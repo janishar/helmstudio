@@ -51,6 +51,7 @@ Install state and process state are separate machines and are never merged. Thes
 | `cloning` → `cloned`                               | Fetching repo and submodules                                 | Installing · cloning       |
 | `building` → `built`                               | Running `build[]` in order                                   | Installing · step n of m   |
 | `fetching_weights`                                 | Downloading declared artifacts                               | Downloading 43%            |
+| `auth_required`                                    | A gated weight needs a Hugging Face token; nothing failed    | Needs a Hugging Face token |
 | `ready`                                            | Installed and launchable                                     | Installed                  |
 | `update_available`                                 | Upstream ref moved past the installed commit                 | Update available           |
 | `failed_clone` · `failed_build` · `failed_weights` | Last attempt failed at that phase; work already done is kept | Install failed · \<phase\> |

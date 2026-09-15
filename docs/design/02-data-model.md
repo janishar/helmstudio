@@ -125,7 +125,6 @@ erDiagram
         string realpath
         string state
         int64 total_bytes
-        int ref_count
         int64 verified_at
     }
     MODEL_FILES {
@@ -231,7 +230,7 @@ erDiagram
     }
 ```
 
-`studio_id` is the primary key of `installations` and a foreign key everywhere else: a studio has at most one checkout on a machine, which is the constraint that removes all ambiguity about which build is live.
+`studio_id` is the primary key of `installations`: a studio has at most one checkout on a machine, which is the constraint that removes all ambiguity about which build is live. It is a declared foreign key only on `step_runs` and `studio_model_bindings`, which cascade with an uninstall; everywhere else it is a plain column, because history outlives the checkout (amended 2026-09-15, M3).
 
 ## 4 · Lifecycle tables
 
@@ -249,6 +248,21 @@ One row per studio materialised on this machine, keyed by `studio_id`.
 | `last_failure`                                    | `{phase, step_index, exit_code, log_file_id, message}`. The failure block renders straight from this.                                                                                                                                                                                                                                                                                                                                   |
 | `size_bytes`                                      | Checkout plus build output. Excludes weights, which belong to the cache.                                                                                                                                                                                                                                                                                                                                                                |
 
+    -- added 2026-09-15 for M3 (docs/decisions.md, "M3 install and weights"). remote_checked_at is
+    -- named by this section's prose but missing from the ER list; created_at and updated_at are new.
+    -- root_path is absolute: <data>/studios/<id>/src when helmstudio cloned it, or the manifest's
+    -- local_path. Uninstall removes a root only when it is the former.
+    CREATE TABLE installations (
+      studio_id TEXT PRIMARY KEY,
+      manifest_digest TEXT NOT NULL,        -- sha256 of the manifest's canonical JSON
+      root_path TEXT NOT NULL UNIQUE,
+      commit_sha TEXT, remote_sha TEXT, remote_checked_at INTEGER,
+      install_state TEXT NOT NULL CHECK (install_state IN ('cloning','cloned','building','built',
+        'fetching_weights','auth_required','ready','update_available','failed_clone','failed_build','failed_weights','removing')),
+      runtime_env TEXT, selected_weights TEXT, last_failure TEXT,   -- JSON
+      size_bytes INTEGER,
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+
 ### processes
 
 One row per spawned process, not per studio — which is what makes a multi-process studio representable. `group_run_id` ties one launch together so the UI can say "the group is starting" while only the sidecar is up.
@@ -265,7 +279,9 @@ One row per spawned process, not per studio — which is what makes a multi-proc
 
     -- added 2026-09-15 for M2 (docs/decisions.md, "M2 supervision"). started_at, exited_at and
     -- exit_code are used by this section's prose and indexes but were missing from the ER list.
-    -- studio_id has no REFERENCES installations(studio_id) yet: that table arrives in M3, which adds it.
+    -- studio_id has no REFERENCES installations(studio_id), deliberately: process history outlives an
+    -- uninstall (amended 2026-09-15, M3; see "processes, log_files and jobs deliberately have no
+    -- foreign key" below).
     CREATE TABLE processes (
       id TEXT PRIMARY KEY,
       studio_id TEXT NOT NULL,
@@ -300,6 +316,81 @@ One row per spawned process, not per studio — which is what makes a multi-proc
       truncated INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL);
     CREATE INDEX idx_logs_studio ON log_files(studio_id, created_at DESC);
+
+    -- added 2026-09-15 for M3 (docs/decisions.md, "M3 install and weights"). The state vocabularies
+    -- are new; so are created_at, started_at and finished_at. jobs.studio_id and step_runs.job_id
+    -- carry no cascade: job history outlives an uninstall. step_runs belong to one installation and
+    -- go with it. When an installation's commit or manifest digest changes, its step_runs are
+    -- deleted, so "the first step that has not succeeded" is read from the rows that remain.
+    -- step_runs.pid, pid_start_time and pgid (amended 2026-09-15, M3 review): a step leads its own
+    -- process group and outlives a daemon killed with SIGKILL; the next daemon's sweep stops a
+    -- survivor whose three fields still match, as re-adoption verifies processes, before recording
+    -- the step interrupted. install_state 'auth_required' (same amendment): a gated weight waits for
+    -- a token without the install having failed (R18).
+    CREATE TABLE jobs (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('install','build','download','update','export','uninstall')),
+      studio_id TEXT,
+      state TEXT NOT NULL CHECK (state IN ('queued','running','succeeded','failed','cancelled','interrupted')),
+      subject_kind TEXT, subject_id TEXT,
+      progress_num INTEGER, progress_den INTEGER,
+      last_error TEXT,                      -- JSON
+      created_at INTEGER NOT NULL, started_at INTEGER, finished_at INTEGER);
+    CREATE INDEX idx_jobs_studio ON jobs(studio_id, created_at DESC);
+    CREATE INDEX idx_jobs_live ON jobs(state) WHERE state IN ('queued','running');
+
+    CREATE TABLE step_runs (
+      id TEXT PRIMARY KEY,
+      studio_id TEXT NOT NULL REFERENCES installations(studio_id) ON DELETE CASCADE,
+      job_id TEXT NOT NULL REFERENCES jobs(id),
+      step_index INTEGER NOT NULL, step_name TEXT NOT NULL,
+      command TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (state IN ('pending','running','succeeded','skipped','failed','interrupted','cancelled')),
+      exit_code INTEGER,
+      pid INTEGER, pid_start_time INTEGER, pgid INTEGER,   -- verified before a surviving step is signalled
+      log_file_id TEXT REFERENCES log_files(id) ON DELETE SET NULL,
+      started_at INTEGER, finished_at INTEGER,
+      UNIQUE (studio_id, job_id, step_index));
+
+`processes`, `log_files` and `jobs` deliberately have no foreign key to `installations`: uninstall deletes the installation row, and the history of what ran must survive it, as the gallery and timelines will.
+
+### model_artifacts, model_files, studio_model_bindings
+
+One artifact per Hugging Face `(repo, revision)`, whichever studio declared it first. A binding is one studio's use of it under one placeholder, with the file allow-list that weight declared. Two weights of one repo with different `files` — h3's FL2VA and Ref2VA — are one artifact and two bindings, and the second binding downloads only the files it adds. **There is no stored reference count:** an artifact's references are its binding rows, counted when read, and an artifact with none is reclaimable when it is managed.
+
+    -- added 2026-09-15 for M3 (docs/decisions.md, "M3 install and weights"). Supersedes the ER
+    -- list's ref_count and the 'orphaned' state. commit_sha, last_used_at, created_at and
+    -- bindings.files are new. local_path is <dest>, relative to the models root, which is settable.
+    CREATE TABLE model_artifacts (
+      id TEXT PRIMARY KEY,
+      hf_repo TEXT NOT NULL,
+      revision TEXT NOT NULL,               -- as declared, e.g. "main"
+      commit_sha TEXT,                      -- the revision resolved at listing; downloads pin to it
+      source TEXT NOT NULL CHECK (source IN ('managed','linked')),
+      local_path TEXT NOT NULL UNIQUE,
+      external_path TEXT, realpath TEXT,    -- linked only
+      state TEXT NOT NULL CHECK (state IN ('declared','downloading','interrupted','auth_required','ready','linked','missing')),
+      total_bytes INTEGER, verified_at INTEGER, last_used_at INTEGER,
+      created_at INTEGER NOT NULL,
+      UNIQUE (hf_repo, revision));
+
+    CREATE TABLE model_files (
+      id TEXT PRIMARY KEY,
+      artifact_id TEXT NOT NULL REFERENCES model_artifacts(id) ON DELETE CASCADE,
+      rel_path TEXT NOT NULL, size_bytes INTEGER NOT NULL, etag TEXT,
+      state TEXT NOT NULL CHECK (state IN ('pending','complete')),  -- partial progress is the .part length
+      UNIQUE (artifact_id, rel_path));
+
+    CREATE TABLE studio_model_bindings (
+      studio_id TEXT NOT NULL REFERENCES installations(studio_id) ON DELETE CASCADE,
+      artifact_id TEXT NOT NULL REFERENCES model_artifacts(id) ON DELETE RESTRICT,
+      placeholder TEXT NOT NULL,
+      files TEXT,                           -- JSON allow-list this binding needs; NULL is the whole repo
+      selected INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (studio_id, placeholder));
+    CREATE INDEX idx_bind_artifact ON studio_model_bindings(artifact_id);
+
+`ON DELETE RESTRICT` on the binding means the database itself refuses to delete an artifact a studio still uses, behind the reclaim query.
 
 ## 5 · Platform tables
 
@@ -430,30 +521,32 @@ Two paths, one copy. The content-addressed path gives idempotent writes, dedup a
 | `cloned`           | build starts            | `building`         | `step_runs` created `pending`                                      |
 | `building`         | all steps succeed       | `built`            | `runtime_env` resolved                                             |
 | `building`         | step exits non-zero     | `failed_build`     | step `failed`; `last_failure` carries the log id                   |
-| `building`         | daemon killed           | `failed_build`     | startup sweep marks the live step `interrupted`                    |
+| `building`         | daemon killed           | `failed_build`     | startup sweep stops a verified surviving step, then marks it `interrupted` (amended M3) |
 | `failed_build`     | retry                   | `building`         | resume at the first non-succeeded index                            |
 | `built`            | weights declared        | `fetching_weights` | bindings created; a download Job per missing artifact              |
 | `fetching_weights` | all required ready      | `ready`            | Launch becomes available                                           |
 | `fetching_weights` | required download fails | `failed_weights`   | artifact stays resumable; nothing deleted                          |
+| `fetching_weights` | HF 401/403              | `auth_required`    | token prompt; nothing failed; survives a restart (amended M3)      |
+| `auth_required`    | install, retry or fetch with a working token | `fetching_weights` → `ready` | resumes the remaining downloads (amended M3) |
 | `ready`            | remote ref moved        | `update_available` | non-destructive; still launchable                                  |
-| any                | uninstall               | `removing`         | group stopped, bindings deleted, ref counts drop, checkout removed |
+| any                | uninstall               | `removing`         | group stopped, bindings deleted, checkout removed (amended M3: no ref counts) |
 
 ### model_artifacts.state
 
 | From          | Event                                | To              | Side effect                                                                                                                                           |
 |---------------|--------------------------------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| —             | binding declared, no match           | `declared`      | row created, `ref_count = 1`, `source = 'managed'`                                                                                                    |
+| —             | binding declared, no match           | `declared`      | row created, `source = 'managed'`; the binding is created with the file listing (amended M3: no `ref_count`)                                          |
 | `declared`    | user points at an existing directory | `linked`        | `source = 'linked'`; `external_path` and `realpath` written; `models/<dest>` created as a symlink; declared files checked for presence and rough size |
 | `linked`      | target unreadable or gone            | `missing`       | launch refuses with the expected path; Relink or Download offered; install state untouched                                                            |
 | `missing`     | volume remounted, files present      | `linked`        | `verified_at` refreshed                                                                                                                               |
 | `linked`      | unlink                               | row deleted     | **symlink removed only.** The user's directory is never deleted, and reclaim excludes linked rows entirely                                            |
-| —             | binding declared, match exists       | unchanged       | `ref_count++` only — **the dedup path**                                                                                                               |
+| —             | binding declared, match exists       | unchanged       | a second binding row only — **the dedup path**; files that binding adds are fetched (amended M3)                                                       |
 | `declared`    | listing fetched                      | `downloading`   | file rows and total bytes written                                                                                                                     |
 | `declared`    | HF 401/403                           | `auth_required` | token prompt; install not failed                                                                                                                      |
 | `downloading` | network error                        | `interrupted`   | `.part` kept; Job retries with backoff                                                                                                                |
 | `interrupted` | retry or restart                     | `downloading`   | URL re-resolved; range-resume from the `.part` length                                                                                                 |
 | `downloading` | all files complete                   | `ready`         | `.part` renamed; sizes and etags checked                                                                                                              |
-| `ready`       | `ref_count` hits 0                   | `orphaned`      | not deleted; eligible for reclaim                                                                                                                     |
+| `ready`       | last binding deleted                 | unchanged       | not deleted; a managed artifact with no binding is eligible for reclaim (amended M3: no `orphaned` state, no counter)                                  |
 
 ### processes and the group
 
@@ -484,8 +577,10 @@ Two paths, one copy. The content-addressed path gives idempotent writes, dedup a
 ## 8 · The queries that pay for a database
 
     -- reclaim never touches a linked directory: source='linked' is excluded everywhere
-    SELECT id, local_path, total_bytes FROM model_artifacts
-    WHERE ref_count = 0 AND source = 'managed';   -- unlinking a linked one removes the symlink only
+    -- amended M3: references are binding rows, never a stored count
+    SELECT a.id, a.local_path FROM model_artifacts a
+    WHERE a.source = 'managed'
+      AND NOT EXISTS (SELECT 1 FROM studio_model_bindings b WHERE b.artifact_id = a.id);   -- unlinking a linked one removes the symlink only
 
     -- reclaim: every asset nothing points at. The entire garbage collector.
     SELECT a.id, a.bytes FROM assets a
@@ -545,7 +640,7 @@ The recursive provenance query is the clearest case for the engine: in a hand-ro
 
 ### Two studios, one weight
 
-h3 studio installs first and declares `MiniMaxAI/MiniMax-H3`. No artifact matches `(hf_repo, revision)`, so one is created with `ref_count = 1` and a binding at placeholder `h3`. A later studio declaring the same repo and revision creates only a second binding and takes the count to 2; nothing downloads. Uninstalling h3 studio cascades its binding, drops the count to 1, and leaves every byte in place.
+h3 studio installs first and declares `MiniMaxAI/MiniMax-H3`. No artifact matches `(hf_repo, revision)`, so one is created with a binding at placeholder `h3`. A later studio declaring the same repo and revision creates only a second binding; nothing it already has downloads. Uninstalling h3 studio cascades its binding, leaves one binding, and leaves every byte in place. (Amended M3: the count is the binding rows, never a stored number.)
 
 ### A three-process studio launching
 
