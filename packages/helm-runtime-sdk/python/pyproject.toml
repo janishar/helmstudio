@@ -1,0 +1,17 @@
+[project]
+name = "helm-runtime-sdk"
+version = "1.0.0.dev0"
+description = "helmstudio's runtime SDK: a client for the platform API"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+# The Python embedded provider is decided with the Python studios (docs/decisions.md M4 Q25).
+embedded = []
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["helm_runtime_sdk"]
