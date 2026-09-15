@@ -1,7 +1,8 @@
-// Package api is the daemon's HTTP surface. In M2 it carries only what the
-// plain shelf needs: the launcher's studio, launch, stop, process and log
-// operations from api/openapi.yaml, plus one live log stream that document
-// does not have yet (docs/decisions.md, "M2 supervision").
+// Package api is the daemon's HTTP surface: the plain shelf's studio, launch,
+// stop, process and log operations from api/openapi.yaml, plus one live log
+// stream that document does not have yet (docs/decisions.md, "M2
+// supervision"), and, with WithInstall, install, jobs and the weights cache
+// (docs/decisions.md, "M3 install and weights").
 package api
 
 import (
@@ -17,7 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/weights"
 )
 
 // Base is the API prefix (api/openapi.yaml servers.url).
@@ -29,11 +32,15 @@ type Server struct {
 	hosts map[string]bool // acceptable Host header values
 	mux   *http.ServeMux
 	logf  func(string, ...any)
+
+	installer *install.Installer
+	weights   *weights.Service
+	logsRoot  string
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
 // a loopback host:port. shelf holds the plain shelf's static files.
-func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(string, ...any)) (*Server, error) {
+func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(string, ...any), opts ...Option) (*Server, error) {
 	host, port, err := net.SplitHostPort(listenAddr)
 	if err != nil {
 		return nil, fmt.Errorf("listen address %q: %w", listenAddr, err)
@@ -49,12 +56,16 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 		net.JoinHostPort("localhost", port): true,
 		net.JoinHostPort("::1", port):       true,
 	}}
+	for _, o := range opts {
+		o(s)
+	}
 	s.mux.HandleFunc("GET "+Base+"/studios", s.listStudios)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}", s.getStudio)
 	s.mux.HandleFunc("POST "+Base+"/studios/{action}", s.studioAction)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/processes", s.getProcesses)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/logs", s.getLogFiles)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/processes/{name}/logs", s.streamLogs)
+	s.routeInstall()
 	s.mux.Handle("GET /", http.FileServerFS(shelf))
 	return s, nil
 }
@@ -81,9 +92,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
-// Studio is one library entry as the shelf shows it. install_state from the
-// api/openapi.yaml outline is absent: installations arrive in M3.
-// ManifestLoaded is false for a studio still running from the last daemon
+// Studio is one library entry as the shelf shows it. Root is the recorded
+// checkout, or where install will put it; Install is present when the daemon
+// serves install. ManifestLoaded is false for a studio still running from the last daemon
 // whose manifest was not found or no longer validates: it can be stopped,
 // not launched.
 type Studio struct {
@@ -97,12 +108,24 @@ type Studio struct {
 	Root           string                 `json:"root"`
 	RootPresent    bool                   `json:"root_present"`
 	Group          supervisor.GroupStatus `json:"group"`
+	*install.Info
 }
 
 func (s *Server) studio(r *http.Request, st supervisor.Studio) (Studio, error) {
 	m := st.Manifest
 	out := Studio{ManifestLoaded: true, ID: m.ID, Name: m.Name, Description: m.Description, Kinds: m.Kinds, PeakRAMGB: m.PeakRAMGB,
 		Root: m.LocalPath}
+	if s.installer != nil {
+		info, err := s.installer.Info(r.Context(), m.ID, m)
+		if err != nil {
+			return out, err
+		}
+		out.Info = &info
+		out.Root = s.installer.PlannedRoot(m)
+		if info.Root != "" {
+			out.Root = info.Root
+		}
+	}
 	for _, p := range m.EffectiveProcesses() {
 		out.Heavy = out.Heavy || p.Heavy
 	}
@@ -137,7 +160,12 @@ func (s *Server) listStudios(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) unmanaged(r *http.Request, id string) (Studio, error) {
 	gs, err := s.sup.Status(r.Context(), id)
-	return Studio{ID: id, Name: id, Kinds: []string{}, Heavy: true, Group: gs}, err
+	out := Studio{ID: id, Name: id, Kinds: []string{}, Heavy: true, Group: gs}
+	if err == nil && s.installer != nil {
+		info, ierr := s.installer.Info(r.Context(), id, nil)
+		out.Info, err = &info, ierr
+	}
+	return out, err
 }
 
 func (s *Server) getStudio(w http.ResponseWriter, r *http.Request) {
@@ -171,6 +199,12 @@ func (s *Server) studioAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch action {
+	case "install", "retry", "uninstall":
+		if s.installer == nil {
+			writeError(w, http.StatusNotImplemented, "not_implemented", "this daemon does not serve install")
+			return
+		}
+		s.studioInstallAction(w, r, id, action)
 	case "launch":
 		preempt, _ := strconv.ParseBool(r.URL.Query().Get("preempt"))
 		gs, err := s.sup.Launch(r.Context(), id, supervisor.LaunchOptions{Preempt: preempt})
