@@ -1,57 +1,28 @@
 package manifest
 
 import (
+	"bytes"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
+	"github.com/janishar/helmstudio/schema"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
-// schemaPath locates schema/manifest.json.
-//
-// go:embed cannot reach it from here: an embed pattern may not contain ".."
-// elements, and schema/ is a sibling of internal/, not a descendant — so the
-// schema can only be embedded by a loader file placed inside schema/ itself,
-// which is not in this milestone's file list (CLAUDE.md and the milestone
-// brief both say schema/manifest.json is untouched). Until that trade-off is
-// made deliberately, helm locates the schema relative to this source file,
-// which is correct for `go test`, `make gate` and a `bin/helm` built fresh
-// from a checkout — the only ways helm runs today. HELM_SCHEMA_PATH overrides
-// this for any other caller. See docs/agents/reports/00-contracts.md.
-func schemaPath() (string, error) {
-	if p := os.Getenv("HELM_SCHEMA_PATH"); p != "" {
-		return p, nil
-	}
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("manifest: cannot locate schema/manifest.json: runtime.Caller failed")
-	}
-	// file is .../internal/manifest/schema.go
-	root := filepath.Dir(filepath.Dir(filepath.Dir(file)))
-	p := filepath.Join(root, "schema", "manifest.json")
-	if _, err := os.Stat(p); err != nil {
-		return "", fmt.Errorf("manifest: schema not found at %s (set HELM_SCHEMA_PATH to override): %w", p, err)
-	}
-	return p, nil
-}
+// schemaURL names the embedded schema inside the compiler; references within
+// the schema resolve against it.
+const schemaURL = "https://helmstudio.local/schema/manifest.json"
 
-var (
-	schemaOnce sync.Once
-	compiled   *jsonschema.Schema
-	compileErr error
-)
-
+// compiledSchema compiles schema/manifest.json, embedded by package schema so a
+// binary built with -trimpath, moved elsewhere, or imported from the module
+// cache validates the same way a checkout does (M4 second review #1; this
+// replaces M0's source-relative lookup, whose -trimpath and wrong-worktree
+// failures docs/decisions.md recorded). HELM_SCHEMA_PATH still overrides it,
+// for validating against a schema under development.
 func compiledSchema() (*jsonschema.Schema, error) {
 	schemaOnce.Do(func() {
-		p, err := schemaPath()
-		if err != nil {
-			compileErr = err
-			return
-		}
 		c := jsonschema.NewCompiler()
 		// draft 2020-12 treats "format" as an annotation, not an assertion,
 		// unless asked — meaning repo: "not a uri at all" would otherwise
@@ -61,10 +32,24 @@ func compiledSchema() (*jsonschema.Schema, error) {
 		// license_url are the two fields affected). That is close to a
 		// contract change; see docs/decisions.md (M0, "format assertion").
 		c.AssertFormat = true
-		compiled, compileErr = c.Compile(p)
+		if p := os.Getenv("HELM_SCHEMA_PATH"); p != "" {
+			compiled, compileErr = c.Compile(p)
+			return
+		}
+		if err := c.AddResource(schemaURL, bytes.NewReader(schema.Manifest)); err != nil {
+			compileErr = fmt.Errorf("manifest: loading the embedded schema: %w", err)
+			return
+		}
+		compiled, compileErr = c.Compile(schemaURL)
 	})
 	return compiled, compileErr
 }
+
+var (
+	schemaOnce sync.Once
+	compiled   *jsonschema.Schema
+	compileErr error
+)
 
 // validateSchema checks doc (as produced by decodeGeneric) against
 // schema/manifest.json and flattens the library's nested cause tree into
