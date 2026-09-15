@@ -34,6 +34,23 @@ func (a ProcessIdentity) Matches(b ProcessIdentity) bool {
 	return a.PID == b.PID && a.StartTime == b.StartTime && a.PGID == b.PGID
 }
 
+// SameProcess reports whether two identities name the same process, whatever
+// group it is in now: pid and start time match. A process may leave its group
+// (setsid) without becoming a different process.
+func (a ProcessIdentity) SameProcess(b ProcessIdentity) bool {
+	return a.PID == b.PID && a.StartTime != 0 && a.StartTime == b.StartTime
+}
+
+// ErrUnsafeProcess means a signal to one process was refused because the pid
+// is init, the kernel's, or helmstudio's own.
+var ErrUnsafeProcess = errors.New("refusing to signal an unsafe process id")
+
+// ProcessEntry is one live process in a snapshot of the process table.
+type ProcessEntry struct {
+	ProcessIdentity
+	PPID int
+}
+
 // ShellArgv returns the argv that runs script in the manifest-declared shell
 // (schema/manifest.json: sh, bash, powershell, cmd). Only the POSIX shells are
 // available on the platforms helmstudio builds for today.

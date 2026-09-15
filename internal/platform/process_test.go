@@ -154,3 +154,68 @@ func TestQuoteForShellRoundTrips(t *testing.T) {
 		t.Error("powershell was accepted")
 	}
 }
+
+// The process table shows a child that left its parent's group in its own
+// session, still parented by the process that started it: that is how a
+// teardown finds a render a studio detached (docs/decisions.md M5 Q11).
+func TestProcessTableFindsADetachedChildByItsParent(t *testing.T) {
+	cmd := exec.Command("/bin/sleep", "60")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
+	id, err := IdentifyProcess(cmd.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	table, err := ProcessTable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var self, child *ProcessEntry
+	for i := range table {
+		switch table[i].PID {
+		case os.Getpid():
+			self = &table[i]
+		case cmd.Process.Pid:
+			child = &table[i]
+		}
+	}
+	if self == nil || self.PPID != os.Getppid() || self.PGID != syscall.Getpgrp() {
+		t.Fatalf("this process in the table: %+v; want ppid %d, pgid %d", self, os.Getppid(), syscall.Getpgrp())
+	}
+	if child == nil || child.PPID != os.Getpid() || child.PGID == syscall.Getpgrp() || !child.ProcessIdentity.Matches(id) {
+		t.Fatalf("the detached child in the table: %+v; want parent %d, its own group, identity %+v", child, os.Getpid(), id)
+	}
+}
+
+// SameProcess ignores the group, and never matches an identity without a
+// start time; KillProcess refuses init and this process.
+func TestSameProcessAndSingleProcessSignals(t *testing.T) {
+	a := ProcessIdentity{PID: 10, StartTime: 5, PGID: 10}
+	if !a.SameProcess(ProcessIdentity{PID: 10, StartTime: 5, PGID: 99}) {
+		t.Error("a process that changed group is not the same process")
+	}
+	if a.SameProcess(ProcessIdentity{PID: 10, StartTime: 6, PGID: 10}) || (ProcessIdentity{PID: 10}).SameProcess(ProcessIdentity{PID: 10}) {
+		t.Error("a different start time, or none, matched")
+	}
+	for _, pid := range []int{0, 1, os.Getpid()} {
+		if err := KillProcess(pid); !errors.Is(err, ErrUnsafeProcess) {
+			t.Errorf("KillProcess(%d) = %v, want ErrUnsafeProcess", pid, err)
+		}
+	}
+	cmd := exec.Command("/bin/sleep", "60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if err := TerminateProcess(cmd.Process.Pid); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err == nil {
+		t.Fatal("sleep exited cleanly; want it ended by SIGTERM")
+	}
+	if err := TerminateProcess(cmd.Process.Pid); err != nil {
+		t.Fatalf("signalling a process already gone: %v, want nil", err)
+	}
+}

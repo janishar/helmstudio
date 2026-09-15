@@ -30,6 +30,15 @@ func GroupExists(int) (bool, error) { return false, unsupportedProcesses() }
 // PortHolder knows nothing here.
 func PortHolder(int) string { return "" }
 
+// TerminateProcess refuses.
+func TerminateProcess(int) error { return unsupportedProcesses() }
+
+// KillProcess refuses.
+func KillProcess(int) error { return unsupportedProcesses() }
+
+// ProcessTable refuses.
+func ProcessTable() ([]ProcessEntry, error) { return nil, unsupportedProcesses() }
+
 // IdentifyProcess refuses.
 func IdentifyProcess(int) (ProcessIdentity, error) { return ProcessIdentity{}, unsupportedProcesses() }
 

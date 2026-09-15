@@ -24,34 +24,64 @@ func IdentifyProcess(pid int) (ProcessIdentity, error) {
 	if err != nil {
 		return ProcessIdentity{}, fmt.Errorf("reading /proc/%d/stat: %w", pid, err)
 	}
-	return parseProcStat(pid, string(data))
+	e, err := parseProcStat(pid, string(data))
+	return e.ProcessIdentity, err
+}
+
+// ProcessTable is a snapshot of every live process under /proc, zombies left
+// out. A process that exits while the table is read is skipped.
+func ProcessTable() ([]ProcessEntry, error) {
+	dirs, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, fmt.Errorf("reading /proc: %w", err)
+	}
+	var out []ProcessEntry
+	for _, d := range dirs {
+		pid, err := strconv.Atoi(d.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+		data, err := os.ReadFile("/proc/" + d.Name() + "/stat")
+		if err != nil {
+			continue
+		}
+		if e, err := parseProcStat(pid, string(data)); err == nil {
+			out = append(out, e)
+		}
+	}
+	return out, nil
 }
 
 // parseProcStat parses proc(5)'s stat line. The command name is in
 // parentheses and may itself contain spaces and parentheses, so fields are
 // counted from the last ')'.
-func parseProcStat(pid int, line string) (ProcessIdentity, error) {
+func parseProcStat(pid int, line string) (ProcessEntry, error) {
 	i := strings.LastIndexByte(line, ')')
 	if i < 0 {
-		return ProcessIdentity{}, fmt.Errorf("parsing /proc/%d/stat: no command name", pid)
+		return ProcessEntry{}, fmt.Errorf("parsing /proc/%d/stat: no command name", pid)
 	}
 	f := strings.Fields(line[i+1:])
-	// f[0] is field 3 (state), f[2] field 5 (pgrp), f[19] field 22 (starttime).
+	// f[0] is field 3 (state), f[1] field 4 (ppid), f[2] field 5 (pgrp),
+	// f[19] field 22 (starttime).
 	if len(f) < 20 {
-		return ProcessIdentity{}, fmt.Errorf("parsing /proc/%d/stat: %d fields after the command name", pid, len(f))
+		return ProcessEntry{}, fmt.Errorf("parsing /proc/%d/stat: %d fields after the command name", pid, len(f))
 	}
 	if f[0] == "Z" || f[0] == "X" {
-		return ProcessIdentity{}, fmt.Errorf("pid %d: %w", pid, ErrNoProcess)
+		return ProcessEntry{}, fmt.Errorf("pid %d: %w", pid, ErrNoProcess)
+	}
+	ppid, err := strconv.Atoi(f[1])
+	if err != nil {
+		return ProcessEntry{}, fmt.Errorf("parsing /proc/%d/stat ppid: %w", pid, err)
 	}
 	pgid, err := strconv.Atoi(f[2])
 	if err != nil {
-		return ProcessIdentity{}, fmt.Errorf("parsing /proc/%d/stat pgrp: %w", pid, err)
+		return ProcessEntry{}, fmt.Errorf("parsing /proc/%d/stat pgrp: %w", pid, err)
 	}
 	start, err := strconv.ParseInt(f[19], 10, 64)
 	if err != nil {
-		return ProcessIdentity{}, fmt.Errorf("parsing /proc/%d/stat starttime: %w", pid, err)
+		return ProcessEntry{}, fmt.Errorf("parsing /proc/%d/stat starttime: %w", pid, err)
 	}
-	return ProcessIdentity{PID: pid, StartTime: start, PGID: pgid}, nil
+	return ProcessEntry{ProcessIdentity: ProcessIdentity{PID: pid, StartTime: start, PGID: pgid}, PPID: ppid}, nil
 }
 
 // HostMemoryBytes is MemTotal from /proc/meminfo.

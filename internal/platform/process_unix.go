@@ -70,6 +70,26 @@ func signalGroup(pgid int, sig syscall.Signal) error {
 	return nil
 }
 
+// TerminateProcess sends SIGTERM to one process.
+func TerminateProcess(pid int) error { return signalProcess(pid, syscall.SIGTERM) }
+
+// KillProcess sends SIGKILL to one process.
+func KillProcess(pid int) error { return signalProcess(pid, syscall.SIGKILL) }
+
+func signalProcess(pid int, sig syscall.Signal) error {
+	if pid <= 1 || pid == os.Getpid() {
+		return fmt.Errorf("process %d: %w", pid, ErrUnsafeProcess)
+	}
+	err := syscall.Kill(pid, sig)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil // already gone
+	}
+	if err != nil {
+		return fmt.Errorf("sending %v to process %d: %w", sig, pid, err)
+	}
+	return nil
+}
+
 // GroupExists reports whether any process — a zombie included — is still in
 // the group. A teardown is complete when this is false.
 func GroupExists(pgid int) (bool, error) {

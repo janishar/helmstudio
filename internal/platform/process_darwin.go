@@ -38,6 +38,30 @@ func IdentifyProcess(pid int) (ProcessIdentity, error) {
 	return ProcessIdentity{PID: pid, StartTime: start, PGID: int(k.Eproc.Pgid)}, nil
 }
 
+// ProcessTable is a snapshot of every live process (sysctl kern.proc.all),
+// zombies left out.
+func ProcessTable() ([]ProcessEntry, error) {
+	procs, err := unix.SysctlKinfoProcSlice("kern.proc.all")
+	if err != nil {
+		return nil, fmt.Errorf("reading the process table from the kernel: %w", err)
+	}
+	out := make([]ProcessEntry, 0, len(procs))
+	for _, k := range procs {
+		if k.Proc.P_pid <= 0 || k.Proc.P_stat == sZomb {
+			continue
+		}
+		out = append(out, ProcessEntry{
+			ProcessIdentity: ProcessIdentity{
+				PID:       int(k.Proc.P_pid),
+				StartTime: k.Proc.P_starttime.Sec*1_000_000 + int64(k.Proc.P_starttime.Usec),
+				PGID:      int(k.Eproc.Pgid),
+			},
+			PPID: int(k.Eproc.Ppid),
+		})
+	}
+	return out, nil
+}
+
 // HostMemoryBytes is the machine's physical (on Apple Silicon, unified) memory.
 func HostMemoryBytes() (uint64, error) {
 	n, err := unix.SysctlUint64("hw.memsize")
