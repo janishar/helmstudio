@@ -21,6 +21,7 @@ import (
 	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/theme"
 	"github.com/janishar/helmstudio/internal/weights"
 )
 
@@ -40,6 +41,7 @@ type Server struct {
 
 	studioAPI *studioapi.Handler
 	service   *studioapi.Service
+	theme     *theme.Settings
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
@@ -71,6 +73,10 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/processes/{name}/logs", s.streamLogs)
 	s.routeInstall()
 	if s.service != nil {
+		s.theme = s.service.Theme()
+	}
+	s.routeTheme()
+	if s.service != nil {
 		s.mux.HandleFunc("GET "+Base+"/assets:reclaim", s.service.ServeReclaim)
 		s.mux.HandleFunc("POST "+Base+"/assets:reclaim", s.service.ServeReclaim)
 	}
@@ -88,7 +94,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMisdirectedRequest, "bad_host", fmt.Sprintf("Host %q is not this daemon's address", r.Host))
 		return
 	}
-	if origin := r.Header.Get("Origin"); origin != "" {
+	if originExempt(r) {
+		// The SDK files and the theme are public: a studio's page on its own
+		// port fetches them in CORS mode (docs/decisions.md M6 Q9, Q14).
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	} else if origin := r.Header.Get("Origin"); origin != "" {
 		o, ok := strings.CutPrefix(origin, "http://")
 		if !ok || !s.hosts[o] {
 			writeError(w, http.StatusForbidden, "bad_origin", fmt.Sprintf("requests from %q are not accepted", origin))

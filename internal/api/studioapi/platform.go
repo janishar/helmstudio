@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/janishar/helmstudio/internal/media"
 	"github.com/janishar/helmstudio/internal/platform"
 	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/theme"
 )
 
 // PlatformConfig is what a provider serving the studio API over a set of
@@ -24,6 +26,9 @@ type PlatformConfig struct {
 	Dirs  *platform.Dirs
 	// API is HELM_API: the base URL studios reach this provider at.
 	API string
+	// SDKBase is where /sdk/ is served, without the major; HELM_SDK_BASE is
+	// it plus "/v<major>". Empty derives it from API (…/api/v1 → …/sdk).
+	SDKBase string
 	// StudioData is {data}. Nil is <data>/studios/<id>/data, as the
 	// supervisor's default.
 	StudioData func(studioID string) string
@@ -41,7 +46,9 @@ type Platform struct {
 	Tokens   *Tokens
 	Launches *Launches
 	Paths    DirPaths
-	cfg      PlatformConfig
+	// Theme is the launcher's theme setting, loaded from the store.
+	Theme *theme.Settings
+	cfg   PlatformConfig
 }
 
 // NewPlatform returns the tokens and launch hooks. Hand Launches to
@@ -53,11 +60,21 @@ func NewPlatform(cfg PlatformConfig) *Platform {
 	if cfg.FreeBytes == nil {
 		cfg.FreeBytes = platform.FreeDiskBytes
 	}
+	if cfg.SDKBase == "" {
+		cfg.SDKBase = strings.TrimSuffix(strings.TrimRight(cfg.API, "/"), Base) + "/sdk"
+	}
+	settings := &theme.Settings{Store: cfg.Store, Hub: theme.NewHub(theme.System)}
+	if current, err := settings.Load(context.Background()); err != nil {
+		cfg.Logf("studioapi: %v; the theme starts as system", err)
+	} else {
+		settings.Hub = theme.NewHub(current)
+	}
 	tokens := &Tokens{Store: cfg.Store}
 	return &Platform{
 		Tokens:   tokens,
-		Launches: &Launches{Tokens: tokens, API: cfg.API, StageRoot: cfg.Dirs.Stage(), Logf: cfg.Logf},
+		Launches: &Launches{Tokens: tokens, API: cfg.API, SDKBase: cfg.SDKBase, Theme: settings.Hub, StageRoot: cfg.Dirs.Stage(), Logf: cfg.Logf},
 		Paths:    DirPaths{StageRoot: cfg.Dirs.Stage(), DataRoot: cfg.Dirs.Data(), LogsRoot: cfg.Dirs.Logs(), StudioData: cfg.StudioData},
+		Theme:    settings,
 		cfg:      cfg,
 	}
 }
@@ -81,6 +98,7 @@ func (p *Platform) Serve(studios Studios) (*Service, *Handler) {
 		Provider:  p.cfg.Provider,
 		Version:   p.cfg.Version,
 		FreeBytes: p.cfg.FreeBytes,
+		Theme:     p.Theme,
 		Logf:      p.cfg.Logf,
 	})
 	return svc, NewHandler(svc, p.Tokens.Authenticate, p.cfg.Logf)

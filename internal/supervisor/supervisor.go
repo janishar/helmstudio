@@ -94,6 +94,14 @@ type PlatformHooks interface {
 	GroupEnded(studioID, groupRunID string)
 }
 
+// LaunchChecker is implemented by PlatformHooks that can refuse a studio from
+// its manifest alone, such as an SDK major the provider does not serve
+// (docs/decisions.md M6 Q14). Launch asks it before anything is resolved or
+// stopped, so a refusal never costs the running studio.
+type LaunchChecker interface {
+	CheckLaunch(st Studio) error
+}
+
 // Supervisor owns every process group the daemon runs.
 type Supervisor struct {
 	cfg     Config
@@ -256,6 +264,12 @@ func (s *Supervisor) Launch(ctx context.Context, studioID string, opts LaunchOpt
 		other = s.liveHeavyLocked(studioID)
 	}
 	s.mu.Unlock()
+
+	if c, ok := s.cfg.Platform.(LaunchChecker); ok {
+		if err := c.CheckLaunch(st); err != nil {
+			return GroupStatus{}, err
+		}
+	}
 
 	if other != nil {
 		// Find out whether this studio can launch at all before stopping

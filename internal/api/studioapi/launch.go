@@ -7,9 +7,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/theme"
 	helm "github.com/janishar/helmstudio/packages/helm-runtime-sdk/go"
 )
 
@@ -19,12 +22,29 @@ type Launches struct {
 	Tokens *Tokens
 	// API is HELM_API, e.g. http://127.0.0.1:8700/api/v1.
 	API string
+	// SDKBase is where /sdk/ is served, e.g. http://127.0.0.1:8700/sdk.
+	SDKBase string
+	// Theme gives HELM_THEME at spawn; nil injects none.
+	Theme *theme.Hub
 	// StageRoot holds stage/<studio>/<group_run>/.
 	StageRoot string
 	Logf      func(string, ...any)
 }
 
-var _ supervisor.PlatformHooks = (*Launches)(nil)
+var (
+	_ supervisor.PlatformHooks = (*Launches)(nil)
+	_ supervisor.LaunchChecker = (*Launches)(nil)
+)
+
+// CheckLaunch refuses a studio whose sdk pins a major this provider does not
+// serve (04 §9, docs/decisions.md M6 Q14). The supervisor asks before it
+// stops anything for the launch.
+func (l *Launches) CheckLaunch(st supervisor.Studio) error {
+	if _, err := theme.SDKMajor(st.Manifest); err != nil {
+		return &supervisor.Error{Kind: supervisor.KindNotLaunchable, Message: err.Error()}
+	}
+	return nil
+}
 
 // StageDir is a launch's stage directory.
 func StageDir(root, studioID, groupRunID string) string {
@@ -33,14 +53,26 @@ func StageDir(root, studioID, groupRunID string) string {
 
 func (l *Launches) LaunchEnv(ctx context.Context, st supervisor.Studio, groupRunID string) ([]string, error) {
 	m := st.Manifest
+	major, err := theme.SDKMajor(m)
+	if err != nil {
+		return nil, &supervisor.Error{Kind: supervisor.KindNotLaunchable, Message: err.Error()}
+	}
 	stage := StageDir(l.StageRoot, m.ID, groupRunID)
 	if err := os.MkdirAll(stage, 0o700); err != nil {
 		return nil, fmt.Errorf("creating the stage directory %s: %w", stage, err)
 	}
+	accent := theme.Accent(m)
 	env := []string{
 		helm.EnvAPI + "=" + l.API,
 		helm.EnvStudioID + "=" + m.ID,
 		helm.EnvStageDir + "=" + stage,
+		// What a studio's page needs from its proxy (M6 Q7, Q14).
+		helm.EnvAccentDark + "=" + accent.Dark,
+		helm.EnvAccentLight + "=" + accent.Light,
+		helm.EnvSDKBase + "=" + strings.TrimRight(l.SDKBase, "/") + "/v" + strconv.Itoa(major),
+	}
+	if l.Theme != nil {
+		env = append(env, helm.EnvTheme+"="+l.Theme.Current())
 	}
 	tok, err := l.Tokens.Mint(ctx, m.ID, groupRunID, m.Capabilities)
 	if err != nil {

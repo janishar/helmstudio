@@ -20,6 +20,13 @@ type Manifest struct {
 
 	PeakRAMGB int `yaml:"peak_ram_gb"`
 
+	// Hue is the studio's identity colour per theme; nil gets a ramp entry
+	// (docs/design/03-design-system.md §2c).
+	Hue *Hue `yaml:"hue"`
+	// SDK pins the helm package majors the daemon serves this studio
+	// (docs/design/04-packages.md §9); nil means the current ones.
+	SDK *SDK `yaml:"sdk"`
+
 	Requires Requires `yaml:"requires"`
 	Runtime  Runtime  `yaml:"runtime"`
 	Python   *Python  `yaml:"python"`
@@ -63,6 +70,19 @@ type Runtime struct {
 
 type Python struct {
 	Version string `yaml:"version"`
+}
+
+// Hue is "#rrggbb" per theme; the schema checks the form.
+type Hue struct {
+	Dark  string `yaml:"dark"`
+	Light string `yaml:"light"`
+}
+
+// SDK holds semver ranges ("^1", "~1.2", "1.2.3"); the schema checks the form.
+type SDK struct {
+	Runtime string `yaml:"runtime"`
+	UI      string `yaml:"ui"`
+	CSS     string `yaml:"css"`
 }
 
 type BuildStep struct {

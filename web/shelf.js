@@ -170,5 +170,27 @@ function showLogs(studio, process) {
   });
 }
 
+// The theme control: the launcher's System / Light / Dark, which every running
+// studio follows through its theme stream (docs/decisions.md M6 Q8, Q9). The
+// shelf itself stays unstyled until M6b's screens.
+async function theme() {
+  const box = document.getElementById("theme");
+  const r = await call("GET", "/launcher/settings/theme");
+  if (!r.ok) return;
+  for (const input of box.querySelectorAll("input")) {
+    input.checked = input.value === r.body.theme;
+    input.onchange = async () => {
+      const put = await fetch(api + "/launcher/settings/theme", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: input.value }),
+      });
+      if (!put.ok) alert("Setting the theme failed (" + put.status + ")");
+    };
+  }
+  box.disabled = false;
+}
+
+theme();
 refresh();
 setInterval(refresh, 2000);

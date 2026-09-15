@@ -19,6 +19,7 @@ import (
 	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/media"
 	"github.com/janishar/helmstudio/internal/store"
+	"github.com/janishar/helmstudio/internal/theme"
 	helm "github.com/janishar/helmstudio/packages/helm-runtime-sdk/go"
 )
 
@@ -64,8 +65,11 @@ type Config struct {
 	FreeBytes func(path string) (uint64, error)
 	// UploadLimit bounds one upload. Zero means DefaultUploadLimit.
 	UploadLimit int64
-	Now         func() time.Time
-	Logf        func(string, ...any)
+	// Theme is the launcher's theme; a change is published as a theme event
+	// to every subscriber (docs/decisions.md M6 Q8). Nil publishes none.
+	Theme *theme.Settings
+	Now   func() time.Time
+	Logf  func(string, ...any)
 }
 
 // Service implements every studio-api operation against helm.db and the media
@@ -100,8 +104,18 @@ func NewService(cfg Config) *Service {
 	if cfg.UploadLimit == 0 {
 		cfg.UploadLimit = DefaultUploadLimit
 	}
-	return &Service{cfg: cfg, st: cfg.Store, media: cfg.Media, events: NewBroker(1024)}
+	s := &Service{cfg: cfg, st: cfg.Store, media: cfg.Media, events: NewBroker(1024)}
+	if cfg.Theme != nil {
+		// theme needs only a token, so every studio hears it (07 §3).
+		cfg.Theme.Hub.OnChange(func(v string) {
+			s.events.Publish("theme", helm.ThemeEvent{Theme: v}, nil)
+		})
+	}
+	return s
 }
+
+// Theme is the launcher's theme setting, nil when the provider has none.
+func (s *Service) Theme() *theme.Settings { return s.cfg.Theme }
 
 // Events is the service's event broker.
 func (s *Service) Events() *Broker { return s.events }
