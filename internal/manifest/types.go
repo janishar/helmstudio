@@ -27,6 +27,10 @@ type Manifest struct {
 	Capabilities []string `yaml:"capabilities"`
 	Network      []string `yaml:"network"`
 
+	// Storage declares record indexes and per-studio quotas (R33); nil when
+	// the manifest has none, which means the defaults.
+	Storage *Storage `yaml:"storage"`
+
 	Build   []BuildStep `yaml:"build"`
 	Weights []Weight    `yaml:"weights"`
 
@@ -212,4 +216,23 @@ type TestBlock struct {
 type Import struct {
 	Run string `yaml:"run"`
 	Cwd string `yaml:"cwd"`
+}
+
+// Storage is the manifest's storage block (docs/design/06-storage.md §6).
+type Storage struct {
+	Collections []Collection `yaml:"collections"`
+	Quota       Quota        `yaml:"quota"`
+}
+
+// Collection names a records collection and the top-level fields to index.
+type Collection struct {
+	Name  string   `yaml:"name"`
+	Index []string `yaml:"index"`
+	FTS   []string `yaml:"fts"`
+}
+
+// Quota holds per-studio caps; a zero field means the default.
+type Quota struct {
+	Records int64 `yaml:"records"`
+	KVBytes int64 `yaml:"kv_bytes"`
 }
