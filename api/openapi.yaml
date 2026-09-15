@@ -1,632 +1,2494 @@
-# Outline only, per M0. Paths, resource names and the shape of each object —
-# no full request/response schemas, no examples, no generation. M4 completes
-# this; M4's first review happens on this file before anything implements it.
+# The helmstudio platform API — the contract.
 #
-# Paths under docs/design/05-sdk-and-custom-studios.md §3 and
-# docs/design/07-platform-services.md §3-4 are taken from those documents
-# literally, base path and all (servers.url carries /api/v1 so the paths
-# below stay the bare form both documents use in their own endpoint tables).
-# Paths under "Launcher" have no such literal source — 05 and 07 describe the
-# studio-facing surface, not install/uninstall/process-supervision, which
-# only this milestone's own brief asks for; those are invented against
-# 01-prd.md's R7-R30 prose.
+# Completed in M4 from the M0 outline, against the answers recorded in
+# docs/decisions.md under "2026-09-15 · M4 API and SDK" (Q1–Q30). Every
+# operation cites the design section or decision it comes from. Awaiting M4's
+# first review: nothing implements this revision yet.
 #
-# `tags: [studio-api]` / `tags: [launcher]` on every operation is a PROPOSAL
-# for M4's first review, not settled. It exists so the generator R51 describes
-# could leave launcher operations out of helm-runtime-sdk; whether M4 wants
-# that split, a separate document, or no split is M4's call. See
-# docs/decisions.md ("Open, not yet decided") for the supporting design text
-# and what it does not settle.
+# Conventions that apply everywhere, so they are not repeated per operation:
 #
-# See docs/agents/reports/00-contracts.md for the resources that
-# don't trace to a docs/design/02-data-model.md table (certification_level:
-# no column — 05 §9's four levels are evaluated live by `helm doctor
-# --studio`, not stored, so this mirrors data-model §1's own "derived, not a
-# row" category rather than naming a genuine gap) and the ones that do but
-# have no endpoint here yet (step_runs, tags as their own resource).
+# - Tags. Every operation is `studio-api` or `launcher`, never both (Q1). Only
+#   `studio-api` operations are generated into helm-runtime-sdk. Every
+#   `studio-api` operation requires a studio token, with no exception (Q7): the
+#   launcher reads the job queue through its own `/launcher/jobs` paths (M4
+#   first review, #2).
+# - x-helm-group / x-helm-method name the SDK method, identical in Go, Python
+#   and Node (04 §4): `x-helm-group: assets`, `x-helm-method: adopt` is
+#   `c.Assets.Adopt`, `c.assets.adopt`, `c.assets.adopt`.
+# - x-helm-capability names the manifest capability a studio token needs
+#   (Q8). `token` means any valid studio token. Absent on launcher operations.
+# - x-helm-events on an SSE operation maps each event name to its data schema.
+# - Ids are bare ULIDs; timestamps are RFC 3339 (Q29).
+# - Errors are always the Error schema (Q4, 04 §4). Status → SDK error kind:
+#     400, 413, 416, 422 Invalid · 401 Unauthenticated · 403, 421 Forbidden ·
+#     404, 410 NotFound · 409 Conflict · 429, 507 QuotaExceeded ·
+#     501 Unsupported · 503 or no connection Unavailable · anything else Internal.
+# - PATCH always means a JSON merge patch (RFC 7396) over the resource's
+#   writable fields, sent as application/merge-patch+json: an object member
+#   merges, an array or scalar replaces, `null` removes (M4 first review, #11).
+# - Asset bytes and thumbnails need the Bearer header, which <img> and <video>
+#   cannot send. M4's clients are server-side; how a browser page reaches them
+#   is decided in M6 (Q27), and that decision may change the security of
+#   /assets/{id} and /assets/{id}/thumb (M4 first review, #12).
+# - Collections return a page: {items, next_cursor} with `limit` (default 50,
+#   max 200) and an opaque `cursor` (Q5). A cursor is only valid with the same
+#   filters it was issued for. Reclaim previews are single documents, not
+#   collections: their confirm digest covers the whole set.
+# - JSON request bodies are capped at 1 MiB (413 `too_large`).
 openapi: 3.1.0
 
 info:
   title: helmstudio platform API
-  version: "0.1.0"
+  version: "1.0.0"
   description: >
     The local, single-machine API a studio's runtime SDK speaks, and the one
-    the launcher UI speaks to the daemon. Reference implementation is a
-    browser at 127.0.0.1:8700; see docs/design/07-platform-services.md.
+    the launcher speaks to the daemon. Served by the daemon at
+    127.0.0.1:8700 and, for one studio with no daemon, by `helm dev` and the
+    embedded provider (05 §2, §5a). The two are substitutable: one
+    conformance suite runs against both (Q25). The in-process embedded
+    provider has no token, and still enforces the studio's capabilities,
+    read from its manifest, with the same 403 `capability_required`; the
+    suite's capability cases run against both providers (M4 first review,
+    #7).
 
 servers:
   - url: http://127.0.0.1:8700/api/v1
 
+tags:
+  - name: studio-api
+    description: >
+      What a studio calls, with its HELM_TOKEN. Generated into
+      helm-runtime-sdk. Every operation requires a studio token (Q7) and
+      touches only the calling studio's namespace unless a capability says
+      otherwise (07 §3).
+  - name: launcher
+    description: >
+      What the launcher calls: install, weights, supervision and reclaim. No
+      token; the daemon's Host and Origin checks apply (docs/decisions.md, M2
+      supervision). Not generated into helm-runtime-sdk.
+
+security: []
+
 paths:
-  # --- Registry, install, weights (docs/design/01-prd.md §6) — launcher only, R7-R19 ---
-  /studios:
-    get:
-      tags: [launcher]
-      summary: List the library (registry + local + imported), with install state.
-      responses:
-        "200": { $ref: "#/components/responses/StudioList" }
-    post:
-      tags: [launcher]
-      summary: Import a studio from a local folder, a git URL, or a pasted/fetched manifest.
-      responses:
-        "200": { $ref: "#/components/responses/Studio" }
 
-  /studios/{id}:
-    get:
-      tags: [launcher]
-      summary: One studio's manifest, install state and runtime_env.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "200": { $ref: "#/components/responses/Studio" }
+  # ======================================================================
+  # Identity and events (05 §3, 07 §3)
+  # ======================================================================
 
-  /studios/{id}:install:
-    post:
-      tags: [launcher]
-      summary: Clone (or adopt local_path), run build[], fetch declared weights.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "202": { $ref: "#/components/responses/Job" }
-
-  /studios/{id}:retry:
-    post:
-      tags: [launcher]
-      summary: Resume install at the first step that has not succeeded.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "202": { $ref: "#/components/responses/Job" }
-
-  /studios/{id}:uninstall:
-    post:
-      tags: [launcher]
-      summary: Remove the checkout and process state; cached weights are left for reclaim.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "202": { $ref: "#/components/responses/Job" }
-
-  /studios/{id}:update:
-    post:
-      tags: [launcher]
-      summary: Pull the pinned ref forward and rebuild; shows a command diff when build steps changed.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "202": { $ref: "#/components/responses/Job" }
-
-  /studios/{id}/models:select:
-    post:
-      tags: [launcher]
-      summary: Record which selectable weight {models.selected} resolves to for this studio (studio_model_bindings.selected), before or at :launch.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "200": { description: Binding recorded. }
-
-  /models:
-    get:
-      tags: [launcher]
-      summary: The weights cache — model_artifacts, with ref counts and reclaimable size.
-      responses:
-        "200": { $ref: "#/components/responses/ModelArtifactList" }
-
-  /models/{id}:link:
-    post:
-      tags: [launcher]
-      summary: Point a declared weight at a directory the user already has, instead of downloading.
-      parameters: [{ $ref: "#/components/parameters/ModelId" }]
-      responses:
-        "200": { $ref: "#/components/responses/ModelArtifact" }
-
-  /models/{id}:verify:
-    post:
-      tags: [launcher]
-      summary: SHA256 an artifact on demand (size + etag is the default check on download).
-      parameters: [{ $ref: "#/components/parameters/ModelId" }]
-      responses:
-        "202": { $ref: "#/components/responses/Job" }
-
-  /models/{id}:
-    delete:
-      tags: [launcher]
-      summary: Reclaim a managed artifact with ref_count 0, or unlink a linked one (never deletes the user's directory).
-      parameters: [{ $ref: "#/components/parameters/ModelId" }]
-      responses:
-        "204": { description: Removed or unlinked. }
-
-  /doctor:
-    get:
-      tags: [launcher]
-      summary: Host side of the compute-runtime question — chip, unified memory, Metal version, detected framework versions.
-      responses:
-        "200": { description: Doctor report. }
-
-  # --- Processes and supervision (docs/design/01-prd.md §7) — launcher only, R20-R30 ---
-  /studios/{id}:launch:
-    post:
-      tags: [launcher]
-      summary: Start the process group in dependency order, health-gating each before its dependents.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "202": { $ref: "#/components/responses/ProcessGroup" }
-
-  /studios/{id}:stop:
-    post:
-      tags: [launcher]
-      summary: SIGTERM the group in reverse dependency order, escalating to SIGKILL after grace.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "202": { description: Stopping. }
-
-  /studios/{id}/processes:
-    get:
-      tags: [launcher]
-      summary: Live process rows for this studio's current group_run_id.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "200": { $ref: "#/components/responses/ProcessGroup" }
-
-  /studios/{id}/logs:
-    get:
-      tags: [launcher]
-      summary: The last five run logs, head-and-tail truncated.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
-      responses:
-        "200": { description: Log file index. }
-
-  # --- Studio identity (docs/design/05 §3, docs/design/07 §3 — literal path) ---
   /me:
     get:
       tags: [studio-api]
-      summary: Studio id, capabilities, quota, paths, provider, SDK version — resolved from HELM_TOKEN.
+      operationId: meGet
+      x-helm-group: me
+      x-helm-method: get
+      x-helm-capability: token
+      summary: Who the token belongs to, what it may do, and how much quota is left.
+      description: >
+        05 §3 and 07 §3. `provider` says which provider answered, which is the
+        first question every integration bug asks (05 §4).
+      security: [{ studioToken: [] }]
       responses:
-        "200": { description: Caller identity. }
+        "200":
+          description: The caller.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Me" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
 
-  # --- Sessions (docs/design/01-prd.md R31a, docs/design/02-data-model.md §5) — studio-api ---
-  /sessions:
+  /events:
     get:
       tags: [studio-api]
-      summary: List a studio's sessions, most recently opened first.
-      responses:
-        "200": { $ref: "#/components/responses/SessionList" }
-    post:
-      tags: [studio-api]
-      summary: Create a session with an opaque state document.
-      responses:
-        "200": { $ref: "#/components/responses/Session" }
-
-  /sessions/{id}:
-    get:
-      tags: [studio-api]
-      summary: One session.
-      parameters: [{ $ref: "#/components/parameters/SessionId" }]
-      responses:
-        "200": { $ref: "#/components/responses/Session" }
-    patch:
-      tags: [studio-api]
-      summary: Rename, or replace state (If-Match against etag — two open tabs must not silently overwrite each other).
-      parameters: [{ $ref: "#/components/parameters/SessionId" }]
-      responses:
-        "200": { $ref: "#/components/responses/Session" }
-    delete:
-      tags: [studio-api]
-      summary: Soft-delete.
-      parameters: [{ $ref: "#/components/parameters/SessionId" }]
-      responses:
-        "204": { description: Deleted. }
-
-  /sessions/{id}:duplicate:
-    post:
-      tags: [studio-api]
-      summary: Copy a session's state document under a new name.
-      parameters: [{ $ref: "#/components/parameters/SessionId" }]
-      responses:
-        "200": { $ref: "#/components/responses/Session" }
-
-  /sessions/{id}:activate:
-    post:
-      tags: [studio-api]
-      summary: Mark opened_at; does not change process state.
-      parameters: [{ $ref: "#/components/parameters/SessionId" }]
-      responses:
-        "204": { description: Activated. }
-
-  # --- KV (docs/design/05 §3, docs/design/07 §3 — literal paths) ---
-  /kv/{ns}/{key}:
-    get:
-      tags: [studio-api]
-      summary: Read a JSON document. Returns ETag.
+      operationId: eventsSubscribe
+      x-helm-group: events
+      x-helm-method: subscribe
+      x-helm-capability: token
+      summary: Server-sent events for the calling studio.
+      description: >
+        R41, 07 §3. Each event carries `id:` (opaque), `event:` (its name)
+        and `data:` (JSON). Reconnect with `Last-Event-ID` to resume; the
+        provider keeps the last 1024 events. When the id is older than that,
+        was issued by a provider that has since restarted, or was never
+        issued, `gap` comes first and the stream continues from now (second
+        review #2). A studio receives `item` events
+        for its own items, or for every studio's with `gallery.read_all`;
+        `inbox` for handoffs to it; `job` for its own studio's jobs. `theme`
+        is part of the contract now and first emitted in M6. `: ping` comments
+        keep the connection open.
+      security: [{ studioToken: [] }]
       parameters:
-        - { $ref: "#/components/parameters/Namespace" }
-        - { $ref: "#/components/parameters/Key" }
+        - name: Last-Event-ID
+          in: header
+          schema: { type: string }
+      x-helm-events:
+        theme: { $ref: "#/components/schemas/ThemeEvent" }
+        inbox: { $ref: "#/components/schemas/InboxEvent" }
+        item: { $ref: "#/components/schemas/ItemEvent" }
+        job: { $ref: "#/components/schemas/JobEvent" }
+        shutdown: { $ref: "#/components/schemas/ShutdownEvent" }
+        gap: { $ref: "#/components/schemas/GapEvent" }
       responses:
-        "200": { $ref: "#/components/responses/KVDoc" }
-    put:
-      tags: [studio-api]
-      summary: Replace. If-Match for optimistic concurrency; 409 on conflict.
-      parameters:
-        - { $ref: "#/components/parameters/Namespace" }
-        - { $ref: "#/components/parameters/Key" }
-      responses:
-        "200": { $ref: "#/components/responses/KVDoc" }
-    patch:
-      tags: [studio-api]
-      summary: JSON merge patch, for a single field without resending the document.
-      parameters:
-        - { $ref: "#/components/parameters/Namespace" }
-        - { $ref: "#/components/parameters/Key" }
-      responses:
-        "200": { $ref: "#/components/responses/KVDoc" }
-    delete:
-      tags: [studio-api]
-      summary: Remove.
-      parameters:
-        - { $ref: "#/components/parameters/Namespace" }
-        - { $ref: "#/components/parameters/Key" }
-      responses:
-        "204": { description: Removed. }
+        "200":
+          description: An event stream.
+          content: { text/event-stream: { schema: { type: string } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+
+  # ======================================================================
+  # KV (R31b, 05 §3, 07 §3)
+  # ======================================================================
 
   /kv/{ns}:
     get:
       tags: [studio-api]
-      summary: List keys with sizes and modified times (?prefix=), no values.
+      operationId: kvList
+      x-helm-group: kv
+      x-helm-method: list
+      x-helm-capability: kv
+      summary: List keys in a namespace, with sizes and modified times. No values.
+      description: >
+        07 §3. Ordered by key, ascending. The namespace `shared` is the
+        shared namespace and needs `kv.shared` (Q21).
+      security: [{ studioToken: [] }]
       parameters:
         - { $ref: "#/components/parameters/Namespace" }
         - name: prefix
           in: query
-          schema: { type: string }
+          schema: { type: string, maxLength: 200 }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
       responses:
-        "200": { description: Key listing. }
+        "200":
+          description: A page of keys.
+          content: { application/json: { schema: { $ref: "#/components/schemas/KVKeyPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
-  # --- Records (docs/design/01-prd.md R32, literal path) --------------------
+  /kv/{ns}/{key}:
+    get:
+      tags: [studio-api]
+      operationId: kvGet
+      x-helm-group: kv
+      x-helm-method: get
+      x-helm-capability: kv
+      summary: Read one document.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+      responses:
+        "200":
+          description: The document. The ETag header equals `etag`.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/KVDoc" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [studio-api]
+      operationId: kvPut
+      x-helm-group: kv
+      x-helm-method: put
+      x-helm-capability: kv
+      summary: Create or replace a document.
+      description: >
+        07 §3. The body is the document, a JSON object. With `If-Match`, the
+        write happens only when the stored etag matches (409
+        `etag_mismatch` otherwise, and on a key that does not exist). Without
+        it, the write is unconditional. Every successful write produces a new
+        etag. The document's bytes count toward `kv_bytes` (Q20).
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/JSONObject" } } }
+      responses:
+        "200":
+          description: The stored document.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/KVDoc" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+    patch:
+      tags: [studio-api]
+      operationId: kvPatch
+      x-helm-group: kv
+      x-helm-method: patch
+      x-helm-capability: kv
+      summary: Apply a JSON merge patch (RFC 7396) to an existing document.
+      description: >
+        07 §3. A `null` member removes that member. `If-Match` as for PUT.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content: { application/merge-patch+json: { schema: { $ref: "#/components/schemas/JSONObject" } } }
+      responses:
+        "200":
+          description: The patched document.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/KVDoc" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+    delete:
+      tags: [studio-api]
+      operationId: kvDelete
+      x-helm-group: kv
+      x-helm-method: delete
+      x-helm-capability: kv
+      summary: Remove a document.
+      description: >
+        07 §3. With `If-Match`, only when the etag matches. Deleting a key
+        that does not exist is 404.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      responses:
+        "204": { description: "Removed." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ======================================================================
+  # Sessions (R31a, 02 §5)
+  # ======================================================================
+
+  /sessions:
+    get:
+      tags: [studio-api]
+      operationId: sessionsList
+      x-helm-group: sessions
+      x-helm-method: list
+      x-helm-capability: kv
+      summary: The calling studio's sessions, most recently opened first.
+      description: >
+        Ordered by `opened_at` descending with never-opened sessions last,
+        then `created_at` descending. Deleted sessions are not listed.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of sessions.
+          content: { application/json: { schema: { $ref: "#/components/schemas/SessionPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [studio-api]
+      operationId: sessionsCreate
+      x-helm-group: sessions
+      x-helm-method: create
+      x-helm-capability: kv
+      summary: Create a session.
+      description: >
+        A name is unique among the studio's live sessions (409 `name_taken`).
+        The state's bytes count toward `kv_bytes` (Q20).
+      security: [{ studioToken: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SessionCreate" } } }
+      responses:
+        "201":
+          description: The new session.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+
+  /sessions/{id}:
+    get:
+      tags: [studio-api]
+      operationId: sessionsGet
+      x-helm-group: sessions
+      x-helm-method: get
+      x-helm-capability: kv
+      summary: One session. A deleted session, or another studio's, is 404.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200":
+          description: The session.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [studio-api]
+      operationId: sessionsUpdate
+      x-helm-group: sessions
+      x-helm-method: update
+      x-helm-capability: kv
+      summary: Rename, or merge changes into the state document.
+      description: >
+        R31a, M4 first review #11. A JSON merge patch over `{name, state}`:
+        members of `state` merge into the stored state, and a `null` member
+        removes that key. `name` cannot be null. With `If-Match`, only when the
+        etag matches: two open tabs must not silently overwrite each other.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SessionId" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content: { application/merge-patch+json: { schema: { $ref: "#/components/schemas/SessionUpdate" } } }
+      responses:
+        "200":
+          description: The updated session.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+    delete:
+      tags: [studio-api]
+      operationId: sessionsDelete
+      x-helm-group: sessions
+      x-helm-method: delete
+      x-helm-capability: kv
+      summary: Soft-delete. Its name becomes free; items keep their session_id.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/SessionId" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      responses:
+        "204": { description: "Deleted." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /sessions/{id}:duplicate:
+    post:
+      tags: [studio-api]
+      operationId: sessionsDuplicate
+      x-helm-group: sessions
+      x-helm-method: duplicate
+      x-helm-capability: kv
+      summary: Copy a session's state under a new name. The copy has never been opened.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SessionDuplicate" } } }
+      responses:
+        "201":
+          description: The copy.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
+
+  /sessions/{id}:activate:
+    post:
+      tags: [studio-api]
+      operationId: sessionsActivate
+      x-helm-group: sessions
+      x-helm-method: activate
+      x-helm-capability: kv
+      summary: Set opened_at to now. Changes neither the state nor the etag, nor any process.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "204": { description: "Activated." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ======================================================================
+  # Records (R32-R33, 06 §6)
+  # ======================================================================
+
   /records/{collection}:
     get:
       tags: [studio-api]
-      summary: Query with the closed filter language (eq ne lt lte gt gte in contains exists; at most eight clauses; always parameterised). No SQL passthrough.
-      parameters: [{ $ref: "#/components/parameters/Collection" }]
+      operationId: recordsQuery
+      x-helm-group: records
+      x-helm-method: query
+      x-helm-capability: records
+      summary: Query a collection with the closed filter language. Never SQL.
+      description: >
+        06 §6 and Q19. Each `where` is `field:op:value`, at most eight, all
+        of which must match.
+
+        - field: a top-level document key matching `^[A-Za-z_][A-Za-z0-9_]*$`,
+          or one of `id`, `created_at`, `updated_at`. No nested paths. Any
+          field may be filtered; `storage.collections[].index` only makes it
+          faster.
+        - op: `eq ne lt lte gt gte in contains exists`.
+        - value: everything after the second `:`, so a value may itself contain
+          `:` (a timestamp, a URL); a field and an operator never do. Parsed
+          as JSON when it is valid JSON (`42`, `true`, `null`, `"42"`),
+          otherwise taken as a literal string. `in` takes a JSON array.
+          `contains` is a case-sensitive substring test when the stored value
+          is a string and a membership test when it is an array. `exists`
+          takes `true` or `false`. `lt`, `lte`, `gt` and `gte` match only
+          stored values of the filter value's JSON type, so `seed:gt:10` never
+          matches a seed stored as the string "42" (M4, signed off by the
+          human at the second review, #5).
+
+        - `created_at` and `updated_at` take RFC 3339 values and compare as
+          instants (they are stored as milliseconds), so
+          `created_at:gte:2026-09-15T00:00:00Z` works; any other value is
+          `bad_filter`, and so are `contains` and `exists` on them. `id`
+          compares as a string, which for ULIDs is creation order.
+
+        Every value is bound as a parameter. `order` is `field:asc` or
+        `field:desc` on one field, default `created_at:desc`, with `id`
+        breaking ties in the same direction. Deleted records are never
+        returned. Bad syntax, an unknown operator or more than eight clauses
+        is 400 `bad_filter`.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Collection" }
+        - name: where
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 8
+            items: { type: string }
+        - name: order
+          in: query
+          schema: { type: string, default: "created_at:desc" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
       responses:
-        "200": { $ref: "#/components/responses/RecordList" }
+        "200":
+          description: A page of records.
+          content: { application/json: { schema: { $ref: "#/components/schemas/RecordPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [studio-api]
-      summary: Insert a document. Quota (records, kv_bytes) enforced from the manifest's storage block.
+      operationId: recordsInsert
+      x-helm-group: records
+      x-helm-method: insert
+      x-helm-capability: records
+      summary: Insert a document; returns its id and etag.
+      description: >
+        06 §6. The body is the document, a JSON object. A studio may write to
+        any collection name matching the manifest schema's pattern, declared
+        or not. Each live record counts toward the `records` quota (Q20).
+      security: [{ studioToken: [] }]
       parameters: [{ $ref: "#/components/parameters/Collection" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/JSONObject" } } }
       responses:
-        "200": { $ref: "#/components/responses/Record" }
+        "201":
+          description: The stored record.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Record" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "429": { $ref: "#/components/responses/QuotaExceeded" }
 
   /records/{collection}/{id}:
     get:
       tags: [studio-api]
-      summary: One record.
+      operationId: recordsGet
+      x-helm-group: records
+      x-helm-method: get
+      x-helm-capability: records
+      summary: One record. Deleted, in another collection, or another studio's is 404.
+      security: [{ studioToken: [] }]
       parameters:
         - { $ref: "#/components/parameters/Collection" }
         - { $ref: "#/components/parameters/RecordId" }
       responses:
-        "200": { $ref: "#/components/responses/Record" }
+        "200":
+          description: The record.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Record" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [studio-api]
+      operationId: recordsReplace
+      x-helm-group: records
+      x-helm-method: replace
+      x-helm-capability: records
+      summary: Replace a document. If-Match on the etag; 409 on conflict.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Collection" }
+        - { $ref: "#/components/parameters/RecordId" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/JSONObject" } } }
+      responses:
+        "200":
+          description: The replaced record.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Record" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
     patch:
       tags: [studio-api]
-      summary: Update a document.
+      operationId: recordsPatch
+      x-helm-group: records
+      x-helm-method: patch
+      x-helm-capability: records
+      summary: Apply a JSON merge patch (RFC 7396). If-Match on the etag; 409 on conflict.
+      security: [{ studioToken: [] }]
       parameters:
         - { $ref: "#/components/parameters/Collection" }
         - { $ref: "#/components/parameters/RecordId" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content: { application/merge-patch+json: { schema: { $ref: "#/components/schemas/JSONObject" } } }
       responses:
-        "200": { $ref: "#/components/responses/Record" }
+        "200":
+          description: The patched record.
+          headers: { ETag: { $ref: "#/components/headers/ETag" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Record" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
     delete:
       tags: [studio-api]
-      summary: Soft-delete.
+      operationId: recordsDelete
+      x-helm-group: records
+      x-helm-method: delete
+      x-helm-capability: records
+      summary: Soft-delete, so an undo is possible and a sync never sees a gap.
+      description: 06 §6. The record stops counting toward the `records` quota.
+      security: [{ studioToken: [] }]
       parameters:
         - { $ref: "#/components/parameters/Collection" }
         - { $ref: "#/components/parameters/RecordId" }
+        - { $ref: "#/components/parameters/IfMatch" }
       responses:
-        "204": { description: Deleted. }
+        "204": { description: "Deleted." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
-  # --- Assets (docs/design/05 §3, docs/design/07 §3-4 — literal paths) -----
+  # ======================================================================
+  # Assets (R34-R37, 06 §4, 07 §4)
+  # ======================================================================
+
   /assets:
     post:
       tags: [studio-api]
-      summary: Upload bytes, returns {id, sha256, bytes, kind, url}. Idempotent on content.
+      operationId: assetsUpload
+      x-helm-group: assets
+      x-helm-method: upload
+      x-helm-capability: assets
+      summary: Upload bytes. Idempotent on content.
+      description: >
+        R34, Q14. The body is the raw bytes. The daemon hashes them, writes
+        `<name>.tmp`, fsyncs and renames into the blob store (06 §4), then
+        makes the library hardlink. When the sha256 already exists, nothing is
+        stored and the existing asset is returned with 200. Either way the
+        caller gains read access to it (Q9). `pinned=true` pins; nothing
+        unpins. Images are probed for width and height; video and audio take
+        the hints given (Q13). A body over the upload limit is 413
+        `too_large` with `details.limit`; a body the disk cannot hold, with
+        the same headroom rule as weight downloads, is 507 `disk_space`
+        (`QuotaExceeded`: out of room, do not retry) before anything is
+        written (M4 first review, #16, second review #9; the limit's value
+        is still open). The check uses the request's Content-Length when it
+        is sent. An asset stays out of reclaim until an item or item
+        input first references it (M4 first review, #3).
+      security: [{ studioToken: [] }]
+      parameters:
+        - name: kind
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/AssetKind" }
+        - name: filename
+          in: query
+          description: Names the library file and the blob's extension. Defaults to the asset id plus an extension from the mime.
+          schema: { type: string, maxLength: 255 }
+        - { $ref: "#/components/parameters/Pinned" }
+        - { $ref: "#/components/parameters/HintWidth" }
+        - { $ref: "#/components/parameters/HintHeight" }
+        - { $ref: "#/components/parameters/HintDuration" }
+        - { $ref: "#/components/parameters/HintFps" }
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema: { type: string, contentMediaType: application/octet-stream }
       responses:
-        "200": { $ref: "#/components/responses/Asset" }
+        "201":
+          description: A new asset.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Asset" } } }
+        "200":
+          description: These bytes were already stored; the existing asset.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Asset" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "507": { $ref: "#/components/responses/InsufficientStorage" }
 
   /assets:adopt:
     post:
       tags: [studio-api]
-      summary: Adopt a file already written into HELM_STAGE_DIR by hardlink — no copy, no HTTP body.
-      responses:
-        "200": { $ref: "#/components/responses/Asset" }
+      operationId: assetsAdopt
+      x-helm-group: assets
+      x-helm-method: adopt
+      x-helm-capability: assets
+      summary: Adopt a file from the stage or data directory by hardlink — no copy, no HTTP body.
+      description: >
+        R34, 07 §4, Q10 as amended by the M4 first review (#4), Q11.
 
-  /assets:reclaim:
-    post:
-      tags: [launcher]
-      summary: Delete every asset with ref_count 0 and pinned=false (02 §8's reclaim query), not one at a time.
+        **Where the file may be.** `path` must resolve, with no symlink in it,
+        inside the caller's stage directory (`HELM_STAGE_DIR`, `paths.stage`)
+        or its data directory (`{data}`, `paths.data`). Anywhere else is 422
+        `outside_roots`. It must be a regular file (422 `not_a_file`).
+
+        **What happens to it.** The file is hardlinked into the blob store and
+        made read-only (0444).
+        - From stage, the stage entry is then unlinked.
+        - From data, the studio's file stays where it is. It is the blob's
+          inode, so it is read-only too.
+
+        **When the bytes already exist.** Nothing is stored and the existing
+        asset returns with 200 (02 §7). A stage entry is unlinked; a data file
+        is left alone.
+
+        **Adoption never copies.** A blob hardlink that fails across volumes is
+        422 `cross_device`, and the file is left in place. A library hardlink
+        that fails across volumes still adopts, with `library_path` null and a
+        warning.
+
+        An asset stays out of reclaim until an item or item input first
+        references it (M4 first review, #3).
+      security: [{ studioToken: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/AdoptRequest" } } }
       responses:
-        "202": { $ref: "#/components/responses/Job" }
+        "201":
+          description: A new asset.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Asset" } } }
+        "200":
+          description: These bytes were already stored; the existing asset.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Asset" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /assets/{id}:
     get:
       tags: [studio-api]
-      summary: Stream bytes with Range support, so a studio can scrub a video without downloading it.
-      parameters: [{ $ref: "#/components/parameters/AssetId" }]
+      operationId: assetsRead
+      x-helm-group: assets
+      x-helm-method: read
+      x-helm-capability: assets
+      summary: The asset's bytes, with Range.
+      description: >
+        R37. Readable by the rules in Q9; anything else is 404. `ETag` is the
+        sha256. A single byte range answers 206; an unsatisfiable one 416
+        (`Invalid`). When the row exists and its file does not, 410
+        `asset_missing`. Needs the Bearer header, so a browser element cannot
+        load it directly; M6 decides browser access and may change this
+        operation's security (Q27, M4 first review #12).
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/AssetId" }
+        - name: Range
+          in: header
+          schema: { type: string }
       responses:
-        "200": { description: Bytes, Range-aware. }
+        "200":
+          description: The whole file.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+            Accept-Ranges: { schema: { type: string, const: bytes } }
+          content: { "*/*": { schema: { type: string, contentMediaType: application/octet-stream } } }
+        "206":
+          description: The requested range.
+          headers:
+            Content-Range: { schema: { type: string } }
+          content: { "*/*": { schema: { type: string, contentMediaType: application/octet-stream } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "416":
+          description: Range not satisfiable. Code `range_not_satisfiable`.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
 
   /assets/{id}/thumb:
     get:
       tags: [studio-api]
-      summary: Poster frame or waveform, generated once by the daemon and cached (?w=320).
+      operationId: assetsThumb
+      x-helm-group: assets
+      x-helm-method: thumb
+      x-helm-capability: assets
+      summary: A thumbnail, generated once and cached.
+      description: >
+        R36, Q13. Images only in M4; video and audio answer 501 `unsupported`
+        until the ffmpeg decision. The only width is 320 (02 §5's
+        `thumb-320`). Needs the Bearer header, so `<img>` cannot load it
+        directly; M6 decides browser access and may change this operation's
+        security (Q27, M4 first review #12).
+      security: [{ studioToken: [] }]
       parameters:
         - { $ref: "#/components/parameters/AssetId" }
         - name: w
           in: query
-          schema: { type: integer }
+          schema: { type: integer, enum: [320], default: 320 }
       responses:
-        "200": { description: Bytes. }
+        "200":
+          description: The thumbnail.
+          content: { image/jpeg: { schema: { type: string, contentMediaType: image/jpeg } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "501": { $ref: "#/components/responses/Unsupported" }
 
-  # --- Gallery (docs/design/05 §3, docs/design/07 §3/§5 — literal paths) ---
+  /assets/{id}/lineage:
+    get:
+      tags: [studio-api]
+      operationId: assetsLineage
+      x-helm-group: assets
+      x-helm-method: lineage
+      x-helm-capability: gallery
+      summary: Downstream provenance — every item ever made from this asset, recursively.
+      description: >
+        02 §8, Q16. Follows `item_inputs` from the asset to the items that
+        used it, then from each of those items' assets onward. Other studios'
+        items are left out unless the caller holds `gallery.read_all`; the
+        walk still passes through them, so a later own item is found. Ordered
+        `created_at` descending. Soft-deleted items are left out of the
+        result, and the walk passes through them too.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/AssetId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of items.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /assets:reclaim:
+    get:
+      tags: [launcher]
+      operationId: assetsReclaimPreview
+      summary: Exactly which assets reclaim would delete, and the bytes freed.
+      description: >
+        Q12, 02 §8, M4 first review #1 and #3. An asset is reclaimable when
+        all of these hold:
+
+        - It is unpinned.
+        - It was referenced by an item or item input at least once.
+        - No live (not soft-deleted) item has it as its asset or as an input.
+        - No timeline clip names it.
+
+        `total_bytes` counts only assets whose stored file has no link outside
+        the asset store and library: an asset adopted from a studio's `{data}`
+        is still listed, and frees nothing while the studio keeps its file
+        (second review #7). Each item in the preview lists the soft-deleted
+        items that name the asset. Reclaim hard-deletes those, because until then a soft delete is
+        undoable. Assets never referenced are counted in `unreferenced`, and
+        never deleted. `confirm` is a digest of the exact set, including
+        those items.
+      responses:
+        "200":
+          description: The preview.
+          content: { application/json: { schema: { $ref: "#/components/schemas/AssetReclaimPreview" } } }
+    post:
+      tags: [launcher]
+      operationId: assetsReclaim
+      summary: Delete exactly the previewed set.
+      description: >
+        Q12, 02 §8. When `confirm` no longer matches the current preview,
+        nothing is deleted: 409 `preview_changed`, with the current preview in
+        `details.preview`. Otherwise, in one transaction:
+
+        1. Hard-delete every soft-deleted item listed. Its inputs, tags, inbox
+           entries and search entry go with it.
+        2. Delete the asset rows.
+
+        After that commits, reclaim removes each asset's blob and derived
+        directory. It removes the library file only when that path still holds
+        the blob's inode; a file the user replaced there is left in place and
+        reported in `kept_library_paths`.
+
+        A soft-deleted item never blocks reclaim with a foreign-key error.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ReclaimConfirm" } } }
+      responses:
+        "200":
+          description: What was deleted.
+          content: { application/json: { schema: { $ref: "#/components/schemas/AssetReclaimResult" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ======================================================================
+  # Gallery (R38, 07 §5)
+  # ======================================================================
+
   /gallery/items:
     post:
       tags: [studio-api]
-      summary: Record an output with its params, inputs and session. One call per generation.
+      operationId: galleryAdd
+      x-helm-group: gallery
+      x-helm-method: add
+      x-helm-capability: gallery
+      summary: Record an output with its params, inputs, tags and session. One call per generation.
+      description: >
+        07 §5. The item, its inputs, its tags and its search entry are written
+        in one transaction (06 §8). `asset_id` and every input's `asset_id`
+        must be readable by the caller (Q9), else 404; `session_id` must be one
+        of the caller's live sessions, else 422 `unknown_session` (Q15).
+        Duplicate `(asset_id, role)` inputs and duplicate tags are collapsed.
+      security: [{ studioToken: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ItemCreate" } } }
       responses:
-        "200": { $ref: "#/components/responses/Item" }
+        "201":
+          description: The recorded item.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "413": { $ref: "#/components/responses/TooLarge" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
     get:
       tags: [studio-api]
-      summary: Query by kind, tag, session, date and text; scoped to the caller unless scope=all and the capability is held.
+      operationId: galleryQuery
+      x-helm-group: gallery
+      x-helm-method: query
+      x-helm-capability: gallery
+      summary: Query items, scoped to the caller unless scope=all.
+      description: >
+        R38. `scope=all` needs `gallery.read_all` (403 otherwise). `studio`
+        narrows `scope=all` to one studio. Filters combine with AND; `tag`
+        repeats and every tag must be present. `q` is full-text over title and
+        `params.prompt` (Q17), FTS5 query syntax. Ordered `created_at`
+        descending, `id` breaking ties, with or without `q`. Deleted items are
+        never returned.
+      security: [{ studioToken: [] }]
+      parameters:
+        - name: scope
+          in: query
+          schema: { type: string, enum: [self, all], default: self }
+        - name: studio
+          in: query
+          schema: { $ref: "#/components/schemas/StudioIdValue" }
+        - name: kind
+          in: query
+          schema: { $ref: "#/components/schemas/AssetKind" }
+        - name: tag
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string } }
+        - name: session_id
+          in: query
+          schema: { $ref: "#/components/schemas/ULID" }
+        - name: starred
+          in: query
+          schema: { type: boolean }
+        - name: asset_id
+          in: query
+          schema: { $ref: "#/components/schemas/ULID" }
+        - name: since
+          in: query
+          description: Items created at or after this time.
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          description: Items created before this time.
+          schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 500 }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
       responses:
-        "200": { $ref: "#/components/responses/ItemList" }
+        "200":
+          description: A page of items.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /gallery/items/{id}:
     get:
       tags: [studio-api]
-      summary: One item.
+      operationId: galleryGet
+      x-helm-group: gallery
+      x-helm-method: get
+      x-helm-capability: gallery
+      summary: One item. Another studio's without gallery.read_all, or a deleted one, is 404.
+      security: [{ studioToken: [] }]
       parameters: [{ $ref: "#/components/parameters/ItemId" }]
       responses:
-        "200": { $ref: "#/components/responses/Item" }
+        "200":
+          description: The item.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     patch:
       tags: [studio-api]
-      summary: Star, tag, rename, annotate (07 §3) — the only mutation surface for tags; no separate /tags resource.
+      operationId: galleryUpdate
+      x-helm-group: gallery
+      x-helm-method: update
+      x-helm-capability: gallery
+      summary: Star, tag or rename one of the caller's own items.
+      description: >
+        07 §3, Q16, M4 first review #11. A JSON merge patch: `tags`, an array,
+        replaces the whole set; `title: null` clears the title. Params,
+        inputs, asset and session are provenance and cannot change. Another
+        studio's item is 404, even with `gallery.read_all`.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/ItemId" }]
+      requestBody:
+        required: true
+        content: { application/merge-patch+json: { schema: { $ref: "#/components/schemas/ItemUpdate" } } }
+      responses:
+        "200":
+          description: The updated item.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [studio-api]
+      operationId: galleryDelete
+      x-helm-group: gallery
+      x-helm-method: delete
+      x-helm-capability: gallery
+      summary: Soft-delete one of the caller's own items.
+      description: >
+        Q16, M4 first review #1. The item leaves every query, and every
+        lineage result. Its row, inputs and tags stay until an asset reclaim
+        takes one of the assets it names, which hard-deletes it (see POST
+        /assets:reclaim). Until then the delete loses nothing. Its asset, and
+        the assets it used as inputs, stop counting as referenced by it.
+      security: [{ studioToken: [] }]
       parameters: [{ $ref: "#/components/parameters/ItemId" }]
       responses:
-        "200": { $ref: "#/components/responses/Item" }
+        "204": { description: "Deleted." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
-  # --- Handoff (docs/design/05 §3, docs/design/07 §3/§5 — literal paths) ---
+  /gallery/items/{id}/lineage:
+    get:
+      tags: [studio-api]
+      operationId: galleryLineage
+      x-helm-group: gallery
+      x-helm-method: lineage
+      x-helm-capability: gallery
+      summary: Upstream provenance — the items whose outputs this item was made from, recursively.
+      description: >
+        Q16. From the item's inputs to the items whose asset is that input,
+        then onward. Inputs no item produced (a user import) end the walk and
+        are visible in each item's `inputs`. Other studios' items are left out
+        unless the caller holds `gallery.read_all`; the walk still passes
+        through them. Soft-deleted items are left out of the result, and the
+        walk passes through them too. Ordered `created_at` descending.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/ItemId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of items.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ======================================================================
+  # Handoff and inbox (R39, 07 §5)
+  # ======================================================================
+
   /handoff:
     post:
       tags: [studio-api]
-      summary: Send an item to another studio's inbox — the cross-studio move.
+      operationId: handoffSend
+      x-helm-group: handoff
+      x-helm-method: send
+      x-helm-capability: handoff.send
+      summary: Put an item in another studio's inbox.
+      description: >
+        R39, Q23. The item must be readable by the caller, else 404.
+        `to_studio` must be a studio the daemon knows (404) and not the
+        caller (422 `self_handoff`). Writes an inbox row and an `inbox` event
+        to the target; the row lets the target read that item and its asset
+        (Q9). The target need not be installed or running.
+      security: [{ studioToken: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/HandoffRequest" } } }
       responses:
-        "200": { description: Queued. }
+        "201":
+          description: Delivered to the inbox.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Handoff" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
 
   /inbox:
     get:
       tags: [studio-api]
-      summary: >
-        Items other studios sent here. Drained by the studio on read (07 §3)
-        — GET itself is the drain; there is no separate :consume action, and
-        adding one would contradict that line.
+      operationId: inboxList
+      x-helm-group: inbox
+      x-helm-method: list
+      x-helm-capability: gallery
+      summary: Handoffs to the caller not yet consumed, oldest first.
+      description: >
+        Q22. Reading does not consume. An entry whose item has since been
+        deleted is still listed, with `item` null.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
       responses:
-        "200": { description: Pending handoffs. }
+        "200":
+          description: A page of pending entries.
+          content: { application/json: { schema: { $ref: "#/components/schemas/InboxPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
-  # --- Jobs (docs/design/05 §3, literal path) -------------------------------
+  /inbox/{id}:consume:
+    post:
+      tags: [studio-api]
+      operationId: inboxConsume
+      x-helm-group: inbox
+      x-helm-method: consume
+      x-helm-capability: gallery
+      summary: Mark an entry handled. Idempotent.
+      description: >
+        Q22. A consumed entry leaves the list. Consuming it again is 204.
+        Another studio's entry is 404.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/InboxId" }]
+      responses:
+        "204": { description: "Consumed." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ======================================================================
+  # Jobs (R40, 02 §4) — a studio's view. The launcher's is /launcher/jobs.
+  # ======================================================================
+
   /jobs:
     get:
       tags: [studio-api]
-      summary: Installs, downloads, exports and a studio's own renders — the one queue.
+      operationId: jobsList
+      x-helm-group: jobs
+      x-helm-method: list
+      x-helm-capability: jobs
+      summary: The calling studio's jobs, of every kind, newest first.
+      description: >
+        R40. Only the token's studio: its install, build, download, update,
+        export and uninstall jobs, and the task jobs it reported. Never another
+        studio's (M4 first review, #2).
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
       responses:
-        "200": { $ref: "#/components/responses/JobList" }
+        "200":
+          description: A page of jobs.
+          content: { application/json: { schema: { $ref: "#/components/schemas/JobPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [studio-api]
-      summary: A studio's own long-running work, on the same progress/cancellation/log path installs use.
+      operationId: jobsCreate
+      x-helm-group: jobs
+      x-helm-method: create
+      x-helm-capability: jobs
+      summary: Report a long-running piece of the studio's own work as a task job.
+      description: >
+        R40, Q24. The daemon runs nothing: the studio updates progress and
+        state with PATCH, appends log lines, and ends the job itself. The job
+        starts `running` unless `state: queued` is given.
+      security: [{ studioToken: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TaskCreate" } } }
       responses:
-        "202": { $ref: "#/components/responses/Job" }
+        "201":
+          description: The new task job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /jobs/{id}:
     get:
       tags: [studio-api]
-      summary: One job's progress and last_error.
+      operationId: jobsGet
+      x-helm-group: jobs
+      x-helm-method: get
+      x-helm-capability: jobs
+      summary: One of the calling studio's jobs. Another studio's is 404.
+      security: [{ studioToken: [] }]
       parameters: [{ $ref: "#/components/parameters/JobId" }]
       responses:
-        "200": { $ref: "#/components/responses/Job" }
+        "200":
+          description: The job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [studio-api]
+      operationId: jobsUpdate
+      x-helm-group: jobs
+      x-helm-method: update
+      x-helm-capability: jobs
+      summary: Report progress on, or finish, a task job the calling studio created.
+      description: >
+        Q24, M4 first review #11. A JSON merge patch. State may move
+        `queued → running`, and from either to `succeeded`, `failed` or
+        `cancelled`; a finished job cannot change (409 `job_finished`).
+        `progress_num` must not exceed `progress_den`. `last_error: null`
+        clears it. Only the studio's own `task` jobs: another studio's job is
+        404, and one of its own lifecycle jobs is 403 `not_a_task`.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      requestBody:
+        required: true
+        content: { application/merge-patch+json: { schema: { $ref: "#/components/schemas/TaskUpdate" } } }
+      responses:
+        "200":
+          description: The updated job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /jobs/{id}:cancel:
     post:
       tags: [studio-api]
-      summary: Cancel; the running step's process group is killed, completed work kept.
+      operationId: jobsCancel
+      x-helm-group: jobs
+      x-helm-method: cancel
+      x-helm-capability: jobs
+      summary: Ask for one of the calling studio's task jobs to be cancelled.
+      description: >
+        Q24. Records `cancel_requested_at` and emits a `job` event. The job
+        stays `running` until the studio ends it. Cancelling a finished job
+        is 409 `job_finished`. A studio cannot cancel its own install, build,
+        download or uninstall jobs (403 `not_a_task`); only the launcher can
+        (POST /launcher/jobs/{id}:cancel). Another studio's job is 404.
+      security: [{ studioToken: [] }]
       parameters: [{ $ref: "#/components/parameters/JobId" }]
       responses:
-        "204": { description: Cancelled. }
+        "204": { description: "Cancellation requested." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
-  # --- Events (docs/design/05 §3, docs/design/07 §3 — literal path) --------
-  /events:
+  /jobs/{id}/logs:
     get:
       tags: [studio-api]
-      summary: SSE stream — theme changed, inbox arrived, item added elsewhere, job progress, shutting down.
+      operationId: jobsLogs
+      x-helm-group: jobs
+      x-helm-method: logs
+      x-helm-capability: jobs
+      summary: One of the calling studio's job logs as server-sent events, from the start, then live until the job finishes.
+      description: >
+        Events: `step` when an install step's log begins, `line` per line, and
+        `end` once the job has finished and every line has been sent. A task
+        job has no `step` events. Another studio's job is 404.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      x-helm-events:
+        step: { $ref: "#/components/schemas/JobLogStep" }
+        line: { $ref: "#/components/schemas/JobLogLine" }
+        end: { $ref: "#/components/schemas/JobLogEnd" }
       responses:
-        "200": { description: text/event-stream. }
-
-  # --- Timeline (docs/design/05 §7 — literal paths, base path included there) ---
-  /timeline:
+        "200":
+          description: An event stream.
+          content: { text/event-stream: { schema: { type: string } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     post:
       tags: [studio-api]
-      summary: Create a sequence from clips (target + tracks referencing asset ids; non-destructive).
+      operationId: jobsAppendLog
+      x-helm-group: jobs
+      x-helm-method: appendLog
+      x-helm-capability: jobs
+      summary: Append lines to a running task job's log.
+      description: >
+        Q24. Written to a log file the daemon owns under the logs root, never
+        into the database. A finished job is 409 `job_finished`; a lifecycle
+        job is 403 `not_a_task`; another studio's job is 404.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/LogAppend" } } }
       responses:
-        "200": { $ref: "#/components/responses/Timeline" }
+        "204": { description: "Appended." }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "413": { $ref: "#/components/responses/TooLarge" }
 
-  /timeline:append:
-    post:
-      tags: [studio-api]
-      summary: Add clips to the open sequence without stealing focus.
-      responses:
-        "200": { $ref: "#/components/responses/Timeline" }
+  # ======================================================================
+  # Launcher: the job queue (docs/decisions.md M3; separated from /jobs by
+  # the M4 first review, #2)
+  # ======================================================================
 
-  /timeline/{id}:open:
-    post:
-      tags: [studio-api]
-      summary: Ask the framework to show its editor. 501 with a reason when no framework is present — the data operation always works, only the presentation degrades.
-      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
-      responses:
-        "200": { description: Opened. }
-        "501": { description: No framework present. }
-
-  /timeline/{id}:
-    get:
-      tags: [studio-api]
-      summary: One timeline document.
-      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
-      responses:
-        "200": { $ref: "#/components/responses/Timeline" }
-    patch:
-      tags: [studio-api]
-      summary: Edit tracks; optimistic concurrency on revision (02 §5's undo is "the previous revision").
-      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
-      responses:
-        "200": { $ref: "#/components/responses/Timeline" }
-
-  /timeline/{id}/export:
-    post:
-      tags: [studio-api]
-      summary: Conform every clip to the declared target; concat stream-copy when legal. Creates a Job.
-      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
-      responses:
-        "202": { $ref: "#/components/responses/Job" }
-
-  # --- Settings (docs/design/02-data-model.md SETTINGS table) — launcher only ---
-  /settings:
+  /launcher/jobs:
     get:
       tags: [launcher]
-      summary: Overridden roots and other machine-level settings; an absent key means "use the OS default".
+      operationId: launcherJobsList
+      summary: Every studio's install, build, download, update, export and uninstall jobs, newest first.
+      description: >
+        No token. Never `task` jobs: those are a studio's own data and reach
+        only that studio's token (Q7).
+      parameters:
+        - name: studio
+          in: query
+          schema: { $ref: "#/components/schemas/StudioIdValue" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
       responses:
-        "200": { description: Settings document. }
-    put:
+        "200":
+          description: A page of jobs.
+          content: { application/json: { schema: { $ref: "#/components/schemas/JobPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+
+  /launcher/jobs/{id}:
+    get:
       tags: [launcher]
-      summary: Override a setting.
+      operationId: launcherJobsGet
+      summary: One lifecycle job, with its steps. A task job is 404.
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
       responses:
-        "200": { description: Settings document. }
+        "200":
+          description: The job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /launcher/jobs/{id}:cancel:
+    post:
+      tags: [launcher]
+      operationId: launcherJobsCancel
+      summary: Cancel an install, build, download or uninstall.
+      description: >
+        docs/decisions.md M3. The running step's process group is killed and
+        completed work kept. A finished job is 409 `job_finished`; a task job
+        is 404.
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "204": { description: "Cancelled." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /launcher/jobs/{id}/logs:
+    get:
+      tags: [launcher]
+      operationId: launcherJobsLogs
+      summary: A lifecycle job's build log as server-sent events. A task job is 404.
+      description: Events as for GET /jobs/{id}/logs.
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      x-helm-events:
+        step: { $ref: "#/components/schemas/JobLogStep" }
+        line: { $ref: "#/components/schemas/JobLogLine" }
+        end: { $ref: "#/components/schemas/JobLogEnd" }
+      responses:
+        "200":
+          description: An event stream.
+          content: { text/event-stream: { schema: { type: string } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ======================================================================
+  # Launcher: studios, install, supervision (01 §6-7; M2 and M3 as served)
+  # ======================================================================
+
+  /studios:
+    get:
+      tags: [launcher]
+      operationId: studiosList
+      summary: The studios this daemon knows, with install and process state, ordered by id.
+      description: >
+        Includes studios still running from a previous daemon whose manifest
+        is gone or invalid (`manifest_loaded: false`; M2 review round 1).
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of studios.
+          content: { application/json: { schema: { $ref: "#/components/schemas/StudioPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+
+  /studios/{id}:
+    get:
+      tags: [launcher]
+      operationId: studiosGet
+      summary: One studio.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200":
+          description: The studio.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Studio" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /studios/{id}:install:
+    post:
+      tags: [launcher]
+      operationId: studiosInstall
+      summary: Clone at the pinned ref, run build[], fetch required weights.
+      description: >
+        R7-R19, docs/decisions.md M3. Install while an install runs returns
+        that job. Refused while the studio runs (409 `conflict`), and for a
+        host that fails `requires` (422 `blocked`).
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202":
+          description: The install job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /studios/{id}:retry:
+    post:
+      tags: [launcher]
+      operationId: studiosRetry
+      summary: Install again, resuming at the first step that has not succeeded. The same operation as :install.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202":
+          description: The install job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /studios/{id}:uninstall:
+    post:
+      tags: [launcher]
+      operationId: studiosUninstall
+      summary: Stop the group and remove the checkout helmstudio cloned. Weights and data are kept.
+      description: R67, docs/decisions.md M3 Q9 and Q11.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202":
+          description: The uninstall job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /studios/{id}:launch:
+    post:
+      tags: [launcher]
+      operationId: studiosLaunch
+      summary: Start the process group in dependency order, health-gating each member.
+      description: >
+        R20-R25, docs/decisions.md M2. A second heavy group is refused with 409
+        `heavy_conflict` and the arithmetic in `details.heavy`; `preempt=true`
+        stops the running heavy group first. 409 `already_running`,
+        `port_conflict`; 422 `not_launchable` (not installed, a weight not
+        fetched, a missing linked directory).
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - name: preempt
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "202":
+          description: The group, starting.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ProcessGroup" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /studios/{id}:stop:
+    post:
+      tags: [launcher]
+      operationId: studiosStop
+      summary: SIGTERM the group in reverse dependency order, SIGKILL after the grace period.
+      description: R26, docs/decisions.md M2. The group's studio token is revoked and its stage directory removed (Q6, 07 §4).
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202":
+          description: Stopping.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Stopping" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /studios/{id}/processes:
+    get:
+      tags: [launcher]
+      operationId: studiosProcesses
+      summary: The studio's current or most recent process group.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200":
+          description: The group.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ProcessGroup" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /studios/{id}/logs:
+    get:
+      tags: [launcher]
+      operationId: studiosLogFiles
+      summary: The studio's retained run logs, newest first.
+      description: R30. The last five group runs per studio.
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of log files.
+          content: { application/json: { schema: { $ref: "#/components/schemas/LogFilePage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /studios/{id}/processes/{name}/logs:
+    get:
+      tags: [launcher]
+      operationId: studiosProcessLog
+      summary: One process's output as server-sent events.
+      description: >
+        docs/decisions.md M2. Events: `line` (id: its sequence), `gap` (lines
+        this viewer lost for being slow, or bytes the daemon skipped), `end`
+        when the process is not live and its tail has been sent. Resume with
+        `Last-Event-ID`.
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Last-Event-ID
+          in: header
+          schema: { type: string }
+      x-helm-events:
+        line: { $ref: "#/components/schemas/ProcessLogLine" }
+        gap: { $ref: "#/components/schemas/ProcessLogLine" }
+        end: { $ref: "#/components/schemas/ProcessLogEnd" }
+      responses:
+        "200":
+          description: An event stream.
+          content: { text/event-stream: { schema: { type: string } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /studios/{id}/weights/{name}:link:
+    post:
+      tags: [launcher]
+      operationId: weightsLink
+      summary: Use a directory the user already has for a declared weight, instead of downloading.
+      description: >
+        R14a, docs/decisions.md M3 Q23 and review round 1 #6. The directory is
+        never written to. 422 `not_linkable` names what the directory lacks.
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/WeightName" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/LinkRequest" } } }
+      responses:
+        "200":
+          description: The linked artifact.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ModelArtifact" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /studios/{id}/weights/{name}:fetch:
+    post:
+      tags: [launcher]
+      operationId: weightsFetch
+      summary: Download an optional weight.
+      description: docs/decisions.md M3 Q6.
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/WeightName" }
+      responses:
+        "202":
+          description: The download job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ======================================================================
+  # Launcher: the weights cache (01 §6, 02 §4; M3 as served)
+  # ======================================================================
+
+  /models:
+    get:
+      tags: [launcher]
+      operationId: modelsList
+      summary: Every model artifact, newest first, with the studios bound to it.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of artifacts.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ModelArtifactPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+
+  /models/{id}:
+    get:
+      tags: [launcher]
+      operationId: modelsGet
+      summary: One artifact, with the one-item reclaim preview a DELETE must confirm when it is an unused download.
+      parameters: [{ $ref: "#/components/parameters/ModelId" }]
+      responses:
+        "200":
+          description: The artifact.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ModelArtifactView" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [launcher]
+      operationId: modelsDelete
+      summary: Unlink a linked artifact, or reclaim an unused download with the confirm from its preview.
+      description: >
+        docs/decisions.md M3 review round 1 #3. A linked artifact: the symlink
+        is removed, never the user's directory. A download: only with
+        `confirm`; without it 409 `confirm_required`, with a stale one 409
+        `preview_changed`, both carrying `details.preview`. 409 `in_use` names
+        the studios bound to it; 409 `not_reclaimable` while it downloads.
+      parameters:
+        - { $ref: "#/components/parameters/ModelId" }
+        - name: confirm
+          in: query
+          schema: { type: string }
+      responses:
+        "204": { description: "Unlinked or deleted." }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /models:reclaim:
+    get:
+      tags: [launcher]
+      operationId: modelsReclaimPreview
+      summary: Exactly which downloads reclaim would delete — managed artifacts no studio is bound to.
+      responses:
+        "200":
+          description: The preview.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ModelReclaimPreview" } } }
+    post:
+      tags: [launcher]
+      operationId: modelsReclaim
+      summary: Delete exactly the previewed set, or nothing (409 preview_changed with the current preview).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ReclaimConfirm" } } }
+      responses:
+        "200":
+          description: What was deleted.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ModelReclaimPreview" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
 components:
+
+  securitySchemes:
+    studioToken:
+      type: http
+      scheme: bearer
+      description: >
+        HELM_TOKEN, minted per launch for one studio and its declared
+        capabilities, revoked when its group stops (07 §3, Q6). Format
+        `hs_live_` plus 52 base32 characters.
+
+  headers:
+    ETag:
+      description: The resource's etag, quoted. Send it back in If-Match.
+      schema: { type: string }
+
   parameters:
-    StudioId:      { name: id,         in: path, required: true, schema: { type: string } }
-    ModelId:       { name: id,         in: path, required: true, schema: { type: string } }
-    SessionId:     { name: id,         in: path, required: true, schema: { type: string } }
-    Namespace:     { name: ns,         in: path, required: true, schema: { type: string } }
-    Key:           { name: key,        in: path, required: true, schema: { type: string } }
-    Collection:    { name: collection, in: path, required: true, schema: { type: string } }
-    RecordId:      { name: id,         in: path, required: true, schema: { type: string } }
-    AssetId:       { name: id,         in: path, required: true, schema: { type: string } }
-    ItemId:        { name: id,         in: path, required: true, schema: { type: string } }
-    JobId:         { name: id,         in: path, required: true, schema: { type: string } }
-    TimelineId:    { name: id,         in: path, required: true, schema: { type: string } }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      description: The `next_cursor` of the previous page, unchanged.
+      schema: { type: string }
+    IfMatch:
+      name: If-Match
+      in: header
+      description: The etag last read. When given and stale, the write is refused with 409 `etag_mismatch`.
+      schema: { type: string }
+    Namespace:
+      name: ns
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[a-z][a-z0-9_.-]{0,63}$" }
+    Key:
+      name: key
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[A-Za-z0-9_.:-]{1,200}$" }
+    Collection:
+      name: collection
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[a-z][a-z0-9_]*$", maxLength: 64 }
+    StudioId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/StudioIdValue" }
+    WeightName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+    ModelId:      { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    SessionId:    { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    RecordId:     { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    AssetId:      { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    ItemId:       { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    InboxId:      { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    JobId:        { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    Pinned:
+      name: pinned
+      in: query
+      description: A user import. Pinned assets are never reclaimed; nothing unpins.
+      schema: { type: boolean, default: false }
+    HintWidth:    { name: width, in: query, schema: { type: integer, minimum: 1 } }
+    HintHeight:   { name: height, in: query, schema: { type: integer, minimum: 1 } }
+    HintDuration: { name: duration_s, in: query, schema: { type: number, exclusiveMinimum: 0 } }
+    HintFps:      { name: fps, in: query, schema: { type: number, exclusiveMinimum: 0 } }
 
-  # Outline shapes only — field lists trace to docs/design/02-data-model.md's
-  # tables, not a full request/response contract. M4 fills these in.
+  responses:
+    Invalid:
+      description: >
+        The request is malformed. Codes: `bad_request`, `bad_filter`,
+        `bad_cursor`, `invalid_document`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unauthenticated:
+      description: No studio token, or a revoked or unknown one. Code `unauthenticated`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: >
+        The token lacks a capability (`capability_required`, with
+        `details.capability`), the job is not a task the studio may change
+        (`not_a_task`), or the request came from another origin (`bad_origin`).
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Absent, deleted, or not the caller's to see. Code `not_found`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Gone:
+      description: The asset's row exists and its file does not. Code `asset_missing`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Conflict:
+      description: >
+        Codes: `etag_mismatch`, `name_taken`, `job_finished`,
+        `already_running`, `not_running`, `port_conflict`, `heavy_conflict`
+        (with `details.heavy`), `not_installed`, `conflict`, `in_use`,
+        `missing`, `confirm_required` and `preview_changed` (with
+        `details.preview`), `not_reclaimable`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    TooLarge:
+      description: The body is over its limit. Code `too_large`, with `details.limit` in bytes.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unprocessable:
+      description: >
+        Well-formed but refused. Codes: `outside_roots`, `cross_device`,
+        `not_a_file`, `unknown_session`, `self_handoff`, `not_launchable`,
+        `blocked`, `not_linkable`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    InsufficientStorage:
+      description: The disk cannot hold the body with headroom; nothing was written. Code `disk_space`, with `details.needed` and `details.free` in bytes.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    QuotaExceeded:
+      description: A per-studio quota is full. Code `quota_exceeded`, with `details` as QuotaDetails.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unsupported:
+      description: This provider cannot serve this. Code `unsupported`, with a reason in `message`.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
   schemas:
-    Studio:
-      type: object
-      properties:
-        id: { type: string }
-        name: { type: string }
-        install_state: { type: string }
-        certification_level: { type: string } # derived (helm doctor --studio), not a data-model column — see the header comment
-        runtime_env: { type: object }
 
-    ModelArtifact:
-      type: object
-      properties:
-        id: { type: string }
-        hf_repo: { type: string }
-        source: { type: string, enum: [managed, linked] }
-        state: { type: string }
-        ref_count: { type: integer }
+    # ---------------------------------------------------------------- common
 
-    ProcessGroup:
-      type: object
-      properties:
-        group_run_id: { type: string }
-        processes:
-          type: array
-          items:
-            type: object
-            properties:
-              spec_name: { type: string }
-              role: { type: string }
-              state: { type: string }
-              health_state: { type: string }
+    ULID:
+      type: string
+      pattern: "^[0-9A-HJKMNP-TV-Z]{26}$"
 
-    Session:
+    StudioIdValue:
+      type: string
+      pattern: "^[a-z][a-z0-9-]{1,38}[a-z0-9]$"
+      description: A manifest id (schema/manifest.json `id`).
+
+    JSONObject:
       type: object
+      additionalProperties: true
+
+    Error:
+      type: object
+      required: [error, message]
       properties:
-        id: { type: string }
-        studio_id: { type: string }
-        name: { type: string }
-        state: { type: object }
-        etag: { type: string }
+        error: { type: string, description: "A stable snake_case code a program branches on." }
+        message: { type: string, description: "A sentence for a person." }
+        details: { type: object, additionalProperties: true }
+
+    QuotaDetails:
+      type: object
+      required: [quota, limit, used]
+      properties:
+        quota: { type: string, enum: [records, kv_bytes] }
+        limit: { type: integer }
+        used: { type: integer }
+
+    Page:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        next_cursor:
+          type: [string, "null"]
+          description: Null on the last page.
+
+    # ---------------------------------------------------------------- identity
+
+    Me:
+      type: object
+      required: [studio_id, capabilities, quota, paths, provider, api_version, daemon_version]
+      properties:
+        studio_id: { $ref: "#/components/schemas/StudioIdValue" }
+        capabilities: { type: array, items: { $ref: "#/components/schemas/Capability" } }
+        quota:
+          type: object
+          required: [records, kv_bytes]
+          properties:
+            records: { $ref: "#/components/schemas/QuotaUse" }
+            kv_bytes: { $ref: "#/components/schemas/QuotaUse" }
+        paths:
+          type: object
+          required: [stage, data]
+          properties:
+            stage: { type: string, description: "Absolute. The directory :adopt takes files from." }
+            data: { type: string, description: "Absolute. The studio's persistent data directory, {data}." }
+        provider: { type: string, enum: [daemon, embedded] }
+        api_version: { type: string, description: "This document's info.version." }
+        daemon_version: { type: string, description: "The daemon's or helm dev's build version." }
+
+    QuotaUse:
+      type: object
+      required: [limit, used]
+      properties:
+        limit: { type: integer }
+        used: { type: integer }
+
+    Capability:
+      type: string
+      enum: [kv, records, assets, gallery, timeline, jobs, gallery.read_all, kv.shared, handoff.send]
+
+    # ---------------------------------------------------------------- events
+
+    ThemeEvent:
+      type: object
+      required: [theme]
+      properties:
+        theme: { type: string, enum: [system, light, dark] }
+    InboxEvent:
+      type: object
+      required: [inbox_id, item_id, from_studio]
+      properties:
+        inbox_id: { $ref: "#/components/schemas/ULID" }
+        item_id: { $ref: "#/components/schemas/ULID" }
+        from_studio: { $ref: "#/components/schemas/StudioIdValue" }
+        role: { type: [string, "null"] }
+    ItemEvent:
+      type: object
+      required: [change, item]
+      properties:
+        change: { type: string, enum: [added, updated, deleted] }
+        item: { $ref: "#/components/schemas/Item" }
+    JobEvent:
+      type: object
+      required: [job]
+      properties:
+        job: { $ref: "#/components/schemas/Job" }
+    ShutdownEvent:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+    GapEvent:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, description: "Events were lost; re-read state rather than trusting the stream." }
+
+    # ---------------------------------------------------------------- kv
 
     KVDoc:
       type: object
+      required: [ns, key, doc, etag, updated_at]
       properties:
-        doc: { type: object }
+        ns: { type: string }
+        key: { type: string }
+        doc: { $ref: "#/components/schemas/JSONObject" }
         etag: { type: string }
+        updated_at: { type: string, format: date-time }
+
+    KVKey:
+      type: object
+      required: [key, bytes, updated_at]
+      properties:
+        key: { type: string }
+        bytes: { type: integer }
+        updated_at: { type: string, format: date-time }
+
+    KVKeyPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/KVKey" } }
+
+    # ---------------------------------------------------------------- sessions
+
+    Session:
+      type: object
+      required: [id, studio_id, name, state, etag, created_at, opened_at]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
+        studio_id: { $ref: "#/components/schemas/StudioIdValue" }
+        name: { type: string }
+        state: { $ref: "#/components/schemas/JSONObject" }
+        etag: { type: string }
+        created_at: { type: string, format: date-time }
+        opened_at: { type: [string, "null"], format: date-time }
+
+    SessionCreate:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        state: { $ref: "#/components/schemas/JSONObject" }
+
+    SessionUpdate:
+      type: object
+      description: A JSON merge patch over the session's writable fields. `state` members merge; a null member removes that key.
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        state: { $ref: "#/components/schemas/JSONObject" }
+
+    SessionDuplicate:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+
+    SessionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Session" } }
+
+    # ---------------------------------------------------------------- records
 
     Record:
       type: object
+      required: [id, collection, doc, etag, created_at, updated_at]
       properties:
-        id: { type: string }
+        id: { $ref: "#/components/schemas/ULID" }
         collection: { type: string }
-        doc: { type: object }
+        doc: { $ref: "#/components/schemas/JSONObject" }
+        etag: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    RecordPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Record" } }
+
+    # ---------------------------------------------------------------- assets
+
+    AssetKind:
+      type: string
+      enum: [image, video, audio, other]
 
     Asset:
       type: object
+      required: [id, sha256, kind, mime, bytes, width, height, duration_s, fps, state, pinned, origin_studio, url, thumb, library_path, created_at]
       properties:
-        id: { type: string }
+        id: { $ref: "#/components/schemas/ULID" }
+        sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        kind: { $ref: "#/components/schemas/AssetKind" }
+        mime: { type: string }
+        bytes: { type: integer }
+        width: { type: [integer, "null"] }
+        height: { type: [integer, "null"] }
+        duration_s: { type: [number, "null"] }
+        fps: { type: [number, "null"] }
+        state: { type: string, enum: [ready, missing, corrupt] }
+        pinned: { type: boolean }
+        origin_studio:
+          type: [string, "null"]
+          description: >
+            The studio that first stored these bytes. Null for any caller that
+            is not that studio, so a dedup hit or a shared read never reveals
+            another studio (M4 first review, #9).
+        url: { type: string, description: "This API's path to the bytes, e.g. /api/v1/assets/{id}. Needs the Bearer header until M6 decides browser access." }
+        thumb: { type: string, description: "This API's path to the thumbnail, e.g. /api/v1/assets/{id}/thumb?w=320. Needs the Bearer header until M6 decides browser access." }
+        library_path:
+          type: [string, "null"]
+          description: >
+            The readable hardlink, relative to the library root. Null when it
+            could not be made (Q11), and null for any caller that is not the
+            origin studio, since it names that studio, a month and a filename
+            (M4 first review, #9).
+        created_at: { type: string, format: date-time }
+        warnings:
+          type: array
+          items: { type: string }
+          description: Present on an adopt or upload response when something short of failure happened, such as no library link.
+
+    AdoptRequest:
+      type: object
+      required: [path, kind]
+      additionalProperties: false
+      properties:
+        path: { type: string, description: "Absolute, inside the caller's stage directory (unlinked after adopting) or its data directory (left in place, read-only)." }
+        kind: { $ref: "#/components/schemas/AssetKind" }
+        pinned: { type: boolean, default: false }
+        width: { type: integer, minimum: 1 }
+        height: { type: integer, minimum: 1 }
+        duration_s: { type: number, exclusiveMinimum: 0 }
+        fps: { type: number, exclusiveMinimum: 0 }
+
+    AssetReclaimItem:
+      type: object
+      required: [id, sha256, bytes, blob_path, library_path, deleted_items]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
         sha256: { type: string }
-        kind: { type: string, enum: [image, video, audio, other] }
-        state: { type: string }
+        bytes: { type: integer }
+        blob_path: { type: string }
+        library_path: { type: [string, "null"] }
+        deleted_items:
+          type: array
+          items: { $ref: "#/components/schemas/ULID" }
+          description: Soft-deleted items that name this asset, as their asset or as an input. Reclaim hard-deletes them.
+
+    AssetReclaimPreview:
+      type: object
+      required: [items, total_bytes, unreferenced, confirm]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AssetReclaimItem" } }
+        total_bytes: { type: integer }
+        unreferenced:
+          type: object
+          required: [count, bytes]
+          description: Unpinned assets no item or input has ever referenced. Reported, never reclaimed.
+          properties:
+            count: { type: integer }
+            bytes: { type: integer }
+        confirm: { type: string }
+
+    AssetReclaimResult:
+      type: object
+      required: [items, total_bytes, kept_library_paths]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/AssetReclaimItem" } }
+        total_bytes: { type: integer }
+        kept_library_paths:
+          type: array
+          items: { type: string }
+          description: Library paths left in place because they no longer held the blob's inode.
+
+    ReclaimConfirm:
+      type: object
+      required: [confirm]
+      additionalProperties: false
+      properties:
+        confirm: { type: string }
+
+    # ---------------------------------------------------------------- gallery
+
+    ItemInput:
+      type: object
+      required: [asset_id, role]
+      additionalProperties: false
+      properties:
+        asset_id: { $ref: "#/components/schemas/ULID" }
+        role: { type: string, pattern: "^[a-z][a-z0-9_]*$", maxLength: 64, description: "e.g. first_frame, last_frame, reference, audio_bed, clip" }
+
+    Tag:
+      type: string
+      minLength: 1
+      maxLength: 64
+
+    ItemCreate:
+      type: object
+      required: [kind, asset_id, params]
+      additionalProperties: false
+      properties:
+        kind: { $ref: "#/components/schemas/AssetKind" }
+        asset_id: { $ref: "#/components/schemas/ULID" }
+        title: { type: string, maxLength: 500 }
+        session_id: { $ref: "#/components/schemas/ULID" }
+        params: { $ref: "#/components/schemas/JSONObject" }
+        inputs: { type: array, items: { $ref: "#/components/schemas/ItemInput" }, default: [] }
+        tags: { type: array, items: { $ref: "#/components/schemas/Tag" }, maxItems: 32, default: [] }
+
+    ItemUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        title: { type: [string, "null"], maxLength: 500 }
+        starred: { type: boolean }
+        tags: { type: array, items: { $ref: "#/components/schemas/Tag" }, maxItems: 32 }
 
     Item:
       type: object
+      required: [id, studio_id, kind, asset_id, asset, session_id, title, params, starred, tags, inputs, created_at]
       properties:
-        id: { type: string }
-        studio_id: { type: string }
-        asset_id: { type: string }
-        kind: { type: string }
-        params: { type: object }
+        id: { $ref: "#/components/schemas/ULID" }
+        studio_id: { $ref: "#/components/schemas/StudioIdValue" }
+        kind: { $ref: "#/components/schemas/AssetKind" }
+        asset_id: { $ref: "#/components/schemas/ULID" }
+        asset: { $ref: "#/components/schemas/Asset" }
+        session_id: { oneOf: [{ $ref: "#/components/schemas/ULID" }, { type: "null" }] }
+        title: { type: [string, "null"] }
+        params: { $ref: "#/components/schemas/JSONObject" }
         starred: { type: boolean }
-        tags: { type: array, items: { type: string } }
-        inputs:
-          type: array
-          items:
-            type: object
-            properties:
-              asset_id: { type: string }
-              role: { type: string }
+        tags: { type: array, items: { $ref: "#/components/schemas/Tag" } }
+        inputs: { type: array, items: { $ref: "#/components/schemas/ItemInput" } }
+        created_at: { type: string, format: date-time }
+
+    ItemPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Item" } }
+
+    # ---------------------------------------------------------------- handoff
+
+    HandoffRequest:
+      type: object
+      required: [item_id, to_studio]
+      additionalProperties: false
+      properties:
+        item_id: { $ref: "#/components/schemas/ULID" }
+        to_studio: { $ref: "#/components/schemas/StudioIdValue" }
+        role: { type: string, pattern: "^[a-z][a-z0-9_]*$", maxLength: 64 }
+
+    Handoff:
+      type: object
+      required: [id, to_studio, item_id, role, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
+        to_studio: { $ref: "#/components/schemas/StudioIdValue" }
+        item_id: { $ref: "#/components/schemas/ULID" }
+        role: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+
+    InboxEntry:
+      type: object
+      required: [id, from_studio, item_id, item, role, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
+        from_studio: { $ref: "#/components/schemas/StudioIdValue" }
+        item_id: { $ref: "#/components/schemas/ULID" }
+        item:
+          oneOf: [{ $ref: "#/components/schemas/Item" }, { type: "null" }]
+          description: Null when the sender has since deleted the item.
+        role: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+
+    InboxPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/InboxEntry" } }
+
+    # ---------------------------------------------------------------- jobs
+
+    JobKind:
+      type: string
+      enum: [install, build, download, update, export, uninstall, task]
+
+    JobState:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled, interrupted]
+
+    JobError:
+      type: object
+      required: [code, message]
+      description: >
+        installations.last_failure and jobs.last_error (02 §4). Install codes:
+        clone_failed, tool_missing, step_failed, step_timeout, cancelled,
+        interrupted, auth_required, disk_space, weights_failed, linked_missing,
+        uninstall_failed. A task job's code is the studio's own.
+      properties:
+        code: { type: string }
+        message: { type: string }
+        phase: { type: string }
+        step_index: { type: integer }
+        exit_code: { type: integer }
+        log_file_id: { $ref: "#/components/schemas/ULID" }
+
+    StepRun:
+      type: object
+      required: [step_index, step_name, command, state]
+      properties:
+        step_index: { type: integer }
+        step_name: { type: string }
+        command: { type: string }
+        state: { type: string, enum: [pending, running, succeeded, skipped, failed, interrupted, cancelled] }
+        exit_code: { type: integer }
+        log_file_id: { $ref: "#/components/schemas/ULID" }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
 
     Job:
       type: object
+      required: [id, kind, state, progress_num, progress_den, created_at]
       properties:
-        id: { type: string }
-        kind: { type: string }
-        studio_id: { type: string }
-        state: { type: string }
-        progress_num: { type: integer }
-        progress_den: { type: integer }
+        id: { $ref: "#/components/schemas/ULID" }
+        kind: { $ref: "#/components/schemas/JobKind" }
+        studio_id: { $ref: "#/components/schemas/StudioIdValue" }
+        state: { $ref: "#/components/schemas/JobState" }
+        subject_kind: { type: string }
+        subject_id: { type: string }
+        progress_num: { type: integer, minimum: 0 }
+        progress_den: { type: integer, minimum: 0 }
+        last_error: { $ref: "#/components/schemas/JobError" }
+        created_at: { type: string, format: date-time }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: string, format: date-time }
+        cancel_requested_at: { type: string, format: date-time }
+        steps: { type: array, items: { $ref: "#/components/schemas/StepRun" } }
+        warnings: { type: array, items: { type: string } }
 
-    Timeline:
+    JobPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Job" } }
+
+    TaskCreate:
       type: object
+      additionalProperties: false
       properties:
-        id: { type: string }
-        target: { type: object }
-        tracks: { type: array, items: { type: object } }
-        revision: { type: integer }
+        state: { type: string, enum: [queued, running], default: running }
+        subject_kind: { type: string, maxLength: 64 }
+        subject_id: { type: string, maxLength: 200 }
+        progress_num: { type: integer, minimum: 0, default: 0 }
+        progress_den: { type: integer, minimum: 0, default: 0 }
 
-  responses:
-    StudioList:         { description: Array of Studio., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Studio" } } } } }
-    Studio:              { description: A studio.,       content: { application/json: { schema: { $ref: "#/components/schemas/Studio" } } } }
-    ModelArtifactList:   { description: Array of ModelArtifact., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModelArtifact" } } } } }
-    ModelArtifact:       { description: A weights cache entry., content: { application/json: { schema: { $ref: "#/components/schemas/ModelArtifact" } } } }
-    ProcessGroup:        { description: A studio's process group., content: { application/json: { schema: { $ref: "#/components/schemas/ProcessGroup" } } } }
-    SessionList:         { description: Array of Session., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Session" } } } } }
-    Session:             { description: A session., content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
-    KVDoc:                { description: A kv document., content: { application/json: { schema: { $ref: "#/components/schemas/KVDoc" } } } }
-    RecordList:          { description: Array of Record., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Record" } } } } }
-    Record:               { description: A record., content: { application/json: { schema: { $ref: "#/components/schemas/Record" } } } }
-    Asset:                { description: An asset., content: { application/json: { schema: { $ref: "#/components/schemas/Asset" } } } }
-    ItemList:            { description: Array of Item., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Item" } } } } }
-    Item:                 { description: A gallery item., content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
-    JobList:              { description: Array of Job., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Job" } } } } }
-    Job:                   { description: A job., content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } } }
-    Timeline:             { description: A timeline document., content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } } }
+    TaskUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        state: { type: string, enum: [running, succeeded, failed, cancelled] }
+        progress_num: { type: integer, minimum: 0 }
+        progress_den: { type: integer, minimum: 0 }
+        last_error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code: { type: string, maxLength: 64 }
+            message: { type: string, maxLength: 4000 }
+
+    LogAppend:
+      type: object
+      required: [lines]
+      additionalProperties: false
+      properties:
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: { type: string, maxLength: 16384 }
+
+    JobLogStep:
+      type: object
+      required: [step_index, step_name, command]
+      properties:
+        step_index: { type: integer }
+        step_name: { type: string }
+        command: { type: string }
+    JobLogLine:
+      type: object
+      required: [text]
+      properties:
+        step_index: { type: integer, description: "Absent for a task job." }
+        text: { type: string }
+    JobLogEnd:
+      type: object
+      required: [state]
+      properties:
+        state: { $ref: "#/components/schemas/JobState" }
+        last_error: { $ref: "#/components/schemas/JobError" }
+
+    # ---------------------------------------------------------------- studios
+
+    InstallState:
+      type: string
+      enum: [listed, cloning, cloned, building, built, fetching_weights, auth_required, ready, update_available, failed_clone, failed_build, failed_weights, removing]
+
+    Studio:
+      type: object
+      required: [manifest_loaded, id, name, kinds, heavy, root, root_present, group]
+      properties:
+        manifest_loaded: { type: boolean, description: "False for a studio still running from a previous daemon whose manifest is gone or invalid. It can be stopped, not launched." }
+        id: { $ref: "#/components/schemas/StudioIdValue" }
+        name: { type: string }
+        description: { type: string }
+        kinds: { type: array, items: { type: string, enum: [video, image, audio, text] } }
+        heavy: { type: boolean }
+        peak_ram_gb: { type: integer }
+        root: { type: string, description: "The recorded checkout, or where install will put it." }
+        root_present: { type: boolean }
+        group: { $ref: "#/components/schemas/ProcessGroup" }
+        install_state: { $ref: "#/components/schemas/InstallState" }
+        root_path: { type: string }
+        commit_sha: { type: string }
+        rebuild_needed: { type: boolean, description: "The manifest changed since this checkout was built from it." }
+        runtime_env: { $ref: "#/components/schemas/JSONObject" }
+        last_failure: { $ref: "#/components/schemas/JobError" }
+        size_bytes: { type: integer }
+        job_id: { $ref: "#/components/schemas/ULID" }
+
+    StudioPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Studio" } }
+
+    ProcessGroup:
+      type: object
+      required: [studio_id, processes]
+      properties:
+        studio_id: { $ref: "#/components/schemas/StudioIdValue" }
+        group_run_id: { $ref: "#/components/schemas/ULID" }
+        state: { type: string, enum: [starting, running, stopping, failed, exited] }
+        processes: { type: array, items: { $ref: "#/components/schemas/Process" } }
+        failure: { $ref: "#/components/schemas/GroupFailure" }
+
+    Process:
+      type: object
+      required: [spec_name, role, state, health_state, command]
+      properties:
+        spec_name: { type: string }
+        role: { type: string, enum: [main, sidecar, worker, oneshot] }
+        state: { type: string, enum: [queued, starting, running, stopping, exited, failed] }
+        health_state: { type: string, enum: ["", unknown, passing, failing] }
+        exit_reason: { type: string, enum: [clean, crashed, health_timeout, killed_by_user, preempted, oom] }
+        exit_code: { type: integer }
+        pid: { type: integer }
+        pgid: { type: integer }
+        port: { type: integer }
+        command: { type: string, description: "The fully substituted argv, as a JSON array in a string." }
+        started_at: { type: string, format: date-time }
+        health_timeout_s: { type: integer }
+        ui: { type: string }
+
+    GroupFailure:
+      type: object
+      required: [process, exit_reason, last_lines]
+      properties:
+        process: { type: string }
+        exit_reason: { type: string }
+        exit_code: { type: integer }
+        last_lines: { type: array, items: { type: string } }
+
+    HeavyArithmetic:
+      type: object
+      description: "`details.heavy` on 409 heavy_conflict. A peak of 0 means undeclared."
+      required: [running_studio, running_name, running_peak_gb, wanted_studio, wanted_name, wanted_peak_gb, host_gb]
+      properties:
+        running_studio: { type: string }
+        running_name: { type: string }
+        running_peak_gb: { type: integer }
+        wanted_studio: { type: string }
+        wanted_name: { type: string }
+        wanted_peak_gb: { type: integer }
+        host_gb: { type: integer }
+
+    Stopping:
+      type: object
+      required: [state]
+      properties:
+        state: { type: string, const: stopping }
+
+    LogFile:
+      type: object
+      required: [id, group_run_id, process, path, bytes, truncated, cap_bytes, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
+        group_run_id: { $ref: "#/components/schemas/ULID" }
+        process: { type: string }
+        path: { type: string, description: "Relative to the logs root." }
+        bytes: { type: integer }
+        truncated: { type: boolean }
+        cap_bytes: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    LogFilePage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/LogFile" } }
+
+    ProcessLogLine:
+      type: object
+      required: [seq]
+      properties:
+        seq: { type: integer }
+        text: { type: string }
+        gap: { type: integer }
+        gap_unit: { type: string, enum: [lines, bytes] }
+
+    ProcessLogEnd:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string }
+
+    # ---------------------------------------------------------------- weights
+
+    LinkRequest:
+      type: object
+      required: [path]
+      additionalProperties: false
+      properties:
+        path: { type: string, description: "An absolute directory the user already has." }
+
+    ModelArtifact:
+      type: object
+      required: [id, hf_repo, revision, source, state, dest, path, bytes_on_disk, ref_count, studios, created_at]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
+        hf_repo: { type: string }
+        revision: { type: string }
+        commit_sha: { type: string }
+        source: { type: string, enum: [managed, linked] }
+        state: { type: string, enum: [declared, downloading, interrupted, auth_required, ready, linked, missing] }
+        dest: { type: string }
+        path: { type: string }
+        external_path: { type: string }
+        realpath: { type: string }
+        total_bytes: { type: integer }
+        bytes_on_disk: { type: integer, description: "What a managed artifact holds under the models root, partial files included. Zero for linked." }
+        ref_count: { type: integer, description: "The number of studio bindings, counted when read — never stored." }
+        studios: { type: array, items: { type: string } }
+        verified_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        unobtainable:
+          type: array
+          items: { type: string }
+          description: Set only by :link — optional weights of this repository the linked directory lacks.
+
+    ModelArtifactView:
+      allOf:
+        - { $ref: "#/components/schemas/ModelArtifact" }
+        - properties:
+            reclaim: { $ref: "#/components/schemas/ModelReclaimPreview" }
+
+    ModelArtifactPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/ModelArtifact" } }
+
+    ModelReclaimItem:
+      type: object
+      required: [id, hf_repo, revision, path, bytes]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
+        hf_repo: { type: string }
+        revision: { type: string }
+        path: { type: string }
+        bytes: { type: integer }
+
+    ModelReclaimPreview:
+      type: object
+      required: [items, total_bytes, confirm]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ModelReclaimItem" } }
+        total_bytes: { type: integer }
+        confirm: { type: string }
