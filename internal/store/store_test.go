@@ -317,14 +317,14 @@ func TestMigrationsFromEmptyCreateSchemaV1(t *testing.T) {
 	}
 	s := openTest(t, d)
 
-	if v, err := s.Version(ctx); err != nil || v != 4 || LatestVersion() != 4 {
-		t.Fatalf("version = %d (%v), latest = %d; want 4", v, err, LatestVersion())
+	if v, err := s.Version(ctx); err != nil || v != 5 || LatestVersion() != 5 {
+		t.Fatalf("version = %d (%v), latest = %d; want 5", v, err, LatestVersion())
 	}
 
 	tables := slices.DeleteFunc(objects(t, s.Reader(), "table"), func(n string) bool {
 		return strings.HasPrefix(n, "items_fts_") // FTS5's own shadow tables
 	})
-	wantTables := []string{"assets", "derived", "inbox", "installations", "item_inputs", "items", "items_fts", "jobs", "kv", "log_files", "model_artifacts", "model_files", "processes", "records", "sessions", "step_runs", "studio_assets", "studio_model_bindings", "studio_tokens", "tags", "timelines"}
+	wantTables := []string{"assets", "derived", "inbox", "installations", "item_inputs", "items", "items_fts", "jobs", "kv", "log_files", "model_artifacts", "model_files", "processes", "records", "sessions", "settings", "step_runs", "studio_assets", "studio_model_bindings", "studio_tokens", "tags", "timelines"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}

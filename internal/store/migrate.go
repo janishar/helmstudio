@@ -32,6 +32,9 @@ var schemaV3 string
 //go:embed migrations/0004_api.sql
 var schemaV4 string
 
+//go:embed migrations/0005_settings.sql
+var schemaV5 string
+
 // migrations is forward-only and append-only. The embedded provider inside a
 // standalone studio runs the same sequence, which is what makes adopting its
 // ./.helm/helm.db an import rather than a merge. Never edit or reorder an
@@ -41,6 +44,7 @@ var migrations = []Migration{
 	{Version: 2, Name: "process and log tables (docs/design/02-data-model.md §4)", Up: execScript(schemaV2)},
 	{Version: 3, Name: "installation, job and weights tables (docs/design/02-data-model.md §4)", Up: execScript(schemaV3)},
 	{Version: 4, Name: "platform API: tokens, asset grants, record etags, search, task jobs (docs/design/02-data-model.md §4-5)", Up: execScript(schemaV4)},
+	{Version: 5, Name: "launcher settings (docs/design/02-data-model.md §5)", Up: execScript(schemaV5)},
 }
 
 // LatestVersion is the schema version this binary migrates to.
