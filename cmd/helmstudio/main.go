@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/janishar/helmstudio/internal/api"
+	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/platform"
@@ -59,8 +60,15 @@ func run(addr, studiosDir string) error {
 	}
 	defer st.Close()
 
+	// The studio API (docs/design/07-platform-services.md §3): tokens minted
+	// per launch, a stage directory per launch, and the service both
+	// providers serve. The conformance suite builds its daemon from the same
+	// constructor.
+	plat := studioapi.NewPlatform(studioapi.PlatformConfig{Store: st, Dirs: dirs, API: "http://" + addr + studioapi.Base,
+		Provider: "daemon", Version: version, Logf: log.Printf})
+
 	w := weights.New(weights.Config{Store: st, Dirs: dirs, HF: weights.NewHF(huggingFaceToken), Logf: log.Printf})
-	sup := supervisor.New(supervisor.Config{Dirs: dirs, Store: st, Weights: w, Logf: log.Printf})
+	sup := supervisor.New(supervisor.Config{Dirs: dirs, Store: st, Weights: w, Logf: log.Printf, Platform: plat.Launches})
 	sup.SetStudios(loadStudios(studiosDir))
 	installer := install.New(install.Config{Store: st, Dirs: dirs, Supervisor: sup, Weights: w, Logf: log.Printf})
 	if err := installer.Sweep(ctx); err != nil {
@@ -83,8 +91,18 @@ func run(addr, studiosDir string) error {
 	for _, id := range rep.Unmanaged {
 		log.Printf("warning: re-adopted %s, but its manifest is not loaded from %s; it counts as heavy and can only be stopped", id, studiosDir)
 	}
+	// A group that died with the last daemon never had its tokens revoked or
+	// its stage cleared.
+	revoked, cleared, err := plat.Readopted(ctx, sup)
+	if err != nil {
+		return err
+	}
+	if revoked > 0 || len(cleared) > 0 {
+		log.Printf("revoked %d studio token(s) and cleared %d stage director(ies) left by groups that are no longer running", revoked, len(cleared))
+	}
+	svc, studioAPI := plat.Serve(studioapi.SupervisorStudios{Sup: sup})
 
-	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()))
+	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()), api.WithStudioAPI(studioAPI, svc))
 	if err != nil {
 		return err
 	}
@@ -101,6 +119,7 @@ func run(addr, studiosDir string) error {
 		BaseContext: func(net.Listener) context.Context { return baseCtx }}
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.Serve(ln) }()
+	go svc.WatchJobs(baseCtx, 500*time.Millisecond)
 	log.Printf("serving http://%s — data %s, logs %s", addr, dirs.Data(), dirs.Logs())
 
 	sig := make(chan os.Signal, 1)
@@ -118,6 +137,7 @@ func run(addr, studiosDir string) error {
 	// the next daemon to re-adopt.
 	shutdownCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	svc.Events().Shutdown("helmstudio is stopping")
 	cancelRequests()
 	_ = srv.Shutdown(shutdownCtx)
 	// Install jobs stop first, recorded interrupted, so a build step is never
@@ -127,6 +147,9 @@ func run(addr, studiosDir string) error {
 	}
 	return sup.Shutdown(shutdownCtx)
 }
+
+// version is reported by GET /me; release builds set it with -ldflags.
+var version = "dev"
 
 // hfTokenName is the Keychain account the Hugging Face token is stored
 // under, in the helmstudio service (R43). Nothing sets it yet: until the

@@ -10,16 +10,25 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/weights"
 )
 
 // Option configures a Server.
 type Option func(*Server)
+
+// WithStudioAPI serves every studio-api operation through h, and the
+// launcher's asset reclaim through svc (docs/decisions.md M4).
+func WithStudioAPI(h *studioapi.Handler, svc *studioapi.Service) Option {
+	return func(s *Server) {
+		s.studioAPI, s.service = h, svc
+	}
+}
 
 // WithInstall serves the install, job and weight operations
 // (api/openapi.yaml "Registry, install, weights" and "Jobs"), plus the
@@ -34,10 +43,12 @@ func (s *Server) routeInstall() {
 	if s.installer == nil {
 		return
 	}
-	s.mux.HandleFunc("GET "+Base+"/jobs", s.listJobs)
-	s.mux.HandleFunc("GET "+Base+"/jobs/{id}", s.getJob)
-	s.mux.HandleFunc("POST "+Base+"/jobs/{action}", s.jobAction)
-	s.mux.HandleFunc("GET "+Base+"/jobs/{id}/logs", s.streamJobLogs)
+	// The launcher's job queue (first review #2): never task jobs, which are
+	// a studio's own and reach only its token at /jobs.
+	s.mux.HandleFunc("GET "+Base+"/launcher/jobs", s.listJobs)
+	s.mux.HandleFunc("GET "+Base+"/launcher/jobs/{id}", s.getJob)
+	s.mux.HandleFunc("POST "+Base+"/launcher/jobs/{action}", s.jobAction)
+	s.mux.HandleFunc("GET "+Base+"/launcher/jobs/{id}/logs", s.streamJobLogs)
 	s.mux.HandleFunc("GET "+Base+"/models", s.listModels)
 	s.mux.HandleFunc("GET "+Base+"/models/{id}", s.getModel)
 	s.mux.HandleFunc("DELETE "+Base+"/models/{id}", s.deleteModel)
@@ -59,6 +70,8 @@ func (s *Server) failInstall(w http.ResponseWriter, err error) {
 	switch {
 	case errors.As(err, &ie):
 		writeError(w, installStatus[ie.Kind], string(ie.Kind), ie.Message)
+	case errors.Is(err, errTaskJob):
+		writeError(w, http.StatusNotFound, "not_found", err.Error())
 	case errors.Is(err, install.ErrNoJob), errors.Is(err, weights.ErrNoArtifact):
 		writeError(w, http.StatusNotFound, "not_found", err.Error())
 	case errors.Is(err, install.ErrNotRunning):
@@ -92,18 +105,35 @@ func (s *Server) studioInstallAction(w http.ResponseWriter, r *http.Request, id,
 	writeJSON(w, http.StatusAccepted, j)
 }
 
+// errTaskJob hides a studio's task job from the launcher's queue.
+var errTaskJob = errors.New("no such job in the launcher's queue")
+
+// launcherJobsKept bounds how far back the launcher's queue reads.
+const launcherJobsKept = 1000
+
 func (s *Server) listJobs(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	jobs, err := s.installer.Jobs(r.Context(), r.URL.Query().Get("studio"), limit)
+	jobs, err := s.installer.Jobs(r.Context(), r.URL.Query().Get("studio"), launcherJobsKept)
 	if err != nil {
 		s.failInstall(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, jobs)
+	jobs = slices.DeleteFunc(jobs, func(j install.Job) bool { return j.Kind == "task" })
+	if page, ok := paginate(w, r, jobs, func(j install.Job) string { return j.ID }); ok {
+		writeJSON(w, http.StatusOK, page)
+	}
+}
+
+// launcherJob reads a job the launcher may see: any but a task job.
+func (s *Server) launcherJob(r *http.Request, id string) (install.Job, error) {
+	j, err := s.installer.Job(r.Context(), id)
+	if err == nil && j.Kind == "task" {
+		return install.Job{}, errTaskJob
+	}
+	return j, err
 }
 
 func (s *Server) getJob(w http.ResponseWriter, r *http.Request) {
-	j, err := s.installer.Job(r.Context(), r.PathValue("id"))
+	j, err := s.launcherJob(r, r.PathValue("id"))
 	if err != nil {
 		s.failInstall(w, err)
 		return
@@ -115,6 +145,10 @@ func (s *Server) jobAction(w http.ResponseWriter, r *http.Request) {
 	id, action, ok := strings.Cut(r.PathValue("action"), ":")
 	if !ok || action != "cancel" {
 		writeError(w, http.StatusNotFound, "not_found", "the only job action is :cancel")
+		return
+	}
+	if _, err := s.launcherJob(r, id); err != nil {
+		s.failInstall(w, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
@@ -131,7 +165,7 @@ func (s *Server) jobAction(w http.ResponseWriter, r *http.Request) {
 // "end" once the job has finished and every log has been sent.
 func (s *Server) streamJobLogs(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if _, err := s.installer.Job(r.Context(), id); err != nil {
+	if _, err := s.launcherJob(r, id); err != nil {
 		s.failInstall(w, err)
 		return
 	}
@@ -221,7 +255,19 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		s.failInstall(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, arts)
+	if arts == nil {
+		arts = []weights.Artifact{}
+	}
+	// Newest first, as every collection is.
+	slices.SortStableFunc(arts, func(a, b weights.Artifact) int {
+		if c := b.CreatedAt.Compare(a.CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(b.ID, a.ID)
+	})
+	if page, ok := paginate(w, r, arts, func(a weights.Artifact) string { return a.ID }); ok {
+		writeJSON(w, http.StatusOK, page)
+	}
 }
 
 // modelView is one artifact, with the one-item reclaim preview a DELETE of
@@ -282,13 +328,13 @@ func (s *Server) deleteModel(w http.ResponseWriter, r *http.Request) {
 			s.failInstall(w, err)
 			return
 		}
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "confirm_required",
-			"message": fmt.Sprintf("deleting %s frees %d bytes; repeat with ?confirm=%s", a.Path, p.TotalBytes, p.Confirm), "preview": p})
+		writeJSON(w, http.StatusConflict, errorBody{Error: "confirm_required",
+			Message: fmt.Sprintf("deleting %s frees %d bytes; repeat with ?confirm=%s", a.Path, p.TotalBytes, p.Confirm), Details: map[string]any{"preview": p}})
 		return
 	}
 	p, err := s.weights.ReclaimOne(r.Context(), a.ID, confirm)
 	if errors.Is(err, weights.ErrPreviewChanged) {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "preview_changed", "message": err.Error(), "preview": p})
+		writeJSON(w, http.StatusConflict, errorBody{Error: "preview_changed", Message: err.Error(), Details: map[string]any{"preview": p}})
 		return
 	}
 	if err != nil {
@@ -323,7 +369,7 @@ func (s *Server) reclaim(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.weights.Reclaim(r.Context(), body.Confirm)
 	if errors.Is(err, weights.ErrPreviewChanged) {
-		writeJSON(w, http.StatusConflict, map[string]any{"error": "preview_changed", "message": err.Error(), "preview": p})
+		writeJSON(w, http.StatusConflict, errorBody{Error: "preview_changed", Message: err.Error(), Details: map[string]any{"preview": p}})
 		return
 	}
 	if err != nil {

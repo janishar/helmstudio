@@ -105,8 +105,22 @@ function render(studios) {
   }
 }
 
+// Every collection is a page: {items, next_cursor} (api/openapi.yaml).
+async function all(path) {
+  const items = [];
+  let cursor = null;
+  do {
+    const sep = path.includes("?") ? "&" : "?";
+    const r = await call("GET", path + sep + "limit=200" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : ""));
+    if (!r.ok) return r;
+    items.push(...r.body.items);
+    cursor = r.body.next_cursor;
+  } while (cursor);
+  return { ok: true, body: items };
+}
+
 async function refresh() {
-  const r = await call("GET", "/studios");
+  const r = await all("/studios");
   const status = document.getElementById("status");
   if (!r.ok) {
     status.textContent = "Could not reach the daemon: " + (r.body.message || r.status);

@@ -152,10 +152,16 @@ func TestHeavyConflictOverHTTP(t *testing.T) {
 	waitRunning(t, srv, "first-heavy")
 
 	rec := do(t, srv, "POST", Base+"/studios/second-heavy:launch", nil)
-	var body errorBody
+	var body struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+		Details struct {
+			Heavy *supervisor.HeavyArithmetic `json:"heavy"`
+		} `json:"details"`
+	}
 	json.Unmarshal(rec.Body.Bytes(), &body)
-	if rec.Code != http.StatusConflict || body.Error != "heavy_conflict" || body.Heavy == nil ||
-		body.Heavy.RunningPeakGB != 20 || body.Heavy.HostGB != 64 || !strings.Contains(body.Message, "40 GB") {
+	if rec.Code != http.StatusConflict || body.Error != "heavy_conflict" || body.Details.Heavy == nil ||
+		body.Details.Heavy.RunningPeakGB != 20 || body.Details.Heavy.HostGB != 64 || !strings.Contains(body.Message, "40 GB") {
 		t.Fatalf("second launch: %d %s", rec.Code, rec.Body)
 	}
 

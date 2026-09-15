@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/supervisor"
 	"github.com/janishar/helmstudio/internal/weights"
@@ -36,6 +37,9 @@ type Server struct {
 	installer *install.Installer
 	weights   *weights.Service
 	logsRoot  string
+
+	studioAPI *studioapi.Handler
+	service   *studioapi.Service
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
@@ -66,6 +70,10 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/logs", s.getLogFiles)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/processes/{name}/logs", s.streamLogs)
 	s.routeInstall()
+	if s.service != nil {
+		s.mux.HandleFunc("GET "+Base+"/assets:reclaim", s.service.ServeReclaim)
+		s.mux.HandleFunc("POST "+Base+"/assets:reclaim", s.service.ServeReclaim)
+	}
 	s.mux.Handle("GET /", http.FileServerFS(shelf))
 	return s, nil
 }
@@ -89,6 +97,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
+	// Studio-api routes first: every one requires a studio token (Q7). What
+	// the studio router does not recognise is the launcher's.
+	if s.studioAPI != nil && s.studioAPI.Serve(w, r) {
+		return
+	}
 	s.mux.ServeHTTP(w, r)
 }
 
@@ -155,7 +168,10 @@ func (s *Server) listStudios(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, v)
 	}
-	writeJSON(w, http.StatusOK, out)
+	slices.SortFunc(out, func(a, b Studio) int { return strings.Compare(a.ID, b.ID) })
+	if page, ok := paginate(w, r, out, func(st Studio) string { return st.ID }); ok {
+		writeJSON(w, http.StatusOK, page)
+	}
 }
 
 func (s *Server) unmanaged(r *http.Request, id string) (Studio, error) {
@@ -243,7 +259,12 @@ func (s *Server) getLogFiles(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, files)
+	if files == nil {
+		files = []supervisor.LogFile{}
+	}
+	if page, ok := paginate(w, r, files, func(f supervisor.LogFile) string { return f.ID }); ok {
+		writeJSON(w, http.StatusOK, page)
+	}
 }
 
 // streamLogs is a text/event-stream of one process's output. Events: "line"
@@ -346,18 +367,23 @@ var statusFor = map[supervisor.ErrorKind]int{
 	supervisor.KindHeavyConflict:  http.StatusConflict,
 }
 
-// errorBody is every error response: a stable kind for code, a message for
-// a person, and the memory arithmetic when that is the reason.
+// errorBody is every error response (api/openapi.yaml components.schemas.Error):
+// a stable code, a message for a person, and details such as the memory
+// arithmetic when that is the reason (Q4).
 type errorBody struct {
-	Error   string                      `json:"error"`
-	Message string                      `json:"message"`
-	Heavy   *supervisor.HeavyArithmetic `json:"heavy,omitempty"`
+	Error   string         `json:"error"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 func (s *Server) fail(w http.ResponseWriter, err error) {
 	var se *supervisor.Error
 	if errors.As(err, &se) {
-		writeJSON(w, statusFor[se.Kind], errorBody{Error: string(se.Kind), Message: se.Message, Heavy: se.Heavy})
+		body := errorBody{Error: string(se.Kind), Message: se.Message}
+		if se.Heavy != nil {
+			body.Details = map[string]any{"heavy": se.Heavy}
+		}
+		writeJSON(w, statusFor[se.Kind], body)
 		return
 	}
 	s.logf("api: %v", err)

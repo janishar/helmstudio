@@ -97,7 +97,7 @@ func waitJob(t *testing.T, h http.Handler, id string) install.Job {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
-		j := decode[install.Job](t, do(t, h, "GET", Base+"/jobs/"+id, nil))
+		j := decode[install.Job](t, do(t, h, "GET", Base+"/launcher/jobs/"+id, nil))
 		if j.FinishedAt != nil {
 			return j
 		}
@@ -128,15 +128,15 @@ func TestInstallJobsModelsAndReclaimOverHTTP(t *testing.T) {
 		t.Fatalf("studio = %v", studio)
 	}
 
-	logs := do(t, srv, "GET", Base+"/jobs/"+job.ID+"/logs", nil)
+	logs := do(t, srv, "GET", Base+"/launcher/jobs/"+job.ID+"/logs", nil)
 	if body := logs.Body.String(); !strings.Contains(body, "event: step") || !strings.Contains(body, "hello from the build") || !strings.Contains(body, "event: end") {
 		t.Fatalf("job log stream: %s", body)
 	}
-	if jobs := decode[[]install.Job](t, do(t, srv, "GET", Base+"/jobs?studio=toy-studio", nil)); len(jobs) != 2 {
+	if jobs := decode[Page[install.Job]](t, do(t, srv, "GET", Base+"/launcher/jobs?studio=toy-studio", nil)).Items; len(jobs) != 2 {
 		t.Fatalf("jobs = %+v; want the install and its download", jobs)
 	}
 
-	models := decode[[]weights.Artifact](t, do(t, srv, "GET", Base+"/models", nil))
+	models := decode[Page[weights.Artifact]](t, do(t, srv, "GET", Base+"/models", nil)).Items
 	if len(models) != 1 || models[0].RefCount != 1 || models[0].BytesOnDisk != 2048 {
 		t.Fatalf("models = %+v", models)
 	}
@@ -164,7 +164,7 @@ func TestInstallJobsModelsAndReclaimOverHTTP(t *testing.T) {
 	if rec.Code != http.StatusOK || decode[weights.ReclaimPreview](t, rec).TotalBytes != 2048 {
 		t.Fatalf("reclaim: %d %s", rec.Code, rec.Body)
 	}
-	if models := decode[[]weights.Artifact](t, do(t, srv, "GET", Base+"/models", nil)); len(models) != 0 {
+	if models := decode[Page[weights.Artifact]](t, do(t, srv, "GET", Base+"/models", nil)).Items; len(models) != 0 {
 		t.Fatalf("models after reclaim = %+v", models)
 	}
 
@@ -197,7 +197,7 @@ func TestDeleteModelNeedsTheConfirmOfItsPreview(t *testing.T) {
 		t.Fatalf("install = %+v", job)
 	}
 	waitJob(t, srv, decode[install.Job](t, do(t, srv, "POST", Base+"/studios/toy-studio:uninstall", nil)).ID)
-	id := decode[[]weights.Artifact](t, do(t, srv, "GET", Base+"/models", nil))[0].ID
+	id := decode[Page[weights.Artifact]](t, do(t, srv, "GET", Base+"/models", nil)).Items[0].ID
 
 	view := decode[modelView](t, do(t, srv, "GET", Base+"/models/"+id, nil))
 	if view.Reclaim == nil || len(view.Reclaim.Items) != 1 || view.Reclaim.TotalBytes != 2048 {
@@ -208,14 +208,14 @@ func TestDeleteModelNeedsTheConfirmOfItsPreview(t *testing.T) {
 		if rec.Code != http.StatusConflict || !strings.Contains(rec.Body.String(), `"preview"`) {
 			t.Fatalf("DELETE%s: %d %s; want 409 with the preview", q, rec.Code, rec.Body)
 		}
-		if models := decode[[]weights.Artifact](t, do(t, srv, "GET", Base+"/models", nil)); len(models) != 1 {
+		if models := decode[Page[weights.Artifact]](t, do(t, srv, "GET", Base+"/models", nil)).Items; len(models) != 1 {
 			t.Fatalf("DELETE%s deleted without a matching confirm", q)
 		}
 	}
 	if rec := do(t, srv, "DELETE", Base+"/models/"+id+"?confirm="+view.Reclaim.Confirm, nil); rec.Code != http.StatusNoContent {
 		t.Fatalf("DELETE with the confirm: %d %s", rec.Code, rec.Body)
 	}
-	if models := decode[[]weights.Artifact](t, do(t, srv, "GET", Base+"/models", nil)); len(models) != 0 {
+	if models := decode[Page[weights.Artifact]](t, do(t, srv, "GET", Base+"/models", nil)).Items; len(models) != 0 {
 		t.Fatalf("models after DELETE = %+v", models)
 	}
 }
