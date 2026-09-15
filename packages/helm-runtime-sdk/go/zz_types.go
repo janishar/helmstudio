@@ -187,11 +187,11 @@ type Asset struct {
 	// studio, so a dedup hit or a shared read never reveals another studio (M4 first
 	// review, #9).
 	OriginStudio *string `json:"origin_studio"`
-	// This API's path to the bytes, e.g. /api/v1/assets/{id}. Needs the Bearer header
-	// until M6 decides browser access.
+	// This API's path to the bytes, e.g. /api/v1/assets/{id}. Needs the Bearer header; a
+	// page prefixes /helm to go through its proxy (M6 Q10).
 	URL string `json:"url"`
 	// This API's path to the thumbnail, e.g. /api/v1/assets/{id}/thumb?w=320. Needs the
-	// Bearer header until M6 decides browser access.
+	// Bearer header; a page prefixes /helm to go through its proxy (M6 Q10).
 	Thumb string `json:"thumb"`
 	// The readable hardlink, relative to the library root. Null when it could not be made
 	// (Q11), and null for any caller that is not the origin studio, since it names that

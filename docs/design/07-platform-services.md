@@ -49,6 +49,11 @@ At spawn, the daemon injects the environment every SDK reads. The token is minte
     HELM_THEME=dark                    # system|light|dark
     HELM_ACCENT=#e0a33c                # this studio's identity hue
 
+(Amended 2026-09-16, M6.)
+- **The hue (Q7).** `HELM_ACCENT` is two variables, `HELM_ACCENT_DARK` and `HELM_ACCENT_LIGHT`, because `hue` has a value per theme. A studio without a `hue` gets its entry from 03 §2c's ramp.
+- **The SDK files (Q14).** `HELM_SDK_BASE` (for example `http://127.0.0.1:8700/sdk/v1`) says where the helm packages for the studio's pinned majors are served.
+- **The page (Q9, Q10).** A studio's page gets none of these: it reaches the API, the SDK files, its accent and the theme stream through the runtime SDK's proxy at `/helm/`, and never holds `HELM_TOKEN`.
+
 | Endpoint                                                 | Does                                                                                                                                    |
 |----------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
 | GET /kv/{ns}/{key}           | Read a JSON document. Returns `ETag`.                                                                                                   |
@@ -144,6 +149,12 @@ Consistency rests on `helm-css` — tokens, base, layout and component classes, 
 **Identity survives.** `--helm-studio-accent` is set from the manifest's `hue`, so h3 studio's Render button stays amber and AuK's stays violet while every ground, border, text colour, radius and font matches. Studios are consistent, not uniform — which is the actual goal.**
 
 **Theme follows the launcher.** The daemon passes `HELM_THEME` at spawn and pushes a `theme` event over SSE when the user toggles it; the SDK's two-line theme bridge sets `data-theme` on the studio's root element. Flip the launcher to light and every running studio follows within a frame. A standalone studio falls back to `prefers-color-scheme`, which is what it would have done anyway.**
+
+(Amended 2026-09-16, M6 Q8, Q9, Q19.)
+- **The stream.** The launcher's theme is the `theme` setting, changed with `PUT /launcher/settings/theme`. A page follows it through `GET /theme/events`, which needs no token and carries only `{theme}`, through its proxy or directly. `theme` also arrives on `/events` for a studio's server.
+- **The bridge.** The browser runtime's `themeBridge()` sets `data-theme`, or removes it for `system`. It marks the root `data-helm-theme-follows="launcher"` while the stream answers.
+- **A studio's own theme control.** Hosted, the launcher's theme wins: a studio's own control hides while the root carries that mark. Standalone, the control works as it did.
+- **The accent.** It comes from the proxy's `/helm/accent.css`, which switches with `data-theme` the way helm-tokens.css does.
 
 ### What "enforce" can honestly mean
 

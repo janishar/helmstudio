@@ -152,6 +152,117 @@ Stripe, dot and timeline clip only — never a button fill in launcher chrome. A
 | iris studio | `#d8558f` | `#b12f68` | image         |
 | AuK studio  | `#8b7cf0` | `#5c4bc4` | audio         |
 
+(Amended 2026-09-16, M6 Q7: h3 studio's manifest carries this table's `#e0a33c` / `#a06a10`, not the `#ffb454` / `#b5721a` in 08's draft manifest. The table was chosen against the accent.)
+
+## 2a · Tokens
+
+(Added 2026-09-16, M6 Q5. Token names are API within a major (§5): this table is the whole list, and `helm-tokens.css` and `tokens.json` carry exactly these names with these values. The values in §2 are unchanged. A value marked *proposed* was not stated anywhere in the design and needs the human's sign-off; one marked *reading copy* comes from the stylesheet of `docs/artifacts/03-design-system.html`, where the prose never stated it.)
+
+#### Colour — one value per theme
+
+| Token | Dark | Light | Role |
+|---|---|---|---|
+| `--helm-ground-page` | `#0d0c0a` | `#faf8f3` | Page ground |
+| `--helm-ground-panel` | `#161512` | `#ffffff` | Panels, cards |
+| `--helm-ground-raised` | `#1f1d18` | `#fbf8f1` | Dialogs, chips, raised surfaces |
+| `--helm-ground-inset` | `#090804` | `#1c1a15` | Terminal and log surfaces — dark in both themes |
+| `--helm-border-hairline` | `#292620` | `#e4dfd2` | Every 1px structural border |
+| `--helm-border-strong` | `#3b372e` | `#c9c2b0` | Secondary button outline, emphasised borders |
+| `--helm-text-primary` | `#f1ede4` | `#1a1813` | Body and titles |
+| `--helm-text-secondary` | `#a8a294` | `#534f45` | Descriptions, secondary labels |
+| `--helm-text-muted` | `#716b5e` | `#837d70` | Non-essential labels at 11px/500 only (§17) |
+| `--helm-accent-base` | `#ffc700` | `#f5b800` | The one primary fill |
+| `--helm-accent-hover` | `#ffd633` | `#e0a800` *reading copy* | Primary fill on hover |
+| `--helm-accent-subtle` | `#2b2206` | `#fff3d1` | Selected row, active tab ground |
+| `--helm-accent-text` | `#ffd24a` | `#7a5600` | Links, active labels, accent icons |
+| `--helm-on-accent` | `#1a1400` | `#1a1400` | Text on `accent-base` |
+| `--helm-status-idle` | `#716b5e` | `#837d70` | Not installed, stopped |
+| `--helm-status-running` | `#4caf7d` | `#1f7a4d` | Healthy, step done |
+| `--helm-status-info` | `#4a9fe0` | `#1c6fb8` | Downloading, building |
+| `--helm-status-warning` | `#f0883e` | `#a85410` | Update available, unverified, marginal |
+| `--helm-status-error` | `#e05c52` | `#c0342a` | Failed, requirement not met; the danger fill (§9) |
+| `--helm-on-danger` | `#1a1400` *proposed* | `#ffffff` *proposed* | Text on a danger fill (`status-error`) |
+| `--helm-log-text` | `#a8a294` *reading copy* | `#cfc8ba` *reading copy* | Log output on `ground-inset` |
+| `--helm-log-muted` | `#7a7467` *proposed* | `#7a7467` *proposed* | Timestamps, dimmed log lines |
+| `--helm-log-error` | `#e05c52` *proposed* | `#e05c52` *proposed* | Error lines — the dark value in both, since the terminal is dark |
+| `--helm-log-warning` | `#f0883e` *proposed* | `#f0883e` *proposed* | Warning lines |
+| `--helm-log-accent` | `#ffd24a` *proposed* | `#ffd24a` *proposed* | Prompts and step headers in a log |
+| `--helm-focus-ring` | `#ffc700` | `#7a5600` | The 2px focus outline (§15; Q6) |
+| `--helm-scrim` | `rgb(0 0 0 / 0.6)` *proposed* | `rgb(28 26 21 / 0.4)` *proposed* | Behind a dialog |
+| `--helm-shadow-dialog` | `0 12px 32px rgb(0 0 0 / 0.45)` *reading copy* | `0 12px 32px rgb(0 0 0 / 0.45)` *reading copy* | The dialog shadow (§1: one of two shadows) |
+| `--helm-studio-accent` | `var(--helm-accent-text)` | `var(--helm-accent-text)` | The studio's `hue` for the current theme (§2c); the value here is the fallback when none is injected |
+| `--helm-on-studio-accent` | `var(--helm-ground-page)` | `var(--helm-ground-page)` | Text on a `studio-accent` fill; injected beside it (§2c) |
+
+#### Independent of theme
+
+| Token | Value | Role |
+|---|---|---|
+| `--helm-space-1` … `--helm-space-9` | `4px` `8px` `12px` `16px` `20px` `24px` `32px` `40px` `56px` | The spacing scale (§4) |
+| `--helm-radius-sm` | `4px` | Buttons, chips, inputs, bars |
+| `--helm-radius-md` | `6px` | Cards, panels, terminals, dialogs |
+| `--helm-control-sm` | `22px` | Compact button, inside card rows and panel headers |
+| `--helm-control-md` | `26px` | Default button |
+| `--helm-control-lg` | `30px` | Dialog primary |
+| `--helm-font-sans` | `"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif` | |
+| `--helm-font-mono` | `"IBM Plex Mono", ui-monospace, Menlo, monospace` | |
+| `--helm-type-title` | `600 20px/28px var(--helm-font-sans)` | Page title |
+| `--helm-type-section` | `600 11px/16px var(--helm-font-sans)` | Uppercase section label |
+| `--helm-type-card-title` | `600 14px/20px var(--helm-font-sans)` | Card title |
+| `--helm-type-body` | `400 13px/20px var(--helm-font-sans)` | Body |
+| `--helm-type-mono` | `400 12px/18px var(--helm-font-mono)` | Metadata lines |
+| `--helm-type-log` | `400 12px/17px var(--helm-font-mono)` | Log lines |
+| `--helm-type-micro` | `500 11px/15px var(--helm-font-sans)` | Micro labels |
+| `--helm-tracking-title` | `-0.01em` | Page title letter-spacing |
+| `--helm-tracking-section` | `0.09em` | Uppercase label letter-spacing |
+| `--helm-duration-hover` | `120ms` | Hover and focus colour, border (§16) |
+| `--helm-duration-expand` | `180ms` | Row or panel expand |
+| `--helm-duration-dialog-in` | `160ms` | Dialog rise |
+| `--helm-duration-dialog-out` | `100ms` | Dialog fade |
+| `--helm-duration-progress` | `200ms` | Determinate progress fill |
+| `--helm-duration-indeterminate` | `1400ms` | Indeterminate segment loop |
+| `--helm-ease-standard` | `cubic-bezier(.2,0,.2,1)` | Hover and focus |
+| `--helm-ease-enter` | `cubic-bezier(.2,0,0,1)` | Expand, dialog in |
+| `--helm-ease-indeterminate` | `cubic-bezier(.4,0,.6,1)` | Indeterminate segment |
+
+Under `prefers-reduced-motion: reduce`, every `--helm-duration-*` except `--helm-duration-progress` is `0ms` (§16).
+
+## 2b · Contrast pairs
+
+(Added 2026-09-16, M6 Q6. Supersedes §5's "any token pair below 4.5:1": that rule fails `text-muted`, which §17 permits. Ratios are WCAG 2 relative-luminance contrast, checked in both themes by the gate.)
+
+| Foreground | On | At least |
+|---|---|---|
+| `text-primary` | `ground-page`, `ground-panel`, `ground-raised` | 4.5 |
+| `text-secondary` | `ground-page`, `ground-panel`, `ground-raised` | 4.5 |
+| `text-muted` | `ground-page`, `ground-panel`, `ground-raised` | 3 |
+| `accent-text` | `ground-page`, `ground-panel`, `accent-subtle` | 4.5 |
+| `on-accent` | `accent-base`, `accent-hover` | 4.5 |
+| `status-running`, `status-info`, `status-warning`, `status-error` | `ground-panel` | 4.5 |
+| `status-idle` | `ground-panel` | 3 |
+| `on-danger` | `status-error` | 4.5 |
+| `log-text`, `log-error`, `log-warning`, `log-accent` | `ground-inset` | 4.5 |
+| `log-muted` | `ground-inset` | 3 |
+| `focus-ring` | `ground-page`, `ground-panel` | 3 |
+
+## 2c · Identity hues in practice
+
+(Added 2026-09-16, M6 Q7.)
+
+- **What the daemon injects.** It passes a studio's `hue` at spawn as `HELM_ACCENT_DARK` and `HELM_ACCENT_LIGHT`. The runtime SDK's proxy serves them as `/helm/accent.css`, which sets `--helm-studio-accent` and `--helm-on-studio-accent` for whichever theme is showing.
+- **Text on a hue.** `--helm-on-studio-accent` is `#1a1400` or `#ffffff`, whichever contrasts more with that theme's hue.
+- **A studio with no `hue`.** It is given an entry from this ramp. The entry is chosen by the 32-bit FNV-1a hash of its id, modulo six, so it is the same at every launch:
+
+| # | Dark | Light |
+|---|---|---|
+| 0 | `#a1cb4d` | `#5d7e1b` |
+| 1 | `#62cb4d` | `#2b7e1b` |
+| 2 | `#4dcb77` | `#1b7e3c` |
+| 3 | `#4dcbb6` | `#1b7e6e` |
+| 4 | `#4dc1cb` | `#1b767e` |
+| 5 | `#b64dcb` | `#6e1b7e` |
+
+Each entry is at least 30° of hue from the accent and from each launch studio's hue in the same theme, and at least 3:1 on that theme's `ground-panel`. Colour is a stripe or dot there, not text. The gate checks both.
+
 ## 3 · Type
 
 **IBM Plex Sans and IBM Plex Mono.** Not Inter, the default of every AI product since 2022; not Space Grotesk, whose wide caps fight a dense rail. The decisive argument is the *matched* mono: a metadata line and the label above it share a skeleton, so the switch to mono reads as "this is machine output", not "this is a different app".**
@@ -190,6 +301,10 @@ The system ships as a package so studios can look like family without importing 
 | Enforcement | `helm validate` fails on raw hex outside the vendored token file, on non-Plex families, and on any token pair below 4.5:1 in either theme. Advisory locally, blocking in registry CI.                                                               |
 | Stability   | Token names are API within a major. A renamed token silently restyles four studios — the worst kind of break, because nothing errors.                                                                                                               |
 
+Amendments (2026-09-16, M6):
+- **Theme** (Q8, Q9, Q10). The daemon injects `HELM_THEME` at spawn and emits `theme` both on `/events` and on the tokenless `GET /theme/events`. A studio's page reaches that stream through the runtime SDK's same-origin proxy at `/helm/`, or directly. The browser runtime's `themeBridge()` sets `data-theme`, or removes it for `system`. With no stream, `data-theme` stays unset. Hosted, the launcher's theme wins, and a studio's own theme control is hidden while the stream answers. Standalone, that control keeps working (Q19).
+- **Enforcement** (Q6, Q17). `helm validate -theme <dir>` flags colour literals and non-Plex font families. It is advisory, and `-strict` makes it blocking for registry CI. The contrast rule is the pairs in §2b, not every token pair. Rendering a studio's own stylesheet for contrast is the approval harness's job (M7).
+
 ## 6 · Catalogue
 
 *[Mockup: the launcher shell — top bar with `helmstudio`, `127.0.0.1:8700`, the running studio "ltx studio · 12:04 :8720" with Stop and "1 running"; nav Studios, Gallery, Timeline, Models & disk, Doctor; page title "Studios" with "4 studios · 2 installed · 38.4 GB on disk" and Add studio; four cards:*
@@ -213,6 +328,13 @@ Card anatomy: 3px identity stripe, title with a kind badge, one clamped descript
 | process `failed` | Crashed · exit 137 | Restart | View log |
 
 Every state in the canonical vocabulary has a row here. An unmapped state falls back to its raw name in an idle chip rather than rendering blank — a state with no chip is a bug, not a blank space.
+
+(Amended 2026-09-16, M6 defaults: three rows the vocabulary gained after the freeze, which would otherwise fall back to raw names.
+- **`auth_required`** (M3 review #5): chip "Needs a Hugging Face token", primary "Add token".
+- **A studio re-adopted without its manifest** (M2 round 1): chip "Running · manifest not loaded", primary Stop.
+- **A failure with code `env_failed`** (M5 Q7) reads as `failed_*` with its message.
+
+The facts line shows what the manifest declares, not the mockup's "~60 GB".)
 
 ## 7 · Studio detail and install
 
@@ -254,11 +376,18 @@ Elapsed against the budget, never a check count. If it exhausts, this becomes "l
 
 The confirm is danger-filled, not accent-filled, because it destroys running work — the one place a status colour becomes a button.
 
+(Amended 2026-09-16, M6 Q22.
+- **"Don't ask again this session"** is offered and honoured only while the running studio reports `idle`, never for `busy` or `unknown`. Even when remembered, the page fetches a fresh conflict and confirms with that digest (M5 Q13).
+- **The body** states the arithmetic from the conflict, and says the models "do not fit" only when their sum exceeds host memory. The one-heavy rule applies whether or not they fit.
+- **Text on the danger fill** is `--helm-on-danger`.)
+
 ## 10 · Gallery
 
 *[Mockup: Gallery, 1,284 items · 38.4 GB, filters ltx h3 iris, All kinds, "Search prompts"; a grid of items — café window drift (h3 · 5.0s · seed 42), rain street plate (ltx · 4.2s · seed 7), klein still 11 (iris · 1024² · s 991), line 04 — arshi (AuK · 0:03 · zero-shot), take-053255 (h3 · 5.2s · seed 42), café sequence (timeline · 14.2s); a selected item with the provenance chip "from take-052505" and actions Use as first frame, Send to…, Add to timeline.]*
 
 One query serves both views: the launcher's cross-studio gallery and a studio's own panel differ only by scope. Selecting an item exposes what can be done with it — the provenance chip on the left says where it came from, which is the thing only a central store can know.
+
+(Amended 2026-09-16, M6 Q11: the launcher's cross-studio gallery waits for M9's cookie. Until then only a studio's own panel exists, through `helm-gallery`.)
 
 ## 11 · Timeline
 
@@ -277,6 +406,10 @@ Clips carry the identity hue of the studio that produced them, so a sequence ass
 | tencent/AuK-Flash | 4.1 GB | Orphaned | 12d ago | Reveal · Delete |
 
 "Used by" is the reference count made visible. An artifact used by two studios is not deletable without a confirmation naming both; one used by none is chipped orphaned and is the only thing Reclaim touches.
+
+(Amended 2026-09-16, M6 Q21 and defaults:
+- **No Verify yet.** It is not shown while weight verification is open.
+- **"Orphaned" is a word, not a stored state.** It labels an artifact no studio is bound to; M3 Q3 removed the stored reference count and the `orphaned` state, not the idea.)
 
 ## 13 · Adding a studio
 
@@ -349,6 +482,8 @@ The window frame is the only place the product gains a shadow it did not draw it
 
 Buttons are 26px by default, 22px compact inside card rows and panel headers, 30px for a dialog primary; 4px radius, 13px medium label. Focus is a 2px accent outline at 2px offset on `:focus-visible`, never suppressed. A progress bar never carries text inside it; the number sits in the mono line beneath. A state chip is never dot-only. A card is not a button — the primary action is — so the expensive action is never where a keyboard user lands first.
 
+(Amended 2026-09-16, M6 Q6: the focus outline is `--helm-focus-ring`, which is the accent fill in dark and `accent-text` in light. A yellow outline on a white panel measures 1.8:1.)
+
 ## 16 · Motion
 
 | What | Duration | Easing |
@@ -364,6 +499,18 @@ Buttons are 26px by default, 22px compact inside card rows and panel headers, 30
 ## 17 · Accessibility
 
 **Contrast.** Dark: primary text on the page ground is about 16:1, secondary on a panel about 7.5:1, muted about 3.9:1 — so muted is permitted only at 11px/500 for non-essential labels and never as the sole statement of a status. Light: about 15.4:1, 8.1:1 and 4.1:1 under the same rule. The accent fill carries `#1a1400` text at roughly 11:1 in both themes, which is the property that let yellow be the accent at all.
+
+(Amended 2026-09-16, M6 Q6: the figures, measured with the WCAG formula, are:
+
+| | Dark | Light |
+|---|---|---|
+| Primary text on the page ground | 16.7:1 | 16.7:1 |
+| Secondary text on a panel | 7.2:1 | 8.2:1 |
+| Muted text on the page ground | 3.7:1 | 3.9:1 |
+| Muted text on a panel | 3.5:1 | 4.1:1 |
+| `#1a1400` on the accent fill | 11.7:1 | 10.3:1 |
+
+The rule is unchanged; §2b is what the gate checks.)
 
 **Focus order** runs top bar, nav, page actions, then content in DOM order; a skip link is first. Within a card: title, secondary, primary.
 

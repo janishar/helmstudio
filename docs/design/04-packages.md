@@ -129,6 +129,14 @@ A component **receives** a runtime client; it never constructs one. `el.client =
         .addEventListener('frame-extracted', e => setFirstFrame(e.detail.asset))
     </script>
 
+Amendments (2026-09-16, M6):
+- **Browser access (Q10).** A page never holds a token. The studio's server mounts the runtime SDK's same-origin proxy at `/helm/`: `helm.Proxy` in Go, `helm_runtime_sdk.proxy.Proxy` in Python, and `createProxy` from `@helmstudio/runtime/proxy` in Node. The proxy forwards `/helm/api/v1/<studio-api path>` with the studio's token added, `/helm/sdk/v1/*` without one, and serves `/helm/accent.css`. Anything else, launcher operations included, is 404.
+  - **The client.** The browser build's `connect()` takes a base URL (default `/helm/api/v1`) and no token; it replaces `fromEnv()` in a page.
+  - **The example above.** Its paths become `/helm/sdk/v1/helm.css`, `/helm/sdk/v1/helm-runtime.js` and `/helm/sdk/v1/helm-ui.js`.
+  - **Level 0 stays viable.** Mounting the proxy is optional.
+- **Components receive interfaces (Q12).** A component depends on the few methods it calls, documented with the component in M6b, not on the runtime client's whole type. The runtime SDK's browser client provides them for studio operations. A launcher browser client, generated from `launcher` operations and served only to the daemon's own page, provides them for install and process logs.
+- **Which components ship when (Q13).** `helm-timeline` ships with the timeline API in M8. `helm-player` ships in M6b without filmstrip, waveform and h264 proxy, which render `Unsupported` until the ffmpeg decision.
+
 ## 6 · Four adoption levels
 
 **Level 0 · nothing**
@@ -172,6 +180,12 @@ Both paths edit the same document through the same endpoints, so a sequence open
 
 All three must exist. Registries alone exclude the studios that refuse a build step; served bundles alone break standalone; vendoring alone goes stale.
 
+(Amended 2026-09-16, M6 Q14.)
+- **How the bundles are served.** The daemon serves `/sdk/v1/*` as static files, `GET` and `HEAD` only. They are exempt from its Origin check and answered with `Access-Control-Allow-Origin: *`, because a module script or font from another origin is fetched in CORS mode.
+- **What is there.** helm-css is served at the root: its four layers, `helm.css`, `helm.min.css`, `tokens.json` and `fonts/`. The browser runtime is `helm-runtime.js`, which re-exports `runtime/browser.js`.
+- **How a studio finds it.** `HELM_SDK_BASE` (for example `http://127.0.0.1:8700/sdk/v1`) is injected at spawn from the manifest's `sdk` majors. A pinned major the daemon does not serve refuses the launch as `not_launchable`, before anything is stopped for it.
+- **The vendored copy.** It is linked before the daemon's `/helm/sdk/v1/` copy, reached through the proxy.
+
 ## 9 · Versioning across three packages
 
 - **Independent semver**, with one published compatibility matrix. `GET /me` reports the framework's API major and the SDK majors it serves, so a component can decide at runtime rather than guess.
@@ -192,7 +206,9 @@ All three must exist. Registries alone exclude the studios that refuse a build s
     ├── studios/*.yaml              # the registry
     └── test/conformance/           # run against both providers
 
-A monorepo because the contract and its three clients must move together; three release trains because their consumers must not have to. CI gates: the conformance suite against daemon and embedded provider, generated-client drift (regenerate and fail on a diff), visual regression on `helm-css` and every component in **both themes**, and a contrast check on every token pair. The visual regression matters more than it sounds — a CSS framework consumed by four studios has no other way to notice it broke one of them.
+(Amended 2026-09-16, M6 defaults: the directories are `packages/helm-css/`, `packages/helm-runtime-sdk/{go,python,node}/` and `packages/helm-ui-sdk/`, as CLAUDE.md's layout has them, not `css/`, `runtime-*/` and `ui/`.)
+
+A monorepo because the contract and its three clients must move together; three release trains because their consumers must not have to. CI gates: the conformance suite against daemon and embedded provider, generated-client drift (regenerate and fail on a diff), visual regression on `helm-css` and every component in **both themes**, and a contrast check on every token pair. The visual regression matters more than it sounds — a CSS framework consumed by four studios has no other way to notice it broke one of them. (Amended 2026-09-16, M6 Q6 and Q16: the contrast check covers the declared pairs in 03 §2b, not every pair. Visual regression runs in `make gate` against an installed Chrome, driven over its DevTools pipe from Go's standard library. Its goldens are exact, tied to the Chrome major they were made with, and regenerated only by `make golden`.)
 
 ## 11 · The rules that stop this rotting
 

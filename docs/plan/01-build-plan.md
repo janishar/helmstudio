@@ -11,7 +11,7 @@ architectural layer.
 | 2 | Install, weights, linked models | 8–10d | Clean machine to generated video; interrupt and resume; link an existing model |
 | 3 | OpenAPI contract, SDK, embedded provider | 10–12d | Conformance green against both providers; `helm dev` with no daemon |
 | 4 | ltx and AuK — the second caller | 6–8d | Three studios, independent environments, switch dialog with real memory arithmetic |
-| 5 | helm-css, real UI, helm-ui-sdk | 10–12d | h3's take list replaced by `<helm-gallery>`; theme toggle re-themes running studios |
+| 5 | helm-css, real UI, helm-ui-sdk | 10–12d | h3's take list replaced by `<helm-gallery>`; theme toggle re-themes running studios (note, M6 Q20: h3 stays at level 2 with its own take list, per 07 §5 and 08; `<helm-gallery>` is shown in a fixture studio) |
 | 6 | iris, manifest library, editor | 6–8d | Wrap a repo that never heard of helmstudio; export the manifest as a pull request |
 | 7 | Timeline and export | 10–12d | A 14-second sequence from three studios; stream-copy verified bit-identical |
 | 8 | Mac app and release | 7–9d | Notarised `.dmg` on a clean Mac; quit with a studio alive in the menu bar |

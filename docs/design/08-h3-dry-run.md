@@ -107,6 +107,22 @@ The stylesheet already defines 45 variables in a `:root` block, redefines them u
 
 The 64 remaining raw literals are the real task, and most are shadows and overlay tints — `rgba(0,0,0,.5)`, `rgba(255,180,84,.12)` — which become `color-mix()` over tokens. Note the studio's dark ground is blue-cast (`#0b0e14`) where helmstudio's is warm (`#0d0c0a`); adopting tokens shifts the studio slightly warmer, which is the point of a shared palette but is a visible change worth expecting rather than discovering.
 
+(Amended 2026-09-16, M6 Q7 and Q19.)
+- **The counts do not reproduce.** `helm validate -theme` at the pinned `a6eb54f` finds 20 distinct custom properties in 54 declarations across the dark, system-light and explicit-light blocks. It finds 101 colour literals in total: 51 inside those blocks and 50 outside them (26 hex, 24 `rgb`/`rgba`). It also finds 45 font-family uses of the studio's own `--mono`/`--sans`. So "45" and "64" were not measured at that commit.
+- **Rows the table above lacked:**
+  - `--raised-2` → `color-mix()` of `ground-raised` and `border-strong`
+  - `--amber-d` → `color-mix()` of `studio-accent` and `ground-page`
+  - `--term-*` → `ground-inset`, `log-text` and `log-accent`
+  - `--r` → `radius-md`
+  - `--mono`/`--sans` → `font-mono`/`font-sans`
+- **Visible changes, accepted:**
+  - warmer grounds
+  - a dark terminal in the light theme, per 03 §2
+  - a 6px radius instead of 8px
+  - Plex
+  - green, not lime, for success
+- **The manifest's hue** is 03 §2's `#e0a33c`/`#a06a10`, not the `#ffb454`/`#b5721a` below.
+
 ## Timeline: the framework version is strictly better
 
 h3 studio already has `CombineTimeline`, and it builds a `filter_complex … concat=n=N:v=1:a=1` graph. That always re-encodes, even when every clip is a take from the same session at identical settings — which is the overwhelmingly common case here. The framework pipeline takes the concat-demuxer stream-copy path in exactly that situation, so the same four-take sequence goes from a re-encode to a few seconds.

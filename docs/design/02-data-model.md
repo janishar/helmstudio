@@ -552,6 +552,14 @@ One artifact per Hugging Face `(repo, revision)`, whichever studio declared it f
     DROP TABLE items_fts;
     CREATE VIRTUAL TABLE items_fts USING fts5(item_id UNINDEXED, title, prompt, tokenize='porter unicode61');
 
+Schema v5 (added 2026-09-16, M6 Q8): the launcher's settings. §6's "`settings` stores a root only when the user overrides it" lands here as a table; M6 writes only `theme`, and roots stay open.
+
+    -- one row per setting the user changed; an absent key means the default
+    CREATE TABLE settings (
+      key TEXT PRIMARY KEY,                 -- 'theme': 'system' | 'light' | 'dark' (default 'system')
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL) WITHOUT ROWID;
+
 A studio may read an asset it has a `studio_assets` row for, one its own items or item inputs reference, one an item in its inbox references, or any asset when it holds `gallery.read_all`. Blobs are written read-only (mode 0444). `:adopt` never copies. It takes a file from one of two places (amended by the M4 first review, #4, superseding Q10's stage only):
 
 - **The caller's stage directory.** The stage entry is unlinked afterwards.

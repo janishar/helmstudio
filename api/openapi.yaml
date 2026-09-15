@@ -7,11 +7,13 @@
 #
 # Conventions that apply everywhere, so they are not repeated per operation:
 #
-# - Tags. Every operation is `studio-api` or `launcher`, never both (Q1). Only
-#   `studio-api` operations are generated into helm-runtime-sdk. Every
-#   `studio-api` operation requires a studio token, with no exception (Q7): the
-#   launcher reads the job queue through its own `/launcher/jobs` paths (M4
-#   first review, #2).
+# - Tags. Every operation is `studio-api`, `launcher` or `public`, exactly one
+#   (Q1; `public` added in M6, Q9). Only `studio-api` operations are generated
+#   into helm-runtime-sdk. Every `studio-api` operation requires a studio token,
+#   with no exception (Q7): the launcher reads the job queue through its own
+#   `/launcher/jobs` paths (M4 first review, #2). A `public` operation needs no
+#   token, is a GET, carries nothing but the launcher's theme, and is the only
+#   kind of operation a studio's page may reach from its own origin.
 # - x-helm-group / x-helm-method name the SDK method, identical in Go, Python
 #   and Node (04 §4): `x-helm-group: assets`, `x-helm-method: adopt` is
 #   `c.Assets.Adopt`, `c.assets.adopt`, `c.assets.adopt`.
@@ -26,10 +28,15 @@
 # - PATCH always means a JSON merge patch (RFC 7396) over the resource's
 #   writable fields, sent as application/merge-patch+json: an object member
 #   merges, an array or scalar replaces, `null` removes (M4 first review, #11).
-# - Asset bytes and thumbnails need the Bearer header, which <img> and <video>
-#   cannot send. M4's clients are server-side; how a browser page reaches them
-#   is decided in M6 (Q27), and that decision may change the security of
-#   /assets/{id} and /assets/{id}/thumb (M4 first review, #12).
+# - Browser access (M6 Q10, resolving M4 Q27 and first review #12). A studio's
+#   page never holds a token. The runtime SDK's same-origin proxy, mounted at
+#   /helm/ on the studio's own server, forwards /helm/api/v1/<studio-api path>
+#   here with the studio's Bearer token added, and forwards nothing else. So
+#   <img src="/helm/api/v1/assets/{id}"> works, and /assets/{id} and
+#   /assets/{id}/thumb keep their Bearer security unchanged.
+# - Outside this document's servers.url, the daemon serves the helm packages
+#   as static files at /sdk/v1/ (helm.css, helm-runtime.js, …; 04 §8), GET and
+#   HEAD only, exempt from the Origin check like `public` operations (M6 Q14).
 # - Collections return a page: {items, next_cursor} with `limit` (default 50,
 #   max 200) and an opaque `cursor` (Q5). A cursor is only valid with the same
 #   filters it was issued for. Reclaim previews are single documents, not
@@ -66,6 +73,12 @@ tags:
       What the launcher calls: install, weights, supervision and reclaim. No
       token; the daemon's Host and Origin checks apply (docs/decisions.md, M2
       supervision). Not generated into helm-runtime-sdk.
+  - name: public
+    description: >
+      The launcher's theme, for a studio's page (M6 Q9). No token, GET only,
+      and exempt from the Origin check with `Access-Control-Allow-Origin: *`,
+      so a page on a studio's own port can follow it directly or through its
+      proxy. The Host check still applies. Not generated into helm-runtime-sdk.
 
 security: []
 
@@ -109,9 +122,10 @@ paths:
         issued, `gap` comes first and the stream continues from now (second
         review #2). A studio receives `item` events
         for its own items, or for every studio's with `gallery.read_all`;
-        `inbox` for handoffs to it; `job` for its own studio's jobs. `theme`
-        is part of the contract now and first emitted in M6. `: ping` comments
-        keep the connection open.
+        `inbox` for handoffs to it; `job` for its own studio's jobs; `theme`
+        to every studio whenever the launcher's theme is set (M6 Q8). A page
+        follows the theme through `GET /theme/events` instead, which needs no
+        token. `: ping` comments keep the connection open.
       security: [{ studioToken: [] }]
       parameters:
         - name: Last-Event-ID
@@ -731,9 +745,9 @@ paths:
         R37. Readable by the rules in Q9; anything else is 404. `ETag` is the
         sha256. A single byte range answers 206; an unsatisfiable one 416
         (`Invalid`). When the row exists and its file does not, 410
-        `asset_missing`. Needs the Bearer header, so a browser element cannot
-        load it directly; M6 decides browser access and may change this
-        operation's security (Q27, M4 first review #12).
+        `asset_missing`. Needs the Bearer header; a studio's page loads it
+        through the runtime SDK's same-origin proxy, which adds the header,
+        as `/helm/api/v1/assets/{id}` (M6 Q10).
       security: [{ studioToken: [] }]
       parameters:
         - { $ref: "#/components/parameters/AssetId" }
@@ -771,9 +785,9 @@ paths:
       description: >
         R36, Q13. Images only in M4; video and audio answer 501 `unsupported`
         until the ffmpeg decision. The only width is 320 (02 §5's
-        `thumb-320`). Needs the Bearer header, so `<img>` cannot load it
-        directly; M6 decides browser access and may change this operation's
-        security (Q27, M4 first review #12).
+        `thumb-320`). Needs the Bearer header; a studio's page loads it
+        through the runtime SDK's same-origin proxy, as
+        `/helm/api/v1/assets/{id}/thumb` (M6 Q10).
       security: [{ studioToken: [] }]
       parameters:
         - { $ref: "#/components/parameters/AssetId" }
@@ -1667,6 +1681,73 @@ paths:
         "400": { $ref: "#/components/responses/Invalid" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  # ======================================================================
+  # Theme (03 §5, 07 §6; docs/decisions.md M6 Q8, Q9)
+  # ======================================================================
+
+  /launcher/settings/theme:
+    get:
+      tags: [launcher]
+      operationId: launcherThemeGet
+      summary: The launcher's theme.
+      description: >
+        Stored in `settings` (02 §5, schema v5); `system` when none is set.
+      responses:
+        "200":
+          description: The theme.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ThemeEvent" } } }
+    put:
+      tags: [launcher]
+      operationId: launcherThemeSet
+      summary: Set the launcher's theme; every running studio follows it.
+      description: >
+        Stores the theme and emits `theme` on `/events` and on
+        `/theme/events` at once, whether or not it changed. The body is
+        exactly `{theme}`. A value other than system, light or dark is 422
+        `invalid_theme`; a body that does not parse, or has another member,
+        is 400 `bad_request`.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ThemeEvent" } } }
+      responses:
+        "200":
+          description: The theme now.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ThemeEvent" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "422": { $ref: "#/components/responses/Invalid" }
+
+  /theme:
+    get:
+      tags: [public]
+      operationId: themeGet
+      summary: The launcher's theme, for a studio's page.
+      description: >
+        No token. Exempt from the Origin check, answered with
+        `Access-Control-Allow-Origin: *` (M6 Q9).
+      responses:
+        "200":
+          description: The theme.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ThemeEvent" } } }
+
+  /theme/events:
+    get:
+      tags: [public]
+      operationId: themeEvents
+      summary: The launcher's theme as a stream a studio's page follows.
+      description: >
+        No token. Exempt from the Origin check, answered with
+        `Access-Control-Allow-Origin: *` (M6 Q9). The current theme is sent
+        at once, then every change, each as `event: theme` with `data:` a
+        ThemeEvent and no `id:`; there is nothing to resume, since the first
+        event after a reconnect is the current theme. `: ping` comments keep
+        the connection open. The runtime SDK's browser `themeBridge()` reads it.
+      x-helm-events:
+        theme: { $ref: "#/components/schemas/ThemeEvent" }
+      responses:
+        "200":
+          description: An event stream.
+          content: { text/event-stream: { schema: { type: string } } }
+
 components:
 
   securitySchemes:
@@ -2017,8 +2098,8 @@ components:
             The studio that first stored these bytes. Null for any caller that
             is not that studio, so a dedup hit or a shared read never reveals
             another studio (M4 first review, #9).
-        url: { type: string, description: "This API's path to the bytes, e.g. /api/v1/assets/{id}. Needs the Bearer header until M6 decides browser access." }
-        thumb: { type: string, description: "This API's path to the thumbnail, e.g. /api/v1/assets/{id}/thumb?w=320. Needs the Bearer header until M6 decides browser access." }
+        url: { type: string, description: "This API's path to the bytes, e.g. /api/v1/assets/{id}. Needs the Bearer header; a page prefixes /helm to go through its proxy (M6 Q10)." }
+        thumb: { type: string, description: "This API's path to the thumbnail, e.g. /api/v1/assets/{id}/thumb?w=320. Needs the Bearer header; a page prefixes /helm to go through its proxy (M6 Q10)." }
         library_path:
           type: [string, "null"]
           description: >
