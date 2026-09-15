@@ -53,6 +53,38 @@ func rejectMultiDocument(data []byte) error {
 	return nil
 }
 
+// Load validates one manifest file and, when it is valid, returns it decoded.
+// It is Validate plus the typed result, so the daemon and `helm validate`
+// accept exactly the same manifests. m is nil whenever res has errors.
+func Load(file string) (m *Manifest, res Result, err error) {
+	res, err = Validate(file)
+	if err != nil || !res.OK() {
+		return nil, res, err
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, Result{}, fmt.Errorf("reading %s: %w", file, err)
+	}
+	m = new(Manifest)
+	if err := yaml.Unmarshal(data, m); err != nil {
+		return nil, Result{}, fmt.Errorf("manifest %s passed validation but failed typed decode: %w", file, err)
+	}
+	return m, res, nil
+}
+
+// EffectiveProcesses returns the supervised process group, whether the
+// manifest used processes[] or the run sugar.
+func (m *Manifest) EffectiveProcesses() []Process {
+	if m.Run != nil {
+		return []Process{*m.Run}
+	}
+	return m.Processes
+}
+
+// Placeholders returns the names inside every {...} in s, in order — the
+// same scan the known-placeholder rule applies to process.cmd.
+func Placeholders(s string) []string { return placeholders(s) }
+
 // Validate reads and validates one manifest file: schema/manifest.json
 // first, then the seven rules the schema cannot express. The semantic rules
 // only run once the document is schema-valid — they assume a shape (process
