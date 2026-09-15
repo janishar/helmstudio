@@ -737,15 +737,24 @@ func (s *Supervisor) applyRetention(ctx context.Context, studioID string, keep i
 	if len(doomed) == 0 {
 		return
 	}
+	// Removal goes through os.Root on the logs root, so a symlinked
+	// directory on the way (<logs>/studios/<id>) is refused rather than
+	// followed (M3 review), and only a regular file is removed.
 	logsRoot := filepath.Clean(s.dirs.Logs())
+	logs, err := os.OpenRoot(logsRoot)
+	if err != nil {
+		s.logf("supervisor: log retention for %s: %v", studioID, err)
+		return
+	}
+	defer logs.Close()
 	var removed []string
 	for _, e := range doomed {
 		abs := filepath.Join(logsRoot, e.path)
-		if rel, err := filepath.Rel(logsRoot, abs); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(e.path) {
-			s.logf("supervisor: not deleting log %q: it is outside the logs root", e.path)
+		if !filepath.IsLocal(e.path) || !strings.HasSuffix(e.path, ".log") {
+			s.logf("supervisor: not deleting log %q: it is not a run log inside the logs root", e.path)
 			continue
 		}
-		fi, err := os.Lstat(abs)
+		fi, err := logs.Lstat(e.path)
 		switch {
 		case errors.Is(err, os.ErrNotExist):
 		case err != nil:
@@ -755,7 +764,7 @@ func (s *Supervisor) applyRetention(ctx context.Context, studioID string, keep i
 			s.logf("supervisor: not deleting log %s: it is not a regular file", abs)
 			continue
 		default:
-			if err := os.Remove(abs); err != nil {
+			if err := logs.Remove(e.path); err != nil {
 				s.logf("supervisor: deleting old log %s: %v", abs, err)
 				continue
 			}
