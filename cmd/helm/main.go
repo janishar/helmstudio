@@ -33,5 +33,6 @@ func usage() {
 
 commands:
   validate <manifest.yaml>...   validate one or more studio manifests
+  validate -theme <dir>         lint a studio's stylesheets against helm-css (-strict to fail)
   dev [-f helmstudio.yaml]      run a studio against the embedded provider, no daemon`)
 }
