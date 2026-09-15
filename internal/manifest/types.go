@@ -15,6 +15,7 @@ type Manifest struct {
 	License     string   `yaml:"license"`
 	Repo        string   `yaml:"repo"`
 	Ref         string   `yaml:"ref"`
+	Submodules  bool     `yaml:"submodules"`
 	LocalPath   string   `yaml:"local_path"`
 
 	PeakRAMGB int `yaml:"peak_ram_gb"`
@@ -34,11 +35,21 @@ type Manifest struct {
 
 	Test   *TestBlock `yaml:"test"`
 	Import *Import    `yaml:"import"`
+
+	// Digest is the sha256 of the manifest's canonical JSON form, set by
+	// Load: what an installation records it was built from
+	// (docs/design/02-data-model.md §4, manifest_digest). A formatting or
+	// comment change to the YAML does not change it.
+	Digest string `yaml:"-"`
 }
 
 type Requires struct {
-	OS   []string `yaml:"os"`
-	Arch []string `yaml:"arch"`
+	OS    []string `yaml:"os"`
+	Arch  []string `yaml:"arch"`
+	Tools []string `yaml:"tools"`
+	// RAMGB and DiskGB warn on a shortfall; they never block (R5).
+	RAMGB  int `yaml:"ram_gb"`
+	DiskGB int `yaml:"disk_gb"`
 }
 
 type Runtime struct {
@@ -51,19 +62,55 @@ type Python struct {
 }
 
 type BuildStep struct {
-	Name string `yaml:"name"`
-	Cwd  string `yaml:"cwd"`
-	Run  string `yaml:"run"`
+	Name     string `yaml:"name"`
+	Cwd      string `yaml:"cwd"`
+	Run      string `yaml:"run"`
+	Shell    string `yaml:"shell"`
+	TimeoutS int    `yaml:"timeout_s"`
+	Optional bool   `yaml:"optional"`
+}
+
+// EffectiveName applies the schema's documented default: the command.
+func (b BuildStep) EffectiveName() string {
+	if b.Name == "" {
+		return b.Run
+	}
+	return b.Name
+}
+
+// EffectiveShell applies the schema default ("sh").
+func (b BuildStep) EffectiveShell() string {
+	if b.Shell == "" {
+		return "sh"
+	}
+	return b.Shell
+}
+
+// EffectiveTimeoutS applies the schema default of 3600 seconds.
+func (b BuildStep) EffectiveTimeoutS() int {
+	if b.TimeoutS == 0 {
+		return 3600
+	}
+	return b.TimeoutS
 }
 
 type Weight struct {
-	Name       string  `yaml:"name"`
-	Repo       string  `yaml:"repo"`
-	Revision   string  `yaml:"revision"`
-	Dest       string  `yaml:"dest"`
-	SizeGB     float64 `yaml:"size_gb"`
-	Selectable bool    `yaml:"selectable"`
-	Optional   bool    `yaml:"optional"`
+	Name       string   `yaml:"name"`
+	Repo       string   `yaml:"repo"`
+	Revision   string   `yaml:"revision"`
+	Dest       string   `yaml:"dest"`
+	SizeGB     float64  `yaml:"size_gb"`
+	Files      []string `yaml:"files"`
+	Selectable bool     `yaml:"selectable"`
+	Optional   bool     `yaml:"optional"`
+}
+
+// EffectiveRevision applies the schema default ("main").
+func (w Weight) EffectiveRevision() string {
+	if w.Revision == "" {
+		return "main"
+	}
+	return w.Revision
 }
 
 // Process mirrors $defs.process. Role and Autostart keep the pointer-free

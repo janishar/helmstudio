@@ -2,6 +2,8 @@ package manifest
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,6 +31,22 @@ func decodeGeneric(data []byte) (any, error) {
 		return nil, fmt.Errorf("re-parsing json: %w", err)
 	}
 	return doc, nil
+}
+
+// digest hashes the manifest's canonical JSON: the generic document with
+// encoding/json's sorted object keys, so key order, comments and YAML
+// formatting do not change it, and any change of value does.
+func digest(data []byte) (string, error) {
+	doc, err := decodeGeneric(data)
+	if err != nil {
+		return "", err
+	}
+	canonical, err := json.Marshal(doc)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // rejectMultiDocument errors on a file containing more than one YAML
@@ -68,6 +86,9 @@ func Load(file string) (m *Manifest, res Result, err error) {
 	m = new(Manifest)
 	if err := yaml.Unmarshal(data, m); err != nil {
 		return nil, Result{}, fmt.Errorf("manifest %s passed validation but failed typed decode: %w", file, err)
+	}
+	if m.Digest, err = digest(data); err != nil {
+		return nil, Result{}, fmt.Errorf("manifest %s: computing its digest: %w", file, err)
 	}
 	return m, res, nil
 }
