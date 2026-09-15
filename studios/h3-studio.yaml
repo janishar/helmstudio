@@ -13,7 +13,8 @@ id: h3-studio
 name: h3 studio
 description: Native Metal video and audio generation from MiniMax-H3, no PyTorch in the loop.
 kinds: [video, audio]
-hue: { dark: "#ffb454", light: "#b5721a" }
+# 03 §2's identity hue, chosen against the yellow accent (docs/decisions.md M6 Q7).
+hue: { dark: "#e0a33c", light: "#a06a10" }
 license: MIT
 repo: https://github.com/janishar/h3c-studio
 ref: a6eb54f3c9d8c3e711bab22574ec6599399a03f9
