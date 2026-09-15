@@ -18,6 +18,7 @@ license: MIT
 repo: https://github.com/janishar/h3c-studio
 ref: a6eb54f3c9d8c3e711bab22574ec6599399a03f9
 submodules: true
+peak_ram_gb: 21 # docs/design/08-h3-dry-run.md and 01-prd.md §13; not re-measured. Added in M2 review round 1 with the human's approval.
 requires:
   os: [darwin]
   arch: [arm64]
