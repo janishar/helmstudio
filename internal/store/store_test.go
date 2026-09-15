@@ -317,18 +317,18 @@ func TestMigrationsFromEmptyCreateSchemaV1(t *testing.T) {
 	}
 	s := openTest(t, d)
 
-	if v, err := s.Version(ctx); err != nil || v != 3 || LatestVersion() != 3 {
-		t.Fatalf("version = %d (%v), latest = %d; want 3", v, err, LatestVersion())
+	if v, err := s.Version(ctx); err != nil || v != 4 || LatestVersion() != 4 {
+		t.Fatalf("version = %d (%v), latest = %d; want 4", v, err, LatestVersion())
 	}
 
 	tables := slices.DeleteFunc(objects(t, s.Reader(), "table"), func(n string) bool {
 		return strings.HasPrefix(n, "items_fts_") // FTS5's own shadow tables
 	})
-	wantTables := []string{"assets", "derived", "inbox", "installations", "item_inputs", "items", "items_fts", "jobs", "kv", "log_files", "model_artifacts", "model_files", "processes", "records", "sessions", "step_runs", "studio_model_bindings", "tags", "timelines"}
+	wantTables := []string{"assets", "derived", "inbox", "installations", "item_inputs", "items", "items_fts", "jobs", "kv", "log_files", "model_artifacts", "model_files", "processes", "records", "sessions", "step_runs", "studio_assets", "studio_model_bindings", "studio_tokens", "tags", "timelines"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
-	wantIndexes := []string{"idx_bind_artifact", "idx_inbox_pending", "idx_inputs_asset", "idx_items_asset", "idx_items_feed", "idx_items_studio", "idx_jobs_live", "idx_jobs_studio", "idx_logs_studio", "idx_proc_live", "idx_proc_studio", "idx_rec_scan", "idx_session_recent", "uq_session_name"}
+	wantIndexes := []string{"idx_bind_artifact", "idx_inbox_pending", "idx_inputs_asset", "idx_items_asset", "idx_items_feed", "idx_items_studio", "idx_jobs_live", "idx_jobs_studio", "idx_logs_studio", "idx_proc_live", "idx_proc_studio", "idx_rec_scan", "idx_session_recent", "idx_studio_assets_asset", "idx_tokens_group", "uq_session_name"}
 	if got := objects(t, s.Reader(), "index"); !slices.Equal(got, wantIndexes) {
 		t.Errorf("indexes = %v, want %v", got, wantIndexes)
 	}
