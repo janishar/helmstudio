@@ -29,6 +29,7 @@ The same applies to a failing test. If a test looks wrong, that is a finding, no
     studios/           registry pointers, one per studio
     docs/design/       the frozen design — the contract
     docs/plan/         build order, milestones, how work is delegated
+    docs/artifacts/    the same material as rendered pages, for reading only
     docs/agents/       milestone briefs, the gate, report template
     test/conformance/  runs against both the daemon and the embedded provider
 

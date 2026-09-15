@@ -1,0 +1,426 @@
+<title>helmstudio Milestones</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --page:#faf8f3; --panel:#ffffff; --raised:#fbf8f1; --inset:#1c1a15;
+  --hair:#e4dfd2; --strong:#c9c2b0; --faint:#f0ece1;
+  --tx:#1a1813; --tx2:#534f45; --tx3:#837d70; --inv:#ffffff;
+  --ac:#f5b800; --ac-h:#e0a800; --ac-sub:#fff3d1; --ac-tx:#7a5600; --on-ac:#1a1400;
+  --idle:#837d70; --ok:#1f7a4d; --info:#1c6fb8; --warn:#a85410; --err:#c0342a;
+  --ltx:#2f5fc4; --h3:#a06a10; --iris:#b12f68; --auk:#5c4bc4;
+  --logtx:#cfc8ba;
+  --sans:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}}
+:root[data-theme="dark"]{
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--tx);font-family:var(--sans);font-size:13px;line-height:20px;margin:0;-webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;height:52px;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--hair)}
+.mark{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.mark svg{display:block}
+.bar .doc{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+.bar .sp{flex:1}
+.pill{height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;color:var(--tx2);background:var(--raised)}
+.dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--idle)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:212px minmax(0,1fr);gap:40px;align-items:start}
+nav.toc{position:sticky;top:76px;padding-block:32px;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - 92px);overflow-y:auto}
+nav.toc a{color:var(--tx2);text-decoration:none;font-size:12px;padding:5px 8px;border-radius:4px;border-left:2px solid transparent}
+nav.toc a:hover{background:var(--raised);color:var(--tx)}
+nav.toc .lbl{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:16px 8px 6px}
+article{padding-block:32px 96px;min-width:0;max-width:820px}
+h1{font-size:28px;line-height:34px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;text-wrap:balance}
+h2{font-size:19px;line-height:26px;font-weight:600;letter-spacing:-.01em;margin:44px 0 12px;padding-top:20px;border-top:1px solid var(--hair);text-wrap:balance}
+h2:first-of-type{border-top:0;padding-top:0}
+h3{font-size:14px;font-weight:600;margin:28px 0 8px}
+h4{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);margin:24px 0 8px}
+p{margin:0 0 12px;max-width:68ch;color:var(--tx2)}
+p strong,li strong{color:var(--tx);font-weight:600}
+article > p:first-of-type{font-size:14px;line-height:22px}
+a{color:var(--ac-tx)}
+code{font-family:var(--mono);font-size:12px;background:var(--raised);border:1px solid var(--faint);padding:1px 4px;border-radius:3px;color:var(--tx)}
+pre{background:var(--inset);color:var(--logtx);border:1px solid var(--hair);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:18px;margin:0 0 16px}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:12px}
+pre .k{color:var(--ac-tx)} pre .c{color:#6e6862} pre .s{color:#f0883e} pre .t{color:#9bb4d8}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin:0 0 16px}
+th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:8px 10px;border-bottom:1px solid var(--strong);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--hair);color:var(--tx2);vertical-align:top}
+td:first-child{color:var(--tx)}
+td code,th code{font-size:11.5px;white-space:nowrap}
+.tw{overflow-x:auto;margin:0 0 16px;border:1px solid var(--hair);border-radius:6px}
+.tw table{margin:0}
+.tw th{background:var(--panel)}
+.tw td,.tw th{padding:8px 12px}
+.tw tr:last-child td{border-bottom:0}
+ul,ol{margin:0 0 14px;padding-left:20px;color:var(--tx2);max-width:68ch}
+li{margin-bottom:6px}
+li::marker{color:var(--tx3)}
+.note{border-left:2px solid var(--ac);background:var(--ac-sub);padding:12px 14px;border-radius:0 4px 4px 0;margin:0 0 16px;max-width:68ch}
+.note p{margin:0;color:var(--tx)}
+.note .h{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ac-tx);margin-bottom:4px;display:block}
+.warnbox{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--panel))}
+.warnbox .h{color:var(--warn)}
+.meta{font-family:var(--mono);font-size:12px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.chip{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;background:var(--raised);color:var(--tx);white-space:nowrap}
+.chip .dot{width:6px;height:6px}
+.docmeta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+.new{border-color:color-mix(in srgb,var(--ac) 55%,transparent);background:var(--ac-sub);color:var(--ac-tx)}
+figure{margin:0 0 18px}
+figcaption{font-size:12px;color:var(--tx3);margin-top:8px;max-width:68ch}
+.diag{background:var(--panel);border:1px solid var(--hair);border-radius:6px;padding:18px;overflow-x:auto;margin:0 0 8px}
+.diag svg{display:block;width:100%;min-width:660px;height:auto;color:var(--tx);font-family:var(--sans)}
+.ep{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.verb{display:inline-block;min-width:44px;font-weight:500}
+.g{color:var(--ok)}.po{color:var(--ac-tx)}.pu{color:var(--warn)}.de{color:var(--err)}
+.qa{border:1px solid var(--hair);border-left:2px solid var(--ac);border-radius:0 6px 6px 0;background:var(--panel);padding:14px 16px;margin:0 0 20px}
+.qa .q{font:600 13px/19px var(--sans);color:var(--tx);margin:0 0 6px}
+.qa p:last-child{margin-bottom:0}
+@media(max-width:920px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:0}
+  nav.toc{position:static;max-height:none;flex-direction:row;flex-wrap:wrap;gap:4px;padding-block:20px 0;border-bottom:1px solid var(--hair)}
+  nav.toc .lbl{display:none}
+  nav.toc a{border:1px solid var(--hair);border-radius:4px}
+  article{padding-block:24px 64px}
+}
+.ms{border:1px solid var(--hair);border-radius:6px;background:var(--panel);margin:0 0 16px;overflow:hidden}
+.ms .hd{display:flex;align-items:baseline;gap:10px;padding:11px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.ms .n{font:600 11px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--on-ac);background:var(--ac);padding:4px 7px;border-radius:3px;flex:none}
+.ms .n.later{background:var(--raised);color:var(--tx3);border:1px solid var(--hair)}
+.ms h3{margin:0;font:600 14px/20px var(--sans)}
+.ms .eff{margin-left:auto;font:400 11.5px var(--mono);color:var(--tx3)}
+.ms .bd{padding:12px 14px}
+.ms .bd > p:last-child{margin-bottom:0}
+.ms h4{margin:14px 0 6px}
+.ms h4:first-child{margin-top:0}
+.ms ul{margin:0 0 10px;padding-left:18px}
+.ms li{margin-bottom:4px;font-size:12.5px}
+.dod{background:var(--inset);color:var(--logtx);border-radius:4px;padding:10px 12px;font-family:var(--mono);font-size:11.5px;line-height:17px;white-space:pre-wrap;overflow-x:auto;margin:0 0 10px}
+.dod .ok2{color:var(--ok)}
+.rv{border-left:2px solid var(--info);background:color-mix(in srgb,var(--info) 8%,transparent);padding:9px 12px;border-radius:0 4px 4px 0;margin:10px 0 0}
+.rv b{display:block;font:600 10.5px/1 var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--info);margin-bottom:5px}
+.rv ul{margin:0;padding-left:16px}
+.rv li{font-size:12.5px;color:var(--tx)}
+.mb{border-left:2px solid var(--warn);background:color-mix(in srgb,var(--warn) 9%,transparent);padding:9px 12px;border-radius:0 4px 4px 0;margin:10px 0 0}
+.mb b{display:block;font:600 10.5px/1 var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--warn);margin-bottom:4px}
+.mb p{margin:0;font-size:12.5px;color:var(--tx)}
+.brief{background:var(--inset);color:var(--logtx);border:1px solid var(--hair);border-radius:6px;padding:14px 16px;font-family:var(--mono);font-size:11.5px;line-height:17px;overflow-x:auto;margin:0 0 16px;white-space:pre-wrap}
+.brief .k{color:var(--ac-tx)}
+.brief .c{color:#6e6862}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:0 0 18px}
+</style>
+<header class="bar">
+  <span class="mark"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1" fill="none" stroke="var(--ac)" stroke-width="1.6"/><g stroke="var(--ac)" stroke-width="1.6" stroke-linecap="round"><path d="M8 .9v3.2M8 11.9v3.2M.9 8h3.2M11.9 8h3.2M3 3l2.2 2.2M10.8 10.8L13 13M13 3l-2.2 2.2M5.2 10.8L3 13"/></g></svg>helmstudio</span>
+  <span class="doc">Milestones · M0–M10</span>
+  <span class="sp"></span>
+  <span class="pill"><span class="dot" style="background:var(--ac)"></span>1 implementer · 1 reviewer</span>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <span class="lbl">Protocol</span>
+  <a href="#setup">Two agents</a>
+  <a href="#prereq">Prerequisite</a>
+  <a href="#impl">Implementer brief</a>
+  <a href="#rev">Reviewer brief</a>
+  <a href="#dod">Definition of done</a>
+  <span class="lbl">Milestones</span>
+  <a href="#m0">M0 · Contracts</a>
+  <a href="#m1">M1 · Foundation</a>
+  <a href="#m2">M2 · Supervision</a>
+  <a href="#m3">M3 · Install &amp; weights</a>
+  <a href="#m4">M4 · API &amp; SDK</a>
+  <a href="#m5">M5 · Python studios</a>
+  <a href="#m6">M6 · Design &amp; UI</a>
+  <a href="#m7">M7 · Library &amp; iris</a>
+  <a href="#m8">M8 · Timeline</a>
+  <a href="#m9">M9 · Mac app</a>
+  <a href="#m10">M10 · Docs &amp; site</a>
+  <span class="lbl">Notes</span>
+  <a href="#depth">On depth</a>
+</nav>
+
+<article>
+<h1>Milestones and review protocol</h1>
+<p>Eleven milestones for one implementer working sequentially, with a review at each boundary. h3 studio is the reference implementation and is already complete — it is the target the framework is built against, not something to be built.</p>
+<div class="docmeta">
+  <span class="chip">Sonnet 5 · implementer</span>
+  <span class="chip">Opus 5 · reviewer</span>
+  <span class="chip">Review at boundaries only</span>
+  <span class="chip new"><span class="dot" style="background:var(--ac)"></span>Nothing runs until you say so</span>
+</div>
+
+<h2 id="setup">Two agents, two jobs</h2>
+<div class="two">
+<div class="ms"><div class="hd"><span class="n">Impl</span><h3>Sonnet 5</h3></div><div class="bd"><p>Builds one milestone against contracts that already exist, in files it is told it may touch. Runs the gate itself before reporting. Produces a branch and a report, never a merge. Stops and escalates rather than improvising when the design is inconsistent.</p></div></div>
+<div class="ms"><div class="hd"><span class="n">Review</span><h3>Opus 5</h3></div><div class="bd"><p>Reads the diff, the milestone document and the named design sections. Produces ranked findings and changes nothing. Judgement work — contradictions with the frozen design, missed edge cases, the failure nobody wrote a test for.</p></div></div>
+</div>
+<p>The model split follows the work: bounded implementation against a written contract is where Sonnet is strong and cheap enough to iterate, while review is the judgement-heavy end where a stronger model earns its cost — a reviewer that misses a contradiction costs far more than the tokens saved. Keeping the roles in separate runs is what stops an implementer quietly relaxing a test to make itself pass.</p>
+
+<h2 id="prereq">The prerequisite before any run</h2>
+<div class="mb"><b>The frozen design has to live in the repo</b><p>It is currently in published artifacts, which an agent in a container cannot read. Before M0 starts, the eight design documents are exported to <code>docs/design/*.md</code> in the helmstudio repository. From then on that directory is the contract every brief points at, it is version-controlled alongside the code it describes, and a design change is a pull request like anything else.</p></div>
+<p>This is not busywork. An agent that cannot read the design will infer it from the code, which inverts the whole arrangement — the code becomes the spec and the documents become decoration. It is the first task in M0 for that reason.</p>
+
+<h2 id="impl">Standing implementer brief</h2>
+<p>Prepended to every milestone run. The milestone document supplies the rest.</p>
+<div class="brief"><span class="k">ROLE</span>      You implement one milestone of helmstudio. You do not design it.
+
+<span class="k">READ</span>      docs/design/** — the frozen design. It is the contract.
+          docs/decisions.md — every decision made so far, with reasons.
+          The milestone document you were given. Read all three before writing code.
+
+<span class="k">RULES</span>     Touch only the files the milestone names. Do not edit tests you did
+          not write. Do not change a schema, an API shape, or a token name.
+          Do not add a dependency without saying so in your report.
+          Do not weaken or delete a failing test — that is a finding, not a fix.
+
+<span class="k">VERIFY</span>    Run the gate yourself before reporting. A milestone is not done
+          because the code is written; it is done when the gate is green.
+
+<span class="k">ESCALATE</span>  If the design is inconsistent, ambiguous, or wrong: STOP.
+          Report the contradiction with a quote from docs/design, say what you
+          would do and why, and wait. Do not resolve it yourself — four other
+          decisions depend on it being resolved once.
+
+<span class="k">REPORT</span>    What you built · gate output · what you could not verify and why ·
+          every judgement call you made · anything you noticed but did not touch.
+          Append one line per decision to docs/decisions.md.</div>
+
+<h2 id="rev">Standing reviewer brief</h2>
+<div class="brief"><span class="k">ROLE</span>      You review one completed milestone. You change nothing.
+
+<span class="k">INPUT</span>     The full diff · the milestone document · docs/design/** ·
+          docs/decisions.md · the implementer's report.
+
+<span class="k">LOOK FOR</span>  in this order of value:
+          1. Contradictions with the frozen design — quote both sides.
+          2. Things the definition of done passes but a user would hit:
+             the failure path nobody tested, the state with no UI, the
+             error that surfaces as a stack trace.
+          3. Decisions made silently that should have been escalated.
+          4. Tests that assert the implementation rather than the contract.
+          5. Scope creep — anything outside the milestone's TOUCH list.
+          6. Only then: correctness, clarity, dead code.
+
+<span class="k">OUTPUT</span>    Ranked findings. For each: BLOCKING or SHOULD-FIX or NOTE,
+          the file and line, what is wrong, and the concrete fix.
+          Say plainly if the milestone is done. Do not pad with praise.
+
+<span class="k">DO NOT</span>    Edit any file. Re-litigate frozen design decisions — if you think
+          one is wrong, say so once as a NOTE and move on.</div>
+
+<h2 id="dod">The gate, once</h2>
+<p>Every milestone's definition of done is the same command plus its own specifics. Build this in M1 so that everything afterwards can use it.</p>
+<div class="dod">make gate
+  <span class="ok2">✓</span> gofmt · go vet · dependency diff clean
+  <span class="ok2">✓</span> go test ./... (macOS and Linux)
+  <span class="ok2">✓</span> helm validate studios/*.yaml
+  <span class="ok2">✓</span> generated clients regenerate with no diff      <span class="c"># from M4</span>
+  <span class="ok2">✓</span> conformance: daemon + embedded                 <span class="c"># from M4</span>
+  <span class="ok2">✓</span> visual regression, both themes                 <span class="c"># from M6</span></div>
+<p>Anything the gate cannot check happens in your integration window on the Mac. Each milestone lists those items explicitly so they queue rather than getting lost.</p>
+
+<h2 id="m0">M0 · Contracts</h2>
+<div class="ms">
+<div class="hd"><span class="n">M0</span><h3>Nothing runs, everything is written down</h3><span class="eff">2–3 days</span></div>
+<div class="bd">
+<h4>Scope</h4>
+<ul>
+<li>Export the eight frozen design documents to <code>docs/design/*.md</code>; create <code>docs/decisions.md</code> seeded with the decisions already made.</li>
+<li>Write <code>schema/manifest.json</code> — the full JSON Schema including <code>processes[]</code>, <code>runtime</code>, <code>weights[]</code> with <code>selectable</code>, <code>storage</code>, <code>capabilities</code>, <code>sdk</code>, <code>test</code>, <code>network</code>.</li>
+<li>Write <code>helmstudio.yaml</code> for all four studios by reading the real repositories. h3 studio first — it is complete and known, so it is the calibration case.</li>
+<li><code>cmd/helm/validate.go</code> — the validator, as a standalone binary.</li>
+<li><code>api/openapi.yaml</code> — endpoint names and request/response shapes only. No schemas yet.</li>
+</ul>
+<h4>Definition of done</h4>
+<div class="dod">helm validate studios/*.yaml    → 4 valid, 0 errors
+helm validate test/fixtures/bad-*.yaml → each rejected, naming the field
+go test ./... · gofmt · go vet          → clean</div>
+<div class="rv"><b>Review focus</b><ul>
+<li>Does any of the four manifests need a field that exists only for it? That is a schema smell and the whole point of this milestone.</li>
+<li>Does any manifest paper over a gap with a shell one-liner that the schema should express?</li>
+<li>Are <code>runtime.framework</code> and <code>backends</code> correct per studio — native-kernel/metal for h3 and iris, mlx/metal for ltx, pytorch/mps for AuK?</li>
+<li>Is h3's health timeout 30 s, not 240? The dry run established that its server is a thin wrapper.</li>
+</ul></div>
+<div class="mb"><b>Machine-bound</b><p>Nothing. This milestone runs entirely in the cloud, which is why it is first.</p></div>
+</div></div>
+
+<h2 id="m1">M1 · Foundation</h2>
+<div class="ms">
+<div class="hd"><span class="n">M1</span><h3>Repo, platform seams, store, gate</h3><span class="eff">5–6 days</span></div>
+<div class="bd">
+<h4>Scope</h4>
+<ul>
+<li>Monorepo skeleton: <code>cmd/helmstudio</code>, <code>cmd/helm</code>, <code>internal/…</code>, <code>packages/</code> placeholders.</li>
+<li><code>internal/platform</code> — the four seams as interfaces with darwin implementations only: process group control, secret store, app paths, reveal in file manager.</li>
+<li>Directories helper: four roots resolved per OS, <code>HELMSTUDIO_HOME</code> and per-root overrides, library defaulting to <code>~/helmstudio</code>, adoption of an existing <code>~/.helmstudio</code>.</li>
+<li><code>internal/store</code>: SQLite open with the four pragmas, migration runner on <code>user_version</code>, schema v1 — installations, step_runs, processes, jobs, log_files, settings.</li>
+<li><code>make gate</code> and the CI workflow, running on macOS and Linux.</li>
+</ul>
+<h4>Definition of done</h4>
+<div class="dod">make gate                        → green on macOS and Linux
+go test ./internal/store/...     → migrations up from empty, idempotent,
+                                   refuses a higher user_version
+HELMSTUDIO_HOME=/tmp/x helmstudio --print-paths → all roots under /tmp/x</div>
+<div class="rv"><b>Review focus</b><ul>
+<li>Are <code>foreign_keys(ON)</code> and WAL actually set, and proven by a test rather than asserted in a comment?</li>
+<li>Is the write connection capped at one, with a separate read pool?</li>
+<li>Does any path escape the directories helper? Grep for string concatenation with a home directory.</li>
+<li>Do the platform interfaces have a shape a Windows implementation could satisfy, or do they leak POSIX assumptions into their signatures?</li>
+</ul></div>
+<div class="mb"><b>Machine-bound</b><p>Confirm the Keychain implementation stores and retrieves a token on your Mac. Everything else is cloud-verifiable.</p></div>
+</div></div>
+
+<h2 id="m2">M2 · Supervision</h2>
+<div class="ms">
+<div class="hd"><span class="n">M2</span><h3>The walking skeleton, proven against h3 studio</h3><span class="eff">7–8 days</span></div>
+<div class="bd">
+<h4>Scope</h4>
+<ul>
+<li>Manifest loader with three-source resolution; <code>local_path</code> path for now.</li>
+<li>Port allocator over the configured range, with a <code>net.Listen</code> probe.</li>
+<li>Template substitution: <code>{port}</code>, <code>{ports.x}</code>, <code>{models.x}</code>, <code>{root}</code>, <code>{data}</code>, <code>{venv}</code>.</li>
+<li>Supervisor: spawn with <code>Setpgid</code>, dependency-ordered group start, health polling against the declared budget, reverse teardown with SIGTERM then SIGKILL, and re-adoption verifying pid, start time and pgid.</li>
+<li>Log files with an index row, streamed over SSE; retention of the last five per studio.</li>
+<li>A deliberately plain HTML shelf: list, Launch, Stop, live state. No design system.</li>
+</ul>
+<h4>Definition of done</h4>
+<div class="dod">go test ./internal/supervisor/... → group ordering, health timeout,
+                                    teardown order, re-adoption identity check,
+                                    all against fake child processes
+make gate                         → green</div>
+<div class="rv"><b>Review focus</b><ul>
+<li>Is the re-adoption check all three of pid, start time and pgid? Two is a bug that surfaces as killing an unrelated process months later.</li>
+<li>Does a failed health check ever trigger a restart of a <code>main</code> process? It must not — an eight-minute generation has to survive a slow probe.</li>
+<li>Is teardown genuinely reverse-dependency-ordered, and does it kill the group rather than the process?</li>
+<li>Does a startup sweep mark an interrupted step <code>interrupted</code> rather than <code>failed</code>? The distinction changes what Retry does.</li>
+</ul></div>
+<div class="mb"><b>Machine-bound · the M2 demo</b><p>Launch h3 studio from a local checkout, generate a video, <code>kill -9</code> the daemon, restart it, confirm re-adoption. Then stop and confirm no process survives. Needs h3's <code>/healthz</code> merged first.</p></div>
+</div></div>
+
+<h2 id="m3">M3 · Install and weights</h2>
+<div class="ms">
+<div class="hd"><span class="n">M3</span><h3>From a URL to a ready studio</h3><span class="eff">8–9 days</span></div>
+<div class="bd">
+<h4>Scope</h4>
+<ul>
+<li>Clone with submodules at a pinned ref; ordered build steps with streamed output; resume from the first non-succeeded step; cancel by process-group kill.</li>
+<li>Tool probing from <code>requires.tools</code>, failing with the command that installs the missing one.</li>
+<li>Hugging Face downloader: listing, range resume from <code>.part</code> length, URL re-resolution on every resume, 429 backoff, <code>auth_required</code> on 401/403, token from the platform secret store.</li>
+<li>Linked weights: point at an existing directory, symlink into the cache, read-only, <code>missing</code> when the target goes.</li>
+<li>Disk pre-check; the cache view with reference counts; reclaim that never follows a symlink.</li>
+</ul>
+<h4>Definition of done</h4>
+<div class="dod">go test ./internal/install/... ./internal/weights/...
+  → resume from a truncated .part, 403-on-resume re-resolves,
+    429 backs off, reclaim refuses a linked artifact,
+    build resumes at the failed step
+make gate → green</div>
+<div class="rv"><b>Review focus</b><ul>
+<li>Can any delete path follow a symlink? This is the finding that matters most in this milestone — deleting a user's own 60 GB checkpoint is unrecoverable.</li>
+<li>Is a 403 on resume treated as an expired URL rather than corruption?</li>
+<li>Are weights passed as absolute paths, with nothing symlinked into the studio checkout?</li>
+<li>Does a partially complete linked directory get written into, anywhere?</li>
+</ul></div>
+<div class="mb"><b>Machine-bound · the M3 demo</b><p>Clean install of h3 studio end to end, interrupted once mid-build and resumed. Then install again against a model directory you already have and watch nothing download.</p></div>
+</div></div>
+
+<h2 id="m4">M4 · Platform API and SDK</h2>
+<div class="ms">
+<div class="hd"><span class="n">M4</span><h3>The contract everything else lives on</h3><span class="eff">10–12 days</span></div>
+<div class="bd">
+<p><strong>The most consequential milestone, and the one to review hardest.</strong> Consider splitting the review: once when <code>api/openapi.yaml</code> is complete and before any implementation, then again at the end.</p>
+<h4>Scope</h4>
+<ul>
+<li>Complete <code>api/openapi.yaml</code>. Schema v2: sessions, kv, records, assets, derived, items, item_inputs, tags, items_fts, inbox.</li>
+<li>Endpoints in order: <code>/me</code>, <code>/kv</code>, <code>/sessions</code>, <code>/assets</code> and <code>:adopt</code>, <code>/gallery</code>, <code>/records</code>, <code>/jobs</code>, <code>/events</code>, <code>/handoff</code>.</li>
+<li>Capability-scoped per-launch tokens injected at spawn.</li>
+<li>Media engine v1: probe, thumbnail, poster, waveform, h264 proxy as derived files.</li>
+<li>Generated Go and Python clients; the embedded provider; <code>helm dev</code>; <code>helmstudio fsck</code>.</li>
+<li>The conformance suite, written from the OpenAPI document and run against both providers.</li>
+</ul>
+<h4>Definition of done</h4>
+<div class="dod">make gate → now including client drift and conformance × 2
+conformance: identical results, daemon and embedded
+helm dev --fixtures → a studio runs with no daemon installed</div>
+<div class="rv"><b>Review focus</b><ul>
+<li>Was the conformance suite written from the contract or from the implementation? Check whether it would catch a deliberate bug.</li>
+<li>Does <code>:adopt</code> hardlink, never copy? A copy is a silent performance cliff at 2 GB.</li>
+<li>Is dedup a uniqueness constraint rather than an algorithm, and is there any stored reference count that could drift?</li>
+<li>Can a studio's token reach another studio's namespace under any endpoint?</li>
+<li>Does the records filter language accept anything that reaches SQL unparameterised?</li>
+</ul></div>
+<div class="mb"><b>Machine-bound · the M4 demo</b><p>h3 studio records real takes through the SDK; thumbnails and provenance appear; an image handed to h3 as a first frame produces a lineage row.</p></div>
+</div></div>
+
+<h2 id="m5">M5 · The Python studios</h2>
+<div class="ms">
+<div class="hd"><span class="n later">M5</span><h3>ltx studio and AuK studio — the second caller</h3><span class="eff">6–7 days</span></div>
+<div class="bd">
+<p>Per-studio <code>uv</code> environments pinned to <code>python.version</code>; the Python runtime SDK against a real caller; the one-heavy-studio rule with the switch dialog, now that two studios genuinely compete for memory. <strong>Expect schema churn and treat it as the milestone working</strong> — this is what tells you which parts of M0 were guesses.</p>
+<div class="rv"><b>Review focus</b><ul><li>Any special case in Go for a specific studio. If one appears, the schema is wrong and the fix belongs in the schema.</li><li>Are the two environments genuinely independent — no shared site-packages, no shared interpreter?</li></ul></div>
+<div class="mb"><b>Machine-bound</b><p>Three studios installed side by side; AuK generating speech into the shared gallery; a switch from ltx to h3 showing real memory arithmetic.</p></div>
+</div></div>
+
+<h2 id="m6">M6 · Design system and UI</h2>
+<div class="ms">
+<div class="hd"><span class="n later">M6</span><h3>helm-css, the real launcher, helm-ui-sdk</h3><span class="eff">10–12 days</span></div>
+<div class="bd">
+<p>The five CSS layers with visual regression and a contrast check on every token pair; the fourteen screens from the design document; then <code>helm-terminal</code>, <code>helm-gallery</code>, <code>helm-player</code> in that order. Theme pushed over SSE so toggling the launcher re-themes running studios. The h3 token migration — 45 variables mapped, 64 literals cleared — belongs here as a separate task against h3's repo.</p>
+<div class="rv"><b>Review focus</b><ul><li>Every state in the canonical vocabulary has a chip, including the failure states.</li><li>No colour defined only inside a media query or <code>[data-theme]</code> block.</li><li>Does <code>helm-terminal</code> virtualise? Thirty lines a second will find out in production otherwise.</li><li>Do components receive a client rather than constructing one?</li></ul></div>
+</div></div>
+
+<h2 id="m7">M7 · Library, editor and iris</h2>
+<div class="ms">
+<div class="hd"><span class="n later">M7</span><h3>Anyone can add a studio</h3><span class="eff">6–8 days</span></div>
+<div class="bd">
+<p>iris studio with <code>selectable</code> weights and the checkpoint picker; the three-source manifest library with local override and Revert; the in-app editor with live validation and criteria scoring; import from file, paste and URL, and export; the certification checks and the approval screen with every build command shown verbatim.</p>
+<div class="rv"><b>Review focus</b><ul><li>Is import genuinely not install, in the code as well as the copy?</li><li>Does the approval screen show the commands verbatim, unelided, before anything executes?</li><li>Does an id collision ever resolve silently?</li></ul></div>
+</div></div>
+
+<h2 id="m8">M8 · Timeline and export</h2>
+<div class="ms">
+<div class="hd"><span class="n later">M8</span><h3>The one that will be wrong twice</h3><span class="eff">10–12 days</span></div>
+<div class="bd">
+<p>Timeline document and rows; the editor component; export as a Job with the conform-to-target filter graph and the stream-copy fast path; golden frame-hash tests across both providers. Settle the ffmpeg licensing question <em>before</em> this starts, not during.</p>
+<div class="rv"><b>Review focus</b><ul><li>Is the stream-copy path taken only when genuinely legal — same codec, resolution, fps, audio parameters, no transitions, no gain?</li><li>Do golden tests actually compare frame hashes, or just that a file was produced?</li><li>Does a timeline's clip count as a reference for reclaim?</li></ul></div>
+<div class="mb"><b>Machine-bound · most of it</b><p>Export correctness cannot be judged in a container. Budget real time in your integration window for this milestone specifically.</p></div>
+</div></div>
+
+<h2 id="m9">M9 · Mac app and release</h2>
+<div class="ms">
+<div class="hd"><span class="n later">M9</span><h3>Something a stranger can install</h3><span class="eff">7–9 days</span></div>
+<div class="bd">
+<p>Electron shell with the stdout handshake, daemon adoption, quit behaviour and the menu-bar option; native affordances; browser-path auth with the one-time token URL, <code>SameSite=Strict</code> cookie and the Host and Origin checks; signing, notarisation of the bundle and the nested binary, the update feed and the Homebrew formula.</p>
+<div class="rv"><b>Review focus</b><ul><li>Does the renderer ever see the token?</li><li>Is navigation locked to loopback, with external links handed to the system browser?</li><li>Are the CSRF defences present on every mutating endpoint, not just the obvious ones?</li></ul></div>
+<div class="mb"><b>Machine-bound · all of it</b><p>Signing and notarisation need your certificates and cannot be delegated.</p></div>
+</div></div>
+
+<h2 id="m10">M10 · Documentation and the site</h2>
+<div class="ms">
+<div class="hd"><span class="n later">M10</span><h3>Assembly, if the tracks were kept</h3><span class="eff">8–10 days</span></div>
+<div class="bd">
+<p>The SDK documentation — quickstart, concepts, guides, generated API and manifest reference, CLI reference, publishing criteria, and the four annotated launch manifests. Then helmstudio.in. Both built with <code>helm-css</code>, reference pages regenerated in CI.</p>
+<div class="rv"><b>Review focus</b><ul><li>Is any reference page hand-written? It must be generated or it will drift.</li><li>Does the quickstart run, verbatim, on a clean machine?</li></ul></div>
+</div></div>
+
+<h2 id="depth">A note on depth</h2>
+<div class="note"><span class="h">M0 through M4 are specified; M5 onward are scoped</span><p>That is deliberate rather than unfinished. M5's shape depends on what M0's manifests reveal, M6's on what the API actually looks like, M8's on how the media engine behaves in practice. Writing them in full today would produce documents that get rewritten before anyone reads them. Each is expanded to M0-level detail at its own kickoff, by which point the two things a good brief needs — the contract it builds against and the last milestone's findings — both exist.</p></div>
+<p>The same applies to the review checklists. The ones above are what is knowable now; each will gain items from the previous milestone's findings, which is how a review protocol should accumulate rather than being guessed at the start.</p>
+</article>
+</div>

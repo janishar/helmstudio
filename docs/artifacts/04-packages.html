@@ -1,0 +1,370 @@
+<title>helmstudio Package Architecture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --page:#faf8f3; --panel:#ffffff; --raised:#fbf8f1; --inset:#1c1a15;
+  --hair:#e4dfd2; --strong:#c9c2b0; --faint:#f0ece1;
+  --tx:#1a1813; --tx2:#534f45; --tx3:#837d70; --inv:#ffffff;
+  --ac:#f5b800; --ac-h:#e0a800; --ac-sub:#fff3d1; --ac-tx:#7a5600; --on-ac:#1a1400;
+  --idle:#837d70; --ok:#1f7a4d; --info:#1c6fb8; --warn:#a85410; --err:#c0342a;
+  --ltx:#2f5fc4; --h3:#a06a10; --iris:#b12f68; --auk:#5c4bc4;
+  --logtx:#cfc8ba;
+  --sans:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}}
+:root[data-theme="dark"]{
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--tx);font-family:var(--sans);font-size:13px;line-height:20px;margin:0;-webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;height:52px;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--hair)}
+.mark{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.mark svg{display:block}
+.bar .doc{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+.bar .sp{flex:1}
+.pill{height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;color:var(--tx2);background:var(--raised)}
+.dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--idle)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:212px minmax(0,1fr);gap:40px;align-items:start}
+nav.toc{position:sticky;top:76px;padding-block:32px;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - 92px);overflow-y:auto}
+nav.toc a{color:var(--tx2);text-decoration:none;font-size:12px;padding:5px 8px;border-radius:4px;border-left:2px solid transparent}
+nav.toc a:hover{background:var(--raised);color:var(--tx)}
+nav.toc .lbl{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:16px 8px 6px}
+article{padding-block:32px 96px;min-width:0;max-width:820px}
+h1{font-size:28px;line-height:34px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;text-wrap:balance}
+h2{font-size:19px;line-height:26px;font-weight:600;letter-spacing:-.01em;margin:44px 0 12px;padding-top:20px;border-top:1px solid var(--hair);text-wrap:balance}
+h2:first-of-type{border-top:0;padding-top:0}
+h3{font-size:14px;font-weight:600;margin:28px 0 8px}
+h4{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);margin:24px 0 8px}
+p{margin:0 0 12px;max-width:68ch;color:var(--tx2)}
+p strong,li strong{color:var(--tx);font-weight:600}
+article > p:first-of-type{font-size:14px;line-height:22px}
+a{color:var(--ac-tx)}
+code{font-family:var(--mono);font-size:12px;background:var(--raised);border:1px solid var(--faint);padding:1px 4px;border-radius:3px;color:var(--tx)}
+pre{background:var(--inset);color:var(--logtx);border:1px solid var(--hair);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:18px;margin:0 0 16px}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:12px}
+pre .k{color:var(--ac-tx)} pre .c{color:#6e6862} pre .s{color:#f0883e} pre .t{color:#9bb4d8}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin:0 0 16px}
+th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:8px 10px;border-bottom:1px solid var(--strong);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--hair);color:var(--tx2);vertical-align:top}
+td:first-child{color:var(--tx)}
+td code,th code{font-size:11.5px;white-space:nowrap}
+.tw{overflow-x:auto;margin:0 0 16px;border:1px solid var(--hair);border-radius:6px}
+.tw table{margin:0}
+.tw th{background:var(--panel)}
+.tw td,.tw th{padding:8px 12px}
+.tw tr:last-child td{border-bottom:0}
+ul,ol{margin:0 0 14px;padding-left:20px;color:var(--tx2);max-width:68ch}
+li{margin-bottom:6px}
+li::marker{color:var(--tx3)}
+.note{border-left:2px solid var(--ac);background:var(--ac-sub);padding:12px 14px;border-radius:0 4px 4px 0;margin:0 0 16px;max-width:68ch}
+.note p{margin:0;color:var(--tx)}
+.note .h{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ac-tx);margin-bottom:4px;display:block}
+.warnbox{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--panel))}
+.warnbox .h{color:var(--warn)}
+.meta{font-family:var(--mono);font-size:12px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.chip{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;background:var(--raised);color:var(--tx);white-space:nowrap}
+.chip .dot{width:6px;height:6px}
+.docmeta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+.new{border-color:color-mix(in srgb,var(--ac) 55%,transparent);background:var(--ac-sub);color:var(--ac-tx)}
+figure{margin:0 0 18px}
+figcaption{font-size:12px;color:var(--tx3);margin-top:8px;max-width:68ch}
+.diag{background:var(--panel);border:1px solid var(--hair);border-radius:6px;padding:18px;overflow-x:auto;margin:0 0 8px}
+.diag svg{display:block;width:100%;min-width:660px;height:auto;color:var(--tx);font-family:var(--sans)}
+.ep{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.verb{display:inline-block;min-width:44px;font-weight:500}
+.g{color:var(--ok)}.po{color:var(--ac-tx)}.pu{color:var(--warn)}.de{color:var(--err)}
+.qa{border:1px solid var(--hair);border-left:2px solid var(--ac);border-radius:0 6px 6px 0;background:var(--panel);padding:14px 16px;margin:0 0 20px}
+.qa .q{font:600 13px/19px var(--sans);color:var(--tx);margin:0 0 6px}
+.qa p:last-child{margin-bottom:0}
+@media(max-width:920px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:0}
+  nav.toc{position:static;max-height:none;flex-direction:row;flex-wrap:wrap;gap:4px;padding-block:20px 0;border-bottom:1px solid var(--hair)}
+  nav.toc .lbl{display:none}
+  nav.toc a{border:1px solid var(--hair);border-radius:4px}
+  article{padding-block:24px 64px}
+}
+.diag{background:var(--panel);border:1px solid var(--hair);border-radius:6px;padding:18px;overflow-x:auto;margin:0 0 8px}
+.diag svg{display:block;width:100%;min-width:660px;height:auto;color:var(--tx);font-family:var(--sans)}
+.ep{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.qa{border:1px solid var(--hair);border-left:2px solid var(--ac);border-radius:0 6px 6px 0;background:var(--panel);padding:14px 16px;margin:0 0 20px}
+.qa .q{font:600 13px/19px var(--sans);color:var(--tx);margin:0 0 6px}
+.qa p:last-child{margin-bottom:0}
+.pk{border:1px solid var(--hair);border-radius:6px;background:var(--panel);padding:14px 16px;margin:0 0 14px}
+.pk h4{margin:0 0 2px;color:var(--tx);font:600 13px/18px var(--sans);letter-spacing:0;text-transform:none}
+.pk .sub{font:400 11.5px var(--mono);color:var(--tx3);margin-bottom:9px}
+.pk p:last-child{margin-bottom:0}
+.strip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 14px;border:1px solid var(--hair);border-radius:6px;background:var(--panel);margin:0 0 8px}
+.btn{appearance:none;height:26px;padding:0 11px;border-radius:4px;font:500 12.5px/1 var(--sans);border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn.pri{background:var(--ac);color:var(--on-ac)}
+.btn.sec{background:transparent;border-color:var(--strong);color:var(--tx)}
+.btn.gh{background:transparent;color:var(--tx2)}
+.btn.dng{background:transparent;border-color:var(--err);color:var(--err)}
+.ch{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:4px;border:1px solid var(--hair);background:var(--raised);font:500 11px/1 var(--sans);color:var(--tx)}
+.ch i{width:6px;height:6px;border-radius:50%;flex:none}
+.ok{background:color-mix(in srgb,var(--ok) 14%,transparent);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.inf{background:color-mix(in srgb,var(--info) 14%,transparent);border-color:color-mix(in srgb,var(--info) 35%,transparent)}
+.fld{height:26px;border:1px solid var(--strong);border-radius:4px;background:var(--page);color:var(--tx);font:400 12.5px var(--sans);padding:0 8px;min-width:120px}
+.prog{width:120px;height:4px;border-radius:3px;background:var(--inset);overflow:hidden}
+.prog i{display:block;height:100%;width:62%;background:var(--ac)}
+.lvl{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:0 0 18px}
+.lvl>div{border:1px solid var(--hair);border-radius:6px;background:var(--panel);padding:11px 13px}
+.lvl h5{margin:0 0 5px;font:600 12.5px var(--sans)}
+.lvl p{margin:0;font-size:11.5px;line-height:16px}
+</style>
+
+<header class="bar">
+  <span class="mark"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1" fill="none" stroke="var(--ac)" stroke-width="1.6"/><g stroke="var(--ac)" stroke-width="1.6" stroke-linecap="round"><path d="M8 .9v3.2M8 11.9v3.2M.9 8h3.2M11.9 8h3.2M3 3l2.2 2.2M10.8 10.8L13 13M13 3l-2.2 2.2M5.2 10.8L3 13"/></g></svg>helmstudio</span>
+  <span class="doc">Packages · v1</span>
+  <span class="sp"></span>
+  <span class="pill"><span class="dot" style="background:var(--ac)"></span>css · runtime · ui</span>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <span class="lbl">Shape</span>
+  <a href="#three">1 · Three packages</a>
+  <a href="#why">2 · Why split</a>
+  <span class="lbl">Each</span>
+  <a href="#css">3 · helm-css</a>
+  <a href="#runtime">4 · helm-runtime-sdk</a>
+  <a href="#ui">5 · helm-ui-sdk</a>
+  <span class="lbl">Using them</span>
+  <a href="#adopt">6 · Adoption levels</a>
+  <a href="#timeline">7 · Timeline, settled</a>
+  <a href="#dist">8 · Distribution</a>
+  <a href="#versions">9 · Versioning</a>
+  <a href="#repo">10 · Repo and CI</a>
+  <a href="#rules">11 · Rules that hold</a>
+</nav>
+
+<article>
+<h1>Package Architecture</h1>
+<p>Three packages with a strict dependency direction: a CSS framework that knows nothing, a runtime SDK that knows the wire, and a UI SDK that knows neither — it consumes the runtime and wears the CSS. A studio takes as many layers as it wants and never inherits the ones it does not.</p>
+<div class="docmeta">
+  <span class="chip">helm-css</span>
+  <span class="chip">helm-runtime-sdk · go · python · node</span>
+  <span class="chip">helm-ui-sdk</span>
+  <span class="chip new"><span class="dot" style="background:var(--ac)"></span>Independently versioned</span>
+</div>
+
+<h2 id="three">1 · Three packages, one direction</h2>
+<figure class="diag">
+<svg viewBox="0 0 900 360" role="img" aria-label="helm-css depends on nothing; helm-runtime-sdk ships Go, Python and Node clients talking to the helmstudio API; helm-ui-sdk depends on both and provides gallery, player, terminal and timeline components.">
+<defs><marker id="p1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+<marker id="p2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ac)"/></marker></defs>
+<g font-size="12.5">
+<rect x="24" y="16" width="250" height="88" rx="5" fill="var(--panel)" stroke="currentColor"/>
+<text x="42" y="40" font-weight="600">helm-css</text>
+<text x="42" y="59" font-size="11.5" fill="var(--tx2)">tokens · base · components</text>
+<text x="42" y="76" font-size="11.5" fill="var(--tx2)">both themes · no JavaScript</text>
+<text x="42" y="94" font-size="11" fill="var(--tx3)" font-family="var(--mono)">depends on: nothing</text>
+
+<rect x="325" y="16" width="250" height="88" rx="5" fill="var(--ac-sub)" stroke="var(--ac)" stroke-width="1.5"/>
+<text x="343" y="40" font-weight="600" fill="var(--ac-tx)">helm-ui-sdk</text>
+<text x="343" y="59" font-size="11.5" fill="var(--tx2)">gallery · player · terminal</text>
+<text x="343" y="76" font-size="11.5" fill="var(--tx2)">timeline editor</text>
+<text x="343" y="94" font-size="11" fill="var(--tx3)" font-family="var(--mono)">depends on: css + runtime(node)</text>
+
+<rect x="626" y="16" width="250" height="88" rx="5" fill="var(--panel)" stroke="currentColor"/>
+<text x="644" y="40" font-weight="600">helm-runtime-sdk</text>
+<text x="644" y="59" font-size="11.5" fill="var(--tx2)">go · python · node</text>
+<text x="644" y="76" font-size="11.5" fill="var(--tx2)">state · assets · gallery · jobs</text>
+<text x="644" y="94" font-size="11" fill="var(--tx3)" font-family="var(--mono)">depends on: the API contract</text>
+
+<rect x="626" y="166" width="250" height="60" rx="5" fill="var(--raised)" stroke="currentColor"/>
+<text x="751" y="191" text-anchor="middle" font-weight="500">helmstudio framework</text>
+<text x="751" y="210" text-anchor="middle" font-size="11" fill="var(--tx3)" font-family="var(--mono)">/api/v1 · or embedded provider</text>
+
+<rect x="24" y="276" width="852" height="64" rx="5" fill="var(--panel)" stroke="currentColor" stroke-dasharray="4 3"/>
+<text x="44" y="300" font-weight="500">a studio</text>
+<text x="44" y="320" font-size="11.5" fill="var(--tx2)">takes any subset — css alone, css + runtime, or all three. Nothing is required.</text>
+</g>
+<g stroke="var(--ac)" fill="none" stroke-width="1.5">
+<path d="M325 60 H274" marker-end="url(#p2)"/>
+<path d="M575 60 H626" marker-end="url(#p2)"/>
+</g>
+<g stroke="currentColor" fill="none" stroke-width="1.1">
+<path d="M751 104 V166" marker-end="url(#p1)"/>
+<path d="M149 104 V276" marker-end="url(#p1)"/>
+<path d="M450 104 V276" marker-end="url(#p1)"/>
+<path d="M751 226 V276" marker-end="url(#p1)" stroke-dasharray="3 3"/>
+</g>
+<g font-size="11" fill="var(--tx3)">
+<text x="300" y="50" text-anchor="middle">wears</text>
+<text x="600" y="50" text-anchor="middle">calls</text>
+<text x="762" y="138">HTTP</text>
+</g>
+</svg>
+</figure>
+<div class="tw"><table>
+<tr><th>Package</th><th>Ships as</th><th>Contains</th><th>Depends on</th></tr>
+<tr><td><code>helm-css</code></td><td>A CSS file, a minified one, per-layer files, <code>tokens.json</code>. npm and a CDN path on the daemon.</td><td>Tokens, base, layout primitives, components, both themes.</td><td>Nothing. It is text.</td></tr>
+<tr><td><code>helm-runtime-sdk</code></td><td>Go module, PyPI package, npm package (with a browser ESM build).</td><td>Typed client for state, records, assets, gallery, jobs, timeline, events. Provider selection.</td><td>The OpenAPI contract. Optional embedded extra.</td></tr>
+<tr><td><code>helm-ui-sdk</code></td><td>npm package plus a prebuilt ESM bundle the daemon serves.</td><td><code>helm-gallery</code>, <code>helm-player</code>, <code>helm-terminal</code>, <code>helm-timeline</code>.</td><td><code>helm-css</code> and the Node/browser <code>helm-runtime-sdk</code>.</td></tr>
+</table></div>
+
+<h2 id="why">2 · Why this split and not one package</h2>
+<p><strong>None of the four launch studios has a front-end toolchain.</strong> h3 studio and iris studio are Go stdlib with hand-written JS and no build step; ltx studio serves HTML from a Python stdlib server; AuK runs FastAPI. A single bundle would force npm on all four. With the split, a Go studio takes <code>helm-runtime-sdk</code> and <code>helm-css</code> and never sees a package.json.</p>
+<p><strong>Release cadences genuinely differ.</strong> A player bug fix is a patch on one package; adding a field to the gallery API is a minor on another; a spacing change is a third. Coupled, every fix forces every studio to re-test everything. Split, a studio pins <code>ui@^1</code> and <code>runtime@^1</code> and moves them independently.</p>
+<p><strong>One package knows the wire format.</strong> This is the rule that makes the rest safe: <code>helm-ui-sdk</code> never constructs a URL, never sets a header, never parses a response. It receives a runtime client and calls methods on it. An API change touches the runtime SDK and regenerates; the components do not care.</p>
+<div class="qa">
+<p class="q">The dependency arrow points one way, always.</p>
+<p>css knows nothing. runtime knows the API. ui knows css and runtime. Nothing points back up: the runtime SDK must never import a component, and <code>helm-css</code> must never assume a component's markup exists. The day one of those arrows reverses, the packages have become one package with extra steps.</p>
+</div>
+
+<h2 id="css">3 · helm-css — the framework</h2>
+<p>Not a utility framework and not a copy of Tailwind. A small, semantic, class-based system shaped around what these tools actually contain: dense control rails, log panels, take lists, parameter forms and status. Plain CSS with custom properties, no preprocessor, no build step.</p>
+<div class="tw"><table>
+<tr><th>Layer</th><th>File</th><th>Holds</th></tr>
+<tr><td>Tokens</td><td><code>helm-tokens.css</code></td><td>Colour for both themes, spacing scale, radii, borders, type scale, motion durations. Also emitted as <code>tokens.json</code> for anything that is not CSS.</td></tr>
+<tr><td>Base</td><td><code>helm-base.css</code></td><td>Reset, root theming, focus-visible ring, selection, scrollbars, <code>prefers-reduced-motion</code>, safe-area padding.</td></tr>
+<tr><td>Layout</td><td><code>helm-layout.css</code></td><td>App shell, top bar, rails, panels, the three-column working layout, responsive collapse.</td></tr>
+<tr><td>Components</td><td><code>helm-components.css</code></td><td>Button, chip, field, select, panel, card, table, step row, progress, dialog, toast, tabs, metadata line, terminal surface.</td></tr>
+<tr><td>Everything</td><td><code>helm.css</code></td><td>The four concatenated, plus <code>helm.min.css</code>.</td></tr>
+</table></div>
+<div class="strip">
+  <button class="btn pri" type="button">Render</button>
+  <button class="btn sec" type="button">Queue 3 seeds</button>
+  <button class="btn gh" type="button">History</button>
+  <button class="btn dng" type="button">Stop</button>
+  <span class="ch"><i style="background:var(--idle)"></i>idle</span>
+  <span class="ch ok"><i style="background:var(--ok)"></i>running</span>
+  <span class="ch inf"><i style="background:var(--info)"></i>12 steps</span>
+  <input class="fld" value="800 × 448" aria-label="Resolution">
+  <span class="prog"><i></i></span>
+  <span class="meta">seed 42 · 6m 11s</span>
+</div>
+<p class="meta" style="margin:0 0 18px">Rendered from the same tokens this page uses. Toggle your OS theme and it follows.</p>
+<p><strong>Rules that keep it usable.</strong> Every class is prefixed <code>helm-</code> so it cannot collide with a studio's own stylesheet. Nothing is <code>!important</code>. Specificity stays at a single class so a studio overrides by writing one rule, not by fighting. There are no utilities beyond a handful for spacing and flex, because a utility framework would end up dictating markup, which is exactly what a studio is entitled to own.</p>
+<div class="note"><span class="h">How it coexists with Shadow DOM</span><p>Components in <code>helm-ui-sdk</code> render inside Shadow DOM, so class-based rules do not reach them — but <strong>custom properties inherit straight through the boundary</strong>. That is the whole trick: tokens theme the components, <code>helm-css</code> classes style the studio's own markup around them, and neither can break the other. Components expose <code>::part()</code> hooks for the handful of overrides that turn out to be necessary.</p></div>
+
+<h2 id="runtime">4 · helm-runtime-sdk — go, python, node</h2>
+<p>One OpenAPI document generates all three. Identical method names, identical semantics, identical errors, so an author moving between a Go studio and a Python one is not learning a second product.</p>
+<pre><code><span class="c">// go</span>
+c := helm.FromEnv()
+as, _ := c.Assets.Adopt(ctx, path, helm.Video)
+c.Gallery.Add(ctx, helm.Item{Kind: helm.Video, Asset: as.ID, Params: p})
+
+<span class="c"># python</span>
+c = helm.from_env()
+a = c.assets.adopt(path, kind="video")
+c.gallery.add(kind="video", asset=a.id, params=p)
+
+<span class="c">// node / browser</span>
+const c = helm.fromEnv()
+const a = await c.assets.adopt(file, {kind: 'video'})
+await c.gallery.add({kind: 'video', asset: a.id, params: p})
+</code></pre>
+<div class="tw"><table>
+<tr><th>Concern</th><th>How</th></tr>
+<tr><td>Provider selection</td><td><code>fromEnv()</code> returns the remote client when <code>HELM_API</code> is set, the embedded one otherwise. Same interface either way.</td></tr>
+<tr><td>Embedded stays optional</td><td>A separate module in Go (<code>helm-runtime-sdk/embedded</code>) and an extra in Python (<code>helm-runtime-sdk[embedded]</code>), so a hosted-only studio never pulls SQLite in. The Node package is remote-only; a Node studio running standalone points at a framework it starts itself.</td></tr>
+<tr><td>Browser build</td><td>The Node package ships an ESM browser entry with no Node built-ins, because this is precisely what <code>helm-ui-sdk</code> consumes.</td></tr>
+<tr><td>Errors</td><td>One typed error shape across languages: <code>Conflict</code> (etag), <code>QuotaExceeded</code>, <code>NotFound</code>, <code>Unsupported</code> (an endpoint the current provider cannot serve), <code>Unavailable</code>. Components branch on these, so they must mean the same thing everywhere.</td></tr>
+<tr><td>Testing</td><td><code>helm dev</code> and the fixtures ship here, since they are the runtime's job. Every generated client runs the same conformance suite against both providers.</td></tr>
+</table></div>
+
+<h2 id="ui">5 · helm-ui-sdk — the prebuilt components</h2>
+<p>Four components, each solving something every studio otherwise rebuilds badly. They are custom elements — no React, no framework, no build step required to use them.</p>
+<div class="pk"><h4>helm-terminal</h4><div class="sub">&lt;helm-terminal job="jb_01J…" follow&gt;</div>
+<p>Virtualised log view over a ring buffer, so a diffusion loop emitting thirty lines a second never accumulates a hundred thousand DOM nodes. ANSI colour parsed to spans, carriage-return progress lines rewriting in place rather than printing four hundred rows, follow that releases when the user scrolls, copy, wrap, and a jump-to-latest affordance. Subscribes through the runtime client's event stream and reconnects with <code>Last-Event-ID</code>.</p></div>
+<div class="pk"><h4>helm-player</h4><div class="sub">&lt;helm-player asset="as_01J…" fps="24"&gt;</div>
+<p>Frame-accurate transport built on <code>requestVideoFrameCallback</code>: arrow keys step one frame, the frame counter is authoritative and the timecode derived. Filmstrip scrubbing from a generated sprite sheet, waveform under the scrubber, A/B compare between two assets on one transport, loop and speed. <strong>Extract frame</strong> draws the current frame to a canvas, posts it through the runtime client and emits the new asset id — which is what turns "find the right frame" into a two-click anchor for FL2VA and L2VA instead of a file hunt. Plays the framework's h264 proxy when the source codec is not browser-decodable, and says so rather than letting anyone judge quality from it.</p></div>
+<div class="pk"><h4>helm-gallery</h4><div class="sub">&lt;helm-gallery scope="self" kind="video" picker&gt;</div>
+<p>Paginated, filterable grid or list over <code>/gallery/items</code>, with thumbnails, params, star and tag, cursor paging and live insertion when a new item lands on the event stream. <code>scope="all"</code> renders the cross-studio view where the capability allows; <code>picker</code> mode turns it into a chooser that resolves to an asset, which is how a studio offers "use one of my earlier renders as a reference" without building a browser.</p></div>
+<div class="pk"><h4>helm-timeline</h4><div class="sub">&lt;helm-timeline timeline="tl_01J…" editable&gt;</div>
+<p>The editor for a framework-owned sequence: tracks, clips coloured by the studio that produced them, drag and trim with snapping, gapless preview across cuts, and export that creates a Job. It edits the framework's timeline document through the runtime client and owns none of the data — which is why the same sequence can be opened in the launcher or inside any studio and stay one thing.</p></div>
+<div class="note"><span class="h">The rule that keeps this package honest</span><p>A component <strong>receives</strong> a runtime client; it never constructs one. <code>el.client = helm.fromEnv()</code>, or the page sets <code>window.helm</code> once and components pick it up. Otherwise every component re-implements provider selection, auth and base-URL handling, and testing a component against a mock becomes impossible.</p></div>
+<pre><code><span class="c">&lt;!-- zero-build path: what h3 studio would actually write --&gt;</span>
+&lt;link rel="stylesheet" href="/sdk/v1/helm.css"&gt;
+&lt;script type="module"&gt;
+  import { fromEnv } from '/sdk/v1/helm-runtime.js'
+  import '/sdk/v1/helm-ui.js'
+  window.helm = fromEnv()
+&lt;/script&gt;
+
+&lt;helm-gallery scope="self" kind="video"&gt;&lt;/helm-gallery&gt;
+&lt;helm-player id="v"&gt;&lt;/helm-player&gt;
+&lt;script type="module"&gt;
+  document.querySelector('helm-player')
+    .addEventListener('frame-extracted', e =&gt; setFirstFrame(e.detail.asset))
+&lt;/script&gt;
+</code></pre>
+
+<h2 id="adopt">6 · Four adoption levels</h2>
+<div class="lvl">
+  <div><h5>Level 0 · nothing</h5><p>A studio ignores all three. Installs, launches, runs. No gallery, no shared cache. This must stay viable or helmstudio is not a launcher.</p></div>
+  <div><h5>Level 1 · css</h5><p>Takes <code>helm-css</code> only. Looks like it belongs to the family, keeps its own identity hue, stores nothing centrally. Cheapest possible conformance.</p></div>
+  <div><h5>Level 2 · css + runtime</h5><p>Assets, gallery, records and jobs, with the studio's own UI. This is where the four launch studios land, because none wants a front-end toolchain.</p></div>
+  <div><h5>Level 3 · all three</h5><p>Prebuilt gallery, player, terminal and timeline. Fastest path for a new studio, and the one <code>helm studio init</code> scaffolds.</p></div>
+</div>
+<p>Levels are a choice, not a ladder to climb. A studio with an unusual interface may deliberately sit at level 2 forever, and that is a success, not a gap.</p>
+
+<h2 id="timeline">7 · The timeline, settled</h2>
+<p>Two earlier decisions look contradictory and are not, once the layers are named.</p>
+<div class="tw"><table>
+<tr><th>Part</th><th>Owner</th><th>Why there</th></tr>
+<tr><td>The timeline document and its rows</td><td>Framework</td><td>A sequence made of an h3 clip, an ltx clip, an iris still and an AuK voice line is nobody's studio document, and it must survive uninstalling the studio that made half of it.</td></tr>
+<tr><td>The export pipeline and ffmpeg</td><td>Framework</td><td>One conform-and-concat implementation, one licensing decision, one place the stream-copy fast path is correct.</td></tr>
+<tr><td>The editor UI</td><td><code>helm-ui-sdk</code></td><td>A component like any other, so a studio can embed sequencing inline instead of bouncing the user to the launcher.</td></tr>
+<tr><td>Opening the launcher's own editor</td><td>Framework API</td><td><code>POST /timeline/{id}:open</code> stays, for studios at level 2 that would rather hand off than embed.</td></tr>
+</table></div>
+<p>Both paths edit the same document through the same endpoints, so a sequence opened in the launcher and one opened inside a studio are the same sequence, mid-edit.</p>
+
+<h2 id="dist">8 · Distribution</h2>
+<div class="tw"><table>
+<tr><th>Path</th><th>What it is</th><th>For</th></tr>
+<tr><td>Package registries</td><td><code>go get helmstudio.in/runtime</code>, <code>pip install helm-runtime-sdk</code>, <code>npm i @helmstudio/runtime @helmstudio/ui @helmstudio/css</code></td><td>Studios with a toolchain, and CI.</td></tr>
+<tr><td>Daemon-served bundles</td><td><code>/sdk/v1/helm.css</code>, <code>/sdk/v1/helm-runtime.js</code>, <code>/sdk/v1/helm-ui.js</code> — prebuilt ESM, no bundler</td><td>The zero-build path. What the four launch studios use.</td></tr>
+<tr><td>Vendored copy</td><td>The same files committed under <code>vendor/helm/</code> in the studio repo</td><td>Standalone. The page links the vendored file first and the daemon's second, so the live version wins the cascade when hosted.</td></tr>
+</table></div>
+<p>All three must exist. Registries alone exclude the studios that refuse a build step; served bundles alone break standalone; vendoring alone goes stale.</p>
+
+<h2 id="versions">9 · Versioning across three packages</h2>
+<ul>
+<li><strong>Independent semver</strong>, with one published compatibility matrix. <code>GET /me</code> reports the framework's API major and the SDK majors it serves, so a component can decide at runtime rather than guess.</li>
+<li><strong>A studio pins majors separately</strong> in its manifest — <code>sdk: { runtime: "^1", ui: "^1", css: "^1" }</code> — and the daemon injects the matching bundle URLs at launch. Updating helmstudio never silently jumps a studio across a major.</li>
+<li><strong>ui depends on a runtime range, never an exact version</strong>, so a runtime patch does not force a ui release.</li>
+<li><strong>Degrade, never explode.</strong> An unknown attribute is ignored; an endpoint the provider cannot serve returns <code>Unsupported</code> and the component renders its empty state with a one-line reason. A studio built against a newer SDK than the host should look reduced, not broken.</li>
+<li><strong>css is additive within a major.</strong> Tokens may be added, never removed or repurposed — a renamed token silently restyles four studios, which is the worst kind of breaking change because nothing errors.</li>
+</ul>
+
+<h2 id="repo">10 · One repo, three release trains</h2>
+<pre><code>helmstudio/
+├── api/openapi.yaml            <span class="c"># the contract — everything else is downstream</span>
+├── cmd/helmstudio/             <span class="c"># the daemon</span>
+├── packages/
+│   ├── css/                    <span class="c"># helm-css</span>
+│   ├── runtime-go/  runtime-py/  runtime-node/
+│   └── ui/                     <span class="c"># helm-ui-sdk</span>
+├── studios/*.yaml              <span class="c"># the registry</span>
+└── test/conformance/           <span class="c"># run against both providers</span>
+</code></pre>
+<p>A monorepo because the contract and its three clients must move together; three release trains because their consumers must not have to. CI gates: the conformance suite against daemon and embedded provider, generated-client drift (regenerate and fail on a diff), visual regression on <code>helm-css</code> and every component in <strong>both themes</strong>, and a contrast check on every token pair. The visual regression matters more than it sounds — a CSS framework consumed by four studios has no other way to notice it broke one of them.</p>
+
+<h2 id="rules">11 · The rules that stop this rotting</h2>
+<ol>
+<li><strong>The dependency arrow never reverses.</strong> runtime must not import a component; css must not assume a component's markup.</li>
+<li><strong>Only the runtime SDK knows the wire.</strong> No URL, header or response shape appears anywhere in <code>helm-ui-sdk</code>.</li>
+<li><strong>Components receive a client, never build one.</strong></li>
+<li><strong>Level 0 stays viable.</strong> The day a studio must adopt a package to be installable, this stopped being a launcher.</li>
+<li><strong>No model-specific UI, ever.</strong> Prompt builders, parameter panels, LoRA pickers and scheduler controls stay in studios. The generic version would be worse than every specific one, and shipping it turns four independent studios into four skins.</li>
+<li><strong>A component earns its place by being identical everywhere.</strong> A log stream, a video transport, a list of past outputs and a sequence are the same problem in every studio. That is the test — if two studios would want it meaningfully different, it does not belong in the package.</li>
+</ol>
+</article>
+</div>

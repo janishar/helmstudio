@@ -1,0 +1,436 @@
+<title>helmstudio Requirements</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --page:#faf8f3; --panel:#ffffff; --raised:#fbf8f1; --inset:#1c1a15;
+  --hair:#e4dfd2; --strong:#c9c2b0; --faint:#f0ece1;
+  --tx:#1a1813; --tx2:#534f45; --tx3:#837d70; --inv:#ffffff;
+  --ac:#f5b800; --ac-h:#e0a800; --ac-sub:#fff3d1; --ac-tx:#7a5600; --on-ac:#1a1400;
+  --idle:#837d70; --ok:#1f7a4d; --info:#1c6fb8; --warn:#a85410; --err:#c0342a;
+  --ltx:#2f5fc4; --h3:#a06a10; --iris:#b12f68; --auk:#5c4bc4;
+  --logtx:#cfc8ba;
+  --sans:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}}
+:root[data-theme="dark"]{
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--tx);font-family:var(--sans);font-size:13px;line-height:20px;margin:0;-webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;height:52px;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--hair)}
+.mark{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.mark svg{display:block}
+.bar .doc{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+.bar .sp{flex:1}
+.pill{height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;color:var(--tx2);background:var(--raised)}
+.dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--idle)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:212px minmax(0,1fr);gap:40px;align-items:start}
+nav.toc{position:sticky;top:76px;padding-block:32px;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - 92px);overflow-y:auto}
+nav.toc a{color:var(--tx2);text-decoration:none;font-size:12px;padding:5px 8px;border-radius:4px;border-left:2px solid transparent}
+nav.toc a:hover{background:var(--raised);color:var(--tx)}
+nav.toc .lbl{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:16px 8px 6px}
+article{padding-block:32px 96px;min-width:0;max-width:820px}
+h1{font-size:28px;line-height:34px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;text-wrap:balance}
+h2{font-size:19px;line-height:26px;font-weight:600;letter-spacing:-.01em;margin:44px 0 12px;padding-top:20px;border-top:1px solid var(--hair);text-wrap:balance}
+h2:first-of-type{border-top:0;padding-top:0}
+h3{font-size:14px;font-weight:600;margin:28px 0 8px}
+h4{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);margin:24px 0 8px}
+p{margin:0 0 12px;max-width:68ch;color:var(--tx2)}
+p strong,li strong{color:var(--tx);font-weight:600}
+article > p:first-of-type{font-size:14px;line-height:22px}
+a{color:var(--ac-tx)}
+code{font-family:var(--mono);font-size:12px;background:var(--raised);border:1px solid var(--faint);padding:1px 4px;border-radius:3px;color:var(--tx)}
+pre{background:var(--inset);color:var(--logtx);border:1px solid var(--hair);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:18px;margin:0 0 16px}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:12px}
+pre .k{color:var(--ac-tx)} pre .c{color:#6e6862} pre .s{color:#f0883e} pre .t{color:#9bb4d8}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin:0 0 16px}
+th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:8px 10px;border-bottom:1px solid var(--strong);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--hair);color:var(--tx2);vertical-align:top}
+td:first-child{color:var(--tx)}
+td code,th code{font-size:11.5px;white-space:nowrap}
+.tw{overflow-x:auto;margin:0 0 16px;border:1px solid var(--hair);border-radius:6px}
+.tw table{margin:0}
+.tw th{background:var(--panel)}
+.tw td,.tw th{padding:8px 12px}
+.tw tr:last-child td{border-bottom:0}
+ul,ol{margin:0 0 14px;padding-left:20px;color:var(--tx2);max-width:68ch}
+li{margin-bottom:6px}
+li::marker{color:var(--tx3)}
+.note{border-left:2px solid var(--ac);background:var(--ac-sub);padding:12px 14px;border-radius:0 4px 4px 0;margin:0 0 16px;max-width:68ch}
+.note p{margin:0;color:var(--tx)}
+.note .h{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ac-tx);margin-bottom:4px;display:block}
+.warnbox{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--panel))}
+.warnbox .h{color:var(--warn)}
+.meta{font-family:var(--mono);font-size:12px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.chip{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;background:var(--raised);color:var(--tx);white-space:nowrap}
+.chip .dot{width:6px;height:6px}
+.docmeta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+.new{border-color:color-mix(in srgb,var(--ac) 55%,transparent);background:var(--ac-sub);color:var(--ac-tx)}
+figure{margin:0 0 18px}
+figcaption{font-size:12px;color:var(--tx3);margin-top:8px;max-width:68ch}
+.diag{background:var(--panel);border:1px solid var(--hair);border-radius:6px;padding:18px;overflow-x:auto;margin:0 0 8px}
+.diag svg{display:block;width:100%;min-width:660px;height:auto;color:var(--tx);font-family:var(--sans)}
+.ep{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.verb{display:inline-block;min-width:44px;font-weight:500}
+.g{color:var(--ok)}.po{color:var(--ac-tx)}.pu{color:var(--warn)}.de{color:var(--err)}
+.qa{border:1px solid var(--hair);border-left:2px solid var(--ac);border-radius:0 6px 6px 0;background:var(--panel);padding:14px 16px;margin:0 0 20px}
+.qa .q{font:600 13px/19px var(--sans);color:var(--tx);margin:0 0 6px}
+.qa p:last-child{margin-bottom:0}
+@media(max-width:920px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:0}
+  nav.toc{position:static;max-height:none;flex-direction:row;flex-wrap:wrap;gap:4px;padding-block:20px 0;border-bottom:1px solid var(--hair)}
+  nav.toc .lbl{display:none}
+  nav.toc a{border:1px solid var(--hair);border-radius:4px}
+  article{padding-block:24px 64px}
+}
+</style>
+<header class="bar">
+  <span class="mark"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1" fill="none" stroke="var(--ac)" stroke-width="1.6"/><g stroke="var(--ac)" stroke-width="1.6" stroke-linecap="round"><path d="M8 .9v3.2M8 11.9v3.2M.9 8h3.2M11.9 8h3.2M3 3l2.2 2.2M10.8 10.8L13 13M13 3l-2.2 2.2M5.2 10.8L3 13"/></g></svg>helmstudio</span>
+  <span class="doc">PRD · v2</span>
+  <span class="sp"></span>
+  <span class="pill"><span class="dot" style="background:var(--ac)"></span>Draft for build</span>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <span class="lbl">Product</span>
+  <a href="#problem">1 · Problem</a>
+  <a href="#users">2 · Users</a>
+  <a href="#principles">3 · Principles</a>
+  <a href="#shape">4 · System shape</a>
+  <a href="#states">5 · State vocabulary</a>
+  <span class="lbl">Scope</span>
+  <a href="#launcher">6 · Launcher</a>
+  <a href="#supervision">7 · Processes</a>
+  <a href="#platform">8 · Platform services</a>
+  <a href="#timeline">9 · Timeline</a>
+  <a href="#packages">10 · SDK packages</a>
+  <a href="#custom">11 · Custom studios</a>
+  <a href="#app">12 · Mac app</a>
+  <span class="lbl">Delivery</span>
+  <a href="#manifest">13 · Manifest</a>
+  <a href="#nongoals">14 · Non-goals</a>
+  <a href="#risks">15 · Open decisions</a>
+  <a href="#milestones">16 · Milestones</a>
+</nav>
+
+<article>
+<h1>helmstudio — Product Requirements</h1>
+<p>helmstudio is a local launcher and platform for open-weight generative models. It installs a studio's repo, builds it, fetches its weights, supervises its processes, gives it storage, a gallery and a timeline, and presents the whole shelf in one window. The studios stay independent repos; helmstudio never imports their code.</p>
+<div class="docmeta">
+  <span class="chip">helmstudio.in</span>
+  <span class="chip">github.com/janishar/helmstudio</span>
+  <span class="chip">Janishar Ali</span>
+  <span class="chip">v2 · 15 Sep 2026</span>
+  <span class="chip">macOS · Apple Silicon</span>
+  <span class="chip new"><span class="dot" style="background:var(--ac)"></span>Platform, timeline, packages, custom studios</span>
+</div>
+
+<h2 id="problem">1 · Problem and opportunity</h2>
+<p>Open-weight video, image and speech models have reached the point where one Mac with 64 GB of unified memory generates a five-second video with synchronised audio, a 4K still, or a minute of expressive speech — entirely offline. The models are free. Running them is not.</p>
+<p>The cost is paid in setup. Someone who wants to try MiniMax-H3 reads a README, clones a repo, discovers the <code>git submodule update --init --recursive</code> mentioned three sections later, installs a C toolchain, runs <code>make mps</code>, and watches it fail because Xcode command line tools are a version behind. Python studios fail differently: the repo wants 3.10, the system has 3.13, and last month's virtualenv has conflicting pins. Then the download — 16 GB for FLUX.2 Klein, 60 GB for a video checkpoint — with no resume when the Wi-Fi drops. Finally two studios both hard-code port 8720 and the second dies with an error the user has no context for.</p>
+<p>The second cost is paid after setup, and it is the one nobody talks about. Every studio rebuilds the same things badly: a take list, a log panel, a video player, a place to put outputs, a timeline. Each one keeps its generations in its own folder in its own format, so the image you made in one cannot become the first frame of a video in another without a trip through Finder. helmstudio answers both: a launcher that removes the setup, and a platform that gives every studio storage, a gallery, media handling and sequencing so it never has to build them.</p>
+
+<h2 id="users">2 · Users and jobs to be done</h2>
+<p><strong>The creator</strong> makes things and owns a Mac because it is a good computer, not because it is a GPU rig. Their job is "generate the thing without learning a toolchain." They measure success by whether the first generation happened on the first evening, and whether coming back a week later still works without re-reading anything. If helmstudio shows them a compiler error as the whole message, it has failed them.</p>
+<p><strong>The tinkerer</strong> follows model releases. Their job is "try the new thing the week it drops, next to the last thing I tried." They measure success by time-to-first-output for a newly added studio, and by keeping four studios installed without a 200 GB disk bill. They will be first to ask <em>why</em> something failed, so the logs must be real logs.</p>
+<p><strong>The studio author</strong> wrote one of these repos and wants people to run it. Their job is "make my repo installable by anyone with a Mac, and stop rebuilding infrastructure." They measure success by two things: adding a studio is one YAML file with no daemon changes, and the SDK saves them a gallery, a player and a store they would otherwise write.</p>
+
+<h2 id="principles">3 · Product principles</h2>
+<p><strong>Studios stay independent repos.</strong> helmstudio never vendors, forks, patches or imports studio code. A studio must remain fully usable by someone who clones it directly and ignores helmstudio entirely.</p>
+<p><strong>The daemon is never a model runtime.</strong> No inference, no tensors, no Metal, no Python in-process. Its job is lifecycle and platform: fetch, build, download, supervise, store, serve. The moment a feature requires understanding a model format, it belongs in a studio.</p>
+<p><strong>Nothing leaves the machine.</strong> The only outbound calls are the ones a user action implies — GitHub, Hugging Face, and whatever a studio's build fetches. No telemetry, no analytics, no account. A reviewer can grep the daemon for every hostname it contacts.</p>
+<p><strong>A failed step leaves a recoverable state.</strong> Every install, build and download is idempotent. A killed download resumes; a failed build keeps the clone and the logs. Retry is always offered.</p>
+<p><strong>One heavy studio at a time, by default.</strong> Two 20 GB models do not coexist on a 64 GB machine. The daemon enforces it and states the arithmetic before enforcing it.</p>
+<p><strong>Everything the daemon starts is supervised the same way.</strong> A web server, a model sidecar, a worker and a shared service are all processes in a declared group with health, ordering and teardown. There is no weaker second path for "extra" processes.</p>
+<p><strong>Every platform service is optional.</strong> A studio that uses none of the SDK still installs, launches and runs. The day adoption becomes mandatory, this stopped being a launcher.</p>
+<p><strong>Adding a studio is a data change.</strong> If support requires editing the daemon, the manifest schema is wrong. "We'll special-case it in Go" is not available.</p>
+
+<h2 id="shape">4 · System shape</h2>
+<figure class="diag">
+<svg viewBox="0 0 900 330" role="img" aria-label="The helmstudio daemon holds lifecycle and platform services, serves three SDK packages, and supervises studio process groups; media and metadata are stored locally.">
+<defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+<marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ac)"/></marker></defs>
+<g font-size="12.5">
+<rect x="20" y="14" width="250" height="52" rx="4" fill="var(--raised)" stroke="currentColor"/>
+<text x="145" y="36" text-anchor="middle" font-weight="500">helmstudio.app</text><text x="145" y="54" text-anchor="middle" font-size="11" fill="var(--tx3)">Electron shell · native chrome</text>
+<rect x="300" y="14" width="250" height="52" rx="4" fill="var(--raised)" stroke="currentColor"/>
+<text x="425" y="36" text-anchor="middle" font-weight="500">launcher UI</text><text x="425" y="54" text-anchor="middle" font-size="11" fill="var(--tx3)">shelf · timeline · disk · doctor</text>
+<rect x="580" y="14" width="300" height="52" rx="4" fill="var(--raised)" stroke="currentColor"/>
+<text x="730" y="36" text-anchor="middle" font-weight="500">studio UIs</text><text x="730" y="54" text-anchor="middle" font-size="11" fill="var(--tx3)">helm-css · helm-ui-sdk · helm-runtime-sdk</text>
+
+<rect x="20" y="106" width="860" height="94" rx="5" fill="var(--ac-sub)" stroke="var(--ac)" stroke-width="1.5"/>
+<text x="40" y="130" font-weight="600" fill="var(--ac-tx)">helmstudio daemon · 127.0.0.1:8700</text>
+<text x="40" y="152" font-size="11.5" fill="var(--tx2)">lifecycle: registry · installer · weights · supervisor · ports · jobs</text>
+<text x="40" y="172" font-size="11.5" fill="var(--tx2)">platform: kv · records · assets · gallery · timeline · media engine · events</text>
+<text x="40" y="192" font-size="11" fill="var(--tx3)" font-family="var(--mono)">/api/v1 · capability-scoped per-launch tokens</text>
+
+<rect x="20" y="238" width="420" height="76" rx="5" fill="var(--panel)" stroke="currentColor"/>
+<text x="38" y="260" font-weight="600">studio process groups</text>
+<text x="38" y="279" font-size="11.5" fill="var(--tx2)">ltx · h3 · iris · AuK · custom</text>
+<text x="38" y="298" font-size="11" fill="var(--tx3)" font-family="var(--mono)">main + sidecars + workers, health-gated</text>
+<rect x="470" y="238" width="410" height="76" rx="5" fill="var(--panel)" stroke="currentColor"/>
+<text x="488" y="260" font-weight="600">local storage</text>
+<text x="488" y="279" font-size="11.5" fill="var(--tx2)">helm.db (SQLite) · assets/blobs · library · models</text>
+<text x="488" y="298" font-size="11" fill="var(--tx3)" font-family="var(--mono)">metadata in rows, bytes in directories</text>
+</g>
+<g stroke="currentColor" fill="none" stroke-width="1.1">
+<path d="M145 66 V106" marker-end="url(#a1)"/><path d="M425 66 V106" marker-end="url(#a1)"/><path d="M730 66 V106" marker-end="url(#a1)"/>
+</g>
+<g stroke="var(--ac)" fill="none" stroke-width="1.4">
+<path d="M230 200 V238" marker-end="url(#a2)"/><path d="M675 200 V238" marker-end="url(#a2)"/>
+</g>
+</svg>
+</figure>
+
+<h2 id="states">5 · One state vocabulary</h2>
+<p>Install state and process state are separate machines and are never merged. These spellings are used in this document, in the data model and in the UI; a state with no chip is a bug in the design, not licence to invent a synonym.</p>
+<div class="tw"><table>
+<tr><th>Install state</th><th>Meaning</th><th>Chip</th></tr>
+<tr><td><code>listed</code></td><td>In the catalogue, nothing on disk</td><td>Not installed</td></tr>
+<tr><td><code>cloning</code> → <code>cloned</code></td><td>Fetching repo and submodules</td><td>Installing · cloning</td></tr>
+<tr><td><code>building</code> → <code>built</code></td><td>Running <code>build[]</code> in order</td><td>Installing · step n of m</td></tr>
+<tr><td><code>fetching_weights</code></td><td>Downloading declared artifacts</td><td>Downloading 43%</td></tr>
+<tr><td><code>ready</code></td><td>Installed and launchable</td><td>Installed</td></tr>
+<tr><td><code>update_available</code></td><td>Upstream ref moved past the installed commit</td><td>Update available</td></tr>
+<tr><td><code>failed_clone</code> · <code>failed_build</code> · <code>failed_weights</code></td><td>Last attempt failed at that phase; work already done is kept</td><td>Install failed · &lt;phase&gt;</td></tr>
+<tr><td><code>removing</code></td><td>Uninstall in progress</td><td>Removing…</td></tr>
+</table></div>
+<div class="tw"><table>
+<tr><th>Process state</th><th>Meaning</th><th>Chip</th></tr>
+<tr><td><code>queued</code></td><td>Waiting for a heavy slot or a dependency</td><td>Queued</td></tr>
+<tr><td><code>starting</code></td><td>Spawned, health not yet passing</td><td>Starting · 0:24 of 4:00</td></tr>
+<tr><td><code>running</code></td><td>Health passing</td><td>Running · 12:04</td></tr>
+<tr><td><code>stopping</code> → <code>exited</code></td><td>SIGTERM to the group, SIGKILL after grace</td><td>Stopping… / Stopped</td></tr>
+<tr><td><code>failed</code></td><td>Exited before ready, health timed out, or crashed</td><td>Crashed · exit 137</td></tr>
+</table></div>
+
+<h2 id="launcher">6 · Launcher: registry, install, weights</h2>
+<h4>Registry and discovery</h4>
+<ul>
+<li><strong>R1</strong> A studio's manifest — <code>helmstudio.yaml</code> — lives at the root of the studio's own repository, beside the code it describes. The bundled registry holds <strong>pointers</strong> (<code>id</code>, <code>repo</code>, <code>ref</code>, certification level), and the daemon resolves and caches the manifest from the repo at that ref. One copy, so nothing drifts, and a studio can announce a new build step without waiting for a helmstudio release.</li>
+<li><strong>R2</strong> Each manifest is validated at load; an invalid one is not listed and its field and reason are logged. One bad manifest never blocks the others.</li>
+<li><strong>R2a</strong> A manifest resolves from three sources, first match winning: a local file at <code>~/.helmstudio/studios/&lt;id&gt;.yaml</code>, then <code>helmstudio.yaml</code> in the repo at the pinned ref, then an inline manifest carried by the registry pointer for repos that have none. All three normalise to one shape, so a studio behaves identically whichever wrote it.</li>
+<li><strong>R3</strong> <strong>Anyone can author a manifest, not only a studio's author.</strong> helmstudio provides an in-app editor — a form over the schema beside a live YAML pane — that validates as you type, shows the certification criteria updating, runs the smoke harness without installing, saves to the local directory, and exports the file to commit upstream or open as a pull request. One format means a manifest written to get a model running locally is, unchanged, the one a registry review accepts.</li>
+<li><strong>R3c</strong> <strong>A manifest can be imported as a file</strong> — dropped onto the window, chosen from a picker, pasted as text, or fetched from a URL — and several at once. Import validates, reports what it found, and adds the entry to the library as Local with a note of where it came from. <strong>Import is not install:</strong> an imported manifest is a description until the user installs it, and installing it from a repository they do not own still passes through the approval screen with every build command shown.</li>
+<li><strong>R3d</strong> Export is the mirror of import: any library entry can be written out as a file or copied as text, unchanged and ready to commit upstream, attach to an issue, or send to someone else. This is the sharing loop — a manifest that got a model running on one machine is the artefact that gets it running on another, with no marketplace in between.</li>
+<li><strong>R3a</strong> A local manifest overrides a registry entry with the same <code>id</code>; the card says so and offers Revert. An import whose <code>id</code> already exists offers Override, Rename or Cancel rather than silently replacing anything. Duplicate-and-edit copies any entry to local under a new id, so forking a studio to point at different weights or flags breaks nothing.</li>
+<li><strong>R3b</strong> The catalogue is a <strong>library</strong>: the set of studios this machine knows about, of which installed ones are a subset. Each entry carries source (local, repo, registry), certification level and install state as three independent facts, and the library is derived at startup from files — bundled pointers, the local directory, and fetched manifests cached on disk — so a user can hand-edit or version-control their own entries.</li>
+<li><strong>R4</strong> A manifest may declare <code>local_path</code>; cloning is then skipped.</li>
+<li><strong>R5</strong> <code>requires</code> is evaluated against the host. <code>os</code> and <code>arch</code> mismatches block Install; memory and disk shortfalls warn with the specific number and let the user proceed.</li>
+<li><strong>R5a</strong> Every studio declares its <strong>compute runtime</strong> — the framework it runs inference through and the device backends it supports. The shelf shows it on the card and the detail page, and a studio whose backends the host cannot provide is <strong>blocked, not warned</strong>: nobody should download 60 GB before discovering a studio is CUDA-only.</li>
+<li><strong>R5b</strong> Doctor reports the host's side of the same question — chip, unified memory, Metal version, and the detected versions of any framework a manifest names — so "why is this slower than the README says" has somewhere to start.</li>
+<li><strong>R6</strong> <code>helmstudio validate &lt;file&gt;</code> checks a manifest offline and prints schema errors with line numbers.</li>
+<li><strong>R6a</strong> <strong>A studio is fully developable with the SDKs alone.</strong> <code>helm dev</code> is the daemon restricted to one studio and a local path — the same supervisor, manifest parser and template substitution — so the manifest is exercised from the first day rather than first executed at install time, and no code changes when the studio later runs hosted.</li>
+<li><strong>R6b</strong> <code>helm adopt</code> imports a studio's standalone data into the daemon: blobs hardlinked rather than copied, rows replayed, assets deduplicated by hash. It is idempotent, has a <code>--dry-run</code>, and refuses a schema newer than the daemon knows rather than dropping fields it cannot read.</li>
+<li><strong>R6c</strong> <code>helm doctor --studio</code> scores the certification criteria against a working tree on demand, so readiness is a live number during development rather than a verdict at submission.</li>
+</ul>
+<h4>Install</h4>
+<ul>
+<li><strong>R7</strong> Install runs <code>git clone --recurse-submodules</code> into <code>~/.helmstudio/studios/&lt;id&gt;/src</code> at <code>ref</code> when declared.</li>
+<li><strong>R8</strong> Each <code>build[]</code> entry runs in declared order in its own <code>cwd</code>; a non-zero exit stops the sequence and sets <code>failed_build</code> with step index, exit code and log reference.</li>
+<li><strong>R9</strong> stdout and stderr stream to the UI over SSE and append to the studio's log directory.</li>
+<li><strong>R10</strong> Retry resumes from the first step that has not succeeded; completed steps are not re-run unless a full rebuild is requested.</li>
+<li><strong>R11</strong> Tools in <code>requires.tools</code> are probed before the first step, failing fast with the tool name and the command that installs it.</li>
+<li><strong>R12</strong> Python studios get a per-studio <code>uv</code> environment pinned to <code>python.version</code>; environments are never shared.</li>
+<li><strong>R13</strong> Install can be cancelled: the running step's process group is killed, the phase marked failed, completed work kept.</li>
+</ul>
+<h4>Weights</h4>
+<ul>
+<li><strong>R14</strong> A weight is resolved one of two ways and the rest of the system cannot tell them apart. <em>Managed</em>: helmstudio downloads the Hugging Face repo into <code>~/.helmstudio/models/&lt;dest&gt;</code>. <em>Linked</em>: the user points at a directory they already have, and helmstudio creates <code>~/.helmstudio/models/&lt;dest&gt;</code> as a symlink to it rather than downloading anything. Either way <code>{models.&lt;name&gt;}</code> substitutes the resolved real path, and nothing is ever symlinked into the studio checkout, so <code>git pull</code> never meets an untracked path.</li>
+<li><strong>R14a</strong> Any artifact can be linked instead of downloaded, from the weights panel on the install screen and from Models &amp; disk. The user picks a directory; helmstudio checks it is readable and that the files the manifest declares are present at roughly the expected sizes, then records it as linked and <code>unverified</code> — launch is what proves it, and the UI says so rather than implying a check it did not perform.</li>
+<li><strong>R14b</strong> Settings carries additional <strong>model roots</strong> — directories helmstudio scans for repos it recognises, such as an existing ComfyUI or LM Studio models folder. When a scan matches a declared weight, Install offers "use the copy you already have" beside the download, with both sizes stated.</li>
+<li><strong>R14c</strong> A linked directory is treated as <strong>read-only</strong>. helmstudio never writes into it — no partial files, no repair, no permission changes — and a partially complete linked directory is reported with the missing files named, offering a managed download instead of completing in place.</li>
+<li><strong>R15</strong> Downloads resume across restarts and interruptions, per file. Signed CDN URLs are re-resolved on every resume; a 403 on resume means re-resolve, not corruption; 429 backs off.</li>
+<li><strong>R16</strong> An artifact already cached at the same repo and revision is not downloaded again; the second binding increments its reference count.</li>
+<li><strong>R17</strong> Free disk is checked against declared size plus headroom before downloading, refusing with actual numbers.</li>
+<li><strong>R18</strong> A gated repo returning 401/403 sets <code>auth_required</code> and prompts for a token rather than failing the install.</li>
+<li><strong>R19</strong> The cache records size, source, revision and referencing studios; an artifact with no reference is reclaimable, and one in use cannot be deleted without a confirmation naming the dependents.</li>
+<li><strong>R19a</strong> <strong>Reclaim never follows a symlink.</strong> Deleting a linked artifact removes the link and nothing else; the user's directory is never touched, and the action is labelled Unlink rather than Delete. Linked bytes are reported separately from cache bytes, because they are not helmstudio's to free.</li>
+<li><strong>R19b</strong> A linked directory that disappears — an external drive unplugged, a folder moved — sets the artifact <code>missing</code> rather than failing obscurely at model load. Launch refuses with the path it expected and offers Relink or Download, and the studio's install state is untouched.</li>
+</ul>
+
+<h2 id="supervision">7 · Processes and supervision</h2>
+<ul>
+<li><strong>R20</strong> A studio declares one or more processes. The daemon starts them in dependency order, health-gates each before its dependents, and stops them in reverse.</li>
+<li><strong>R21</strong> Each process is spawned in its own process group with <code>{port}</code>, <code>{ports.&lt;name&gt;}</code>, <code>{models.&lt;name&gt;}</code>, <code>{root}</code> and <code>{venv}</code> substituted, the studio root as cwd, and manifest <code>env</code> applied.</li>
+<li><strong>R22</strong> Ports are assigned from a configurable range (default 8701–8799); a manifest port is advisory. A process declared <code>port: fixed</code> refuses to start when that port is taken, naming the occupant.</li>
+<li><strong>R23</strong> After spawn the daemon polls <code>health</code> every <code>interval_s</code> (default 2) until <code>timeout_s</code> (default 180), showing elapsed against the budget. Loading 20 GB before answering is normal and must not read as a hang.</li>
+<li><strong>R24</strong> Health probes support <code>path</code>, <code>tcp</code> and <code>exec</code>, because a worker has no HTTP endpoint.</li>
+<li><strong>R25</strong> Only one group marked <code>heavy</code> runs at a time. Starting a second states the memory arithmetic and, on confirm, stops the first and waits for its ports to clear.</li>
+<li><strong>R26</strong> Stop sends SIGTERM to each group in reverse dependency order, escalating to SIGKILL after grace. Install state is untouched.</li>
+<li><strong>R27</strong> A <code>main</code> process that exits unexpectedly fails the group, surfaces the last 200 log lines and offers Restart. It is never auto-restarted, and <strong>never restarted on a failed health check alone</strong> — an eight-minute generation must survive a slow probe. A <code>sidecar</code> with <code>restart: on-failure</code> retries with backoff, at most three times in ten minutes.</li>
+<li><strong>R28</strong> On clean shutdown children are terminated. On restart, survivors are re-adopted after verifying pid, process start time and process group, so a recycled pid is never signalled.</li>
+<li><strong>R29</strong> <code>services/*.yaml</code> declares long-lived processes belonging to no studio, supervised by the same code path.</li>
+<li><strong>R30</strong> Log retention is bounded: the last five run logs per studio, each capped with head-and-tail truncation, with the cap stated in the UI.</li>
+</ul>
+
+<h2 id="platform">8 · Platform services</h2>
+<p>Every service below is optional to a studio and reached through the same capability-scoped API. A studio declares what it uses; the user sees it before install.</p>
+<ul>
+<li><strong>R31</strong> <strong>All studio state is written through the SDK</strong> and stored centrally in SQLite. A studio does not maintain its own store, config directory or settings files. The provider decides where rows land — the daemon's database when hosted, the studio's own <code>./.helm/helm.db</code> standalone — so one backup, one migration path and one crash-safe write implementation serve every studio instead of one per author.</li>
+<li><strong>R31a</strong> <strong>Sessions are a platform concept.</strong> Create, rename, duplicate, activate, list and soft-delete are SDK calls, with the studio's own settings carried in an opaque <code>state</code> document. Every studio has this idea today and each implements it differently; centralising it also lets the launcher show session counts and last-opened times on a card without parsing anyone's format.</li>
+<li><strong>R31b</strong> <code>/kv/{ns}/{key}</code> holds singleton state — UI preferences, the last opened session, panel widths — with <code>ETag</code> and <code>If-Match</code> so two open tabs cannot silently overwrite each other.</li>
+<li><strong>R32</strong> <strong>Records.</strong> <code>/records/{collection}</code> is a per-studio document store for domain data helmstudio does not model, queried through a closed filter language (<code>eq ne lt lte gt gte in contains exists</code>, at most eight clauses, always parameterised). <strong>No SQL passthrough from a studio, ever.</strong></li>
+<li><strong>R33</strong> Indexes and quotas are declared in the manifest; the daemon creates scoped expression indexes at install and enforces per-studio row and byte caps, refusing with the number rather than filling the disk.</li>
+<li><strong>R34</strong> <strong>Assets.</strong> <code>POST /assets:adopt</code> hardlinks a file the studio already wrote into the store — no copy, no HTTP body — and <code>POST /assets</code> uploads bytes. Both are idempotent on content: dedup is a uniqueness constraint on the hash, not an algorithm.</li>
+<li><strong>R35</strong> Media bytes live in directories, never in the database. The blob is named by hash; a human-readable hardlink under <code>library/&lt;studio&gt;/&lt;month&gt;/</code> is what a person browses in Finder. Paths are stored relative to the assets root so moving the library is a settings change.</li>
+<li><strong>R36</strong> The daemon generates thumbnails, poster frames, waveforms and browser-playable proxies once per asset, cached as derived files no studio implements.</li>
+<li><strong>R37</strong> <code>GET /assets/{id}</code> streams with <code>Range</code>, so a studio can scrub a video without downloading it.</li>
+<li><strong>R38</strong> <strong>Gallery.</strong> <code>POST /gallery/items</code> records an output with its params and an <code>inputs[]</code> provenance list; <code>GET /gallery/items</code> queries by kind, tag, session, date and text, scoped to the caller unless <code>scope=all</code> and the capability is held.</li>
+<li><strong>R39</strong> <strong>Handoff.</strong> <code>POST /handoff</code> sends an item to another studio's inbox; <code>GET /inbox</code> drains it. A studio that has not implemented an inbox receives the file in its stage directory instead.</li>
+<li><strong>R40</strong> <strong>Jobs.</strong> Long work — installs, downloads, exports and a studio's own renders — is a Job with progress, cancellation and a log file, so no studio builds a second queue.</li>
+<li><strong>R41</strong> <strong>Events.</strong> <code>GET /events</code> is an SSE stream carrying theme changes, job progress, inbox arrivals and shutdown.</li>
+<li><strong>R42</strong> <strong>Reconciliation.</strong> <code>helmstudio fsck</code> reconciles rows and files both ways: a row with no file marks the asset <code>missing</code> and keeps the gallery item intact with its params; a file with no row is reported as reclaimable and never deleted silently.</li>
+<li><strong>R43</strong> Secrets are never in the store: a Hugging Face token lives in the macOS Keychain and the database records only that one exists and when it was added.</li>
+</ul>
+
+<h2 id="timeline">9 · Timeline</h2>
+<p>Sequencing is inherently cross-studio — a sequence made from an h3 clip, an ltx clip, an iris still and an AuK voice line is nobody's studio document — so the framework owns it and must survive uninstalling the studio that made half of it.</p>
+<ul>
+<li><strong>R44</strong> A timeline is a document: a target (resolution, fps, sample rate) and tracks of clips referencing assets with in and out points. It is non-destructive; sources are never modified or copied.</li>
+<li><strong>R45</strong> <code>POST /timeline</code> creates a sequence from clips, <code>:append</code> adds to the open one without stealing focus, and <code>:open</code> asks the framework to show its editor. When no framework is present, <code>:open</code> returns <code>501</code> with a reason and the studio hides the button — <strong>the data operation always works, only the presentation degrades</strong>.</li>
+<li><strong>R46</strong> Export creates a Job, reusing install's progress, cancellation and log rather than a second progress system.</li>
+<li><strong>R47</strong> Every clip is conformed to the declared target; nothing is inferred per clip at render time. When all clips already match and there are no transitions or gain changes, export is a concat stream copy with no re-encode, and the UI says so.</li>
+<li><strong>R48</strong> An exported sequence becomes a gallery item whose <code>inputs[]</code> are its clips, so lineage survives the edit. A timeline referencing an asset counts as a reference for reclaim.</li>
+<li><strong>R49</strong> ffmpeg is bundled at a pinned version rather than expected on the machine, since "install ffmpeg first" is the friction helmstudio exists to remove.</li>
+</ul>
+
+<h2 id="packages">10 · SDK packages</h2>
+<p>Three packages with a strict one-way dependency: <code>helm-css</code> knows nothing, <code>helm-runtime-sdk</code> knows the API, <code>helm-ui-sdk</code> knows both.</p>
+<ul>
+<li><strong>R50</strong> <code>helm-css</code> ships tokens, base, layout and component layers as separate files and one bundle, plus <code>tokens.json</code>. Classes are prefixed, single-specificity and never <code>!important</code>, so a studio overrides with one rule.</li>
+<li><strong>R51</strong> <code>helm-runtime-sdk</code> ships for Go, Python and Node, generated from one OpenAPI document so the three cannot drift. Provider selection is automatic: remote when <code>HELM_API</code> is set, embedded otherwise.</li>
+<li><strong>R52</strong> The embedded provider is a separate module or extra, so a studio that only runs hosted never pulls SQLite into its dependency tree.</li>
+<li><strong>R53</strong> <code>helm-ui-sdk</code> ships <code>helm-gallery</code>, <code>helm-player</code>, <code>helm-terminal</code> and <code>helm-timeline</code> as custom elements. <strong>It never constructs a URL or sets a header</strong> — it receives a runtime client — so an API change regenerates one package and leaves components untouched.</li>
+<li><strong>R54</strong> All three are distributed three ways: package registries, prebuilt bundles served by the daemon for studios with no build step, and a vendored copy for standalone.</li>
+<li><strong>R55</strong> A manifest pins majors separately (<code>sdk: { runtime, ui, css }</code>) and the daemon injects matching bundle URLs at launch, so updating helmstudio never jumps a studio across a major.</li>
+<li><strong>R56</strong> Components degrade rather than explode: an unknown attribute is ignored, and an endpoint the provider cannot serve renders an empty state with a one-line reason.</li>
+<li><strong>R57</strong> <code>helm dev</code> runs the embedded provider behind the real HTTP surface and exports <code>HELM_API</code>; <code>--fixtures</code> seeds a gallery with sample media and a populated inbox; <code>--fail=</code> injects quota, conflict and outage errors so failure paths are reproducible.</li>
+<li><strong>R58</strong> <code>helm test</code> runs a studio's smoke test against an ephemeral embedded provider and asserts: health inside budget, at least one asset adopted, at least one gallery item with non-empty params, no writes outside the studio's roots, clean exit on SIGTERM.</li>
+<li><strong>R59</strong> A conformance suite runs in CI twice — against the daemon over HTTP and against the embedded provider in-process — so "the two are substitutable" is proved rather than asserted.</li>
+<li><strong>R60</strong> No package ever contains model-specific UI: prompt builders, parameter panels, model or LoRA pickers and scheduler controls stay in studios.</li>
+</ul>
+
+<h2 id="custom">11 · Custom studios</h2>
+<ul>
+<li><strong>R61</strong> A user adds a studio from a local folder, a git URL, or the registry — three routes, one code path.</li>
+<li><strong>R62</strong> Before anything executes, an approval screen shows the repo and ref, <strong>every build command verbatim</strong>, the weights and sizes, the capabilities requested as plain sentences, the declared network hosts and the certification level.</li>
+<li><strong>R63</strong> Checks run before install: manifest validity, host requirements, capability review, theme conformance and the smoke harness. Required failures warn loudly and block a registry merge; expected failures never block a user installing their own work.</li>
+<li><strong>R64</strong> A studio carries a certification level shown as a card chip — Draft, Unverified, Verified, Registry — which labels but never gates what a user runs on their own machine.</li>
+<li><strong>R65</strong> Custom studios install at a pinned commit; auto-update is off below Registry level, and an update shows a command diff when build steps changed.</li>
+<li><strong>R66</strong> There is no URL scheme or one-click web install. The add flow starts inside the app, every time.</li>
+<li><strong>R67</strong> Uninstall is complete: no files outside the studio's roots, no orphaned processes, with cached weights left for the user to reclaim explicitly.</li>
+<li><strong>R68</strong> <code>helm studio init</code> scaffolds a studio that passes the required criteria on a clean checkout: manifest, vendored css, SDK wired, health endpoint, one adopt-and-record call, a passing smoke test.</li>
+</ul>
+
+<h2 id="app">12 · The Mac app</h2>
+<ul>
+<li><strong>R69</strong> <code>helmstudio.app</code> bundles the daemon; the shell starts it, adopts an existing one if present, and on quit shuts it down cleanly or leaves it running when the user chose to keep studios alive in the menu bar.</li>
+<li><strong>R70</strong> Native affordances: folder pickers for the models root, Reveal in Finder, a menu bar item showing the running studio with a Stop, notifications on install complete and failed, and Dock progress during downloads.</li>
+<li><strong>R71</strong> Hardened runtime, Developer ID signature and notarisation for the app and the embedded binary, so first launch is not a quarantine dialog.</li>
+<li><strong>R72</strong> Updates ship the shell, daemon and bundled registry together, which makes adding a studio to the catalogue a release.</li>
+<li><strong>R73</strong> The headless binary stays first-class; no feature is reachable only from the app, and the Electron layer contains no business logic.</li>
+</ul>
+
+<h2 id="manifest">13 · The manifest</h2>
+<pre><code><span class="k">id</span>: h3-studio
+<span class="k">name</span>: h3 studio
+<span class="k">kinds</span>: [video, audio]
+<span class="k">hue</span>: { dark: <span class="s">"#e0a33c"</span>, light: <span class="s">"#a06a10"</span> }
+<span class="k">repo</span>: https://github.com/janishar/h3c-studio
+<span class="k">submodules</span>: true
+<span class="k">peak_ram_gb</span>: 21
+<span class="k">license</span>: MIT
+<span class="k">requires</span>: { os: [darwin], arch: [arm64], tools: [git, make, cc, go], ram_gb: 32, disk_gb: 120 }
+<span class="k">runtime</span>:
+  <span class="k">framework</span>: native-kernel        <span class="c"># native-kernel | mlx | pytorch | ggml | onnx | jax</span>
+  <span class="k">backends</span>: [metal]              <span class="c"># metal | mps | cuda | rocm | cpu</span>
+  <span class="k">precision</span>: [bf16, int8]
+  <span class="k">language</span>: c                    <span class="c"># the engine's own stack, shown as "h3.c"</span>
+<span class="k">capabilities</span>: [kv, assets, gallery, timeline]
+<span class="k">sdk</span>: { runtime: <span class="s">"^1"</span>, ui: <span class="s">"^1"</span>, css: <span class="s">"^1"</span> }
+<span class="k">network</span>: [huggingface.co, cdn-lfs.huggingface.co]
+<span class="k">storage</span>:
+  <span class="k">collections</span>: [{ name: takes, index: [seed, model, session], fts: [prompt] }]
+  <span class="k">quota</span>: { records: 100000, kv_bytes: 8388608 }
+<span class="k">build</span>:
+  - { name: Build the Metal engine, cwd: h3c, run: make mps }
+  - { name: Build the studio server, cwd: ., run: go build -o dist/h3studio . }
+<span class="k">weights</span>:
+  - { name: h3, repo: MiniMaxAI/MiniMax-H3, dest: MiniMax-H3, size_gb: 60,
+      files: [config.json, <span class="s">"*.safetensors"</span>] }   <span class="c"># also the linked-directory check</span>
+<span class="k">processes</span>:
+  - <span class="k">name</span>: studio
+    <span class="k">role</span>: main
+    <span class="k">heavy</span>: true
+    <span class="k">cmd</span>: ./dist/h3studio --h3 ./h3c/h3 --model {models.h3} --port {port}
+    <span class="k">port</span>: { prefer: 8710 }
+    <span class="k">health</span>: { path: /healthz, timeout_s: 240, interval_s: 2 }
+    <span class="k">ui</span>: /
+<span class="k">test</span>: { profile: tiny, smoke: ./test/smoke.yaml }
+</code></pre>
+<p><strong>The other three fit the same schema.</strong> ltx and AuK declare <code>python.version</code>, which makes the daemon create a <code>uv</code> environment before the build; their run shape is the repo's own launcher. iris lists both checkpoints with <code>selectable: true</code> and references <code>{models.selected}</code>, so the shelf asks which to launch with and records the choice on the installation. A studio with an engine sidecar and an on-demand worker adds two more <code>processes[]</code> entries with <code>depends_on</code> and nothing else changes.</p>
+
+<h3>What the four launch studios declare</h3>
+<p>The values differ in every case, which is the argument for the field existing at all.</p>
+<div class="tw"><table>
+<tr><th>Studio</th><th>framework</th><th>backends</th><th>precision</th><th>Reads as</th></tr>
+<tr><td>h3 studio</td><td><code>native-kernel</code> (h3.c)</td><td><code>metal</code></td><td>bf16, int8</td><td>Native Metal · no Python</td></tr>
+<tr><td>iris studio</td><td><code>native-kernel</code> (iris.c)</td><td><code>metal</code></td><td>bf16</td><td>Native Metal · no Python</td></tr>
+<tr><td>ltx studio</td><td><code>mlx</code></td><td><code>metal</code></td><td>bf16, int8</td><td>MLX · quantised on load</td></tr>
+<tr><td>AuK studio</td><td><code>pytorch</code></td><td><code>mps</code>, <code>cpu</code></td><td>bf16</td><td>PyTorch · mps</td></tr>
+</table></div>
+<p>The distinction the field has to carry is not simply "Mac or not". A native Metal kernel and MLX are both Apple-native but behave differently; PyTorch on <code>mps</code> runs on the same machine as either but typically holds far more memory for the same model, which is the comparison ltx studio's own README makes. And PyTorch on <code>cuda</code> — the same framework, a different backend — will not run here at all. That is why <code>framework</code> and <code>backends</code> are separate fields rather than one label, and why the host check is against <code>backends</code>.</p>
+
+<h2 id="nongoals">14 · Non-goals for v1</h2>
+<ul>
+<li>No cloud or remote execution, no hosted mode, no proxying to anything that is not loopback.</li>
+<li>No multi-user, sessions, roles or sharing. One person, one machine.</li>
+<li>No account, sign-in or settings sync.</li>
+<li>No fine-tuning, LoRA training or dataset management at the launcher level.</li>
+<li>No cross-studio pipelines or orchestration. Handoff moves an asset; it does not chain generations.</li>
+<li>No Windows or Linux GPU support at launch; <code>requires.os</code>, <code>runtime.backends</code> and the directories helper keep the door open without a rewrite. Linux is a short hop — POSIX signals and process groups are identical, leaving packaging, the secret store and the video encoder. Windows is a genuine port: no process groups or signals (teardown becomes Job Objects), and <code>build[].run</code> assumes a POSIX shell.</li>
+<li>No plugin marketplace or third-party manifest hosting. Registry manifests land by pull request.</li>
+<li>No path-prefixed embedding of studios until they accept <code>--base-path</code>; a shared origin means a shared cookie jar and localStorage across every studio.</li>
+<li>No colour grading, keyframing, titles or effects in the timeline. Cuts, holds, one transition type, audio gain.</li>
+<li>No model-specific UI in any SDK package, permanently.</li>
+</ul>
+
+<h2 id="risks">15 · Open decisions</h2>
+<div class="tw"><table>
+<tr><th>Decision</th><th>Options</th><th>Lean</th></tr>
+<tr><td>ffmpeg licensing</td><td>LGPL build with videotoolbox, or a GPL build with x264</td><td>LGPL plus videotoolbox — also the fast encoder on Apple Silicon, and it avoids a GPL question in a signed MIT app. Decide before the first release.</td></tr>
+<tr><td>Dedup headline</td><td>File-level content addressing with hardlinks, or drop the claim</td><td>Check whether the four manifests share a single Hugging Face repo before promising a number.</td></tr>
+<tr><td>Proxy</td><td>Add <code>--base-path</code> to all four studios, or open each at its own origin</td><td>Own origin now; the flag is a week spread across four repos you already own, versus an HTML-rewriting proxy.</td></tr>
+<tr><td>Vendoring <code>uv</code></td><td>Pinned binary in the bundle, or detect and instruct</td><td>Ship it in the app, detect for the headless binary.</td></tr>
+<tr><td>Weight verification</td><td>Per-file SHA256, or size and etag</td><td>Size and etag on download; SHA256 behind an explicit Verify, since hashing 60 GB costs minutes.</td></tr>
+<tr><td>Preemption</td><td>Stop on confirm, or queue until the user stops</td><td>Stop on confirm, with an optional <code>busy</code> probe so a studio can report a generation in flight.</td></tr>
+<tr><td>Accent collision</td><td>Yellow accent sits near h3 studio's amber identity hue</td><td>Keep them separable by role — identity hues only as stripes and dots, the accent only as the single primary fill — and keep the accent a brighter lemon than h3's amber.</td></tr>
+</table></div>
+
+<h2 id="milestones">16 · Milestones</h2>
+<p><strong>M0 — Contract and registry.</strong> The manifest schema and the OpenAPI document are written, all four studios have manifests, and the daemon loads, validates and lists them. <em>Demo:</em> the shelf shows four cards with correct requirement badges; a malformed manifest is rejected by field name while the others still list; <code>helmstudio validate</code> prints the same error from the command line.</p>
+<p><strong>M1 — Supervision, proven with h3 studio.</strong> Process groups, port assignment, health with a real timeout, stop, crash detection, re-adoption after a daemon restart, log streaming. <em>Demo:</em> launch h3 studio, generate a video, kill the daemon with <code>-9</code>, restart it, and watch the running studio be re-adopted rather than orphaned.</p>
+<p><strong>M2 — Installer and weights.</strong> Clone with submodules, ordered build steps with resume-from-failed-step, resumable downloads into the shared cache, disk pre-checks, the cache view. <em>Demo:</em> h3 studio goes from <code>listed</code> to a generated video on a machine that has never seen the repo, with the build interrupted once and resumed.</p>
+<p><strong>M3 — Store, assets and gallery.</strong> SQLite, the asset store with hardlink adoption and a readable library tree, derived thumbnails and proxies, the gallery with provenance, <code>fsck</code>. <em>Demo:</em> h3 studio records takes through the runtime SDK; the launcher shows them; an image from one becomes the first frame of another via handoff.</p>
+<p><strong>M4 — The Python path and the packages.</strong> ltx and AuK with per-studio <code>uv</code> environments; <code>helm-css</code>, <code>helm-runtime-sdk</code> for all three languages, <code>helm-ui-sdk</code> with gallery, player and terminal; <code>helm dev</code> and <code>helm test</code>. <em>Demo:</em> all four studios installed and themed consistently; a studio's take list replaced by <code>&lt;helm-gallery&gt;</code> in an afternoon.</p>
+<p><strong>M5 — Timeline and export.</strong> The timeline document, the editor, the conform-and-concat pipeline with the stream-copy fast path, export as a Job. <em>Demo:</em> a fourteen-second sequence assembled from three studios with an AuK voice line, exported and appearing in the gallery with its clips as inputs.</p>
+<p><strong>M6 — Custom studios and the Mac app.</strong> The add flow with the approval screen, the criteria checks and certification levels, <code>helm studio init</code>; the Electron shell, signing, notarisation and the update feed. <em>Demo:</em> a notarised <code>.dmg</code> on a clean Mac — install a studio from a git URL after reading exactly what it will run, quit the app with the studio still alive in the menu bar, then take an update that ships a fifth studio.</p>
+</article>
+</div>

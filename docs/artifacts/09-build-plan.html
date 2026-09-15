@@ -1,0 +1,417 @@
+<title>helmstudio Build Plan</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --page:#faf8f3; --panel:#ffffff; --raised:#fbf8f1; --inset:#1c1a15;
+  --hair:#e4dfd2; --strong:#c9c2b0; --faint:#f0ece1;
+  --tx:#1a1813; --tx2:#534f45; --tx3:#837d70; --inv:#ffffff;
+  --ac:#f5b800; --ac-h:#e0a800; --ac-sub:#fff3d1; --ac-tx:#7a5600; --on-ac:#1a1400;
+  --idle:#837d70; --ok:#1f7a4d; --info:#1c6fb8; --warn:#a85410; --err:#c0342a;
+  --ltx:#2f5fc4; --h3:#a06a10; --iris:#b12f68; --auk:#5c4bc4;
+  --logtx:#cfc8ba;
+  --sans:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}}
+:root[data-theme="dark"]{
+  --page:#0d0c0a; --panel:#161512; --raised:#1f1d18; --inset:#090804;
+  --hair:#292620; --strong:#3b372e; --faint:#1f1d18;
+  --tx:#f1ede4; --tx2:#a8a294; --tx3:#716b5e; --inv:#0d0c0a;
+  --ac:#ffc700; --ac-h:#ffd633; --ac-sub:#2b2206; --ac-tx:#ffd24a; --on-ac:#1a1400;
+  --idle:#716b5e; --ok:#4caf7d; --info:#4a9fe0; --warn:#f0883e; --err:#e05c52;
+  --ltx:#5b8def; --h3:#e0a33c; --iris:#d8558f; --auk:#8b7cf0;
+  --logtx:#a8a294;
+}
+*{box-sizing:border-box}
+body{background:var(--page);color:var(--tx);font-family:var(--sans);font-size:13px;line-height:20px;margin:0;-webkit-font-smoothing:antialiased}
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;height:52px;display:flex;align-items:center;gap:12px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--hair)}
+.mark{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.mark svg{display:block}
+.bar .doc{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+.bar .sp{flex:1}
+.pill{height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 9px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;color:var(--tx2);background:var(--raised)}
+.dot{width:6px;height:6px;border-radius:50%;flex:none;background:var(--idle)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:212px minmax(0,1fr);gap:40px;align-items:start}
+nav.toc{position:sticky;top:76px;padding-block:32px;display:flex;flex-direction:column;gap:2px;max-height:calc(100vh - 92px);overflow-y:auto}
+nav.toc a{color:var(--tx2);text-decoration:none;font-size:12px;padding:5px 8px;border-radius:4px;border-left:2px solid transparent}
+nav.toc a:hover{background:var(--raised);color:var(--tx)}
+nav.toc .lbl{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:16px 8px 6px}
+article{padding-block:32px 96px;min-width:0;max-width:820px}
+h1{font-size:28px;line-height:34px;font-weight:600;letter-spacing:-.015em;margin:0 0 10px;text-wrap:balance}
+h2{font-size:19px;line-height:26px;font-weight:600;letter-spacing:-.01em;margin:44px 0 12px;padding-top:20px;border-top:1px solid var(--hair);text-wrap:balance}
+h2:first-of-type{border-top:0;padding-top:0}
+h3{font-size:14px;font-weight:600;margin:28px 0 8px}
+h4{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);margin:24px 0 8px}
+p{margin:0 0 12px;max-width:68ch;color:var(--tx2)}
+p strong,li strong{color:var(--tx);font-weight:600}
+article > p:first-of-type{font-size:14px;line-height:22px}
+a{color:var(--ac-tx)}
+code{font-family:var(--mono);font-size:12px;background:var(--raised);border:1px solid var(--faint);padding:1px 4px;border-radius:3px;color:var(--tx)}
+pre{background:var(--inset);color:var(--logtx);border:1px solid var(--hair);border-radius:6px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:18px;margin:0 0 16px}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:12px}
+pre .k{color:var(--ac-tx)} pre .c{color:#6e6862} pre .s{color:#f0883e} pre .t{color:#9bb4d8}
+table{border-collapse:collapse;width:100%;font-size:12.5px;margin:0 0 16px}
+th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--tx3);padding:8px 10px;border-bottom:1px solid var(--strong);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--hair);color:var(--tx2);vertical-align:top}
+td:first-child{color:var(--tx)}
+td code,th code{font-size:11.5px;white-space:nowrap}
+.tw{overflow-x:auto;margin:0 0 16px;border:1px solid var(--hair);border-radius:6px}
+.tw table{margin:0}
+.tw th{background:var(--panel)}
+.tw td,.tw th{padding:8px 12px}
+.tw tr:last-child td{border-bottom:0}
+ul,ol{margin:0 0 14px;padding-left:20px;color:var(--tx2);max-width:68ch}
+li{margin-bottom:6px}
+li::marker{color:var(--tx3)}
+.note{border-left:2px solid var(--ac);background:var(--ac-sub);padding:12px 14px;border-radius:0 4px 4px 0;margin:0 0 16px;max-width:68ch}
+.note p{margin:0;color:var(--tx)}
+.note .h{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ac-tx);margin-bottom:4px;display:block}
+.warnbox{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,var(--panel))}
+.warnbox .h{color:var(--warn)}
+.meta{font-family:var(--mono);font-size:12px;color:var(--tx3);font-variant-numeric:tabular-nums}
+.chip{display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border:1px solid var(--hair);border-radius:4px;font-size:11px;font-weight:500;background:var(--raised);color:var(--tx);white-space:nowrap}
+.chip .dot{width:6px;height:6px}
+.docmeta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+.new{border-color:color-mix(in srgb,var(--ac) 55%,transparent);background:var(--ac-sub);color:var(--ac-tx)}
+figure{margin:0 0 18px}
+figcaption{font-size:12px;color:var(--tx3);margin-top:8px;max-width:68ch}
+.diag{background:var(--panel);border:1px solid var(--hair);border-radius:6px;padding:18px;overflow-x:auto;margin:0 0 8px}
+.diag svg{display:block;width:100%;min-width:660px;height:auto;color:var(--tx);font-family:var(--sans)}
+.ep{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+.verb{display:inline-block;min-width:44px;font-weight:500}
+.g{color:var(--ok)}.po{color:var(--ac-tx)}.pu{color:var(--warn)}.de{color:var(--err)}
+.qa{border:1px solid var(--hair);border-left:2px solid var(--ac);border-radius:0 6px 6px 0;background:var(--panel);padding:14px 16px;margin:0 0 20px}
+.qa .q{font:600 13px/19px var(--sans);color:var(--tx);margin:0 0 6px}
+.qa p:last-child{margin-bottom:0}
+@media(max-width:920px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:0}
+  nav.toc{position:static;max-height:none;flex-direction:row;flex-wrap:wrap;gap:4px;padding-block:20px 0;border-bottom:1px solid var(--hair)}
+  nav.toc .lbl{display:none}
+  nav.toc a{border:1px solid var(--hair);border-radius:4px}
+  article{padding-block:24px 64px}
+}
+.ph{border:1px solid var(--hair);border-radius:6px;background:var(--panel);margin:0 0 14px;overflow:hidden}
+.ph .hd{display:flex;align-items:baseline;gap:10px;padding:11px 14px;border-bottom:1px solid var(--hair);flex-wrap:wrap}
+.ph .n{font:600 11px/1 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--on-ac);background:var(--ac);padding:4px 7px;border-radius:3px;flex:none}
+.ph h3{margin:0;font:600 14px/20px var(--sans)}
+.ph .eff{margin-left:auto;font:400 11.5px var(--mono);color:var(--tx3);font-variant-numeric:tabular-nums}
+.ph .bd{padding:12px 14px}
+.ph .bd p{margin:0 0 10px}
+.ph .bd p:last-child{margin-bottom:0}
+.ph ul{margin:0 0 10px;padding-left:18px}
+.ph li{margin-bottom:4px;font-size:12.5px}
+.gate{border-left:2px solid var(--ok);background:color-mix(in srgb,var(--ok) 9%,transparent);padding:9px 12px;border-radius:0 4px 4px 0;margin:10px 0 0}
+.gate b{display:block;font:600 10.5px/1 var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--ok);margin-bottom:4px}
+.gate p{margin:0;font-size:12.5px;color:var(--tx)}
+.risk{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.risk b{color:var(--warn)}
+.day{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--faint);font-size:12.5px}
+.day:last-child{border-bottom:0}
+.day .d{flex:none;width:74px;font:500 11.5px var(--mono);color:var(--ac-tx)}
+</style>
+<header class="bar">
+  <span class="mark"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3.1" fill="none" stroke="var(--ac)" stroke-width="1.6"/><g stroke="var(--ac)" stroke-width="1.6" stroke-linecap="round"><path d="M8 .9v3.2M8 11.9v3.2M.9 8h3.2M11.9 8h3.2M3 3l2.2 2.2M10.8 10.8L13 13M13 3l-2.2 2.2M5.2 10.8L3 13"/></g></svg>helmstudio</span>
+  <span class="doc">Build plan · post-freeze</span>
+  <span class="sp"></span>
+  <span class="pill"><span class="dot" style="background:var(--ac)"></span>10 phases · ~16 weeks solo</span>
+</header>
+
+<div class="wrap">
+<nav class="toc">
+  <span class="lbl">Approach</span>
+  <a href="#shape">How it's ordered</a>
+  <a href="#map">The map</a>
+  <span class="lbl">Phases</span>
+  <a href="#p0">0 · Prove the manifest</a>
+  <a href="#p1">1 · Supervision</a>
+  <a href="#p2">2 · Install &amp; weights</a>
+  <a href="#p3">3 · Contract &amp; SDK</a>
+  <a href="#p4">4 · Python studios</a>
+  <a href="#p5">5 · Design &amp; packages</a>
+  <a href="#p6">6 · Library &amp; iris</a>
+  <a href="#p7">7 · Timeline</a>
+  <a href="#p8">8 · Mac app</a>
+  <a href="#p9">9 · Docs &amp; site</a>
+  <span class="lbl">Running alongside</span>
+  <a href="#cross">Cross-cutting</a>
+  <a href="#studios">Studio PRs</a>
+  <a href="#week1">Week one, by day</a>
+  <a href="#defer">Deferred</a>
+</nav>
+
+<article>
+<h1>Build Plan</h1>
+<p>Ten phases, roughly sixteen weeks of focused solo work. The ordering is not by architectural layer but by <strong>what could still prove the design wrong</strong> — the cheapest experiments that could invalidate a decision come first, and nothing large gets built on an assumption that has not been tested.</p>
+<div class="docmeta">
+  <span class="chip">Risk-first ordering</span>
+  <span class="chip">Walking skeleton before depth</span>
+  <span class="chip">Every phase ends in a demo</span>
+  <span class="chip new"><span class="dot" style="background:var(--ac)"></span>Design frozen 15 Sep</span>
+</div>
+
+<h2 id="shape">How this is ordered, and why</h2>
+<p><strong>Risk first.</strong> The single largest design risk is not the supervisor or the database — it is whether one manifest schema can express four genuinely different studios without a special case. h3 and iris are Go wrapping hand-written Metal C; ltx is Python on MLX; AuK is Python on PyTorch with a FastAPI server. If the schema cannot describe all four, the "adding a studio is a data change" principle collapses and much of the rest follows it. That test costs two days and no code, so it goes first.</p>
+<p><strong>Walking skeleton before depth.</strong> Phase 1 builds a thin end-to-end path — load a manifest, spawn a process, watch it, stop it — with a deliberately ugly HTML page. Nothing is polished until something works end to end, because the gaps between components are where designs actually fail, not inside them.</p>
+<p><strong>One real studio at a time.</strong> h3 studio carries phases 1 through 3 alone. A second caller arrives only in phase 4, which is the point at which interfaces stop being a refactor of one studio and become interfaces. Building the SDK against two callers before either works would be designing in the dark.</p>
+<p><strong>Every phase ends in something you can show.</strong> If a phase has no demo, it has no definition of done, and a solo project with no definition of done drifts.</p>
+
+<h2 id="map">The map</h2>
+<figure class="diag">
+<svg viewBox="0 0 900 392" role="img" aria-label="Timeline of ten phases across sixteen weeks, with cross-cutting CI and studio pull request tracks running alongside.">
+<defs>
+<marker id="dep" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+</defs>
+<g font-size="11" fill="var(--tx3)" font-family="var(--mono)">
+<text x="60" y="20">wk 0</text><text x="118" y="20">2</text><text x="178" y="20">4</text><text x="238" y="20">6</text><text x="298" y="20">8</text><text x="358" y="20">10</text><text x="418" y="20">12</text><text x="478" y="20">14</text><text x="536" y="20">16</text>
+</g>
+<g stroke="var(--hair)" stroke-width="1">
+<path d="M60 26 V346"/><path d="M120 26 V346"/><path d="M180 26 V346"/><path d="M240 26 V346"/><path d="M300 26 V346"/><path d="M360 26 V346"/><path d="M420 26 V346"/><path d="M480 26 V346"/><path d="M540 26 V346"/>
+</g>
+<g font-size="12">
+<rect x="60" y="34" width="24" height="20" rx="3" fill="var(--ac)"/><text x="92" y="49" fill="var(--tx)">0 · Prove the manifest</text>
+<rect x="84" y="62" width="66" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="158" y="77" fill="var(--tx)">1 · Supervision — walking skeleton</text>
+<rect x="150" y="90" width="66" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="224" y="105" fill="var(--tx)">2 · Install, weights, linked models</text>
+<rect x="216" y="118" width="60" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="284" y="133" fill="var(--tx)">3 · Contract, SDK, embedded provider</text>
+<rect x="276" y="146" width="45" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="329" y="161" fill="var(--tx)">4 · ltx + AuK — the second caller</text>
+<rect x="321" y="174" width="60" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="389" y="189" fill="var(--tx)">5 · helm-css, the real UI, ui-sdk</text>
+<rect x="381" y="202" width="30" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="419" y="217" fill="var(--tx)">6 · iris + manifest library</text>
+<rect x="411" y="230" width="60" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="479" y="245" fill="var(--tx)">7 · Timeline + export</text>
+<rect x="471" y="258" width="45" height="20" rx="3" fill="var(--raised)" stroke="currentColor"/><text x="524" y="273" fill="var(--tx)">8 · Mac app + release</text>
+<rect x="516" y="286" width="54" height="20" rx="3" fill="var(--ac)"/><text x="578" y="301" fill="var(--tx)">9 · SDK docs + helmstudio.in</text>
+</g>
+<g stroke="currentColor" stroke-width="1" fill="none" opacity=".5">
+<path d="M84 54 V62" marker-end="url(#dep)"/><path d="M150 82 V90" marker-end="url(#dep)"/><path d="M216 110 V118" marker-end="url(#dep)"/>
+<path d="M276 138 V146" marker-end="url(#dep)"/><path d="M321 166 V174" marker-end="url(#dep)"/><path d="M381 194 V202" marker-end="url(#dep)"/>
+<path d="M411 222 V230" marker-end="url(#dep)"/><path d="M471 250 V258" marker-end="url(#dep)"/><path d="M516 278 V286" marker-end="url(#dep)"/>
+</g>
+<g>
+<rect x="60" y="322" width="510" height="16" rx="3" fill="none" stroke="var(--ok)" stroke-dasharray="4 3"/>
+<text x="578" y="334" font-size="11.5" fill="var(--ok)">CI: build · conformance · visual · Linux</text>
+<rect x="60" y="346" width="200" height="16" rx="3" fill="none" stroke="var(--info)" stroke-dasharray="4 3"/>
+<text x="268" y="358" font-size="11.5" fill="var(--info)">PRs into your four studios (parallel)</text>
+<rect x="60" y="370" width="510" height="16" rx="3" fill="none" stroke="var(--warn)" stroke-dasharray="4 3"/>
+<text x="578" y="382" font-size="11.5" fill="var(--warn)">Docs capture: decision log · demo scripts · generated refs</text>
+</g>
+</svg>
+</figure>
+<p class="meta" style="margin:0 0 20px">Phases are strictly sequential because each one's demo depends on the last. The two dashed tracks run from day one alongside everything.</p>
+
+<h2 id="p0">Phase 0 · Prove the manifest</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P0</span><h3>Four manifests, no daemon</h3><span class="eff">2–3 days</span></div>
+  <div class="bd">
+    <ul>
+      <li>Write the JSON Schema for the manifest, including <code>processes[]</code>, <code>runtime</code>, <code>weights[]</code>, <code>storage</code>, <code>capabilities</code>, <code>sdk</code>, <code>test</code>.</li>
+      <li>Hand-write <code>helmstudio.yaml</code> for all four studios against the real repositories — not sketches, the actual build steps and run commands you would type.</li>
+      <li>Build <code>helm validate</code> as a standalone binary. It is the first thing that compiles and the last thing you will stop using.</li>
+      <li>Write the OpenAPI document's <em>outline</em> — endpoint names and shapes only, no schemas yet — so phase 3 starts from a sketch rather than a blank file.</li>
+    </ul>
+    <div class="gate risk"><b>The test that matters</b><p>If any of the four needs a field the schema does not have, add it now — that is the phase working. If any needs a <em>special case in Go</em>, the schema is wrong and this is the cheapest possible moment to find out.</p></div>
+  </div>
+</div>
+
+<h2 id="p1">Phase 1 · Supervision — the walking skeleton</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P1</span><h3>Spawn, watch, stop, re-adopt</h3><span class="eff">8–10 days</span></div>
+  <div class="bd">
+    <ul>
+      <li><strong>Repo and skeleton:</strong> monorepo layout, <code>cmd/helmstudio</code>, <code>internal/…</code>, and the <code>platform</code> package with its four seams — process group control, secret store, app paths, reveal-in-file-manager — darwin implementations only, but the interfaces defined.</li>
+      <li><strong>Directories helper</strong> before anything writes a file. Retrofitting paths is miserable.</li>
+      <li><strong>Store:</strong> SQLite open with the WAL pragmas, migration runner on <code>user_version</code>, schema v1 covering <code>installations</code>, <code>step_runs</code>, <code>processes</code>, <code>jobs</code>, <code>log_files</code>, <code>settings</code>.</li>
+      <li><strong>Manifest loader</strong> with the three-source resolution, reading from <code>local_path</code> for now.</li>
+      <li><strong>Supervisor:</strong> port allocator, template substitution, spawn with <code>Setpgid</code>, health polling against a real budget, group start ordering, reverse teardown, and the re-adoption check on pid + start time + pgid.</li>
+      <li><strong>Logs</strong> as append-only files with an index row, streamed over SSE.</li>
+      <li><strong>A deliberately ugly HTML page</strong> that lists studios and has Launch and Stop. No design system. Resist.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>Launch h3 studio from a local checkout, generate a video in its own UI, <code>kill -9</code> the daemon, restart it, and watch the running studio be re-adopted rather than orphaned. Then stop it and confirm no process survives.</p></div>
+  </div>
+</div>
+
+<h2 id="p2">Phase 2 · Install and weights</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P2</span><h3>From a URL to a generated video on a clean machine</h3><span class="eff">8–10 days</span></div>
+  <div class="bd">
+    <ul>
+      <li>Clone with submodules at a pinned ref; ordered build steps with streamed output; resume from the first step that has not succeeded; cancel via process-group kill.</li>
+      <li>Tool probing from <code>requires.tools</code>, failing fast with the command that installs the missing one.</li>
+      <li>Hugging Face downloader: file listing, range resume from <code>.part</code> length, re-resolution of signed URLs on every resume, 429 backoff, <code>auth_required</code> on 401/403, Keychain for the token.</li>
+      <li><strong>Linked weights</strong> — point at an existing directory, symlink into the cache, read-only, <code>missing</code> when the volume goes. Build this alongside downloading, not after; they share one resolution path.</li>
+      <li>Disk pre-check with real numbers; the cache view with reference counts and reclaim that never follows a symlink.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>A machine that has never seen the repo goes from <code>listed</code> to a generated video. Interrupt the build once and resume. Then install a second time using a model directory you already had, and watch nothing download.</p></div>
+  </div>
+</div>
+
+<h2 id="p3">Phase 3 · The contract and the runtime SDK</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P3</span><h3>One document, two providers, one suite</h3><span class="eff">10–12 days</span></div>
+  <div class="bd">
+    <ul>
+      <li><strong>Finish the OpenAPI document first.</strong> Everything downstream is generated from it, so a day spent here is worth a week later.</li>
+      <li>Schema v2: <code>sessions</code>, <code>kv</code>, <code>records</code>, <code>assets</code>, <code>derived</code>, <code>items</code>, <code>item_inputs</code>, <code>tags</code>, <code>items_fts</code>, <code>inbox</code>.</li>
+      <li>Endpoints, in this order: <code>/me</code>, <code>/kv</code>, <code>/sessions</code>, <code>/assets</code> and <code>:adopt</code>, <code>/gallery</code>, <code>/records</code>, <code>/jobs</code>, <code>/events</code>, <code>/handoff</code>.</li>
+      <li>Capability-scoped per-launch tokens injected at spawn.</li>
+      <li>Media engine v1: probe, thumbnail, poster, waveform, h264 proxy — all as derived files.</li>
+      <li>Generate the Go and Python clients; write the <strong>embedded provider</strong> as the same code path without HTTP; ship <code>helm dev</code> as the daemon in single-studio mode.</li>
+      <li>The <strong>conformance suite</strong>, run twice in CI. Write it as you write endpoints, not afterwards.</li>
+      <li><code>helmstudio fsck</code>, while the asset rules are fresh.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>h3 studio records its takes through the SDK; the launcher shows them with thumbnails and provenance; conformance is green against both the daemon and the embedded provider; <code>helm dev</code> runs the studio with no daemon installed.</p></div>
+  </div>
+</div>
+
+<h2 id="p4">Phase 4 · The second and third callers</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P4</span><h3>ltx studio and AuK studio</h3><span class="eff">6–8 days</span></div>
+  <div class="bd">
+    <ul>
+      <li><code>python.version</code> handling, per-studio <code>uv</code> environments, the <code>bash web/run.sh</code> run shape.</li>
+      <li>The Python runtime SDK against a real caller.</li>
+      <li>The one-heavy-studio rule with the switch confirmation, now that two studios can actually compete for memory.</li>
+      <li><strong>Expect schema churn here</strong> and treat it as success: this is the phase that tells you which parts of phase 0's manifest were guesses.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>Three studios installed side by side with independent environments; AuK generates speech through the SDK into the shared gallery; switching from ltx to h3 shows the memory arithmetic and stops the first cleanly.</p></div>
+  </div>
+</div>
+
+<h2 id="p5">Phase 5 · Design system and packages</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P5</span><h3>It stops looking like a prototype</h3><span class="eff">10–12 days</span></div>
+  <div class="bd">
+    <ul>
+      <li><code>helm-css</code> in five layers, with visual regression in CI on both themes and a contrast check on every token pair.</li>
+      <li>The real launcher: catalogue, studio detail with the install checklist and terminal, process group, launching and switch dialog, gallery, models and disk, settings, doctor.</li>
+      <li><code>helm-ui-sdk</code>: <code>helm-terminal</code> first (virtualised ring buffer, ANSI, carriage returns), then <code>helm-gallery</code>, then <code>helm-player</code> with frame extraction.</li>
+      <li>Theme push over SSE so toggling the launcher re-themes running studios.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>h3 studio's hand-built take list replaced by <code>&lt;helm-gallery&gt;</code> in an afternoon, and its log panel by <code>&lt;helm-terminal&gt;</code>; toggle the theme in the launcher and every open studio follows.</p></div>
+  </div>
+</div>
+
+<h2 id="p6">Phase 6 · The library and iris studio</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P6</span><h3>Anyone can add a studio</h3><span class="eff">6–8 days</span></div>
+  <div class="bd">
+    <ul>
+      <li>iris studio: <code>selectable</code> weights and the pre-launch checkpoint picker.</li>
+      <li>Manifest library: three sources, local override with Revert, duplicate-and-edit.</li>
+      <li>The in-app editor with live validation and criteria scoring; import (drop, pick, paste, URL) and export.</li>
+      <li>The certification checks and the add-a-studio approval screen, with every build command shown verbatim.</li>
+      <li><code>helm studio init</code>, <code>helm test</code>, <code>helm doctor --studio</code>.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>Take a repository that has never heard of helmstudio, write its manifest in the app, test it without installing, install it, then export the file as a pull request to that repo.</p></div>
+  </div>
+</div>
+
+<h2 id="p7">Phase 7 · Timeline and export</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P7</span><h3>The part that will be wrong twice</h3><span class="eff">10–12 days</span></div>
+  <div class="bd">
+    <ul>
+      <li>Timeline document and rows; the editor component with drag, trim and snapping; gapless preview across cuts.</li>
+      <li>Export as a Job: conform-to-target filter graph, and the <strong>stream-copy fast path</strong> when everything already matches.</li>
+      <li>Golden frame-hash tests across both providers — this is what stops the media engine forking.</li>
+      <li>Bundle a pinned LGPL ffmpeg with videotoolbox. Settle the licensing question before this phase, not during it.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>A fourteen-second sequence assembled from three studios with an AuK voice line, exported and appearing in the gallery with its clips as inputs — and the stream-copy case verified bit-identical to its source.</p></div>
+  </div>
+</div>
+
+<h2 id="p8">Phase 8 · The Mac app and first release</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P8</span><h3>Something a stranger can install</h3><span class="eff">7–9 days</span></div>
+  <div class="bd">
+    <ul>
+      <li>Electron shell: sidecar spawn with the stdout handshake, adoption of an existing daemon, quit behaviour and the keep-running-in-menu-bar choice.</li>
+      <li>Native affordances: folder picker, Reveal in Finder, menu bar item, notifications, Dock progress.</li>
+      <li>Browser-path auth: the one-time token URL and the <code>SameSite=Strict</code> cookie, plus <code>Host</code> and <code>Origin</code> checks.</li>
+      <li>Signing, notarisation of the bundle <em>and</em> the nested Go binary, <code>electron-updater</code> against GitHub Releases, and the Homebrew formula.</li>
+    </ul>
+    <div class="gate"><b>Demo</b><p>A notarised <code>.dmg</code> on a Mac that has never run helmstudio: double-click, install a studio, generate something, quit the app with the studio still alive in the menu bar, then take an update that ships a fifth studio pointer.</p></div>
+  </div>
+</div>
+
+<h2 id="p9">Phase 9 · SDK documentation and helmstudio.in</h2>
+<div class="ph">
+  <div class="hd"><span class="n">P9</span><h3>The two things that decide whether anyone else shows up</h3><span class="eff">8–10 days</span></div>
+  <div class="bd">
+    <p>Deliberately last. An API you are still changing cannot be documented without documenting it twice, screenshots of a half-built UI age in days, and a quickstart is only worth writing once it can be run against a shipping binary. Everything here is assembly rather than authorship — if the tracks below have been kept, most of the content already exists.</p>
+    <h4 style="margin-top:4px">The SDK documentation</h4>
+    <ul>
+      <li><strong>Quickstart</strong> — from nothing to a scaffolded studio recording its first gallery item, tested end to end against the released binaries on a clean machine. If it takes more than ten minutes, fix the tooling rather than the prose.</li>
+      <li><strong>Concepts</strong> — the manifest, process groups, weights managed and linked, capabilities, the two providers, and why a studio stays an independent repo.</li>
+      <li><strong>Guides</strong> — wrap a model repo that has no manifest; record outputs with provenance; use sessions; hand off to the timeline; theme with <code>helm-css</code>; develop and test in isolation.</li>
+      <li><strong>Generated reference</strong> — the API pages from the OpenAPI document and the manifest pages from the JSON Schema. <strong>Generated, never hand-written</strong>, so reference material cannot drift from the thing it describes. This is the same rule that governs the three SDK clients.</li>
+      <li><strong>CLI reference</strong> for <code>init</code>, <code>dev</code>, <code>validate</code>, <code>test</code>, <code>doctor</code>, <code>adopt</code>.</li>
+      <li><strong>Publishing</strong> — the fifteen criteria, the certification levels, and what a registry pull request actually contains.</li>
+      <li><strong>Worked examples</strong> — the four launch manifests annotated line by line. These already exist from phase 0 and are the most useful page on the site.</li>
+    </ul>
+    <h4>The website</h4>
+    <ul>
+      <li>What helmstudio is, in a sentence that names the problem: open-weight video, image and speech models on your own machine, without the afternoon of setup.</li>
+      <li>The problem made concrete — the submodule you did not clone, the Python version mismatch, the 60 GB download with no resume, the two studios that both want port 8720.</li>
+      <li>The launch studios with their runtime badges, so a visitor can tell at a glance what will run on their hardware.</li>
+      <li>A real screen recording of an install and a generation. This is the single highest-value asset on the site and the reason it cannot be made earlier.</li>
+      <li>Install, honestly stated: Homebrew formula and the notarised <code>.dmg</code>, with the current platform support named rather than implied.</li>
+      <li>A short "add your own studio" section pointing at the docs, and the repository.</li>
+      <li>No signup, no waitlist, no pricing. It is a local open-source tool and the site should read like one.</li>
+    </ul>
+    <p><strong>Both sites are built with <code>helm-css</code></strong>, which is worth doing for its own sake: a design system that works outside the application it was drawn for is a design system, and one that does not is a stylesheet. Static output, deployed to <code>helmstudio.in</code> with the documentation at <code>/docs</code>, and the reference pages regenerated in CI so a merged API change updates them without anyone remembering to.</p>
+    <div class="gate"><b>Demo</b><p>Hand the quickstart to someone who has never seen the project, on a Mac that has never run it, and watch them reach a generated output without asking you anything. That is the only test of documentation that means anything.</p></div>
+  </div>
+</div>
+
+<h2 id="cross">Running alongside from day one</h2>
+<div class="tw"><table>
+<tr><th>Track</th><th>What</th><th>Why from the start</th></tr>
+<tr><td>CI</td><td>Build, unit tests, <code>helm validate</code> on all manifests, generated-client drift check, conformance (from P3), visual regression (from P5)</td><td>Adding CI to a project that has drifted is a week; keeping it green from commit one is minutes per day.</td></tr>
+<tr><td>Linux build</td><td>Compile and run the test suite on linux/arm64 even though it is unsupported</td><td>A case-insensitive Mac filesystem hides path bugs that a Linux run surfaces instantly — and it keeps the port cheap later.</td></tr>
+<tr><td>Studio PRs</td><td>Small changes to your own four repos</td><td>They unblock phases and are independent of the daemon; see below.</td></tr>
+<tr><td><strong>Docs capture</strong></td><td>Write down each phase's demo as you perform it; keep the generated reference pipeline wired from phase 3 even with no site to publish to</td><td>Phase 9 is then assembly rather than archaeology. A demo script written the day it worked is a guide; reconstructed three months later it is guesswork.</td></tr>
+<tr><td>The decision log</td><td>One markdown file, append-only, one line per decision with the date and the reason</td><td>Six weeks in you will not remember why the health timeout is 30 seconds for one studio and 240 for another.</td></tr>
+</table></div>
+
+<h2 id="studios">The pull requests into your own studios</h2>
+<p>These are independent of the daemon and can be done in any idle hour. The h3 items block the phase 1 demo, so do them first.</p>
+<div class="tw"><table>
+<tr><th>Studio</th><th>Change</th><th>Blocks</th></tr>
+<tr><td>h3</td><td>A dumb <code>GET /healthz</code> returning 200 unconditionally — not <code>/api/config</code>, which can fail on a missing model directory</td><td>P1</td></tr>
+<tr><td>h3</td><td>Nothing else. <code>--port</code>, <code>--root</code>, SIGTERM and <code>Setpgid</code> are already correct</td><td>—</td></tr>
+<tr><td>h3</td><td>One adopt-and-record call in <code>finishTake</code></td><td>P3 demo</td></tr>
+<tr><td>h3</td><td>Token pass over <code>style.css</code>: 45 variables mapped, 64 raw literals cleared</td><td>P5</td></tr>
+<tr><td>ltx, AuK</td><td>Health endpoint and an assigned-port flag if missing; a <code>tiny</code> test profile</td><td>P4</td></tr>
+<tr><td>iris</td><td>Confirm it accepts an assigned port; add a health endpoint</td><td>P6</td></tr>
+<tr><td>all four</td><td>Add <code>helmstudio.yaml</code> to the repo root once phase 0's schema is settled</td><td>P6</td></tr>
+</table></div>
+
+<h2 id="week1">Week one, by day</h2>
+<div class="ph"><div class="bd">
+  <div class="day"><span class="d">Day 1</span><span>Manifest JSON Schema. Write h3's manifest first — you know that repo best — then iris, since it is the closest sibling.</span></div>
+  <div class="day"><span class="d">Day 2</span><span>ltx and AuK manifests. These are where the schema will bend; note every field you wished existed rather than working around it.</span></div>
+  <div class="day"><span class="d">Day 3</span><span><code>helm validate</code> compiling and passing on all four. OpenAPI outline. Open the <code>/healthz</code> PR on h3 studio.</span></div>
+  <div class="day"><span class="d">Day 4</span><span>Repo skeleton, <code>platform</code> package interfaces, directories helper, SQLite open with pragmas, migration runner.</span></div>
+  <div class="day"><span class="d">Day 5</span><span>Schema v1 and its store methods. CI green on build, test and <code>helm validate</code>, on macOS and Linux both.</span></div>
+</div></div>
+<p>By the end of week one nothing generates anything, and that is correct. What you have instead is the answer to the only question that could have forced a redesign, plus the scaffolding that everything else sits on.</p>
+
+<h2 id="defer">Deliberately not in this plan</h2>
+<div class="tw"><table>
+<tr><th>Deferred</th><th>Until</th></tr>
+<tr><td>The path-prefixed reverse proxy and embedded iframe</td><td>All four studios accept <code>--base-path</code>. Own-origin tabs until then.</td></tr>
+<tr><td>Update flow for installed studios</td><td>After the first release. v1 update is uninstall plus install, and weights stay cached so it costs no bandwidth.</td></tr>
+<tr><td>Windows</td><td>After Linux, which is after v1. It needs Job Objects and a shell story, not a port of the same code.</td></tr>
+<tr><td>Registry PR automation, ratings, discovery</td><td>There are four studios. A pull request is the whole process.</td></tr>
+<tr><td>Multi-GPU placement, VRAM-aware scheduling</td><td>Not a macOS problem. Revisit with the Linux port.</td></tr>
+<tr><td>Colour grading, keyframes, titles, effects</td><td>Possibly never. The timeline is cuts, holds, one transition and audio gain.</td></tr>
+</table></div>
+<div class="note"><span class="h">The honest caveat on the estimate</span><p>Sixteen weeks assumes focused days and no long detour. Two phases carry most of the schedule risk: <strong>phase 3</strong>, because an API you will live with for years deserves more care than a plan admits, and <strong>phase 7</strong>, because conform-and-concat is always wrong twice before it is right. If something has to give, cut scope inside phases 6 and 7 rather than compressing phase 3 — a rushed contract is paid for every week afterwards. Phase 9 is the one place where shipping less is genuinely fine: a quickstart, the generated reference and the four annotated manifests are worth more than a complete site, and the rest can follow.</p></div>
+</article>
+</div>
