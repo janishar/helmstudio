@@ -131,8 +131,10 @@ func (s *Supervisor) adoptRun(ctx context.Context, studioID, runID string, rows 
 		for name, port := range assigned {
 			s.alloc.lease(port, fmt.Sprintf("%s (process %q)", studioID, name))
 		}
-		var err error
-		plan, err = resolvePlan(s.dirs, st, assigned, s.alloc)
+		lp, err := s.installed(ctx, st)
+		if err == nil {
+			plan, err = resolvePlan(s.dirs, st, lp, assigned, s.alloc)
+		}
 		if err != nil {
 			s.logf("supervisor: re-adoption: %s no longer resolves (%v); watching its survivors without restarting or probing them", studioID, err)
 			plan = nil

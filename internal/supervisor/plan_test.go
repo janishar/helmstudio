@@ -31,7 +31,11 @@ func TestSubstitutedPathsArriveAsOneArgument(t *testing.T) {
     port: {}
     env: { MODEL_DIR: "{models.base}", LITERAL: "a b" }
 `)
-	plan, err := resolvePlan(e.dirs, st, nil, e.sup.alloc)
+	lp, err := e.sup.installed(context.Background(), st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := resolvePlan(e.dirs, st, lp, nil, e.sup.alloc)
 	if err != nil {
 		t.Fatal(err)
 	}

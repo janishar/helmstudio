@@ -102,7 +102,7 @@ type Studio struct {
 func (s *Server) studio(r *http.Request, st supervisor.Studio) (Studio, error) {
 	m := st.Manifest
 	out := Studio{ManifestLoaded: true, ID: m.ID, Name: m.Name, Description: m.Description, Kinds: m.Kinds, PeakRAMGB: m.PeakRAMGB,
-		Root: s.sup.StudioRoot(m)}
+		Root: m.LocalPath}
 	for _, p := range m.EffectiveProcesses() {
 		out.Heavy = out.Heavy || p.Heavy
 	}

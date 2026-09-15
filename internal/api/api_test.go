@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -30,9 +31,9 @@ func newServer(t *testing.T) (*Server, *supervisor.Supervisor) {
 	}
 	sup := supervisor.New(supervisor.Config{Dirs: d, Store: st, Grace: 2 * time.Second, PortMin: 40000, PortMax: 40999,
 		HostMemory: func() (uint64, error) { return 64 << 30, nil }})
-	root := t.TempDir()
 	var studios []supervisor.Studio
 	for _, id := range []string{"first-heavy", "second-heavy"} {
+		root := t.TempDir()
 		f := filepath.Join(t.TempDir(), id+".yaml")
 		os.WriteFile(f, []byte(`id: `+id+`
 name: `+strings.ReplaceAll(id, "-", " ")+`
@@ -49,6 +50,15 @@ processes:
 		m, res, err := manifest.Load(f)
 		if err != nil || !res.OK() {
 			t.Fatal(err, res.Errors)
+		}
+		// Since M3 a launch needs an installation; record one as install
+		// leaves it (docs/decisions.md, "M3 install and weights").
+		if err := st.Update(context.Background(), func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `INSERT INTO installations (studio_id, manifest_digest, root_path, install_state, created_at, updated_at)
+				VALUES (?, ?, ?, 'ready', 1, 1)`, id, m.Digest, root)
+			return err
+		}); err != nil {
+			t.Fatal(err)
 		}
 		studios = append(studios, supervisor.Studio{Manifest: m, File: f})
 	}

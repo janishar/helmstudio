@@ -1,6 +1,8 @@
 package supervisor
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -33,14 +35,42 @@ type planned struct {
 	healthArgv []string
 }
 
-// Studio root, data and weight paths until M3 records installations
-// (docs/decisions.md, "M2 supervision"): a manifest's local_path, else
-// <data>/studios/<id>/src, which is where install will clone to (R7).
-func studioRoot(dirs *platform.Dirs, m *manifest.Manifest) string {
-	if m.LocalPath != "" {
-		return filepath.Clean(m.LocalPath)
+// launchPaths is what an installation contributes to a launch: the checkout
+// it recorded, and the {models.<name>} values its weights resolve to.
+type launchPaths struct {
+	root string
+	// models holds resolved real paths by placeholder ("models.fl2va");
+	// modelRefusals says why any other declared weight cannot resolve.
+	models        map[string]string
+	modelRefusals map[string]string
+}
+
+// launchable states are the install states a studio may launch from
+// (docs/design/01-prd.md §5: ready, and update_available, which is still
+// launchable).
+var launchable = map[string]bool{"ready": true, "update_available": true}
+
+// installed reads a studio's installation and resolves its weights. A studio
+// with no installation, or one mid-install, failed or being removed, is not
+// launchable, and the refusal says what to do.
+func (s *Supervisor) installed(ctx context.Context, st Studio) (launchPaths, error) {
+	m := st.Manifest
+	var root, state string
+	err := s.store.Reader().QueryRowContext(ctx, `SELECT root_path, install_state FROM installations WHERE studio_id = ?`, m.ID).Scan(&root, &state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return launchPaths{}, &Error{Kind: KindNotLaunchable, Message: fmt.Sprintf("%s is not installed; install it before launching", m.ID)}
 	}
-	return filepath.Join(dirs.Data(), "studios", m.ID, "src")
+	if err != nil {
+		return launchPaths{}, fmt.Errorf("%s: reading its installation: %w", m.ID, err)
+	}
+	if !launchable[state] {
+		return launchPaths{}, &Error{Kind: KindNotLaunchable, Message: fmt.Sprintf("%s cannot launch while its install state is %s; finish or retry the install first", m.ID, state)}
+	}
+	models, refuse, err := s.weights.Launch(ctx, m.ID, m.Weights)
+	if err != nil {
+		return launchPaths{}, fmt.Errorf("%s: resolving its weights: %w", m.ID, err)
+	}
+	return launchPaths{root: root, models: models, modelRefusals: refuse}, nil
 }
 
 // studioData is {data}: the studio's persistent data root, outside its
@@ -142,7 +172,7 @@ func substitute(tmpl string, values map[string]string, refuse map[string]string,
 // ports already bound to a process name (re-adopted processes keep theirs);
 // every other port comes from alloc, and on error every port this call leased
 // is released again.
-func resolvePlan(dirs *platform.Dirs, st Studio, assigned map[string]int, alloc *allocator) (_ []*planned, err error) {
+func resolvePlan(dirs *platform.Dirs, st Studio, lp launchPaths, assigned map[string]int, alloc *allocator) (_ []*planned, err error) {
 	m := st.Manifest
 	notLaunchable := func(format string, args ...any) error {
 		return &Error{Kind: KindNotLaunchable, Message: fmt.Sprintf("%s: ", m.ID) + fmt.Sprintf(format, args...)}
@@ -151,9 +181,9 @@ func resolvePlan(dirs *platform.Dirs, st Studio, assigned map[string]int, alloc 
 	if m.LocalPath != "" && !filepath.IsAbs(m.LocalPath) {
 		return nil, notLaunchable("local_path %q is not an absolute path", m.LocalPath)
 	}
-	root := studioRoot(dirs, m)
+	root := lp.root
 	if fi, statErr := os.Stat(root); statErr != nil || !fi.IsDir() {
-		return nil, notLaunchable("no checkout at %s; install lands in a later milestone, so clone and build the studio there by hand, or set local_path in its manifest", root)
+		return nil, notLaunchable("its installation records a checkout at %s, which is not there; uninstall and install it again", root)
 	}
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -196,23 +226,15 @@ func resolvePlan(dirs *platform.Dirs, st Studio, assigned map[string]int, alloc 
 	for name, port := range ports {
 		values["ports."+name] = strconv.Itoa(port)
 	}
-	for _, w := range m.Weights {
-		path := filepath.Join(dirs.Models(), w.Dest)
-		if real, evalErr := filepath.EvalSymlinks(path); evalErr == nil {
-			if fi, statErr := os.Stat(real); statErr == nil && fi.IsDir() {
-				values["models."+w.Name] = real
-			}
-		}
+	for k, v := range lp.models {
+		values[k] = v
 	}
 	refuse := map[string]string{
 		"venv":            "{venv} needs a per-studio Python environment, which lands with the Python studios milestone",
 		"models.selected": "{models.selected} needs a recorded weight selection, which lands with the library milestone",
 	}
-	for _, w := range m.Weights {
-		if _, ok := values["models."+w.Name]; !ok {
-			refuse["models."+w.Name] = fmt.Sprintf("weight %q is not at %s; weights download lands in a later milestone, so place or symlink the model directory there by hand",
-				w.Name, filepath.Join(dirs.Models(), w.Dest))
-		}
+	for k, why := range lp.modelRefusals {
+		refuse[k] = why
 	}
 
 	var out []*planned
@@ -262,7 +284,7 @@ func resolvePlan(dirs *platform.Dirs, st Studio, assigned map[string]int, alloc 
 			return nil, notLaunchable("process %q: working directory %s resolves outside the checkout %s", p.Name, cwd, realRoot)
 		}
 
-		env := studioEnv(os.Environ(), filepath.Join(dirs.Data(), "studios", m.ID, "no-hf-token"))
+		env := RestrictedEnv(dirs, m.ID, os.Environ())
 		keys := make([]string, 0, len(p.Env))
 		for k := range p.Env {
 			keys = append(keys, k)
@@ -307,6 +329,13 @@ var passedEnv = map[string]bool{
 	"TMPDIR": true, "LANG": true, "TERM": true, "TZ": true,
 	"HTTP_PROXY": true, "HTTPS_PROXY": true, "NO_PROXY": true, "ALL_PROXY": true,
 	"http_proxy": true, "https_proxy": true, "no_proxy": true, "all_proxy": true,
+}
+
+// RestrictedEnv is the environment everything helmstudio runs on a studio's
+// behalf gets — its processes, and install's git and build steps: studioEnv
+// applied to environ, with the studio's never-created token path.
+func RestrictedEnv(dirs *platform.Dirs, studioID string, environ []string) []string {
+	return studioEnv(environ, filepath.Join(dirs.Data(), "studios", studioID, "no-hf-token"))
 }
 
 // studioEnv filters an environment down to passedEnv, then closes the one

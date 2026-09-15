@@ -241,6 +241,9 @@ processes:
 	if err != nil || !res.OK() {
 		t.Fatal(err, res.Errors)
 	}
+	if err := recordInstall(context.Background(), o.store, o.dirs, m); err != nil {
+		t.Fatal(err)
+	}
 	sup.SetStudios([]Studio{{Manifest: m, File: other}})
 	_, err = sup.Launch(context.Background(), "other-heavy", LaunchOptions{})
 	var se *Error
@@ -346,7 +349,7 @@ func TestWorkingDirectoryMustResolveInsideTheCheckout(t *testing.T) {
 	st, _ := e.sup.Studio("escaper")
 	rel := *st.Manifest
 	rel.LocalPath = "relative/checkout"
-	if _, err := resolvePlan(e.dirs, Studio{Manifest: &rel}, nil, e.sup.alloc); !errors.As(err, &se) || !strings.Contains(se.Message, "not an absolute path") {
+	if _, err := resolvePlan(e.dirs, Studio{Manifest: &rel}, launchPaths{root: e.root}, nil, e.sup.alloc); !errors.As(err, &se) || !strings.Contains(se.Message, "not an absolute path") {
 		t.Fatalf("relative local_path: err = %v; want a refusal", err)
 	}
 }

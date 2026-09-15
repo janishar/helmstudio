@@ -160,6 +160,10 @@ func helperDaemon(args []string) int {
 		fmt.Println("manifest:", err, res.Errors)
 		return 1
 	}
+	if err := recordInstall(context.Background(), st, dirs, m); err != nil {
+		fmt.Println("install:", err)
+		return 1
+	}
 	s := New(Config{Dirs: dirs, Store: st, Grace: 2 * time.Second})
 	s.SetStudios([]Studio{{Manifest: m}})
 	if _, err := s.Launch(context.Background(), m.ID, LaunchOptions{}); err != nil {
@@ -244,10 +248,87 @@ processes:
 	if err != nil || !res.OK() {
 		e.t.Fatalf("manifest %s: %v %v\n%s", id, err, res.Errors, body)
 	}
+	if err := recordInstall(context.Background(), e.store, e.dirs, m); err != nil {
+		e.t.Fatalf("recording %s as installed: %v", id, err)
+	}
 	st := Studio{Manifest: m, File: file}
 	studios := append(e.sup.Studios(), st)
 	e.sup.SetStudios(studios)
 	return st
+}
+
+// recordInstall records a manifest as install leaves a studio: ready, at its
+// local_path. Since M3 a launch reads the installation, so these tests set one
+// up rather than depend on the M2 stand-in paths (docs/decisions.md, "M3
+// install and weights"). Each declared weight is bound to whatever is at
+// <models>/<dest>: a symlink as a linked artifact, a directory as a complete
+// download, nothing as one never downloaded. root_path is unique, so a second
+// studio sharing a checkout is recorded at a symlink to it.
+func recordInstall(ctx context.Context, st *store.Store, dirs *platform.Dirs, m *manifest.Manifest) error {
+	return st.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM installations WHERE studio_id = ?`, m.ID).Scan(&n); err != nil || n > 0 {
+			return err
+		}
+		root := m.LocalPath
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM installations WHERE root_path = ?`, root).Scan(&n); err != nil {
+			return err
+		}
+		if n > 0 {
+			alias := filepath.Join(dirs.Data(), "test-roots", m.ID)
+			if err := os.MkdirAll(filepath.Dir(alias), 0o755); err != nil {
+				return err
+			}
+			if err := os.Symlink(root, alias); err != nil && !os.IsExist(err) {
+				return err
+			}
+			root = alias
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO installations (studio_id, manifest_digest, root_path, install_state, created_at, updated_at)
+			VALUES (?, ?, ?, 'ready', 1, 1)`, m.ID, m.Digest, root); err != nil {
+			return err
+		}
+		for _, w := range m.Weights {
+			rev := w.EffectiveRevision()
+			path := filepath.Join(dirs.Models(), w.Dest)
+			source, state, real := "managed", "declared", ""
+			fi, err := os.Lstat(path)
+			switch {
+			case err == nil && fi.Mode()&os.ModeSymlink != 0:
+				source, state = "linked", "linked"
+				real, _ = filepath.EvalSymlinks(path)
+			case err == nil && fi.IsDir():
+				state = "ready"
+			}
+			id := store.NewID(time.Now())
+			if _, err := tx.ExecContext(ctx, `INSERT INTO model_artifacts (id, hf_repo, revision, source, local_path, external_path, realpath, state, created_at)
+				VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), ?, 1) ON CONFLICT (hf_repo, revision) DO NOTHING`,
+				id, w.Repo, rev, source, w.Dest, real, real, state); err != nil {
+				return err
+			}
+			if err := tx.QueryRowContext(ctx, `SELECT id FROM model_artifacts WHERE hf_repo = ? AND revision = ?`, w.Repo, rev).Scan(&id); err != nil {
+				return err
+			}
+			if state == "ready" {
+				err := filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
+					if err != nil || !d.Type().IsRegular() {
+						return err
+					}
+					rel, _ := filepath.Rel(path, p)
+					_, err = tx.ExecContext(ctx, `INSERT INTO model_files (id, artifact_id, rel_path, size_bytes, state) VALUES (?, ?, ?, 0, 'complete')`,
+						store.NewID(time.Now()), id, filepath.ToSlash(rel))
+					return err
+				})
+				if err != nil {
+					return err
+				}
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO studio_model_bindings (studio_id, artifact_id, placeholder) VALUES (?, ?, ?)`, m.ID, id, w.Name); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (e *env) waitState(id, want string, within time.Duration) GroupStatus {

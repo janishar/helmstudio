@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/platform"
 	"github.com/janishar/helmstudio/internal/store"
+	"github.com/janishar/helmstudio/internal/weights"
 )
 
 // Config is everything a Supervisor needs. Zero durations and limits take the
@@ -24,6 +24,9 @@ import (
 type Config struct {
 	Dirs  *platform.Dirs
 	Store *store.Store
+	// Weights resolves {models.<name>} from the studio's bindings. Default:
+	// a weights service over Store and Dirs that downloads nothing.
+	Weights *weights.Service
 
 	// PortMin and PortMax bound assigned ports. Default 8701–8799 (R22).
 	PortMin, PortMax int
@@ -66,10 +69,11 @@ type Config struct {
 
 // Supervisor owns every process group the daemon runs.
 type Supervisor struct {
-	cfg   Config
-	dirs  *platform.Dirs
-	store *store.Store
-	alloc *allocator
+	cfg     Config
+	dirs    *platform.Dirs
+	store   *store.Store
+	weights *weights.Service
+	alloc   *allocator
 
 	launchMu sync.Mutex // one launch or re-adoption at a time
 
@@ -122,10 +126,14 @@ func New(cfg Config) *Supervisor {
 	if cfg.portHolder == nil {
 		cfg.portHolder = platform.PortHolder
 	}
+	if cfg.Weights == nil {
+		cfg.Weights = weights.New(weights.Config{Store: cfg.Store, Dirs: cfg.Dirs, Logf: cfg.Logf})
+	}
 	return &Supervisor{
-		cfg:   cfg,
-		dirs:  cfg.Dirs,
-		store: cfg.Store,
+		cfg:     cfg,
+		dirs:    cfg.Dirs,
+		store:   cfg.Store,
+		weights: cfg.Weights,
 		alloc: &allocator{
 			min: cfg.PortMin, max: cfg.PortMax,
 			leases: make(map[int]string),
@@ -225,7 +233,11 @@ func (s *Supervisor) Launch(ctx context.Context, studioID string, opts LaunchOpt
 		// is resolved against an allocator that finds every port free.
 		dry := &allocator{min: s.cfg.PortMin, max: s.cfg.PortMax, leases: map[int]string{},
 			free: func(int) bool { return true }, holder: func(int) string { return "" }}
-		if _, err := resolvePlan(s.dirs, st, nil, dry); err != nil {
+		lp, err := s.installed(ctx, st)
+		if err != nil {
+			return GroupStatus{}, err
+		}
+		if _, err := resolvePlan(s.dirs, st, lp, nil, dry); err != nil {
 			return GroupStatus{}, err
 		}
 		arith := s.arithmetic(other, st)
@@ -247,7 +259,11 @@ func (s *Supervisor) Launch(ctx context.Context, studioID string, opts LaunchOpt
 		}
 	}
 
-	plan, err := resolvePlan(s.dirs, st, nil, s.alloc)
+	lp, err := s.installed(ctx, st)
+	if err != nil {
+		return GroupStatus{}, err
+	}
+	plan, err := resolvePlan(s.dirs, st, lp, nil, s.alloc)
 	if err != nil {
 		return GroupStatus{}, err
 	}
@@ -756,6 +772,20 @@ func (s *Supervisor) applyRetention(ctx context.Context, studioID string, keep i
 	})
 }
 
-// StudioRoot is where a studio's checkout is expected: its local_path, or the
-// directory install will clone into.
-func (s *Supervisor) StudioRoot(m *manifest.Manifest) string { return studioRoot(s.dirs, m) }
+// Running reports whether a studio has a group this daemon has not finished
+// tearing down.
+func (s *Supervisor) Running(studioID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	g := s.groups[studioID]
+	return g != nil && !g.finished()
+}
+
+// HoldLaunches runs fn while no launch can begin or be mid-way, so a caller
+// can check Running and change a studio's install state without a launch
+// slipping in between. fn must not call Launch or Shutdown.
+func (s *Supervisor) HoldLaunches(fn func() error) error {
+	s.launchMu.Lock()
+	defer s.launchMu.Unlock()
+	return fn()
+}
