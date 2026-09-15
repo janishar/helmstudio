@@ -354,6 +354,33 @@ One row per spawned process, not per studio — which is what makes a multi-proc
 
 `processes`, `log_files` and `jobs` deliberately have no foreign key to `installations`: uninstall deletes the installation row, and the history of what ran must survive it, as the gallery and timelines will.
 
+**Studio-reported jobs** (amended 2026-09-15, M4; `docs/decisions.md` "M4 API and SDK", Q24). A studio's own long work — a render — runs inside the studio, so the daemon cannot cancel it or write its log. It is a `task` job the studio creates and updates through the API; cancellation is a request the studio honours. Schema v4 rebuilds both tables:
+
+    -- jobs: 'task' added to kind; cancel_requested_at records a cancel the studio has not acted on yet.
+    CREATE TABLE jobs (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('install','build','download','update','export','uninstall','task')),
+      studio_id TEXT,
+      state TEXT NOT NULL CHECK (state IN ('queued','running','succeeded','failed','cancelled','interrupted')),
+      subject_kind TEXT, subject_id TEXT,
+      progress_num INTEGER, progress_den INTEGER,
+      last_error TEXT,                      -- JSON
+      created_at INTEGER NOT NULL, started_at INTEGER, finished_at INTEGER,
+      cancel_requested_at INTEGER);
+    -- idx_jobs_studio and idx_jobs_live are recreated unchanged.
+
+    -- log_files: a task job's lines are appended by the daemon on the studio's behalf.
+    CREATE TABLE log_files (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL UNIQUE,            -- relative to the logs root, never absolute
+      kind TEXT NOT NULL CHECK (kind IN ('run','build','task')),
+      owner_kind TEXT NOT NULL CHECK (owner_kind IN ('process','step_run','job')),
+      owner_id TEXT NOT NULL,
+      studio_id TEXT NOT NULL,
+      truncated INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL);
+    -- idx_logs_studio is recreated unchanged.
+
 ### model_artifacts, model_files, studio_model_bindings
 
 One artifact per Hugging Face `(repo, revision)`, whichever studio declared it first. A binding is one studio's use of it under one placeholder, with the file allow-list that weight declared. Two weights of one repo with different `files` — h3's FL2VA and Ref2VA — are one artifact and two bindings, and the second binding downloads only the files it adds. **There is no stored reference count:** an artifact's references are its binding rows, counted when read, and an artifact with none is reclaimable when it is managed.
@@ -472,6 +499,8 @@ One artifact per Hugging Face `(repo, revision)`, whichever studio declared it f
       id TEXT PRIMARY KEY, name TEXT NOT NULL,
       target TEXT NOT NULL,                  -- {width,height,fps,sample_rate}
       tracks TEXT NOT NULL,                  -- clips reference asset ids; never copies
+                                             -- amended M4 (review #5): [{kind, clips: [{asset_id, …}]}];
+                                             -- a clip names its asset as asset_id, and M8 keeps that key
       revision INTEGER NOT NULL DEFAULT 1,  -- optimistic concurrency + undo
       created_at INTEGER, updated_at INTEGER);
 
@@ -481,13 +510,62 @@ One artifact per Hugging Face `(repo, revision)`, whichever studio declared it f
       role TEXT, created_at INTEGER, consumed_at INTEGER);
     CREATE INDEX idx_inbox_pending ON inbox(to_studio, created_at) WHERE consumed_at IS NULL;
 
+**Schema v4 platform changes** (amended 2026-09-15, M4; `docs/decisions.md` "M4 API and SDK", Q6, Q9, Q17, Q18, and the M4 first review):
+
+    -- per-launch studio tokens. Only the hash is stored: the token itself is a secret (§11).
+    -- A token outlives a daemon restart with its group, and is revoked when the group stops.
+    CREATE TABLE studio_tokens (
+      token_sha256 TEXT PRIMARY KEY,
+      studio_id TEXT NOT NULL,
+      group_run_id TEXT,                    -- NULL for a token helm dev mints outside a group
+      capabilities TEXT NOT NULL,           -- JSON array, copied from the manifest at mint time
+      created_at INTEGER NOT NULL, revoked_at INTEGER);
+    CREATE INDEX idx_tokens_group ON studio_tokens(group_run_id) WHERE revoked_at IS NULL;
+
+    -- which studios have adopted or uploaded an asset. Dedup gives two studios one assets row
+    -- and origin_studio names only the first; this is what lets the second read what it adopted.
+    -- It is an access grant, not a reclaim reference.
+    CREATE TABLE studio_assets (
+      studio_id TEXT NOT NULL,
+      asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (studio_id, asset_id)) WITHOUT ROWID;
+    CREATE INDEX idx_studio_assets_asset ON studio_assets(asset_id);
+
+    -- records gain an etag: 06 §6 returns and checks one. The UPDATE gives every existing row a
+    -- fresh value, so no record is left with the empty default.
+    ALTER TABLE records ADD COLUMN etag TEXT NOT NULL DEFAULT '';
+    UPDATE records SET etag = lower(hex(randomblob(16)));
+
+    -- first_referenced_at: set, once, when an item or item input first names the asset. Reclaim
+    -- takes only assets that were referenced once and are not now (review #3): an asset adopted and
+    -- never recorded — a crash between adopt and gallery add, a frame kept for later — is never
+    -- reclaimed, because its blob is the only copy. Existing referenced assets are backfilled.
+    ALTER TABLE assets ADD COLUMN first_referenced_at INTEGER;
+    UPDATE assets SET first_referenced_at = COALESCE(created_at, 0)
+     WHERE EXISTS (SELECT 1 FROM items i WHERE i.asset_id = assets.id)
+        OR EXISTS (SELECT 1 FROM item_inputs x WHERE x.asset_id = assets.id);
+
+    -- items_fts replaced: the v1 table indexed a prompt column items does not have, contentless,
+    -- joined on a rowid VACUUM may renumber. prompt holds params.prompt; the row is written,
+    -- replaced and deleted in the same transaction as its item.
+    DROP TABLE items_fts;
+    CREATE VIRTUAL TABLE items_fts USING fts5(item_id UNINDEXED, title, prompt, tokenize='porter unicode61');
+
+A studio may read an asset it has a `studio_assets` row for, one its own items or item inputs reference, one an item in its inbox references, or any asset when it holds `gallery.read_all`. Blobs are written read-only (mode 0444). `:adopt` never copies. It takes a file from one of two places (amended by the M4 first review, #4, superseding Q10's stage only):
+
+- **The caller's stage directory.** The stage entry is unlinked afterwards.
+- **The studio's own `{data}` directory.** The studio's file stays where it is, as 08 describes for h3's takes. Because it is the blob's inode, it becomes read-only too.
+
+**What read-only costs** (review #14). Every link to a blob shares its 0444 mode, so the library file and a `{data}` file cannot be edited in place, and Finder cannot write tags or other extended attributes to them. Renaming or deleting a link still works: that needs write permission on the directory, not the file. A studio that chmods its link and writes to it changes the blob, and a later Verify marks the asset `corrupt`.
+
 **Managed and linked weights are the same row with a different `source`.** A managed artifact owns the bytes under `models/<dest>`; a linked one has that path as a symlink to a directory the user already had, with `external_path` as they typed it and `realpath` as it resolved. Everything downstream — bindings, `{models.x}` substitution, the disk view, the launch check — reads one field and behaves identically, which is the point of putting the symlink in the cache rather than special-casing paths at spawn time. Two rules make it safe: a linked directory is read-only to helmstudio, and no delete path ever follows a symlink.**
 
 All studio state goes through the SDK
 
 A studio does not keep its own store. Session settings, domain documents and preferences are written through `sessions`, `records` and `kv`, and the provider decides where the bytes land — `helm.db` under the daemon, `./.helm/helm.db` standalone. That is what makes one backup, one migration path and one crash-safety implementation possible instead of one per studio, and it is why `sessions` is a table here rather than a convention each author reinvents. Bytes still stay in directories; this is about rows.
 
-**No stored reference count on an asset.** A counter drifts the first time a transaction is interrupted; the truth is derivable exactly from `items` and `item_inputs`, and a timeline's clips are `item_inputs` rows on its export, so a sequence in progress holds its footage through the same mechanism.**
+**No stored reference count on an asset.** A counter drifts the first time a transaction is interrupted; the truth is derivable exactly from `items`, `item_inputs` and `timelines.tracks`. An exported sequence holds its footage through the `item_inputs` rows on its export; a sequence not yet exported holds it through the asset ids its tracks name, which the reclaim query in §8 reads (amended 2026-09-15, M4, Q12: an unexported sequence has no `item_inputs`, and R48 says a timeline's reference counts).**
 
 ## 6 · Media on disk
 
@@ -572,7 +650,7 @@ Two paths, one copy. The content-addressed path gives idempotent writes, dedup a
 | `ready`   | fsck finds no file                         | `missing`   | items stay, greyed, with params intact; Locate offered              |
 | `missing` | file returns, hash matches                 | `ready`     | derived regenerated                                                 |
 | `ready`   | explicit Verify mismatches                 | `corrupt`   | flagged; never auto-refetched, since a render cannot be regenerated |
-| `ready`   | no item or input references it, not pinned | reclaimable | listed with bytes; deleted only on an explicit action               |
+| `ready`   | referenced once, no live item or input or timeline clip references it now, not pinned (amended M4 first review) | reclaimable | listed with bytes and the soft-deleted items it takes with it; deleted only on an explicit action |
 
 ## 8 · The queries that pay for a database
 
@@ -583,10 +661,33 @@ Two paths, one copy. The content-addressed path gives idempotent writes, dedup a
       AND NOT EXISTS (SELECT 1 FROM studio_model_bindings b WHERE b.artifact_id = a.id);   -- unlinking a linked one removes the symlink only
 
     -- reclaim: every asset nothing points at. The entire garbage collector.
+    -- amended M4 (Q12): a timeline's clips count, exported or not.
+    -- amended M4 first review (#1, #3, #5): only a live item's inputs count; an asset never
+    -- referenced is never reclaimed; a clip names its asset as asset_id.
     SELECT a.id, a.bytes FROM assets a
     WHERE a.pinned = 0
-      AND NOT EXISTS (SELECT 1 FROM items i       WHERE i.asset_id = a.id AND i.deleted_at IS NULL)
-      AND NOT EXISTS (SELECT 1 FROM item_inputs x WHERE x.asset_id = a.id);
+      AND a.first_referenced_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM items i WHERE i.asset_id = a.id AND i.deleted_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM item_inputs x JOIN items i ON i.id = x.item_id
+                      WHERE x.asset_id = a.id AND i.deleted_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM timelines t, json_each(t.tracks) tr, json_each(tr.value, '$.clips') c
+                      WHERE json_extract(c.value, '$.asset_id') = a.id);
+
+    -- executing it, in one transaction, against exactly the previewed set. Soft-deleted items still
+    -- hold items.asset_id and item_inputs, both ON DELETE RESTRICT, so every soft-deleted item that
+    -- names a reclaimed asset — as its own asset or as an input — is hard-deleted first. Its inputs,
+    -- tags and inbox rows cascade, and its items_fts row is deleted with it. Until reclaim, a soft
+    -- delete loses nothing; reclaim is where it becomes permanent, and the preview lists those items.
+    CREATE TEMP TABLE doomed AS /* the query above */ …;
+    DELETE FROM items_fts WHERE item_id IN (SELECT i.id FROM items i WHERE i.deleted_at IS NOT NULL AND
+      (i.asset_id IN (SELECT id FROM doomed) OR EXISTS (SELECT 1 FROM item_inputs x
+        WHERE x.item_id = i.id AND x.asset_id IN (SELECT id FROM doomed))));
+    DELETE FROM items WHERE deleted_at IS NOT NULL AND
+      (asset_id IN (SELECT id FROM doomed) OR EXISTS (SELECT 1 FROM item_inputs x
+        WHERE x.item_id = items.id AND x.asset_id IN (SELECT id FROM doomed)));
+    DELETE FROM assets WHERE id IN (SELECT id FROM doomed);   -- derived and studio_assets cascade
+    -- then, after commit: the blob, its derived directory, and its library file only when that
+    -- path is still the blob's inode; with the library hardlink left, deleting the blob frees nothing
 
     -- the gallery feed at any scope, with its thumbnail, in one round trip
     SELECT i.id, i.title, i.kind, i.created_at, a.blob_path, d.path AS thumb
@@ -596,17 +697,20 @@ Two paths, one copy. The content-addressed path gives idempotent writes, dedup a
     ORDER BY i.created_at DESC LIMIT 50;
 
     -- downstream provenance: everything ever made from this reference image
+    -- amended M4 (Q16): the earlier form referenced lineage inside a subquery, which SQLite refuses
     WITH RECURSIVE lineage(item_id) AS (
       SELECT item_id FROM item_inputs WHERE asset_id = ?1
       UNION
-      SELECT x.item_id FROM item_inputs x
-        JOIN items i ON i.id IN (SELECT item_id FROM lineage)
-       WHERE x.asset_id = i.asset_id)
-    SELECT * FROM lineage;
+      SELECT x.item_id FROM lineage l
+        JOIN items i ON i.id = l.item_id
+        JOIN item_inputs x ON x.asset_id = i.asset_id)
+    SELECT item_id FROM lineage;
 
     -- "that café video, whatever studio made it"
-    SELECT i.* FROM items_fts f JOIN items i ON i.rowid = f.rowid
-    WHERE items_fts MATCH 'café NEAR window' ORDER BY rank LIMIT 25;
+    -- amended M4 (Q17): items_fts carries item_id, not a rowid join; and FTS5 spells proximity
+    -- NEAR(a b) — 'café NEAR window' is FTS4 syntax, which FTS5 reads as three words and never matches
+    SELECT i.* FROM items_fts f JOIN items i ON i.id = f.item_id
+    WHERE items_fts MATCH 'NEAR(café window)' AND i.deleted_at IS NULL ORDER BY rank LIMIT 25;
 
     -- a studio's own records, from the closed filter language — values always bound
     SELECT id, doc FROM records
@@ -652,7 +756,7 @@ iris studio adopts a still: an `assets` row, a blob, a library hardlink, a thumb
 
 ## 11 · What we deliberately do not store
 
-- **Anything a studio owns internally.** Its sessions, prompts, seeds and working files stay in its own directories in its own shape. What a studio wants centrally it writes through `records`, on purpose.
+- **A studio's working bytes.** Its scratch files and in-progress media stay in its own directories until it adopts them. Its state — sessions, settings, domain documents — goes through the SDK into `sessions`, `kv` and `records` (amended 2026-09-15, M4, Q30: this line used to keep sessions and prompts in the studio's own directories, against R31 and §5).
 - **Log bytes.** Append-only files with an index row.
 - **Media and weight bytes, and per-chunk progress.** The filesystem is the source of truth; progress is `stat`.
 - **Secrets.** The Hugging Face token is in the Keychain; the row records only that one exists and when.

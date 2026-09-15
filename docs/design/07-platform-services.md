@@ -62,9 +62,9 @@ At spawn, the daemon injects the environment every SDK reads. The token is minte
 | GET /assets/{id}/thumb?w=320 | Poster frame or waveform, generated once by the daemon and cached. No studio implements thumbnailing.                                   |
 | POST /gallery/items         | Record an output with its params, inputs and session. One call per generation.                                                          |
 | GET /gallery/items?…         | Query by kind, tag, text, date, session. Scoped to the caller unless `scope=all` and the capability is held.                            |
-| PATCH /gallery/items/{id}   | Star, tag, rename, annotate.                                                                                                            |
+| PATCH /gallery/items/{id}   | Star, tag, rename. (Amended 2026-09-15, M4, Q16: "annotate" had no column and is dropped; `DELETE` soft-deletes and `…/lineage` returns provenance.) |
 | POST /handoff               | Send an item to another studio's inbox — the cross-studio move.                                                                         |
-| GET /inbox                   | Items other studios sent here. Drained by the studio on read.                                                                           |
+| GET /inbox                   | Items other studios sent here, still pending. `POST /inbox/{id}:consume` marks one handled. (Amended 2026-09-15, M4, Q22: a GET that drains loses a handoff to a retry, a prefetch or a crash.) |
 | GET /events                  | SSE: theme changed, inbox arrived, item added elsewhere, shutting down.                                                                 |
 | GET /me                      | Studio id, capabilities, quota, paths, daemon version.                                                                                  |
 
@@ -77,6 +77,8 @@ At spawn, the daemon injects the environment every SDK reads. The token is minte
 
 A studio with no `capabilities` gets no token at all, which keeps the default the safest one.
 
+Which capability each endpoint needs (amended 2026-09-15, M4, Q8 — the enum names none for sessions, the inbox, events or `/me`): `kv` for `/kv` and `/sessions`, `kv.shared` for the `shared` namespace, `records` for `/records`, `assets` for `/assets`, `gallery` for `/gallery` and `/inbox`, `gallery.read_all` for `scope=all` and other studios' items, `handoff.send` for `/handoff`, `jobs` for `/jobs`; `/me` and `/events` need only a token. Every studio endpoint refuses a request with no token. Tokens are stored only as a hash, so a studio re-adopted after a daemon restart keeps its token until its group stops.
+
 ## 4 · One media store for every studio
 
 The point is that a studio writes an output file and makes one call. Everything after that — hashing, deduplication, thumbnails, poster frames, waveforms, duration and dimension probing, retention, reclaim — is the daemon's job, done once, the same way for all four studios.
@@ -88,7 +90,7 @@ The point is that a studio writes an output file and makes one call. Everything 
         "kind": "video", "width": 800, "height": 448, "duration_s": 5.17,
         "thumb": "/api/v1/assets/as_01JB9…/thumb?w=320" }
 
-Adoption hardlinks the staged file into the blob store and unlinks the stage entry, so a 2 GB video costs two inode operations rather than a 2 GB copy through an HTTP body. If the hash already exists, the link is simply dropped — the second studio to produce identical bytes stores nothing.
+Adoption hardlinks the staged file into the blob store and unlinks the stage entry, so a 2 GB video costs two inode operations rather than a 2 GB copy through an HTTP body. If the hash already exists, the link is simply dropped — the second studio to produce identical bytes stores nothing. (Amended 2026-09-15 by the M4 first review, #4: adoption may also take a file from the studio's own `{data}` directory, which stays where it is and becomes read-only with the blob; see 02 §5.)
 
 | Path                                    | Holds                                                                                                       |
 |-----------------------------------------|-------------------------------------------------------------------------------------------------------------|
@@ -97,20 +99,22 @@ Adoption hardlinks the staged file into the blob store and unlinks the stage ent
 | stage/\<studio\>/\<group_run\>/         | Per-launch scratch the studio writes into. Cleared when the group stops; anything not adopted is discarded. |
 | state/\<studio\>/\<ns\>.json            | That studio's documents. Never readable by another studio.                                                  |
 
-**Retention** reuses the model-weight mechanism exactly: an asset's reference count is the number of gallery items pointing at it, deleting an item decrements it, and an asset at zero becomes reclaimable rather than deleted. The disk page gains a second table and no new concepts. Inputs a user imported are pinned by default, because deleting the reference photo someone dragged in is a much worse outcome than keeping a stale render.**
+**Retention** has no reference count (amended 2026-09-15, M4, approved in the M4 first review, #15; the storage decision "no stored reference count" superseded the count this paragraph described). An asset's references are the live items and item inputs that name it and the timeline clips that name it, read when reclaim runs (02 §8). An asset that was referenced once and is referenced by nothing now becomes reclaimable rather than deleted; one never referenced is never reclaimed. The disk page gains a second table and no new concepts. Inputs a user imported are pinned by default, because deleting the reference photo someone dragged in is a much worse outcome than keeping a stale render.**
 
 ## 5 · One gallery, two views
 
 A gallery item is a row about an asset: what produced it, from what, with which parameters. Because every studio writes the same shape, the launcher's cross-studio gallery and a studio's own panel are the same query with a different scope — there is no second implementation and no syncing.
 
     POST /gallery/items
-    { "kind": "video", "asset": "as_01JB9…",
+    { "kind": "video", "asset_id": "01JB9…",
       "title": "café window drift",
-      "session": "example",
+      "session_id": "01JB2…",
       "params": { "model": "MiniMax-H3", "mode": "FL2VA", "seed": 42, "steps": 12,
                   "resolution": "800x448", "frames": 124, "prompt": "The woman in the grey knit…" },
-      "inputs": [ { "asset": "as_01JB7…", "role": "first_frame" } ],
+      "inputs": [ { "asset_id": "01JB7…", "role": "first_frame" } ],
       "tags": ["café", "test"] }
+
+(Amended 2026-09-15, M4, Q15 and Q29: reference fields are `asset_id` and `session_id`, a session is named by its id, and ids are bare ULIDs.)
 
 `inputs[]` is the field that earns the central store. It makes provenance a graph: this video came from that last frame, which came from that image, which came from that prompt in another studio. No studio could record that alone, because the earlier link happened somewhere else.
 
@@ -122,7 +126,7 @@ Either way the framework provides the expensive shared parts: thumbnails, poster
 
 ### The handoff
 
-The cross-studio move is the payoff: an image generated in iris studio becomes the first frame of an h3 studio render, and a voice line from AuK becomes the audio bed. `POST /handoff` puts the item in the target studio's inbox; the target reads `GET /inbox` on start and on an SSE event, and shows it as a pending input. The launcher offers the same thing as a "Use in…" menu on any gallery item, which works even for a studio that has not implemented the inbox — it simply arrives as a file in that studio's stage directory.
+The cross-studio move is the payoff: an image generated in iris studio becomes the first frame of an h3 studio render, and a voice line from AuK becomes the audio bed. `POST /handoff` puts the item in the target studio's inbox; the target reads `GET /inbox` on start and on an SSE event, and shows it as a pending input. The launcher offers the same thing as a "Use in…" menu on any gallery item, which works even for a studio that has not implemented the inbox — it simply arrives as a file in that studio's stage directory. (Amended 2026-09-15, M4, Q23: `POST /handoff` always writes the inbox row; the stage-file delivery is the launcher's, and how it avoids exposing a blob's inode is decided with the launcher UI in M6.)
 
 ## 6 · One palette across independent repos
 
@@ -155,6 +159,8 @@ For studios you wrote yourself — all four of the launch set — the lint is si
 ## 7 · SDK packages
 
 All three are thin wrappers over the HTTP API with the same method names, so a studio author moving between them is not learning a new product.
+
+(Amended 2026-09-15, M4, Q2 and Q3: the packages are named as in the package architecture document — `helm-runtime-sdk` for Go, Python and Node — and the Python client is sync only until async is decided.)
 
 | Package             | For                      | Shape                                                                                                                                    |
 |---------------------|--------------------------|------------------------------------------------------------------------------------------------------------------------------------------|

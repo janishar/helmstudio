@@ -25,7 +25,7 @@ What stays out of every package, permanently: prompt builders, parameter panels,
 
 Every capability is declared once as an interface with two implementations. A studio picks one at construction and never branches again.
 
-Because the schema and the directory layout are identical, a studio that ran alone for months is *adopted* rather than migrated when helmstudio arrives: the daemon hardlinks the blobs and replays the rows. Keep the embedded provider a separate package — `helmsdk/embedded` in Go, `helmsdk[embedded]` in Python — so a studio that only ever runs hosted never pulls SQLite into its dependency tree.
+Because the schema and the directory layout are identical, a studio that ran alone for months is *adopted* rather than migrated when helmstudio arrives: the daemon hardlinks the blobs and replays the rows. Keep the embedded provider a separate package — `helm-runtime-sdk/go/embedded` in Go, `helm-runtime-sdk[embedded]` in Python — so a studio that only ever runs hosted never pulls SQLite into its dependency tree. (Amended 2026-09-15, M4, Q2: the names follow the package architecture document.)
 
 ## 3 · API surface
 
@@ -33,7 +33,7 @@ Because the schema and the directory layout are identical, a studio that ran alo
 |--------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
 | GET PUT PATCH /kv/{ns}/{key} | Small JSON documents — settings, session state. `ETag` and `If-Match`.                                                |
 | POST GET /records/{collection}                            | The studio's own domain documents, queried with a closed filter language.                                             |
-| POST /assets · /assets:adopt                                                          | Register media. Adopt hardlinks a file already written to the stage directory — no copy, no HTTP body.                |
+| POST /assets · /assets:adopt                                                          | Register media. Adopt hardlinks a file already written to the stage directory or the studio's own `{data}` directory — no copy, no HTTP body (amended by the M4 first review, #4). |
 | GET /assets/{id} · /thumb                                                              | Bytes with `Range`; thumbnails, posters and waveforms generated once by the framework.                                |
 | POST GET /gallery/items                                   | Record an output with params and `inputs[]` provenance; query at studio or global scope.                              |
 | POST /timeline · /timeline/{id}:open                                                  | Create a sequence from clips and hand it to the framework's editor. See §6.                                           |
@@ -203,11 +203,13 @@ A framework screen. Clips carry the identity hue of the studio that produced the
       "target": { "width": 1920, "height": 1080, "fps": 24, "sample_rate": 48000 },
       "tracks": [
         { "kind": "video", "clips": [
-          { "asset": "as_01JB7…", "in": 0, "out": 5.04, "at": 0 },
-          { "asset": "as_01JB8…", "in": 1.20, "out": 5.26, "at": 5.04,
+          { "asset_id": "as_01JB7…", "in": 0, "out": 5.04, "at": 0 },
+          { "asset_id": "as_01JB8…", "in": 1.20, "out": 5.26, "at": 5.04,
             "transition_in": { "type": "dissolve", "duration": 0.25 } },
-          { "asset": "as_01JBA…", "hold": 2.2, "at": 9.10 } ]},
+          { "asset_id": "as_01JBA…", "hold": 2.2, "at": 9.10 } ]},
         { "kind": "audio", "gain_db": -3, "clips": [ … ] } ] }
+
+(Amended 2026-09-15 by the M4 first review, #5: a clip names its asset as `asset_id`, as every wire reference does since Q15, and the reclaim query reads that key. M8 keeps it.)
 
 **Non-destructive by construction.** A clip is a reference with in and out points; sources are never modified or copied. Every edit is a patch, so undo is the previous revision, and a timeline referencing an asset counts as a reference for reclaim — the disk page can never offer to delete footage a sequence is using. Export creates a Job, which means it reuses install's progress, cancellation and log file rather than inventing a second progress system, and the result becomes a gallery item whose `inputs[]` are every clip that went into it, so lineage survives the edit.**
 
@@ -226,7 +228,7 @@ A studio hands clips to the framework and gets back a sequence. It never renders
     # create a sequence from what the studio just made
     POST /api/v1/timeline
     { "name": "café sequence", "target": { "fps": 24, "width": 1920, "height": 1080 },
-      "clips": [ { "asset": "as_01JB7…" }, { "asset": "as_01JB8…", "in": 1.2, "out": 5.26 } ] }
+      "clips": [ { "asset_id": "as_01JB7…" }, { "asset_id": "as_01JB8…", "in": 1.2, "out": 5.26 } ] }
     → { "id": "tl_01JB9…", "duration_s": 9.30 }
 
     # ask the framework to open it — a launcher window, or a tab the daemon focuses
@@ -234,7 +236,7 @@ A studio hands clips to the framework and gets back a sequence. It never renders
     → { "opened": true, "surface": "app" }
 
     # append to whatever sequence the user has open, without stealing focus
-    POST /api/v1/timeline:append   { "asset": "as_01JBB…", "track": "V1" }
+    POST /api/v1/timeline:append   { "asset_id": "as_01JBB…", "track": "V1" }
 
     # exports are Jobs, so progress and logs come back on the channel that already exists
     POST /api/v1/timeline/tl_01JB9…/export  { "preset": "h264-1080p24" }
