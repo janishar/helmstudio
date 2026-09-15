@@ -10,8 +10,9 @@
 //
 // Uninstall has no path into the models directory. It stops the studio,
 // removes the checkout helmstudio cloned — never a local_path checkout, and
-// never the studio's data — and deletes the installation row, which drops its
-// weight bindings. Weights stay for an explicit reclaim.
+// never the studio's data — and its Python environment, and deletes the
+// installation row, which drops its weight bindings. Weights stay for an
+// explicit reclaim.
 package install
 
 import (
@@ -69,10 +70,12 @@ const (
 	KindConflict     ErrorKind = "conflict"
 )
 
-// Error is a refusal a user can act on.
+// Error is a refusal a user can act on. Details, when set, carries what a UI
+// needs to choose a sentence, such as the code and tool of a missing tool.
 type Error struct {
 	Kind    ErrorKind
 	Message string
+	Details map[string]any
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -103,6 +106,9 @@ type Config struct {
 	Environ func() []string
 	// GitTimeout bounds one git command. Default 30 minutes.
 	GitTimeout time.Duration
+	// EnvTimeout bounds creating a Python environment, which may download an
+	// interpreter. Default 30 minutes.
+	EnvTimeout time.Duration
 	// BuildLogsKept is how many install jobs' build logs a studio keeps.
 	// Default 5 (R30's retention, applied to build logs).
 	BuildLogsKept int
@@ -157,6 +163,9 @@ func New(cfg Config) *Installer {
 	}
 	if cfg.GitTimeout == 0 {
 		cfg.GitTimeout = 30 * time.Minute
+	}
+	if cfg.EnvTimeout == 0 {
+		cfg.EnvTimeout = 30 * time.Minute
 	}
 	if cfg.BuildLogsKept == 0 {
 		cfg.BuildLogsKept = 5
@@ -260,7 +269,8 @@ func (in *Installer) Info(ctx context.Context, studioID string, m *manifest.Mani
 
 // checkHost applies R5 and R5a: os, arch and backends block; memory and disk
 // shortfalls warn with the numbers. A manifest that needs a Python
-// environment is refused until that milestone lands.
+// environment is refused before anything is cloned when uv is not on PATH
+// (docs/decisions.md M5 Q3).
 func (in *Installer) checkHost(m *manifest.Manifest) ([]string, error) {
 	if hostOS := in.cfg.HostOS(); !slices.Contains(m.Requires.OS, hostOS) {
 		return nil, refuse(KindBlocked, "%s runs on %s; this machine is %s", m.Name, strings.Join(m.Requires.OS, ", "), hostOS)
@@ -277,7 +287,10 @@ func (in *Installer) checkHost(m *manifest.Manifest) ([]string, error) {
 		return nil, refuse(KindBlocked, "%s runs %s on %s; this machine provides %s", m.Name, m.Runtime.Framework, strings.Join(m.Runtime.Backends, ", "), strings.Join(host, ", "))
 	}
 	if m.Python != nil {
-		return nil, refuse(KindBlocked, "%s needs a Python %s environment, which helmstudio creates from the Python studios milestone on; it cannot be installed yet", m.Name, m.Python.Version)
+		if _, err := in.cfg.LookPath("uv"); err != nil {
+			return nil, &Error{Kind: KindBlocked, Details: map[string]any{"code": "tool_missing", "tool": "uv"},
+				Message: fmt.Sprintf("%s needs a Python %s environment, which helmstudio makes with uv; uv is not on PATH: %s", m.Name, m.Python.Version, uvHint)}
+		}
 	}
 	if m.LocalPath != "" && !filepath.IsAbs(m.LocalPath) {
 		return nil, refuse(KindBlocked, "%s: local_path %q is not an absolute path", m.ID, m.LocalPath)
@@ -496,6 +509,17 @@ func (in *Installer) pipeline(ctx context.Context, jobID string, st supervisor.S
 		state = StateCloned
 	}
 
+	// An installed Python studio whose environment no longer checks — its
+	// interpreter was deleted, or someone changed it — builds again, which
+	// remakes the environment and reruns every step. This is what a launch's
+	// "install it again" refers to (M5 review #10).
+	if m.Python != nil && state != StateCloned && state != StateBuilding && state != StateFailedBuild {
+		if why := supervisor.CheckVenv(supervisor.VenvDir(in.cfg.Dirs, m.ID), m.Python.Version); why != nil {
+			in.cfg.Logf("install: %s: %v; building again", m.ID, why)
+			state = StateCloned
+		}
+	}
+
 	if state == StateCloned || state == StateBuilding || state == StateFailedBuild {
 		if f := in.build(ctx, jobID, m, r.root, env); f != nil {
 			return in.fail(ctx, m.ID, StateFailedBuild, f)
@@ -636,8 +660,9 @@ func (in *Installer) git(ctx context.Context, git, dir string, env []string, arg
 	return out.String(), nil
 }
 
-// buildLogName is the only file name build-log retention removes.
-var buildLogName = regexp.MustCompile(`^build-[0-9A-HJKMNP-TV-Z]{26}-[0-9]{2,}\.log$`)
+// buildLogName is the only file name build-log retention removes: a step's
+// log, or the log of creating a Python environment.
+var buildLogName = regexp.MustCompile(`^build-[0-9A-HJKMNP-TV-Z]{26}-([0-9]{2,}|env)\.log$`)
 
 var lockPath = regexp.MustCompile(`Unable to create '([^']+\.lock)': File exists`)
 
@@ -656,6 +681,8 @@ func toolMessage(tool string) string {
 	switch tool {
 	case "git", "make", "cc", "clang", "c++", "clang++", "gcc", "ld":
 		return fmt.Sprintf("this studio needs %q, which is not on PATH; install it with `xcode-select --install`, then retry", tool)
+	case "uv":
+		return fmt.Sprintf("this studio needs %q, which is not on PATH; %s", tool, uvHint)
 	}
 	return fmt.Sprintf("this studio needs %q, which is not on PATH; install %s, then retry", tool, tool)
 }
@@ -673,14 +700,37 @@ func (in *Installer) build(ctx context.Context, jobID string, m *manifest.Manife
 	if err := in.setState(ctx, m.ID, StateBuilding, ``); err != nil {
 		return &Failure{Phase: "build", Code: "step_failed", Message: err.Error()}
 	}
-	// R11: every declared tool before the first step.
+	// R11: every declared tool before the first step; uv for any studio that
+	// declares python:, whether or not it lists uv (Q3).
+	required := slices.Clone(m.Requires.Tools)
+	if m.Python != nil && !slices.Contains(required, "uv") {
+		required = append(required, "uv")
+	}
 	tools := map[string]string{}
-	for _, t := range m.Requires.Tools {
+	for _, t := range required {
 		p, err := in.cfg.LookPath(t)
 		if err != nil {
 			return &Failure{Phase: "build", Code: "tool_missing", Message: toolMessage(t)}
 		}
 		tools[t] = p
+	}
+
+	runtimeEnv := map[string]any{"tools": tools}
+	if m.Python != nil {
+		// Q7: before step 0, and not a step: the manifest's steps keep their
+		// own numbering.
+		created, f := in.ensureVenv(ctx, jobID, m, tools["uv"], append(slices.Clone(env), supervisor.UVEnv(in.cfg.Dirs)...))
+		if f != nil {
+			return f
+		}
+		// A new environment holds nothing the steps installed before, so
+		// none of them counts as done (M5 review #1).
+		if created {
+			if err := in.forgetSteps(ctx, m.ID); err != nil {
+				return &Failure{Phase: "build", Code: "env_failed", Message: err.Error()}
+			}
+		}
+		env = in.pythonEnv(m, env)
 	}
 
 	done := map[int]bool{}
@@ -724,7 +774,18 @@ func (in *Installer) build(ctx context.Context, jobID string, m *manifest.Manife
 	}
 	in.setProgress(ctx, jobID, int64(len(m.Build)), int64(len(m.Build)))
 
-	runtimeEnv := map[string]any{"tools": tools}
+	if m.Python != nil {
+		// A step can replace the environment — uv sync remakes it for the
+		// project's own requires-python or .python-version, and exits 0 — so
+		// it is checked again before it is recorded (M5 review #1).
+		info, f := in.venvAfterBuild(ctx, m, tools["uv"], env)
+		if f != nil {
+			return f
+		}
+		for k, v := range info {
+			runtimeEnv[k] = v
+		}
+	}
 	if goPath, ok := tools["go"]; ok {
 		cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		cmd := exec.CommandContext(cctx, goPath, "version")
@@ -1249,6 +1310,11 @@ func (in *Installer) uninstall(ctx context.Context, studioID, root string) *Fail
 	if err := in.removeCheckout(studioID, root); err != nil {
 		return fail("%v", err)
 	}
+	// The Python environment is helmstudio's whatever the checkout is, and is
+	// removed even when the manifest no longer declares python: (Q4).
+	if err := in.removeStudioEntry(studioID, "venv"); err != nil {
+		return fail("removing the Python environment: %v", err)
+	}
 	err := in.cfg.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM installations WHERE studio_id = ?`, studioID)
 		return err
@@ -1269,24 +1335,8 @@ func (in *Installer) removeCheckout(studioID, root string) error {
 		in.cfg.Logf("install: %s's checkout %s is its local_path; it belongs to the user and is not removed", studioID, root)
 		return nil
 	}
-	parent := filepath.Dir(managed)
-	fi, err := os.Lstat(parent)
-	switch {
-	case errors.Is(err, fs.ErrNotExist):
-		return nil
-	case err != nil:
-		return err
-	case !fi.IsDir():
-		// A symlink here would make the removal below land in its target.
-		return fmt.Errorf("%s is not a directory helmstudio made (it is a %s); not removing anything under it", parent, fi.Mode().Type())
-	}
-	r, err := os.OpenRoot(parent)
-	if err != nil {
-		return fmt.Errorf("opening %s: %w", parent, err)
-	}
-	defer r.Close()
-	if err := r.RemoveAll(filepath.Base(managed)); err != nil {
-		return fmt.Errorf("removing the checkout %s: %w", managed, err)
+	if err := in.removeStudioEntry(studioID, filepath.Base(managed)); err != nil {
+		return fmt.Errorf("removing the checkout: %w", err)
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -181,12 +182,21 @@ func TestHostMismatchBlocksAndShortfallsWarn(t *testing.T) {
 		t.Fatalf("a blocked install recorded %d installations", n)
 	}
 
+	// Since M5 a python: manifest is blocked only when uv is missing (M5 Q3,
+	// Q7 supersedes M3 Q15); still before anything is recorded.
 	f.studio("python-studio", f.repoLine(), f.defaultBuild())
 	st, _ = f.sup.Studio("python-studio")
 	st.Manifest.Python = &manifest.Python{Version: "3.11"}
+	f.in.cfg.LookPath = func(name string) (string, error) {
+		if name == "uv" {
+			return "", exec.ErrNotFound
+		}
+		return exec.LookPath(name)
+	}
 	if _, err := f.in.Install(context.Background(), "python-studio"); !errors.As(err, &ie) || ie.Kind != KindBlocked || !strings.Contains(ie.Message, "Python") {
 		t.Fatalf("python manifest: err = %v, want blocked", err)
 	}
+	f.in.cfg.LookPath = exec.LookPath
 
 	f.studio("hungry", f.repoLine(), f.defaultBuild())
 	st, _ = f.sup.Studio("hungry")

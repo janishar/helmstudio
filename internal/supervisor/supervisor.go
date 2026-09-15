@@ -68,6 +68,12 @@ type Config struct {
 	// StudioData is {data} for a studio. Default <data>/studios/<id>/data;
 	// helm dev keeps it at ./.helm/data (docs/decisions.md M4 Q26).
 	StudioData func(m *manifest.Manifest) string
+	// Python resolves the environment of a studio that declares python:: the
+	// directory {venv} names and the variables its members get besides
+	// activation. Default: VenvDir, checked against python.version, with
+	// UVEnv; helm dev uses the author's own environment instead
+	// (docs/decisions.md M5 Q15).
+	Python func(m *manifest.Manifest) (venv string, env []string, err error)
 
 	// For tests.
 	now        func() time.Time

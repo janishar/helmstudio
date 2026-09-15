@@ -69,7 +69,7 @@ func (s *Server) failInstall(w http.ResponseWriter, err error) {
 	var ie *install.Error
 	switch {
 	case errors.As(err, &ie):
-		writeError(w, installStatus[ie.Kind], string(ie.Kind), ie.Message)
+		writeJSON(w, installStatus[ie.Kind], errorBody{Error: string(ie.Kind), Message: ie.Message, Details: ie.Details})
 	case errors.Is(err, errTaskJob):
 		writeError(w, http.StatusNotFound, "not_found", err.Error())
 	case errors.Is(err, install.ErrNoJob), errors.Is(err, weights.ErrNoArtifact):

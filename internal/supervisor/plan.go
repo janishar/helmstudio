@@ -45,6 +45,10 @@ type launchPaths struct {
 	modelRefusals map[string]string
 	// data is {data}.
 	data string
+	// venv is {venv}, and pyEnv what the studio's members get besides
+	// activation; both empty for a studio without python:.
+	venv  string
+	pyEnv []string
 }
 
 // launchable states are the install states a studio may launch from
@@ -72,12 +76,18 @@ func (s *Supervisor) installed(ctx context.Context, st Studio) (launchPaths, err
 	if err != nil {
 		return launchPaths{}, fmt.Errorf("%s: resolving its weights: %w", m.ID, err)
 	}
-	return launchPaths{root: root, models: models, modelRefusals: refuse, data: s.studioData(m)}, nil
+	lp := launchPaths{root: root, models: models, modelRefusals: refuse, data: s.studioData(m)}
+	if m.Python != nil {
+		if lp.venv, lp.pyEnv, err = s.python(m); err != nil {
+			return launchPaths{}, &Error{Kind: KindNotLaunchable, Message: fmt.Sprintf("%s cannot launch: %v", m.ID, err)}
+		}
+	}
+	return lp, nil
 }
 
 // studioData is {data}: the studio's persistent data root, outside its
 // checkout so a reinstall cannot take the user's work with it
-// (docs/design/08-h3-dry-run.md, change 2).
+// (docs/design/08, change 2).
 func studioData(dirs *platform.Dirs, m *manifest.Manifest) string {
 	return filepath.Join(dirs.Data(), "studios", m.ID, "data")
 }
@@ -240,8 +250,12 @@ func resolvePlan(dirs *platform.Dirs, st Studio, lp launchPaths, assigned map[st
 		values[k] = v
 	}
 	refuse := map[string]string{
-		"venv":            "{venv} needs a per-studio Python environment, which lands with the Python studios milestone",
 		"models.selected": "{models.selected} needs a recorded weight selection, which lands with the library milestone",
+	}
+	if lp.venv != "" {
+		values["venv"] = lp.venv
+	} else {
+		refuse["venv"] = "{venv} names a Python environment, and this studio declares no python block"
 	}
 	for k, why := range lp.modelRefusals {
 		refuse[k] = why
@@ -295,6 +309,9 @@ func resolvePlan(dirs *platform.Dirs, st Studio, lp launchPaths, assigned map[st
 		}
 
 		env := RestrictedEnv(dirs, m.ID, os.Environ())
+		if lp.venv != "" {
+			env = Activate(append(env, lp.pyEnv...), lp.venv)
+		}
 		keys := make([]string, 0, len(p.Env))
 		for k := range p.Env {
 			// HELM_* is the platform's (docs/decisions.md M4 defaults): a

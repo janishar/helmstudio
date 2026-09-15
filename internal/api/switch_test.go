@@ -3,7 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/janishar/helmstudio/internal/install"
 )
 
 // Q13 over HTTP: a stale or made-up preempt stops nothing and answers 409
@@ -44,5 +47,23 @@ func TestAStalePreemptIsPreviewChanged(t *testing.T) {
 	}
 	if now := waitRunning(t, srv, "first-heavy"); now.GroupRunID != first.GroupRunID {
 		t.Fatalf("a stale preempt replaced the running group: %s → %s", first.GroupRunID, now.GroupRunID)
+	}
+}
+
+// Q3: an install refused because uv is missing reaches the client as 422
+// blocked with the code and tool in details, so a UI need not parse the
+// message.
+func TestInstallRefusalCarriesItsDetails(t *testing.T) {
+	srv, _ := newServer(t)
+	rec := httptest.NewRecorder()
+	srv.failInstall(rec, &install.Error{Kind: install.KindBlocked, Message: "uv is not on PATH",
+		Details: map[string]any{"code": "tool_missing", "tool": "uv"}})
+	var body struct {
+		Error   string         `json:"error"`
+		Details map[string]any `json:"details"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &body)
+	if rec.Code != http.StatusUnprocessableEntity || body.Error != "blocked" || body.Details["code"] != "tool_missing" || body.Details["tool"] != "uv" {
+		t.Fatalf("%d %s; want 422 blocked with details", rec.Code, rec.Body)
 	}
 }

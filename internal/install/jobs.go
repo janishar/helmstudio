@@ -28,9 +28,10 @@ type Failure struct {
 	ExitCode  *int   `json:"exit_code,omitempty"`
 	LogFileID string `json:"log_file_id,omitempty"`
 	Message   string `json:"message"`
-	// Code is one of: clone_failed, tool_missing, step_failed, step_timeout,
-	// cancelled, interrupted, auth_required, disk_space, weights_failed,
-	// linked_missing, uninstall_failed.
+	// Code is one of: clone_failed, tool_missing, env_failed, step_failed,
+	// step_timeout, cancelled, interrupted, auth_required, disk_space,
+	// weights_failed, linked_missing, uninstall_failed. env_failed has no
+	// step_index: creating a Python environment is not one of the steps.
 	Code string `json:"code"`
 }
 
