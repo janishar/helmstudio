@@ -1,0 +1,58 @@
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Local assistant and tooling state — CLAUDE.md itself is tracked
+.claude/
+.cursor/
+.aider*
+.github/copilot-instructions.md
+
+# Go build output
+/dist/
+/bin/
+/out/
+*.exe
+*.test
+*.prof
+coverage.out
+.gocache/
+.gomodcache/
+
+# Node — packages/ui and packages/css
+node_modules/
+.npm/
+*.tsbuildinfo
+/packages/*/dist/
+
+# Python — helm dev may create an environment for a local studio
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Electron packaging
+/packages/app/release/
+*.dmg
+*.zip.blockmap
+
+# helmstudio's own runtime state. None of this is ever committed: the store is
+# a user's library, and a stray .db in a diff is somebody's generation history.
+/.helm/
+*.db
+*.db-wal
+*.db-shm
+*.db.bak.*
+/testdata/tmp/
+/tmp/
+
+# Generated clients ARE committed on purpose — the gate regenerates them and
+# fails on a diff, which only works if the checked-in copy is there to compare.

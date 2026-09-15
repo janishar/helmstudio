@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.in/schema/manifest-1.json",
+  "title": "helmstudio studio manifest",
+  "description": "One file per studio, at the root of the studio's own repository as helmstudio.yaml. The registry holds pointers to these, never copies. This schema is the whole extension surface: if supporting a studio needs a change to the daemon rather than a change here, the schema is wrong.",
+  "type": "object",
+  "required": ["id", "name", "kinds", "requires", "runtime", "processes"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": {
+      "type": "integer", "const": 1,
+      "description": "Manifest schema major. Omitted means 1."
+    },
+
+    "id": {
+      "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$",
+      "description": "Stable slug. Used for paths, routes, token scope and the local override filename. Immutable once published."
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 60,
+      "description": "Display name, lowercase as the studio names itself (e.g. 'h3 studio')." },
+    "description": { "type": "string", "maxLength": 140,
+      "description": "One line for the card. Clamped to a single line in the UI." },
+    "kinds": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "enum": ["video", "image", "audio", "text"] },
+      "description": "A list, not an enum: ltx and h3 are video AND audio."
+    },
+    "hue": {
+      "type": "object", "required": ["dark", "light"], "additionalProperties": false,
+      "properties": {
+        "dark":  { "$ref": "#/$defs/hex" },
+        "light": { "$ref": "#/$defs/hex" }
+      },
+      "description": "Identity colour, used only as a 3px stripe, a dot and a timeline clip — never as a button fill. Also injected as --helm-studio-accent. A studio without one is assigned from a generated ramp."
+    },
+    "license":     { "type": "string", "description": "SPDX identifier where possible." },
+    "license_url": { "type": "string", "format": "uri" },
+
+    "repo":       { "type": "string", "format": "uri", "description": "git clone URL. Required unless local_path is set." },
+    "ref":        { "type": "string", "description": "Branch, tag or commit. A registry entry always pins one." },
+    "submodules": { "type": "boolean", "default": false },
+    "local_path": { "type": "string", "description": "Absolute path to an existing checkout. When set, cloning is skipped. Development only — a registry manifest never sets this." },
+
+    "requires": {
+      "type": "object", "required": ["os", "arch"], "additionalProperties": false,
+      "properties": {
+        "os":      { "type": "array", "minItems": 1, "items": { "enum": ["darwin", "linux", "windows"] } },
+        "arch":    { "type": "array", "minItems": 1, "items": { "enum": ["arm64", "amd64"] } },
+        "tools":   { "type": "array", "items": { "type": "string" },
+                     "description": "Probed before the first build step. Failing fast here beats failing inside make." },
+        "ram_gb":  { "type": "integer", "minimum": 1, "description": "Minimum to install. A shortfall warns; it does not block." },
+        "disk_gb": { "type": "integer", "minimum": 1, "description": "Checkout, build output and weights together." }
+      },
+      "description": "os and arch mismatches block Install. Memory and disk shortfalls warn with the real number and let the user proceed."
+    },
+    "peak_ram_gb": {
+      "type": "integer", "minimum": 1,
+      "description": "What the model actually occupies once loaded. Drives the switch dialog's arithmetic, so an estimate is better than nothing."
+    },
+
+    "runtime": {
+      "type": "object", "required": ["framework", "backends"], "additionalProperties": false,
+      "properties": {
+        "framework": {
+          "enum": ["native-kernel", "mlx", "pytorch", "ggml", "onnx", "jax", "other"],
+          "description": "How inference is implemented. 'native-kernel' means hand-written Metal/CUDA/C with no Python framework in the loop."
+        },
+        "backends": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": { "enum": ["metal", "mps", "cuda", "rocm", "cpu", "vulkan"] },
+          "description": "Device backends this studio can actually use. The host check runs against THIS, not arch — a studio whose backends the host cannot provide is blocked, not warned."
+        },
+        "precision": { "type": "array", "items": { "enum": ["fp32", "bf16", "fp16", "fp8", "int8", "int4"] } },
+        "language":  { "type": "string", "description": "The engine's own stack, shown as prose (e.g. 'c', 'go', 'python')." }
+      },
+      "description": "framework and backends are separate because PyTorch-on-cuda and PyTorch-on-mps are entirely different answers for a given machine."
+    },
+
+    "python": {
+      "type": "object", "required": ["version"], "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string", "pattern": "^3\\.(9|1[0-9])$" },
+        "extras":  { "type": "array", "items": { "type": "string" } }
+      },
+      "description": "Presence makes the daemon create a per-studio uv environment pinned to this version before any build step. Environments are never shared between studios."
+    },
+
+    "capabilities": {
+      "type": "array", "uniqueItems": true,
+      "items": { "enum": ["kv", "records", "assets", "gallery", "timeline", "jobs", "gallery.read_all", "kv.shared", "handoff.send"] },
+      "description": "Least privilege, shown to the user before install as sentences rather than identifiers. No capabilities means no token is issued at all."
+    },
+
+    "sdk": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "runtime": { "$ref": "#/$defs/semverRange" },
+        "ui":      { "$ref": "#/$defs/semverRange" },
+        "css":     { "$ref": "#/$defs/semverRange" }
+      },
+      "description": "Majors pinned separately. The daemon injects matching bundle URLs at launch so a helmstudio update never jumps a studio across a major."
+    },
+
+    "network": {
+      "type": "array", "items": { "type": "string" },
+      "description": "Hostnames this studio is expected to contact at build or run time. The smoke harness flags anything else."
+    },
+
+    "storage": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "collections": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["name"], "additionalProperties": false,
+            "properties": {
+              "name":  { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+              "index": { "type": "array", "items": { "type": "string" },
+                         "description": "Top-level JSON fields to build scoped expression indexes on at install time." },
+              "fts":   { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "quota": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "records":  { "type": "integer", "minimum": 1 },
+            "kv_bytes": { "type": "integer", "minimum": 1024 }
+          },
+          "description": "Per-studio caps enforced on write. A studio in a retry loop must not be able to fill a disk."
+        }
+      }
+    },
+
+    "build": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["run"], "additionalProperties": false,
+        "properties": {
+          "name":      { "type": "string", "description": "Shown in the install checklist. Defaults to the command." },
+          "cwd":       { "type": "string", "description": "Relative to the studio root. Must not escape it." },
+          "run":       { "type": "string", "minLength": 1 },
+          "shell":     { "enum": ["sh", "bash", "powershell", "cmd"], "default": "sh",
+                         "description": "Declared now so a later Windows port does not invalidate every manifest ever written." },
+          "timeout_s": { "type": "integer", "minimum": 1, "default": 3600 },
+          "optional":  { "type": "boolean", "default": false,
+                         "description": "A non-zero exit marks the step skipped rather than failing the install." }
+        }
+      },
+      "description": "Executed in declared order, each in its own cwd. Non-zero exit stops the sequence; Retry resumes at the first step that has not succeeded."
+    },
+
+    "weights": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["name", "repo", "dest"], "additionalProperties": false,
+        "properties": {
+          "name":       { "type": "string", "pattern": "^[a-z][a-z0-9_]*$",
+                          "description": "The placeholder key: {models.<name>} in a process command." },
+          "repo":       { "type": "string", "description": "Hugging Face repo id." },
+          "revision":   { "type": "string", "default": "main" },
+          "dest":       { "type": "string", "description": "Directory name under the shared models root." },
+          "size_gb":    { "type": "number", "minimum": 0, "description": "For the disk pre-check, before any bytes move." },
+          "files":      { "type": "array", "items": { "type": "string" },
+                          "description": "Allow-list of paths to fetch, and the presence check used when a directory is linked instead of downloaded." },
+          "selectable": { "type": "boolean", "default": false,
+                          "description": "One of a set the user picks between at launch, bound to {models.selected}. iris studio takes exactly one checkpoint per run." },
+          "optional":   { "type": "boolean", "default": false }
+        }
+      }
+    },
+
+    "processes": {
+      "type": "array", "minItems": 1,
+      "items": { "$ref": "#/$defs/process" },
+      "description": "The supervised process group. Started in dependency order, each health-gated before its dependents; stopped in reverse."
+    },
+
+    "run": {
+      "$ref": "#/$defs/process",
+      "description": "Sugar for a single process with role 'main' and name 'studio'. Mutually exclusive with processes[]."
+    },
+
+    "test": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "profile": { "type": "string",
+                     "description": "A reduced configuration — smaller model, fewer steps, shorter clip — so the smoke test exercises the real code path in under two minutes. Without one, nothing generative is testable in CI." },
+        "smoke":   { "type": "string", "description": "Path to the smoke test definition, relative to the studio root." }
+      }
+    },
+
+    "import": {
+      "type": "object", "required": ["run"], "additionalProperties": false,
+      "properties": {
+        "run":   { "type": "string" },
+        "cwd":   { "type": "string" },
+        "shell": { "enum": ["sh", "bash", "powershell", "cmd"], "default": "sh" }
+      },
+      "description": "A one-time, idempotent importer run on first launch under helmstudio, adopting data the studio already has. Never moves or deletes the originals."
+    }
+  },
+
+  "allOf": [
+    {
+      "description": "A studio is cloned or it is local, never neither.",
+      "anyOf": [
+        { "required": ["repo"] },
+        { "required": ["local_path"] }
+      ]
+    },
+    {
+      "description": "processes[] and the run sugar are mutually exclusive.",
+      "not": { "required": ["processes", "run"] }
+    }
+  ],
+
+  "$defs": {
+    "hex": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+
+    "semverRange": { "type": "string", "pattern": "^[\\^~]?[0-9]+(\\.[0-9]+){0,2}$" },
+
+    "process": {
+      "type": "object",
+      "required": ["name", "cmd"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$",
+                  "description": "Unique within the studio. Exposed to siblings as {ports.<name>}." },
+        "role": {
+          "enum": ["main", "sidecar", "worker", "oneshot"], "default": "main",
+          "description": "main owns the UI and the Launch button. oneshot runs to completion before dependents start."
+        },
+        "cmd": {
+          "type": "string", "minLength": 1,
+          "description": "Template. Substitutes {port}, {ports.<name>}, {models.<name>}, {models.selected}, {root}, {data}, {venv}."
+        },
+        "cwd":   { "type": "string", "description": "Relative to the studio root." },
+        "env":   { "type": "object", "additionalProperties": { "type": "string" } },
+        "shell": { "enum": ["sh", "bash", "powershell", "cmd"], "default": "sh" },
+
+        "port": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "prefer": { "$ref": "#/$defs/portNumber", "description": "Advisory. Used when free, otherwise the daemon assigns from its range." },
+            "fixed":  { "$ref": "#/$defs/portNumber", "description": "Refuses to start when taken, naming the occupant. For a process that cannot accept a port flag." }
+          },
+          "not": { "required": ["prefer", "fixed"] },
+          "description": "Omit entirely for a process that listens on nothing."
+        },
+
+        "health": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "path":       { "type": "string", "pattern": "^/", "description": "HTTP GET expected to return 200." },
+            "tcp":        { "type": "boolean", "description": "A successful connect to the assigned port is enough." },
+            "exec":       { "type": "string", "description": "A command whose zero exit means healthy. For a worker with no endpoint." },
+            "timeout_s":  { "type": "integer", "minimum": 1, "default": 180,
+                            "description": "The budget, shown to the user as elapsed against it. A studio that loads 20 GB before answering needs a large one; a thin wrapper needs a small one so a dead process is reported quickly." },
+            "interval_s": { "type": "integer", "minimum": 1, "default": 2 }
+          },
+          "oneOf": [
+            { "required": ["path"] },
+            { "required": ["tcp"] },
+            { "required": ["exec"] }
+          ],
+          "description": "Exactly one probe shape. A failed health check never restarts a main process — an eight-minute generation must survive a slow probe."
+        },
+
+        "busy": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "pattern": "^/",
+                      "description": "Returns whether the studio currently holds a model or has work in flight." }
+          },
+          "description": "Liveness is not occupancy. A studio may be running and holding nothing, or running and holding 21 GB. Without this the switch dialog is guessing."
+        },
+
+        "depends_on": {
+          "type": "array", "items": { "type": "string" }, "uniqueItems": true,
+          "description": "Names of sibling processes that must be healthy first. The validator rejects unknown names and cycles."
+        },
+        "autostart": { "type": "boolean", "default": true,
+                       "description": "False lets a user start a worker on demand from the studio page." },
+        "restart": {
+          "enum": ["never", "on-failure"], "default": "never",
+          "description": "A main process is never auto-restarted. A sidecar with on-failure retries with backoff, at most three times in ten minutes, then the group fails."
+        },
+        "heavy": { "type": "boolean", "default": false,
+                   "description": "Marks the process that holds the model. The one-heavy-group-at-a-time rule is evaluated on this member." },
+        "ui":    { "type": "string", "pattern": "^/", "description": "Path the Open button targets. Meaningful on a main process." }
+      }
+    },
+
+    "portNumber": { "type": "integer", "minimum": 1024, "maximum": 65535 }
+  }
+}
