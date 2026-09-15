@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>helm-css components</title>
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.setAttribute("data-theme", t);
+</script>
+<link rel="stylesheet" href="/sdk/v1/helm.css">
+</head>
+<body>
+<main class="helm-main helm-stack" style="gap: var(--helm-space-6)">
+  <section class="helm-stack">
+    <p class="helm-section-label">Buttons</p>
+    <div class="helm-row">
+      <button class="helm-btn helm-btn-primary">Install</button>
+      <button class="helm-btn helm-btn-primary" disabled>Install</button>
+      <button class="helm-btn helm-btn-secondary">View progress</button>
+      <button class="helm-btn helm-btn-ghost">View log</button>
+      <button class="helm-btn helm-btn-danger">Uninstall</button>
+      <button class="helm-btn helm-btn-danger-fill helm-btn-lg">Stop and switch</button>
+      <button class="helm-btn helm-btn-studio">Render</button>
+      <button class="helm-btn helm-btn-secondary helm-btn-sm">Details</button>
+      <button class="helm-btn helm-btn-secondary" id="focused">Focused</button>
+      <a class="helm-link" href="#">Open folder</a>
+    </div>
+  </section>
+
+  <section class="helm-stack">
+    <p class="helm-section-label">Chips</p>
+    <div class="helm-row">
+      <span class="helm-chip helm-status-idle"><span class="helm-dot"></span>Stopped</span>
+      <span class="helm-chip helm-status-running"><span class="helm-dot"></span>Running · 12:04</span>
+      <span class="helm-chip helm-status-info"><span class="helm-dot"></span>Downloading 43%</span>
+      <span class="helm-chip helm-status-warning"><span class="helm-dot"></span>Update available</span>
+      <span class="helm-chip helm-status-error"><span class="helm-dot"></span>Crashed · exit 137</span>
+      <span class="helm-kind">video+audio</span>
+    </div>
+  </section>
+
+  <section class="helm-row" style="align-items: flex-start">
+    <div class="helm-field" style="width: 240px">
+      <label class="helm-label" for="f1">Models root</label>
+      <input class="helm-input" id="f1" value="/Volumes/Models">
+      <span class="helm-hint">Linked directories are read-only.</span>
+    </div>
+    <div class="helm-field" style="width: 240px">
+      <label class="helm-label" for="f2">Seed</label>
+      <input class="helm-input" id="f2" aria-invalid="true" value="forty-two">
+    </div>
+    <div class="helm-field">
+      <label class="helm-label" for="f3">Precision</label>
+      <select class="helm-select" id="f3"><option>bf16</option><option>int8</option></select>
+    </div>
+    <div class="helm-field">
+      <span class="helm-label">Theme</span>
+      <div class="helm-segmented" role="group" aria-label="Theme">
+        <button class="helm-segment" aria-pressed="false">System</button>
+        <button class="helm-segment" aria-pressed="true">Light</button>
+        <button class="helm-segment" aria-pressed="false">Dark</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="helm-row" style="align-items: flex-start">
+    <article class="helm-card" style="width: 340px; --_helm-hue: var(--helm-status-info)">
+      <span class="helm-card-stripe"></span>
+      <div class="helm-row"><h3 class="helm-card-title">ltx studio</h3><span class="helm-kind">video+audio</span></div>
+      <p class="helm-card-desc">LTX-2.5 video with synchronised audio, MLX on Apple Silicon, and a description long enough to clamp.</p>
+      <p class="helm-meta">MLX · Metal · 21.4 GB · peak ~20 GB</p>
+      <div class="helm-card-actions">
+        <span class="helm-chip helm-status-running"><span class="helm-dot"></span>Running · 12:04</span>
+        <span class="helm-spacer"></span>
+        <button class="helm-btn helm-btn-secondary helm-btn-sm">Stop</button>
+        <button class="helm-btn helm-btn-primary helm-btn-sm">Open</button>
+      </div>
+    </article>
+    <div class="helm-panel" style="width: 420px">
+      <div class="helm-panel-header"><span class="helm-section-label">Processes</span><span class="helm-spacer"></span><span class="helm-micro">3 declared · 1 running</span></div>
+      <table class="helm-table">
+        <thead><tr><th>Process</th><th>Port</th><th>State</th></tr></thead>
+        <tbody>
+          <tr><td>engine</td><td class="helm-mono">:8781</td><td>Running · 0:38</td></tr>
+          <tr><td>studio</td><td class="helm-mono">:8782</td><td>Starting</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="helm-row" style="align-items: flex-start">
+    <ol class="helm-steps helm-panel" style="width: 460px">
+      <li class="helm-step"><span class="helm-step-glyph" data-state="done"></span><span class="helm-step-name">Clone repository</span><span class="helm-mono">48s</span><span class="helm-step-command">git clone --recurse-submodules https://github.com/janishar/h3c-studio</span></li>
+      <li class="helm-step"><span class="helm-step-glyph" data-state="running"></span><span class="helm-step-name">Check toolchain</span><span class="helm-mono">1.2s</span></li>
+      <li class="helm-step" data-state="failed"><span class="helm-step-glyph" data-state="failed"></span><span class="helm-step-name">Build the Metal engine</span><span class="helm-mono">exit 2</span><span class="helm-step-command">cd h3c &amp;&amp; make</span></li>
+      <li class="helm-step"><span class="helm-step-glyph" data-state="skipped"></span><span class="helm-step-name">Build the studio server</span><span class="helm-mono">skipped</span></li>
+      <li class="helm-step"><span class="helm-step-glyph"></span><span class="helm-step-name">Download weights</span><span class="helm-mono">pending</span></li>
+    </ol>
+    <div class="helm-stack" style="width: 320px">
+      <div class="helm-progress"><div class="helm-progress-fill" style="--_helm-progress: 62%"></div></div>
+      <p class="helm-meta">13.2 / 21.4 GB · 62%</p>
+      <div class="helm-progress helm-status-running"><div class="helm-progress-fill" style="--_helm-progress: 100%"></div></div>
+      <div class="helm-progress"><div class="helm-progress-indeterminate"></div></div>
+      <div class="helm-tabs"><button class="helm-tab" aria-selected="true">Output</button><button class="helm-tab">Requirements</button></div>
+      <div class="helm-toast"><span class="helm-chip helm-status-running"><span class="helm-dot"></span>Done</span>ltx studio installed in 6m 11s.</div>
+    </div>
+  </section>
+
+  <section class="helm-row" style="align-items: flex-start">
+    <div class="helm-dialog" role="dialog" aria-labelledby="d1" style="animation: none">
+      <h2 class="helm-dialog-title" id="d1">Stop ltx studio to launch h3 studio?</h2>
+      <p class="helm-dialog-body">Only one studio can hold a model in memory at a time. ltx studio will be stopped.</p>
+      <div class="helm-dialog-actions">
+        <button class="helm-btn helm-btn-secondary">Cancel</button>
+        <button class="helm-btn helm-btn-danger-fill helm-btn-lg">Stop ltx studio and launch h3 studio</button>
+      </div>
+    </div>
+    <pre class="helm-terminal" style="width: 460px; min-height: 0">==&gt; cd h3c &amp;&amp; make
+<span class="helm-log-muted">clang -O3 -std=c17 -c src/h3_metal.c</span>
+<span class="helm-log-warning">warning: unused variable 'n'</span>
+<span class="helm-log-error">fatal error: 'Metal/Metal.h' file not found</span>
+<span class="helm-log-accent">==&gt; step failed after 2m 41s (exit 2)</span></pre>
+  </section>
+</main>
+<script>
+  document.getElementById("focused").focus({ focusVisible: true });
+  document.documentElement.dataset.ready = "1";
+</script>
+</body>
+</html>

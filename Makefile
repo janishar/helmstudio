@@ -14,7 +14,7 @@ SHELL := /bin/bash
 GO ?= go
 HELM ?= ./bin/helm
 
-.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance css
+.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css
 
 # The Go modules besides the root: the runtime SDK (stdlib only), its embedded
 # provider, and the conformance suite (docs/decisions.md M4 Q2, Q25).
@@ -26,7 +26,7 @@ GENERATED := packages/helm-runtime-sdk/go/zz_types.go packages/helm-runtime-sdk/
 	packages/helm-runtime-sdk/python/helm_runtime_sdk/_generated.py \
 	packages/helm-runtime-sdk/node/src/generated.js
 
-gate: fmt vet vet-linux boundaries deps drift test sdk conformance validate
+gate: fmt vet vet-linux boundaries deps drift test sdk conformance visual validate
 	@echo "gate: green"
 
 fmt:
@@ -118,7 +118,19 @@ deps:
 
 test:
 	@if [ ! -f go.mod ]; then echo "test: no go.mod yet, skipping"; \
-	else $(GO) test ./...; fi
+	else $(GO) test $$($(GO) list ./... | grep -v '/test/visual$$'); fi
+
+# Visual regression of helm-css in both themes, and the theme reaching a
+# running studio's page, in a real Chrome driven over its DevTools pipe
+# (docs/decisions.md M6 Q16). A missing browser fails unless
+# HELM_ALLOW_MISSING_BROWSER is set; HELM_CHROME names one.
+visual:
+	@$(GO) test -count=1 ./test/visual/
+
+# Regenerate the visual goldens and record the Chrome major they were made
+# with. Review the images before committing them.
+golden:
+	@HELM_UPDATE_GOLDEN=1 $(GO) test -count=1 -run TestHelmCSSMatchesItsGoldensInBothThemes ./test/visual/ && echo "golden: written to test/visual/golden; review them"
 
 # Build helm.css, helm.min.css and tokens.json from helm-css's four layers.
 css:

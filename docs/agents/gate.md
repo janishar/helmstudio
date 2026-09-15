@@ -14,6 +14,12 @@ M1 and grows as the contracts it checks come into existence.
 | conformance suite × both providers | M4 |
 | visual regression, both themes | M6 |
 
+**Visual regression (`make visual`).**
+- **What it runs.** An installed Chrome, driven over its DevTools pipe by Go's standard library (`internal/chrome`). `HELM_CHROME` names the binary. A missing browser fails the gate unless `HELM_ALLOW_MISSING_BROWSER` is set.
+- **The goldens.** `test/visual/golden/*.png` are compared exactly, pixel for pixel. They are tied to the Chrome major in `test/visual/golden/CHROME_MAJOR`; a different major fails and asks for a deliberate `make golden` and a look at the images.
+- **Theme end to end.** The same target runs the test that the launcher's theme reaches a running studio's page.
+- **Contrast and token names** are checked by `go test` in `packages/helm-css`, against 03 §2a and §2b.
+
 The Linux run is deliberate. macOS has a case-insensitive filesystem, which
 hides a class of path bug that a Linux run surfaces on the first try.
 

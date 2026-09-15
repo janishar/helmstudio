@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>helm-css layout</title>
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.setAttribute("data-theme", t);
+</script>
+<link rel="stylesheet" href="/sdk/v1/helm.css">
+</head>
+<body>
+<div class="helm-app">
+  <a class="helm-skip-link" href="#main">Skip to content</a>
+  <header class="helm-topbar">
+    <span class="helm-brand">helmstudio</span>
+    <span class="helm-micro">127.0.0.1:8700</span>
+    <span class="helm-spacer"></span>
+    <span class="helm-chip helm-status-running"><span class="helm-dot"></span>ltx studio · 12:04</span>
+  </header>
+  <nav class="helm-nav" aria-label="Main">
+    <a class="helm-nav-link" href="#" aria-current="page">Studios</a>
+    <a class="helm-nav-link" href="#">Models &amp; disk</a>
+    <a class="helm-nav-link" href="#">Settings</a>
+  </nav>
+  <main class="helm-main" id="main">
+    <div class="helm-page-header">
+      <h1 class="helm-title">h3 studio</h1>
+      <span class="helm-chip helm-status-error"><span class="helm-dot"></span>Install failed · build</span>
+      <span class="helm-spacer"></span>
+      <button class="helm-btn helm-btn-primary">Retry from failed step</button>
+    </div>
+    <div class="helm-work">
+      <aside class="helm-work-left helm-rail">
+        <p class="helm-section-label">Requirements</p>
+        <div class="helm-row"><span class="helm-body">Apple Silicon</span><span class="helm-spacer"></span><span class="helm-mono">arm64</span></div>
+        <div class="helm-row"><span class="helm-body">32 GB memory</span><span class="helm-spacer"></span><span class="helm-mono">64 GB</span></div>
+      </aside>
+      <section class="helm-work-centre helm-panel">
+        <div class="helm-panel-header"><span class="helm-section-label">Install</span><span class="helm-spacer"></span><span class="helm-micro">step 3 of 5</span></div>
+        <div class="helm-panel-body helm-stack">
+          <p class="helm-body">Build the Metal engine failed. make exited with code 2.</p>
+          <div class="helm-progress"><div class="helm-progress-fill" style="--_helm-progress: 40%"></div></div>
+        </div>
+      </section>
+      <section class="helm-work-right">
+        <pre class="helm-terminal">==&gt; cd h3c &amp;&amp; make
+<span class="helm-log-error">make: *** Error 2</span></pre>
+      </section>
+    </div>
+    <p class="helm-section-label" style="margin-top: var(--helm-space-6)">Studios</p>
+    <div class="helm-grid-cards">
+      <article class="helm-card" style="--_helm-hue: var(--helm-status-info)"><span class="helm-card-stripe"></span><h3 class="helm-card-title">ltx studio</h3><p class="helm-meta">MLX · Metal · 21.4 GB</p></article>
+      <article class="helm-card" style="--_helm-hue: var(--helm-status-warning)"><span class="helm-card-stripe"></span><h3 class="helm-card-title">h3 studio</h3><p class="helm-meta">Metal kernel · peak ~21 GB</p></article>
+      <article class="helm-card"><span class="helm-card-stripe"></span><h3 class="helm-card-title">iris studio</h3><p class="helm-meta">Metal kernel · 9.2 GB</p></article>
+    </div>
+  </main>
+</div>
+<script>document.documentElement.dataset.ready = "1";</script>
+</body>
+</html>

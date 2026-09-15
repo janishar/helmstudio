@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>helm-css tokens</title>
+<script>
+  // ?theme=light|dark sets data-theme; no parameter leaves the system preference.
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.setAttribute("data-theme", t);
+</script>
+<link rel="stylesheet" href="/sdk/v1/helm.css">
+<style>
+  .helm-fixture-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--helm-space-2); }
+  .helm-fixture-swatch { display: flex; align-items: center; gap: var(--helm-space-2); }
+  .helm-fixture-box { flex: none; width: 64px; height: 28px; border: 1px solid var(--helm-border-hairline); border-radius: var(--helm-radius-sm); }
+  .helm-fixture-bar { height: 8px; background: var(--helm-text-secondary); }
+</style>
+</head>
+<body>
+<main class="helm-main">
+  <h1 class="helm-title">Tokens</h1>
+  <p class="helm-section-label">Colour</p>
+  <div class="helm-fixture-grid" id="colours"></div>
+  <p class="helm-section-label">Space</p>
+  <div class="helm-stack" id="space"></div>
+  <p class="helm-section-label">Radius and controls</p>
+  <div class="helm-row" id="radius"></div>
+  <p class="helm-section-label">Type</p>
+  <div class="helm-stack" id="type"></div>
+</main>
+<script>
+  // Every token in tokens.json gets a specimen, so a token added to the table
+  // shows up here without editing this page.
+  fetch("/sdk/v1/tokens.json").then((r) => r.json()).then((tok) => {
+    const add = (parent, html) => { const d = document.createElement("div"); d.innerHTML = html; parent.appendChild(d.firstElementChild); };
+    for (const name of Object.keys(tok.themes.dark).sort()) {
+      const style = name === "--helm-shadow-dialog" ? `box-shadow: var(${name}); background: var(--helm-ground-raised)` : `background: var(${name})`;
+      add(document.getElementById("colours"), `<div class="helm-fixture-swatch"><span class="helm-fixture-box" style="${style}"></span><span class="helm-mono">${name.slice(7)}</span></div>`);
+    }
+    const names = Object.keys(tok.tokens).sort();
+    for (const name of names.filter((n) => n.startsWith("--helm-space-"))) {
+      add(document.getElementById("space"), `<div class="helm-row"><span class="helm-mono" style="width: 120px">${name.slice(7)}</span><span class="helm-fixture-bar" style="width: calc(var(${name}) * 4)"></span></div>`);
+    }
+    for (const name of names.filter((n) => n.startsWith("--helm-radius-") || n.startsWith("--helm-control-"))) {
+      const r = name.startsWith("--helm-radius-") ? `border-radius: var(${name}); height: 40px` : `height: var(${name}); border-radius: var(--helm-radius-sm)`;
+      add(document.getElementById("radius"), `<span class="helm-fixture-box" title="${name}" style="width: 80px; ${r}"></span>`);
+    }
+    for (const name of names.filter((n) => n.startsWith("--helm-type-"))) {
+      add(document.getElementById("type"), `<div style="font: var(${name})">${name.slice(12)} · 800×448 · 124f · seed 42 · Studios</div>`);
+    }
+    document.documentElement.dataset.ready = "1";
+  });
+</script>
+</body>
+</html>
