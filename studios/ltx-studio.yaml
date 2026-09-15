@@ -8,11 +8,10 @@
 # Written from /Users/janisharali/GenAI/ltx/ltx-2-studio at commit
 # bc82d75f0182e3631a6cbcd3b704e74445a32c5f (pinned below as `ref`). See
 # docs/agents/reports/00-contracts.md for what could and could not be
-# verified in code, and for an unresolved question this file raises rather
-# than answers: whether `uv sync --all-extras` here is meant to run inside
-# the per-studio venv the daemon creates from `python.version` below, or
-# makes its own .venv beside it — {venv} exists as a process.cmd
-# substitution but build[].run documents no substitution variables at all.
+# verified in code. The venv question it once raised is answered
+# (docs/decisions.md M5 Q5): the daemon creates the environment from
+# `python.version` and activates it for every build step and process, so
+# `uv sync` installs into it and `python` below runs from it.
 id: ltx-studio
 name: ltx studio
 description: MLX video and audio generation against a user-selected LTX checkpoint.
@@ -36,8 +35,10 @@ runtime:
 capabilities: [kv, assets, gallery, timeline]
 network: [huggingface.co, cdn-lfs.huggingface.co]
 build:
+  # --locked: install exactly uv.lock, and fail rather than rewrite it in the
+  # checkout (M5 Q9).
   - name: Sync dependencies
-    run: uv sync --all-extras
+    run: uv sync --locked --all-extras
 # Lightricks/LTX-2.5 is one repo of individually-named files, several marked
 # optional in the README's own table. `ltx` is the set the README's
 # "recommended" download command fetches (~71 GB); `ltx_dev_transformer`
@@ -72,8 +73,15 @@ processes:
     role: main
     heavy: true
     cwd: web
-    cmd: "uv run python server.py --host 127.0.0.1 --port {port} --model {models.ltx}"
+    # Not `uv run`: it would sync the environment, and reach the network, at
+    # every launch (M5 Q9). The environment is active, so python is its own.
+    cmd: "python server.py --host 127.0.0.1 --port {port} --model {models.ltx}"
     port: { prefer: 8720 }
     health: { tcp: true, timeout_s: 30, interval_s: 2 }
+    # /api/queue answers a JSON list, not the busy contract (M5 Q12), so the
+    # switch dialog reads ltx studio as unknown until ltx serves one; move this
+    # path, and `ref`, when it does. Its renders run in their own session
+    # (web/server.py:765) and it has no SIGTERM handler; helmstudio stops them
+    # as detached descendants (M5 Q11), and a handler upstream is still wanted.
     busy: { path: /api/queue }
     ui: /

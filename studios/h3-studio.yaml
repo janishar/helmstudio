@@ -73,5 +73,8 @@ processes:
     cmd: "./dist/h3studio --h3 ./h3c/h3 --model {models.fl2va} --port {port} --root {data}"
     port: { prefer: 8710 }
     health: { tcp: true, timeout_s: 30, interval_s: 2 }
+    # /api/queue does not answer the busy contract (M5 Q12), so the switch
+    # dialog reads h3 as unknown until h3 serves one; move this path, and
+    # `ref`, when it does.
     busy: { path: /api/queue }
     ui: /

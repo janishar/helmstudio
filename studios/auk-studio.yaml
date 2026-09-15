@@ -8,12 +8,15 @@
 # Written from /Users/janisharali/GenAI/audio/AuK at commit
 # 61ae02a65c947a8c499a27f963165b351416a146 (pinned below as `ref`). See
 # docs/agents/reports/00-contracts.md for what could and could not be
-# verified in code, and for an unresolved question this file raises rather
-# than answers: whether `uv pip install -e .` here is meant to run inside
-# the per-studio venv the daemon creates from `python.version` below — {venv}
-# exists as a process.cmd substitution but build[].run documents no
-# substitution variables at all, and this manifest cannot currently wire any
-# of the three weights below into `cmd` either way (see the report).
+# verified in code. The venv question it once raised is answered
+# (docs/decisions.md M5 Q5): the daemon creates the environment from
+# `python.version` and activates it for every build step and process, so
+# `uv pip install` installs into it and `python3` below runs from it. AuK has
+# no lock file, so its dependencies are reproducible only to the Python minor
+# version and whatever resolves on the day (M5 Q9). This manifest still cannot
+# wire any of the three weights below into `cmd`: web/server.py reads a
+# hard-coded ckpts/ inside the checkout (M5 Q10). AuK needs flags upstream,
+# and `cmd` and `ref` change when they exist.
 id: auk-studio
 name: AuK studio
 description: PyTorch speech and voice generation on mps, with AuK and AuK-Flash checkpoints.
@@ -62,5 +65,8 @@ processes:
     cmd: "python3 server.py --host 127.0.0.1 --port {port}"
     port: { prefer: 8420 }
     health: { path: /api/health, timeout_s: 30, interval_s: 2 }
+    # /api/health answers 200 without a busy boolean, so the switch dialog
+    # reads AuK as unknown until it serves the busy contract (M5 Q12); move
+    # this path, and `ref`, when it does.
     busy: { path: /api/health }
     ui: /
