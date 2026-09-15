@@ -14,9 +14,19 @@ SHELL := /bin/bash
 GO ?= go
 HELM ?= ./bin/helm
 
-.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean
+.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance
 
-gate: fmt vet vet-linux boundaries deps test validate
+# The Go modules besides the root: the runtime SDK (stdlib only), its embedded
+# provider, and the conformance suite (docs/decisions.md M4 Q2, Q25).
+MODULES := packages/helm-runtime-sdk/go packages/helm-runtime-sdk/go/embedded test/conformance
+
+# Every file api/gen writes. A hand edit to any of them fails drift.
+GENERATED := packages/helm-runtime-sdk/go/zz_types.go packages/helm-runtime-sdk/go/zz_client.go \
+	internal/api/studioapi/zz_server.go \
+	packages/helm-runtime-sdk/python/helm_runtime_sdk/_generated.py \
+	packages/helm-runtime-sdk/node/src/generated.js
+
+gate: fmt vet vet-linux boundaries deps drift test sdk conformance validate
 	@echo "gate: green"
 
 fmt:
@@ -27,12 +37,12 @@ fmt:
 
 vet:
 	@if [ ! -f go.mod ]; then echo "vet: no go.mod yet, skipping"; \
-	else $(GO) vet ./... && echo "vet: clean"; fi
+	else $(GO) vet ./... && for m in $(MODULES); do (cd $$m && $(GO) vet ./...) || exit 1; done && echo "vet: clean"; fi
 
 # Type-checks the tree as Linux sees it, so the Linux implementation behind
 # each platform seam cannot silently stop compiling. Not a test run.
 vet-linux:
-	@GOOS=linux GOARCH=arm64 $(GO) vet ./... && echo "vet-linux: clean"
+	@GOOS=linux GOARCH=arm64 $(GO) vet ./... && for m in $(MODULES); do (cd $$m && GOOS=linux GOARCH=arm64 $(GO) vet ./...) || exit 1; done && echo "vet-linux: clean"
 
 # Only internal/platform may make an operating-system decision or find the home
 # directory; every other path comes from its directories helper. This is a text
@@ -109,6 +119,29 @@ deps:
 test:
 	@if [ ! -f go.mod ]; then echo "test: no go.mod yet, skipping"; \
 	else $(GO) test ./...; fi
+
+# Regenerate the clients and the studio-api router from api/openapi.yaml.
+generate:
+	@$(GO) run ./api/gen && echo "generate: written"
+
+# Generate into a scratch tree and compare with what is checked in, so a hand
+# edit, or a contract change nobody regenerated, fails whether or not the files
+# are committed yet.
+drift:
+	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	$(GO) run ./api/gen -root "$$tmp" || exit 1; \
+	fail=0; for f in $(GENERATED); do \
+	  if ! cmp -s "$$tmp/$$f" "$$f"; then echo "drift: $$f differs from what api/gen generates from api/openapi.yaml; run make generate"; fail=1; fi; \
+	done; [ $$fail -eq 0 ] && echo "drift: generated clients match api/openapi.yaml"
+
+# The runtime SDK and embedded provider modules' own tests.
+sdk:
+	@for m in packages/helm-runtime-sdk/go packages/helm-runtime-sdk/go/embedded; do (cd $$m && $(GO) test ./...) || exit 1; done
+
+# One suite against the daemon over HTTP and the embedded provider in process,
+# plus the Python and Node clients' smoke tests (docs/decisions.md M4 Q25).
+conformance:
+	@cd test/conformance && $(GO) test -count=1 ./...
 
 build:
 	@if [ ! -f go.mod ]; then echo "build: no go.mod yet, skipping"; \
