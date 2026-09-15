@@ -1,0 +1,66 @@
+# PLACEHOLDER SHAPE, pending an open decision (docs/decisions.md, "Open, not
+# yet decided": studios/*.yaml as a bare pointer vs a full manifest). This is
+# a full manifest only because schema/manifest.json has no pointer shape to
+# validate a pointer against, and M0's gate runs `helm validate studios/*.yaml`.
+# It is not a reading of docs/design/05-sdk-and-custom-studios.md §5a, which
+# describes a four-line pointer. When that decision lands, this file changes.
+#
+# Written from /Users/janisharali/GenAI/audio/AuK at commit
+# 61ae02a65c947a8c499a27f963165b351416a146 (pinned below as `ref`). See
+# docs/agents/reports/00-contracts.md for what could and could not be
+# verified in code, and for an unresolved question this file raises rather
+# than answers: whether `uv pip install -e .` here is meant to run inside
+# the per-studio venv the daemon creates from `python.version` below — {venv}
+# exists as a process.cmd substitution but build[].run documents no
+# substitution variables at all, and this manifest cannot currently wire any
+# of the three weights below into `cmd` either way (see the report).
+id: auk-studio
+name: AuK studio
+description: PyTorch speech and voice generation on mps, with AuK and AuK-Flash checkpoints.
+kinds: [audio]
+license: MIT
+repo: https://github.com/janishar/AuK
+ref: 61ae02a65c947a8c499a27f963165b351416a146
+python: { version: "3.10" }
+peak_ram_gb: 25 # web/README.md: "each is ~15-25GB" per checkpoint variant — upper bound, unverified against a real checkpoint
+requires:
+  os: [darwin]
+  arch: [arm64]
+  tools: [uv]
+runtime:
+  framework: pytorch
+  # web/server.py:53 (_default_device) supports cuda too. Two defensible
+  # manifests follow from that: widen requires to linux/amd64 and keep cuda,
+  # or keep darwin/arm64 and match docs/design/01-prd.md §13's table (mps,
+  # cpu). This takes the second; the reason is in docs/decisions.md (M0,
+  # "AuK's backends").
+  backends: [mps, cpu]
+  precision: [bf16]
+  language: python
+capabilities: [kv, assets, gallery]
+network: [huggingface.co, cdn-lfs.huggingface.co]
+build:
+  - name: Install the core package
+    run: uv pip install -e .
+  - name: Install the web server
+    run: uv pip install -r web/requirements.txt
+weights:
+  - name: auk
+    repo: tencent/AuK
+    dest: AuK
+  - name: auk_flash
+    repo: tencent/AuK-Flash
+    dest: AuK-Flash
+  - name: qwen
+    repo: Qwen/Qwen2.5-Omni-3B
+    dest: Qwen2.5-Omni-3B
+processes:
+  - name: studio
+    role: main
+    heavy: true
+    cwd: web
+    cmd: "python3 server.py --host 127.0.0.1 --port {port}"
+    port: { prefer: 8420 }
+    health: { path: /api/health, timeout_s: 30, interval_s: 2 }
+    busy: { path: /api/health }
+    ui: /

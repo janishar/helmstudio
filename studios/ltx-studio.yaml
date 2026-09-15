@@ -1,0 +1,79 @@
+# PLACEHOLDER SHAPE, pending an open decision (docs/decisions.md, "Open, not
+# yet decided": studios/*.yaml as a bare pointer vs a full manifest). This is
+# a full manifest only because schema/manifest.json has no pointer shape to
+# validate a pointer against, and M0's gate runs `helm validate studios/*.yaml`.
+# It is not a reading of docs/design/05-sdk-and-custom-studios.md §5a, which
+# describes a four-line pointer. When that decision lands, this file changes.
+#
+# Written from /Users/janisharali/GenAI/ltx/ltx-2-studio at commit
+# bc82d75f0182e3631a6cbcd3b704e74445a32c5f (pinned below as `ref`). See
+# docs/agents/reports/00-contracts.md for what could and could not be
+# verified in code, and for an unresolved question this file raises rather
+# than answers: whether `uv sync --all-extras` here is meant to run inside
+# the per-studio venv the daemon creates from `python.version` below, or
+# makes its own .venv beside it — {venv} exists as a process.cmd
+# substitution but build[].run documents no substitution variables at all.
+id: ltx-studio
+name: ltx studio
+description: MLX video and audio generation against a user-selected LTX checkpoint.
+kinds: [video, audio]
+license: MIT
+repo: https://github.com/janishar/ltx-2-studio
+ref: bc82d75f0182e3631a6cbcd3b704e74445a32c5f
+python: { version: "3.11" }
+peak_ram_gb: 21 # README: 21 GiB at the validated default (short clips, int8 quantize-on-load); a 5s 1280x704 clip peaked ~76 GiB and swapped on the 64 GB test machine — one number cannot carry this range, see the report
+requires:
+  os: [darwin]
+  arch: [arm64]
+  tools: [uv]
+  ram_gb: 64
+  disk_gb: 90
+runtime:
+  framework: mlx
+  backends: [metal]
+  precision: [bf16, int8]
+  language: python
+capabilities: [kv, assets, gallery, timeline]
+network: [huggingface.co, cdn-lfs.huggingface.co]
+build:
+  - name: Sync dependencies
+    run: uv sync --all-extras
+# Lightricks/LTX-2.5 is one repo of individually-named files, several marked
+# optional in the README's own table. `ltx` is the set the README's
+# "recommended" download command fetches (~71 GB); `ltx_dev_transformer`
+# unlocks two-stage/HQ/retake/extend and is the one the README prices
+# separately (~42 GB). Its exact path is inferred from the sibling
+# distilled-transformer file's naming pattern, not confirmed by a literal
+# download command in the README — flagged in the report.
+weights:
+  - name: ltx
+    repo: Lightricks/LTX-2.5
+    dest: LTX-2.5
+    files:
+      - diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors
+      - text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors
+      - vae/ltx-2.5-video-vae-conv-bf16.safetensors
+      - vae/ltx-2.5-audio-vae-bf16.safetensors
+      - latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+      - model_patches/ltx-2.5-duration-head-bf16.safetensors
+    size_gb: 71
+  - name: ltx_dev_transformer
+    repo: Lightricks/LTX-2.5
+    dest: LTX-2.5
+    files: ["diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors"]
+    size_gb: 42
+    optional: true
+  - name: gemma
+    repo: mlx-community/gemma-3-12b-it-4bit
+    dest: gemma-3-12b-it-4bit
+    optional: true
+processes:
+  - name: studio
+    role: main
+    heavy: true
+    cwd: web
+    cmd: "uv run python server.py --host 127.0.0.1 --port {port} --model {models.ltx}"
+    port: { prefer: 8720 }
+    health: { tcp: true, timeout_s: 30, interval_s: 2 }
+    busy: { path: /api/queue }
+    ui: /

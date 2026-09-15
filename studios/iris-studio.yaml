@@ -1,0 +1,52 @@
+# PLACEHOLDER SHAPE, pending an open decision (docs/decisions.md, "Open, not
+# yet decided": studios/*.yaml as a bare pointer vs a full manifest). This is
+# a full manifest only because schema/manifest.json has no pointer shape to
+# validate a pointer against, and M0's gate runs `helm validate studios/*.yaml`.
+# It is not a reading of docs/design/05-sdk-and-custom-studios.md §5a, which
+# describes a four-line pointer. When that decision lands, this file changes.
+#
+# Written from /Users/janisharali/GenAI/minimax-h3-mlx/iris-studio at commit
+# b4f857f4d484f91cbbd6e48ba79f3879e49a253c (pinned below as `ref`). See
+# docs/agents/reports/00-contracts.md for what could and could not be
+# verified in code.
+id: iris-studio
+name: iris studio
+description: Native Metal image generation across the FLUX.2 Klein and Z-Image checkpoints.
+kinds: [image]
+license: MIT
+repo: https://github.com/janishar/iris-studio
+ref: b4f857f4d484f91cbbd6e48ba79f3879e49a253c
+submodules: true
+peak_ram_gb: 30 # README: "fits your disk/RAM; ~16-30GB per model" — upper bound, unverified against a real checkpoint
+requires:
+  os: [darwin]
+  arch: [arm64]
+  tools: [git, make, gcc, xxd, go]
+runtime:
+  framework: native-kernel
+  backends: [metal]
+  precision: [bf16]
+  language: c
+capabilities: [kv, assets, gallery]
+network: [huggingface.co, cdn-lfs.huggingface.co]
+build:
+  - name: Build the iris engine
+    cwd: iris.c
+    run: make mps
+  - name: Build the studio server
+    cwd: .
+    run: go build -o iris-studio .
+weights:
+  - { name: flux_klein_4b, repo: black-forest-labs/FLUX.2-klein-4B, dest: flux-klein-4b, selectable: true }
+  - { name: flux_klein_4b_base, repo: black-forest-labs/FLUX.2-klein-base-4B, dest: flux-klein-4b-base, selectable: true }
+  - { name: flux_klein_9b, repo: black-forest-labs/FLUX.2-klein-9B, dest: flux-klein-9b, selectable: true }
+  - { name: flux_klein_9b_base, repo: black-forest-labs/FLUX.2-klein-base-9B, dest: flux-klein-9b-base, selectable: true }
+  - { name: zimage_turbo, repo: Tongyi-MAI/Z-Image-Turbo, dest: zimage-turbo, selectable: true }
+processes:
+  - name: studio
+    role: main
+    heavy: true
+    cmd: "./iris-studio --iris ./iris.c/iris --model {models.selected} --port {port}"
+    port: { prefer: 8720 }
+    health: { tcp: true, timeout_s: 30, interval_s: 2 }
+    ui: /

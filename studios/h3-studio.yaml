@@ -1,0 +1,76 @@
+# PLACEHOLDER SHAPE, pending an open decision (docs/decisions.md, "Open, not
+# yet decided": studios/*.yaml as a bare pointer vs a full manifest). This is
+# a full manifest only because schema/manifest.json has no pointer shape to
+# validate a pointer against, and M0's gate runs `helm validate studios/*.yaml`.
+# It is not a reading of docs/design/05-sdk-and-custom-studios.md §5a, which
+# describes a four-line pointer. When that decision lands, this file changes.
+#
+# Written from /Users/janisharali/GenAI/minimax-h3-mlx/h3c-studio at commit
+# a6eb54f3c9d8c3e711bab22574ec6599399a03f9 (pinned below as `ref`). See
+# docs/agents/reports/00-contracts.md for what could and could not be
+# verified in code.
+id: h3-studio
+name: h3 studio
+description: Native Metal video and audio generation from MiniMax-H3, no PyTorch in the loop.
+kinds: [video, audio]
+hue: { dark: "#ffb454", light: "#b5721a" }
+license: MIT
+repo: https://github.com/janishar/h3c-studio
+ref: a6eb54f3c9d8c3e711bab22574ec6599399a03f9
+submodules: true
+requires:
+  os: [darwin]
+  arch: [arm64]
+  tools: [git, make, cc, go, ffmpeg]
+  ram_gb: 64
+  disk_gb: 200
+runtime:
+  framework: native-kernel
+  backends: [metal]
+  precision: [bf16, int8]
+  language: c
+capabilities: [kv, assets, gallery, timeline]
+network: [huggingface.co, cdn-lfs.huggingface.co]
+storage:
+  collections:
+    - name: takes
+      index: [seed, model, session]
+      fts: [prompt]
+  quota: { records: 100000, kv_bytes: 8388608 }
+sdk: { runtime: "^1", css: "^1" }
+build:
+  - name: Build the Metal engine
+    cwd: h3c
+    run: make -j8
+  - name: Build the studio server
+    cwd: .
+    run: go build -o dist/h3studio .
+# FL2VA and Ref2VA are two pipelines inside one MiniMaxAI/MiniMax-H3 repo,
+# both expected as subdirectories of the single directory h3studio's --model
+# flag points at (server/model.go: "FL2VA always, Ref2VA for references").
+# Both entries share dest so {models.fl2va} and {models.ref2va} resolve to
+# the same directory; files scopes them to their own subtree. This does not
+# reproduce the README's manual dedup-via-symlink trick (~66 GB instead of
+# ~196 GB) — the schema has no field for "these files are identical across
+# two weights, hardlink them" — see the report.
+weights:
+  - name: fl2va
+    repo: MiniMaxAI/MiniMax-H3
+    dest: MiniMax-H3
+    files: ["FL2VA/**"]
+    size_gb: 62
+  - name: ref2va
+    repo: MiniMaxAI/MiniMax-H3
+    dest: MiniMax-H3
+    files: ["Ref2VA/**"]
+    size_gb: 134
+    optional: true
+processes:
+  - name: studio
+    role: main
+    heavy: true
+    cmd: "./dist/h3studio --h3 ./h3c/h3 --model {models.fl2va} --port {port} --root {data}"
+    port: { prefer: 8710 }
+    health: { tcp: true, timeout_s: 30, interval_s: 2 }
+    busy: { path: /api/queue }
+    ui: /
