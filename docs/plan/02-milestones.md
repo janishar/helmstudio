@@ -25,7 +25,7 @@ for an integration window on an Apple Silicon Mac.
 | M4 | **API and SDK** — OpenAPI, schema v2, endpoints, tokens, media engine, clients, embedded provider, conformance, `helm dev` | 10–12d | h3 records real takes with provenance |
 | M5 | Python studios — uv environments, ltx and AuK, the switch dialog | 6–7d | three studios side by side |
 | M6 | Design and UI — helm-css, fourteen screens, ui-sdk components, h3's token migration (note, M6 Q2, Q4, Q13: the named screens in the M6 brief, not fourteen; two briefs, M6a and M6b; `helm-timeline` moves to M8) | 10–12d | theme toggle re-themes running studios |
-| M7 | Library, editor and iris — selectable weights, the three-source library, the editor, import and export, the approval screen | 6–8d | wrap a repo with no manifest |
+| M7 | Library, editor and iris — selectable weights, the three-source library, the editor, import and export, the approval screen (note, M7 Q2, Q16: two briefs, M7a and M7b, ordered M6a's review → M7a → M6b → M7b; the smoke harness, `helm doctor --studio` and `helm studio init` go to a milestone not yet placed) | 6–8d | wrap a repo with no manifest |
 | M8 | Timeline and export — the document, the editor, conform and stream-copy, golden tests | 10–12d | **most of it** |
 | M9 | Mac app and release — Electron, handshake, browser auth and CSRF, signing, notarisation | 7–9d | **all of it** |
 | M10 | Docs and site | 8–10d | quickstart on a clean machine |

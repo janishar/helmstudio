@@ -155,6 +155,11 @@ reviewed first; **M6b** is built on a reviewed M6a.
 Built on a reviewed M6a. Its file list and DoD are confirmed at M6b's kickoff
 against what M6a's review changed.
 
+(Amended 2026-09-16, M7 Q2: M6b is also built after a reviewed M7a, because
+M7a changes `/studios`, `:install` and `:launch` under the screens M6b builds.
+Until M7b draws 03 §13, M6b's Install shows M7a's approval preview as a plain
+dialog.)
+
 ### Tasks
 
 7. **helm-ui-sdk** (`packages/helm-ui-sdk/`): `helm-terminal`, `helm-gallery`,
