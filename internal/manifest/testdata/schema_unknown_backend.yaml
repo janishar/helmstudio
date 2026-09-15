@@ -1,0 +1,10 @@
+id: fixture-unknown-backend
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [quantum] }
+repo: https://example.com/fixture
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio --port {port}"

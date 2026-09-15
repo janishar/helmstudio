@@ -1,0 +1,23 @@
+id: fixture-cycle-two-disjoint
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+processes:
+  - name: a
+    role: main
+    cmd: "./bin/a --port {port}"
+    depends_on: [b]
+  - name: b
+    role: sidecar
+    cmd: "./bin/b"
+    depends_on: [a, c]
+  - name: c
+    role: sidecar
+    cmd: "./bin/c"
+    depends_on: [d]
+  - name: d
+    role: sidecar
+    cmd: "./bin/d"
+    depends_on: [c]

@@ -1,0 +1,19 @@
+id: fixture-cycle-three
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+processes:
+  - name: a
+    role: main
+    cmd: "./bin/a --port {port}"
+    depends_on: [b]
+  - name: b
+    role: sidecar
+    cmd: "./bin/b"
+    depends_on: [c]
+  - name: c
+    role: sidecar
+    cmd: "./bin/c"
+    depends_on: [a]

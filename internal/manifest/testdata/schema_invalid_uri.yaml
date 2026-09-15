@@ -1,0 +1,10 @@
+id: fixture-invalid-uri
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: "not a uri at all"
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio --port {port}"

@@ -1,0 +1,13 @@
+id: fixture-main-two
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio --port {port}"
+  - name: studio2
+    role: main
+    cmd: "./bin/studio2 --port {port}"

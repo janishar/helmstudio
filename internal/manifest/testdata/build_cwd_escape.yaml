@@ -1,0 +1,12 @@
+id: fixture-build-cwd-escape
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+build:
+  - { name: escape, cwd: "../../etc", run: "make" }
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio --port {port}"

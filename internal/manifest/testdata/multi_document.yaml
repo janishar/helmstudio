@@ -1,0 +1,21 @@
+id: fixture-multi-document
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio --port {port}"
+---
+id: fixture-multi-document-second
+name: second document
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture2
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio2 --port {port}"

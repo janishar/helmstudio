@@ -1,0 +1,11 @@
+id: fixture-cycle-self
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio --port {port}"
+    depends_on: [studio]

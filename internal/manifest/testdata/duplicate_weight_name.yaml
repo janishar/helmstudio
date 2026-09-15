@@ -1,0 +1,13 @@
+id: fixture-duplicate-weight-name
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+weights:
+  - { name: w1, repo: org/repo, dest: w1a }
+  - { name: w1, repo: org/repo2, dest: w1b }
+processes:
+  - name: studio
+    role: main
+    cmd: "./bin/studio --model {models.w1} --port {port}"

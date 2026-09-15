@@ -1,0 +1,10 @@
+id: fixture-main-zero
+name: fixture studio
+kinds: [image]
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: native-kernel, backends: [metal] }
+repo: https://example.com/fixture
+processes:
+  - name: studio
+    role: sidecar
+    cmd: "./bin/studio --port {port}"
