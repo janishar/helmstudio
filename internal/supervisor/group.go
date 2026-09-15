@@ -235,10 +235,15 @@ func (g *group) spawn(p *proc) error {
 		if err := os.MkdirAll(filepath.Dir(abs), 0o700); err != nil {
 			return fmt.Errorf("creating the log directory for %s: %w", p.name, err)
 		}
-		p.log = newLogStream(abs, s.cfg.Log)
+		ls := newLogStream(abs, s.cfg.Log)
 		rowID := p.rowID
-		p.log.onTruncate = func() { s.markLogTruncated(rowID) }
-		go p.log.run(s.cfg.LogTick)
+		ls.onTruncate = func() { s.markLogTruncated(rowID) }
+		// SubscribeLogs reads p.log under s.mu, so it is written under it too
+		// (found by M4's helm dev test under the race detector).
+		s.mu.Lock()
+		p.log = ls
+		s.mu.Unlock()
+		go ls.run(s.cfg.LogTick)
 	}
 	out, err := p.log.openForProcess()
 	if err != nil {
