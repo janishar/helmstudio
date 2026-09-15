@@ -318,9 +318,13 @@ func TestPreemptingLaunchSurvivesTheCallerLeaving(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.waitState("slow-to-stop", stateRunning, 10*time.Second)
+	var se *Error
+	if _, err := e.sup.Launch(context.Background(), "replacement", LaunchOptions{}); !errors.As(err, &se) || se.Heavy == nil {
+		t.Fatalf("launch without confirming: %v; want a heavy conflict", err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	if _, err := e.sup.Launch(ctx, "replacement", LaunchOptions{Preempt: true}); err != nil {
+	if _, err := e.sup.Launch(ctx, "replacement", LaunchOptions{Confirm: se.Heavy.Confirm}); err != nil {
 		t.Fatalf("preempting launch returned %v after its caller left", err)
 	}
 	e.waitState("replacement", stateRunning, 10*time.Second)

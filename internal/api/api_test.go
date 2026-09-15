@@ -143,7 +143,8 @@ func waitRunning(t *testing.T, h http.Handler, id string) supervisor.GroupStatus
 }
 
 // The heavy refusal reaches the client as 409 with the arithmetic in the
-// body; ?preempt=true stops the first and launches the second.
+// body; ?preempt=<details.heavy.confirm> stops the first and launches the
+// second.
 func TestHeavyConflictOverHTTP(t *testing.T) {
 	srv, _ := newServer(t)
 	if rec := do(t, srv, "POST", Base+"/studios/first-heavy:launch", nil); rec.Code != http.StatusAccepted {
@@ -165,7 +166,7 @@ func TestHeavyConflictOverHTTP(t *testing.T) {
 		t.Fatalf("second launch: %d %s", rec.Code, rec.Body)
 	}
 
-	if rec := do(t, srv, "POST", Base+"/studios/second-heavy:launch?preempt=true", nil); rec.Code != http.StatusAccepted {
+	if rec := do(t, srv, "POST", Base+"/studios/second-heavy:launch?preempt="+body.Details.Heavy.Confirm, nil); rec.Code != http.StatusAccepted {
 		t.Fatalf("preempting launch: %d %s", rec.Code, rec.Body)
 	}
 	waitRunning(t, srv, "second-heavy")

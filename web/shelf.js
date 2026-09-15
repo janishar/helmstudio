@@ -50,12 +50,21 @@ function processLine(studio, p) {
   return li;
 }
 
-async function launch(studio, preempt) {
-  const r = await call("POST", "/studios/" + encodeURIComponent(studio.id) + ":launch" + (preempt ? "?preempt=true" : ""));
+// launch starts a studio. A heavy conflict is the switch dialog: the message
+// states the memory arithmetic and what the running studio said it is doing
+// (unknown is said as unknown), and confirming sends back the digest of what
+// was shown. When the running studio changed since — it started or finished
+// work — the daemon answers preview_changed and the dialog is shown again
+// with what is true now, rather than stopping a render nobody saw
+// (docs/decisions.md M5 Q13).
+async function launch(studio, confirmDigest) {
+  const q = confirmDigest ? "?preempt=" + encodeURIComponent(confirmDigest) : "";
+  const r = await call("POST", "/studios/" + encodeURIComponent(studio.id) + ":launch" + q);
   if (r.ok) return refresh();
-  if (r.body.error === "heavy_conflict" && !preempt) {
-    if (confirm(r.body.message)) return launch(studio, true);
-    return;
+  const heavy = r.body.details && r.body.details.heavy;
+  if ((r.body.error === "heavy_conflict" || r.body.error === "preview_changed") && heavy) {
+    if (confirm(r.body.message)) return launch(studio, heavy.confirm);
+    return refresh();
   }
   alert(r.body.message || "Launch failed (" + r.status + ")");
   refresh();

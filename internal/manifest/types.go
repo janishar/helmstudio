@@ -170,8 +170,8 @@ func (h Health) EffectiveIntervalS() int {
 	return h.IntervalS
 }
 
-// Busy mirrors $defs.process.busy. Its response has no contract yet
-// (docs/decisions.md, "Open, not yet decided"), so nothing calls it.
+// Busy mirrors $defs.process.busy. The supervisor asks it when a heavy
+// launch would stop this studio (docs/decisions.md M5 Q12).
 type Busy struct {
 	Path string `yaml:"path"`
 }

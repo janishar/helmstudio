@@ -222,8 +222,9 @@ func (s *Server) studioAction(w http.ResponseWriter, r *http.Request) {
 		}
 		s.studioInstallAction(w, r, id, action)
 	case "launch":
-		preempt, _ := strconv.ParseBool(r.URL.Query().Get("preempt"))
-		gs, err := s.sup.Launch(r.Context(), id, supervisor.LaunchOptions{Preempt: preempt})
+		// preempt carries the confirm digest of a heavy_conflict refusal
+		// (docs/decisions.md M5 Q13); a stale one is preview_changed.
+		gs, err := s.sup.Launch(r.Context(), id, supervisor.LaunchOptions{Confirm: r.URL.Query().Get("preempt")})
 		if err != nil {
 			s.fail(w, err)
 			return
@@ -365,6 +366,7 @@ var statusFor = map[supervisor.ErrorKind]int{
 	supervisor.KindNotLaunchable:  http.StatusUnprocessableEntity,
 	supervisor.KindPortConflict:   http.StatusConflict,
 	supervisor.KindHeavyConflict:  http.StatusConflict,
+	supervisor.KindPreviewChanged: http.StatusConflict,
 }
 
 // errorBody is every error response (api/openapi.yaml components.schemas.Error):

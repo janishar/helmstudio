@@ -32,7 +32,8 @@ type Config struct {
 	// PortMin and PortMax bound assigned ports. Default 8701–8799 (R22).
 	PortMin, PortMax int
 	// Grace is how long a process group has between SIGTERM and SIGKILL.
-	// Default 30s: h3 studio's own SIGTERM path can take over 20s.
+	// Default 30s: a native studio's own SIGTERM path can take over 20s
+	// (docs/decisions.md, M2 review round 1).
 	Grace time.Duration
 	// KillWait is how long to wait for a group to disappear after SIGKILL
 	// before reporting it. Default 5s.
@@ -218,9 +219,13 @@ func (s *Supervisor) Studio(id string) (Studio, bool) {
 
 // LaunchOptions modify a launch.
 type LaunchOptions struct {
-	// Preempt confirms stopping a running heavy group so this one can start
-	// (R25). Without it, a second heavy launch is refused with the arithmetic.
-	Preempt bool
+	// Confirm is the digest from a heavy_conflict refusal: it confirms
+	// stopping the running heavy group so this one can start (R25). Empty, a
+	// second heavy launch is refused with the arithmetic; stale — the running
+	// group, or whether it is busy or holding a model, changed since — it is
+	// refused as preview_changed with the arithmetic as it is now
+	// (docs/decisions.md M5 Q13).
+	Confirm string
 }
 
 // Launch starts a studio's process group. It returns once the group is
@@ -260,9 +265,14 @@ func (s *Supervisor) Launch(ctx context.Context, studioID string, opts LaunchOpt
 		if _, err := resolvePlan(s.dirs, st, lp, nil, dry); err != nil {
 			return GroupStatus{}, err
 		}
-		arith := s.arithmetic(other, st)
-		if !opts.Preempt {
+		arith := s.arithmetic(ctx, other, st)
+		switch opts.Confirm {
+		case "":
 			return GroupStatus{}, &Error{Kind: KindHeavyConflict, Message: arith.sentence(), Heavy: &arith}
+		case arith.Confirm:
+		default:
+			return GroupStatus{}, &Error{Kind: KindPreviewChanged, Heavy: &arith,
+				Message: "What was confirmed no longer describes the running studio. " + arith.sentence()}
 		}
 		s.logf("supervisor: stopping %s so %s can launch: %s", other.studioID, studioID, arith.sentence())
 		other.requestStop(reasonPreempted)
@@ -356,7 +366,7 @@ func (s *Supervisor) liveHeavyLocked(except string) *group {
 	return nil
 }
 
-func (s *Supervisor) arithmetic(running *group, wanted Studio) HeavyArithmetic {
+func (s *Supervisor) arithmetic(ctx context.Context, running *group, wanted Studio) HeavyArithmetic {
 	a := HeavyArithmetic{
 		RunningStudio: running.studioID, RunningName: running.studioID + " (its manifest is not loaded)",
 		WantedStudio: wanted.Manifest.ID, WantedName: wanted.Manifest.Name, WantedPeakGB: wanted.Manifest.PeakRAMGB,
@@ -367,6 +377,8 @@ func (s *Supervisor) arithmetic(running *group, wanted Studio) HeavyArithmetic {
 	if b, err := s.cfg.HostMemory(); err == nil {
 		a.HostGB = int(math.Round(float64(b) / (1 << 30)))
 	}
+	a.Busy = s.groupBusy(ctx, running)
+	a.Confirm = confirmDigest(a, running.runID)
 	return a
 }
 
@@ -388,8 +400,41 @@ func (a HeavyArithmetic) sentence() string {
 	case a.HostGB > 0:
 		fmt.Fprintf(&b, " — this machine has %d GB", a.HostGB)
 	}
-	fmt.Fprintf(&b, ". Only one heavy studio runs at a time: stop %s first, or confirm to have it stopped for you.", a.RunningName)
+	b.WriteString(". ")
+	b.WriteString(a.busySentence())
+	fmt.Fprintf(&b, " Only one heavy studio runs at a time: stop %s first, or confirm to have it stopped for you.", a.RunningName)
 	return b.String()
+}
+
+// busySentence says what stopping the running studio costs, as far as it is
+// known. Unknown is said as unknown, never as idle.
+func (a HeavyArithmetic) busySentence() string {
+	holds := ""
+	if a.Busy.Loaded != nil {
+		if *a.Busy.Loaded {
+			holds = " and holds a loaded model"
+		} else {
+			holds = " and holds no model"
+		}
+	}
+	switch a.Busy.State {
+	case BusyBusy:
+		work := "has work in flight"
+		if a.Busy.Progress != nil {
+			work = fmt.Sprintf("is %d%% through its work", int(math.Round(*a.Busy.Progress*100)))
+		}
+		if a.Busy.Message != "" {
+			work += " (" + a.Busy.Message + ")"
+		}
+		return fmt.Sprintf("%s %s%s; stopping it loses that work.", a.RunningName, work, holds)
+	case BusyIdle:
+		return fmt.Sprintf("%s reports no work in flight%s.", a.RunningName, holds)
+	}
+	why := ""
+	if a.Busy.Message != "" {
+		why = " (" + a.Busy.Message + ")"
+	}
+	return fmt.Sprintf("helmstudio cannot tell whether %s has work in flight%s.", a.RunningName, why)
 }
 
 func (s *Supervisor) waitPortsClear(ctx context.Context, g *group) error {

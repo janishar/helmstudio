@@ -67,6 +67,43 @@ func TestStopReachesAChildThatLeftTheGroup(t *testing.T) {
 	}
 }
 
+// Preempting a heavy studio stops its detached work before the next heavy
+// studio starts: the one-heavy rule must not be satisfied on paper while a
+// render still holds the memory. The child ignores SIGTERM, so it is SIGKILLed
+// after grace.
+func TestPreemptionReachesAChildThatLeftTheGroup(t *testing.T) {
+	e := newEnv(t, Config{Grace: time.Second})
+	termFile := filepath.Join(t.TempDir(), "terms")
+	e.manifest("first", "", `  - name: studio
+    heavy: true
+    cmd: `+serve+` --name first --port {port} --detach --detached-ignores-term --term-file `+termFile+`
+    port: { prefer: 30110 }
+    health: { tcp: true, timeout_s: 10, interval_s: 1 }
+`)
+	e.manifest("second", "", `  - name: studio
+    heavy: true
+    cmd: `+serve+` --name second --port {port}
+    port: { prefer: 30111 }
+    health: { tcp: true, timeout_s: 10, interval_s: 1 }
+`)
+	if _, err := e.sup.Launch(context.Background(), "first", LaunchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	e.waitState("first", stateRunning, 10*time.Second)
+	pid := detachedPID(t, e, "first")
+
+	c := conflict(t, e, "second")
+	if _, err := e.sup.Launch(context.Background(), "second", LaunchOptions{Confirm: c.Heavy.Confirm}); err != nil {
+		t.Fatal(err)
+	}
+	if alive(pid) {
+		t.Fatalf("first studio's detached child %d is still running after the second heavy studio was launched", pid)
+	}
+	if b, _ := os.ReadFile(termFile); !strings.Contains(string(b), "first-detached ") {
+		t.Fatalf("the detached child was not sent SIGTERM before SIGKILL; term file:\n%s", b)
+	}
+}
+
 // The walk finds every descendant outside the group, at any depth, and
 // nothing else: not the group's own members or their in-group children, not
 // an unrelated process, not a cycle.

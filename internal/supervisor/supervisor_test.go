@@ -306,6 +306,7 @@ func TestSecondHeavyStudioIsRefusedWithArithmetic(t *testing.T) {
 	if !errors.As(err, &se) || se.Kind != KindHeavyConflict || se.Heavy == nil {
 		t.Fatalf("err = %v; want a heavy conflict", err)
 	}
+	confirm := se.Heavy.Confirm
 	for _, want := range []string{"first heavy", "21 GB", "30 GB", "51 GB", "64 GB"} {
 		if !strings.Contains(se.Message, want) {
 			t.Errorf("message %q lacks %q", se.Message, want)
@@ -323,7 +324,7 @@ func TestSecondHeavyStudioIsRefusedWithArithmetic(t *testing.T) {
     heavy: true
     cmd: run {venv}/bin/python
 `)
-	_, err = e.sup.Launch(context.Background(), "broken-heavy", LaunchOptions{Preempt: true})
+	_, err = e.sup.Launch(context.Background(), "broken-heavy", LaunchOptions{Confirm: confirm})
 	if !errors.As(err, &se) || se.Kind != KindNotLaunchable {
 		t.Fatalf("preempting launch of an unlaunchable studio: err = %v; want not launchable", err)
 	}
@@ -331,7 +332,7 @@ func TestSecondHeavyStudioIsRefusedWithArithmetic(t *testing.T) {
 		t.Fatalf("preempt stopped the running studio for a launch that could not happen: %+v", gs)
 	}
 
-	if _, err := e.sup.Launch(context.Background(), "second-heavy", LaunchOptions{Preempt: true}); err != nil {
+	if _, err := e.sup.Launch(context.Background(), "second-heavy", LaunchOptions{Confirm: confirm}); err != nil {
 		t.Fatal(err)
 	}
 	e.waitState("second-heavy", stateRunning, 20*time.Second)

@@ -100,8 +100,9 @@ func helperMain(mode string, args []string) int {
 // helperServe listens on --port, answers /healthz from --health-file ("fail"
 // means 500), optionally forks a grandchild that stays in its process group, logs a
 // line every 50ms, records SIGTERM to --term-file, and ignores SIGTERM with
-// --ignore-term. --detach starts a child in its own session, which records
-// SIGTERM as "<name>-detached" and ignores it with --detached-ignores-term.
+// --ignore-term. /busy answers from --busy-file. --detach starts a child in
+// its own session, which records SIGTERM as "<name>-detached" and ignores it
+// with --detached-ignores-term.
 func helperServe(args []string) int {
 	if hasFlag(args, "grandchild") {
 		gc := exec.Command(os.Args[0], "helper", "sleep", "--name", flagValue(args, "name"), "--term-file", flagValue(args, "term-file"))
@@ -155,6 +156,21 @@ func helperServe(args []string) int {
 				}
 			}
 			w.WriteHeader(http.StatusOK)
+		})
+		// /busy answers with --busy-file's contents; "status NNN" answers
+		// that status, and "hang" never answers in time.
+		mux.HandleFunc("/busy", func(w http.ResponseWriter, r *http.Request) {
+			b, _ := os.ReadFile(flagValue(args, "busy-file"))
+			body := strings.TrimSpace(string(b))
+			switch {
+			case body == "hang":
+				time.Sleep(5 * time.Second)
+			case strings.HasPrefix(body, "status "):
+				code, _ := strconv.Atoi(strings.TrimPrefix(body, "status "))
+				w.WriteHeader(code)
+				return
+			}
+			w.Write([]byte(body))
 		})
 		go http.Serve(l, mux)
 	}
