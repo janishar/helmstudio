@@ -41,8 +41,11 @@ type devOptions struct {
 	manifest string
 	addr     string
 	links    []string
-	stdout   io.Writer
-	stderr   io.Writer
+	// venv is the author's own Python environment, for a manifest that
+	// declares python: (docs/decisions.md M5 Q15).
+	venv   string
+	stdout io.Writer
+	stderr io.Writer
 	// stop ends the run as SIGINT does. Nil means signals only.
 	stop <-chan struct{}
 	// ready receives the API base URL once the studio is launched.
@@ -56,14 +59,15 @@ func runDevCommand(args []string, stdout, stderr io.Writer) int {
 	addr := fs.String("addr", "127.0.0.1:0", "loopback address for the studio API (port 0 picks a free one)")
 	var links linkFlags
 	fs.Var(&links, "link", "use an existing weights directory: -link <weight>=<directory> (repeatable)")
+	venv := fs.String("venv", os.Getenv("VIRTUAL_ENV"), "the Python environment a studio that declares python: runs in (default: the active one, $VIRTUAL_ENV)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: helm dev [-f helmstudio.yaml] [-addr 127.0.0.1:0] [-link weight=dir]...")
+		fmt.Fprintln(stderr, "usage: helm dev [-f helmstudio.yaml] [-addr 127.0.0.1:0] [-link weight=dir]... [-venv dir]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := runDev(devOptions{manifest: *file, addr: *addr, links: links, stdout: stdout, stderr: stderr}); err != nil {
+	if err := runDev(devOptions{manifest: *file, addr: *addr, links: links, venv: *venv, stdout: stdout, stderr: stderr}); err != nil {
 		fmt.Fprintf(stderr, "helm dev: %v\n", err)
 		return 1
 	}
@@ -100,6 +104,10 @@ func runDev(o devOptions) error {
 		return fmt.Errorf("%s is not a valid manifest", o.manifest)
 	}
 	manifestPath, err := filepath.Abs(o.manifest)
+	if err != nil {
+		return err
+	}
+	venv, err := devVenv(m, o.venv)
 	if err != nil {
 		return err
 	}
@@ -151,7 +159,15 @@ func runDev(o devOptions) error {
 		StudioData: func(string) string { return dataDir }, Provider: "embedded", Version: "helm dev", Logf: logf})
 	w := weights.New(weights.Config{Store: st, Dirs: dirs, Logf: logf})
 	sup := supervisor.New(supervisor.Config{Dirs: dirs, Store: st, Weights: w, Logf: logf, Platform: plat.Launches,
-		StudioData: func(*manifest.Manifest) string { return dataDir }})
+		StudioData: func(*manifest.Manifest) string { return dataDir },
+		// The author's environment, as it is: no uv settings of helmstudio's,
+		// and checked again at every launch.
+		Python: func(m *manifest.Manifest) (string, []string, error) {
+			if err := supervisor.CheckVenv(venv, m.Python.Version); err != nil {
+				return "", nil, err
+			}
+			return venv, nil, nil
+		}})
 	studio := supervisor.Studio{Manifest: m, File: manifestPath}
 	sup.SetStudios([]supervisor.Studio{studio})
 	in := install.New(install.Config{Store: st, Dirs: dirs, Supervisor: sup, Weights: w, Logf: logf})
@@ -236,6 +252,28 @@ func runDev(o devOptions) error {
 		runErr = err
 	}
 	return runErr
+}
+
+// devVenv resolves the environment helm dev runs a python: studio in: the
+// author's own, from -venv or the active $VIRTUAL_ENV, checked against
+// python.version. helm dev runs no build[], so it never creates or changes an
+// environment; without one it refuses and says how to make one (Q15).
+func devVenv(m *manifest.Manifest, dir string) (string, error) {
+	if m.Python == nil {
+		return "", nil
+	}
+	howTo := fmt.Sprintf("create one with `uv venv --python %s`, install the studio's dependencies into it, then activate it or pass -venv <dir>", m.Python.Version)
+	if dir == "" {
+		return "", fmt.Errorf("%s declares Python %s, and no environment is active; helm dev runs a studio in your own environment and never makes one: %s", m.ID, m.Python.Version, howTo)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	if err := supervisor.CheckVenv(abs, m.Python.Version); err != nil {
+		return "", fmt.Errorf("%s: %w; %s", m.ID, err, howTo)
+	}
+	return abs, nil
 }
 
 // followLog prints a process's output, prefixed with its name.
