@@ -104,6 +104,15 @@ Read it before starting on anything and add to it when you finish. Whatever is n
 - **Raised in M6a: the token set has no colours for data series.** h3's profile timing chart (`.c0`–`.c6` in `static/style.css`) stacks seven categorical colours. Status colours are a separate vocabulary (03 §1), and the identity ramp is for studios, not series. So the seven literals are left, and `helm validate -theme -strict` on h3's `helm-tokens` branch reports exactly those seven. Options: add `--helm-series-1`…`-7` per theme to 03 §2a (a contract change); or accept literals in data visualisation and give the lint a rule that exempts them.
 - **Raised in M6a: nothing names edges and raised surfaces on the always-dark terminal ground.** h3's console needed `color-mix()` of log and inset tokens for its borders, tab chips and header text to stay legible in the light theme. A `--helm-log-border` (and perhaps `--helm-log-raised`) would say it once for every studio.
 - **Raised in M6a: 05 §4's `helm validate` row and 05 §9 criterion 12 still say theme conformance means "contrast ≥ 4.5:1",** against 03 §2b's pairs. 05 is not in M6a's file list, so it was not amended with 03 §5.
+- **Raised at M7 kickoff: the smoke harness (`helm test`, R58), `helm doctor --studio` (R6c) and `helm studio init` (R68) belong to no milestone.** M7 Q16 took them out of M7, for a milestone the human places. Until one builds them:
+  - no studio can be Verified or Registry (M7 Q15);
+  - the editor has no Test button;
+  - the approval screen lists the smoke test and theme conformance as not run (M7 Q13);
+  - 05 §9's criteria 3, 6, 7, 9, 10, 11, 12 and 14 are not scored.
+
+  M6's amendment to 03 §5, "Rendering a studio's own stylesheet for contrast is the approval harness's job (M7)", moves with them.
+- **Raised at M7 kickoff: `weights[]` has no licence field,** so criterion 8's "any weight licences it accepts on the user's behalf" can be neither checked nor shown on the approval screen. A schema change.
+- **Raised at M7 kickoff: `peak_ram_gb` is one figure per studio,** so a studio with `selectable` weights states one peak for every checkpoint. iris's FLUX.2 Klein 4B and 9B both read 30 GB, and the switch dialog's arithmetic cannot follow the choice. A schema change.
 
 ---
 
@@ -422,6 +431,200 @@ Judgement calls while building M6a, each for the reviewer to confirm or overturn
 
   Reason: this is the machine-bound demo's path. Cost: the `replace` works only in this machine's layout and must become a published tag before h3 merges.
 - 2026-09-16 · tests · **the M1 store test `TestMigrationsFromEmptyCreateSchemaV1` pins version 5 and lists `settings`** — the same kind of edit M2, M3 and M4 were directed to make when their migrations landed; named here for sign-off.
+
+## 2026-09-16 · M7 library, editor and iris
+
+M7 was scoped, not specified. Its brief set two conditions for its own expansion, and neither held: no review of M6a is recorded, and M6b is not built. At kickoff it stopped on 21 questions, recorded in `docs/agents/reports/07-library-editor-iris.md`. The human answered "recommendations for all".
+
+Each entry below is one of those answers. The defaults taken with them are the last entry. Four answers carry a correction made while recording, marked as such, for the human's sign-off. Nothing is built yet: M7a starts after M6a's review.
+
+- 2026-09-16 · process · **M7's contract is the expansion drafted at kickoff and approved by the human, now `docs/agents/milestones/07-library-editor-iris.md`** — same reason as M5 Q1. Q1.
+- 2026-09-16 · scope · **M7 is two briefs, reviewed separately, and the order is: M6a's review, then M7a, then M6b, then M7b.**
+  - **M7a, the library, trust and selection:** contracts, daemon, API and CLI, plus the plain-shelf controls its demo needs.
+  - **M7b, the screens:** Add studio, the editor, import and export, the approval screen, and the checkpoint choice. Built on a reviewed M6b and a reviewed M7a.
+  - **M6b** is built after M7a. Until M7b draws 03 §13, M6b's Install shows M7a's approval preview as a plain dialog.
+
+  Reason: M7's brief is expanded once "the previous milestone's review findings" exist. M7's launcher operations copy M6a's API conventions. The library is the catalogue M6b draws (R3b), and M7a changes `/studios`, `:install` and `:launch` under it. Q2. [amends: M6's "M6b is built on a reviewed M6a", which now also waits for M7a]
+- 2026-09-16 · scope · **"iris" in M7 means iris installs with one chosen checkpoint, launches with `{models.selected}`, and relaunches on another, all through the library.**
+  - iris adopting the runtime SDK is not in M7.
+  - iris's registry entry drops `kv`, `assets` and `gallery`.
+  - M7a's machine-bound demo is that sequence on the Mac.
+  - M7b's is the milestone's own demo, on a public repository the human picks, with no registry entry and no `helmstudio.yaml`.
+
+  Reason: iris is the only studio with `selectable` weights, and `internal/supervisor/plan.go` refuses `{models.selected}`. Its `go.mod` at `b4f857f` has no helmstudio dependency, against criterion 9. All four studio repositories already have registry entries. Q3.
+- 2026-09-16 · manifest · **a registry entry is a pointer, `id`, `repo` and `ref`, with an optional inline `manifest:` for a repository that ships none.**
+  - A new `schema/registry-entry.json` describes it, and refers to `manifest.json` for the inline part.
+  - The inline manifest's `id`, `repo` and `ref` must equal the pointer's where set.
+  - `helm validate` accepts either document. A pointer with no inline manifest validates as an envelope only.
+  - There is no `certified` field, and this answer does not change `schema/manifest.json`. Only Q21 touches it, in the `selectable` description.
+  - The four `studios/*.yaml` become pointers with inline manifests and lose their PLACEHOLDER SHAPE headers.
+
+  Reason: R1 and 05 §5a as written. When a repository ships `helmstudio.yaml`, the pull request that moves `ref` removes the inline copy, so there is still one copy. Q4. [resolves: the open entry "`studios/*.yaml`: bare pointer … vs the full manifest M0 actually wrote there", and its correction]
+- 2026-09-16 · storage · **local manifests live at `<data>/studios/<id>.yaml`; fetched manifests are cached at `<cache>/manifests/<id>@<commit>.yaml`.**
+  - The local path is the design's `~/.helmstudio/studios/<id>.yaml` through M1's roots, beside the `<data>/studios/<id>/` directories install already uses.
+  - The cache is keyed by the resolved commit.
+  - There is no new root and no new environment variable.
+  - Uninstall never touches a local manifest. The editor shows the real path and offers Reveal.
+
+  Reason: it is backed up, never purged, and isolated by `HELMSTUDIO_HOME` in tests; `<id>@<ref>` goes stale when a ref is a branch. Cost: harder to find than a dot-directory. Q5.
+- 2026-09-16 · manifest · **first match wins by existence, not validity: an entry is decided by the highest source that exists for its id.**
+  - An invalid winner is listed invalid, with its source, file and errors, and with Edit and Revert. It cannot be installed or launched.
+  - The lower sources are not read for that id. The same holds between the in-repo manifest and the inline one.
+  - Every entry carries `source`, and `overrides` when it shadows another.
+  - R2 is amended: an invalid manifest is listed as invalid, not hidden.
+
+  Reason: falling through would silently drop a user's override, and hiding the entry would make a registry studio vanish over a typo. Neither shows the short-circuit the review focus asks for. R2's "one bad manifest never blocks the others" still holds across ids. Q6. [amends: R2]
+- 2026-09-16 · manifest · **startup never touches the network.**
+  - **What startup reads:** the bundled registry, the local directory, installed checkouts and the cache.
+    - A pointer with nothing to read is listed with "Manifest not fetched" and a Fetch action.
+    - A pointer with an inline manifest whose repository has not been read resolves to the inline manifest, and says so.
+  - **Fetching is a user action:** Fetch, the approval preview, and Add from a repository. It may change an entry's source. The approval preview always reads the repository, so it shows the source that will be used.
+  - **Git only, never a forge's HTTP API:** a depth-1 fetch of the ref without file contents, then only `helmstudio.yaml` and `.gitmodules`, with the resolved commit recorded.
+  - **An installed studio whose manifest comes from its repository reads it from its own checkout.** A purged cache or an offline Mac never makes it unlaunchable.
+
+  Reason: M3 Q18 ("nothing is fetched or built at daemon start"), 01 §3's outbound calls "a user action implies", and 06 §4's cache, which the OS may purge. Q7.
+- 2026-09-16 · manifest · **the local directory also holds pointers.**
+  - **A local pointer:** `<data>/studios/<id>.yaml` with `id`, `repo` and `ref` and no inline manifest. It is a From repo entry, resolved as a registry pointer is, without a review.
+  - **A complete manifest there** is Local.
+  - **Adding a repository with no `helmstudio.yaml`** opens the editor pre-filled with `repo` and `ref`; saving writes a Local manifest.
+  - **Provenance** goes in `<data>/studios/<id>.source.json`, not in the manifest: "imported from <url> on <date>", "duplicated from <id>", "written in the editor". It is a note for the card, never a trust signal.
+
+  Reason: copying an author's manifest into the local directory makes two copies, and a note inside the file would be exported upstream (R3d: "unchanged"). Q8.
+- 2026-09-16 · manifest · **Revert moves a local manifest and never deletes it.**
+  - **Revert** moves the file to `<data>/studios/_reverted/<id>-<timestamp>.yaml`, which is not scanned, and the card says where it went.
+  - **Override and Revert leave an installed or running studio alone.** The group keeps running, the card shows `rebuild_needed` when the digest differs, and the next install or launch goes through approval (Q10).
+  - **Duplicate** writes a Local manifest under a new id the user types, changing `id` and nothing else. For a repository entry, it copies the resolved text.
+  - **Rename on import** is the same edit.
+
+  Reason: a Revert that deletes could destroy the only copy of something the user wrote (R3b: "hand-edit or version-control"). **Correction made while recording:** the kickoff wrote `reverted/`. That is a valid studio id, so it would collide with a studio's own `<data>/studios/<id>/`; an id cannot start with an underscore. Q9.
+- 2026-09-16 · security · **one approval rule, enforced by the API.**
+  - **The rule:** approval is required before any install, retry or launch whose recorded approval does not match what would run now. No source is exempt: not Local, not `local_path`, not Registry.
+  - **The digest** covers everything that executes and where it comes from (Q11), plus capabilities and network hosts.
+  - **The preview:** `GET /studios/{id}/approval` returns it with its digest, after reading the repository (Q7) and resolving `ref` to a commit.
+  - **The confirm:** `:install`, `:retry` and `:launch` take `approval=<digest>` whenever the recorded approval does not match. With none, 409 `approval_required`, with the preview in `details`. With a stale one, 409 `preview_changed`.
+  - **What runs:** install checks out exactly the approved commit, so a branch that moved needs a new approval. The approval is recorded on the installation (schema v6).
+  - **Costs:**
+    - 05 §5a's "A hand-written manifest pointing at your own checkout needs no ceremony" is amended.
+    - Every studio installed before v6 asks once, at its next launch.
+    - `helm dev` records its own installation as approved.
+
+  Reason:
+  - The screen exists for someone else's commands. Import, paste and Duplicate put someone else's text into Local entries, so 05 §5a's "you wrote it" does not hold.
+  - A rule that depends on who wrote a file cannot be checked by a daemon that sees only files.
+  - `:install` took no confirmation, a branch could move between the screen and the clone, and `processes[].cmd` runs at launch without any install.
+
+  Same shape as M5 Q13's switch confirm. Honest limit: until M9's cookie, any local process can fetch a preview and send its digest; the digest proves the screen was current, not that a person read it. Q10. [amends: 05 §5a's trust note]
+- 2026-09-16 · security · **the approval screen shows every command verbatim, grouped by when it runs.**
+  - **At install:** every `build[]` step with its `cwd` and `shell`; for a `python` studio, that helmstudio makes a uv environment.
+  - **At every launch:** every process `cmd` with its `cwd`, `shell` and `env`, placeholders left as written; and every `health.exec`.
+  - **Once, on first launch:** `import.run` with its `cwd`.
+  - **Also fetched:** the repository URL and commit, and each submodule's URL and path from `.gitmodules` at that commit.
+  - **Verbatim means byte for byte.** Control characters and newlines are shown escaped and flagged; zero-width and bidirectional characters are flagged.
+
+  Reason: R62 says "every build command", while 05 §10 says "the commands", and the schema also runs `processes[].cmd`, `health.exec` and `import.run`. A harmless build with a hostile `cmd` would pass a screen that showed build steps only. Q11. [amends: R62, 05 §8]
+- 2026-09-16 · security · **a studio's capabilities are shown as sentences:**
+  - none: "Uses no helmstudio services. It gets no access token."
+  - `kv`: "Saves its own settings and sessions in helmstudio."
+  - `records`: "Keeps its own records, such as a list of takes, in helmstudio."
+  - `assets`: "Stores the files it makes in your helmstudio library."
+  - `gallery`: "Adds what it makes to your gallery, and receives items other studios send it."
+  - `jobs`: "Reports its long-running work to helmstudio."
+  - `timeline`: "Can create sequences on your timeline."
+  - `gallery.read_all`: "Can read everything you have ever made, in every studio."
+  - `kv.shared`: "Can read and change settings shared by every studio."
+  - `handoff.send`: "Can send items to other studios."
+
+  The table goes into 03 §18. One Go table in `internal/manifest` serves the preview, and a test diffs it against 03, as the tokens are diffed. `gallery.read_all` and `kv.shared` are marked as warnings. No manifest field states a reason. Reason: the design wrote one sentence of nine, and half of it was one studio's reason. Q12.
+- 2026-09-16 · security · **before approval, only checks that execute nothing from the studio run.**
+  - **What runs:** the schema and rules; host requirements, as install applies them; the commands (Q11) and capabilities (Q12); the declared hosts; the weights, with sizes and whether each is downloaded or linked.
+  - **Not run:** theme conformance and the smoke test are listed as "Not run before install", with the reason, never as passes.
+  - **Buttons:** Cancel and Install, which becomes "Install anyway" when a required check fails. There is no "Run checks".
+  - **Hosts** read: "The manifest says it contacts these hosts. helmstudio does not restrict network access."
+  - 05 §8, 03 §13 and R63 are amended.
+
+  Reason: a smoke test builds and runs the studio, which is what the screen asks permission for, and theme conformance needs files not yet cloned. 05 §8's "Run checks" and 03 §13's "Install anyway" disagreed. Q13. [leaves open: the M5 entry on whether `network` must list the hosts a build reaches]
+- 2026-09-16 · manifest · **import and paths outside the roots.**
+  - **Two new validator rules**, so `helm validate`, the editor and import agree:
+    - `weights[].dest` resolves strictly under the models root, checked lexically as rule 7 checks `cwd`;
+    - `test.smoke` stays under the studio root.
+
+    Each changes what `helm validate` accepts, as M0's added rules did. None of the four manifests is affected.
+  - **`local_path` in an import or a Duplicate** is kept, and flagged in the import report: "builds in <path> on this Mac, without cloning". Approval covers it (Q10).
+  - **`repo` schemes are not restricted** by the validator. The approval screen names the transport, for example "Clones a directory on this Mac: <path>".
+  - **Import from a URL:** `https://` only, with no redirect to anything else. Refused when the host resolves to a loopback, link-local or private address. At most 1 MiB, a 10 s timeout, no cookies or credentials. The bytes are parsed as a manifest, and never echoed back as text when they are not one.
+  - **Files, drops and paste** are read by the page and sent as text. The daemon never opens a path a request names, except "From folder", which takes a typed absolute path and reads only `<path>/helmstudio.yaml`.
+  - **There is no directory-listing endpoint.**
+
+  Reason:
+  - `dest: ../../Documents` passed `helm validate` and failed only at download.
+  - `file://` is how M3's tests and local development work.
+  - An import URL chosen by any local process could reach loopback services and the LAN.
+  - A browser folder picker never gives a page an absolute path, and another account on this Mac can reach loopback (M2 review).
+
+  **Correction made while recording:** the kickoff said `dest` "stays under" the models root. A `dest` of `.` would be the models root itself, so it must resolve strictly under it. Q14.
+- 2026-09-16 · certification · **a certification level is derived, never declared.**
+  - In M7 it is Draft for a manifest with `local_path`, and Unverified for everything else.
+  - Verified and Registry are defined but not shown until a smoke harness exists and its runs are recorded.
+  - So the four registry studios show source Registry and level Unverified.
+  - R1, 05 §5a's example and 05 §9 get notes.
+
+  Reason: 05 §9 defines Registry as "verified in CI on every release" and Verified as the harness having run on this machine. Neither CI (M1) nor the harness exists, so either label would be false today. 05 §5a's `certified: verified` on a registry pointer contradicted 05 §9. Q15.
+- 2026-09-16 · certification · **M7 scores only the criteria the manifest alone answers.** They live in `internal/manifest` beside the validator, shared by `helm validate -criteria`, the editor and the approval preview.
+  - **1:** valid, with a well-formed `id`.
+  - **2:** `requires.tools`, `requires.ram_gb`, `requires.disk_gb` and `peak_ram_gb` are declared; the schema already requires `os` and `arch`.
+  - **4:** exactly one `main`, with a health probe. "Realistic" is not judged.
+  - **5:** no `port.fixed`, and `{port}` in the command of each process that declares a port.
+  - **8:** `license` is declared. Weight licences are not checkable.
+  - **13:** `test.profile` is declared.
+  - **15:** `sdk` and `ref` are declared. Whether a ref is a branch is not decided offline.
+
+  Criteria 3, 6, 7, 10, 11 and 14 are listed "Not checked: needs the smoke harness"; 9, "needs the studio's source"; 12, "needs the studio's stylesheets". A count reads "n of m checkable pass". Criterion 4 in 05 §9 is amended to "exactly one", which the validator enforces and `role: main`'s description implies. The smoke harness (`helm test`), `helm doctor --studio` and `helm studio init` get a milestone of their own, which the human places, and the editor has no Test until then.
+
+  Reason: none of the three is in any milestone brief, and six criteria need a sandboxed smoke run with a filesystem watch and a proxy. **Correction made while recording:** the kickoff said criterion 2's "five fields"; the check is these four, beyond what the schema requires. Q16. [resolves: the open entry "`docs/agents/milestones/00-contracts.md` rule 3 ("exactly one process has role: main") vs … criterion 4"]
+- 2026-09-16 · manifest · **the page never parses YAML.**
+  - **Validation:** the page sends text to `POST /launcher/manifests:validate` and gets back errors with lines and pointers, the criteria, and the document as JSON.
+  - **Editing:** a form edit is sent as a JSON pointer and a value. The daemon applies it to the YAML node tree, keeping comments and key order, and returns the new text.
+  - **One path:** `internal/manifest` gains a bytes entry point that `Validate(file)` calls, so the CLI, the loader, the editor, import and save share one path. A test requires the same verdict and errors from `helm validate` and the endpoint for every file in `internal/manifest/testdata` and `studios/`.
+  - **The form** is generated from `schema/manifest.json`, served to the page, with a hand-written map from pointers to 03 §13a's sections. A test fails on a property that is neither in a section nor sent to the YAML pane.
+
+  Reason: a JavaScript YAML parser is a second implementation. Its disagreements with `yaml.v3` (anchors, merge keys, `on` and `yes`, duplicate keys) would show one manifest and validate another. A hand-written form is a second copy of the schema. Q17.
+- 2026-09-16 · api · **launcher operations for the library, all tagged `launcher` and under M2's Host and Origin rules:**
+  - `GET /studios`, extended into the library: every id from the three sources, with `source`, `overrides`, `level`, `manifest_valid`, `errors` and `provenance`.
+  - `GET /studios/{id}/manifest`: the resolved text, digest, source, file and commit.
+  - `POST /launcher/manifests:validate` and `POST /launcher/manifests:edit`, which write nothing.
+  - `PUT /launcher/manifests/{id}`: saves a Local manifest or pointer. Refuses an invalid one (422 with the errors). `If-Match` on the file's digest.
+  - `DELETE /launcher/manifests/{id}`: Revert.
+  - `POST /launcher/manifests/{id}:duplicate`, with `{new_id}`.
+  - `POST /launcher/manifests:import`: items of `{text}` or `{url}` give a report per item and a `confirm` digest; `{confirm, resolutions}` adds them. It installs nothing.
+  - `POST /launcher/repositories:read`: `{repo, ref}` or `{path}`. It writes nothing.
+  - `GET /studios/{id}/approval`, and `approval=` on `:install`, `:retry` and `:launch`.
+  - `PUT /studios/{id}/selection`, with `{weight}`.
+
+  Reason: M4 Q1 removed `POST /studios` and `/studios/{id}/models:select` "to return with the milestone that builds it". Cost, recorded rather than solved: until M9, these writes are reachable by any local process, including another account on this Mac. What is new is that one can put an Override into the library; Q10 makes the user's next install or launch show the changed commands instead of running them. Q18.
+- 2026-09-16 · manifest · **Export is a file download and a copy, byte-identical to the stored text.**
+  - An inline registry manifest is written out on its own.
+  - helmstudio opens no pull requests: no GitHub API, no token. The person commits the file.
+  - An exported manifest with `local_path` gets a warning beside the button, and the file is not changed.
+
+  Reason: 01 §14 rules out an account or sign-in, and there is nowhere to keep a GitHub token. The build plan demo's pull request is opened by hand. Q19.
+- 2026-09-16 · weights · **the selection is `studio_model_bindings.selected`.** Exactly one selectable binding per studio has it, enforced by a partial unique index in schema v6. `installations.selected_weights` is not used, and 02 §4 says so, but the column stays in the table. Reason: 02 stored one fact twice, and an artifact id cannot name the weight when two weights share an artifact (M3 Q5). Rebuilding `installations` to drop a column costs more than it saves. Q20.
+- 2026-09-16 · weights · **the checkpoint is chosen before install, and install downloads only that one.**
+  - **The choice** is made on the approval preview, defaulting to the first `selectable` weight declared.
+  - **Other checkpoints** are downloaded or linked on demand with `:fetch` and `:link`.
+  - **`PUT /studios/{id}/selection`** changes it while the studio is not running. While it runs, 409 `conflict`; for a weight not downloaded, 409 `not_fetched`, naming `:fetch` and `:link`.
+  - **A launch with no selection** is 422 `selection_required`, listing the choices.
+  - **iris's heavy arithmetic** stays one `peak_ram_gb` for every checkpoint.
+  - **The selection is shown on the preview but not covered by its digest,** like sizes. Every selectable weight was approved with the manifest, and a digest over the choice would ask for approval at every checkpoint switch.
+  - **The `selectable` description** in `schema/manifest.json` ("One of a set the user picks between at launch") changes to say this. The schema's structure does not change.
+
+  Reason: iris's five checkpoints are each a whole repository, and 01 §13 and the schema both say the user picks one. **Correction made while recording:** the kickoff's defaults put "the weights and the selection" in the digest, which would contradict this answer and Q3's demo. Q21. [amends: M3 Q6 for `selectable` weights; resolves: the M3 review open entry on iris's five checkpoints]
+- 2026-09-16 · defaults · **taken at kickoff:**
+  - **The registry is embedded:** `studios/*.yaml` through `studios/studios.go`, as `schema/schema.go` embeds the schema, with `-studios` kept as a development override (R72's bundled registry).
+  - **A local file is named for its `id`**, or it is listed invalid, naming both.
+  - **The library is re-derived** after every write through the API and on a Rescan, with no file watching.
+  - **Unsaved editor text** stays in the page.
+  - **Tests** use local bare git repositories, a counting fake fetcher and an injected resolver, and touch no models directory or user root.
+  - **The approval digest covers:** the studio id, source and resolved commit; `submodules`; every command field of Q11 with its `cwd`, `shell` and `env`; capabilities, network hosts and `python.version`; and the declared weights. It does not cover sizes, free disk or the selection (Q21).
 
 ## Changes
 
