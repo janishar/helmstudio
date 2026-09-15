@@ -1,8 +1,10 @@
 // Command helmstudio is the daemon: one local process that supervises studios
 // and owns helm.db (docs/design/01-prd.md).
 //
-// In M2 it loads the studio manifests, re-adopts whatever the last daemon left
-// running, and serves the plain shelf and the supervision API on loopback.
+// It loads the studio manifests, records installs and downloads a previous
+// daemon left mid-flight as interrupted, re-adopts whatever the last daemon
+// left running, and serves the plain shelf, the supervision API and the
+// install and weights API on loopback.
 package main
 
 import (
@@ -21,10 +23,12 @@ import (
 	"time"
 
 	"github.com/janishar/helmstudio/internal/api"
+	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/platform"
 	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/weights"
 	"github.com/janishar/helmstudio/web"
 )
 
@@ -55,8 +59,13 @@ func run(addr, studiosDir string) error {
 	}
 	defer st.Close()
 
-	sup := supervisor.New(supervisor.Config{Dirs: dirs, Store: st, Logf: log.Printf})
+	w := weights.New(weights.Config{Store: st, Dirs: dirs, HF: weights.NewHF(huggingFaceToken), Logf: log.Printf})
+	sup := supervisor.New(supervisor.Config{Dirs: dirs, Store: st, Weights: w, Logf: log.Printf})
 	sup.SetStudios(loadStudios(studiosDir))
+	installer := install.New(install.Config{Store: st, Dirs: dirs, Supervisor: sup, Weights: w, Logf: log.Printf})
+	if err := installer.Sweep(ctx); err != nil {
+		return err
+	}
 
 	rep, err := sup.Readopt(ctx)
 	if err != nil {
@@ -75,7 +84,7 @@ func run(addr, studiosDir string) error {
 		log.Printf("warning: re-adopted %s, but its manifest is not loaded from %s; it counts as heavy and can only be stopped", id, studiosDir)
 	}
 
-	handler, err := api.New(sup, web.Shelf, addr, log.Printf)
+	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()))
 	if err != nil {
 		return err
 	}
@@ -111,7 +120,29 @@ func run(addr, studiosDir string) error {
 	defer cancel()
 	cancelRequests()
 	_ = srv.Shutdown(shutdownCtx)
+	// Install jobs stop first, recorded interrupted, so a build step is never
+	// left running beside a studio being stopped.
+	if err := installer.Shutdown(shutdownCtx); err != nil {
+		log.Print(err)
+	}
 	return sup.Shutdown(shutdownCtx)
+}
+
+// hfTokenName is the Keychain account the Hugging Face token is stored
+// under, in the helmstudio service (R43). Nothing sets it yet: until the
+// token prompt exists, store one with
+// `security add-generic-password -s helmstudio -a huggingface-token -w`.
+const hfTokenName = "huggingface-token"
+
+// huggingFaceToken reads the token for each request, so one added while the
+// daemon runs is used on the next retry. No token, or no secret store on this
+// platform, means asking anonymously.
+func huggingFaceToken(ctx context.Context) (string, error) {
+	tok, err := platform.Secrets().Get(ctx, hfTokenName)
+	if errors.Is(err, platform.ErrSecretNotFound) || errors.Is(err, platform.ErrNoSecretStore) {
+		return "", nil
+	}
+	return tok, err
 }
 
 // loadStudios validates every manifest in dir. An invalid one is not listed,
