@@ -1,5 +1,7 @@
 // HTTP transport for the helmstudio runtime SDK: fetch only, no Node built-ins,
-// so the same file can serve a browser build once M6 decides browser access.
+// so the same file is the browser build's (browser.js). In a page there is no
+// token: the studio's same-origin proxy adds it (docs/decisions.md M6 Q10), so
+// the Authorization header is sent only when a token was given.
 
 // The one typed error shape across languages (docs/design/04-packages.md §4).
 const KINDS = {
@@ -83,7 +85,8 @@ export class Transport {
       else params.append(k, value(v));
     }
     const qs = params.toString();
-    const h = { Authorization: `Bearer ${this.token}` };
+    const h = {};
+    if (this.token) h.Authorization = `Bearer ${this.token}`;
     for (const [k, v] of Object.entries(headers)) {
       if (v !== undefined && v !== null) h[k] = value(v);
     }

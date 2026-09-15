@@ -4,7 +4,8 @@
   "description": "helmstudio's runtime SDK: a client for the platform API",
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./browser": "./src/browser.js"
   },
   "files": ["src"],
   "engines": {
