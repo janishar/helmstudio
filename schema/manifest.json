@@ -272,9 +272,9 @@
           "type": "object", "additionalProperties": false,
           "properties": {
             "path": { "type": "string", "pattern": "^/",
-                      "description": "Returns whether the studio currently holds a model or has work in flight." }
+                      "description": "HTTP GET on the process's assigned port. Answers 200 with a JSON object: {\"busy\": boolean (required) — work in flight, \"loaded\": boolean — holds a model, \"message\": string, \"progress\": number 0..1}. Any other status, a body without a boolean busy, a progress outside 0..1, or no answer within 2 s reads as unknown, which is never shown as idle." }
           },
-          "description": "Liveness is not occupancy. A studio may be running and holding nothing, or running and holding 21 GB. Without this the switch dialog is guessing."
+          "description": "Liveness is not occupancy. A studio may be running and holding nothing, or running and holding 21 GB. Without this the switch dialog is guessing. Asked only when a heavy launch would stop this studio; an answer never changes process or health state (docs/decisions.md M5 Q12)."
         },
 
         "depends_on": {

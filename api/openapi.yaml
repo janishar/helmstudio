@@ -1410,8 +1410,11 @@ paths:
       summary: Clone at the pinned ref, run build[], fetch required weights.
       description: >
         R7-R19, docs/decisions.md M3. Install while an install runs returns
-        that job. Refused while the studio runs (409 `conflict`), and for a
-        host that fails `requires` (422 `blocked`).
+        that job. Refused while the studio runs (409 `conflict`), for a host
+        that fails `requires` (422 `blocked`), and, before anything is cloned,
+        for a manifest declaring `python` when uv is not on PATH (422
+        `blocked` with `details: {code: tool_missing, tool: uv}`,
+        docs/decisions.md M5 Q3).
       parameters: [{ $ref: "#/components/parameters/StudioId" }]
       responses:
         "202":
@@ -1455,16 +1458,23 @@ paths:
       operationId: studiosLaunch
       summary: Start the process group in dependency order, health-gating each member.
       description: >
-        R20-R25, docs/decisions.md M2. A second heavy group is refused with 409
-        `heavy_conflict` and the arithmetic in `details.heavy`; `preempt=true`
-        stops the running heavy group first. 409 `already_running`,
+        R20-R25, docs/decisions.md M2 and M5 Q12-Q13. A second heavy group is
+        refused with 409 `heavy_conflict`: the arithmetic, what the running
+        studio's `busy` probe answered, and a `confirm` digest are in
+        `details.heavy`. `preempt=<details.heavy.confirm>` stops the running
+        heavy group first. A digest that no longer describes the running group
+        (another group runs, or it became busy, idle or unknown, or loaded or
+        unloaded a model) is 409 `preview_changed` with `details.heavy` as it
+        is now, and nothing is stopped. 409 `already_running`,
         `port_conflict`; 422 `not_launchable` (not installed, a weight not
-        fetched, a missing linked directory).
+        fetched, a missing linked directory, a missing or mismatched Python
+        environment).
       parameters:
         - { $ref: "#/components/parameters/StudioId" }
         - name: preempt
           in: query
-          schema: { type: boolean, default: false }
+          description: The `confirm` digest from the heavy_conflict refusal the user confirmed.
+          schema: { type: string, maxLength: 64 }
       responses:
         "202":
           description: The group, starting.
@@ -2197,9 +2207,11 @@ components:
       required: [code, message]
       description: >
         installations.last_failure and jobs.last_error (02 §4). Install codes:
-        clone_failed, tool_missing, step_failed, step_timeout, cancelled,
-        interrupted, auth_required, disk_space, weights_failed, linked_missing,
-        uninstall_failed. A task job's code is the studio's own.
+        clone_failed, tool_missing, env_failed, step_failed, step_timeout,
+        cancelled, interrupted, auth_required, disk_space, weights_failed,
+        linked_missing, uninstall_failed. env_failed (creating a Python
+        environment, docs/decisions.md M5 Q7) has no step_index. A task job's
+        code is the studio's own.
       properties:
         code: { type: string }
         message: { type: string }
@@ -2378,8 +2390,8 @@ components:
 
     HeavyArithmetic:
       type: object
-      description: "`details.heavy` on 409 heavy_conflict. A peak of 0 means undeclared."
-      required: [running_studio, running_name, running_peak_gb, wanted_studio, wanted_name, wanted_peak_gb, host_gb]
+      description: "`details.heavy` on 409 heavy_conflict and preview_changed. A peak of 0 means undeclared."
+      required: [running_studio, running_name, running_peak_gb, wanted_studio, wanted_name, wanted_peak_gb, host_gb, busy, confirm]
       properties:
         running_studio: { type: string }
         running_name: { type: string }
@@ -2388,6 +2400,24 @@ components:
         wanted_name: { type: string }
         wanted_peak_gb: { type: integer }
         host_gb: { type: integer }
+        busy: { $ref: "#/components/schemas/BusyState" }
+        confirm: { type: string, description: "Send back as `preempt` to confirm stopping the running studio." }
+
+    BusyState:
+      type: object
+      description: >
+        What the running studio's `busy` probes answered when the conflict was
+        built (schema/manifest.json, $defs.process.busy; docs/decisions.md M5
+        Q12). A group is busy if any member is, otherwise unknown if any member
+        is unknown or none declares a probe, otherwise idle. `unknown` is never
+        idle: the studio did not answer, answered something other than the
+        contract, or declares no probe.
+      required: [state]
+      properties:
+        state: { type: string, enum: [busy, idle, unknown] }
+        loaded: { type: boolean, description: "Whether it holds a model, when it said." }
+        message: { type: string, description: "The studio's own words; for unknown, why helmstudio cannot tell." }
+        progress: { type: number, minimum: 0, maximum: 1 }
 
     Stopping:
       type: object

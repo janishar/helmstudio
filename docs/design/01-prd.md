@@ -93,7 +93,7 @@ Install state and process state are separate machines and are never merged. Thes
 - **R9** stdout and stderr stream to the UI over SSE and append to the studio's log directory.
 - **R10** Retry resumes from the first step that has not succeeded; completed steps are not re-run unless a full rebuild is requested.
 - **R11** Tools in `requires.tools` are probed before the first step, failing fast with the tool name and the command that installs it.
-- **R12** Python studios get a per-studio `uv` environment pinned to `python.version`; environments are never shared.
+- **R12** Python studios get a per-studio `uv` environment pinned to `python.version`; environments are never shared. (Amended 2026-09-15, M5, Q3–Q7: the environment is `<data>/studios/<id>/venv`, outside the checkout; it is made by `uv` found on `PATH` before the first build step, with a managed interpreter only, uv's cache under the cache root and no user uv configuration; build steps, processes and `exec` probes run with it active; install is refused before the clone when `uv` is missing; uninstall removes it. Bundling a pinned `uv` comes with the app in M9.)
 - **R13** Install can be cancelled: the running step's process group is killed, the phase marked failed, completed work kept.
 
 #### Weights
@@ -117,7 +117,7 @@ Install state and process state are separate machines and are never merged. Thes
 - **R22** Ports are assigned from a configurable range (default 8701–8799); a manifest port is advisory. A process declared `port: fixed` refuses to start when that port is taken, naming the occupant.
 - **R23** After spawn the daemon polls `health` every `interval_s` (default 2) until `timeout_s` (default 180), showing elapsed against the budget. Loading 20 GB before answering is normal and must not read as a hang.
 - **R24** Health probes support `path`, `tcp` and `exec`, because a worker has no HTTP endpoint.
-- **R25** Only one group marked `heavy` runs at a time. Starting a second states the memory arithmetic and, on confirm, stops the first and waits for its ports to clear.
+- **R25** Only one group marked `heavy` runs at a time. Starting a second states the memory arithmetic and, on confirm, stops the first and waits for its ports to clear. (Amended 2026-09-15, M5, Q11–Q13: the statement includes what the running studio's `busy` probe answered — busy, idle or unknown, never guessed as idle — and a confirmation is a digest of that statement, refused when the running studio has changed since; stopping reaches processes a studio detached from its group.)
 - **R26** Stop sends SIGTERM to each group in reverse dependency order, escalating to SIGKILL after grace. Install state is untouched.
 - **R27** A `main` process that exits unexpectedly fails the group, surfaces the last 200 log lines and offers Restart. It is never auto-restarted, and **never restarted on a failed health check alone** — an eight-minute generation must survive a slow probe. A `sidecar` with `restart: on-failure` retries with backoff, at most three times in ten minutes.
 - **R28** On clean shutdown children are terminated. On restart, survivors are re-adopted after verifying pid, process start time and process group, so a recycled pid is never signalled.
@@ -160,8 +160,8 @@ Sequencing is inherently cross-studio — a sequence made from an h3 clip, an lt
 Three packages with a strict one-way dependency: `helm-css` knows nothing, `helm-runtime-sdk` knows the API, `helm-ui-sdk` knows both.
 
 - **R50** `helm-css` ships tokens, base, layout and component layers as separate files and one bundle, plus `tokens.json`. Classes are prefixed, single-specificity and never `!important`, so a studio overrides with one rule.
-- **R51** `helm-runtime-sdk` ships for Go, Python and Node, generated from one OpenAPI document so the three cannot drift. Provider selection is automatic: remote when `HELM_API` is set, embedded otherwise.
-- **R52** The embedded provider is a separate module or extra, so a studio that only runs hosted never pulls SQLite into its dependency tree.
+- **R51** `helm-runtime-sdk` ships for Go, Python and Node, generated from one OpenAPI document so the three cannot drift. Provider selection is automatic: remote when `HELM_API` is set, embedded otherwise. (Amended 2026-09-15, M5, Q14: "embedded otherwise" holds for Go only; the Python and Node constructors fail as `Unavailable` without `HELM_API`, naming `helm dev`.)
+- **R52** The embedded provider is a separate module, so a studio that only runs hosted never pulls SQLite into its dependency tree. (Amended 2026-09-15, M5, Q14: there is no Python embedded provider; a Python studio developed standalone runs under `helm dev`, and `Helm.from_env()` without `HELM_API` raises `Unavailable` naming it.)
 - **R53** `helm-ui-sdk` ships `helm-gallery`, `helm-player`, `helm-terminal` and `helm-timeline` as custom elements. **It never constructs a URL or sets a header** — it receives a runtime client — so an API change regenerates one package and leaves components untouched.
 - **R54** All three are distributed three ways: package registries, prebuilt bundles served by the daemon for studios with no build step, and a vendored copy for standalone.
 - **R55** A manifest pins majors separately (`sdk: { runtime, ui, css }`) and the daemon injects matching bundle URLs at launch, so updating helmstudio never jumps a studio across a major.
@@ -263,9 +263,9 @@ The distinction the field has to carry is not simply "Mac or not". A native Meta
 | ffmpeg licensing    | LGPL build with videotoolbox, or a GPL build with x264                | LGPL plus videotoolbox — also the fast encoder on Apple Silicon, and it avoids a GPL question in a signed MIT app. Decide before the first release.                      |
 | Dedup headline      | File-level content addressing with hardlinks, or drop the claim       | Check whether the four manifests share a single Hugging Face repo before promising a number.                                                                             |
 | Proxy               | Add `--base-path` to all four studios, or open each at its own origin | Own origin now; the flag is a week spread across four repos you already own, versus an HTML-rewriting proxy.                                                             |
-| Vendoring `uv`      | Pinned binary in the bundle, or detect and instruct                   | Ship it in the app, detect for the headless binary.                                                                                                                      |
+| Vendoring `uv`      | Pinned binary in the bundle, or detect and instruct                   | Ship it in the app, detect for the headless binary. **Detect and instruct from M5; the pinned binary ships with the app in M9 (docs/decisions.md M5 Q3).**                |
 | Weight verification | Per-file SHA256, or size and etag                                     | Size and etag on download; SHA256 behind an explicit Verify, since hashing 60 GB costs minutes.                                                                          |
-| Preemption          | Stop on confirm, or queue until the user stops                        | Stop on confirm, with an optional `busy` probe so a studio can report a generation in flight.                                                                            |
+| Preemption          | Stop on confirm, or queue until the user stops                        | Stop on confirm, with an optional `busy` probe so a studio can report a generation in flight. **Decided: stop on confirm (M2); the probe's contract and a digest-checked confirm (M5 Q12, Q13).** |
 | Accent collision    | Yellow accent sits near h3 studio's amber identity hue                | Keep them separable by role — identity hues only as stripes and dots, the accent only as the single primary fill — and keep the accent a brighter lemon than h3's amber. |
 
 ## 16 · Milestones

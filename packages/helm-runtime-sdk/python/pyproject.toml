@@ -5,9 +5,8 @@ description = "helmstudio's runtime SDK: a client for the platform API"
 requires-python = ">=3.9"
 dependencies = []
 
-[project.optional-dependencies]
-# The Python embedded provider is decided with the Python studios (docs/decisions.md M4 Q25).
-embedded = []
+# No embedded extra: a Python studio runs standalone under helm dev
+# (docs/decisions.md M5 Q14).
 
 [build-system]
 requires = ["setuptools>=61"]

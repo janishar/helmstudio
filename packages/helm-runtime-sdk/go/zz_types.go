@@ -324,9 +324,10 @@ const (
 )
 
 // JobError: installations.last_failure and jobs.last_error (02 §4). Install codes:
-// clone_failed, tool_missing, step_failed, step_timeout, cancelled, interrupted,
-// auth_required, disk_space, weights_failed, linked_missing, uninstall_failed. A task
-// job's code is the studio's own.
+// clone_failed, tool_missing, env_failed, step_failed, step_timeout, cancelled,
+// interrupted, auth_required, disk_space, weights_failed, linked_missing,
+// uninstall_failed. env_failed (creating a Python environment, docs/decisions.md M5 Q7)
+// has no step_index. A task job's code is the studio's own.
 type JobError struct {
 	Code      string  `json:"code"`
 	Message   string  `json:"message"`

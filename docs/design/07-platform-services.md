@@ -178,6 +178,8 @@ All three are thin wrappers over the HTTP API with the same method names, so a s
 
 ## 8 · The standalone fallback
 
+(Amended 2026-09-15, M5, Q14: only the Go SDK has a standalone backend, the embedded provider M4 built over the same store as the daemon. The Python and Node constructors fail as `Unavailable` without `HELM_API`, naming `helm dev`, which is how those studios run standalone. The JSON and JSONL layout below was superseded by the storage decision in M1.)
+
 Every SDK constructor checks for `HELM_API`. When it is missing the client switches to a local backend with the same interface: `./.helm/state/<ns>.json` for documents, `./.helm/assets/` for blobs using the identical content-addressed layout, and `./.helm/gallery/index.jsonl` for items. The semantics are identical, down to ETags and reference counts.
 
 This has a useful second effect: because the layouts match, a studio that ran standalone for six months can be adopted wholesale when the user later installs helmstudio — the daemon imports `./.helm/` by hardlinking blobs and replaying the journal, and nothing is lost or duplicated.
