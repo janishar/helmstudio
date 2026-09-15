@@ -42,7 +42,7 @@ func runSecurity(ctx context.Context, stdin string, args ...string) (string, str
 	cmd.Stdin = strings.NewReader(stdin)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
-	err := cmd.Run()
+	err := RunInGroup(cmd)
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		return out.String(), errOut.String(), exitErr.ExitCode(), nil
