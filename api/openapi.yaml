@@ -1,0 +1,632 @@
+# Outline only, per M0. Paths, resource names and the shape of each object —
+# no full request/response schemas, no examples, no generation. M4 completes
+# this; M4's first review happens on this file before anything implements it.
+#
+# Paths under docs/design/05-sdk-and-custom-studios.md §3 and
+# docs/design/07-platform-services.md §3-4 are taken from those documents
+# literally, base path and all (servers.url carries /api/v1 so the paths
+# below stay the bare form both documents use in their own endpoint tables).
+# Paths under "Launcher" have no such literal source — 05 and 07 describe the
+# studio-facing surface, not install/uninstall/process-supervision, which
+# only this milestone's own brief asks for; those are invented against
+# 01-prd.md's R7-R30 prose.
+#
+# `tags: [studio-api]` / `tags: [launcher]` on every operation is a PROPOSAL
+# for M4's first review, not settled. It exists so the generator R51 describes
+# could leave launcher operations out of helm-runtime-sdk; whether M4 wants
+# that split, a separate document, or no split is M4's call. See
+# docs/decisions.md ("Open, not yet decided") for the supporting design text
+# and what it does not settle.
+#
+# See docs/agents/reports/00-contracts.md for the resources that
+# don't trace to a docs/design/02-data-model.md table (certification_level:
+# no column — 05 §9's four levels are evaluated live by `helm doctor
+# --studio`, not stored, so this mirrors data-model §1's own "derived, not a
+# row" category rather than naming a genuine gap) and the ones that do but
+# have no endpoint here yet (step_runs, tags as their own resource).
+openapi: 3.1.0
+
+info:
+  title: helmstudio platform API
+  version: "0.1.0"
+  description: >
+    The local, single-machine API a studio's runtime SDK speaks, and the one
+    the launcher UI speaks to the daemon. Reference implementation is a
+    browser at 127.0.0.1:8700; see docs/design/07-platform-services.md.
+
+servers:
+  - url: http://127.0.0.1:8700/api/v1
+
+paths:
+  # --- Registry, install, weights (docs/design/01-prd.md §6) — launcher only, R7-R19 ---
+  /studios:
+    get:
+      tags: [launcher]
+      summary: List the library (registry + local + imported), with install state.
+      responses:
+        "200": { $ref: "#/components/responses/StudioList" }
+    post:
+      tags: [launcher]
+      summary: Import a studio from a local folder, a git URL, or a pasted/fetched manifest.
+      responses:
+        "200": { $ref: "#/components/responses/Studio" }
+
+  /studios/{id}:
+    get:
+      tags: [launcher]
+      summary: One studio's manifest, install state and runtime_env.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Studio" }
+
+  /studios/{id}:install:
+    post:
+      tags: [launcher]
+      summary: Clone (or adopt local_path), run build[], fetch declared weights.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  /studios/{id}:retry:
+    post:
+      tags: [launcher]
+      summary: Resume install at the first step that has not succeeded.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  /studios/{id}:uninstall:
+    post:
+      tags: [launcher]
+      summary: Remove the checkout and process state; cached weights are left for reclaim.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  /studios/{id}:update:
+    post:
+      tags: [launcher]
+      summary: Pull the pinned ref forward and rebuild; shows a command diff when build steps changed.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  /studios/{id}/models:select:
+    post:
+      tags: [launcher]
+      summary: Record which selectable weight {models.selected} resolves to for this studio (studio_model_bindings.selected), before or at :launch.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200": { description: Binding recorded. }
+
+  /models:
+    get:
+      tags: [launcher]
+      summary: The weights cache — model_artifacts, with ref counts and reclaimable size.
+      responses:
+        "200": { $ref: "#/components/responses/ModelArtifactList" }
+
+  /models/{id}:link:
+    post:
+      tags: [launcher]
+      summary: Point a declared weight at a directory the user already has, instead of downloading.
+      parameters: [{ $ref: "#/components/parameters/ModelId" }]
+      responses:
+        "200": { $ref: "#/components/responses/ModelArtifact" }
+
+  /models/{id}:verify:
+    post:
+      tags: [launcher]
+      summary: SHA256 an artifact on demand (size + etag is the default check on download).
+      parameters: [{ $ref: "#/components/parameters/ModelId" }]
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  /models/{id}:
+    delete:
+      tags: [launcher]
+      summary: Reclaim a managed artifact with ref_count 0, or unlink a linked one (never deletes the user's directory).
+      parameters: [{ $ref: "#/components/parameters/ModelId" }]
+      responses:
+        "204": { description: Removed or unlinked. }
+
+  /doctor:
+    get:
+      tags: [launcher]
+      summary: Host side of the compute-runtime question — chip, unified memory, Metal version, detected framework versions.
+      responses:
+        "200": { description: Doctor report. }
+
+  # --- Processes and supervision (docs/design/01-prd.md §7) — launcher only, R20-R30 ---
+  /studios/{id}:launch:
+    post:
+      tags: [launcher]
+      summary: Start the process group in dependency order, health-gating each before its dependents.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202": { $ref: "#/components/responses/ProcessGroup" }
+
+  /studios/{id}:stop:
+    post:
+      tags: [launcher]
+      summary: SIGTERM the group in reverse dependency order, escalating to SIGKILL after grace.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "202": { description: Stopping. }
+
+  /studios/{id}/processes:
+    get:
+      tags: [launcher]
+      summary: Live process rows for this studio's current group_run_id.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200": { $ref: "#/components/responses/ProcessGroup" }
+
+  /studios/{id}/logs:
+    get:
+      tags: [launcher]
+      summary: The last five run logs, head-and-tail truncated.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200": { description: Log file index. }
+
+  # --- Studio identity (docs/design/05 §3, docs/design/07 §3 — literal path) ---
+  /me:
+    get:
+      tags: [studio-api]
+      summary: Studio id, capabilities, quota, paths, provider, SDK version — resolved from HELM_TOKEN.
+      responses:
+        "200": { description: Caller identity. }
+
+  # --- Sessions (docs/design/01-prd.md R31a, docs/design/02-data-model.md §5) — studio-api ---
+  /sessions:
+    get:
+      tags: [studio-api]
+      summary: List a studio's sessions, most recently opened first.
+      responses:
+        "200": { $ref: "#/components/responses/SessionList" }
+    post:
+      tags: [studio-api]
+      summary: Create a session with an opaque state document.
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+
+  /sessions/{id}:
+    get:
+      tags: [studio-api]
+      summary: One session.
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+    patch:
+      tags: [studio-api]
+      summary: Rename, or replace state (If-Match against etag — two open tabs must not silently overwrite each other).
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+    delete:
+      tags: [studio-api]
+      summary: Soft-delete.
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "204": { description: Deleted. }
+
+  /sessions/{id}:duplicate:
+    post:
+      tags: [studio-api]
+      summary: Copy a session's state document under a new name.
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+
+  /sessions/{id}:activate:
+    post:
+      tags: [studio-api]
+      summary: Mark opened_at; does not change process state.
+      parameters: [{ $ref: "#/components/parameters/SessionId" }]
+      responses:
+        "204": { description: Activated. }
+
+  # --- KV (docs/design/05 §3, docs/design/07 §3 — literal paths) ---
+  /kv/{ns}/{key}:
+    get:
+      tags: [studio-api]
+      summary: Read a JSON document. Returns ETag.
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+      responses:
+        "200": { $ref: "#/components/responses/KVDoc" }
+    put:
+      tags: [studio-api]
+      summary: Replace. If-Match for optimistic concurrency; 409 on conflict.
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+      responses:
+        "200": { $ref: "#/components/responses/KVDoc" }
+    patch:
+      tags: [studio-api]
+      summary: JSON merge patch, for a single field without resending the document.
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+      responses:
+        "200": { $ref: "#/components/responses/KVDoc" }
+    delete:
+      tags: [studio-api]
+      summary: Remove.
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - { $ref: "#/components/parameters/Key" }
+      responses:
+        "204": { description: Removed. }
+
+  /kv/{ns}:
+    get:
+      tags: [studio-api]
+      summary: List keys with sizes and modified times (?prefix=), no values.
+      parameters:
+        - { $ref: "#/components/parameters/Namespace" }
+        - name: prefix
+          in: query
+          schema: { type: string }
+      responses:
+        "200": { description: Key listing. }
+
+  # --- Records (docs/design/01-prd.md R32, literal path) --------------------
+  /records/{collection}:
+    get:
+      tags: [studio-api]
+      summary: Query with the closed filter language (eq ne lt lte gt gte in contains exists; at most eight clauses; always parameterised). No SQL passthrough.
+      parameters: [{ $ref: "#/components/parameters/Collection" }]
+      responses:
+        "200": { $ref: "#/components/responses/RecordList" }
+    post:
+      tags: [studio-api]
+      summary: Insert a document. Quota (records, kv_bytes) enforced from the manifest's storage block.
+      parameters: [{ $ref: "#/components/parameters/Collection" }]
+      responses:
+        "200": { $ref: "#/components/responses/Record" }
+
+  /records/{collection}/{id}:
+    get:
+      tags: [studio-api]
+      summary: One record.
+      parameters:
+        - { $ref: "#/components/parameters/Collection" }
+        - { $ref: "#/components/parameters/RecordId" }
+      responses:
+        "200": { $ref: "#/components/responses/Record" }
+    patch:
+      tags: [studio-api]
+      summary: Update a document.
+      parameters:
+        - { $ref: "#/components/parameters/Collection" }
+        - { $ref: "#/components/parameters/RecordId" }
+      responses:
+        "200": { $ref: "#/components/responses/Record" }
+    delete:
+      tags: [studio-api]
+      summary: Soft-delete.
+      parameters:
+        - { $ref: "#/components/parameters/Collection" }
+        - { $ref: "#/components/parameters/RecordId" }
+      responses:
+        "204": { description: Deleted. }
+
+  # --- Assets (docs/design/05 §3, docs/design/07 §3-4 — literal paths) -----
+  /assets:
+    post:
+      tags: [studio-api]
+      summary: Upload bytes, returns {id, sha256, bytes, kind, url}. Idempotent on content.
+      responses:
+        "200": { $ref: "#/components/responses/Asset" }
+
+  /assets:adopt:
+    post:
+      tags: [studio-api]
+      summary: Adopt a file already written into HELM_STAGE_DIR by hardlink — no copy, no HTTP body.
+      responses:
+        "200": { $ref: "#/components/responses/Asset" }
+
+  /assets:reclaim:
+    post:
+      tags: [launcher]
+      summary: Delete every asset with ref_count 0 and pinned=false (02 §8's reclaim query), not one at a time.
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  /assets/{id}:
+    get:
+      tags: [studio-api]
+      summary: Stream bytes with Range support, so a studio can scrub a video without downloading it.
+      parameters: [{ $ref: "#/components/parameters/AssetId" }]
+      responses:
+        "200": { description: Bytes, Range-aware. }
+
+  /assets/{id}/thumb:
+    get:
+      tags: [studio-api]
+      summary: Poster frame or waveform, generated once by the daemon and cached (?w=320).
+      parameters:
+        - { $ref: "#/components/parameters/AssetId" }
+        - name: w
+          in: query
+          schema: { type: integer }
+      responses:
+        "200": { description: Bytes. }
+
+  # --- Gallery (docs/design/05 §3, docs/design/07 §3/§5 — literal paths) ---
+  /gallery/items:
+    post:
+      tags: [studio-api]
+      summary: Record an output with its params, inputs and session. One call per generation.
+      responses:
+        "200": { $ref: "#/components/responses/Item" }
+    get:
+      tags: [studio-api]
+      summary: Query by kind, tag, session, date and text; scoped to the caller unless scope=all and the capability is held.
+      responses:
+        "200": { $ref: "#/components/responses/ItemList" }
+
+  /gallery/items/{id}:
+    get:
+      tags: [studio-api]
+      summary: One item.
+      parameters: [{ $ref: "#/components/parameters/ItemId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Item" }
+    patch:
+      tags: [studio-api]
+      summary: Star, tag, rename, annotate (07 §3) — the only mutation surface for tags; no separate /tags resource.
+      parameters: [{ $ref: "#/components/parameters/ItemId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Item" }
+
+  # --- Handoff (docs/design/05 §3, docs/design/07 §3/§5 — literal paths) ---
+  /handoff:
+    post:
+      tags: [studio-api]
+      summary: Send an item to another studio's inbox — the cross-studio move.
+      responses:
+        "200": { description: Queued. }
+
+  /inbox:
+    get:
+      tags: [studio-api]
+      summary: >
+        Items other studios sent here. Drained by the studio on read (07 §3)
+        — GET itself is the drain; there is no separate :consume action, and
+        adding one would contradict that line.
+      responses:
+        "200": { description: Pending handoffs. }
+
+  # --- Jobs (docs/design/05 §3, literal path) -------------------------------
+  /jobs:
+    get:
+      tags: [studio-api]
+      summary: Installs, downloads, exports and a studio's own renders — the one queue.
+      responses:
+        "200": { $ref: "#/components/responses/JobList" }
+    post:
+      tags: [studio-api]
+      summary: A studio's own long-running work, on the same progress/cancellation/log path installs use.
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  /jobs/{id}:
+    get:
+      tags: [studio-api]
+      summary: One job's progress and last_error.
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Job" }
+
+  /jobs/{id}:cancel:
+    post:
+      tags: [studio-api]
+      summary: Cancel; the running step's process group is killed, completed work kept.
+      parameters: [{ $ref: "#/components/parameters/JobId" }]
+      responses:
+        "204": { description: Cancelled. }
+
+  # --- Events (docs/design/05 §3, docs/design/07 §3 — literal path) --------
+  /events:
+    get:
+      tags: [studio-api]
+      summary: SSE stream — theme changed, inbox arrived, item added elsewhere, job progress, shutting down.
+      responses:
+        "200": { description: text/event-stream. }
+
+  # --- Timeline (docs/design/05 §7 — literal paths, base path included there) ---
+  /timeline:
+    post:
+      tags: [studio-api]
+      summary: Create a sequence from clips (target + tracks referencing asset ids; non-destructive).
+      responses:
+        "200": { $ref: "#/components/responses/Timeline" }
+
+  /timeline:append:
+    post:
+      tags: [studio-api]
+      summary: Add clips to the open sequence without stealing focus.
+      responses:
+        "200": { $ref: "#/components/responses/Timeline" }
+
+  /timeline/{id}:open:
+    post:
+      tags: [studio-api]
+      summary: Ask the framework to show its editor. 501 with a reason when no framework is present — the data operation always works, only the presentation degrades.
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      responses:
+        "200": { description: Opened. }
+        "501": { description: No framework present. }
+
+  /timeline/{id}:
+    get:
+      tags: [studio-api]
+      summary: One timeline document.
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Timeline" }
+    patch:
+      tags: [studio-api]
+      summary: Edit tracks; optimistic concurrency on revision (02 §5's undo is "the previous revision").
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      responses:
+        "200": { $ref: "#/components/responses/Timeline" }
+
+  /timeline/{id}/export:
+    post:
+      tags: [studio-api]
+      summary: Conform every clip to the declared target; concat stream-copy when legal. Creates a Job.
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      responses:
+        "202": { $ref: "#/components/responses/Job" }
+
+  # --- Settings (docs/design/02-data-model.md SETTINGS table) — launcher only ---
+  /settings:
+    get:
+      tags: [launcher]
+      summary: Overridden roots and other machine-level settings; an absent key means "use the OS default".
+      responses:
+        "200": { description: Settings document. }
+    put:
+      tags: [launcher]
+      summary: Override a setting.
+      responses:
+        "200": { description: Settings document. }
+
+components:
+  parameters:
+    StudioId:      { name: id,         in: path, required: true, schema: { type: string } }
+    ModelId:       { name: id,         in: path, required: true, schema: { type: string } }
+    SessionId:     { name: id,         in: path, required: true, schema: { type: string } }
+    Namespace:     { name: ns,         in: path, required: true, schema: { type: string } }
+    Key:           { name: key,        in: path, required: true, schema: { type: string } }
+    Collection:    { name: collection, in: path, required: true, schema: { type: string } }
+    RecordId:      { name: id,         in: path, required: true, schema: { type: string } }
+    AssetId:       { name: id,         in: path, required: true, schema: { type: string } }
+    ItemId:        { name: id,         in: path, required: true, schema: { type: string } }
+    JobId:         { name: id,         in: path, required: true, schema: { type: string } }
+    TimelineId:    { name: id,         in: path, required: true, schema: { type: string } }
+
+  # Outline shapes only — field lists trace to docs/design/02-data-model.md's
+  # tables, not a full request/response contract. M4 fills these in.
+  schemas:
+    Studio:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        install_state: { type: string }
+        certification_level: { type: string } # derived (helm doctor --studio), not a data-model column — see the header comment
+        runtime_env: { type: object }
+
+    ModelArtifact:
+      type: object
+      properties:
+        id: { type: string }
+        hf_repo: { type: string }
+        source: { type: string, enum: [managed, linked] }
+        state: { type: string }
+        ref_count: { type: integer }
+
+    ProcessGroup:
+      type: object
+      properties:
+        group_run_id: { type: string }
+        processes:
+          type: array
+          items:
+            type: object
+            properties:
+              spec_name: { type: string }
+              role: { type: string }
+              state: { type: string }
+              health_state: { type: string }
+
+    Session:
+      type: object
+      properties:
+        id: { type: string }
+        studio_id: { type: string }
+        name: { type: string }
+        state: { type: object }
+        etag: { type: string }
+
+    KVDoc:
+      type: object
+      properties:
+        doc: { type: object }
+        etag: { type: string }
+
+    Record:
+      type: object
+      properties:
+        id: { type: string }
+        collection: { type: string }
+        doc: { type: object }
+
+    Asset:
+      type: object
+      properties:
+        id: { type: string }
+        sha256: { type: string }
+        kind: { type: string, enum: [image, video, audio, other] }
+        state: { type: string }
+
+    Item:
+      type: object
+      properties:
+        id: { type: string }
+        studio_id: { type: string }
+        asset_id: { type: string }
+        kind: { type: string }
+        params: { type: object }
+        starred: { type: boolean }
+        tags: { type: array, items: { type: string } }
+        inputs:
+          type: array
+          items:
+            type: object
+            properties:
+              asset_id: { type: string }
+              role: { type: string }
+
+    Job:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        studio_id: { type: string }
+        state: { type: string }
+        progress_num: { type: integer }
+        progress_den: { type: integer }
+
+    Timeline:
+      type: object
+      properties:
+        id: { type: string }
+        target: { type: object }
+        tracks: { type: array, items: { type: object } }
+        revision: { type: integer }
+
+  responses:
+    StudioList:         { description: Array of Studio., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Studio" } } } } }
+    Studio:              { description: A studio.,       content: { application/json: { schema: { $ref: "#/components/schemas/Studio" } } } }
+    ModelArtifactList:   { description: Array of ModelArtifact., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ModelArtifact" } } } } }
+    ModelArtifact:       { description: A weights cache entry., content: { application/json: { schema: { $ref: "#/components/schemas/ModelArtifact" } } } }
+    ProcessGroup:        { description: A studio's process group., content: { application/json: { schema: { $ref: "#/components/schemas/ProcessGroup" } } } }
+    SessionList:         { description: Array of Session., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Session" } } } } }
+    Session:             { description: A session., content: { application/json: { schema: { $ref: "#/components/schemas/Session" } } } }
+    KVDoc:                { description: A kv document., content: { application/json: { schema: { $ref: "#/components/schemas/KVDoc" } } } }
+    RecordList:          { description: Array of Record., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Record" } } } } }
+    Record:               { description: A record., content: { application/json: { schema: { $ref: "#/components/schemas/Record" } } } }
+    Asset:                { description: An asset., content: { application/json: { schema: { $ref: "#/components/schemas/Asset" } } } }
+    ItemList:            { description: Array of Item., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Item" } } } } }
+    Item:                 { description: A gallery item., content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+    JobList:              { description: Array of Job., content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Job" } } } } }
+    Job:                   { description: A job., content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } } }
+    Timeline:             { description: A timeline document., content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } } }
