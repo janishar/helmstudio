@@ -127,8 +127,8 @@ test:
 visual:
 	@$(GO) test -count=1 ./test/visual/
 
-# Regenerate the visual goldens and record the Chrome major they were made
-# with. Review the images before committing them.
+# Regenerate the visual goldens and record the Chrome major and the operating
+# system they were made with. Review the images before committing them.
 golden:
 	@HELM_UPDATE_GOLDEN=1 $(GO) test -count=1 -run TestHelmCSSMatchesItsGoldensInBothThemes ./test/visual/ && echo "golden: written to test/visual/golden; review them"
 
