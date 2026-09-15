@@ -23,12 +23,16 @@ type Migration struct {
 //go:embed migrations/0001_platform.sql
 var schemaV1 string
 
+//go:embed migrations/0002_supervision.sql
+var schemaV2 string
+
 // migrations is forward-only and append-only. The embedded provider inside a
 // standalone studio runs the same sequence, which is what makes adopting its
 // ./.helm/helm.db an import rather than a merge. Never edit or reorder an
 // entry that has shipped; add the next number.
 var migrations = []Migration{
 	{Version: 1, Name: "platform tables (docs/design/02-data-model.md §5)", Up: execScript(schemaV1)},
+	{Version: 2, Name: "process and log tables (docs/design/02-data-model.md §4)", Up: execScript(schemaV2)},
 }
 
 // LatestVersion is the schema version this binary migrates to.

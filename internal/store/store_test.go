@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -305,7 +306,8 @@ func objects(t *testing.T, db *sql.DB, typ string) []string {
 	return names
 }
 
-// Names from docs/design/02-data-model.md §5.
+// Names from docs/design/02-data-model.md §5 (schema v1) and §4 (schema v2,
+// the process and log tables added in M2).
 func TestMigrationsFromEmptyCreateSchemaV1(t *testing.T) {
 	ctx := context.Background()
 	d := platformtest.Dirs(t)
@@ -314,18 +316,18 @@ func TestMigrationsFromEmptyCreateSchemaV1(t *testing.T) {
 	}
 	s := openTest(t, d)
 
-	if v, err := s.Version(ctx); err != nil || v != 1 || LatestVersion() != 1 {
-		t.Fatalf("version = %d (%v), latest = %d; want 1", v, err, LatestVersion())
+	if v, err := s.Version(ctx); err != nil || v != 2 || LatestVersion() != 2 {
+		t.Fatalf("version = %d (%v), latest = %d; want 2", v, err, LatestVersion())
 	}
 
 	tables := slices.DeleteFunc(objects(t, s.Reader(), "table"), func(n string) bool {
 		return strings.HasPrefix(n, "items_fts_") // FTS5's own shadow tables
 	})
-	wantTables := []string{"assets", "derived", "inbox", "item_inputs", "items", "items_fts", "kv", "records", "sessions", "tags", "timelines"}
+	wantTables := []string{"assets", "derived", "inbox", "item_inputs", "items", "items_fts", "kv", "log_files", "processes", "records", "sessions", "tags", "timelines"}
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
-	wantIndexes := []string{"idx_inbox_pending", "idx_inputs_asset", "idx_items_asset", "idx_items_feed", "idx_items_studio", "idx_rec_scan", "idx_session_recent", "uq_session_name"}
+	wantIndexes := []string{"idx_inbox_pending", "idx_inputs_asset", "idx_items_asset", "idx_items_feed", "idx_items_studio", "idx_logs_studio", "idx_proc_live", "idx_proc_studio", "idx_rec_scan", "idx_session_recent", "uq_session_name"}
 	if got := objects(t, s.Reader(), "index"); !slices.Equal(got, wantIndexes) {
 		t.Errorf("indexes = %v, want %v", got, wantIndexes)
 	}
@@ -381,8 +383,9 @@ func TestFailedMigrationLeavesVersionAndSchemaUntouched(t *testing.T) {
 	}
 	s.Close()
 
+	latest := LatestVersion()
 	broken := append(slices.Clone(migrations), Migration{
-		Version: 2, Name: "half-applied",
+		Version: latest + 1, Name: "half-applied",
 		Up: func(ctx context.Context, tx *sql.Tx) error {
 			if _, err := tx.ExecContext(ctx, `CREATE TABLE should_not_survive (x)`); err != nil {
 				return err
@@ -391,13 +394,13 @@ func TestFailedMigrationLeavesVersionAndSchemaUntouched(t *testing.T) {
 			return err
 		},
 	})
-	if _, err := open(ctx, d, broken); err == nil || !strings.Contains(err.Error(), "still at version 1") {
-		t.Fatalf("open with a failing migration: err = %v, want a refusal at version 1", err)
+	if _, err := open(ctx, d, broken); err == nil || !strings.Contains(err.Error(), fmt.Sprintf("still at version %d", latest)) {
+		t.Fatalf("open with a failing migration: err = %v, want a refusal at version %d", err, latest)
 	}
 
 	s2 := openTest(t, d)
-	if v, _ := s2.Version(ctx); v != 1 {
-		t.Errorf("version = %d after a failed migration, want 1", v)
+	if v, _ := s2.Version(ctx); v != latest {
+		t.Errorf("version = %d after a failed migration, want %d", v, latest)
 	}
 	if got := objects(t, s2.Reader(), "table"); slices.Contains(got, "should_not_survive") {
 		t.Error("the failed migration's table survived the rollback")
@@ -414,8 +417,9 @@ func TestExistingDataIsBackedUpBeforeMigrating(t *testing.T) {
 	seedItem(t, ctx, s)
 	s.Close()
 
+	latest := LatestVersion()
 	next := append(slices.Clone(migrations), Migration{
-		Version: 2, Name: "add a table",
+		Version: latest + 1, Name: "add a table",
 		Up: execScript(`CREATE TABLE added_in_v2 (x)`),
 	})
 	s2, err := open(ctx, d, next)
@@ -424,14 +428,14 @@ func TestExistingDataIsBackedUpBeforeMigrating(t *testing.T) {
 	}
 	s2.Close()
 
-	bak, err := sql.Open("sqlite", "file:"+d.DBBackup(1)+"?mode=ro")
+	bak, err := sql.Open("sqlite", "file:"+d.DBBackup(latest)+"?mode=ro")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer bak.Close()
 	var v, n int
-	if err := bak.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil || v != 1 {
-		t.Fatalf("backup version = %d (%v), want 1", v, err)
+	if err := bak.QueryRow(`PRAGMA user_version`).Scan(&v); err != nil || v != latest {
+		t.Fatalf("backup version = %d (%v), want %d", v, err, latest)
 	}
 	if err := bak.QueryRow(`SELECT count(*) FROM items`).Scan(&n); err != nil || n != 1 {
 		t.Fatalf("backup items = %d (%v), want the seeded row", n, err)

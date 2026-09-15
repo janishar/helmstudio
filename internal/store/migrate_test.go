@@ -58,7 +58,7 @@ func TestRebuildingAParentTableKeepsChildReferences(t *testing.T) {
 	}
 	s.Close()
 
-	next := append(slices.Clone(migrations), Migration{Version: 2, Name: "rebuild sessions", Up: execScript(rebuildSessions)})
+	next := append(slices.Clone(migrations), Migration{Version: LatestVersion() + 1, Name: "rebuild sessions", Up: execScript(rebuildSessions)})
 	s2, err := open(ctx, d, next)
 	if err != nil {
 		t.Fatalf("open with the rebuild: %v", err)
@@ -92,8 +92,9 @@ func TestMigrationLeavingForeignKeyViolationsIsRolledBack(t *testing.T) {
 	seedItem(t, ctx, s)
 	s.Close()
 
+	latest := LatestVersion()
 	orphaning := append(slices.Clone(migrations), Migration{
-		Version: 2, Name: "orphans an input",
+		Version: latest + 1, Name: "orphans an input",
 		Up: execScript(`INSERT INTO item_inputs (item_id, asset_id, role) VALUES ('it_1', 'as_missing', 'reference')`),
 	})
 	if _, err := open(ctx, d, orphaning); err == nil || !strings.Contains(err.Error(), "foreign-key violation") {
@@ -101,8 +102,8 @@ func TestMigrationLeavingForeignKeyViolationsIsRolledBack(t *testing.T) {
 	}
 
 	s2 := openTest(t, d)
-	if v, _ := s2.Version(ctx); v != 1 {
-		t.Errorf("version = %d, want 1", v)
+	if v, _ := s2.Version(ctx); v != latest {
+		t.Errorf("version = %d, want %d", v, latest)
 	}
 	var n int
 	if err := s2.Reader().QueryRowContext(ctx, `SELECT count(*) FROM item_inputs WHERE asset_id = 'as_missing'`).Scan(&n); err != nil || n != 0 {
