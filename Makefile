@@ -14,7 +14,7 @@ SHELL := /bin/bash
 GO ?= go
 HELM ?= ./bin/helm
 
-.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance
+.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance css
 
 # The Go modules besides the root: the runtime SDK (stdlib only), its embedded
 # provider, and the conformance suite (docs/decisions.md M4 Q2, Q25).
@@ -119,6 +119,10 @@ deps:
 test:
 	@if [ ! -f go.mod ]; then echo "test: no go.mod yet, skipping"; \
 	else $(GO) test ./...; fi
+
+# Build helm.css, helm.min.css and tokens.json from helm-css's four layers.
+css:
+	@$(GO) run ./packages/helm-css/cmd/build && echo "css: built"
 
 # Regenerate the clients and the studio-api router from api/openapi.yaml.
 generate:

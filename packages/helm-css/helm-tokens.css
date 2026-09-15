@@ -1,0 +1,163 @@
+/* helm-css · tokens
+ *
+ * The token table in docs/design/03-design-system.md §2a, and nothing else:
+ * a test diffs this file, tokens.json and that table. Token names are API
+ * within a major (03 §5) — add, never rename or remove.
+ *
+ * Dark is the primary design and the default. Light applies when the page
+ * says data-theme="light", or when it says nothing and the system prefers
+ * light. Every selector is wrapped in :where(), so a studio overrides any
+ * token with one plain :root rule.
+ */
+
+:where(:root) {
+  color-scheme: dark;
+
+  --helm-ground-page: #0d0c0a;
+  --helm-ground-panel: #161512;
+  --helm-ground-raised: #1f1d18;
+  --helm-ground-inset: #090804;
+  --helm-border-hairline: #292620;
+  --helm-border-strong: #3b372e;
+  --helm-text-primary: #f1ede4;
+  --helm-text-secondary: #a8a294;
+  --helm-text-muted: #716b5e;
+  --helm-accent-base: #ffc700;
+  --helm-accent-hover: #ffd633;
+  --helm-accent-subtle: #2b2206;
+  --helm-accent-text: #ffd24a;
+  --helm-on-accent: #1a1400;
+  --helm-status-idle: #716b5e;
+  --helm-status-running: #4caf7d;
+  --helm-status-info: #4a9fe0;
+  --helm-status-warning: #f0883e;
+  --helm-status-error: #e05c52;
+  --helm-on-danger: #1a1400;
+  --helm-log-text: #a8a294;
+  --helm-log-muted: #7a7467;
+  --helm-log-error: #e05c52;
+  --helm-log-warning: #f0883e;
+  --helm-log-accent: #ffd24a;
+  --helm-focus-ring: #ffc700;
+  --helm-scrim: rgb(0 0 0 / 0.6);
+  --helm-shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.45);
+  --helm-studio-accent: var(--helm-accent-text);
+  --helm-on-studio-accent: var(--helm-ground-page);
+
+  --helm-space-1: 4px;
+  --helm-space-2: 8px;
+  --helm-space-3: 12px;
+  --helm-space-4: 16px;
+  --helm-space-5: 20px;
+  --helm-space-6: 24px;
+  --helm-space-7: 32px;
+  --helm-space-8: 40px;
+  --helm-space-9: 56px;
+  --helm-radius-sm: 4px;
+  --helm-radius-md: 6px;
+  --helm-control-sm: 22px;
+  --helm-control-md: 26px;
+  --helm-control-lg: 30px;
+  --helm-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --helm-font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --helm-type-title: 600 20px/28px var(--helm-font-sans);
+  --helm-type-section: 600 11px/16px var(--helm-font-sans);
+  --helm-type-card-title: 600 14px/20px var(--helm-font-sans);
+  --helm-type-body: 400 13px/20px var(--helm-font-sans);
+  --helm-type-mono: 400 12px/18px var(--helm-font-mono);
+  --helm-type-log: 400 12px/17px var(--helm-font-mono);
+  --helm-type-micro: 500 11px/15px var(--helm-font-sans);
+  --helm-tracking-title: -0.01em;
+  --helm-tracking-section: 0.09em;
+  --helm-duration-hover: 120ms;
+  --helm-duration-expand: 180ms;
+  --helm-duration-dialog-in: 160ms;
+  --helm-duration-dialog-out: 100ms;
+  --helm-duration-progress: 200ms;
+  --helm-duration-indeterminate: 1400ms;
+  --helm-ease-standard: cubic-bezier(.2,0,.2,1);
+  --helm-ease-enter: cubic-bezier(.2,0,0,1);
+  --helm-ease-indeterminate: cubic-bezier(.4,0,.6,1);
+}
+
+@media (prefers-color-scheme: light) {
+  :where(:root:not([data-theme])) {
+    color-scheme: light;
+
+    --helm-ground-page: #faf8f3;
+    --helm-ground-panel: #ffffff;
+    --helm-ground-raised: #fbf8f1;
+    --helm-ground-inset: #1c1a15;
+    --helm-border-hairline: #e4dfd2;
+    --helm-border-strong: #c9c2b0;
+    --helm-text-primary: #1a1813;
+    --helm-text-secondary: #534f45;
+    --helm-text-muted: #837d70;
+    --helm-accent-base: #f5b800;
+    --helm-accent-hover: #e0a800;
+    --helm-accent-subtle: #fff3d1;
+    --helm-accent-text: #7a5600;
+    --helm-on-accent: #1a1400;
+    --helm-status-idle: #837d70;
+    --helm-status-running: #1f7a4d;
+    --helm-status-info: #1c6fb8;
+    --helm-status-warning: #a85410;
+    --helm-status-error: #c0342a;
+    --helm-on-danger: #ffffff;
+    --helm-log-text: #cfc8ba;
+    --helm-log-muted: #7a7467;
+    --helm-log-error: #e05c52;
+    --helm-log-warning: #f0883e;
+    --helm-log-accent: #ffd24a;
+    --helm-focus-ring: #7a5600;
+    --helm-scrim: rgb(28 26 21 / 0.4);
+    --helm-shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.45);
+    --helm-studio-accent: var(--helm-accent-text);
+    --helm-on-studio-accent: var(--helm-ground-page);
+  }
+}
+
+:where(:root[data-theme="light"]) {
+  color-scheme: light;
+
+  --helm-ground-page: #faf8f3;
+  --helm-ground-panel: #ffffff;
+  --helm-ground-raised: #fbf8f1;
+  --helm-ground-inset: #1c1a15;
+  --helm-border-hairline: #e4dfd2;
+  --helm-border-strong: #c9c2b0;
+  --helm-text-primary: #1a1813;
+  --helm-text-secondary: #534f45;
+  --helm-text-muted: #837d70;
+  --helm-accent-base: #f5b800;
+  --helm-accent-hover: #e0a800;
+  --helm-accent-subtle: #fff3d1;
+  --helm-accent-text: #7a5600;
+  --helm-on-accent: #1a1400;
+  --helm-status-idle: #837d70;
+  --helm-status-running: #1f7a4d;
+  --helm-status-info: #1c6fb8;
+  --helm-status-warning: #a85410;
+  --helm-status-error: #c0342a;
+  --helm-on-danger: #ffffff;
+  --helm-log-text: #cfc8ba;
+  --helm-log-muted: #7a7467;
+  --helm-log-error: #e05c52;
+  --helm-log-warning: #f0883e;
+  --helm-log-accent: #ffd24a;
+  --helm-focus-ring: #7a5600;
+  --helm-scrim: rgb(28 26 21 / 0.4);
+  --helm-shadow-dialog: 0 12px 32px rgb(0 0 0 / 0.45);
+  --helm-studio-accent: var(--helm-accent-text);
+  --helm-on-studio-accent: var(--helm-ground-page);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(:root) {
+    --helm-duration-hover: 0ms;
+    --helm-duration-expand: 0ms;
+    --helm-duration-dialog-in: 0ms;
+    --helm-duration-dialog-out: 0ms;
+    --helm-duration-indeterminate: 0ms;
+  }
+}
