@@ -1,5 +1,5 @@
 // Command helm is the helmstudio CLI: validate, dev, test, doctor, adopt.
-// Only validate exists yet — the rest land in later milestones.
+// validate and dev exist; the rest land in later milestones.
 package main
 
 import (
@@ -16,6 +16,8 @@ func main() {
 	switch os.Args[1] {
 	case "validate":
 		os.Exit(runValidate(os.Args[2:], os.Stdout, os.Stderr))
+	case "dev":
+		os.Exit(runDevCommand(os.Args[2:], os.Stdout, os.Stderr))
 	case "-h", "--help", "help":
 		usage()
 		return
@@ -30,5 +32,6 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `usage: helm <command> [arguments]
 
 commands:
-  validate <manifest.yaml>...   validate one or more studio manifests`)
+  validate <manifest.yaml>...   validate one or more studio manifests
+  dev [-f helmstudio.yaml]      run a studio against the embedded provider, no daemon`)
 }
