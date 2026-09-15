@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -617,6 +618,17 @@ var errRecycled = errors.New("the recorded pid now belongs to a different proces
 // and no other process has taken its pid — while any member of the old group
 // survives, the kernel cannot hand that group id to anyone else.
 func signalGroup(id platform.ProcessIdentity, kill bool) error {
+	if err := verifyGroup(id); err != nil {
+		return err
+	}
+	if kill {
+		return platform.KillGroup(id.PGID)
+	}
+	return platform.TerminateGroup(id.PGID)
+}
+
+// verifyGroup is signalGroup's check without the signal.
+func verifyGroup(id platform.ProcessIdentity) error {
 	if id.PGID != id.PID {
 		return fmt.Errorf("process %d: recorded group %d is not its own: %w", id.PID, id.PGID, platform.ErrUnsafeGroup)
 	}
@@ -627,10 +639,7 @@ func signalGroup(id platform.ProcessIdentity, kill bool) error {
 	case err != nil && !errors.Is(err, platform.ErrNoProcess):
 		return err
 	}
-	if kill {
-		return platform.KillGroup(id.PGID)
-	}
-	return platform.TerminateGroup(id.PGID)
+	return nil
 }
 
 func groupGone(id platform.ProcessIdentity) bool {
@@ -638,23 +647,121 @@ func groupGone(id platform.ProcessIdentity) bool {
 	return err == nil && !exists
 }
 
-// terminate stops a member's whole process group: SIGTERM, up to Grace for
-// the leader to exit and the group to empty, then SIGKILL.
+// detachedDescendants lists the processes descended from any member of
+// process group pgid that are no longer in that group — a render a studio
+// started in its own session (docs/decisions.md M5 Q11).
+// Only a process still parented, through any chain, by a member of the group
+// is found: one already re-parented to init or launchd is not.
+func detachedDescendants(table []platform.ProcessEntry, pgid int) []platform.ProcessIdentity {
+	children := map[int][]platform.ProcessEntry{}
+	var queue []int
+	for _, e := range table {
+		if e.PID == e.PPID {
+			continue
+		}
+		children[e.PPID] = append(children[e.PPID], e)
+		if e.PGID == pgid {
+			queue = append(queue, e.PID)
+		}
+	}
+	seen := map[int]bool{}
+	var out []platform.ProcessIdentity
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = queue[1:]
+		for _, c := range children[pid] {
+			if seen[c.PID] {
+				continue
+			}
+			seen[c.PID] = true
+			queue = append(queue, c.PID)
+			if c.PGID != pgid {
+				out = append(out, c.ProcessIdentity)
+			}
+		}
+	}
+	return out
+}
+
+// snapshotDetached adds to known the detached descendants of a member's
+// group, read only while that group is still provably the one helmstudio
+// started, so an unrelated process that inherited a pid is never taken for a
+// descendant.
+func (g *group) snapshotDetached(ident platform.ProcessIdentity, known []platform.ProcessIdentity) []platform.ProcessIdentity {
+	if ident.PGID == 0 || verifyGroup(ident) != nil || groupGone(ident) {
+		return known
+	}
+	table, err := platform.ProcessTable()
+	if err != nil {
+		g.sup.logf("supervisor: %s: reading the process table to find children that left group %d: %v", g.studioID, ident.PGID, err)
+		return known
+	}
+	// The check above and the read are two moments. The table itself must
+	// show the same leader, or no process with its pid, before its entries
+	// with that group are trusted (M5 review #9).
+	for _, e := range table {
+		if e.PID == ident.PGID && e.StartTime != ident.StartTime {
+			return known
+		}
+	}
+	for _, d := range detachedDescendants(table, ident.PGID) {
+		if !slices.ContainsFunc(known, d.SameProcess) {
+			g.sup.logf("supervisor: %s: process %d left group %d but descends from it; it is stopped with the group", g.studioID, d.PID, ident.PGID)
+			known = append(known, d)
+		}
+	}
+	return known
+}
+
+// signalDetached signals each detached descendant still provably the same
+// process (pid and start time); one whose pid now names another process is
+// left alone.
+func (g *group) signalDetached(procs []platform.ProcessIdentity, kill bool) {
+	for _, d := range procs {
+		if !stillRunning(d) {
+			continue
+		}
+		send := platform.TerminateProcess
+		if kill {
+			send = platform.KillProcess
+		}
+		if err := send(d.PID); err != nil {
+			g.sup.logf("supervisor: %s: signalling detached process %d: %v", g.studioID, d.PID, err)
+		}
+	}
+}
+
+// stillRunning reports whether a recorded process still exists as itself.
+func stillRunning(d platform.ProcessIdentity) bool {
+	cur, err := platform.IdentifyProcess(d.PID)
+	return err == nil && cur.SameProcess(d)
+}
+
+// terminate stops a member's whole process group and every descendant that
+// left it: SIGTERM, up to Grace for the leader to exit, the group to empty and
+// the descendants to exit, then SIGKILL. The process table is read again
+// before SIGKILL, for anything detached during the grace period.
 func (g *group) terminate(ident platform.ProcessIdentity, exited chan struct{}) {
 	s := g.sup
+	detached := g.snapshotDetached(ident, nil)
 	if err := signalGroup(ident, false); err != nil {
 		if !errors.Is(err, errRecycled) {
 			s.logf("supervisor: %s: SIGTERM to group %d: %v", g.studioID, ident.PGID, err)
 		}
 		return
 	}
-	deadline := time.Now().Add(s.cfg.Grace)
-	if !waitUntil(deadline, func() bool { return (exited == nil || isClosed(exited)) && groupGone(ident) }) {
+	g.signalDetached(detached, false)
+	gone := func() bool {
+		return (exited == nil || isClosed(exited)) && groupGone(ident) && !slices.ContainsFunc(detached, stillRunning)
+	}
+	if !waitUntil(time.Now().Add(s.cfg.Grace), gone) {
+		detached = g.snapshotDetached(ident, detached)
 		if err := signalGroup(ident, true); err != nil && !errors.Is(err, errRecycled) {
 			s.logf("supervisor: %s: SIGKILL to group %d: %v", g.studioID, ident.PGID, err)
 		}
-		if !waitUntil(time.Now().Add(s.cfg.KillWait), func() bool { return (exited == nil || isClosed(exited)) && groupGone(ident) }) {
-			s.logf("supervisor: %s: process group %d survived SIGKILL for %s", g.studioID, ident.PGID, s.cfg.KillWait)
+		g.signalDetached(detached, true)
+		if !waitUntil(time.Now().Add(s.cfg.KillWait), gone) {
+			s.logf("supervisor: %s: process group %d or a process that left it survived SIGKILL for %s", g.studioID, ident.PGID, s.cfg.KillWait)
 		}
 	}
 }

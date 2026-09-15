@@ -68,9 +68,16 @@ func helperMain(mode string, args []string) int {
 			go func() {
 				<-terms
 				fh, _ := os.OpenFile(f, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
-				fmt.Fprintf(fh, "%s-grandchild %d\n", flagValue(args, "name"), time.Now().UnixNano())
+				suffix := "-grandchild"
+				if hasFlag(args, "detached") {
+					suffix = ""
+				}
+				fmt.Fprintf(fh, "%s%s %d\n", flagValue(args, "name"), suffix, time.Now().UnixNano())
 				fh.Close()
-				os.Exit(0)
+				if !hasFlag(args, "ignore-term") {
+					os.Exit(0)
+				}
+				select {}
 			}()
 		}
 		time.Sleep(time.Hour)
@@ -93,7 +100,8 @@ func helperMain(mode string, args []string) int {
 // helperServe listens on --port, answers /healthz from --health-file ("fail"
 // means 500), optionally forks a grandchild that stays in its process group, logs a
 // line every 50ms, records SIGTERM to --term-file, and ignores SIGTERM with
-// --ignore-term.
+// --ignore-term. --detach starts a child in its own session, which records
+// SIGTERM as "<name>-detached" and ignores it with --detached-ignores-term.
 func helperServe(args []string) int {
 	if hasFlag(args, "grandchild") {
 		gc := exec.Command(os.Args[0], "helper", "sleep", "--name", flagValue(args, "name"), "--term-file", flagValue(args, "term-file"))
@@ -102,6 +110,21 @@ func helperServe(args []string) int {
 			return 3
 		}
 		fmt.Printf("grandchild pid %d\n", gc.Process.Pid)
+	}
+	if hasFlag(args, "detach") {
+		// As ltx studio starts a render: in its own session, out of the
+		// process group helmstudio signals (docs/decisions.md M5 Q11).
+		dargs := []string{"helper", "sleep", "--detached", "--name", flagValue(args, "name") + "-detached", "--term-file", flagValue(args, "term-file")}
+		if hasFlag(args, "detached-ignores-term") {
+			dargs = append(dargs, "--ignore-term")
+		}
+		dc := exec.Command(os.Args[0], dargs...)
+		dc.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		if err := dc.Start(); err != nil {
+			fmt.Println("detached child:", err)
+			return 3
+		}
+		fmt.Printf("detached pid %d\n", dc.Process.Pid)
 	}
 	terms := make(chan os.Signal, 1)
 	signal.Notify(terms, syscall.SIGTERM)
@@ -398,6 +421,11 @@ func groupExists(t *testing.T, pgid int) bool {
 
 // grandchildPIDs reads the pids a serve helper reported forking.
 func grandchildPIDs(t *testing.T, logPath string) []int {
+	return reportedPIDs(t, logPath, "grandchild pid ")
+}
+
+// reportedPIDs reads the pids a serve helper printed after prefix.
+func reportedPIDs(t *testing.T, logPath, prefix string) []int {
 	t.Helper()
 	f, err := os.Open(logPath)
 	if err != nil {
@@ -407,7 +435,7 @@ func grandchildPIDs(t *testing.T, logPath string) []int {
 	var pids []int
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		if rest, ok := strings.CutPrefix(sc.Text(), "grandchild pid "); ok {
+		if rest, ok := strings.CutPrefix(sc.Text(), prefix); ok {
 			pid, _ := strconv.Atoi(rest)
 			pids = append(pids, pid)
 		}
