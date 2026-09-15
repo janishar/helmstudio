@@ -141,6 +141,13 @@ func (s *Supervisor) adoptRun(ctx context.Context, studioID, runID string, rows 
 		}
 	}
 	if plan != nil {
+		if err := s.addPlatformEnv(ctx, st, runID, plan); err != nil {
+			s.logf("supervisor: re-adoption: %s: %v; watching its survivors without restarting or probing them", studioID, err)
+			s.releasePlanPorts(plan)
+			plan = nil
+		}
+	}
+	if plan != nil {
 		for _, pl := range plan {
 			if _, ok := byName[pl.spec.Name]; !ok {
 				s.logf("supervisor: re-adoption: %s's manifest now has a process %q the running group does not; watching its survivors only", studioID, pl.spec.Name)

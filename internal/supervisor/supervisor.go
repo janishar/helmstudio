@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/platform"
 	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/weights"
@@ -59,12 +60,31 @@ type Config struct {
 	HostMemory func() (uint64, error)
 	// Logf receives the daemon's own diagnostics. Default: discarded.
 	Logf func(format string, args ...any)
+	// Platform connects launches to the studio API: the environment every
+	// member of a group is spawned with, and word that a group has ended.
+	// Nil runs studios with no platform environment (docs/decisions.md M2).
+	Platform PlatformHooks
+	// StudioData is {data} for a studio. Default <data>/studios/<id>/data;
+	// helm dev keeps it at ./.helm/data (docs/decisions.md M4 Q26).
+	StudioData func(m *manifest.Manifest) string
 
 	// For tests.
 	now        func() time.Time
 	portFree   func(int) bool
 	portHolder func(int) string
 	failWrite  func(what string) error
+}
+
+// PlatformHooks is what a launch needs from the studio API
+// (docs/design/07-platform-services.md §3).
+type PlatformHooks interface {
+	// LaunchEnv returns the variables every member of this launch gets:
+	// HELM_API, HELM_TOKEN, HELM_STAGE_DIR, HELM_STUDIO_ID. It is called at
+	// launch, and again for a re-adopted group whose members may be restarted.
+	LaunchEnv(ctx context.Context, st Studio, groupRunID string) ([]string, error)
+	// GroupEnded is called once a group has stopped: its tokens are revoked
+	// and its stage directory removed.
+	GroupEnded(studioID, groupRunID string)
 }
 
 // Supervisor owns every process group the daemon runs.
@@ -267,12 +287,16 @@ func (s *Supervisor) Launch(ctx context.Context, studioID string, opts LaunchOpt
 	if err != nil {
 		return GroupStatus{}, err
 	}
-	if err := os.MkdirAll(studioData(s.dirs, st.Manifest), 0o700); err != nil {
+	if err := os.MkdirAll(s.studioData(st.Manifest), 0o700); err != nil {
 		s.releasePlanPorts(plan)
 		return GroupStatus{}, fmt.Errorf("%s: creating its data directory: %w", studioID, err)
 	}
 
 	g := newGroup(s, st, studioID, newID(s.now()))
+	if err := s.addPlatformEnv(ctx, st, g.runID, plan); err != nil {
+		s.releasePlanPorts(plan)
+		return GroupStatus{}, err
+	}
 	for _, pl := range plan {
 		p := &proc{g: g, pl: pl, rowID: newID(s.now()), name: pl.spec.Name, role: pl.role,
 			command: pl.argv, port: pl.port, state: stateQueued, health: healthUnknown}
@@ -291,6 +315,21 @@ func (s *Supervisor) Launch(ctx context.Context, studioID string, opts LaunchOpt
 	s.mu.Unlock()
 	go g.run()
 	return s.Status(ctx, studioID)
+}
+
+// addPlatformEnv appends the launch's platform environment to every member.
+func (s *Supervisor) addPlatformEnv(ctx context.Context, st Studio, runID string, plan []*planned) error {
+	if s.cfg.Platform == nil || len(plan) == 0 {
+		return nil
+	}
+	env, err := s.cfg.Platform.LaunchEnv(ctx, st, runID)
+	if err != nil {
+		return fmt.Errorf("%s was not launched: preparing its platform environment: %w", st.Manifest.ID, err)
+	}
+	for _, pl := range plan {
+		pl.env = append(pl.env, env...)
+	}
+	return nil
 }
 
 func (s *Supervisor) releasePlanPorts(plan []*planned) {

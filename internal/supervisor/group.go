@@ -133,6 +133,9 @@ func (g *group) run() {
 	defer close(g.done)
 	g.bringUp()
 	g.teardown()
+	if h := g.sup.cfg.Platform; h != nil {
+		h.GroupEnded(g.studioID, g.runID)
+	}
 }
 
 func (g *group) bringUp() {

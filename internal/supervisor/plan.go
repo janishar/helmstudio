@@ -43,6 +43,8 @@ type launchPaths struct {
 	// modelRefusals says why any other declared weight cannot resolve.
 	models        map[string]string
 	modelRefusals map[string]string
+	// data is {data}.
+	data string
 }
 
 // launchable states are the install states a studio may launch from
@@ -70,7 +72,7 @@ func (s *Supervisor) installed(ctx context.Context, st Studio) (launchPaths, err
 	if err != nil {
 		return launchPaths{}, fmt.Errorf("%s: resolving its weights: %w", m.ID, err)
 	}
-	return launchPaths{root: root, models: models, modelRefusals: refuse}, nil
+	return launchPaths{root: root, models: models, modelRefusals: refuse, data: s.studioData(m)}, nil
 }
 
 // studioData is {data}: the studio's persistent data root, outside its
@@ -78,6 +80,14 @@ func (s *Supervisor) installed(ctx context.Context, st Studio) (launchPaths, err
 // (docs/design/08-h3-dry-run.md, change 2).
 func studioData(dirs *platform.Dirs, m *manifest.Manifest) string {
 	return filepath.Join(dirs.Data(), "studios", m.ID, "data")
+}
+
+// studioData is {data} for this supervisor: Config.StudioData when set.
+func (s *Supervisor) studioData(m *manifest.Manifest) string {
+	if s.cfg.StudioData != nil {
+		return s.cfg.StudioData(m)
+	}
+	return studioData(s.dirs, m)
 }
 
 // launchOrder returns the autostart processes in dependency order. Among
@@ -221,7 +231,7 @@ func resolvePlan(dirs *platform.Dirs, st Studio, lp launchPaths, assigned map[st
 
 	values := map[string]string{
 		"root": root,
-		"data": studioData(dirs, m),
+		"data": lp.data,
 	}
 	for name, port := range ports {
 		values["ports."+name] = strconv.Itoa(port)
@@ -287,6 +297,12 @@ func resolvePlan(dirs *platform.Dirs, st Studio, lp launchPaths, assigned map[st
 		env := RestrictedEnv(dirs, m.ID, os.Environ())
 		keys := make([]string, 0, len(p.Env))
 		for k := range p.Env {
+			// HELM_* is the platform's (docs/decisions.md M4 defaults): a
+			// manifest must not be able to point a studio at another API or
+			// hand it a token.
+			if strings.HasPrefix(k, "HELM_") {
+				return nil, notLaunchable("process %q sets %s in env; HELM_* variables are set by helmstudio", p.Name, k)
+			}
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
