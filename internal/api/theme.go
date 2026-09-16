@@ -12,6 +12,7 @@ import (
 
 	helmcss "github.com/janishar/helmstudio/packages/helm-css"
 	helmruntimenode "github.com/janishar/helmstudio/packages/helm-runtime-sdk/node"
+	helmui "github.com/janishar/helmstudio/packages/helm-ui-sdk"
 )
 
 // The theme and the SDK files (docs/decisions.md M6 Q8, Q9, Q14):
@@ -74,14 +75,18 @@ func originExempt(r *http.Request) bool {
 }
 
 // sdkFile finds a served file: helm-css at the root, the browser runtime
-// under runtime/, and helm-runtime.js re-exporting it (04 §8).
+// under runtime/, the components under ui/, and helm-runtime.js and
+// helm-ui.js re-exporting each (04 §8).
 func sdkFile(name string) (fs.FS, string, bool) {
 	switch {
-	case name == "helm-runtime.js":
+	case name == "helm-runtime.js", name == "helm-ui.js":
 		return nil, "", true
 	case strings.HasPrefix(name, "runtime/"):
 		src, ok := helmruntimenode.BrowserFiles[strings.TrimPrefix(name, "runtime/")]
 		return helmruntimenode.Browser, src, ok
+	case strings.HasPrefix(name, "ui/"):
+		src, ok := helmui.Served[strings.TrimPrefix(name, "ui/")]
+		return helmui.Files, src, ok
 	case slicesContains(helmcss.Layers, name) || slicesContains(helmcss.Derived, name):
 		return helmcss.Files, name, true
 	case strings.HasPrefix(name, "fonts/") && path.Ext(name) == ".woff2", name == "fonts/LICENSE.txt":
@@ -90,7 +95,13 @@ func sdkFile(name string) (fs.FS, string, bool) {
 	return nil, "", false
 }
 
-const runtimeShim = "// helm-runtime.js: the browser build of @helmstudio/runtime (docs/design/04-packages.md §8).\nexport * from \"./runtime/browser.js\";\n"
+// The two shims 04 §8 names. Each re-exports the package's own files rather
+// than being a copy of them, so what a page imports and what the package ships
+// can never differ.
+var shims = map[string]string{
+	"helm-runtime.js": "// helm-runtime.js: the browser build of @helmstudio/runtime (docs/design/04-packages.md §8).\nexport * from \"./runtime/browser.js\";\n",
+	"helm-ui.js":      "// helm-ui.js: the prebuilt components of @helmstudio/ui (docs/design/04-packages.md §8).\n// Importing it registers <helm-terminal>, <helm-gallery> and <helm-player>.\nexport * from \"./ui/index.js\";\n",
+}
 
 var sdkTypes = map[string]string{
 	".css":   "text/css; charset=utf-8",
@@ -109,7 +120,7 @@ func (s *Server) serveSDK(w http.ResponseWriter, r *http.Request) {
 	}
 	var body []byte
 	if fsys == nil {
-		body = []byte(runtimeShim)
+		body = []byte(shims[name])
 	} else {
 		b, err := fs.ReadFile(fsys, src)
 		if errors.Is(err, fs.ErrNotExist) {

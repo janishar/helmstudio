@@ -1,0 +1,22 @@
+{
+  "name": "@helmstudio/ui",
+  "version": "1.0.0-dev.0",
+  "description": "helmstudio's prebuilt components: helm-terminal, helm-gallery, helm-player",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js",
+    "./terminal": "./src/terminal.js",
+    "./gallery": "./src/gallery.js",
+    "./player": "./src/player.js"
+  },
+  "files": ["src"],
+  "peerDependencies": {
+    "@helmstudio/css": "^1",
+    "@helmstudio/runtime": "^1"
+  },
+  "peerDependenciesMeta": {
+    "@helmstudio/css": { "optional": true },
+    "@helmstudio/runtime": { "optional": true }
+  },
+  "license": "MIT"
+}
