@@ -132,6 +132,13 @@ visual:
 golden:
 	@HELM_UPDATE_GOLDEN=1 $(GO) test -count=1 -run TestHelmCSSMatchesItsGoldensInBothThemes ./test/visual/ && echo "golden: written to test/visual/golden; review them"
 
+# Regenerate the export goldens and record the ffmpeg major and architecture
+# they were made with (docs/decisions.md M8 Q15). These hash what the filter
+# graph produced, so a change here is a change in what an export renders: look
+# at the diff before committing it.
+golden-media:
+	@HELM_UPDATE_GOLDEN=1 $(GO) test -count=1 ./test/media/ && echo "golden-media: written to test/media/golden; review them"
+
 # Build helm.css, helm.min.css and tokens.json from helm-css's four layers.
 css:
 	@$(GO) run ./packages/helm-css/cmd/build && echo "css: built"
