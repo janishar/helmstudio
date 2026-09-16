@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>helm-timeline</title>
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.setAttribute("data-theme", t);
+  // A grid parent, as a studio's page often is: an item there is as wide as
+  // its content unless it says otherwise.
+  if (new URLSearchParams(location.search).get("layout") === "grid") document.documentElement.classList.add("grid-page");
+</script>
+<link rel="stylesheet" href="/sdk/v1/helm.css">
+<style>
+  /* The page decides how big the editor is; the editor fills what it is given. */
+  main { padding: var(--helm-space-4); }
+  .grid-page main { display: grid; gap: var(--helm-space-4); }
+  helm-timeline { display: block; }
+</style>
+</head>
+<body class="helm-body">
+<main class="helm-main">
+  <helm-timeline id="tl" timeline="01JBTM00000000000000SEQ01A"></helm-timeline>
+</main>
+
+<script type="module">
+  // A studio page holding timeline and gallery.read_all (M8 Q20), drawn from
+  // a sequence the daemon's own rules laid out: see
+  // test/visual/timeline_fixture_test.go. The client is a fake, because
+  // ownership and revisions on the wire are M8a's and tested there; what it
+  // answers with is not.
+  import "/sdk/v1/helm-ui.js";
+
+  const q = new URLSearchParams(location.search);
+  const flag = (name, fallback) => (q.has(name) ? q.get(name) : fallback);
+
+  const KIND = { 400: "Invalid", 404: "NotFound", 409: "Conflict", 422: "Invalid", 501: "Unsupported" };
+
+  /** call reaches the fixture, and fails the way the runtime SDK's client does. */
+  async function call(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw Object.assign(new Error(`${data.error} (${res.status}): ${data.message}`), { kind: KIND[res.status] || "Internal", code: data.error });
+    }
+    return data;
+  }
+
+  // Every call the editor makes, for the behaviour tests to read.
+  window.calls = [];
+  const record = (...c) => window.calls.push(JSON.parse(JSON.stringify(c)));
+
+  // Scripted answers a behaviour test can set before it acts.
+  window.script = { conflictOnce: false, invalidOnce: null };
+
+  const job = { id: "01JBTM0000000000000000JB1A", kind: "export", state: "running", progress_num: 142, progress_den: 340 };
+  let jobs = flag("export", "none") === "running" ? [job] : [];
+
+  const client = {
+    me: { get: async () => ({ studio_id: "sequencer-studio" }) },
+    timeline: {
+      get: async (id) => {
+        record("get", id);
+        return call("GET", "/timeline-fixture/doc");
+      },
+      update: async (id, body, params) => {
+        record("update", id, body, params.ifMatch);
+        if (window.script.conflictOnce) {
+          window.script.conflictOnce = false;
+          throw Object.assign(new Error("etag_mismatch (409): the sequence changed since it was read"), { kind: "Conflict" });
+        }
+        if (window.script.invalidOnce) {
+          const text = window.script.invalidOnce;
+          window.script.invalidOnce = null;
+          throw Object.assign(new Error(`invalid_timeline (422): ${text}`), { kind: "Invalid" });
+        }
+        return call("POST", "/timeline-fixture/update", { tracks: body.tracks, if_match: params.ifMatch });
+      },
+      revert: async (id, body, params) => {
+        record("revert", id, body, params.ifMatch);
+        return call("POST", "/timeline-fixture/revert", { revision: body.revision, if_match: params.ifMatch });
+      },
+      append: async (body) => {
+        record("append", body);
+        throw Object.assign(new Error("not_found (404): no asset you can use"), { kind: "NotFound" });
+      },
+      plan: async (id, params) => {
+        record("plan", id, params);
+        switch (flag("plan", "real")) {
+          case "copy":
+            return { mode: "copy", reasons: [] };
+          case "unsupported":
+            throw Object.assign(new Error("unsupported (501): Export needs ffmpeg. Install it with brew install ffmpeg, or set HELM_FFMPEG."), { kind: "Unsupported" });
+          default:
+            return call("GET", "/timeline-fixture/plan");
+        }
+      },
+      export: async (id, body) => {
+        record("export", id, body);
+        const started = { ...job, state: "queued", progress_num: 0 };
+        jobs = [started];
+        return started;
+      },
+      exports: async (id) => {
+        record("exports", id);
+        return { items: jobs, next_cursor: null };
+      },
+      cancelExport: async (id, jobId) => {
+        record("cancelExport", id, jobId);
+        jobs = jobs.map((j) => (j.id === jobId ? { ...j, state: "cancelled" } : j));
+      },
+    },
+  };
+  if (flag("preview", "0") === "1") {
+    // An address that never answers: an element stays unloaded where it was
+    // parked, which is what the preview tests read.
+    client.assets = { read: async (id) => ({ url: `/timeline-fixture/media/${id}`, body: null }) };
+  }
+  window.fixture = { client, job, setJobs: (list) => { jobs = list; } };
+
+  await fetch("/timeline-fixture/reset", { method: "POST" });
+
+  const tl = document.getElementById("tl");
+  if (flag("editable", "1") === "1") tl.setAttribute("editable", "");
+  tl.client = client;
+
+  // Wait for the sequence, then put the playhead inside the dissolve and select
+  // the clip it starts, so the golden shows the inspector and the marker.
+  for (let i = 0; i < 200 && !(tl.doc && tl.chip && !tl.chip.hidden); i++) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  if (flag("pose", "1") === "1") {
+    tl.seek(5.2);
+    tl.select(0, 1);
+  }
+
+  const { settle } = await import("./settle.js");
+  await settle();
+</script>
+</body>
+</html>

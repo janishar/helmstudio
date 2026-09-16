@@ -93,6 +93,9 @@ func fixtureServer(t *testing.T) *httptest.Server {
 	mux.Handle("/fixtures/", http.StripPrefix("/fixtures/", http.FileServerFS(os.DirFS("fixtures"))))
 	mux.Handle("/web/", http.StripPrefix("/web/", http.FileServerFS(os.DirFS(filepath.Join("..", "..", "web")))))
 	mux.HandleFunc("/sdk/v1/{file...}", serveSDK)
+	// helm-timeline's fixture sequence, laid out by the daemon's own rules: see
+	// timeline_fixture_test.go.
+	mountSequenceFixture(t, mux)
 	// The editor's fixture talks to a real daemon: see daemon_test.go.
 	srv := httptest.NewUnstartedServer(mux)
 	mountDaemon(t, mux, srv)
@@ -159,6 +162,9 @@ func shots() []shot {
 		out = append(out, shot{"ui-" + theme, "ui.html", theme, opposite, 900, 1400})
 		for _, w := range []int{1280, 1000, 380} {
 			out = append(out, shot{fmt.Sprintf("layout-%s-%d", theme, w), "layout.html", theme, opposite, w, 0})
+			// helm-timeline, posed: the playhead inside the dissolve, a clip
+			// selected so the inspector shows, and an export running.
+			out = append(out, shot{fmt.Sprintf("timeline-%s-%d", theme, w), "timeline.html?export=running", theme, opposite, w, 0})
 			for _, s := range screens {
 				out = append(out, shot{
 					name:    fmt.Sprintf("screen-%s-%s-%d", s, theme, w),
