@@ -4,27 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>helmstudio</title>
+<!-- The theme before first paint, so a dark launcher never flashes light.
+     The stored setting arrives with the first request; until then the OS
+     preference applies, which is what `system` means anyway. -->
+<link rel="stylesheet" href="/sdk/v1/helm.css">
+<link rel="stylesheet" href="launcher.css">
+<script type="module" src="/sdk/v1/helm-ui.js"></script>
+<script type="module">
+  import { start } from "./app.js";
+  start();
+</script>
 </head>
-<body>
-<h1>helmstudio</h1>
-<p id="status">Loading…</p>
-<fieldset id="theme" disabled>
-  <legend>Theme, for every running studio</legend>
-  <label><input type="radio" name="theme" value="system"> System</label>
-  <label><input type="radio" name="theme" value="light"> Light</label>
-  <label><input type="radio" name="theme" value="dark"> Dark</label>
-</fieldset>
-<table border="1" cellpadding="4">
-  <thead>
-    <tr><th>Studio</th><th>State</th><th>Processes</th><th>Actions</th></tr>
-  </thead>
-  <tbody id="studios"></tbody>
-</table>
-
-<h2 id="log-title" hidden>Log</h2>
-<p id="log-note" hidden></p>
-<pre id="log" hidden></pre>
-
-<script src="shelf.js"></script>
+<body class="helm-body">
+<div class="helm-app" id="app">
+  <p class="helm-micro" style="padding: var(--helm-space-4)">Loading…</p>
+</div>
 </body>
 </html>

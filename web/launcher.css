@@ -1,0 +1,44 @@
+/* The launcher's own page styles: only what helm-css cannot carry, because a
+ * framework must not assume the page it is on.
+ *
+ * helm-css gives .helm-scrim for a hand-built overlay. The launcher uses a
+ * real <dialog> instead, so that Escape, the backdrop and focus containment
+ * are the platform's rather than ours (03 §17) — and a native dialog's
+ * backdrop can only be reached through ::backdrop, which no class can style.
+ */
+
+dialog.helm-dialog::backdrop {
+  background: var(--helm-scrim);
+}
+
+/* A component fills the panel it is given; the launcher decides how tall that
+ * panel is, because only the page knows what else is on it. */
+.helm-work-right helm-terminal {
+  display: block;
+  min-height: 320px;
+  height: 100%;
+}
+
+/* The top bar wraps on a narrow window.
+ *
+ * helm-css's .helm-topbar is a single flex row that does not wrap, and the
+ * shell 03 §6 draws — brand, address, the running studio with a Stop, the
+ * count and the three-state theme control — is wider than 380px. Without this
+ * the whole page scrolls sideways.
+ *
+ * This is one plain class rule in a stylesheet linked after helm.css, which is
+ * the override path 04 §3 promises: a studio overrides by writing one rule,
+ * not by fighting specificity. It is here rather than in helm-css because
+ * helm-css belongs to M6a; see this milestone's report.
+ */
+.helm-topbar {
+  flex-wrap: wrap;
+  padding-top: var(--helm-space-1);
+  padding-bottom: var(--helm-space-1);
+}
+
+/* The card's actions wrap too: a chip and two buttons do not fit 320px when
+ * the chip says "Needs a Hugging Face token". */
+.helm-card-actions {
+  flex-wrap: wrap;
+}
