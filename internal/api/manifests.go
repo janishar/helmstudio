@@ -105,6 +105,20 @@ func inspect(name string, data []byte) check {
 		out.Errors = []manifest.Error{}
 	}
 	out.Valid = res.OK()
+
+	// The document as JSON, for the form — whether or not it is valid, as
+	// api/openapi.yaml's ManifestCheck says. An editor exists to fix invalid
+	// documents, and a form that went blank the moment one was invalid would
+	// leave the page guessing at what the text contains; a page that guesses
+	// which parents exist replaces the ones it could not see. Decoding here
+	// rather than on the page is the whole point: one parser, and the form
+	// renders what the validator read.
+	var doc any
+	if err := yamlToAny(data, &doc); err == nil {
+		if m, ok := doc.(map[string]any); ok {
+			out.Document = m
+		}
+	}
 	if !out.Valid {
 		return out
 	}
@@ -121,13 +135,6 @@ func inspect(name string, data []byte) check {
 	if m != nil {
 		c := manifest.Criteria(m)
 		out.Criteria = &c
-	}
-	// The document as JSON, for the form. Decoding it here rather than on the
-	// page is the whole point: one parser, and the form renders what the
-	// validator validated.
-	var doc any
-	if err := yamlToAny(data, &doc); err == nil {
-		out.Document = doc
 	}
 	return out
 }
