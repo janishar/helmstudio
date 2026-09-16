@@ -5,8 +5,11 @@
 //   - Go router:             internal/api/studioapi/zz_server.go
 //   - Python client:         packages/helm-runtime-sdk/python/helm_runtime_sdk/_generated.py
 //   - Node client:           packages/helm-runtime-sdk/node/src/generated.js
+//   - Launcher browser client: web/launcher.js
 //
-// Only operations tagged studio-api are generated. Every output is stdlib-only.
+// The first five carry the studio-api operations, which is all the runtime SDK
+// and its router may know (M4 Q1). web/launcher.js carries the launcher ones,
+// for the daemon's own page alone (M6 Q12). Every output is stdlib-only.
 // Run from the repository root: go run ./api/gen. The gate runs it and fails on
 // a diff, so generated files are never edited by hand.
 package main
@@ -44,6 +47,7 @@ func run(spec, root string) error {
 		{"internal/api/studioapi/zz_server.go", genGoServer(d), true},
 		{"packages/helm-runtime-sdk/python/helm_runtime_sdk/_generated.py", genPython(d), false},
 		{"packages/helm-runtime-sdk/node/src/generated.js", genNode(d), false},
+		{"web/launcher.js", genLauncher(d), false},
 	}
 	for _, o := range outputs {
 		src := []byte(o.src)

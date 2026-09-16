@@ -24,7 +24,8 @@ MODULES := packages/helm-runtime-sdk/go packages/helm-runtime-sdk/go/embedded te
 GENERATED := packages/helm-runtime-sdk/go/zz_types.go packages/helm-runtime-sdk/go/zz_client.go \
 	internal/api/studioapi/zz_server.go \
 	packages/helm-runtime-sdk/python/helm_runtime_sdk/_generated.py \
-	packages/helm-runtime-sdk/node/src/generated.js
+	packages/helm-runtime-sdk/node/src/generated.js \
+	web/launcher.js
 
 gate: fmt vet vet-linux boundaries deps drift test sdk conformance visual validate
 	@echo "gate: green"
