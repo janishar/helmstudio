@@ -211,11 +211,21 @@ A framework screen. Clips carry the identity hue of the studio that produced the
 
 (Amended 2026-09-15 by the M4 first review, #5: a clip names its asset as `asset_id`, as every wire reference does since Q15, and the reclaim query reads that key. M8 keeps it.)
 
+(Amended 2026-09-16, M8, Q7–Q12. The document above is what a request sends; what is stored is the same document with every time snapped.)
+- **The grid.** `at`, `hold` and a transition's `duration`, and a video or image clip's `in` and `out`, land on whole frames of the target; a sound clip's `in` and `out` land on whole samples. 5.04s is not a frame at 24 fps, and two editors rounding it differently would cut in different places. `fps` is one of 23.976, 24, 25, 29.97, 30, 48, 50, 59.94 and 60, each the exact ratio behind the decimal.
+- **The tracks.** One video track, `V1`, contiguous from 0, and up to eight audio tracks, `A1`… A video clip's own sound plays under it unless `audio: false` turns it off; an image is held and never trimmed; clips on one track never overlap, and sound never runs past the picture.
+- **The transition.** A dissolve is centred on the cut and takes half its duration of handle from each side, so adding one moves no clip and the sequence keeps its length. It is refused when either side is short of handle.
+- **Whose it is.** A sequence is owned by the studio that made it, or by the launcher. Another studio reads or edits it only with `gallery.read_all`; a write may add only assets the caller can read, and an asset it may not read is refused in the same words as one that does not exist. Every edit keeps the document it replaced, and undo writes an old one forward rather than rewinding, so nothing is lost by undoing.
+
 **Non-destructive by construction.** A clip is a reference with in and out points; sources are never modified or copied. Every edit is a patch, so undo is the previous revision, and a timeline referencing an asset counts as a reference for reclaim — the disk page can never offer to delete footage a sequence is using. Export creates a Job, which means it reuses install's progress, cancellation and log file rather than inventing a second progress system, and the result becomes a gallery item whose `inputs[]` are every clip that went into it, so lineage survives the edit.**
 
 ### Export, stated precisely
 
 Clips from four studios differ in resolution, frame rate, pixel aspect, colour range and sample rate, and a naïve concat produces something subtly broken — a green first frame, half a second of wrong-pitch audio. The timeline declares a target up front and every clip is conformed to it; nothing is inferred per clip at render time. When every clip already matches the target and there are no transitions or gain changes, export is a concat demuxer **stream copy** — seconds, no re-encode, bit-identical picture — which for a run of takes from one studio is the common case, and the UI says so, so people learn which edits are cheap. Otherwise it is one filter graph: scale with pad, `fps`, `setsar=1`, explicit colour range, `aresample` with `async`, then `concat` — one pass, no intermediate files.
+
+(Amended 2026-09-16, M8, Q13, Q14, Q15.) **The fast path copies the picture, and the sound is always re-encoded.** A copied AAC stream carries its own priming and padding into every cut: two real h3 takes joined by the concat demuxer came out with picture bit-identical to their sources and the second take's sound 81 ms behind its picture. So the fast path is "video stream copy", and it is taken only when every clip — probed at export, never trusted from what a studio said when it adopted it — matches the target and each other on codec, profile, level, size, aspect ratio, field order, pixel format, time base, frame rate, colour tags and parameter sets, and is used whole, since a trim cuts at packets rather than frames. Everything else conforms, and the reason is named per clip.
+
+**Colour is read as it was written.** Every studio here writes untagged files whose pixels are BT.601; a conform reads an untagged source that way, converts to BT.709 limited range and tags what it wrote. A copy keeps its sources' tags, untagged included, because nothing converted the picture and relabelling it would be a lie.
 
 ffmpeg becomes load-bearing, and needs a licensing decision
 
@@ -241,6 +251,8 @@ A studio hands clips to the framework and gets back a sequence. It never renders
     # exports are Jobs, so progress and logs come back on the channel that already exists
     POST /api/v1/timeline/tl_01JB9…/export  { "preset": "h264-1080p24" }
     → { "job": "jb_01JBC…" }        # poll /jobs/{id} or subscribe on /events
+
+(Amended 2026-09-16, M8, Q17, Q18, Q19. The operations as served: `POST /timeline`, `GET /timeline`, `GET`/`PATCH`/`DELETE /timeline/{id}`, `GET /timeline/{id}/revisions`, `POST /timeline/{id}:revert`, `POST /timeline:append`, `POST /timeline/{id}:open`, `GET /timeline/{id}:plan`, `POST /timeline/{id}:export`, `GET /timeline/{id}/exports` and `POST /timeline/{id}/exports/{job}:cancel`. `:export` replaces the slash above, so every action reads the same way. A write takes `If-Match`, which is the sequence's revision. An export's progress and cancellation are under `timeline`, so a studio that exports need not also hold `jobs` to watch what it started; a studio that does hold `jobs` sees the same job in `/jobs`. A preset names encoding only — `h264` — because the sequence's own target already states its size and rates.)
 
 In a studio's UI this is one button — "Add to timeline" — and a toast. When the provider is embedded and no framework is present, `:open` returns `501` with a clear reason and the studio simply hides the button; the sequence is still created and still exports, because export is the embedded media engine doing the same work headlessly. That is the pattern for every framework-only surface: the data operation always works, the presentation is what degrades.
 

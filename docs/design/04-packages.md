@@ -110,6 +110,8 @@ Paginated, filterable grid or list over `/gallery/items`, with thumbnails, param
 
 The editor for a framework-owned sequence: tracks, clips coloured by the studio that produced them, drag and trim with snapping, gapless preview across cuts, and export that creates a Job. It edits the framework's timeline document through the runtime client and owns none of the data — which is why the same sequence can be opened in the launcher or inside any studio and stay one thing.
 
+(Amended 2026-09-16, M8 Q11, Q20.) "Inside any studio" is the studio that made the sequence, or one holding `gallery.read_all` — otherwise a shared document would hand every studio the ids, lengths and origins of work it may not read. A clip whose studio the caller cannot learn is drawn neutral and labelled "another studio". The component ships with M8b; the timeline document and its API ship with M8a, and the launcher's own screen with M9.
+
 The rule that keeps this package honest
 
 A component **receives** a runtime client; it never constructs one. `el.client = helm.fromEnv()`, or the page sets `window.helm` once and components pick it up. Otherwise every component re-implements provider selection, auth and base-URL handling, and testing a component against a mock becomes impossible.

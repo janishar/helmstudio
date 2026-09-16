@@ -552,6 +552,39 @@ One artifact per Hugging Face `(repo, revision)`, whichever studio declared it f
     DROP TABLE items_fts;
     CREATE VIRTUAL TABLE items_fts USING fts5(item_id UNINDEXED, title, prompt, tokenize='porter unicode61');
 
+**Schema v6 timeline changes** (added 2026-09-16, M8; `docs/decisions.md` "2026-09-16 · M8 timeline and export", Q10, Q11, Q12, Q16, Q17). A sequence is nobody's studio document, but it is *owned* by the studio that made it, or by the launcher; every edit keeps the document it replaced, so undo is the previous revision as 05 §6 says; and an export records the process rendering it, so a daemon killed mid-render can stop what it left behind.
+
+    -- timelines: an owner, a soft delete, and the revision the ETag is.
+    -- studio_id is NULL for a sequence the launcher made (M9's screen).
+    -- A deleted sequence keeps its row, so an exported item still names it,
+    -- and its clips stop holding their footage against reclaim (§8).
+    ALTER TABLE timelines ADD COLUMN studio_id TEXT;
+    ALTER TABLE timelines ADD COLUMN deleted_at INTEGER;
+    CREATE INDEX idx_timelines_studio ON timelines(studio_id, updated_at DESC) WHERE deleted_at IS NULL;
+
+    -- every document a write replaced, newest 100 per sequence. Revert writes
+    -- one of these forward as a new revision rather than rewinding to it, so
+    -- nothing is lost by undoing.
+    CREATE TABLE timeline_revisions (
+      timeline_id TEXT NOT NULL REFERENCES timelines(id) ON DELETE CASCADE,
+      revision INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      target TEXT NOT NULL,
+      tracks TEXT NOT NULL,
+      saved_at INTEGER NOT NULL,
+      PRIMARY KEY (timeline_id, revision)) WITHOUT ROWID;
+
+    -- an export's ffmpeg, verified before it is ever signalled, exactly as a
+    -- build step's is (M3 review #1). A job with no identity is never
+    -- signalled; the startup sweep marks it interrupted and removes its file.
+    ALTER TABLE jobs ADD COLUMN pid INTEGER;
+    ALTER TABLE jobs ADD COLUMN pid_start_time INTEGER;
+    ALTER TABLE jobs ADD COLUMN pgid INTEGER;
+    ALTER TABLE jobs ADD COLUMN work_path TEXT;   -- the partial file to remove
+    CREATE INDEX idx_jobs_subject ON jobs(subject_kind, subject_id, created_at DESC);
+
+`log_files.kind` gains `export`, which needs the table rebuilt as v4 rebuilt it.
+
 Schema v5 (added 2026-09-16, M6 Q8): the launcher's settings. §6's "`settings` stores a root only when the user overrides it" lands here as a table; M6 writes only `theme`, and roots stay open.
 
     -- one row per setting the user changed; an absent key means the default

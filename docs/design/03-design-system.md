@@ -385,6 +385,8 @@ The confirm is danger-filled, not accent-filled, because it destroys running wor
 
 *[Mockup: Gallery, 1,284 items · 38.4 GB, filters ltx h3 iris, All kinds, "Search prompts"; a grid of items — café window drift (h3 · 5.0s · seed 42), rain street plate (ltx · 4.2s · seed 7), klein still 11 (iris · 1024² · s 991), line 04 — arshi (AuK · 0:03 · zero-shot), take-053255 (h3 · 5.2s · seed 42), café sequence (timeline · 14.2s); a selected item with the provenance chip "from take-052505" and actions Use as first frame, Send to…, Add to timeline.]*
 
+An item whose `timeline_id` is set is a sequence's export, and the gallery labels it "timeline" rather than by a studio (amended 2026-09-16, M8 Q17).
+
 One query serves both views: the launcher's cross-studio gallery and a studio's own panel differ only by scope. Selecting an item exposes what can be done with it — the provenance chip on the left says where it came from, which is the thing only a central store can know.
 
 (Amended 2026-09-16, M6 Q11: the launcher's cross-studio gallery waits for M9's cookie. Until then only a studio's own panel exists, through `helm-gallery`.)
@@ -394,6 +396,12 @@ One query serves both views: the launcher's cross-studio gallery and a studio's 
 *[Mockup: café sequence — 1920×1080 · 24 fps · 48 kHz · 00:14.16, chip "stream copy · no re-encode", Add from gallery, Export; a ruler 0s–14s; track V1 video with clips take-052505 (0–5.04s), ltx-drift-04 (5.04–9.1s), klein-11 (hold 2.2s), take-053255 (11.3–14.16s), each in its studio's hue; tracks A1 dialogue and A2 ambience.]*
 
 Clips carry the identity hue of the studio that produced them, so a sequence assembled from three studios reads as exactly that. The stream-copy chip tells the user this export is seconds rather than minutes — it teaches which edits are cheap.
+
+(Amended 2026-09-16, M8, Q11, Q13, Q20.)
+- **The chip reads "video stream copy".** The picture is copied and the sound is always re-encoded, because a copied AAC stream drags its own priming into every cut. The conform chip names the first reason the copy could not be taken, which is what teaches which edits are cheap.
+- **The mockup's own sequence would conform,** not copy: it holds a still, clips of three sizes and a separate voice line. A copy is a run of takes from one studio, used whole.
+- **A clip whose studio the viewer cannot learn** — an asset from a studio whose items they may not read — is drawn in a neutral hue and labelled "another studio", never in someone else's identity colour.
+- **This screen is the launcher's, and it ships with the Mac app** (M9), because it reads every studio's items and bytes; until then a sequence is edited inside a studio through `helm-timeline`.
 
 ## 12 · Models and disk
 
