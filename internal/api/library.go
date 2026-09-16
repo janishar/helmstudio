@@ -35,9 +35,13 @@ type libraryFields struct {
 	ManifestValid bool             `json:"manifest_valid"`
 	Errors        []manifest.Error `json:"errors,omitempty"`
 	ManifestFile  string           `json:"manifest_file,omitempty"`
-	Repo          string           `json:"repo,omitempty"`
-	Ref           string           `json:"ref,omitempty"`
-	LocalPath     string           `json:"local_path,omitempty"`
+	// Provenance is where a Local entry came from — imported, duplicated,
+	// written here, or read from a folder. A note for the card and never a
+	// trust signal: it says how a file arrived, not whether to believe it.
+	Provenance *library.Provenance `json:"provenance,omitempty"`
+	Repo       string              `json:"repo,omitempty"`
+	Ref        string              `json:"ref,omitempty"`
+	LocalPath  string              `json:"local_path,omitempty"`
 	// ApprovalRequired is true when what would run now does not match what was
 	// last approved, so the next install, retry or launch will ask (Q10).
 	ApprovalRequired bool `json:"approval_required,omitempty"`
@@ -71,6 +75,7 @@ func (s *Server) entry(r *http.Request, e library.Entry) Studio {
 			Source: e.Source, Overrides: e.Overrides, Level: e.Level,
 			ManifestState: e.State, ManifestValid: e.Valid, Errors: e.Errors,
 			ManifestFile: e.File, Repo: e.Repo, Ref: e.Ref,
+			Provenance: s.provenance(e),
 		},
 	}
 	if e.Manifest == nil {
@@ -108,4 +113,17 @@ func (s *Server) entry(r *http.Request, e library.Entry) Studio {
 		}
 	}
 	return out
+}
+
+// provenance is the note on a Local entry: where the file came from.
+//
+// It is read here rather than carried on the entry because the resolver deals
+// in documents and precedence, and knows nothing about how a file arrived. A
+// note that belongs to one source has no business in the type every source
+// shares.
+func (s *Server) provenance(e library.Entry) *library.Provenance {
+	if s.local == nil || e.Source != library.SourceLocal {
+		return nil
+	}
+	return s.local.Provenance(e.ID)
 }

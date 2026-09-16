@@ -6,6 +6,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,8 +20,10 @@ import (
 	"time"
 
 	"github.com/janishar/helmstudio/internal/api/studioapi"
+	"github.com/janishar/helmstudio/internal/approval"
 	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/library"
+	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/platform"
 	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/supervisor"
@@ -145,6 +148,15 @@ type Studio struct {
 	Root           string                 `json:"root"`
 	RootPresent    bool                   `json:"root_present"`
 	Group          supervisor.GroupStatus `json:"group"`
+	// Selection is the checkpoint this studio launches with, and Selectable
+	// the ones it could. They are here rather than in libraryFields because
+	// they are facts about an installation, not about which source won.
+	Selection  string            `json:"selection,omitempty"`
+	Selectable []approval.Weight `json:"selectable,omitempty"`
+	// RebuildNeededReason says why, when RebuildNeeded is set. An Override is
+	// the usual cause, and a card that says "rebuild needed" without saying
+	// what changed leaves someone guessing at their own edit.
+	RebuildNeededReason string `json:"rebuild_needed_reason,omitempty"`
 	*install.Info
 	libraryFields
 }
@@ -170,9 +182,38 @@ func (s *Server) studio(r *http.Request, st supervisor.Studio) (Studio, error) {
 	if fi, err := os.Stat(out.Root); err == nil && fi.IsDir() {
 		out.RootPresent = true
 	}
+	out.Selection, out.Selectable = s.selection(r.Context(), m)
+	if out.Info != nil && out.Info.RebuildNeeded {
+		out.RebuildNeededReason = "The manifest changed since this checkout was built from it, so the build steps would run differently now."
+	}
 	gs, err := s.sup.Status(r.Context(), m.ID)
 	out.Group = gs
 	return out, err
+}
+
+// selection reads which checkpoint a studio launches with, and which it could.
+//
+// A manifest with no selectable weight has neither, and says so by carrying
+// nothing: a studio with one checkpoint is not making a choice.
+func (s *Server) selection(ctx context.Context, m *manifest.Manifest) (string, []approval.Weight) {
+	var list []approval.Weight
+	for _, w := range m.Weights {
+		if !w.Selectable {
+			continue
+		}
+		list = append(list, approval.Weight{
+			Name: w.Name, Repo: w.Repo, Revision: w.Revision,
+			Selectable: true, Optional: w.Optional,
+		})
+	}
+	if len(list) == 0 || s.weights == nil {
+		return "", list
+	}
+	name, err := s.weights.Selected(ctx, m.ID)
+	if err != nil {
+		return "", list
+	}
+	return name, list
 }
 
 func (s *Server) listStudios(w http.ResponseWriter, r *http.Request) {
