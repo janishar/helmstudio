@@ -32,6 +32,12 @@
     processes: "#/studios/ltx-studio/processes?log=studio",
     models: "#/models",
     settings: "#/settings",
+    // M7b's screens. The editor and the approval screen read a real manifest
+    // from a real daemon: see test/visual/daemon_test.go.
+    add: "#/add",
+    editor: "#/edit/wan-studio",
+    approve: "#/studios/wan-studio/approve?do=install",
+    import: "#/add",
   };
 
   const store = newStore();
@@ -42,8 +48,11 @@
   store.theme = q.get("theme") || "system";
 
   const app = document.getElementById("app");
-  const ctx = newContext({ client: fakeClient(), store, redraw: () => {} });
-  app.replaceChildren(...shell(ctx, HASH[screen], "127.0.0.1:8700"));
+  // A real redraw, because M7b's screens fetch and then draw themselves again.
+  // A no-op would golden the loading state of every one of them.
+  const redraw = () => app.replaceChildren(...shell(ctx, HASH[screen], "127.0.0.1:8700"));
+  const ctx = newContext({ client: fakeClient(), store, redraw });
+  redraw();
 
   // The switch dialog has no route of its own: it is what a heavy conflict
   // opens, so the golden draws it over the catalogue it is opened from.
@@ -68,6 +77,21 @@
     });
     const box = document.querySelector("dialog .helm-label");
     box.append(Object.assign(document.createElement("input"), { type: "checkbox" }), "Don't ask again this session");
+  }
+
+  // The import dialog is what a report looks like, so the fixture drives the
+  // real dialog with three real documents rather than drawing a picture of
+  // one: valid and new, valid and colliding, and not a manifest at all.
+  if (screen === "import") {
+    const { importDialog } = await import("/web/importer.js");
+    const { IMPORTS } = await import("./fake.js");
+    importDialog(ctx);
+    const dlg = document.querySelector("dialog");
+    for (const text of IMPORTS) {
+      dlg.querySelector("textarea").value = text;
+      [...dlg.querySelectorAll("button")].find((b) => b.textContent === "Add pasted text").click();
+    }
+    [...dlg.querySelectorAll("button")].find((b) => b.textContent === "Check").click();
   }
 
   const { settle } = await import("./settle.js");

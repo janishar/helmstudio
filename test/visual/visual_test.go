@@ -93,7 +93,10 @@ func fixtureServer(t *testing.T) *httptest.Server {
 	mux.Handle("/fixtures/", http.StripPrefix("/fixtures/", http.FileServerFS(os.DirFS("fixtures"))))
 	mux.Handle("/web/", http.StripPrefix("/web/", http.FileServerFS(os.DirFS(filepath.Join("..", "..", "web")))))
 	mux.HandleFunc("/sdk/v1/{file...}", serveSDK)
-	srv := httptest.NewServer(mux)
+	// The editor's fixture talks to a real daemon: see daemon_test.go.
+	srv := httptest.NewUnstartedServer(mux)
+	mountDaemon(t, mux, srv)
+	srv.Start()
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -141,7 +144,7 @@ type shot struct {
 // The launcher's screens (docs/decisions.md M6 Q2). Each is drawn from the
 // canned data in fixtures/fake.js, at the three widths 03's layout collapses
 // at, in both themes.
-var screens = []string{"catalogue", "install", "processes", "models", "settings", "switch"}
+var screens = []string{"catalogue", "install", "processes", "models", "settings", "switch", "add", "editor", "import", "approve"}
 
 func shots() []shot {
 	var out []shot
