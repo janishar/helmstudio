@@ -2148,6 +2148,63 @@ paths:
         "400": { $ref: "#/components/responses/Invalid" }
         "422": { $ref: "#/components/responses/Invalid" }
 
+  # ======================================================================
+  # Launcher: the Hugging Face token (01 §1 R18, R43; docs/decisions.md M6 Q21)
+  # ======================================================================
+
+  /launcher/settings/huggingface-token:
+    get:
+      tags: [launcher]
+      operationId: launcherHFTokenGet
+      x-helm-group: settings
+      x-helm-method: huggingFaceToken
+      summary: Whether a Hugging Face token is stored, and when it was added. Never the token itself.
+      description: >
+        R43, Q21. The token lives in the OS secret store, never in `helm.db`
+        and never in a response: the database records only that one exists and
+        when it was added (internal/platform.SecretStore). A token added by
+        hand outside helmstudio is `present` with no `added_at`. On a platform
+        with no secret store, `present` is false and `unsupported` says why.
+      responses:
+        "200":
+          description: What is known about the stored token.
+          content: { application/json: { schema: { $ref: "#/components/schemas/SecretState" } } }
+    put:
+      tags: [launcher]
+      operationId: launcherHFTokenSet
+      x-helm-group: settings
+      x-helm-method: setHuggingFaceToken
+      summary: Store or replace the Hugging Face token.
+      description: >
+        R18, R43, Q21. Write-only: the value is handed to the OS secret store
+        and never read back. An empty token, or one outside printable ASCII,
+        is 422 `invalid_token`; a body that does not parse, or has another
+        member, is 400 `bad_request`. A platform with no secret store is 501
+        `unsupported`. The stored token is read afresh for every Hugging Face
+        request, so one added while a download is retrying is used next.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SecretSet" } } }
+      responses:
+        "200":
+          description: What is known about the token now.
+          content: { application/json: { schema: { $ref: "#/components/schemas/SecretState" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "422": { $ref: "#/components/responses/Invalid" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+    delete:
+      tags: [launcher]
+      operationId: launcherHFTokenDelete
+      x-helm-group: settings
+      x-helm-method: deleteHuggingFaceToken
+      summary: Remove the stored Hugging Face token.
+      description: >
+        Q21. Deleting when none is stored is 204, so the button is idempotent.
+        A platform with no secret store is 501 `unsupported`.
+      responses:
+        "204": { description: "No token is stored." }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
   /theme:
     get:
       tags: [public]
@@ -2396,6 +2453,29 @@ components:
       required: [theme]
       properties:
         theme: { type: string, enum: [system, light, dark] }
+    SecretState:
+      type: object
+      description: >
+        What the launcher may learn about a stored secret: that it is there,
+        and when helmstudio stored it. Never the value (R43).
+      required: [present]
+      properties:
+        present: { type: boolean }
+        added_at:
+          type: string
+          format: date-time
+          description: "When helmstudio stored it. Absent for a secret added outside helmstudio."
+        unsupported:
+          type: string
+          description: "Present when this platform has no secret store; says so in the words the screen shows."
+
+    SecretSet:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token: { type: string, minLength: 1 }
+
     InboxEvent:
       type: object
       required: [inbox_id, item_id, from_studio]

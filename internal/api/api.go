@@ -20,6 +20,8 @@ import (
 
 	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
+	"github.com/janishar/helmstudio/internal/platform"
+	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/supervisor"
 	"github.com/janishar/helmstudio/internal/theme"
 	"github.com/janishar/helmstudio/internal/weights"
@@ -42,6 +44,9 @@ type Server struct {
 	studioAPI *studioapi.Handler
 	service   *studioapi.Service
 	theme     *theme.Settings
+
+	secrets     platform.SecretStore
+	secretStore *store.Store
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
@@ -76,6 +81,7 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 		s.theme = s.service.Theme()
 	}
 	s.routeTheme()
+	s.routeSecrets()
 	if s.service != nil {
 		s.mux.HandleFunc("GET "+Base+"/assets:reclaim", s.service.ServeReclaim)
 		s.mux.HandleFunc("POST "+Base+"/assets:reclaim", s.service.ServeReclaim)

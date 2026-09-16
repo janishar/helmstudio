@@ -175,6 +175,21 @@ export class SettingsGroup {
   setTheme(body) {
     return this.t.request("PUT", "/launcher/settings/theme", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
   }
+
+  /** Whether a Hugging Face token is stored, and when it was added. Never the token itself. (GET /launcher/settings/huggingface-token) */
+  huggingFaceToken() {
+    return this.t.request("GET", "/launcher/settings/huggingface-token", { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** Store or replace the Hugging Face token. (PUT /launcher/settings/huggingface-token) */
+  setHuggingFaceToken(body) {
+    return this.t.request("PUT", "/launcher/settings/huggingface-token", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Remove the stored Hugging Face token. (DELETE /launcher/settings/huggingface-token) */
+  deleteHuggingFaceToken() {
+    return this.t.request("DELETE", "/launcher/settings/huggingface-token", { query: {}, headers: {}, expect: "empty" });
+  }
 }
 
 /** One property per launcher group. */

@@ -105,7 +105,7 @@ func run(addr, studiosDir string) error {
 	// file removed, before anything is served (docs/decisions.md M8 Q16).
 	svc.SweepExports(ctx)
 
-	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()), api.WithStudioAPI(studioAPI, svc))
+	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()), api.WithStudioAPI(studioAPI, svc), api.WithSecrets(platform.Secrets(), st))
 	if err != nil {
 		return err
 	}
@@ -154,11 +154,11 @@ func run(addr, studiosDir string) error {
 // version is reported by GET /me; release builds set it with -ldflags.
 var version = "dev"
 
-// hfTokenName is the Keychain account the Hugging Face token is stored
-// under, in the helmstudio service (R43). Nothing sets it yet: until the
-// token prompt exists, store one with
-// `security add-generic-password -s helmstudio -a huggingface-token -w`.
-const hfTokenName = "huggingface-token"
+// hfTokenName is the Keychain account the Hugging Face token is stored under,
+// in the helmstudio service (R43). Settings writes it through
+// PUT /launcher/settings/huggingface-token (M6 Q21); it can still be set by
+// hand with `security add-generic-password -s helmstudio -a huggingface-token -w`.
+const hfTokenName = api.HFTokenName
 
 // huggingFaceToken reads the token for each request, so one added while the
 // daemon runs is used on the next retry. No token, or no secret store on this
