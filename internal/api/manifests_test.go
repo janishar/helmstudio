@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
+	"time"
 
+	"github.com/janishar/helmstudio/internal/library"
+	"github.com/janishar/helmstudio/internal/platform/platformtest"
+	"github.com/janishar/helmstudio/internal/store"
+	"github.com/janishar/helmstudio/internal/supervisor"
 	"github.com/janishar/helmstudio/schema"
 )
 
@@ -109,4 +116,146 @@ func doJSON(t *testing.T, h http.Handler, method, path, body string) *httptest.R
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+// A studio in the registry, with one build step to recognise it by.
+const registryStudio = `id: reg-studio
+name: reg studio
+kinds: [image]
+repo: https://github.com/someone/reg
+ref: v1.0.0
+requires: { os: [darwin], arch: [arm64] }
+runtime: { framework: other, backends: [cpu] }
+build:
+  - { name: Build, run: "make registry" }
+processes:
+  - name: studio
+    role: main
+    cmd: "./reg --port {port}"
+    port: { prefer: 8770 }
+    health: { tcp: true, timeout_s: 30 }
+`
+
+// overrideServer is a daemon with a registry beneath a local directory and the
+// approval gate in front of install, which is the arrangement an Override is
+// made in.
+func overrideServer(t *testing.T) *Server {
+	t.Helper()
+	d := platformtest.Dirs(t)
+	st, err := store.Open(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	sup := supervisor.New(supervisor.Config{Dirs: d, Store: st, Grace: time.Second, PortMin: 44000, PortMax: 44999})
+
+	local := library.NewLocal(d.Data())
+	res := library.New(
+		library.Dir(library.SourceLocal, local.Dir),
+		library.FS(library.SourceRegistry, fstest.MapFS{"reg-studio.yaml": {Data: []byte(registryStudio)}}, "registry"),
+	)
+	// As the daemon starts: the supervisor is given what the library resolves.
+	ok, _, err := res.Studios()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var studios []supervisor.Studio
+	for _, e := range ok {
+		studios = append(studios, supervisor.Studio{Manifest: e.Manifest, File: e.File})
+	}
+	sup.SetStudios(studios)
+
+	srv, err := New(sup, fstest.MapFS{}, addr, t.Logf,
+		WithLibrary(res),
+		WithApproval(st),
+		WithManifests(local, library.NewReader(filepath.Join(d.Cache(), "manifests")), library.NewFetcher()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return srv
+}
+
+// commandsFor is every command the approval screen would show for id.
+func commandsFor(t *testing.T, srv *Server, id string) (int, string) {
+	t.Helper()
+	rec := do(t, srv, "GET", "/api/v1/studios/"+id+"/approval", nil)
+	if rec.Code != http.StatusOK {
+		return rec.Code, rec.Body.String()
+	}
+	var p struct {
+		Commands []struct {
+			Command string `json:"command"`
+		} `json:"commands"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	var all []string
+	for _, c := range p.Commands {
+		all = append(all, c.Command)
+	}
+	return rec.Code, strings.Join(all, "\n")
+}
+
+// Q10: after an Override, "the user's next install or launch shows the changed
+// commands instead of running them". The preview is built from what the
+// supervisor was given, and the supervisor was given the library once, at
+// startup — so a saved Override showed, approved and ran the registry's
+// commands until the daemon restarted.
+func TestAnOverrideIsWhatTheNextInstallShows(t *testing.T) {
+	srv := overrideServer(t)
+
+	if _, cmds := commandsFor(t, srv, "reg-studio"); !strings.Contains(cmds, "make registry") {
+		t.Fatalf("before the override the screen shows:\n%s", cmds)
+	}
+
+	mine := strings.Replace(registryStudio, "make registry", "make mine", 1)
+	body, _ := json.Marshal(map[string]string{"text": mine})
+	if rec := doJSON(t, srv, "PUT", "/api/v1/launcher/manifests/reg-studio", string(body)); rec.Code != http.StatusOK {
+		t.Fatalf("save: %d %s", rec.Code, rec.Body)
+	}
+	_, cmds := commandsFor(t, srv, "reg-studio")
+	if !strings.Contains(cmds, "make mine") || strings.Contains(cmds, "make registry") {
+		t.Errorf("after saving an override the approval screen shows:\n%s\nwant the override's command, and not the registry's", cmds)
+	}
+
+	// And Revert puts the registry's back.
+	if rec := do(t, srv, "DELETE", "/api/v1/launcher/manifests/reg-studio", nil); rec.Code != http.StatusOK {
+		t.Fatalf("revert: %d %s", rec.Code, rec.Body)
+	}
+	if _, cmds := commandsFor(t, srv, "reg-studio"); !strings.Contains(cmds, "make registry") {
+		t.Errorf("after reverting the approval screen shows:\n%s", cmds)
+	}
+}
+
+// A studio that arrives by import or Duplicate is a studio someone means to
+// install. The supervisor did not know it existed, so installing it answered
+// "no studio" until the daemon restarted.
+func TestANewEntryCanBeInstalledWithoutARestart(t *testing.T) {
+	srv := overrideServer(t)
+
+	body, _ := json.Marshal(map[string]string{"new_id": "reg-copy"})
+	if rec := doJSON(t, srv, "POST", "/api/v1/launcher/manifests/reg-studio:duplicate", string(body)); rec.Code != http.StatusOK {
+		t.Fatalf("duplicate: %d %s", rec.Code, rec.Body)
+	}
+	if code, out := commandsFor(t, srv, "reg-copy"); code != http.StatusOK {
+		t.Errorf("a duplicate's approval screen answered %d: %s", code, out)
+	}
+
+	imported := strings.NewReplacer("reg-studio", "imp-studio", "reg studio", "imp studio").Replace(registryStudio)
+	items, _ := json.Marshal(map[string]any{"items": []map[string]string{{"text": imported}}})
+	rec := doJSON(t, srv, "POST", "/api/v1/launcher/manifests:import", string(items))
+	var report struct {
+		Confirm string `json:"confirm"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &report); err != nil || report.Confirm == "" {
+		t.Fatalf("import report: %d %s", rec.Code, rec.Body)
+	}
+	confirm, _ := json.Marshal(map[string]any{"items": []map[string]string{{"text": imported}}, "confirm": report.Confirm})
+	if rec := doJSON(t, srv, "POST", "/api/v1/launcher/manifests:import", string(confirm)); rec.Code != http.StatusOK {
+		t.Fatalf("import: %d %s", rec.Code, rec.Body)
+	}
+	if code, out := commandsFor(t, srv, "imp-studio"); code != http.StatusOK {
+		t.Errorf("an imported studio's approval screen answered %d: %s", code, out)
+	}
 }

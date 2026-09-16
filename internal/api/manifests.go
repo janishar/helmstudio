@@ -236,6 +236,7 @@ func (s *Server) saveManifest(w http.ResponseWriter, r *http.Request) {
 	if s.local.Provenance(id) == nil {
 		_ = s.local.SetProvenance(id, library.Provenance{Kind: "written"})
 	}
+	s.reloadLibrary()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": id, "text": body.Text, "digest": digest,
 		"source": library.SourceLocal, "kind": kindOf(data), "file": s.local.Path(id),
@@ -253,6 +254,7 @@ func (s *Server) revertManifest(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
+	s.reloadLibrary()
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "moved_to": moved})
 }
 
@@ -306,6 +308,7 @@ func (s *Server) manifestAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = s.local.SetProvenance(body.NewID, library.Provenance{Kind: "duplicated", FromID: id})
+	s.reloadLibrary()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": body.NewID, "text": string(renamed), "digest": digest,
 		"source": library.SourceLocal, "kind": kindOf(renamed), "file": s.local.Path(body.NewID),
@@ -460,6 +463,7 @@ func (s *Server) importManifests(w http.ResponseWriter, r *http.Request) {
 		rep.Added = true
 		rep.ID = id
 	}
+	s.reloadLibrary()
 	writeJSON(w, http.StatusOK, map[string]any{"items": reports})
 }
 
@@ -509,6 +513,9 @@ func (s *Server) readRepository(w http.ResponseWriter, r *http.Request) {
 		if id := declaredID([]byte(res.Text)); id != "" && res.Commit != "" {
 			if _, err := s.repoReader.Cache(id, res.Commit, res.Text); err != nil {
 				s.logf("caching %s's manifest: %v", id, err)
+			} else {
+				// A pointer that was not fetched resolves now.
+				s.reloadLibrary()
 			}
 		}
 	}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/janishar/helmstudio/internal/library"
 	"github.com/janishar/helmstudio/internal/manifest"
+	"github.com/janishar/helmstudio/internal/supervisor"
 )
 
 // The library on GET /studios (docs/design/01-prd.md R3b; docs/decisions.md
@@ -126,4 +127,32 @@ func (s *Server) provenance(e library.Entry) *library.Provenance {
 		return nil
 	}
 	return s.local.Provenance(e.ID)
+}
+
+// reloadLibrary gives the supervisor what the library resolves to now.
+//
+// Every write to the library calls it. The supervisor is what install, launch
+// and the approval preview read a manifest from, and it was given the library
+// once, at startup — so without this a saved Override was shown, approved and
+// run as the registry's version until the daemon restarted, and a studio that
+// arrived by import or Duplicate could not be installed at all. Q10 says the
+// next install or launch after an Override shows the changed commands, which
+// is only true if the thing building the preview has heard about it.
+//
+// Running groups are not affected: a process was handed its command when it
+// started, and the next launch is the one that uses the new manifest.
+func (s *Server) reloadLibrary() {
+	if s.library == nil {
+		return
+	}
+	ok, _, err := s.library.Studios()
+	if err != nil {
+		s.logf("re-resolving the library after a change: %v", err)
+		return
+	}
+	studios := make([]supervisor.Studio, 0, len(ok))
+	for _, e := range ok {
+		studios = append(studios, supervisor.Studio{Manifest: e.Manifest, File: e.File})
+	}
+	s.sup.SetStudios(studios)
 }
