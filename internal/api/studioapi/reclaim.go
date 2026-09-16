@@ -55,7 +55,7 @@ const reclaimable = `SELECT a.id, a.sha256, a.bytes, a.blob_path, a.library_path
 	  AND NOT EXISTS (SELECT 1 FROM item_inputs x JOIN items i ON i.id = x.item_id
 	                  WHERE x.asset_id = a.id AND i.deleted_at IS NULL)
 	  AND NOT EXISTS (SELECT 1 FROM timelines t, json_each(t.tracks) tr, json_each(tr.value, '$.clips') c
-	                  WHERE json_extract(c.value, '$.asset_id') = a.id)
+	                  WHERE json_extract(c.value, '$.asset_id') = a.id AND t.deleted_at IS NULL)
 	ORDER BY a.id`
 
 type rowsQuerier interface {

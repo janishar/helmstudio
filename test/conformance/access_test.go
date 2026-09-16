@@ -194,7 +194,7 @@ func TestMeReportsTheCaller(t *testing.T) {
 	each(t, func(t *testing.T, e *Env) {
 		me, err := e.C(B).Me.Get(ctx)
 		noErr(t, err)
-		if me.StudioID != B || len(me.Capabilities) != 7 || me.APIVersion != helm.APIVersion || me.Provider != e.Name || me.Paths.Stage == "" || me.Paths.Data == "" {
+		if me.StudioID != B || len(me.Capabilities) != 8 || me.APIVersion != helm.APIVersion || me.Provider != e.Name || me.Paths.Stage == "" || me.Paths.Data == "" {
 			t.Fatalf("me = %+v", me)
 		}
 		if me.Quota.Records.Limit != 100000 || me.Quota.KVBytes.Limit != 8<<20 {
@@ -472,7 +472,21 @@ func TestEveryIDRouteRefusesAnotherStudiosResource(t *testing.T) {
 	entry, err := e.C(A).Handoff.Send(ctx, helm.HandoffRequest{ItemID: aItem.ID, ToStudio: B})
 	noErr(t, err)
 
+	tl, err := b.Timeline.Create(ctx, helm.TimelineCreate{Name: "b's sequence",
+		Target: helm.TimelineTargetInput{Width: 320, Height: 180, FPS: 24}})
+	noErr(t, err)
+	// An export job of b's sequence, written straight into the store: making a
+	// real one needs media and ffmpeg, and what is tried here is whether the
+	// route refuses another studio, not whether a render works.
+	exportJob := store.NewID(time.Now())
+	noErr(t, e.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO jobs (id, kind, studio_id, state, subject_kind, subject_id, progress_num, progress_den, created_at)
+			VALUES (?, 'export', ?, 'running', 'timeline', ?, 0, 1, ?)`, exportJob, B, tl.ID, time.Now().UnixMilli())
+		return err
+	}))
+
 	ids := map[string]string{
+		"/timeline":      tl.ID,
 		"/sessions":      sess.ID,
 		"/records":       rec.ID,
 		"/assets":        asset.ID,
@@ -489,6 +503,15 @@ func TestEveryIDRouteRefusesAnotherStudiosResource(t *testing.T) {
 		"galleryUpdate":     `{"starred":true}`,
 		"jobsUpdate":        `{"state":"failed"}`,
 		"jobsAppendLog":     `{"lines":["x"]}`,
+		"timelineUpdate":    `{"name":"taken over"}`,
+		"timelineRevert":    `{"revision":1}`,
+		"timelineExport":    `{"preset":"h264"}`,
+	}
+	// Headers an operation's contract requires, so a refusal is about
+	// ownership rather than a missing precondition.
+	headers := map[string]map[string]string{
+		"timelineUpdate": {"If-Match": "1"},
+		"timelineRevert": {"If-Match": "1"},
 	}
 	tried := 0
 	for _, op := range studioapi.Operations() {
@@ -504,14 +527,19 @@ func TestEveryIDRouteRefusesAnotherStudiosResource(t *testing.T) {
 			t.Errorf("%s %s (%s) takes an id and this test has no resource of studio b for it; add one", op.Method, op.Path, op.ID)
 			continue
 		}
-		path := strings.NewReplacer("{id}", id, "{collection}", "takes").Replace(op.Path)
+		path := strings.NewReplacer("{id}", id, "{collection}", "takes", "{job}", exportJob).Replace(op.Path)
 		body := bodies[op.ID]
-		if (op.Method == "PUT" || op.Method == "PATCH" || (op.Method == "POST" && strings.HasSuffix(op.Path, "/logs"))) && body == "" {
+		needsBody := op.Method == "PUT" || op.Method == "PATCH" ||
+			(op.Method == "POST" && (strings.HasSuffix(op.Path, "/logs") || strings.HasSuffix(op.Path, ":revert") || strings.HasSuffix(op.Path, ":export")))
+		if needsBody && body == "" {
 			t.Errorf("%s %s (%s) takes a body and this test has none for it; add one", op.Method, op.Path, op.ID)
 			continue
 		}
 		req, _ := http.NewRequest(op.Method, e.URL+"/api/v1"+path, strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer "+e.Tokens[A])
+		for k, v := range headers[op.ID] {
+			req.Header.Set(k, v)
+		}
 		if body != "" {
 			ct := "application/json"
 			if op.Method == "PATCH" {

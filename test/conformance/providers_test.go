@@ -42,6 +42,12 @@ const (
 	D = "studio-d"
 	// S: kv, records, assets and gallery, not jobs: the Python and Node smoke.
 	S = "studio-s"
+	// T and U: assets, gallery and timeline, so that what one studio may see of
+	// another's sequences is a case rather than an assumption (M8 Q11).
+	T = "studio-t"
+	U = "studio-u"
+	// R: T's capabilities plus gallery.read_all, which reaches every sequence.
+	R = "studio-r"
 )
 
 // QuotaRecords and QuotaKVBytes are studio-q's declared quotas.
@@ -52,11 +58,14 @@ const (
 
 func manifests() []*manifest.Manifest {
 	return []*manifest.Manifest{
-		{ID: A, Name: "studio a", Capabilities: []string{"kv", "records", "assets", "gallery", "jobs", "handoff.send"}},
-		{ID: B, Name: "studio b", Capabilities: []string{"kv", "records", "assets", "gallery", "jobs", "gallery.read_all", "kv.shared"}},
+		{ID: A, Name: "studio a", Capabilities: []string{"kv", "records", "assets", "gallery", "jobs", "timeline", "handoff.send"}},
+		{ID: B, Name: "studio b", Capabilities: []string{"kv", "records", "assets", "gallery", "jobs", "timeline", "gallery.read_all", "kv.shared"}},
 		{ID: C, Name: "studio c", Capabilities: []string{"kv"}},
 		{ID: D, Name: "studio d", Capabilities: []string{"assets", "gallery"}},
 		{ID: S, Name: "studio s", Capabilities: []string{"kv", "records", "assets", "gallery"}},
+		{ID: T, Name: "studio t", Capabilities: []string{"assets", "gallery", "timeline"}},
+		{ID: U, Name: "studio u", Capabilities: []string{"assets", "gallery", "timeline"}},
+		{ID: R, Name: "studio r", Capabilities: []string{"assets", "gallery", "timeline", "gallery.read_all"}},
 		{ID: Q, Name: "studio q", Capabilities: []string{"kv", "records"},
 			Storage: &manifest.Storage{Quota: manifest.Quota{Records: QuotaRecords, KVBytes: QuotaKVBytes}}},
 	}
