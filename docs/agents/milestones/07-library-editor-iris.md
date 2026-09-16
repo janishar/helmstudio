@@ -251,6 +251,19 @@ installation row it would attach to.
 Built on a reviewed M6b and a reviewed M7a. Its file list and DoD are confirmed
 at M7b's kickoff against what those reviews changed.
 
+**Built out of order, 2026-09-16, at the human's direction**, the fourth
+milestone to be: M6a, M6b and M7a are all unreviewed beneath it. No review ran,
+so there was nothing to confirm the file list against. It was never written down.
+The work landed in `web/**` and `test/visual/**`, plus fixes in `internal/api`
+and `internal/approval`, each named in the report for sign-off. The DoD below
+stands as drafted. Everything in it holds except the machine-bound demo, which
+did not run.
+
+The implementation report is `docs/agents/reports/07b-screens.md`. Building the
+screens against a real daemon found five places where M7a's operations did not
+do what the contract says, and all five are fixed there. One open item is
+recorded: an edit rewrites flow collections it did not touch.
+
 ### Tasks
 
 - **Library cards** showing source, level and install state as three facts
