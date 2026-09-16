@@ -1,9 +1,22 @@
 [project]
 name = "helm-runtime-sdk"
-version = "1.0.0.dev0"
+version = "1.0.0rc1"
 description = "helmstudio's runtime SDK: a client for the platform API"
+readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Janishar Ali" }]
 dependencies = []
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Documentation = "https://helmstudio.in/docs/"
+Repository = "https://github.com/janishar/helmstudio"
 
 # No embedded extra: a Python studio runs standalone under helm dev
 # (docs/decisions.md M5 Q14).

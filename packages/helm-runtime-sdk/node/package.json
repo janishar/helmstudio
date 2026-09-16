@@ -1,6 +1,6 @@
 {
   "name": "@helmstudio/runtime",
-  "version": "1.0.0-dev.0",
+  "version": "1.0.0-rc.1",
   "description": "helmstudio's runtime SDK: a client for the platform API",
   "type": "module",
   "exports": {
@@ -8,9 +8,20 @@
     "./browser": "./src/browser.js",
     "./proxy": "./src/proxy.js"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "engines": {
     "node": ">=18"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "homepage": "https://helmstudio.in/docs/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janishar/helmstudio.git",
+    "directory": "packages/helm-runtime-sdk/node"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

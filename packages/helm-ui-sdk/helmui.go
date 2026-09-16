@@ -8,7 +8,7 @@ import "embed"
 
 // Version is helm-ui-sdk's own version, which moves independently of helm-css
 // and the runtime SDK (04 §9). It must match src/index.js.
-const Version = "1.0.0"
+const Version = "1.0.0-rc.1"
 
 // Files holds the modules a page imports.
 //

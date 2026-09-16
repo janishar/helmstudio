@@ -1,0 +1,67 @@
+# Publishes @helmstudio/runtime, @helmstudio/ui or @helmstudio/css to npm when
+# its tag is pushed: packages/helm-runtime-sdk/node/v<version>,
+# packages/helm-ui-sdk/v<version> or packages/helm-css/v<version>
+# (docs/releasing.md).
+#
+# Trusted publishing: no token is stored in the repository, and npm attaches provenance
+# on its own. npm lets a trusted publisher be set only on a package that
+# exists, so each package's first version is published by hand, and a version
+# already on npm is skipped here. A pre-release version goes to the next
+# dist-tag, and only a release to latest.
+#
+# This runs no gate: a tag is pushed on a commit that passed `make gate`.
+
+name: publish-npm
+
+on:
+  push:
+    tags:
+      - "packages/helm-runtime-sdk/node/v*"
+      - "packages/helm-ui-sdk/v*"
+      - "packages/helm-css/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+      - name: Use an npm that publishes through trusted publishing (11.5.1 or later)
+        run: npm install -g npm@^11.5.1
+      - name: Find the package, and check the tag names its version
+        id: package
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          dir="${TAG%/v*}"
+          version="${TAG##*/v}"
+          test -f "$dir/package.json" || { echo "no package.json in $dir"; exit 1; }
+          name=$(node -p "require('./$dir/package.json').name")
+          declared=$(node -p "require('./$dir/package.json').version")
+          if [ "$declared" != "$version" ]; then
+            echo "the tag says $version and $dir/package.json says $declared"; exit 1
+          fi
+          case "$version" in *-*) dist=next ;; *) dist=latest ;; esac
+          # npm view prints nothing, and succeeds, for a version a package does not have.
+          if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then published=yes; else published=no; fi
+          { echo "dir=$dir"; echo "name=$name"; echo "version=$version"; echo "dist=$dist"; echo "published=$published"; } >> "$GITHUB_OUTPUT"
+      - name: Show what the package contains
+        working-directory: ${{ steps.package.outputs.dir }}
+        run: npm pack --dry-run
+      - name: Publish
+        if: steps.package.outputs.published == 'no'
+        working-directory: ${{ steps.package.outputs.dir }}
+        run: npm publish --tag "${{ steps.package.outputs.dist }}"
+      - name: Already published
+        if: steps.package.outputs.published == 'yes'
+        run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already on npm; nothing to do"

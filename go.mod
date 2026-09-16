@@ -20,6 +20,6 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-require github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v0.4.0
+require github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v1.0.0-rc.1
 
 replace github.com/janishar/helmstudio/packages/helm-runtime-sdk/go => ./packages/helm-runtime-sdk/go

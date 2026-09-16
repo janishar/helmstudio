@@ -1,22 +1,38 @@
 {
   "name": "@helmstudio/ui",
-  "version": "1.0.0-dev.0",
-  "description": "helmstudio's prebuilt components: helm-terminal, helm-gallery, helm-player",
+  "version": "1.0.0-rc.1",
+  "description": "helmstudio's prebuilt components: helm-terminal, helm-gallery, helm-player and helm-timeline",
   "type": "module",
   "exports": {
     ".": "./src/index.js",
     "./terminal": "./src/terminal.js",
     "./gallery": "./src/gallery.js",
-    "./player": "./src/player.js"
+    "./player": "./src/player.js",
+    "./timeline": "./src/timeline.js"
   },
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "peerDependencies": {
-    "@helmstudio/css": "^1",
-    "@helmstudio/runtime": "^1"
+    "@helmstudio/css": "^1.0.0-rc.1",
+    "@helmstudio/runtime": "^1.0.0-rc.1"
   },
   "peerDependenciesMeta": {
-    "@helmstudio/css": { "optional": true },
-    "@helmstudio/runtime": { "optional": true }
+    "@helmstudio/css": {
+      "optional": true
+    },
+    "@helmstudio/runtime": {
+      "optional": true
+    }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "homepage": "https://helmstudio.in/docs/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janishar/helmstudio.git",
+    "directory": "packages/helm-ui-sdk"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

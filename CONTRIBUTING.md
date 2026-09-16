@@ -28,6 +28,10 @@ Write them the way you would explain the change to someone reviewing it in six m
 
 Anything the gate cannot check — anything needing a GPU, real weights, Metal, or a signed binary — is verified by hand on an Apple Silicon Mac and noted in the pull request rather than assumed. The gate runs on Linux too, deliberately: a case-insensitive filesystem hides path bugs that a Linux run surfaces immediately.
 
+## Releasing
+
+A release is a tag on a commit that passed the gate, and publishing to a registry is the maintainer's. `docs/releasing.md` says what is published where, the setup each registry needs once, and the tags each release pushes.
+
 ## Code
 
 Go, stdlib-first. A new dependency is a decision — say so explicitly and record why.

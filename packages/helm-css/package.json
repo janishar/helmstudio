@@ -1,0 +1,37 @@
+{
+  "name": "@helmstudio/css",
+  "version": "1.0.0-rc.1",
+  "description": "helm-css: helmstudio's design system — tokens, base, layout and components, in a dark and a light theme",
+  "style": "helm.css",
+  "exports": {
+    ".": "./helm.css",
+    "./helm.css": "./helm.css",
+    "./helm.min.css": "./helm.min.css",
+    "./helm-tokens.css": "./helm-tokens.css",
+    "./helm-base.css": "./helm-base.css",
+    "./helm-layout.css": "./helm-layout.css",
+    "./helm-components.css": "./helm-components.css",
+    "./tokens.json": "./tokens.json",
+    "./fonts/*": "./fonts/*"
+  },
+  "files": [
+    "helm.css",
+    "helm.min.css",
+    "helm-tokens.css",
+    "helm-base.css",
+    "helm-layout.css",
+    "helm-components.css",
+    "tokens.json",
+    "fonts"
+  ],
+  "license": "MIT",
+  "homepage": "https://helmstudio.in/docs/guides/theming/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/janishar/helmstudio.git",
+    "directory": "packages/helm-css"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

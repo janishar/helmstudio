@@ -22,7 +22,7 @@ import (
 
 // Version is helm-css's own version. Tokens are additive within a major
 // (04 §9).
-const Version = "1.0.0"
+const Version = "1.0.0-rc.1"
 
 // Files is everything served under /sdk/v1/ for helm-css.
 //

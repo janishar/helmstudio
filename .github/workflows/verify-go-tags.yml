@@ -1,0 +1,74 @@
+# Fetches a tagged Go module through the Go module proxy when its tag is
+# pushed, so the proxy and pkg.go.dev know the version, and checks a studio can
+# build against it (docs/releasing.md). Publishing a Go module is pushing its
+# tag; this checks the tag did what it should.
+#
+# The tags: v<version> on the root module, which the embedded provider imports,
+# and packages/helm-runtime-sdk/go/v<version> and
+# packages/helm-runtime-sdk/go/embedded/v<version> (docs/decisions.md, M4
+# second review #1).
+
+name: verify-go-tags
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "packages/helm-runtime-sdk/go/v*"
+      - "packages/helm-runtime-sdk/go/embedded/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Fetch the module through proxy.golang.org
+        env:
+          TAG: ${{ github.ref_name }}
+          GOFLAGS: ""
+          GOPROXY: https://proxy.golang.org
+        run: |
+          version="${TAG##*/}"
+          case "$TAG" in
+            v*) module=github.com/janishar/helmstudio ;;
+            *) module="github.com/janishar/helmstudio/${TAG%/v*}" ;;
+          esac
+          for attempt in 1 2 3 4 5 6; do
+            go list -m "$module@$version" && exit 0
+            sleep 30
+          done
+          echo "the proxy never served $module@$version"; exit 1
+      - name: Build a studio against the embedded provider
+        if: startsWith(github.ref_name, 'packages/helm-runtime-sdk/go/embedded/')
+        env:
+          TAG: ${{ github.ref_name }}
+          GOFLAGS: ""
+          GOPROXY: https://proxy.golang.org
+        run: |
+          version="${TAG##*/}"
+          mkdir -p /tmp/studio && cd /tmp/studio
+          go mod init example.com/studio
+          cat > main.go <<'GO'
+          package main
+
+          import (
+          	"fmt"
+
+          	helm "github.com/janishar/helmstudio/packages/helm-runtime-sdk/go"
+          	_ "github.com/janishar/helmstudio/packages/helm-runtime-sdk/go/embedded"
+          )
+
+          func main() { _, err := helm.FromEnv(); fmt.Println(err) }
+          GO
+          # The root and SDK tags are pushed with this one; give the proxy time to see them.
+          for attempt in 1 2 3 4 5 6; do
+            go get "github.com/janishar/helmstudio/packages/helm-runtime-sdk/go/embedded@$version" && go build ./... && exit 0
+            sleep 30
+          done
+          exit 1
