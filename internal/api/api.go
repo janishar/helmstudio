@@ -20,6 +20,7 @@ import (
 
 	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
+	"github.com/janishar/helmstudio/internal/library"
 	"github.com/janishar/helmstudio/internal/platform"
 	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/supervisor"
@@ -48,6 +49,7 @@ type Server struct {
 	secrets     platform.SecretStore
 	secretStore *store.Store
 	approvals   *store.Store
+	library     *library.Resolver
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
@@ -140,6 +142,7 @@ type Studio struct {
 	RootPresent    bool                   `json:"root_present"`
 	Group          supervisor.GroupStatus `json:"group"`
 	*install.Info
+	libraryFields
 }
 
 func (s *Server) studio(r *http.Request, st supervisor.Studio) (Studio, error) {
@@ -170,6 +173,39 @@ func (s *Server) studio(r *http.Request, st supervisor.Studio) (Studio, error) {
 
 func (s *Server) listStudios(w http.ResponseWriter, r *http.Request) {
 	out := []Studio{}
+	if s.library != nil {
+		// The library is the list: every id this machine knows about, from
+		// every source, including the ones whose manifest did not resolve.
+		entries, err := s.fromLibrary(r)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		out = entries
+		seen := map[string]bool{}
+		for _, e := range out {
+			seen[e.ID] = true
+		}
+		// A studio still running from a previous daemon is in the list even
+		// when nothing in the library describes it any more: it can be
+		// stopped, and something has to offer that.
+		for _, id := range s.sup.Unmanaged() {
+			if seen[id] {
+				continue
+			}
+			v, err := s.unmanaged(r, id)
+			if err != nil {
+				s.fail(w, err)
+				return
+			}
+			out = append(out, v)
+		}
+		slices.SortFunc(out, func(a, b Studio) int { return strings.Compare(a.ID, b.ID) })
+		if page, ok := paginate(w, r, out, func(st Studio) string { return st.ID }); ok {
+			writeJSON(w, http.StatusOK, page)
+		}
+		return
+	}
 	for _, st := range s.sup.Studios() {
 		v, err := s.studio(r, st)
 		if err != nil {
@@ -210,6 +246,27 @@ func (s *Server) getStudio(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case ok:
 		v, err = s.studio(r, st)
+	case s.library != nil:
+		// It may be an entry whose manifest did not resolve, which the
+		// supervisor has never heard of and which still has to be readable —
+		// the editor opens from here.
+		entries, lerr := s.library.Resolve()
+		if lerr != nil {
+			s.fail(w, lerr)
+			return
+		}
+		for _, e := range entries {
+			if e.ID == id {
+				writeJSON(w, http.StatusOK, s.entry(r, e))
+				return
+			}
+		}
+		if slices.Contains(s.sup.Unmanaged(), id) {
+			v, err = s.unmanaged(r, id)
+			break
+		}
+		writeError(w, http.StatusNotFound, "not_found", fmt.Sprintf("no studio %q is known", id))
+		return
 	case slices.Contains(s.sup.Unmanaged(), id):
 		v, err = s.unmanaged(r, id)
 	default:

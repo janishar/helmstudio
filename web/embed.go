@@ -8,5 +8,5 @@ import "embed"
 
 // Shelf is the launcher's static files, served at the daemon's root.
 //
-//go:embed index.html launcher.css launcher.js app.js ui.js catalogue.js studio.js processes.js models.js settings.js switch.js
+//go:embed index.html launcher.css launcher.js app.js ui.js catalogue.js studio.js processes.js models.js settings.js switch.js approval.js
 var Shelf embed.FS

@@ -21,6 +21,7 @@ import { processGroup } from "./processes.js";
 import { modelsAndDisk } from "./models.js";
 import { settings } from "./settings.js";
 import { launch, stop } from "./switch.js";
+import { guard } from "./approval.js";
 
 /** How often the list is refreshed: cheap enough to leave running, short
  *  enough that a state change is seen before it is wondered about. */
@@ -157,9 +158,16 @@ export async function act(ctx, studio, action) {
     case "install":
     case "retry":
       try {
-        await (action === "install" ? ctx.client.studios.install(studio.id) : ctx.client.studios.retry(studio.id));
-        announce(`${studio.name} is installing.`);
-        ctx.go(`#/studios/${studio.id}`);
+        // Installing runs someone else's build steps, so it goes through the
+        // approval screen unless what would run is already approved (M7 Q10).
+        const started = await guard(ctx, studio, action === "retry" ? "Retry" : "Install", (approval) =>
+          action === "install"
+            ? ctx.client.studios.install(studio.id, { approval })
+            : ctx.client.studios.retry(studio.id, { approval }));
+        if (started) {
+          announce(`${studio.name} is installing.`);
+          ctx.go(`#/studios/${studio.id}`);
+        }
       } catch (err) {
         toast(failure(err, `${studio.name} could not be installed.`), "error");
       }

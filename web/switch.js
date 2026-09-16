@@ -10,6 +10,7 @@
 // under a confirmation nobody saw.
 
 import { announce, dialog, el, failure, toast } from "./ui.js";
+import { guard } from "./approval.js";
 
 /** Consent remembered for this session, per running studio, and only while it
  *  reported idle (Q22). Reloading the page forgets it, which is the point. */
@@ -60,7 +61,13 @@ export async function launch(ctx, studio, preempt, tries = 0) {
     return ctx.refresh();
   }
   try {
-    await ctx.client.studios.launch(studio.id, { preempt });
+    // cmd and health.exec run at every launch and never passed through
+    // install, so a launch is gated by approval too (M7 Q10). The switch
+    // dialog below is a different question — whose model holds the memory —
+    // and both can be asked on one launch.
+    const started = await guard(ctx, studio, "Launch", (approval) =>
+      ctx.client.studios.launch(studio.id, { preempt, approval }));
+    if (started === null) return ctx.refresh();
     announce(`${studio.name} is starting.`);
     ctx.go(`#/studios/${studio.id}/processes`);
     return ctx.refresh();
