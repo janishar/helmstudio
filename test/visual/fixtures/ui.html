@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>helm-ui-sdk components</title>
+<script>
+  const t = new URLSearchParams(location.search).get("theme");
+  if (t) document.documentElement.setAttribute("data-theme", t);
+</script>
+<link rel="stylesheet" href="/sdk/v1/helm.css">
+<style>
+  /* The page decides how big a component is; the component fills what it is
+     given. These are the fixture's own sizes, not the package's. */
+  main { display: grid; gap: var(--helm-space-6); padding: var(--helm-space-4); }
+  helm-terminal { display: block; height: 260px; }
+  helm-gallery { display: block; height: 420px; }
+  helm-player { display: block; max-width: 520px; }
+</style>
+</head>
+<body class="helm-body">
+<main class="helm-main">
+  <section>
+    <p class="helm-section-label">helm-terminal</p>
+    <helm-terminal id="term" follow></helm-terminal>
+  </section>
+  <section>
+    <p class="helm-section-label">helm-gallery</p>
+    <helm-gallery id="gal" scope="self"></helm-gallery>
+  </section>
+  <section>
+    <p class="helm-section-label">helm-player — the transport, and the parts that need ffmpeg</p>
+    <helm-player id="play" asset="as_01JB9PPPPPPPPPPPPPPPPPPPP1" fps="24"></helm-player>
+  </section>
+</main>
+
+<script type="module">
+  import "/sdk/v1/helm-ui.js";
+
+  const THUMBS = new URLSearchParams(location.search).get("thumbs") === "1";
+
+  const ev = (name, data, id) => ({ id, name, data: JSON.stringify(data), json: () => data });
+
+  // A log that ends, so the golden is a settled terminal rather than a race.
+  const LINES = [
+    "==> cd h3c && make mps",
+    "clang -std=c17 -O3 -march=native -c h3_metal.m",
+    "\u001b[33mwarning: unused variable 'scratch' [-Wunused-variable]\u001b[0m",
+    "clang -std=c17 -O3 -march=native -c h3_ffmpeg.c",
+    // Four progress writes, as a daemon splitting on carriage returns sends
+    // them. A terminal that rewrites in place shows one row, not four.
+    "downloading  25%|\r",
+    "downloading  50%|\r",
+    "downloading  75%|\r",
+    "downloading 100%|\r",
+    "\u001b[31mfatal error: 'Metal/Metal.h' file not found\u001b[0m",
+    "make: *** [h3_metal.o] Error 2",
+    "==> step failed after 2m 41s (exit 2)",
+  ];
+
+  document.getElementById("term").source = {
+    key: "fixture",
+    logs: async function* () {
+      yield ev("step", { step_index: 2, step_name: "Build the Metal engine", command: "cd h3c && make mps" }, "1");
+      for (const [i, text] of LINES.entries()) yield ev("line", { text, step_index: 2 }, String(i + 2));
+      yield ev("gap", { gap: 1284, gap_unit: "lines" }, "90");
+      yield ev("end", { state: "failed", last_error: { code: "step_failed", message: "Build the Metal engine failed. make exited with code 2." } }, "91");
+    },
+  };
+
+  // A four-pixel PNG, so a thumbnail is drawn without a decode that could
+  // differ between machines.
+  const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAFklEQVQImWNgYGD4z4AJGBhwC+IHAJ4VAgUqz6XGAAAAAElFTkSuQmCC";
+  const thumbBlob = () => fetch("data:image/png;base64," + PIXEL).then((r) => r.blob());
+
+  const items = [
+    { id: "it_1", studio_id: "h3-studio", kind: "video", asset_id: "as_1", title: "café window drift", starred: true, tags: [{ name: "keeper" }], inputs: [{ item_id: "take-052505" }], params: { seed: 42 }, created_at: "2026-09-16T12:00:00Z", asset: { id: "as_1", kind: "video", width: 800, height: 448, duration_s: 5.0, bytes: 5_200_000 } },
+    { id: "it_2", studio_id: "ltx-studio", kind: "video", asset_id: "as_2", title: "rain street plate", starred: false, tags: [], inputs: [], params: { seed: 7 }, created_at: "2026-09-16T11:40:00Z", asset: { id: "as_2", kind: "video", width: 1280, height: 720, duration_s: 4.2, bytes: 8_100_000 } },
+    { id: "it_3", studio_id: "iris-studio", kind: "image", asset_id: "as_3", title: "klein still 11", starred: false, tags: [{ name: "ref" }], inputs: [], params: { seed: 991 }, created_at: "2026-09-16T11:20:00Z", asset: { id: "as_3", kind: "image", width: 1024, height: 1024, bytes: 1_400_000 } },
+    { id: "it_4", studio_id: "auk-studio", kind: "audio", asset_id: "as_4", title: "line 04 — arshi", starred: false, tags: [], inputs: [], params: {}, created_at: "2026-09-16T11:00:00Z", asset: { id: "as_4", kind: "audio", duration_s: 3.0, bytes: 120_000 } },
+    { id: "it_5", studio_id: "h3-studio", timeline_id: "tl_1", kind: "video", asset_id: "as_5", title: "café sequence", starred: false, tags: [], inputs: [{ asset_id: "as_1" }], params: {}, created_at: "2026-09-16T10:00:00Z", asset: { id: "as_5", kind: "video", width: 1920, height: 1080, duration_s: 14.16, bytes: 31_000_000 } },
+  ];
+
+  document.getElementById("gal").client = {
+    gallery: {
+      query: async () => ({ items, next_cursor: null }),
+      update: async () => ({}),
+    },
+    assets: {
+      // Off by default. A decoded raster in the page changes how Chrome
+      // composites the panel around it, by one unit in one channel at the
+      // rounded corners, and differently from run to run — and these goldens
+      // are exact on purpose (M6 Q16). The thumbnail path is held by
+      // TestComponentsBehave instead, which reads the DOM rather than pixels.
+      thumb: async () => {
+        if (!THUMBS) throw Object.assign(new Error("thumb (501): not in this fixture"), { kind: "Unsupported" });
+        return new Response(await thumbBlob(), { headers: { "Content-Type": "image/png" } });
+      },
+    },
+  };
+
+  // The player is given bytes this browser cannot decode, which is exactly
+  // the state the h264 proxy would have answered and which Q13 leaves
+  // Unsupported until ffmpeg. The transport, the scrubber and the filmstrip
+  // band are what this golden holds.
+  document.getElementById("play").client = {
+    assets: {
+      read: async () => new Response(new Uint8Array([0, 0, 0, 0]), {
+        headers: { "Content-Type": "video/mp4" },
+      }),
+    },
+  };
+
+  const { settle } = await import("./settle.js");
+  await settle();
+</script>
+</body>
+</html>

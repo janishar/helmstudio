@@ -18,8 +18,11 @@ M1 and grows as the contracts it checks come into existence.
 **Visual regression (`make visual`).**
 - **What it runs.** An installed Chrome, driven over its DevTools pipe by Go's standard library (`internal/chrome`). `HELM_CHROME` names the binary. A missing browser fails the gate unless `HELM_ALLOW_MISSING_BROWSER` is set.
 - **The goldens.** `test/visual/golden/*.png` are compared exactly, pixel for pixel. They are tied to the Chrome major in `test/visual/golden/CHROME_MAJOR` and to the operating system in `OS_MAJOR` (`macOS 27`), which the browser itself reports; a different one fails and asks for a deliberate `make golden` and a look at the images. Both are checked before any screenshot is taken.
+- **What is pinned** (M6b): helm-css's tokens, components and layout; the three `helm-ui-sdk` components; and each of the launcher's screens at 1280, 1000 and 380 px, drawn from the canned data in `test/visual/fixtures/fake.js` against the real modules the daemon serves. Time is frozen in the fixtures, because every screen states an elapsed time.
+- **What is not pinned, and why** (M6b): a decoded raster image. A thumbnail in the page changes how Chrome composites the panel around it, by one unit in one channel at the rounded corners and differently from run to run, so `helm-gallery`'s goldens carry no thumbnail. The thumbnail path, and the component behaviour a picture cannot show, are held by `TestComponentsBehave`, which reads the DOM.
 - **Theme end to end.** The same target runs the test that the launcher's theme reaches a running studio's page.
 - **Contrast and token names** are checked by `go test` in `packages/helm-css`, against 03 §2a and §2b.
+- **The dependency arrow** is checked by `go test` in `packages/helm-ui-sdk`: no component names the wire, constructs a client or imports anything outside the package; the runtime SDK names no component; helm-css styles no component's element; every token a component uses exists; and the component stylesheets hold no colour literal.
 
 The Linux run is deliberate. macOS has a case-insensitive filesystem, which
 hides a class of path bug that a Linux run surfaces on the first try.

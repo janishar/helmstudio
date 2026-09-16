@@ -15,6 +15,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +28,8 @@ import (
 
 	"github.com/janishar/helmstudio/internal/chrome"
 	helmcss "github.com/janishar/helmstudio/packages/helm-css"
+	helmruntimenode "github.com/janishar/helmstudio/packages/helm-runtime-sdk/node"
+	helmui "github.com/janishar/helmstudio/packages/helm-ui-sdk"
 )
 
 // EnvUpdate rewrites the goldens instead of comparing (make golden).
@@ -80,24 +83,65 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// fixtureServer serves the fixture pages and helm-css as the daemon serves it.
+// fixtureServer serves the fixture pages, and everything the daemon serves
+// them from: helm-css and the components under /sdk/v1/, and the launcher's
+// own modules under /web/. The fixtures import the real files, so a golden is
+// of the code that ships rather than of a copy that has drifted from it.
 func fixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.Handle("/fixtures/", http.StripPrefix("/fixtures/", http.FileServerFS(os.DirFS("fixtures"))))
-	mux.Handle("/sdk/v1/", http.StripPrefix("/sdk/v1/", http.FileServerFS(helmcss.Files)))
+	mux.Handle("/web/", http.StripPrefix("/web/", http.FileServerFS(os.DirFS(filepath.Join("..", "..", "web")))))
+	mux.HandleFunc("/sdk/v1/{file...}", serveSDK)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
 }
 
+// serveSDK mirrors internal/api's own /sdk/v1/ routing: helm-css at the root,
+// the browser runtime under runtime/, the components under ui/, and the two
+// shims that re-export them.
+func serveSDK(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("file")
+	var body []byte
+	var err error
+	switch {
+	case name == "helm-ui.js":
+		body = []byte(`export * from "./ui/index.js";` + "\n")
+	case name == "helm-runtime.js":
+		body = []byte(`export * from "./runtime/browser.js";` + "\n")
+	case strings.HasPrefix(name, "ui/"):
+		body, err = fs.ReadFile(helmui.Files, helmui.Served[strings.TrimPrefix(name, "ui/")])
+	case strings.HasPrefix(name, "runtime/"):
+		body, err = fs.ReadFile(helmruntimenode.Browser, helmruntimenode.BrowserFiles[strings.TrimPrefix(name, "runtime/")])
+	default:
+		body, err = fs.ReadFile(helmcss.Files, name)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if strings.HasSuffix(name, ".js") {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	} else if strings.HasSuffix(name, ".css") {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	}
+	_, _ = w.Write(body)
+}
+
 type shot struct {
 	name    string
-	fixture string
+	fixture string // with its query, if it takes one
 	theme   string // data-theme, or "" for the system preference
 	system  string // emulated prefers-color-scheme
 	width   int
+	height  int // 0 for the default
 }
+
+// The launcher's screens (docs/decisions.md M6 Q2). Each is drawn from the
+// canned data in fixtures/fake.js, at the three widths 03's layout collapses
+// at, in both themes.
+var screens = []string{"catalogue", "install", "processes", "models", "settings", "switch"}
 
 func shots() []shot {
 	var out []shot
@@ -106,15 +150,23 @@ func shots() []shot {
 		// when data-theme wins.
 		opposite := map[string]string{"dark": "light", "light": "dark"}[theme]
 		out = append(out,
-			shot{"tokens-" + theme, "tokens.html", theme, opposite, 1100},
-			shot{"components-" + theme, "components.html", theme, opposite, 1100},
+			shot{"tokens-" + theme, "tokens.html", theme, opposite, 1100, 0},
+			shot{"components-" + theme, "components.html", theme, opposite, 1100, 0},
 		)
+		out = append(out, shot{"ui-" + theme, "ui.html", theme, opposite, 900, 1400})
 		for _, w := range []int{1280, 1000, 380} {
-			out = append(out, shot{fmt.Sprintf("layout-%s-%d", theme, w), "layout.html", theme, opposite, w})
+			out = append(out, shot{fmt.Sprintf("layout-%s-%d", theme, w), "layout.html", theme, opposite, w, 0})
+			for _, s := range screens {
+				out = append(out, shot{
+					name:    fmt.Sprintf("screen-%s-%s-%d", s, theme, w),
+					fixture: "launcher.html?screen=" + s,
+					theme:   theme, system: opposite, width: w,
+				})
+			}
 		}
 	}
 	// No data-theme: the prefers-color-scheme block decides.
-	out = append(out, shot{"tokens-system-light", "tokens.html", "", "light", 1100})
+	out = append(out, shot{"tokens-system-light", "tokens.html", "", "light", 1100, 0})
 	return out
 }
 
@@ -220,19 +272,32 @@ func TestHelmCSSMatchesItsGoldensInBothThemes(t *testing.T) {
 		t.Run(s.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
-			page, err := b.NewPage(ctx, s.width, 800, s.system)
+			height := s.height
+			if height == 0 {
+				height = 800
+			}
+			page, err := b.NewPage(ctx, s.width, height, s.system)
 			if err != nil {
 				t.Fatal(err)
 			}
 			url := srv.URL + "/fixtures/" + s.fixture
 			if s.theme != "" {
-				url += "?theme=" + s.theme
+				url += (map[bool]string{true: "&", false: "?"})[strings.Contains(s.fixture, "?")] + "theme=" + s.theme
 			}
 			if err := page.Navigate(ctx, url); err != nil {
 				t.Fatal(err)
 			}
-			if err := page.WaitFor(ctx, `document.documentElement.dataset.ready === "1" && document.fonts.status === "loaded"`); err != nil {
+			if err := page.WaitFor(ctx, `document.documentElement.dataset.ready && document.fonts.status === "loaded"`); err != nil {
 				t.Fatal(err)
+			}
+			// A fixture that gave up waiting for itself says so, rather than
+			// letting a half-drawn page be pinned as if it were correct.
+			var ready string
+			if err := page.Eval(ctx, `document.documentElement.dataset.ready`, &ready); err != nil {
+				t.Fatal(err)
+			}
+			if ready != "1" {
+				t.Fatalf("%s never settled (data-ready=%q); its fixture kept changing", s.name, ready)
 			}
 			var plex bool
 			if err := page.Eval(ctx, `document.fonts.check('13px "IBM Plex Sans"') && document.fonts.check('12px "IBM Plex Mono"')`, &plex); err != nil || !plex {

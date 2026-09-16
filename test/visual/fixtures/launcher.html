@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>helmstudio launcher</title>
+<script>
+  const q = new URLSearchParams(location.search);
+  const t = q.get("theme");
+  if (t) document.documentElement.setAttribute("data-theme", t);
+</script>
+<link rel="stylesheet" href="/sdk/v1/helm.css">
+<link rel="stylesheet" href="/web/launcher.css">
+<script type="module" src="/sdk/v1/helm-ui.js"></script>
+</head>
+<body class="helm-body">
+<div class="helm-app" id="app"></div>
+<script type="module">
+  // The launcher's own screens, drawn from canned data. These are the real
+  // modules the daemon serves — a golden of a mock would prove nothing.
+  import { newContext, newStore, shell } from "/web/app.js";
+  import { freezeTime, fakeClient, studios, starting, jobs, models, hfToken } from "./fake.js";
+
+  freezeTime();
+
+  const q = new URLSearchParams(location.search);
+  const screen = q.get("screen") || "catalogue";
+
+  const HASH = {
+    catalogue: "#/studios",
+    install: "#/studios/h3-studio",
+    processes: "#/studios/ltx-studio/processes?log=studio",
+    models: "#/models",
+    settings: "#/settings",
+  };
+
+  const store = newStore();
+  store.studios = screen === "processes" ? [starting, ...studios.slice(1)] : studios;
+  store.models = models;
+  store.jobs = jobs;
+  store.hfToken = hfToken;
+  store.theme = q.get("theme") || "system";
+
+  const app = document.getElementById("app");
+  const ctx = newContext({ client: fakeClient(), store, redraw: () => {} });
+  app.replaceChildren(...shell(ctx, HASH[screen], "127.0.0.1:8700"));
+
+  // The switch dialog has no route of its own: it is what a heavy conflict
+  // opens, so the golden draws it over the catalogue it is opened from.
+  if (screen === "switch") {
+    const { switchBody } = await import("/web/switch.js");
+    const { dialog } = await import("/web/ui.js");
+    dialog({
+      title: "Stop ltx studio to launch h3 studio?",
+      body: switchBody({
+        running_studio: "ltx-studio", running_name: "ltx studio", running_peak_gb: 20,
+        wanted_studio: "h3-studio", wanted_name: "h3 studio", wanted_peak_gb: 21,
+        host_gb: 32, busy: { state: "idle" }, confirm: "fixture",
+      }),
+      extra: Object.assign(document.createElement("label"), {
+        className: "helm-label",
+        style: "display: flex; gap: var(--helm-space-2); align-items: center; margin-top: var(--helm-space-3)",
+      }),
+      actions: [
+        { label: "Cancel", value: null },
+        { label: "Stop ltx studio and launch h3 studio", value: "go", class: "helm-btn-danger-fill", primary: true },
+      ],
+    });
+    const box = document.querySelector("dialog .helm-label");
+    box.append(Object.assign(document.createElement("input"), { type: "checkbox" }), "Don't ask again this session");
+  }
+
+  const { settle } = await import("./settle.js");
+  await settle();
+</script>
+</body>
+</html>
