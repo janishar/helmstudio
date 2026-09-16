@@ -554,6 +554,10 @@ Name the thing that failed and the thing to do. State the machine's limit as a f
 | Unsupported platform. | This studio runs through CUDA, which needs an NVIDIA GPU. It won't run on Apple Silicon, so installing it would download 34 GB you can't use. |
 | Insufficient memory! | This Mac has 16 GB of unified memory and LTX-2.5 needs about 20 GB. You can install it, but generation will likely fail. |
 | This studio requests gallery.read_all. | This studio asks to read everything you have ever made, in every studio. It needs that to offer your past renders as references. |
+| Are you sure? | Stop ltx studio to launch h3 studio? Only one studio can hold a model in memory at a time. |
+| File not found. | The video for this take isn't where helmstudio left it — it may have been moved or deleted in Finder. The prompt and settings are still here, so you can render it again. |
+| Invalid token. | Hugging Face rejected the stored token. It may have expired or lack access to `Lightricks/LTX-2.5`. Replace it in Settings. |
+| Done! | ltx studio installed in 6m 11s. 21.4 GB in the cache. |
 
 ### Capabilities, as sentences
 
@@ -573,8 +577,3 @@ Name the thing that failed and the thing to do. State the machine's limit as a f
 | `handoff.send` | Can send items to other studios. |
 
 The two in bold are shown as warnings. **No manifest field states a reason** — a studio that wants one writes it in its description, where it is not mistaken for something helmstudio checked.
-| Are you sure? | Stop ltx studio to launch h3 studio? Only one studio can hold a model in memory at a time. |
-| File not found. | The video for this take isn't where helmstudio left it — it may have been moved or deleted in Finder. The prompt and settings are still here, so you can render it again. |
-| Invalid token. | Hugging Face rejected the stored token. It may have expired or lack access to `Lightricks/LTX-2.5`. Replace it in Settings. |
-| Done! | ltx studio installed in 6m 11s. 21.4 GB in the cache. |
-
