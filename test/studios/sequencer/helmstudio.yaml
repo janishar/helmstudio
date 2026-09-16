@@ -1,0 +1,32 @@
+# The fixture studio M8's conform demo runs through (docs/decisions.md,
+# "2026-09-16 · M8 timeline and export", Q21). It is not a registry entry and
+# is never installed from one: it runs under `helm dev`, from this checkout.
+#
+#   helm dev -f test/studios/sequencer/helmstudio.yaml
+#   curl -X POST 'http://127.0.0.1:<port>/run?dir=<a folder of clips>'
+#
+# It holds gallery.read_all so that a sequence may put h3's own take beside the
+# files it uploads; without it a studio reaches only its own assets (M8 Q11).
+id: sequencer-studio
+name: sequencer
+kinds: [video]
+repo: https://github.com/janishar/helmstudio
+license: MIT
+requires:
+  os: [darwin, linux]
+  arch: [arm64, amd64]
+  tools: [go]
+  ram_gb: 1
+  disk_gb: 1
+runtime:
+  framework: other
+  backends: [cpu]
+capabilities: [assets, gallery, gallery.read_all, timeline]
+sdk: { runtime: "^1" }
+processes:
+  - name: sequencer
+    role: main
+    cmd: go run ./test/studios/sequencer --port {port}
+    port: { prefer: 8730 }
+    health: { path: /healthz, timeout_s: 120, interval_s: 1 }
+    ui: /
