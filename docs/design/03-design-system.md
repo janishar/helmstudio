@@ -303,7 +303,7 @@ The system ships as a package so studios can look like family without importing 
 
 Amendments (2026-09-16, M6):
 - **Theme** (Q8, Q9, Q10). The daemon injects `HELM_THEME` at spawn and emits `theme` both on `/events` and on the tokenless `GET /theme/events`. A studio's page reaches that stream through the runtime SDK's same-origin proxy at `/helm/`, or directly. The browser runtime's `themeBridge()` sets `data-theme`, or removes it for `system`. With no stream, `data-theme` stays unset. Hosted, the launcher's theme wins, and a studio's own theme control is hidden while the stream answers. Standalone, that control keeps working (Q19).
-- **Enforcement** (Q6, Q17). `helm validate -theme <dir>` flags colour literals and non-Plex font families. It is advisory, and `-strict` makes it blocking for registry CI. The contrast rule is the pairs in §2b, not every token pair. Rendering a studio's own stylesheet for contrast is the approval harness's job (M7).
+- **Enforcement** (Q6, Q17). `helm validate -theme <dir>` flags colour literals and non-Plex font families. It is advisory, and `-strict` makes it blocking for registry CI. The contrast rule is the pairs in §2b, not every token pair. Rendering a studio's own stylesheet for contrast is the smoke harness's job, which belongs to no milestone yet (amended 2026-09-16, M7 Q16: `helm test`, `helm doctor --studio` and `helm studio init` were taken out of M7 for a milestone the human places; until one builds them, the approval preview lists theme conformance as not run rather than as a pass).
 
 ## 6 · Catalogue
 
@@ -435,9 +435,26 @@ Checks run before install, not after. Required failures warn loudly and block a 
 
 *[Levels: Draft · Unverified · Verified · Registry — "a label on the card, never a gate on your own machine".]*
 
+(Amended 2026-09-16, M7 Q10–Q13, Q15.)
+
+- **Every source passes through this screen**, not only an unverified repository. Import, paste and Duplicate put someone else's text into a Local entry, so "you wrote it" cannot be assumed from where a file sits; and a rule that depends on who wrote a file cannot be checked by a daemon that sees only files. A launch is gated too, because `processes[].cmd` and `health.exec` never passed through install.
+- **Every command, grouped by when it runs**, not only `build[]`: the build steps at install, each process `cmd` and `health.exec` at every launch, and `import.run` once on first launch — each with its `cwd`, `shell` and `env`, placeholders left as written, byte for byte. Control characters and newlines are shown escaped and flagged; zero-width and bidirectional characters are flagged. Submodule URLs and paths are shown, from `.gitmodules` at the resolved commit.
+- **Only checks that execute nothing run.** The schema and rules, host requirements, the commands, the capabilities, the declared hosts, and the weights with their sizes. **Theme conformance and the smoke test are listed as "Not run before install"**, with the reason — a smoke test builds and runs the studio, which is the thing this screen is asking permission for.
+- **Two buttons: Cancel and Install**, which reads "Install anyway" when a required check fails. There is no "Run checks": a screen that offered to run the studio's code in order to decide whether to run the studio's code would be asking permission to ask permission.
+- **Hosts** read: "The manifest says it contacts these hosts. helmstudio does not restrict network access."
+- **The level is derived**, never declared in a file. Until a smoke harness exists, only Draft (a manifest with `local_path`) and Unverified are reachable.
+- **The checkpoint choice** for a studio with `selectable` weights is made here, defaulting to the first declared; install downloads only that one. It is shown but **not covered by the digest**, since every selectable weight was approved with the manifest and a digest over the choice would ask again at every switch.
+- **What the digest proves.** Until M9's cookie, any local process can fetch a preview and send its digest back. The digest proves the screen was current, not that a person read it.
+
 ## 13a · Describing a studio yourself
 
 Most repos worth running will never ship a manifest, so writing one has to be a first-class act rather than a fallback. Form on the left for the fields, YAML on the right for the parts that are really text, both live and both editable, with the criteria scoring underneath as you type.
+
+(Amended 2026-09-16, M7 Q16, Q17.)
+
+- **The page never parses YAML.** It sends text to the daemon and gets back errors with lines and pointers, the criteria, and the document as JSON; a form edit goes as a JSON pointer and a value, and the daemon applies it to the YAML node tree, keeping comments and key order. A JavaScript YAML parser would be a second implementation, and its disagreements with the daemon's — anchors, merge keys, `on` and `yes`, duplicate keys — would show one manifest and validate another.
+- **The form is generated** from `schema/manifest.json`, served to the page, with a hand-written map from pointers to the sections below. A hand-written form would be a second copy of the schema, and would silently lose a field the day the schema gained one.
+- **The criteria scored here are only those a manifest alone answers.** The rest read "Not checked: needs the smoke harness", and **there is no Test button** until that harness exists.
 
 *[Mockup: New studio — ~/.helmstudio/studios/wan-studio.yaml, "13 of 15 criteria", Import file, Export, Test, Save to library.*
 - *Form:*
@@ -537,6 +554,25 @@ Name the thing that failed and the thing to do. State the machine's limit as a f
 | Unsupported platform. | This studio runs through CUDA, which needs an NVIDIA GPU. It won't run on Apple Silicon, so installing it would download 34 GB you can't use. |
 | Insufficient memory! | This Mac has 16 GB of unified memory and LTX-2.5 needs about 20 GB. You can install it, but generation will likely fail. |
 | This studio requests gallery.read_all. | This studio asks to read everything you have ever made, in every studio. It needs that to offer your past renders as references. |
+
+### Capabilities, as sentences
+
+(Added 2026-09-16, M7 Q12.) The approval screen names a capability in the words of what it lets a studio do, because `gallery.read_all` tells a person nothing. **This table is the contract.** One Go table in `internal/manifest` serves the preview and a test diffs it against this section, the way the tokens are diffed — a sentence that drifts from here is a gate failure, not a nicety.
+
+| Capability | Sentence |
+|---|---|
+| *none* | Uses no helmstudio services. It gets no access token. |
+| `kv` | Saves its own settings and sessions in helmstudio. |
+| `records` | Keeps its own records, such as a list of takes, in helmstudio. |
+| `assets` | Stores the files it makes in your helmstudio library. |
+| `gallery` | Adds what it makes to your gallery, and receives items other studios send it. |
+| `jobs` | Reports its long-running work to helmstudio. |
+| `timeline` | Can create sequences on your timeline. |
+| **`gallery.read_all`** | Can read everything you have ever made, in every studio. |
+| **`kv.shared`** | Can read and change settings shared by every studio. |
+| `handoff.send` | Can send items to other studios. |
+
+The two in bold are shown as warnings. **No manifest field states a reason** — a studio that wants one writes it in its description, where it is not mistaken for something helmstudio checked.
 | Are you sure? | Stop ltx studio to launch h3 studio? Only one studio can hold a model in memory at a time. |
 | File not found. | The video for this take isn't where helmstudio left it — it may have been moved or deleted in Finder. The prompt and settings are still here, so you can render it again. |
 | Invalid token. | Hugging Face rejected the stored token. It may have expired or lack access to `Lightricks/LTX-2.5`. Replace it in Settings. |

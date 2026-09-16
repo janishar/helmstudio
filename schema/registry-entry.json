@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.in/schema/registry-entry-1.json",
+  "title": "helmstudio registry entry",
+  "description": "One file per studio in the registry, as studios/<id>.yaml. An entry is a pointer: it says where a studio's repository is and which ref to read, and the manifest itself lives in that repository as helmstudio.yaml. The inline `manifest` exists only for a repository that does not ship one yet; when it starts to, the pull request that moves `ref` removes the inline copy, so there is still exactly one copy of the truth. There is deliberately no `certified` field: a certification level is derived from what has actually been checked, never declared by the thing being checked (docs/design/05-sdk-and-custom-studios.md §9, docs/decisions.md M7 Q4 and Q15).",
+  "type": "object",
+  "required": ["id", "repo", "ref"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": {
+      "type": "integer", "const": 1,
+      "description": "Registry entry schema major. Omitted means 1."
+    },
+
+    "id": {
+      "type": "string", "pattern": "^[a-z][a-z0-9-]{1,38}[a-z0-9]$",
+      "description": "The studio's id, the same slug its manifest carries. The file is named for it."
+    },
+
+    "repo": {
+      "type": "string", "format": "uri", "minLength": 1,
+      "description": "git clone URL. helmstudio reads it with git and never through a forge's HTTP API, so any transport git understands works. The approval preview names the transport before anything is cloned."
+    },
+
+    "ref": {
+      "type": "string", "minLength": 1,
+      "description": "Branch, tag or commit to read. It is resolved to a commit before anything is shown or built, and what gets installed is that commit — so a branch that moves after a preview was approved does not change what runs."
+    },
+
+    "manifest": {
+      "$ref": "https://helmstudio.in/schema/manifest-1.json",
+      "description": "The studio's manifest, inline, for a repository that ships no helmstudio.yaml of its own. Where it sets `id`, `repo` or `ref`, each must equal the pointer's — a rule the validator enforces, because JSON Schema cannot compare two fields. A repository that ships its own manifest wins over this one, and this one is then dead weight to be deleted."
+    }
+  }
+}

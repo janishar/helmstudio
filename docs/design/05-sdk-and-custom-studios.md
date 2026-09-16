@@ -102,7 +102,8 @@ This is a change from the earlier design, and it is what makes the handover seam
     id: h3-studio
     repo: https://github.com/janishar/h3c-studio
     ref: v1.4.2                  # the reviewed commit; the manifest that runs is the one reviewed
-    certified: verified
+
+(Amended 2026-09-16, M7 Q4 and Q15: the example carried `certified: verified`, and that line is gone. A certification level is **derived** from what has been checked — it is never declared by the thing being checked, least of all in a file the thing's own author sends a pull request against. `schema/registry-entry.json` is the shape, and it has no such field. An entry may carry an optional inline `manifest:` for a repository that ships none; when the repository starts shipping one, the pull request that moves `ref` removes the inline copy, so there is still one copy.)
 
 Two copies of a manifest drift; one does not. It also removes the oddity where a studio shipping new code could not announce a new build step without a helmstudio release, and it means "add from a git URL" and "installed from the registry" read the identical file — the only difference is whether a human reviewed the ref.
 
@@ -149,7 +150,9 @@ That export is the whole contribution path, and it works because there is only o
 
 What this does and does not change about trust
 
-Authoring a manifest is not the risk — you wrote it, and you can read every command in it. Running an unfamiliar repo is. So the approval screen still appears when installing from a repository you do not own, and it reports the *repo's* standing, not the manifest's origin. A hand-written manifest pointing at your own checkout needs no ceremony; the same manifest pointing at a stranger's repository needs all of it.
+Authoring a manifest is not the risk — you wrote it, and you can read every command in it. Running an unfamiliar repo is. So the approval screen still appears when installing from a repository you do not own, and it reports the *repo's* standing, not the manifest's origin.
+
+(Amended 2026-09-16, M7 Q10.) The last sentence used to read "A hand-written manifest pointing at your own checkout needs no ceremony; the same manifest pointing at a stranger's repository needs all of it." **Every source passes through the screen now, including Local and `local_path`.** Two reasons. Import, paste and Duplicate all put someone else's text into a Local entry, so "you wrote it" cannot be inferred from where the file sits. And a rule that turns on who wrote a file cannot be enforced by a daemon that sees only files — it would be a comforting label over an unchecked path. The cost is a screen the author of a local manifest sees for their own work; the alternative was a hole shaped exactly like the attack.
 
 ### Adoption: the data comes too
 
@@ -266,7 +269,9 @@ Someone builds a studio for a model nobody has wrapped yet and wants it in their
 | Git URL      | **Add studio → From a repository**. The manifest is read from the repo at a pinned ref, validated, then shown for approval before anything runs. | Sharing with a few people, or your own machines. |
 | Registry     | A pull request adding `studios/<id>.yaml` to the helmstudio repo. CI runs validation and the smoke harness.                                      | Everyone. Ships with the next release.           |
 
-The add flow is deliberately slow at one point: after fetching the manifest and before executing anything, helmstudio shows what it is about to do — the repo and ref, every build command verbatim, the weights and their sizes, the capabilities requested, the declared network hosts, and the certification level. That screen is the whole security model made visible, and it is the one place the product should not optimise for clicks.
+The add flow is deliberately slow at one point: after fetching the manifest and before executing anything, helmstudio shows what it is about to do — the repo and ref, every command verbatim, the weights and their sizes, the capabilities requested, the declared network hosts, and the certification level. That screen is the whole security model made visible, and it is the one place the product should not optimise for clicks.
+
+(Amended 2026-09-16, M7 Q11, Q13.) Two corrections to the mockup below. **"Every build command" is every command** — the build steps at install, each process `cmd` and `health.exec` at every launch, and `import.run` on first launch, grouped by when each runs. And there is **no "Run checks" button**: only checks that execute nothing run, so theme conformance and the smoke test are listed as "Not run before install" with the reason. The two buttons are Cancel and Install, which reads "Install anyway" when a required check fails.
 
 Unverified · from a repositorygithub.com/someone/wan-studio · v0.3.1 · 9f2c41a
 
@@ -311,7 +316,7 @@ Checks run before install, not after. A failure is informative, not necessarily 
 | 1   | Manifest validates against the schema; `id` is unique and stable                 | `helm validate`                | Required    |
 | 2   | Declares `requires` (os, arch, tools, ram_gb, disk_gb) and `peak_ram_gb`         | `helm validate`                | Required    |
 | 3   | Build steps are non-interactive, deterministic, and never prompt or require sudo | Smoke run in a clean sandbox   | Required    |
-| 4   | At least one `main` process with a health probe and a realistic timeout          | `helm validate` + smoke        | Required    |
+| 4   | **Exactly one** `main` process with a health probe (amended 2026-09-16, M7 Q16: "at least one" contradicted what `helm validate` enforces and what `role: main`'s own description implies; "realistic" is not something a validator can judge, so it is not scored) | `helm validate` + smoke        | Required    |
 | 5   | Accepts an assigned port; does not hard-code one                                 | Smoke on a random port         | Required    |
 | 6   | Writes only under its own roots and the stage directory                          | Smoke with filesystem watch    | Required    |
 | 7   | Exits cleanly on SIGTERM within the grace period, leaving no children            | Smoke                          | Required    |
@@ -344,6 +349,8 @@ Merged into the helmstudio catalogue; verified in CI on every release.
 
 The level is a chip on the card, never a gate on the user's own machine. The point is that someone can always tell whether what they are running was checked by anyone.
 
+**Which of these can be scored today** (added 2026-09-16, M7 Q16). A criterion is only worth a tick if something actually checked it, so M7 scores the ones a manifest alone answers — 1, 2, 4, 5, 8, 13 and 15 — and the count reads "n of m checkable pass". The rest say why they are not scored rather than passing by default: 3, 6, 7, 10, 11 and 14 need the smoke harness; 9 needs the studio's source; 12 needs its stylesheets. `helm validate -criteria`, the editor and the approval preview all read the same table in `internal/manifest`, so the three cannot disagree about what passed.
+
 ## 10 · Trust and safety, stated plainly
 
 What installing a studio actually is
@@ -365,5 +372,5 @@ Cloning a repository and running its build steps is executing someone else's cod
 | 2 · Remote client, Go and Python                     | The smallest useful slice. h3 studio records its first gallery item.                                                 |
 | 3 · Embedded provider, `helm dev`, fixtures          | Built once there is a second caller, so the interface is an interface and not a refactor of one studio.              |
 | 4 · `helm validate`, `helm test`, `helm studio init` | Turns the criteria into something checkable, which is a prerequisite for custom studios rather than a follow-up.     |
-| 5 · Add-a-studio flow with the approval screen       | Needs 4. The flow is mostly presentation once the checks exist.                                                      |
+| 5 · Add-a-studio flow with the approval screen       | ~~Needs 4.~~ Amended 2026-09-16, M7 Q13 and Q16: it does **not** need step 4. The screen runs only checks that execute nothing, and `helm test` and `helm studio init` are not built — they have no milestone yet. What the screen needs is the validator and the criteria a manifest alone answers, which step 4's `helm validate` already provides. The flow is mostly presentation once *those* exist. |
 | 6 · Timeline and export                              | Last. It depends on assets, jobs and the media engine, and it is the piece most likely to want a second design pass. |

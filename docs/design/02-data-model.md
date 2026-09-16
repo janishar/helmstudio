@@ -244,7 +244,8 @@ One row per studio materialised on this machine, keyed by `studio_id`.
 | `commit_sha` · `remote_sha` · `remote_checked_at` | Local HEAD and the upstream tip. `update_available` is `remote_sha != commit_sha`; without both fields the question is unanswerable.                                                                                                                                                                                                                                                                                                    |
 | `install_state`                                   | The canonical vocabulary from the PRD.                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `runtime_env`                                     | Resolved at the end of a successful build: venv path, python version, go version, tool versions, and the detected versions of any framework the manifest names — `torch 2.6.0`, `mlx 0.31.2`, the Metal version. This is what the studio page shows and what a "why is this slower than the README" question starts from. The declared `runtime` block itself is not stored: it is read from the manifest like everything else derived. (Amended 2026-09-15, M5, Q7: for a studio with `python`, keys `venv`, `python` (the full version), `uv` (its `--version`), and the installed version of the distribution `runtime.framework` maps to — `torch`, `mlx`, `jax` or `onnxruntime`; nothing for `native-kernel`, `ggml` or `other`.) |
-| `selected_weights`                                | Placeholder → artifact id for `selectable` weights. This is how iris studio remembers which checkpoint to launch with.                                                                                                                                                                                                                                                                                                                  |
+| `selected_weights`                                | **Not used** (amended 2026-09-16, M7 Q20). It was to hold placeholder → artifact id for `selectable` weights, but an artifact id cannot name the weight when two weights share one artifact (M3 Q5), and the same fact then lived in two places. The selection is `studio_model_bindings.selected`, with a partial unique index making "exactly one" a constraint rather than a convention. The column stays because rebuilding the table to drop it costs more than leaving it empty. |
+| `approved_digest` · `approved_commit` · `approved_at` | Added 2026-09-16 for M7 Q10. What the user last approved, and the commit that approval named. An install, a retry or a launch whose freshly computed digest differs is refused until the preview is shown again — so a moved branch, an edited override or a new capability all ask again, and nothing that executes can change without the screen that authorises it changing too. NULL means never approved: every studio installed before v7 asks once, at its next launch. |
 | `last_failure`                                    | `{phase, step_index, exit_code, log_file_id, message}`. The failure block renders straight from this. (Amended 2026-09-15, M5, Q7: code `env_failed` means creating the Python environment failed; it has no `step_index`, and its log is owned by the install job.)                                                                                                                                                                  |
 | `size_bytes`                                      | Checkout plus build output. Excludes weights, which belong to the cache.                                                                                                                                                                                                                                                                                                                                                                |
 
@@ -552,6 +553,30 @@ One artifact per Hugging Face `(repo, revision)`, whichever studio declared it f
     DROP TABLE items_fts;
     CREATE VIRTUAL TABLE items_fts USING fts5(item_id UNINDEXED, title, prompt, tokenize='porter unicode61');
 
+**Schema v7 approval and selection** (added 2026-09-16, M7; `docs/decisions.md` "2026-09-16 · M7 library, editor and iris", Q10, Q20, Q21). Two facts the daemon had nowhere to put: which preview the user approved, and which of a studio's `selectable` weights they chose.
+
+**M7a took v7, not v6.** Its brief was written before M8a landed and names v6 throughout; M8a shipped v6 first, so the numbers moved. There is nothing behind the change but the order the two were built in.
+
+    -- What the user last approved for this studio, and when (Q10). The digest
+    -- covers everything that executes and where it comes from; an install, a
+    -- retry or a launch whose freshly computed digest differs from this one is
+    -- refused until the preview is shown again. NULL means never approved,
+    -- which every studio installed before v7 is: each asks once, at its next
+    -- launch. approved_commit is what install checks out, so a branch that
+    -- moved after the screen was shown still builds what was approved.
+    ALTER TABLE installations ADD COLUMN approved_digest TEXT;
+    ALTER TABLE installations ADD COLUMN approved_commit TEXT;
+    ALTER TABLE installations ADD COLUMN approved_at INTEGER;
+
+    -- At most one selectable weight per studio is the chosen one (Q20). The
+    -- index is what enforces it, rather than a check in Go that two writers
+    -- could interleave around. `selected` already exists and already defaults
+    -- to 0, so only the constraint is new.
+    CREATE UNIQUE INDEX idx_bind_selected ON studio_model_bindings(studio_id)
+      WHERE selected = 1;
+
+`installations.selected_weights` stays in the table and is **not used**: an artifact id cannot name the weight when two weights share an artifact (M3 Q5), and the binding is where the fact belongs. Rebuilding the table to drop a column costs more than leaving it empty.
+
 **Schema v6 timeline changes** (added 2026-09-16, M8; `docs/decisions.md` "2026-09-16 · M8 timeline and export", Q10, Q11, Q12, Q16, Q17). A sequence is nobody's studio document, but it is *owned* by the studio that made it, or by the launcher; every edit keeps the document it replaced, so undo is the previous revision as 05 §6 says; and an export records the process rendering it, so a daemon killed mid-render can stop what it left behind.
 
     -- timelines: an owner, a soft delete, and the revision the ETag is.
@@ -634,7 +659,8 @@ Two paths, one copy. The content-addressed path gives idempotent writes, dedup a
 
 | From               | Event                   | To                 | Side effect                                                        |
 |--------------------|-------------------------|--------------------|--------------------------------------------------------------------|
-| —                  | install requested       | `cloning`          | Job(install); root created                                         |
+| —                  | install requested, approval matches | `cloning` | Job(install); root created; the **approved commit** is checked out, not the ref's tip (amended M7 Q10) |
+| —                  | install requested, approval missing or stale | — | Nothing is cloned. 409 `approval_required` or `preview_changed`, with the preview in `details` (amended M7 Q10) |
 | `cloning`          | clone ok                | `cloned`           | `commit_sha`, submodule shas written                               |
 | `cloning`          | git error               | `failed_clone`     | `last_failure`; root left for inspection                           |
 | `cloned`           | build starts            | `building`         | `step_runs` created `pending`; for a studio with `python`, its environment is made or kept first, not as a step (amended M5) |
@@ -644,12 +670,14 @@ Two paths, one copy. The content-addressed path gives idempotent writes, dedup a
 | `building`         | daemon killed           | `failed_build`     | startup sweep stops a verified surviving step, then marks it `interrupted` (amended M3) |
 | `failed_build`     | retry                   | `building`         | resume at the first non-succeeded index                            |
 | `built`            | weights declared        | `fetching_weights` | bindings created; a download Job per missing artifact              |
-| `fetching_weights` | all required ready      | `ready`            | Launch becomes available                                           |
+| `fetching_weights` | all required ready      | `ready`            | Launch becomes available. For a studio with `selectable` weights, only the chosen checkpoint is required; the rest are fetched or linked on demand (amended M7 Q21) |
 | `fetching_weights` | required download fails | `failed_weights`   | artifact stays resumable; nothing deleted                          |
 | `fetching_weights` | HF 401/403              | `auth_required`    | token prompt; nothing failed; survives a restart (amended M3)      |
 | `auth_required`    | install, retry or fetch with a working token | `fetching_weights` → `ready` | resumes the remaining downloads (amended M3) |
 | `ready`            | remote ref moved        | `update_available` | non-destructive; still launchable                                  |
-| any                | uninstall               | `removing`         | group stopped, bindings deleted, checkout removed (amended M3: no ref counts) |
+| any                | uninstall               | `removing`         | group stopped, bindings deleted, checkout removed (amended M3: no ref counts). A **local manifest is never touched**: it is the user's file, and uninstalling a studio is not a request to delete what they wrote about it (amended M7 Q5) |
+
+**Launch has an approval gate of its own** (amended 2026-09-16, M7 Q10). `processes[].cmd` and `health.exec` run at every launch and never passed through install, so a launch whose freshly computed digest differs from `approved_digest` is refused the same way an install is — which is what makes an Override that edits a `cmd` show the user the change instead of running it.
 
 ### model_artifacts.state
 
