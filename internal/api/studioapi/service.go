@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/janishar/helmstudio/internal/export"
 	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/media"
 	"github.com/janishar/helmstudio/internal/store"
@@ -68,8 +69,13 @@ type Config struct {
 	// Theme is the launcher's theme; a change is published as a theme event
 	// to every subscriber (docs/decisions.md M6 Q8). Nil publishes none.
 	Theme *theme.Settings
-	Now   func() time.Time
-	Logf  func(string, ...any)
+	// FindFFmpeg locates the ffmpeg an export runs through. Nil is
+	// export.Find, which reads HELM_FFMPEG or the PATH (docs/decisions.md M8
+	// Q5). Its failure is what makes an export answer 501 rather than the
+	// daemon refuse to start.
+	FindFFmpeg func() (*export.Tool, error)
+	Now        func() time.Time
+	Logf       func(string, ...any)
 }
 
 // Service implements every studio-api operation against helm.db and the media
@@ -89,6 +95,12 @@ type Service struct {
 	// afterReclaimCommit is for tests: it runs between reclaim's commit and
 	// its file removal.
 	afterReclaimCommit func()
+
+	// tool is the ffmpeg this service found, looked up once and kept.
+	toolMu sync.Mutex
+	tool   *export.Tool
+	// exports is what this process is rendering, so a cancel reaches it.
+	exports exports
 }
 
 var _ Server = (*Service)(nil)

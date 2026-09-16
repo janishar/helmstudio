@@ -101,6 +101,9 @@ func run(addr, studiosDir string) error {
 		log.Printf("revoked %d studio token(s) and cleared %d stage director(ies) left by groups that are no longer running", revoked, len(cleared))
 	}
 	svc, studioAPI := plat.Serve(studioapi.SupervisorStudios{Sup: sup})
+	// An export a killed helmstudio left rendering is stopped, and its partial
+	// file removed, before anything is served (docs/decisions.md M8 Q16).
+	svc.SweepExports(ctx)
 
 	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()), api.WithStudioAPI(studioAPI, svc))
 	if err != nil {
