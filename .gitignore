@@ -46,7 +46,9 @@ venv/
 
 # helmstudio's own runtime state. None of this is ever committed: the store is
 # a user's library, and a stray .db in a diff is somebody's generation history.
-/.helm/
+# helm dev keeps a studio's data in .helm beside the manifest it runs, which
+# for the fixture studios under test/studios is inside this repository.
+.helm/
 *.db
 *.db-wal
 *.db-shm

@@ -4,6 +4,7 @@
 #
 #   helm dev -f test/studios/sequencer/helmstudio.yaml
 #   curl -X POST 'http://127.0.0.1:<port>/run?dir=<a folder of clips>'
+#   open http://127.0.0.1:<port>/     # the sequence, in helm-timeline (M8b)
 #
 # It holds gallery.read_all so that a sequence may put h3's own take beside the
 # files it uploads; without it a studio reaches only its own assets (M8 Q11).
@@ -26,7 +27,8 @@ sdk: { runtime: "^1" }
 processes:
   - name: sequencer
     role: main
-    cmd: go run ./test/studios/sequencer --port {port}
+    # helm dev runs this in the manifest's own directory.
+    cmd: go run . --port {port}
     port: { prefer: 8730 }
     health: { path: /healthz, timeout_s: 120, interval_s: 1 }
     ui: /

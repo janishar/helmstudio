@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sequencer</title>
+<link rel="stylesheet" href="/helm/sdk/v1/helm.css">
+<link rel="stylesheet" href="/helm/accent.css">
+<style>
+  /* The page decides how big the editor is. */
+  main { display: grid; gap: var(--helm-space-4); }
+  dialog.pick { width: min(960px, calc(100vw - var(--helm-space-6))); height: min(720px, calc(100vh - var(--helm-space-6))); padding: 0; }
+  dialog.pick helm-gallery { display: block; height: calc(100% - 48px); }
+  dialog.pick::backdrop { background: var(--helm-scrim); }
+</style>
+</head>
+<body class="helm-body">
+<div class="helm-app">
+<main class="helm-main">
+  <div class="helm-page-header">
+    <h1 class="helm-title">sequencer</h1>
+    <span class="helm-meta" id="facts"></span>
+    <span class="helm-spacer"></span>
+    <label class="helm-label" for="which">Sequence</label>
+    <select class="helm-select" id="which" style="max-width: 32ch"></select>
+  </div>
+  <p class="helm-micro" id="empty" hidden>
+    No sequence yet. POST /run?dir=&lt;a folder of clips&gt; builds one from the files it finds.
+  </p>
+  <helm-timeline id="tl" editable hidden></helm-timeline>
+</main>
+</div>
+
+<dialog class="pick helm-dialog" id="pick" aria-labelledby="pick-title">
+  <div class="helm-row" style="padding: var(--helm-space-2) var(--helm-space-3)">
+    <h2 class="helm-dialog-title" id="pick-title" style="margin: 0">Add from the gallery</h2>
+    <span class="helm-spacer"></span>
+    <button class="helm-btn helm-btn-secondary helm-btn-sm" id="pick-close">Close</button>
+  </div>
+  <helm-gallery id="gallery" scope="all" picker></helm-gallery>
+</dialog>
+
+<script type="module">
+  // The page M8b's machine-bound demo edits the conform sequence in (M8 Q20,
+  // Q21). It holds timeline and gallery.read_all, so h3's own take can sit in
+  // the sequence beside the files this studio uploaded.
+  //
+  // Everything here is what a studio at adoption level 3 writes: the runtime
+  // SDK's proxy mounted at /helm/, one client on window.helm, and the
+  // components. What is added to a sequence is the page's choice (04 §11
+  // rule 5), so "Add…" opens this page's own picker.
+  import { connect, themeBridge } from "/helm/sdk/v1/helm-runtime.js";
+  import "/helm/sdk/v1/helm-ui.js";
+
+  themeBridge();
+  const helm = (window.helm = connect());
+
+  const tl = document.getElementById("tl");
+  const which = document.getElementById("which");
+  const pick = document.getElementById("pick");
+  const gallery = document.getElementById("gallery");
+
+  // Clips are labelled by the gallery item that produced their asset, when
+  // this studio may read one; otherwise the editor's own facts are enough.
+  const titles = new Map();
+  async function learnTitles() {
+    try {
+      let cursor = null;
+      do {
+        const page = await helm.gallery.query({ scope: "all", limit: 200, cursor });
+        for (const item of page.items || []) if (item.asset_id && item.title) titles.set(item.asset_id, item.title);
+        cursor = page.next_cursor || null;
+      } while (cursor);
+    } catch {
+      // Titles are a nicety.
+    }
+  }
+  tl.labelFor = (clip) => titles.get(clip.asset_id) || "";
+
+  async function load() {
+    const page = await helm.timeline.list({ limit: 50 });
+    const items = page.items || [];
+    document.getElementById("empty").hidden = items.length > 0;
+    tl.hidden = items.length === 0;
+    which.replaceChildren(...items.map((t) => Object.assign(document.createElement("option"), { value: t.id, textContent: `${t.name} · r${t.revision}` })));
+    const wanted = new URLSearchParams(location.search).get("timeline");
+    const chosen = items.find((t) => t.id === wanted) || items[0];
+    if (!chosen) return;
+    which.value = chosen.id;
+    document.getElementById("facts").textContent = `${items.length} sequence${items.length === 1 ? "" : "s"}`;
+    await learnTitles();
+    tl.setAttribute("timeline", chosen.id);
+  }
+
+  which.addEventListener("change", () => {
+    const u = new URL(location.href);
+    u.searchParams.set("timeline", which.value);
+    history.replaceState(null, "", u);
+    tl.setAttribute("timeline", which.value);
+  });
+  tl.addEventListener("add-request", () => pick.showModal());
+  document.getElementById("pick-close").addEventListener("click", () => pick.close());
+  gallery.addEventListener("pick", async (e) => {
+    pick.close();
+    await tl.append(e.detail.asset);
+  });
+  tl.addEventListener("exported", () => learnTitles());
+  // The picker names each sequence with its revision, which an edit moves on.
+  tl.addEventListener("changed", (e) => {
+    const t = e.detail.timeline;
+    const option = [...which.options].find((o) => o.value === t.id);
+    if (option) option.textContent = `${t.name} · r${t.revision}`;
+  });
+
+  load().catch((err) => {
+    document.getElementById("empty").hidden = false;
+    document.getElementById("empty").textContent = `The sequences could not be read: ${err.message}`;
+  });
+</script>
+</body>
+</html>

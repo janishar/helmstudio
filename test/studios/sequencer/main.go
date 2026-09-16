@@ -16,14 +16,17 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +45,10 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("/run", s.run)
+	// The editor page reaches the daemon through the runtime SDK's same-origin
+	// proxy, which adds this studio's token; the page never holds it (M6 Q10).
+	mux.Handle("/helm/", helm.Proxy(helm.ProxyFromEnv()))
+	mux.HandleFunc("/log", s.log)
 	mux.HandleFunc("/", s.page)
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	log.Printf("sequencer: http://%s", addr)
@@ -49,18 +56,30 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
+//go:embed page.html
+var pageHTML []byte
+
 type sequencer struct {
 	client *helm.Client
 	last   string
 }
 
+// page is the editor: helm-timeline on this studio's sequences, with the
+// gallery as its picker (M8 Q20). It is the page M8b's demo edits the conform
+// sequence in.
 func (s *sequencer) page(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><title>sequencer</title>
-<body style="font:13px ui-sans-serif,system-ui;padding:24px">
-<h1>sequencer</h1>
-<p>POST /run?dir=&lt;a folder of clips&gt; builds a sequence from what it finds and exports it.</p>
-<pre>%s</pre>`, s.last)
+	_, _ = w.Write(pageHTML)
+}
+
+// log is what the last /run did, as text.
+func (s *sequencer) log(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte(s.last))
 }
 
 // run uploads every clip in a folder, puts them in one sequence with a
@@ -100,13 +119,31 @@ func (s *sequencer) sequence(ctx context.Context, dir string, log *strings.Build
 	}
 
 	var video, sound []helm.TimelineClip
+	lengths := map[string]float64{} // asset id -> probed duration
 	for _, name := range names {
 		kind := kindOf(name)
 		f, err := os.Open(filepath.Join(dir, name))
 		if err != nil {
 			return nil, err
 		}
-		asset, err := s.client.Assets.Upload(ctx, f, "", &helm.AssetsUploadParams{Kind: kind, Filename: &name})
+		params := &helm.AssetsUploadParams{Kind: kind, Filename: &name}
+		// A sequence needs every video and sound clip's length (M8 Q7), and an
+		// upload records one only as a hint. ffprobe is what an export runs
+		// anyway, so the demo reads the files with it rather than asking.
+		if kind != helm.AssetKindImage {
+			if d, w, h, err := probe(ctx, filepath.Join(dir, name)); err == nil {
+				params.DurationS = &d
+				if w > 0 && h > 0 {
+					params.Width, params.Height = &w, &h
+				}
+			} else {
+				fmt.Fprintf(log, "probing %s: %v\n", name, err)
+			}
+		}
+		asset, err := s.client.Assets.Upload(ctx, f, "", params)
+		if err == nil && params.DurationS != nil {
+			lengths[asset.ID] = *params.DurationS
+		}
 		f.Close()
 		if err != nil {
 			return nil, fmt.Errorf("uploading %s: %w", name, err)
@@ -129,10 +166,24 @@ func (s *sequencer) sequence(ctx context.Context, dir string, log *strings.Build
 	}
 	// A dissolve on the last cut and a little off the sound, so the demo
 	// exercises the conform path rather than the copy.
+	//
+	// A dissolve is centred on its cut and reads half its length past each
+	// side's edit point (M8 Q8), so both clips give up that much: the last one
+	// starts a quarter-second in, and the one before stops a quarter-second
+	// early. A still needs nothing — it can be held as long as a dissolve asks.
 	if len(video) > 1 {
+		const dissolve = 0.5
+		half := dissolve / 2
 		last := &video[len(video)-1]
-		if last.Hold == nil {
-			last.TransitionIn = &helm.TimelineTransition{Type: "dissolve", Duration: 0.5}
+		prev := &video[len(video)-2]
+		if last.Hold == nil && lengths[last.AssetID] > dissolve {
+			in := half
+			last.In = &in
+			last.TransitionIn = &helm.TimelineTransition{Type: "dissolve", Duration: dissolve}
+			if prev.Hold == nil {
+				out := lengths[prev.AssetID] - half
+				prev.Out = &out
+			}
 		}
 	}
 	tracks := []helm.TimelineTrack{{Kind: "video", Clips: video}}
@@ -179,6 +230,43 @@ func (s *sequencer) sequence(ctx context.Context, dir string, log *strings.Build
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// probe reads a clip's duration, and a picture's size, with ffprobe.
+func probe(ctx context.Context, path string) (duration float64, width, height int64, err error) {
+	tool := os.Getenv("HELM_FFPROBE")
+	if tool == "" {
+		tool = "ffprobe"
+	}
+	out, err := exec.CommandContext(ctx, tool, "-v", "error", "-of", "json",
+		"-show_entries", "format=duration:stream=codec_type,width,height", path).Output()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	var facts struct {
+		Format struct {
+			Duration string `json:"duration"`
+		} `json:"format"`
+		Streams []struct {
+			CodecType string `json:"codec_type"`
+			Width     int64  `json:"width"`
+			Height    int64  `json:"height"`
+		} `json:"streams"`
+	}
+	if err := json.Unmarshal(out, &facts); err != nil {
+		return 0, 0, 0, err
+	}
+	duration, err = strconv.ParseFloat(facts.Format.Duration, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("no duration in %s", path)
+	}
+	for _, st := range facts.Streams {
+		if st.CodecType == "video" {
+			width, height = st.Width, st.Height
+			break
+		}
+	}
+	return duration, width, height, nil
 }
 
 func kindOf(name string) helm.AssetKind {
