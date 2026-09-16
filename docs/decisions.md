@@ -916,6 +916,38 @@ M8b's brief leaves the preview "decided at M8b's kickoff" and its file list and 
 
   The kickoff's questions are in `docs/agents/reports/10-docs-and-site.md`. [amends: the order in `docs/plan/02-milestones.md` and phase 9's "deliberately last" in `docs/plan/01-build-plan.md`]
 
+
+The kickoff stopped before task 1 on fourteen questions, recorded in `docs/agents/reports/10-docs-and-site.md` with what they rest on. The human answered "recommendations for all". Each entry below is one of those answers; the defaults taken with them are the last entry.
+
+- 2026-09-16 · process · **M10's contract is the expansion drafted at kickoff and approved by the human, now `docs/agents/milestones/10-docs-and-site.md`** — the same answer as M5 to M8's Q1. Q1.
+- 2026-09-16 · scope · **M10 builds, before M9, what does not wait on M9:**
+  - the generated reference for the API, the manifest and the CLI;
+  - concepts;
+  - the guides the software supports today;
+  - publishing, as it is scored;
+  - the four annotated manifests;
+  - the site.
+
+  **These wait for M9:** the install section's `.dmg` and Homebrew, the screen recording, and the quickstart run against released binaries. Until then the quickstart is written against a source build, says so, and is run again on a clean machine when M9 ships. Reason: phase 9's "a quickstart, the generated reference and the four annotated manifests are worth more than a complete site". Q2. [amends: phase 9 in `docs/plan/01-build-plan.md`]
+- 2026-09-16 · docs · **the quickstart copies an example studio kept in the repository and runs it under `helm dev`; the gate runs the same example; `helm studio init` is not built in M10.** When init is built, it scaffolds that example, and the quickstart's first step becomes one command. `helm dev --fixtures` and `--fail` are not built either; the guide to developing in isolation says what exists and names what does not. Reason: init, test and doctor belong to no milestone (M7 Q16), and building a feature to make a docs milestone's first page true is the tail wagging the dog; an example the gate runs keeps the quickstart honest now. Q3.
+- 2026-09-16 · docs · **the quickstart is in Python; guides show Python and add Go and JavaScript wherever the calls differ in more than spelling; the reference lists all three clients' calls for every operation**, generated. Reason: most open-weight model repositories are Python, and the clients differ in spelling, not shape. Q4.
+- 2026-09-16 · docs · **the quickstart installs the runtime SDK from the repository** (`pip install -e` from a clone; Go through `replace`) and says that `helm-runtime-sdk`, `@helmstudio/runtime` and `@helmstudio/ui` arrive on their registries with the first release. **M10 publishes nothing.** Reason: none of the three is published, and publishing is outward-facing and the human's. Q5.
+- 2026-09-16 · docs · **publishing documents the criteria as the software scores them** — "n of m checkable", each unscored criterion named with its reason — says what a registry pull request contains, and that no studio can be Verified or Registry until the harness exists (M7 Q15, Q16). Q6.
+- 2026-09-16 · docs · **documentation is written in Markdown and rendered by `github.com/yuin/goldmark`, in a module of its own at `site/`, so the daemon never links it; the dependency is recorded when it is added.** Rejected: HTML fragments with `html/template` (no dependency, but prose nobody wants to edit), and a JavaScript static-site generator (a package manager in the gate, which M6 Q16 refused). Q7.
+- 2026-09-16 · docs · **the site lives in `site/`** — content, templates, samples and its generator — and `docs/` stays the project's own documents. The build output (`site/out/`) and the generated reference are not committed. `make site` builds it, and the gate builds it and fails on a broken internal link, a sample that does not run, an annotation out of step with its manifest, or a reference page for an operation the document no longer has. Q8.
+- 2026-09-16 · docs · **no code is written inline in prose: every sample is a file under `site/samples/`, included by path, and the gate runs it.** Go samples build and run; Python and JavaScript samples run against a studio API started by the test, as the conformance suite's smoke tests already do. A shell transcript is run in a temporary directory where it can be, and one that cannot — a step that needs the network, for instance — is marked on the page as not run by the gate. Q9.
+- 2026-09-16 · docs · **the four annotated manifests are keyed by JSON pointer, not line number**; a test fails when a pointer names nothing in `studios/*.yaml`, when a field is added with no annotation, or when a studio file changes without its annotations being read again (a digest, bumped on purpose). Q10.
+- 2026-09-16 · site · **M10 produces static output and `make site`, and ends there. Going live is the human's**: the domain, DNS and hosting (GitHub Pages from this repository with a `CNAME`, or another host) wait for the human's confirmation that `helmstudio.in` is theirs and where it is served. Reason: M4 Q2 records that nobody serves `helmstudio.in`, and publishing is outward-facing. Q11.
+- 2026-09-16 · site · **the screen recording waits for M9, and the page holds no placeholder image and no mockup in its place** — a still of a screen that does not ship is a claim the software does not make. Q12.
+- 2026-09-16 · site · **platform support says what has been verified**: macOS on Apple Silicon for the launch studios; the daemon and the SDKs build on Linux, with no studio verified there; Windows is not supported. **Each launch studio's badges are generated from its manifest** (`runtime`, `requires`, `peak_ram_gb`), never written by hand. Q13.
+- 2026-09-16 · site · **the site is built with helm-css, copied from `packages/helm-css` into the output at build time and never forked**; a System, Light and Dark control stored in the browser only; no runtime SDK, no component that needs a daemon, no analytics, no signup; and `helm validate -theme` runs over the site's own stylesheet, as it does over a studio's. Q14.
+- 2026-09-16 · defaults · **taken at kickoff:**
+  - British English, as the design documents are written.
+  - The API reference covers the 54 `studio-api` and 2 `public` operations; the 38 `launcher` operations are the daemon's own and are not documented for studio authors.
+  - The manifest reference is generated from `schema/manifest.json`'s own descriptions. A missing description is shown as missing, never invented, and listed in the report as a schema finding; the schema is not edited to fill it.
+  - The CLI reference is generated from `helm`'s own usage, for the two commands that exist.
+  - No page describes an unbuilt feature as if it existed.
+
 ## Changes
 
 - 2026-09-15 · M0 built the manifest schema's `helm validate` (schema validation plus the seven rules it cannot express), the four studio manifests, and the `api/openapi.yaml` outline · found one hard self-contradiction in `schema/manifest.json` itself (the `run` sugar is unusable: `processes` sits in the schema's unconditional top-level `required`, so `run:` alone always fails "missing properties: processes" regardless of the `allOf`/`not` clause that says they're alternatives) — raised in `docs/agents/reports/00-contracts.md`, not resolved in code; all four shipped manifests use `processes:` so this did not block M0.

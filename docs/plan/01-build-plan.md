@@ -65,6 +65,14 @@ pointing at the docs; the repository. No signup, no waitlist, no pricing.
 **Both built with `helm-css`.** A design system that works outside the app it
 was drawn for is a design system. One that does not is a stylesheet.
 
+(Amended 2026-09-16, M10 Q2–Q13. Taken before M9 by the human's decision. The
+quickstart copies an example studio kept in the repository, because `helm studio
+init` belongs to no milestone, and runs against a source build until M9 ships
+binaries. The CLI reference covers the commands that exist: `validate` and
+`dev`. The install section's `.dmg` and Homebrew, and the screen recording, wait
+for M9, with no placeholder in their place. M10 builds the static site and stops
+short of deploying it; `helmstudio.in` is the human's to serve.)
+
 ## Cross-cutting, from day one
 
 CI — build, tests, `helm validate` on all manifests, generated-client drift,
