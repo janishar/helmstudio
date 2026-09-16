@@ -65,6 +65,12 @@ recorded in `docs/decisions.md`.
 4. **M7a is the third milestone built out of order.** M6a's review has still
    not run, and M6b is now unreviewed beneath this too.
 
+**Built, apart from task 8's screens.** The implementation report is
+`docs/agents/reports/07a-library-trust-and-selection.md`; M7's own report is the
+kickoff that stopped before task 1. One design contradiction is open: 02 §5
+records the approval on the installation, and an approval precedes the
+installation row it would attach to.
+
 ### Tasks
 
 0. **The contract, before any code.**
