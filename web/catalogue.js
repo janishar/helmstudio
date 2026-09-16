@@ -17,7 +17,7 @@
 // installs it. Collapsing them into one badge would be the product deciding
 // that where a file came from is the same question as whether it works.
 
-import { bytes, chip, dialog, el, facts, progress, state, toast, failure } from "./ui.js";
+import { announce, bytes, chip, dialog, el, facts, failure, progress, state, toast } from "./ui.js";
 
 /**
  * The identity hue a card's stripe wears (03 §6, M6 Q7).
@@ -152,6 +152,48 @@ async function duplicate(ctx, studio) {
   }
 }
 
+/**
+ * checkpoint is the choice of which selectable weight a studio launches with,
+ * on the card, so it can be made before pressing Launch (M7 Q21).
+ *
+ * The approval screen offers it too — but only when an approval is needed. A
+ * studio whose approval is current launches without showing that screen, and a
+ * choice that is reachable only when something else has changed is not really
+ * a choice. The selection is not covered by the digest, so making it here asks
+ * for nothing.
+ *
+ * Disabled while the studio runs or has work in flight: the running process was
+ * handed a path when it started, and the daemon refuses the change rather than
+ * let the record disagree with what is loaded.
+ */
+function checkpoint(ctx, studio) {
+  const list = studio.selectable || [];
+  if (list.length < 2) return null;
+  const busy = ["starting", "running", "stopping"].includes((studio.group || {}).state) || !!studio.job_id;
+  const id = `checkpoint-${studio.id}`;
+  return el("div", { class: "helm-row helm-card-checkpoint" },
+    el("label", { class: "helm-micro", for: id, text: "Checkpoint" }),
+    el("select", {
+      class: "helm-select", id, disabled: busy,
+      title: busy ? "Stop the studio to change its checkpoint" : null,
+      onchange: async (e) => {
+        const weight = e.target.value;
+        try {
+          await ctx.client.studios.select(studio.id, { weight });
+          announce(`${studio.name} will launch with ${weight}.`);
+        } catch (err) {
+          // Not downloaded is the usual answer, and the daemon's sentence
+          // names :fetch and :link, which is what to do about it.
+          toast(failure(err, `${weight} could not be chosen.`), "error");
+        }
+        await ctx.refresh();
+        ctx.redraw(true);
+      },
+    },
+      studio.selection ? null : el("option", { value: "", text: "— choose —", selected: true, disabled: true }),
+      ...list.map((w) => el("option", { value: w.name, text: w.name, selected: w.name === studio.selection }))));
+}
+
 /** An invalid entry says what is wrong with it, because only that is fixable. */
 function invalid(studio) {
   const errors = studio.errors || [];
@@ -214,6 +256,7 @@ export function card(ctx, studio) {
       ? el("p", { class: "helm-hint helm-status-warning", text: "What this would run has changed since you approved it. The next install or launch will show it again." })
       : null,
 
+    valid ? checkpoint(ctx, studio) : null,
     el("div", { class: "helm-card-actions" },
       chip(s.chip, s.tone),
       el("span", { class: "helm-spacer" }),

@@ -60,7 +60,13 @@ export const studios = [
   {
     manifest_loaded: true, id: "iris-studio", name: "iris studio",
     source: "registry", level: "unverified", manifest_valid: true,
+    // Downloading, so the choice is shown and cannot be changed.
     selection: "flux_klein_4b",
+    selectable: [
+      { name: "flux_klein_4b", hf_repo: "black-forest-labs/FLUX.2-klein-4B", selectable: true },
+      { name: "flux_klein_9b", hf_repo: "black-forest-labs/FLUX.2-klein-9B", selectable: true },
+      { name: "zimage_turbo", hf_repo: "Tongyi-MAI/Z-Image-Turbo", selectable: true },
+    ],
     description: "FLUX.2 Klein and Z-Image-Turbo still image generation.",
     kinds: ["image"], heavy: true, peak_ram_gb: 30,
     root: "~/.helmstudio/studios/iris-studio/src", root_present: true,
@@ -71,6 +77,11 @@ export const studios = [
   {
     manifest_loaded: true, id: "auk-studio", name: "AuK studio",
     source: "registry", level: "unverified", manifest_valid: true,
+    // Stopped with nothing chosen, so the choice is open and says so.
+    selectable: [
+      { name: "auk", hf_repo: "tencent/AuK", selectable: true },
+      { name: "auk_flash", hf_repo: "tencent/AuK-Flash", selectable: true },
+    ],
     description: "Zero-shot and instruct speech generation, editing and enhancement.",
     kinds: ["audio"], heavy: true, peak_ram_gb: 25,
     root: "~/.helmstudio/studios/auk-studio/src", root_present: false,

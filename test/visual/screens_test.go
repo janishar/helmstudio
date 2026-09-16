@@ -127,6 +127,36 @@ func TestLibraryCardsStateThreeFacts(t *testing.T) {
 			1,
 		},
 		{
+			// The checkpoint is chosen on the card, before Launch. The approval
+			// screen offers it only when an approval is needed, so a studio
+			// whose approval is current would otherwise never offer a choice.
+			"a stopped studio offers its checkpoints, with nothing pretended",
+			`(() => {
+				const sel = document.getElementById("checkpoint-auk-studio");
+				if (!sel || sel.disabled) return 0;
+				const chosen = sel.options[sel.selectedIndex];
+				return chosen.textContent === "— choose —" && sel.options.length === 3 ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			// While work is in flight the choice is shown and cannot be made:
+			// the daemon refuses it, and a control that looked live would be
+			// an error waiting to be clicked.
+			"a busy studio shows its checkpoint and does not offer a change",
+			`(() => {
+				const sel = document.getElementById("checkpoint-iris-studio");
+				return sel && sel.disabled && sel.value === "flux_klein_4b" ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			// One checkpoint is not a choice.
+			"a studio with no choice to make offers none",
+			`document.getElementById("checkpoint-ltx-studio") === null ? 1 : 0`,
+			1,
+		},
+		{
 			// Where a Local entry came from is a note, and it is on the card.
 			"a local entry says where it came from",
 			`(() => {
