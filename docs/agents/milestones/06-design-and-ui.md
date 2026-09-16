@@ -160,6 +160,13 @@ M7a changes `/studios`, `:install` and `:launch` under the screens M6b builds.
 Until M7b draws 03 §13, M6b's Install shows M7a's approval preview as a plain
 dialog.)
 
+**Built out of order, at the human's instruction: neither M6a's review nor M7a
+exists.** The file list and DoD below were confirmed against M6a *as built*
+rather than as reviewed. What that costs is in
+`docs/agents/reports/06b-components-and-screens.md`; the short of it is that
+M7a will change `/studios`, `:install` and `:launch` under the catalogue and
+the detail screen, and there is no approval preview for Install to show.
+
 ### Tasks
 
 7. **helm-ui-sdk** (`packages/helm-ui-sdk/`): `helm-terminal`, `helm-gallery`,
@@ -178,14 +185,42 @@ dialog.)
 
    Goldens in both themes at 1280, 1000 and 380 px.
 
-### Definition of Done (draft)
+### File list (confirmed at kickoff)
+
+- `packages/helm-ui-sdk/**` (new)
+- `api/gen/**` and `api/openapi.yaml`: the launcher client's generation, and
+  Q21's three Hugging Face token operations; generated files only through
+  `make generate`
+- `internal/api/**`: the token operations, and serving `helm-ui.js`
+- `cmd/helmstudio/**`: wiring the secret store
+- `web/**`: the launcher's page, its screens and its generated client
+- `test/visual/**`, `Makefile`, `docs/agents/gate.md`
+- `docs/design/04-packages.md` (§5's structural interfaces, Q12)
+- `docs/decisions.md`, and the milestone report
+
+### Definition of Done
 
 - **The dependency arrow.**
   - `grep -rE 'fetch\(|XMLHttpRequest|EventSource|/api/v1|Authorization' packages/helm-ui-sdk`
     finds nothing.
-  - No component constructs a client.
+  - No component constructs a client, and nothing in the package imports
+    anything outside it.
   - `helm-runtime-sdk` imports nothing from `helm-ui-sdk`, and `helm-css`
     references no component markup.
+  - Each of these is a test, not a convention.
+- **Tokens are still the API.** Every `var(--helm-…)` a component uses exists
+  in `tokens.json`, and the component stylesheets hold no colour literal — the
+  same lint `helm validate -theme` holds a studio to.
 - **Screens and components** as Q2 and Q13 settle, each with goldens in both
-  themes. An unmapped state renders its raw name in an idle chip, never blank.
+  themes, and the screens at 1280, 1000 and 380 px. No screen scrolls sideways
+  at 380.
+- **An unmapped state renders its raw name in an idle chip, never blank.**
+- **The degraded parts say so.** `helm-player`'s filmstrip, waveform and proxy
+  render `Unsupported` with a one-line reason rather than being absent.
+- **What a golden cannot hold is held by a test that reads the DOM**: the
+  thumbnail path, a carriage-return line rewriting in place rather than adding
+  a row, ANSI colour becoming spans, and a picker resolving to an asset. Each
+  fails on a planted bug.
+- **The token stays write-only.** `PUT` stores it in the OS secret store; no
+  response, in any of the three operations, contains it.
 - **`make gate` is green.**
