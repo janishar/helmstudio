@@ -12,7 +12,7 @@ const Version = "1.0.0"
 
 // Files holds the modules a page imports.
 //
-//go:embed src/index.js src/base.js src/terminal.js src/gallery.js src/player.js
+//go:embed src/index.js src/base.js src/terminal.js src/gallery.js src/player.js src/timeline.js src/sequence.js src/preview.js
 var Files embed.FS
 
 // Served maps each file to the name it is served under /sdk/v1/ui/.
@@ -22,4 +22,7 @@ var Served = map[string]string{
 	"terminal.js": "src/terminal.js",
 	"gallery.js":  "src/gallery.js",
 	"player.js":   "src/player.js",
+	"timeline.js": "src/timeline.js",
+	"sequence.js": "src/sequence.js",
+	"preview.js":  "src/preview.js",
 }

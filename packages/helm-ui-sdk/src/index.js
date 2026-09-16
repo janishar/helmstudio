@@ -9,9 +9,9 @@
 //   </script>
 //   <helm-gallery scope="self" kind="video"></helm-gallery>
 //
-// Importing this module registers <helm-terminal>, <helm-gallery> and
-// <helm-player>. They are custom elements: no React, no framework, no build
-// step. helm-timeline ships with M8b.
+// Importing this module registers <helm-terminal>, <helm-gallery>,
+// <helm-player> and <helm-timeline>. They are custom elements: no React, no
+// framework, no build step.
 //
 // Nothing here imports the runtime SDK. A component is handed a client — by
 // `el.client = …` or by `window.helm` — and calls methods on it. That is the
@@ -21,6 +21,8 @@ export { HelmElement, bytes, clock, define, el, kindOf, message, timecode } from
 export { HelmTerminal, progress, spans, strip } from "./terminal.js";
 export { HelmGallery, facts, origin } from "./gallery.js";
 export { HelmPlayer, NEEDS_FFMPEG } from "./player.js";
+export { HelmTimeline, clockText } from "./timeline.js";
+export * as sequence from "./sequence.js";
 
 /** Version is helm-ui-sdk's own; it moves independently of css and runtime (04 §9). */
 export const VERSION = "1.0.0";

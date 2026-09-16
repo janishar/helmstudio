@@ -143,6 +143,7 @@ whole type. Each is listed with its component, so that anything implementing it
 | `helm-terminal` | `logs(ref, { lastEventId }) → async iterable of { id, name, data, json() }`, with events named `line`, `step`, `gap` and `end`. Taken from the client's `jobs` group for a `job` attribute, or from a `source` object the page sets for anything else. | — |
 | `helm-gallery` | `gallery.query({ scope, studio, kind, q, limit, cursor }) → { items, next_cursor }` | `gallery.update(id, patch)` for star and tag; `assets.thumb(id, { w })` for thumbnails; `events.subscribe({ lastEventId })` for live insertion |
 | `helm-player` | `assets.read(id, { range }) → a fetch Response` | `assets.upload(blob, contentType, { kind, filename, width, height })` for Extract frame |
+| `helm-timeline` | `timeline.get(id) → Timeline`; with `editable`, `timeline.update(id, { tracks }, { ifMatch }) → Timeline` | `timeline.revert(id, { revision }, { ifMatch })` for Undo and Redo; `timeline.plan(id, { preset })` for the chip; `timeline.export(id, { preset })`, `timeline.exports(id, { limit })` and `timeline.cancelExport(id, job)` for Export; `timeline.append({ asset_id, track, timeline_id })` for `el.append()`; `assets.read(id, { range })` for the preview; `me.get()` for the caller's own hue |
 
 **A missing optional method is a reduced component, never a broken one** (§9):
 no thumbnails, no live insertion, no star, no Extract frame — the rest works.
@@ -157,7 +158,9 @@ element is disconnected.
 
 **What a component does not decide.** What can be done with a selected item is
 the studio's (rule 5), so `helm-gallery` emits `select` and `pick` and takes a
-studio's own buttons in its `actions` slot.
+studio's own buttons in its `actions` slot. For the same reason `helm-timeline`
+does not embed a picker: its Add emits `add-request`, and the page calls
+`el.append(assetId)` with whatever its own picker chose (M8b).
 
 **Errors.** A component branches on the `kind` in §4's table and on nothing
 else — never on a status code, never on an error string.

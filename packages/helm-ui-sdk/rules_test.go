@@ -20,7 +20,7 @@ import (
 // four commits later.
 
 // tags are the elements this package registers.
-var tags = []string{"helm-terminal", "helm-gallery", "helm-player"}
+var tags = []string{"helm-terminal", "helm-gallery", "helm-player", "helm-timeline"}
 
 func sources(t *testing.T) map[string]string {
 	t.Helper()
@@ -204,7 +204,11 @@ func code(src string) string {
 // it. A renamed tag is a breaking change in every studio's markup at once.
 func TestEveryComponentIsRegisteredOnce(t *testing.T) {
 	src := sources(t)
-	all := strings.Join([]string{src["terminal.js"], src["gallery.js"], src["player.js"], src["base.js"], src["index.js"]}, "\n")
+	var parts []string
+	for _, s := range src {
+		parts = append(parts, s)
+	}
+	all := strings.Join(parts, "\n")
 	define := regexp.MustCompile(`define\("([a-z-]+)"`)
 	seen := map[string]int{}
 	for _, m := range define.FindAllStringSubmatch(all, -1) {
