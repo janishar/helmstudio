@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -415,3 +417,29 @@ func TestARecordedDurationIsReCheckedAgainstTheFile(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// A parameter that carries an action is more specific than a bare one, and the
+// router has to try it first: /timeline/{id} and /timeline/{id}:plan both match
+// the same path, and reading the plan as an id ending in ":plan" refuses it for
+// not looking like an id. Found by the conformance suite's route sweep.
+func TestAnActionRouteWinsOverTheBareIDRoute(t *testing.T) {
+	f := newTimelineFixture(t, noFFmpeg)
+	a := f.upload(t, f.ctxOne, "a.mp4", helm.AssetKindVideo, 2)
+	tl, err := f.svc.TimelineCreate(f.ctxOne, &helm.TimelineCreate{Name: "routed", Target: target(), Clips: clips(a)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(f.svc, func(r *http.Request) (context.Context, error) { return f.ctxOne, nil }, t.Logf)
+	for _, tc := range []struct{ path, want string }{
+		{"/api/v1/timeline/" + tl.ID, "200"},
+		// The plan needs ffmpeg, which this service has none of: reaching 501
+		// is what proves it was routed to the plan rather than to the read.
+		{"/api/v1/timeline/" + tl.ID + ":plan", "501"},
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, tc.path, nil))
+		if got := strconv.Itoa(rec.Code); got != tc.want {
+			t.Errorf("GET %s: %s %s, want %s", tc.path, got, rec.Body.String(), tc.want)
+		}
+	}
+}

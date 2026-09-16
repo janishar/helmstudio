@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 
 	helm "github.com/janishar/helmstudio/packages/helm-runtime-sdk/go"
@@ -64,6 +65,22 @@ func init() {
 	for i := range routes {
 		routes[i].segs = parsePath(routes[i].path)
 	}
+	// A route whose parameter carries an action — /timeline/{id}:plan — is more
+	// specific than the bare /timeline/{id}, and both match the same path. Try
+	// the specific one first, or a GET action would be read as an id ending in
+	// ":plan" and refused for not looking like one.
+	sort.SliceStable(routes, func(i, j int) bool { return specificity(routes[i]) > specificity(routes[j]) })
+}
+
+// specificity counts the parameters that carry an action.
+func specificity(rt route) int {
+	n := 0
+	for _, s := range rt.segs {
+		if s.param && s.suffix != "" {
+			n++
+		}
+	}
+	return n
 }
 
 // match returns the path values when path fits r.
