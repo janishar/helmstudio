@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -23,12 +24,21 @@ func TestRealManifestsValid(t *testing.T) {
 	for _, f := range files {
 		f := f
 		t.Run(filepath.Base(f), func(t *testing.T) {
-			res, err := Validate(f)
+			// studios/*.yaml are registry entries, not manifests (M7 Q4), so
+			// the document that has to validate is whichever one this is.
+			data, err := os.ReadFile(f)
 			if err != nil {
-				t.Fatalf("Validate: %v", err)
+				t.Fatal(err)
+			}
+			kind, res, err := ValidateAny(f, data)
+			if err != nil {
+				t.Fatalf("ValidateAny: %v", err)
 			}
 			if !res.OK() {
 				t.Fatalf("expected valid, got errors: %v", res.Errors)
+			}
+			if kind != KindPointer {
+				t.Errorf("a registry entry should read as a pointer, got %q", kind)
 			}
 		})
 	}

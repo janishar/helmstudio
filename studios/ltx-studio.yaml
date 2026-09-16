@@ -1,87 +1,92 @@
-# PLACEHOLDER SHAPE, pending an open decision (docs/decisions.md, "Open, not
-# yet decided": studios/*.yaml as a bare pointer vs a full manifest). This is
-# a full manifest only because schema/manifest.json has no pointer shape to
-# validate a pointer against, and M0's gate runs `helm validate studios/*.yaml`.
-# It is not a reading of docs/design/05-sdk-and-custom-studios.md §5a, which
-# describes a four-line pointer. When that decision lands, this file changes.
+# A registry entry: a pointer at ltx studio's repository
+# (schema/registry-entry.json, docs/design/05-sdk-and-custom-studios.md §5a).
 #
-# Written from /Users/janisharali/GenAI/ltx/ltx-2-studio at commit
-# bc82d75f0182e3631a6cbcd3b704e74445a32c5f (pinned below as `ref`). See
-# docs/agents/reports/00-contracts.md for what could and could not be
-# verified in code. The venv question it once raised is answered
-# (docs/decisions.md M5 Q5): the daemon creates the environment from
-# `python.version` and activates it for every build step and process, so
-# `uv sync` installs into it and `python` below runs from it.
+# The manifest belongs in the studio's own repository as helmstudio.yaml, beside
+# the code it describes, so that a studio can announce a new build step without
+# waiting for a helmstudio release. ltx studio does not ship one yet, so the
+# manifest is carried inline here — and the pull request that moves `ref` to a
+# commit where it does ship one deletes the inline copy, leaving one copy again.
+#
+# Where the inline manifest sets id, repo or ref, each must equal this entry's;
+# the validator enforces it. There is no `certified` field: a level is derived
+# from what has actually been checked, never declared by the thing being
+# checked (docs/decisions.md M7 Q4, Q15).
+
 id: ltx-studio
-name: ltx studio
-description: MLX video and audio generation against a user-selected LTX checkpoint.
-kinds: [video, audio]
-license: MIT
 repo: https://github.com/janishar/ltx-2-studio
 ref: bc82d75f0182e3631a6cbcd3b704e74445a32c5f
-python: { version: "3.11" }
-peak_ram_gb: 21 # README: 21 GiB at the validated default (short clips, int8 quantize-on-load); a 5s 1280x704 clip peaked ~76 GiB and swapped on the 64 GB test machine — one number cannot carry this range, see the report
-requires:
-  os: [darwin]
-  arch: [arm64]
-  tools: [uv]
-  ram_gb: 64
-  disk_gb: 90
-runtime:
-  framework: mlx
-  backends: [metal]
-  precision: [bf16, int8]
-  language: python
-capabilities: [kv, assets, gallery, timeline]
-network: [huggingface.co, cdn-lfs.huggingface.co]
-build:
-  # --locked: install exactly uv.lock, and fail rather than rewrite it in the
-  # checkout (M5 Q9).
-  - name: Sync dependencies
-    run: uv sync --locked --all-extras
-# Lightricks/LTX-2.5 is one repo of individually-named files, several marked
-# optional in the README's own table. `ltx` is the set the README's
-# "recommended" download command fetches (~71 GB); `ltx_dev_transformer`
-# unlocks two-stage/HQ/retake/extend and is the one the README prices
-# separately (~42 GB). Its exact path is inferred from the sibling
-# distilled-transformer file's naming pattern, not confirmed by a literal
-# download command in the README — flagged in the report.
-weights:
-  - name: ltx
-    repo: Lightricks/LTX-2.5
-    dest: LTX-2.5
-    files:
-      - diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors
-      - text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors
-      - vae/ltx-2.5-video-vae-conv-bf16.safetensors
-      - vae/ltx-2.5-audio-vae-bf16.safetensors
-      - latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
-      - model_patches/ltx-2.5-duration-head-bf16.safetensors
-    size_gb: 71
-  - name: ltx_dev_transformer
-    repo: Lightricks/LTX-2.5
-    dest: LTX-2.5
-    files: ["diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors"]
-    size_gb: 42
-    optional: true
-  - name: gemma
-    repo: mlx-community/gemma-3-12b-it-4bit
-    dest: gemma-3-12b-it-4bit
-    optional: true
-processes:
-  - name: studio
-    role: main
-    heavy: true
-    cwd: web
-    # Not `uv run`: it would sync the environment, and reach the network, at
-    # every launch (M5 Q9). The environment is active, so python is its own.
-    cmd: "python server.py --host 127.0.0.1 --port {port} --model {models.ltx}"
-    port: { prefer: 8720 }
-    health: { tcp: true, timeout_s: 30, interval_s: 2 }
-    # /api/queue answers a JSON list, not the busy contract (M5 Q12), so the
-    # switch dialog reads ltx studio as unknown until ltx serves one; move this
-    # path, and `ref`, when it does. Its renders run in their own session
-    # (web/server.py:765) and it has no SIGTERM handler; helmstudio stops them
-    # as detached descendants (M5 Q11), and a handler upstream is still wanted.
-    busy: { path: /api/queue }
-    ui: /
+
+manifest:
+  id: ltx-studio
+  name: ltx studio
+  description: MLX video and audio generation against a user-selected LTX checkpoint.
+  kinds: [video, audio]
+  license: MIT
+  repo: https://github.com/janishar/ltx-2-studio
+  ref: bc82d75f0182e3631a6cbcd3b704e74445a32c5f
+  python: { version: "3.11" }
+  peak_ram_gb: 21 # README: 21 GiB at the validated default (short clips, int8 quantize-on-load); a 5s 1280x704 clip peaked ~76 GiB and swapped on the 64 GB test machine — one number cannot carry this range, see the report
+  requires:
+    os: [darwin]
+    arch: [arm64]
+    tools: [uv]
+    ram_gb: 64
+    disk_gb: 90
+  runtime:
+    framework: mlx
+    backends: [metal]
+    precision: [bf16, int8]
+    language: python
+  capabilities: [kv, assets, gallery, timeline]
+  network: [huggingface.co, cdn-lfs.huggingface.co]
+  build:
+    # --locked: install exactly uv.lock, and fail rather than rewrite it in the
+    # checkout (M5 Q9).
+    - name: Sync dependencies
+      run: uv sync --locked --all-extras
+  # Lightricks/LTX-2.5 is one repo of individually-named files, several marked
+  # optional in the README's own table. `ltx` is the set the README's
+  # "recommended" download command fetches (~71 GB); `ltx_dev_transformer`
+  # unlocks two-stage/HQ/retake/extend and is the one the README prices
+  # separately (~42 GB). Its exact path is inferred from the sibling
+  # distilled-transformer file's naming pattern, not confirmed by a literal
+  # download command in the README — flagged in the report.
+  weights:
+    - name: ltx
+      repo: Lightricks/LTX-2.5
+      dest: LTX-2.5
+      files:
+        - diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors
+        - text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors
+        - vae/ltx-2.5-video-vae-conv-bf16.safetensors
+        - vae/ltx-2.5-audio-vae-bf16.safetensors
+        - latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+        - model_patches/ltx-2.5-duration-head-bf16.safetensors
+      size_gb: 71
+    - name: ltx_dev_transformer
+      repo: Lightricks/LTX-2.5
+      dest: LTX-2.5
+      files: ["diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors"]
+      size_gb: 42
+      optional: true
+    - name: gemma
+      repo: mlx-community/gemma-3-12b-it-4bit
+      dest: gemma-3-12b-it-4bit
+      optional: true
+  processes:
+    - name: studio
+      role: main
+      heavy: true
+      cwd: web
+      # Not `uv run`: it would sync the environment, and reach the network, at
+      # every launch (M5 Q9). The environment is active, so python is its own.
+      cmd: "python server.py --host 127.0.0.1 --port {port} --model {models.ltx}"
+      port: { prefer: 8720 }
+      health: { tcp: true, timeout_s: 30, interval_s: 2 }
+      # /api/queue answers a JSON list, not the busy contract (M5 Q12), so the
+      # switch dialog reads ltx studio as unknown until ltx serves one; move this
+      # path, and `ref`, when it does. Its renders run in their own session
+      # (web/server.py:765) and it has no SIGTERM handler; helmstudio stops them
+      # as detached descendants (M5 Q11), and a handler upstream is still wanted.
+      busy: { path: /api/queue }
+      ui: /

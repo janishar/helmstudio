@@ -9,7 +9,9 @@ import (
 
 // The fields install and weights run on decode, with the schema's defaults.
 func TestLoadReturnsInstallAndWeightFields(t *testing.T) {
-	m, res, err := Load("../../studios/h3-studio.yaml")
+	// h3's registry entry carries its manifest inline until the repository
+	// ships its own (M7 Q4); the manifest under test is that one.
+	m, res, err := loadInlineManifest(t, "../../studios/h3-studio.yaml")
 	if err != nil || !res.OK() {
 		t.Fatalf("Load: %v %v", err, res.Errors)
 	}

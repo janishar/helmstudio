@@ -17,19 +17,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"sort"
 	"syscall"
 	"time"
 
 	"github.com/janishar/helmstudio/internal/api"
 	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
-	"github.com/janishar/helmstudio/internal/manifest"
+	"github.com/janishar/helmstudio/internal/library"
 	"github.com/janishar/helmstudio/internal/platform"
 	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/supervisor"
 	"github.com/janishar/helmstudio/internal/weights"
+	"github.com/janishar/helmstudio/studios"
 	"github.com/janishar/helmstudio/web"
 )
 
@@ -69,7 +68,7 @@ func run(addr, studiosDir string) error {
 
 	w := weights.New(weights.Config{Store: st, Dirs: dirs, HF: weights.NewHF(huggingFaceToken), Logf: log.Printf})
 	sup := supervisor.New(supervisor.Config{Dirs: dirs, Store: st, Weights: w, Logf: log.Printf, Platform: plat.Launches})
-	sup.SetStudios(loadStudios(studiosDir))
+	sup.SetStudios(loadStudios(dirs, studiosDir))
 	installer := install.New(install.Config{Store: st, Dirs: dirs, Supervisor: sup, Weights: w, Logf: log.Printf})
 	if err := installer.Sweep(ctx); err != nil {
 		return err
@@ -171,28 +170,36 @@ func huggingFaceToken(ctx context.Context) (string, error) {
 	return tok, err
 }
 
-// loadStudios validates every manifest in dir. An invalid one is not listed,
-// and its field and reason are logged; it never blocks the others (R2).
-func loadStudios(dir string) []supervisor.Studio {
-	files, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
-	sort.Strings(files)
-	if len(files) == 0 {
-		log.Printf("no studio manifests in %s", dir)
+// loadStudios resolves the library: every studio this machine knows about,
+// from the local directory, installed checkouts, the manifest cache and the
+// bundled registry, first match winning by existence (internal/library).
+//
+// An entry that does not resolve is logged rather than dropped silently. R2 as
+// amended by M7 Q6 says an invalid manifest is *listed* as invalid — the
+// supervisor can only be given studios it could launch, so the library's own
+// view of the problems reaches the API through GET /studios instead.
+func loadStudios(dirs *platform.Dirs, registryDir string) []supervisor.Studio {
+	ok, problems, err := library.Default(dirs.Data(), dirs.Cache(), studios.Bundled, registryDir).Studios()
+	if err != nil {
+		log.Printf("resolving the library: %v", err)
+		return nil
 	}
-	var out []supervisor.Studio
-	for _, f := range files {
-		m, res, err := manifest.Load(f)
-		switch {
-		case err != nil:
-			log.Printf("skipping %s: %v", f, err)
-		case !res.OK():
-			for _, e := range res.Errors {
-				log.Printf("skipping invalid manifest: %s", e)
-			}
+	for _, e := range problems {
+		switch e.State {
+		case library.StateNotFetched:
+			log.Printf("%s: its manifest has not been fetched yet (%s)", e.ID, e.Repo)
 		default:
-			abs, _ := filepath.Abs(f)
-			out = append(out, supervisor.Studio{Manifest: m, File: abs})
+			for _, err := range e.Errors {
+				log.Printf("%s is listed invalid: %s", e.ID, err)
+			}
 		}
+	}
+	if len(ok) == 0 && len(problems) == 0 {
+		log.Printf("no studios in the library")
+	}
+	out := make([]supervisor.Studio, 0, len(ok))
+	for _, e := range ok {
+		out = append(out, supervisor.Studio{Manifest: e.Manifest, File: e.File})
 	}
 	return out
 }

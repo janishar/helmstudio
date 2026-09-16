@@ -1,52 +1,64 @@
-# PLACEHOLDER SHAPE, pending an open decision (docs/decisions.md, "Open, not
-# yet decided": studios/*.yaml as a bare pointer vs a full manifest). This is
-# a full manifest only because schema/manifest.json has no pointer shape to
-# validate a pointer against, and M0's gate runs `helm validate studios/*.yaml`.
-# It is not a reading of docs/design/05-sdk-and-custom-studios.md §5a, which
-# describes a four-line pointer. When that decision lands, this file changes.
+# A registry entry: a pointer at iris studio's repository
+# (schema/registry-entry.json, docs/design/05-sdk-and-custom-studios.md §5a).
 #
-# Written from /Users/janisharali/GenAI/minimax-h3-mlx/iris-studio at commit
-# b4f857f4d484f91cbbd6e48ba79f3879e49a253c (pinned below as `ref`). See
-# docs/agents/reports/00-contracts.md for what could and could not be
-# verified in code.
+# The manifest belongs in the studio's own repository as helmstudio.yaml, beside
+# the code it describes, so that a studio can announce a new build step without
+# waiting for a helmstudio release. iris studio does not ship one yet, so the
+# manifest is carried inline here — and the pull request that moves `ref` to a
+# commit where it does ship one deletes the inline copy, leaving one copy again.
+#
+# Where the inline manifest sets id, repo or ref, each must equal this entry's;
+# the validator enforces it. There is no `certified` field: a level is derived
+# from what has actually been checked, never declared by the thing being
+# checked (docs/decisions.md M7 Q4, Q15).
+
 id: iris-studio
-name: iris studio
-description: Native Metal image generation across the FLUX.2 Klein and Z-Image checkpoints.
-kinds: [image]
-license: MIT
 repo: https://github.com/janishar/iris-studio
 ref: b4f857f4d484f91cbbd6e48ba79f3879e49a253c
-submodules: true
-peak_ram_gb: 30 # README: "fits your disk/RAM; ~16-30GB per model" — upper bound, unverified against a real checkpoint
-requires:
-  os: [darwin]
-  arch: [arm64]
-  tools: [git, make, gcc, xxd, go]
-runtime:
-  framework: native-kernel
-  backends: [metal]
-  precision: [bf16]
-  language: c
-capabilities: [kv, assets, gallery]
-network: [huggingface.co, cdn-lfs.huggingface.co]
-build:
-  - name: Build the iris engine
-    cwd: iris.c
-    run: make mps
-  - name: Build the studio server
-    cwd: .
-    run: go build -o iris-studio .
-weights:
-  - { name: flux_klein_4b, repo: black-forest-labs/FLUX.2-klein-4B, dest: flux-klein-4b, selectable: true }
-  - { name: flux_klein_4b_base, repo: black-forest-labs/FLUX.2-klein-base-4B, dest: flux-klein-4b-base, selectable: true }
-  - { name: flux_klein_9b, repo: black-forest-labs/FLUX.2-klein-9B, dest: flux-klein-9b, selectable: true }
-  - { name: flux_klein_9b_base, repo: black-forest-labs/FLUX.2-klein-base-9B, dest: flux-klein-9b-base, selectable: true }
-  - { name: zimage_turbo, repo: Tongyi-MAI/Z-Image-Turbo, dest: zimage-turbo, selectable: true }
-processes:
-  - name: studio
-    role: main
-    heavy: true
-    cmd: "./iris-studio --iris ./iris.c/iris --model {models.selected} --port {port}"
-    port: { prefer: 8720 }
-    health: { tcp: true, timeout_s: 30, interval_s: 2 }
-    ui: /
+
+manifest:
+  id: iris-studio
+  name: iris studio
+  description: Native Metal image generation across the FLUX.2 Klein and Z-Image checkpoints.
+  kinds: [image]
+  license: MIT
+  repo: https://github.com/janishar/iris-studio
+  ref: b4f857f4d484f91cbbd6e48ba79f3879e49a253c
+  submodules: true
+  peak_ram_gb: 30 # README: "fits your disk/RAM; ~16-30GB per model" — upper bound, unverified against a real checkpoint
+  requires:
+    os: [darwin]
+    arch: [arm64]
+    tools: [git, make, gcc, xxd, go]
+  runtime:
+    framework: native-kernel
+    backends: [metal]
+    precision: [bf16]
+    language: c
+  # None: iris at this ref has no helmstudio dependency in its go.mod, so it
+  # calls no platform service. Declaring capabilities it does not use would
+  # ask the user to grant access nothing reaches for, which is criterion 9
+  # backwards (docs/decisions.md M7 Q3).
+  capabilities: []
+  network: [huggingface.co, cdn-lfs.huggingface.co]
+  build:
+    - name: Build the iris engine
+      cwd: iris.c
+      run: make mps
+    - name: Build the studio server
+      cwd: .
+      run: go build -o iris-studio .
+  weights:
+    - { name: flux_klein_4b, repo: black-forest-labs/FLUX.2-klein-4B, dest: flux-klein-4b, selectable: true }
+    - { name: flux_klein_4b_base, repo: black-forest-labs/FLUX.2-klein-base-4B, dest: flux-klein-4b-base, selectable: true }
+    - { name: flux_klein_9b, repo: black-forest-labs/FLUX.2-klein-9B, dest: flux-klein-9b, selectable: true }
+    - { name: flux_klein_9b_base, repo: black-forest-labs/FLUX.2-klein-base-9B, dest: flux-klein-9b-base, selectable: true }
+    - { name: zimage_turbo, repo: Tongyi-MAI/Z-Image-Turbo, dest: zimage-turbo, selectable: true }
+  processes:
+    - name: studio
+      role: main
+      heavy: true
+      cmd: "./iris-studio --iris ./iris.c/iris --model {models.selected} --port {port}"
+      port: { prefer: 8720 }
+      health: { tcp: true, timeout_s: 30, interval_s: 2 }
+      ui: /

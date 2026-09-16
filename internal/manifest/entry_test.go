@@ -249,3 +249,22 @@ func indent(s, with string) string {
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
+
+// loadInlineManifest reads a registry entry and returns the manifest it
+// carries, for tests written against studios/*.yaml before those files became
+// pointers (M7 Q4).
+func loadInlineManifest(t *testing.T, file string) (*Manifest, Result, error) {
+	t.Helper()
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil, Result{}, err
+	}
+	e, res, err := LoadEntryBytes(file, data)
+	if err != nil || !res.OK() {
+		return nil, res, err
+	}
+	if e.Manifest == nil {
+		t.Fatalf("%s carries no inline manifest", file)
+	}
+	return e.Manifest, res, nil
+}

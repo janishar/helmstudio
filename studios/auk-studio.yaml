@@ -1,72 +1,72 @@
-# PLACEHOLDER SHAPE, pending an open decision (docs/decisions.md, "Open, not
-# yet decided": studios/*.yaml as a bare pointer vs a full manifest). This is
-# a full manifest only because schema/manifest.json has no pointer shape to
-# validate a pointer against, and M0's gate runs `helm validate studios/*.yaml`.
-# It is not a reading of docs/design/05-sdk-and-custom-studios.md §5a, which
-# describes a four-line pointer. When that decision lands, this file changes.
+# A registry entry: a pointer at AuK studio's repository
+# (schema/registry-entry.json, docs/design/05-sdk-and-custom-studios.md §5a).
 #
-# Written from /Users/janisharali/GenAI/audio/AuK at commit
-# 61ae02a65c947a8c499a27f963165b351416a146 (pinned below as `ref`). See
-# docs/agents/reports/00-contracts.md for what could and could not be
-# verified in code. The venv question it once raised is answered
-# (docs/decisions.md M5 Q5): the daemon creates the environment from
-# `python.version` and activates it for every build step and process, so
-# `uv pip install` installs into it and `python3` below runs from it. AuK has
-# no lock file, so its dependencies are reproducible only to the Python minor
-# version and whatever resolves on the day (M5 Q9). This manifest still cannot
-# wire any of the three weights below into `cmd`: web/server.py reads a
-# hard-coded ckpts/ inside the checkout (M5 Q10). AuK needs flags upstream,
-# and `cmd` and `ref` change when they exist.
+# The manifest belongs in the studio's own repository as helmstudio.yaml, beside
+# the code it describes, so that a studio can announce a new build step without
+# waiting for a helmstudio release. AuK studio does not ship one yet, so the
+# manifest is carried inline here — and the pull request that moves `ref` to a
+# commit where it does ship one deletes the inline copy, leaving one copy again.
+#
+# Where the inline manifest sets id, repo or ref, each must equal this entry's;
+# the validator enforces it. There is no `certified` field: a level is derived
+# from what has actually been checked, never declared by the thing being
+# checked (docs/decisions.md M7 Q4, Q15).
+
 id: auk-studio
-name: AuK studio
-description: PyTorch speech and voice generation on mps, with AuK and AuK-Flash checkpoints.
-kinds: [audio]
-license: MIT
 repo: https://github.com/janishar/AuK
 ref: 61ae02a65c947a8c499a27f963165b351416a146
-python: { version: "3.10" }
-peak_ram_gb: 25 # web/README.md: "each is ~15-25GB" per checkpoint variant — upper bound, unverified against a real checkpoint
-requires:
-  os: [darwin]
-  arch: [arm64]
-  tools: [uv]
-runtime:
-  framework: pytorch
-  # web/server.py:53 (_default_device) supports cuda too. Two defensible
-  # manifests follow from that: widen requires to linux/amd64 and keep cuda,
-  # or keep darwin/arm64 and match docs/design/01-prd.md §13's table (mps,
-  # cpu). This takes the second; the reason is in docs/decisions.md (M0,
-  # "AuK's backends").
-  backends: [mps, cpu]
-  precision: [bf16]
-  language: python
-capabilities: [kv, assets, gallery]
-network: [huggingface.co, cdn-lfs.huggingface.co]
-build:
-  - name: Install the core package
-    run: uv pip install -e .
-  - name: Install the web server
-    run: uv pip install -r web/requirements.txt
-weights:
-  - name: auk
-    repo: tencent/AuK
-    dest: AuK
-  - name: auk_flash
-    repo: tencent/AuK-Flash
-    dest: AuK-Flash
-  - name: qwen
-    repo: Qwen/Qwen2.5-Omni-3B
-    dest: Qwen2.5-Omni-3B
-processes:
-  - name: studio
-    role: main
-    heavy: true
-    cwd: web
-    cmd: "python3 server.py --host 127.0.0.1 --port {port}"
-    port: { prefer: 8420 }
-    health: { path: /api/health, timeout_s: 30, interval_s: 2 }
-    # /api/health answers 200 without a busy boolean, so the switch dialog
-    # reads AuK as unknown until it serves the busy contract (M5 Q12); move
-    # this path, and `ref`, when it does.
-    busy: { path: /api/health }
-    ui: /
+
+manifest:
+  id: auk-studio
+  name: AuK studio
+  description: PyTorch speech and voice generation on mps, with AuK and AuK-Flash checkpoints.
+  kinds: [audio]
+  license: MIT
+  repo: https://github.com/janishar/AuK
+  ref: 61ae02a65c947a8c499a27f963165b351416a146
+  python: { version: "3.10" }
+  peak_ram_gb: 25 # web/README.md: "each is ~15-25GB" per checkpoint variant — upper bound, unverified against a real checkpoint
+  requires:
+    os: [darwin]
+    arch: [arm64]
+    tools: [uv]
+  runtime:
+    framework: pytorch
+    # web/server.py:53 (_default_device) supports cuda too. Two defensible
+    # manifests follow from that: widen requires to linux/amd64 and keep cuda,
+    # or keep darwin/arm64 and match docs/design/01-prd.md §13's table (mps,
+    # cpu). This takes the second; the reason is in docs/decisions.md (M0,
+    # "AuK's backends").
+    backends: [mps, cpu]
+    precision: [bf16]
+    language: python
+  capabilities: [kv, assets, gallery]
+  network: [huggingface.co, cdn-lfs.huggingface.co]
+  build:
+    - name: Install the core package
+      run: uv pip install -e .
+    - name: Install the web server
+      run: uv pip install -r web/requirements.txt
+  weights:
+    - name: auk
+      repo: tencent/AuK
+      dest: AuK
+    - name: auk_flash
+      repo: tencent/AuK-Flash
+      dest: AuK-Flash
+    - name: qwen
+      repo: Qwen/Qwen2.5-Omni-3B
+      dest: Qwen2.5-Omni-3B
+  processes:
+    - name: studio
+      role: main
+      heavy: true
+      cwd: web
+      cmd: "python3 server.py --host 127.0.0.1 --port {port}"
+      port: { prefer: 8420 }
+      health: { path: /api/health, timeout_s: 30, interval_s: 2 }
+      # /api/health answers 200 without a busy boolean, so the switch dialog
+      # reads AuK as unknown until it serves the busy contract (M5 Q12); move
+      # this path, and `ref`, when it does.
+      busy: { path: /api/health }
+      ui: /
