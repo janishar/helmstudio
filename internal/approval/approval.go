@@ -296,11 +296,24 @@ func Flags(s string) []Flag {
 	return out
 }
 
+// plural counts a thing without saying "1 processes", which is the sort of
+// detail a reader trusts a screen less for.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, one)
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
 // checks are the rows that run before install — and the two that do not.
 func checks(m *manifest.Manifest, host []Check) []Check {
 	out := []Check{{Name: "Manifest valid", State: CheckPass, Required: true,
-		Detail: fmt.Sprintf("schema v1 · %d build steps · %d processes · %d weights",
-			len(m.Build), len(m.EffectiveProcesses()), len(m.Weights))}}
+		Detail: strings.Join([]string{
+			"schema v1",
+			plural(len(m.Build), "build step", "build steps"),
+			plural(len(m.EffectiveProcesses()), "process", "processes"),
+			plural(len(m.Weights), "weight", "weights"),
+		}, " · ")}}
 	out = append(out, host...)
 
 	if n := len(m.Build); n > 0 {
