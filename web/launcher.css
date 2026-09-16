@@ -136,3 +136,18 @@ dialog.helm-dialog::backdrop {
   width: min(720px, calc(100vw - var(--helm-space-6)));
   max-width: min(720px, calc(100vw - var(--helm-space-6)));
 }
+
+/* The approval screen is one column with a reading measure, and its buttons
+ * are at the bottom. You reach Install by scrolling past every command that
+ * would run, which is the point of the screen (03 §13). */
+.helm-approve {
+  max-width: 76ch;
+}
+
+.helm-approve-actions {
+  margin-top: var(--helm-space-5);
+  padding-top: var(--helm-space-4);
+  border-top: 1px solid var(--helm-border-hairline);
+  gap: var(--helm-space-3);
+  flex-wrap: wrap;
+}

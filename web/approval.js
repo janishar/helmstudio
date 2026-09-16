@@ -1,15 +1,25 @@
-// The approval screen, as a dialog (03 §13, docs/decisions.md M7 Q10-Q13).
+// The approval screen (03 §13, docs/decisions.md M7 Q10-Q13, Q21).
 //
-// This is the one screen the product should not optimise for clicks. Installing
-// a studio is running someone else's code on your Mac with your permissions; a
-// pretty installer does not change that, so the obligation is to make the
-// decision visible rather than quick.
+// The one screen deliberately not optimised for clicks. Installing a studio
+// runs someone else's code on your Mac with your permissions; a pretty
+// installer does not change that, so the obligation is to make the decision
+// visible before it happens rather than quick.
 //
-// It is a dialog rather than the full screen 03 §13 draws because M7b draws
-// that one. What it must not be is a summary: every command that would run is
-// here, verbatim, grouped by when it runs.
+// Three things about the layout are decisions, not taste:
+//
+//   - It is a screen, not a dialog. A dialog is something you dismiss.
+//   - It is one column, read top to bottom, and the buttons are at the bottom.
+//     You reach Install by scrolling past every command that would run. A
+//     button beside the title would let someone approve a screen they never
+//     read, which is the failure this whole screen exists to prevent.
+//   - Every command is here verbatim, grouped by *when* it runs. "This runs
+//     every time you launch it" is a different question from "this runs once".
+//
+// Only checks that execute nothing are run. Theme conformance and the smoke
+// test are listed as not run, with the reason: a smoke test builds and runs
+// the studio, which is the thing this screen is asking permission for.
 
-import { chip, dialog, el, failure, toast } from "./ui.js";
+import { chip, el, failure } from "./ui.js";
 
 const WHEN = {
   install: "Runs once, when you install it",
@@ -71,8 +81,24 @@ function commandBlock(c) {
 
 function section(label, ...children) {
   if (!children.filter(Boolean).length) return null;
-  return el("div", { class: "helm-stack", style: "margin-top: var(--helm-space-3)" },
+  return el("div", { class: "helm-stack", style: "margin-top: var(--helm-space-4)" },
     el("p", { class: "helm-section-label", text: label }), ...children);
+}
+
+const CHECK_TONE = { pass: "running", warn: "warning", fail: "error" };
+
+/**
+ * checks is the list 03 §13 leads with, including the two that deliberately
+ * did not run. `not_run` is a first-class outcome here and never a pass: a
+ * check reported as passing because nobody ran it is worse than no check.
+ */
+function checks(p) {
+  const list = p.checks || [];
+  if (!list.length) return null;
+  return el("div", { class: "helm-stack" },
+    ...list.map((c) => el("div", { class: "helm-stack", style: "gap: 0" },
+      el("div", { class: "helm-row" }, chip(c.name, CHECK_TONE[c.state] || "idle")),
+      c.detail ? el("p", { class: "helm-hint", text: c.detail }) : null)));
 }
 
 /** body is the preview, laid out. Exported so a fixture can draw it. */
@@ -80,9 +106,9 @@ export function approvalBody(p) {
   const out = [];
 
   out.push(el("p", { class: "helm-mono", text: [p.transport, p.commit ? p.commit.slice(0, 7) : null].filter(Boolean).join(" · ") }));
+  out.push(section("Checks", checks(p)));
 
-  // Commands, grouped by when they run. The grouping is the point: "this runs
-  // every time you launch it" is a different question from "this runs once".
+  // Commands, grouped by when they run.
   for (const when of ["install", "first_launch", "launch"]) {
     const group = (p.commands || []).filter((c) => c.when === when);
     if (!group.length) continue;
@@ -115,98 +141,186 @@ export function approvalBody(p) {
     out.push(section("Weights",
       ...p.weights.map((w) => el("p", { class: "helm-mono", text: [w.name, w.hf_repo, w.selectable ? "selectable" : null, w.optional ? "optional" : null].filter(Boolean).join(" · ") }))));
   }
-
-  // The checks, including the two that deliberately did not run.
-  const checks = p.checks || [];
-  if (checks.length) {
-    out.push(section("Checks", ...checks.map((c) => el("div", { class: "helm-stack", style: "gap: 0" },
-      el("div", { class: "helm-row" },
-        chip(c.name, c.state === "pass" ? "running" : c.state === "warn" ? "warning" : c.state === "fail" ? "error" : "idle")),
-      c.detail ? el("p", { class: "helm-hint", text: c.detail }) : null))));
-  }
   return out;
 }
 
 /**
- * chooseCheckpoint is the selectable-weight picker. The choice is made here,
- * before install, because install downloads only the chosen one — iris's five
+ * checkpoint is the selectable-weight picker. The choice is made here, before
+ * install, because install downloads only the chosen one — iris's five
  * checkpoints are a whole repository each (Q21).
+ *
+ * It is shown but not covered by the digest: every selectable weight was
+ * approved with the manifest, and a digest over the choice would ask for
+ * approval again at every switch, which trains people to click through it.
  */
-function chooseCheckpoint(p) {
+function checkpoint(p, onPick) {
   const selectable = (p.weights || []).filter((w) => w.selectable);
   if (selectable.length < 2) return null;
-  const field = el("div", { class: "helm-field", style: "margin-top: var(--helm-space-3)" },
+  const chosen = p.selection || selectable[0].name;
+  return el("div", { class: "helm-field", style: "margin-top: var(--helm-space-4)" },
     el("label", { class: "helm-label", for: "helm-checkpoint", text: "Checkpoint" }),
-    el("select", { class: "helm-select", id: "helm-checkpoint" },
-      ...selectable.map((w) => el("option", { value: w.name, text: w.name, selected: w.name === p.selection }))),
+    el("select", { class: "helm-select", id: "helm-checkpoint", onchange: (e) => onPick(e.target.value) },
+      ...selectable.map((w) => el("option", { value: w.name, text: w.name, selected: w.name === chosen }))),
     el("span", { class: "helm-hint", text: "Only this one is downloaded. The others can be fetched later, and the choice can be changed while the studio is stopped." }));
-  return field;
 }
 
+// ----------------------------------------------------------------- consent
+
 /**
- * ask shows the preview and resolves to the digest when the person says yes,
- * or null when they do not.
+ * granted holds the digest a person approved, for the moment between pressing
+ * the button and the operation running.
  *
- * `required` failures make the button read "Install anyway" rather than
- * blocking: a required failure warns loudly and blocks a registry merge, but
- * never stops someone installing their own work (R63).
+ * It is not a record of consent — the daemon keeps that. It exists because the
+ * screen approves and the action runs, and the two need one value between
+ * them. It is cleared as soon as it is used, so a second operation cannot
+ * inherit a consent given for the first.
  */
-export async function ask(p, verb) {
-  const failed = (p.checks || []).some((c) => c.state === "fail" && c.required);
-  const extra = chooseCheckpoint(p);
+const granted = new Map();
 
-  const chosen = await dialog({
-    title: `${verb} ${p.name || p.studio_id}?`,
-    body: approvalBody(p),
-    extra,
-    actions: [
-      { label: "Cancel", value: null },
-      {
-        label: failed ? `${verb} anyway` : verb,
-        value: "go",
-        class: failed ? "helm-btn-danger-fill" : "helm-btn-primary",
-        primary: true,
-      },
-    ],
-  });
-  if (chosen !== "go") return null;
-  const select = extra && extra.querySelector("select");
-  return { approval: p.digest, selection: select ? select.value : p.selection };
+export function grant(id, digest) {
+  granted.set(id, digest);
+}
+
+function take(id) {
+  const d = granted.get(id);
+  granted.delete(id);
+  return d;
 }
 
 /**
- * guard runs an operation that needs approval, showing the screen when the
- * daemon asks for one and retrying once with the digest.
+ * guard runs an operation that needs approval, sending the person to the
+ * screen when the daemon asks for one.
  *
- * It asks again on `preview_changed` rather than looping: what would run moved
- * between the screen being drawn and the answer coming back, so the new picture
- * is the one that needs reading.
+ * It does not ask inline and it does not retry silently. `preview_changed`
+ * means what would run moved between the screen being drawn and the answer
+ * coming back, so the new picture is the one that needs reading — which is the
+ * same screen again, not a second attempt with the old answer.
  */
 export async function guard(ctx, studio, verb, run) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      return await run(undefined);
-    } catch (err) {
-      const preview = err && err.details && err.details.approval;
-      if (!preview || !["approval_required", "preview_changed"].includes(err.code)) throw err;
+  try {
+    return await run(take(studio.id));
+  } catch (err) {
+    if (!err || !["approval_required", "preview_changed"].includes(err.code)) throw err;
+    ctx.go(`#/studios/${studio.id}/approve?do=${encodeURIComponent(verb)}`);
+    return null;
+  }
+}
 
-      const answer = await ask(preview, verb);
-      if (!answer) return null;
-      if (answer.selection && answer.selection !== preview.selection) {
-        try {
-          await ctx.client.studios.select(studio.id, { weight: answer.selection });
-        } catch (e) {
-          toast(failure(e, "That checkpoint could not be chosen."), "error");
-          return null;
-        }
-      }
-      try {
-        return await run(answer.approval);
-      } catch (again) {
-        if (again && again.code === "preview_changed" && attempt === 0) continue;
-        throw again;
-      }
+// ------------------------------------------------------------------ screen
+
+const VERBS = { install: "Install", retry: "Retry", launch: "Launch" };
+
+function approvalState(ctx, id) {
+  return ctx.keep("approve:" + id, () => ({ preview: null, selection: null, busy: false, error: null, loaded: false }));
+}
+
+async function fetchPreview(ctx, st, id) {
+  st.busy = true;
+  try {
+    st.preview = await ctx.client.studios.approval(id);
+    st.error = null;
+  } catch (err) {
+    st.error = failure(err, "What this would run could not be read.");
+  }
+  st.loaded = true;
+  st.busy = false;
+  ctx.redraw(true);
+}
+
+/**
+ * approve records the choice of checkpoint, grants the digest and hands
+ * control back to the action the person originally asked for.
+ *
+ * The screen does not run the operation itself. It knows what was approved,
+ * not what to do about it, and an approval screen that also knew how to
+ * install would have to know how to launch and how to retry as well.
+ */
+async function approve(ctx, st, studio, verb) {
+  st.busy = true;
+  ctx.redraw(true);
+  const p = st.preview;
+  if (st.selection && st.selection !== p.selection) {
+    try {
+      await ctx.client.studios.select(studio.id, { weight: st.selection });
+    } catch (err) {
+      st.error = failure(err, "That checkpoint could not be chosen.");
+      st.busy = false;
+      ctx.redraw(true);
+      return;
     }
   }
-  return null;
+  grant(studio.id, p.digest);
+  st.loaded = false;
+  st.busy = false;
+  await ctx.act(studio, verb);
+}
+
+export function approvalScreen(ctx, id) {
+  const st = approvalState(ctx, id);
+  if (!st.loaded && !st.busy) fetchPreview(ctx, st, id);
+
+  const verb = ctx.query.get("do") || "install";
+  const studio = (ctx.store.studios || []).find((s) => s.id === id) || { id, name: id };
+  const back = () => ctx.go("#/studios");
+
+  if (!st.loaded) {
+    return el("div", { class: "helm-stack" },
+      el("h1", { class: "helm-title", text: `${VERBS[verb] || "Install"} ${studio.name}?` }),
+      el("p", { class: "helm-micro", text: "Reading what this would run…" }));
+  }
+  const p = st.preview;
+  if (!p) {
+    return el("div", { class: "helm-stack" },
+      el("h1", { class: "helm-title", text: `${VERBS[verb] || "Install"} ${studio.name}?` }),
+      el("p", { class: "helm-body helm-status-error", text: st.error || "There is nothing to show." }),
+      el("button", { class: "helm-btn helm-btn-secondary", text: "Back to the library", onclick: back }));
+  }
+
+  const failed = (p.checks || []).some((c) => c.state === "fail" && c.required);
+  const label = VERBS[verb] || "Install";
+
+  return el("div", { class: "helm-stack helm-approve" },
+    el("div", { class: "helm-page-header" },
+      el("h1", { class: "helm-title", text: `${label} ${p.name || studio.name}?` }),
+      el("span", { class: "helm-spacer" }),
+      el("a", { class: "helm-link", href: `#/edit/${encodeURIComponent(id)}`, text: "View manifest" })),
+
+    // The level and the source, as two facts and not a badge. A level is
+    // derived from what has been checked; it is never declared in a file, and
+    // it is a label rather than a gate on your own machine.
+    // The repository and the ref are not repeated here: the transport line
+    // below says where the code comes from and how it is fetched, which is
+    // the same fact told better.
+    el("div", { class: "helm-row", style: "gap: var(--helm-space-2); flex-wrap: wrap" },
+      chip(p.level || "unverified", "idle"),
+      chip(sourceLabel(p.source), "idle")),
+
+    el("p", { class: "helm-body", text:
+      `Installing ${p.name || studio.name} runs the commands below on this Mac, with your permissions. helmstudio does not sandbox them.` }),
+
+    st.error ? el("p", { class: "helm-body helm-status-error", text: st.error }) : null,
+    p.already_approved
+      ? el("p", { class: "helm-hint", text: "You have approved exactly this before. Nothing about it has changed since." })
+      : null,
+
+    ...approvalBody(p),
+    checkpoint(p, (name) => { st.selection = name; }),
+
+    // Two buttons, at the bottom, after everything above.
+    el("div", { class: "helm-row helm-approve-actions" },
+      el("button", { class: "helm-btn helm-btn-secondary helm-btn-lg", text: "Cancel", onclick: back }),
+      el("span", { class: "helm-spacer" }),
+      el("button", {
+        class: "helm-btn helm-btn-lg " + (failed ? "helm-btn-danger-fill" : "helm-btn-primary"),
+        text: failed ? `${label} anyway` : label,
+        disabled: st.busy,
+        onclick: () => approve(ctx, st, studio, verb),
+      })),
+    failed
+      ? el("p", { class: "helm-hint", text: "A required check failed. That blocks a registry merge; it never stops you installing your own work." })
+      : null);
+}
+
+function sourceLabel(source) {
+  return { local: "from a file you wrote", repo: "from a repository", registry: "from the registry" }[source] || "from a repository";
 }

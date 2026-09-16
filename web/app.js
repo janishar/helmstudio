@@ -21,7 +21,7 @@ import { processGroup } from "./processes.js";
 import { modelsAndDisk } from "./models.js";
 import { settings } from "./settings.js";
 import { launch, stop } from "./switch.js";
-import { guard } from "./approval.js";
+import { approvalScreen, guard } from "./approval.js";
 import { addStudio } from "./add.js";
 import { editor } from "./editor.js";
 
@@ -31,6 +31,7 @@ const POLL_MS = 2000;
 
 const ROUTES = [
   { path: /^\/studios$/, screen: catalogue, nav: "studios" },
+  { path: /^\/studios\/([^/]+)\/approve$/, screen: approvalScreen, nav: "studios" },
   { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios" },
   { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios" },
   // Adding and editing are their own paths rather than /studios/new, because
@@ -168,7 +169,7 @@ export async function act(ctx, studio, action) {
       try {
         // Installing runs someone else's build steps, so it goes through the
         // approval screen unless what would run is already approved (M7 Q10).
-        const started = await guard(ctx, studio, action === "retry" ? "Retry" : "Install", (approval) =>
+        const started = await guard(ctx, studio, action, (approval) =>
           action === "install"
             ? ctx.client.studios.install(studio.id, { approval })
             : ctx.client.studios.retry(studio.id, { approval }));

@@ -65,7 +65,7 @@ export async function launch(ctx, studio, preempt, tries = 0) {
     // install, so a launch is gated by approval too (M7 Q10). The switch
     // dialog below is a different question — whose model holds the memory —
     // and both can be asked on one launch.
-    const started = await guard(ctx, studio, "Launch", (approval) =>
+    const started = await guard(ctx, studio, "launch", (approval) =>
       ctx.client.studios.launch(studio.id, { preempt, approval }));
     if (started === null) return ctx.refresh();
     announce(`${studio.name} is starting.`);
