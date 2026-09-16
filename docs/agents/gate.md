@@ -15,7 +15,7 @@ M1 and grows as the contracts it checks come into existence.
 | visual regression, both themes | M6 |
 | export goldens × the media fixtures | M8 |
 | the site builds, its links lead somewhere, and every sample on it runs | M10 |
-| the published packages agree: versions, where each comes from, what npm packs, a workflow per package | packaging |
+| the published packages agree: versions, where each comes from, what npm packs, a workflow per package; `helm` builds for every released platform | packaging |
 
 **Visual regression (`make visual`).**
 - **What it runs.** An installed Chrome, driven over its DevTools pipe by Go's standard library (`internal/chrome`). `HELM_CHROME` names the binary. A missing browser fails the gate unless `HELM_ALLOW_MISSING_BROWSER` is set.
@@ -42,7 +42,7 @@ hides a class of path bug that a Linux run surfaces on the first try.
 - **The goldens.** The landing page and the quickstart, in both themes at 1280, 1000 and 380 px, are pinned by `TestTheSiteMatchesItsGoldens` in `test/visual`, with the same Chrome and operating-system pins as helm-css's. An edit to either page changes them: `make golden`, and look at the images.
 - **The dependency diff** reads every `go.mod` in the repository, so the site module's dependencies are recorded like the root's.
 
-**The packages (`go test ./test/packaging`, part of `make test`).** A release is a tag on a commit that passed the gate (`docs/releasing.md`), so what a registry will be handed is checked before a tag exists: the runtime SDK at one version in Python, JavaScript and every `go.mod`; the version constants in helm-ui-sdk and helm-css against their `package.json`; each npm package's repository, public access and licence; what `npm pack --dry-run` would publish against what each package's `exports` and `style` name; helm-ui-sdk's peer ranges against its siblings' versions; and a publishing workflow tag for every package. It needs `npm`, or `HELM_ALLOW_MISSING_CLIENTS`. The workflows themselves run only on a pushed tag, where the gate does not reach.
+**The packages (`go test ./test/packaging`, part of `make test`).** A release is a tag on a commit that passed the gate (`docs/releasing.md`), so what a registry will be handed is checked before a tag exists: the runtime SDK at one version in Python, JavaScript and every `go.mod`; the version constants in helm-ui-sdk and helm-css against their `package.json`; each npm package's repository, public access and licence; what `npm pack --dry-run` would publish against what each package's `exports` and `style` name; helm-ui-sdk's peer ranges against its siblings' versions; a publishing workflow tag for every package; and `helm` cross-compiled, with cgo off and the release's flags, for every platform `release-helm.yml` builds, which are also the platforms it runs them on and the archives `docs/releasing.md` names. It needs `npm`, or `HELM_ALLOW_MISSING_CLIENTS`. The workflows themselves run only on a pushed tag, where the gate does not reach.
 
 **Currently not run.** As of M1, by the human's direction, `go test` runs on
 the host only: the Linux and Windows test legs are out of the gate and no CI

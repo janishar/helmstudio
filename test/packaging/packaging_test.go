@@ -326,6 +326,68 @@ func TestAWorkflowPublishesEveryPackage(t *testing.T) {
 	}
 }
 
+// ------------------------------------------------------------------ helm
+
+// releasedPlatforms reads the platforms release-helm.yml builds, as GOOS/GOARCH.
+func releasedPlatforms(t *testing.T) (targets []string, workflow string) {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(root(t), ".github", "workflows", "release-helm.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`for target in ([a-z0-9/ ]+); do`).FindSubmatch(b)
+	if m == nil {
+		t.Fatal("release-helm.yml names no platforms to build")
+	}
+	return strings.Fields(string(m[1])), string(b)
+}
+
+// The helm CLI is released for each platform the workflow builds, run on each
+// of them, and named in the instructions an author follows.
+func TestTheHelmReleaseCoversEveryPlatformItBuilds(t *testing.T) {
+	targets, workflow := releasedPlatforms(t)
+	releasing, err := os.ReadFile(filepath.Join(root(t), "docs", "releasing.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(workflow, `tags: ["v*"]`) {
+		t.Error("release-helm.yml does not run on the root module's v* tags")
+	}
+	var ran []string
+	for _, m := range regexp.MustCompile(`platform: ([a-z0-9_]+)`).FindAllStringSubmatch(workflow, -1) {
+		ran = append(ran, m[1])
+	}
+	var built []string
+	for _, target := range targets {
+		platform := strings.Replace(target, "/", "_", 1)
+		built = append(built, platform)
+		if !strings.Contains(string(releasing), "helm_<version>_"+platform+".tar.gz") {
+			t.Errorf("docs/releasing.md does not name the %s archive", platform)
+		}
+	}
+	if strings.Join(built, " ") != strings.Join(ran, " ") {
+		t.Errorf("release-helm.yml builds %v and runs %v; every archive is run on its own platform before it is released", built, ran)
+	}
+}
+
+// helm cross-compiles, with cgo off and the release's flags, for every
+// platform the workflow releases, so a change that would break a release fails
+// here rather than at a tag.
+func TestHelmBuildsForEveryReleasedPlatform(t *testing.T) {
+	targets, _ := releasedPlatforms(t)
+	for _, target := range targets {
+		t.Run(target, func(t *testing.T) {
+			goos, goarch, _ := strings.Cut(target, "/")
+			cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", filepath.Join(t.TempDir(), "helm"), "./cmd/helm")
+			cmd.Dir = root(t)
+			cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("GOOS=%s GOARCH=%s go build ./cmd/helm: %v\n%s", goos, goarch, err, out)
+			}
+		})
+	}
+}
+
 // ------------------------------------------------------------------ semver
 
 type semver struct {

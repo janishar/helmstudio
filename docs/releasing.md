@@ -18,9 +18,11 @@ repository or its secrets.
 | `@helmstudio/runtime` | npm | `packages/helm-runtime-sdk/node/v<version>` | `npm install @helmstudio/runtime` |
 | `@helmstudio/ui` | npm | `packages/helm-ui-sdk/v<version>` | `npm install @helmstudio/ui` |
 | `@helmstudio/css` | npm | `packages/helm-css/v<version>` | `npm install @helmstudio/css` |
+| the `helm` CLI | GitHub Releases | `v<version>`, the root module's tag | a download: see *Installing helm* below |
 
 A pre-release installs with `pip install --pre`, `npm install <package>@next`,
-or its exact version.
+or its exact version. The `helm` CLI is released with the root module, at the
+runtime SDK's version, because it is built from the root module.
 
 **Versions** (04 §9). The runtime SDK's three languages are generated from one
 contract and move together, at one version; helm-ui-sdk and helm-css each have
@@ -87,19 +89,44 @@ attaches provenance.
      and imports the wheel, and publishes;
    - `publish-npm` checks the tag against `package.json` and publishes;
    - `verify-go-tags` fetches each Go module through the proxy and builds a
-     studio against the embedded provider.
+     studio against the embedded provider;
+   - `release-helm` builds `helm` for macOS on Apple Silicon and for Linux on
+     x86-64 and ARM64, runs each binary on its own platform, and attaches the
+     archives, their `SHA256SUMS` and their build provenance to the GitHub
+     Release for `v<version>`, marked a pre-release when the version is one.
 
-   A version already on its registry is skipped, so a tag pushed again changes
-   nothing.
-4. When the packages are on their registries, change the documentation that
-   installs from the clone — the quickstart's step 4 and the theming guide's
-   note on `@helmstudio/runtime` — so it installs from the registries instead.
-   Not before: a page must not name an install that fails.
+   A version already on its registry is skipped, and a release that exists has
+   its archives replaced, so a tag pushed again changes nothing.
+4. When the packages are on their registries and `helm` is on the release,
+   change the documentation that builds or installs from the clone — the
+   quickstart's steps 2 and 4, and the theming guide's note on
+   `@helmstudio/runtime` — so it installs from them instead. Not before: a page
+   must not name an install that fails.
 
-## Not published this way yet
+## Installing helm
 
-**The `helm` CLI.** A studio author needs `helm dev` and `helm validate`, and
-`go install github.com/janishar/helmstudio/cmd/helm@<tag>` does not work: Go
-refuses to install from a module whose `go.mod` has a `replace` directive, and
-the root module's does. Until that is decided (`docs/decisions.md`, "Open, not
-yet decided"), `helm` is built from a clone, as the quickstart does.
+A studio author needs `helm dev` and `helm validate`, without cloning this
+repository. `go install github.com/janishar/helmstudio/cmd/helm@<tag>` does not
+work — Go refuses to install from a module whose `go.mod` has a `replace`
+directive, and the root module's does — so each release carries prebuilt
+binaries: `helm_<version>_darwin_arm64.tar.gz`,
+`helm_<version>_linux_amd64.tar.gz` and `helm_<version>_linux_arm64.tar.gz`,
+each holding `helm` and its licence.
+
+On a Mac with Apple Silicon, for `1.0.0-rc.1`:
+
+    curl -fsSLO https://github.com/janishar/helmstudio/releases/download/v1.0.0-rc.1/helm_1.0.0-rc.1_darwin_arm64.tar.gz
+    curl -fsSLO https://github.com/janishar/helmstudio/releases/download/v1.0.0-rc.1/SHA256SUMS
+    grep ' helm_1.0.0-rc.1_darwin_arm64.tar.gz$' SHA256SUMS | shasum -a 256 -c -
+    tar -xzf helm_1.0.0-rc.1_darwin_arm64.tar.gz
+
+Then put `helm_1.0.0-rc.1_darwin_arm64/helm` in a directory on your `PATH`.
+`gh attestation verify helm_1.0.0-rc.1_darwin_arm64.tar.gz --repo
+janishar/helmstudio` checks that the archive was built by this repository's
+workflow.
+
+The binaries are not signed until the Mac app's release signs and notarises
+them (M9). Download them with `curl`, as above: macOS quarantines a file a
+browser downloads, and refuses to run an unsigned binary that is quarantined.
+Kubernetes' CLI is also called `helm`; the one first on `PATH` is the one that
+runs.

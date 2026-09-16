@@ -1,0 +1,121 @@
+# Builds the helm CLI and attaches it to the GitHub Release for the root
+# module's tag v<version> (docs/releasing.md). A studio author needs `helm dev`
+# and `helm validate` without cloning this repository, and `go install` cannot
+# install from a module whose go.mod has a replace directive, which the root's
+# does (docs/decisions.md, "Publishing the packages").
+#
+# helm is pure Go, so one Linux runner builds every platform with cgo off. Each
+# binary is then unpacked and run on its own platform before the release is
+# written, so an archive nobody could run is never attached. The binaries are
+# unsigned until the Mac app's release signs and notarises them (M9); Go's
+# linker signs a darwin/arm64 binary ad hoc, which is what lets it run on Apple
+# Silicon at all. Each archive gets a SHA-256 checksum and a build provenance
+# attestation.
+#
+# This runs no gate: a tag is pushed on a commit that passed `make gate`.
+
+name: release-helm
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Build helm for each platform
+        env:
+          TAG: ${{ github.ref_name }}
+          CGO_ENABLED: "0"
+        run: |
+          version="${TAG#v}"
+          mkdir -p build dist
+          for target in darwin/arm64 linux/amd64 linux/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            name="helm_${version}_${os}_${arch}"
+            mkdir -p "build/$name"
+            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "build/$name/helm" ./cmd/helm
+            cp LICENSE "build/$name/"
+            tar -C build -czf "dist/$name.tar.gz" "$name"
+          done
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: helm
+          path: dist/
+
+  run:
+    needs: build
+    strategy:
+      matrix:
+        include:
+          - runner: macos-latest
+            platform: darwin_arm64
+          - runner: ubuntu-latest
+            platform: linux_amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux_arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: helm
+          path: dist/
+      - name: Check, unpack and run helm as a studio author would
+        env:
+          TAG: ${{ github.ref_name }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          name="helm_${TAG#v}_${PLATFORM}"
+          (cd dist && grep " $name.tar.gz\$" SHA256SUMS | shasum -a 256 -c -)
+          tar -xzf "dist/$name.tar.gz" -C "$RUNNER_TEMP"
+          helm="$RUNNER_TEMP/$name/helm"
+          "$helm" validate studios/*.yaml
+          "$helm" validate -criteria studios/h3-studio.yaml
+
+  release:
+    needs: run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: helm
+          path: dist/
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Attach the archives to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          printf '%s\n' \
+            "helm $version, the CLI a studio author runs for \`helm dev\` and \`helm validate\`, for macOS on Apple Silicon and for Linux on x86-64 and ARM64." \
+            "" \
+            "Each archive holds \`helm\` and its licence. Download with curl rather than a browser: the binaries are not signed yet, and macOS quarantines what a browser downloads." \
+            "" \
+            "Check an archive against SHA256SUMS, or against its build provenance with \`gh attestation verify <archive> --repo $REPO\`. How to install it is in docs/releasing.md." \
+            > notes.md
+          prerelease=""
+          case "$version" in *-*) prerelease="--prerelease" ;; esac
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.tar.gz dist/SHA256SUMS --repo "$REPO" --clobber
+          else
+            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --repo "$REPO" --verify-tag $prerelease --title "helm $version" --notes-file notes.md
+          fi
