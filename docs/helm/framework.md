@@ -103,6 +103,8 @@ Start here, in this order, depending on what you are trying to understand.
 | The manifest contract | [`schema/manifest.json`](../../schema/manifest.json), then `internal/manifest/rules.go` for the checks a JSON Schema cannot express |
 | The API contract | [`api/openapi.yaml`](../../api/openapi.yaml) — the header comment states every convention that is not repeated per operation |
 | What a real studio declares | [`studios/h3-studio.yaml`](../../studios/h3-studio.yaml) |
+| The launcher's screens | [`web/app.js`](../../web/app.js) — the shell, the router and the one poll; each screen is a function of a context beside it |
+| A prebuilt component | [`packages/helm-ui-sdk/src/terminal.js`](../../packages/helm-ui-sdk/src/terminal.js) — the busiest of the three, and the clearest example of receiving a client rather than building one |
 | What must pass before a commit | [`Makefile`](../../Makefile), then `docs/agents/gate.md` |
 | Why something is the way it is | `docs/decisions.md` |
 
@@ -118,7 +120,7 @@ packages/          what studios actually depend on
 schema/            manifest.json — the manifest contract
 api/               openapi.yaml — the platform API contract, and its generator
 studios/           registry entries, one per studio
-web/               the launcher's page, served by the daemon
+web/               the launcher's screens and its generated client
 test/              conformance, visual and media suites
 docs/              design, decisions, plan, agent briefs, this file
 ```
@@ -183,7 +185,7 @@ What studios depend on, with a strict one-way dependency:
 flowchart LR
     css["helm-css<br/>tokens, base, layout, components<br/>depends on nothing — it is text"]
     rt["helm-runtime-sdk<br/>go · python · node<br/>knows the API"]
-    ui["helm-ui-sdk<br/>helm-gallery · helm-player<br/>helm-terminal · helm-timeline<br/>knows both"]
+    ui["helm-ui-sdk<br/>helm-gallery · helm-player · helm-terminal<br/>helm-timeline — M8b<br/>knows both"]
 
     api["api/openapi.yaml"] -.->|"generates"| rt
     ui --> css
@@ -207,7 +209,15 @@ flowchart LR
   client falls back to the **embedded provider** — a separate module, so a
   studio that only runs hosted never pulls SQLite into its dependency tree.
   Python and Node fail as `Unavailable` and name `helm dev` (M5 Q14).
-- **`helm-ui-sdk`** — designed in 04 §5, **not built yet**. See §13.
+- **`helm-ui-sdk`** — `helm-terminal`, `helm-gallery` and `helm-player`, as
+  custom elements in Shadow DOM: helm-css's classes cannot reach inside them
+  and its custom properties can, which is exactly how they are themed. The
+  package **imports nothing at all** — a component is handed a client and calls
+  the few methods 04 §5 lists, and the only thing it knows about a failure is
+  the `kind` the runtime SDK puts on it, read off the error rather than
+  imported from it. `helm-player` ships without its filmstrip, waveform and
+  h264 proxy, which need ffmpeg; they render `Unsupported` with a reason rather
+  than being absent. `helm-timeline` ships with M8b.
 
 ### The four adoption levels
 
@@ -219,7 +229,7 @@ forever, and that is a success, not a gap.
 | 0 | nothing | Installs, launches, runs. No gallery, no shared cache. *This must stay viable or helmstudio is not a launcher.* |
 | 1 | `helm-css` | Looks like it belongs to the family, keeps its own identity hue. |
 | 2 | `+ helm-runtime-sdk` | Assets, gallery, records, jobs — with the studio's own UI. **All four launch studios land here**, because none wants a front-end toolchain. |
-| 3 | `+ helm-ui-sdk` | Prebuilt gallery, player, terminal and timeline. |
+| 3 | `+ helm-ui-sdk` | Prebuilt gallery, player and terminal; the timeline editor with M8b. |
 
 ---
 
@@ -242,6 +252,7 @@ flowchart TB
     gen --> py["helm-runtime-sdk/python<br/>_generated.py"]
     gen --> node["helm-runtime-sdk/node<br/>generated.js"]
     gen --> router["internal/api/studioapi<br/>zz_server.go — the daemon's router"]
+    gen --> launcher["web/launcher.js<br/>the launcher's own client"]
 
     gen -.->|"make drift regenerates into a scratch tree<br/>and fails on any difference"| gate(["make gate"])
 ```
@@ -251,6 +262,15 @@ flowchart TB
 > hand edit, or a contract change nobody regenerated, fails the gate whether or
 > not the files are committed yet. Change the generator or the document it
 > reads, then `make generate`.
+
+**Two clients, one generator.** Only `studio-api` operations reach the runtime
+SDK, because a studio has no business installing or launching anything (M4 Q1).
+The `launcher` operations go to `web/launcher.js`, served with the launcher's
+own page and never under `/sdk/`. That is what lets the launcher's install and
+process screens use the same `helm-terminal` a studio uses: the component is
+handed a client, and both clients are generated (M6 Q12). The launcher's
+carries operations only — its transport and its error shape are the runtime
+SDK's, so there is one mapping of status to kind rather than two that drift.
 
 **The manifest's substitutions are a closed set.** A process command may
 contain `{port}`, `{ports.<name>}`, `{models.<name>}`, `{models.selected}`,
@@ -605,7 +625,7 @@ is written; it is finished when the gate is green.
 | `test` | `go test ./...` |
 | `sdk` | The runtime SDK and embedded provider modules' own tests |
 | `conformance` | One suite against the daemon over HTTP **and** the embedded provider in process, plus the Python and Node client smoke tests |
-| `visual` | helm-css in both themes, pixel-exact against goldens, in a real Chrome |
+| `visual` | helm-css, the three components and each launcher screen at 1280, 1000 and 380 px, in both themes, pixel-exact against goldens in a real Chrome. What a picture cannot show — a thumbnail loading, a carriage-return line rewriting in place — is asserted against the DOM instead |
 | `validate` | `helm validate studios/*.yaml` — every registry manifest, every time |
 
 Two more, run deliberately and never as part of the gate, because they change
@@ -626,7 +646,7 @@ Then open `http://127.0.0.1:8700`. Flags:
 
 | Flag | Default | Does |
 |---|---|---|
-| `-addr` | `127.0.0.1:8700` | The loopback address for the shelf and both APIs |
+| `-addr` | `127.0.0.1:8700` | The loopback address for the launcher and both APIs |
 | `-studios` | `studios` | The directory of manifests to load |
 
 On startup it logs its resolved data and logs roots, every re-adopted group,
@@ -760,10 +780,16 @@ first try.
 
 ## 13 · What exists today, honestly
 
-As of the last commit on `main` — built and gate-green: **M0–M6a**, plus
-**M8a**, built out of order at the maintainer's instruction. Each milestone has
-an implementation report in `docs/agents/reports/`, and those reports are the
-place to look for what a milestone could *not* verify.
+As of the last commit on `main` — built and gate-green: **M0–M6**, plus
+**M8a**, the last two built out of order at the maintainer's instruction. Each
+milestone has an implementation report in `docs/agents/reports/`, and those
+reports are the place to look for what a milestone could *not* verify.
+
+**Built out of order means unreviewed.** The loop in `docs/agents/README.md` is
+implement, report, review by a *different* agent, fix, land. M6a, M6b and M8a
+are on `main` without that review step having run. Whatever their reports call
+a judgement call is exactly that — a decision one agent made, not one anybody
+has checked.
 
 | | Milestone | State |
 |---|---|---|
@@ -773,23 +799,35 @@ place to look for what a milestone could *not* verify.
 | M3 | Install and weights — clone, build, resume, downloader, linked weights, reclaim | built |
 | M4 | API and SDK — OpenAPI, the generator, the router, three clients, embedded provider, conformance, `helm dev` | built |
 | M5 | Python studios — uv environments, the switch dialog with its `busy` probe | built |
-| M6a | helm-css, tokens, the theme path a running studio follows | built |
-| M6b | Components and screens — `helm-ui-sdk` | **in progress** — not yet committed |
+| M6a | helm-css, tokens, the theme path a running studio follows | built, **unreviewed** |
+| M6b | Components and screens — `helm-ui-sdk`, the launcher client, the six screens | built, **unreviewed** |
 | M7 | Library, editor, iris — the three-source library, the manifest editor, import/export, the approval screen | **not built** — stopped at kickoff, questions answered, brief written |
-| M8a | Timeline document, API and export pipeline | built |
-| M8b | The timeline editor — `helm-timeline` | **not built**, waits on M6b |
+| M8a | Timeline document, API and export pipeline | built, **unreviewed** |
+| M8b | The timeline editor — `helm-timeline` | **not built** — unblocked now that `packages/helm-ui-sdk/` exists |
 | M9 | The Mac app — Electron shell, signing, notarisation, bundled ffmpeg and uv | **not built** |
 | M10 | Docs and the site | **not built** |
 
 Concretely, that means:
 
-- **`helm-ui-sdk` is not on `main` yet.** `helm-gallery`, `helm-player`,
-  `helm-terminal` and `helm-timeline` are specified in 04 §5; M6b is building
-  the first three, and `helm-timeline` moved to M8b. Until it lands, level 3
-  adoption is not reachable and nothing in the daemon depends on it.
-- **The launcher UI is a deliberately plain shelf** in `web/` — a table and a
-  theme toggle. 03's screens arrive with M6b. This is the build plan working as
-  intended: nothing is polished until something works end to end.
+- **`helm-ui-sdk` ships three of its four components.** `helm-terminal`,
+  `helm-gallery` and `helm-player` are built and served at `/sdk/v1/ui/`;
+  `helm-timeline` moved to M8b. No studio imports them yet — h3 stays at level
+  2 (M6 Q20) — so level 3 is reachable but untravelled, and the components have
+  been driven only from fixtures.
+- **The launcher is six screens**, not the plain shelf M2 put there: the shell
+  with its System/Light/Dark control, the catalogue, studio detail and install,
+  the process group, models and disk, and settings. Three of 03's screens are
+  deliberately absent — adding a studio and the manifest editor are M7's, and
+  the Gallery and Timeline screens wait for M9's cookie, because a read-only
+  launcher gallery under today's Host and Origin rules would let any local
+  process read every studio's work.
+- **03 §7's Requirements block is not drawn**, and this is a contradiction
+  raised rather than resolved. `GET /studios` serves no `hue`, `repo`, `ref` or
+  `requires`, and nothing anywhere reports the host's OS version, memory, free
+  disk or which tools are present — so neither the "required" column nor the
+  "found" one has a source, and every card wears the accent instead of its
+  identity stripe. Four such contradictions are recorded under "Open, not yet
+  decided" in `docs/decisions.md`.
 - **`helm` has `validate` and `dev`.** `helm test`, `helm doctor --studio`,
   `helm adopt` and `helm studio init` are specified and unbuilt; the smoke
   harness they share has no milestone placed yet.
