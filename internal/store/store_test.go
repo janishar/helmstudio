@@ -317,8 +317,8 @@ func TestMigrationsFromEmptyCreateSchemaV1(t *testing.T) {
 	}
 	s := openTest(t, d)
 
-	if v, err := s.Version(ctx); err != nil || v != 6 || LatestVersion() != 6 {
-		t.Fatalf("version = %d (%v), latest = %d; want 6", v, err, LatestVersion())
+	if v, err := s.Version(ctx); err != nil || v != 7 || LatestVersion() != 7 {
+		t.Fatalf("version = %d (%v), latest = %d; want 7", v, err, LatestVersion())
 	}
 
 	tables := slices.DeleteFunc(objects(t, s.Reader(), "table"), func(n string) bool {
@@ -328,7 +328,7 @@ func TestMigrationsFromEmptyCreateSchemaV1(t *testing.T) {
 	if !slices.Equal(tables, wantTables) {
 		t.Errorf("tables = %v, want %v", tables, wantTables)
 	}
-	wantIndexes := []string{"idx_bind_artifact", "idx_inbox_pending", "idx_inputs_asset", "idx_items_asset", "idx_items_feed", "idx_items_studio", "idx_jobs_live", "idx_jobs_studio", "idx_jobs_subject", "idx_logs_studio", "idx_proc_live", "idx_proc_studio", "idx_rec_scan", "idx_session_recent", "idx_studio_assets_asset", "idx_timelines_studio", "idx_tokens_group", "uq_session_name"}
+	wantIndexes := []string{"idx_bind_artifact", "idx_bind_selected", "idx_inbox_pending", "idx_inputs_asset", "idx_items_asset", "idx_items_feed", "idx_items_studio", "idx_jobs_live", "idx_jobs_studio", "idx_jobs_subject", "idx_logs_studio", "idx_proc_live", "idx_proc_studio", "idx_rec_scan", "idx_session_recent", "idx_studio_assets_asset", "idx_timelines_studio", "idx_tokens_group", "uq_session_name"}
 	if got := objects(t, s.Reader(), "index"); !slices.Equal(got, wantIndexes) {
 		t.Errorf("indexes = %v, want %v", got, wantIndexes)
 	}

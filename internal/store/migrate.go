@@ -38,6 +38,9 @@ var schemaV5 string
 //go:embed migrations/0006_timeline.sql
 var schemaV6 string
 
+//go:embed migrations/0007_approval.sql
+var schemaV7 string
+
 // migrations is forward-only and append-only. The embedded provider inside a
 // standalone studio runs the same sequence, which is what makes adopting its
 // ./.helm/helm.db an import rather than a merge. Never edit or reorder an
@@ -49,6 +52,7 @@ var migrations = []Migration{
 	{Version: 4, Name: "platform API: tokens, asset grants, record etags, search, task jobs (docs/design/02-data-model.md §4-5)", Up: execScript(schemaV4)},
 	{Version: 5, Name: "launcher settings (docs/design/02-data-model.md §5)", Up: execScript(schemaV5)},
 	{Version: 6, Name: "timeline ownership, revisions and export identity (docs/design/02-data-model.md §5)", Up: execScript(schemaV6)},
+	{Version: 7, Name: "recorded approval and the chosen checkpoint (docs/design/02-data-model.md §5)", Up: execScript(schemaV7)},
 }
 
 // LatestVersion is the schema version this binary migrates to.
