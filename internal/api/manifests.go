@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,9 +12,11 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/janishar/helmstudio/internal/library"
 	"github.com/janishar/helmstudio/internal/manifest"
+	"github.com/janishar/helmstudio/schema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,6 +52,7 @@ func (s *Server) routeManifests() {
 	if s.local == nil {
 		return
 	}
+	s.mux.HandleFunc("GET /schema/manifest.json", s.manifestSchema)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/manifest", s.getManifest)
 	s.mux.HandleFunc("POST "+Base+"/launcher/manifests:validate", s.validateManifest)
 	s.mux.HandleFunc("POST "+Base+"/launcher/manifests:edit", s.editManifest)
@@ -59,6 +63,23 @@ func (s *Server) routeManifests() {
 	// :duplicate is an action on a path that also has a bare id route, so it
 	// is matched before the bare one (the M8a router finding).
 	s.mux.HandleFunc("POST "+Base+"/launcher/manifests/{action}", s.manifestAction)
+}
+
+// manifestSchema serves schema/manifest.json, which the editor's form is
+// generated from (03 §13a, M7 Q17).
+//
+// It is a static document at a path of its own rather than an API operation:
+// it takes no arguments, returns the same bytes for everyone, and changes only
+// when the contract does — which is what `/sdk/v1/helm.css` is too. Making it
+// an operation would put a constant in the generated clients of three
+// languages that have no use for it.
+//
+// The bytes are the same ones every validator in this repository embeds, so a
+// form field that the daemon would reject cannot be drawn.
+func (s *Server) manifestSchema(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", `"`+library.Digest(schema.Manifest)+`"`)
+	http.ServeContent(w, r, "manifest.json", time.Time{}, bytes.NewReader(schema.Manifest))
 }
 
 // check is api/openapi.yaml's ManifestCheck: a verdict whether or not it is
