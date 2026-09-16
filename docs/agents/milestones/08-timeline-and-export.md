@@ -243,6 +243,17 @@ change is raised at M8a's start rather than resolved in code.
 Built on a reviewed M6b, M7b and M8a. Its file list and DoD are confirmed at
 M8b's kickoff against what those reviews changed.
 
+**Built out of order, 2026-09-16, at the human's direction.** It is the fifth
+milestone to be, and none of the three it rests on has been reviewed. The
+preview was decided at this kickoff by the implementer rather than put to the
+human: it plays each clip's own bytes in the browser, with no ffmpeg. That
+decision, and the rest of the kickoff's, are in `docs/decisions.md` for
+sign-off. No review ran to confirm the file list against. The work landed in
+`packages/helm-ui-sdk/**` and `test/visual/**`, plus the fixture studio,
+04 §5's table and `.gitignore`, each named in the report. The DoD below stands
+as drafted, and all of it holds except the machine-bound demo, which did not
+run. The report is `docs/agents/reports/08b-timeline-editor.md`.
+
 ### Tasks
 
 - **`helm-timeline`** in `packages/helm-ui-sdk/`, against a structural client
