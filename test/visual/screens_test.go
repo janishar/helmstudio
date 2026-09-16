@@ -148,6 +148,47 @@ func TestLibraryCardsStateThreeFacts(t *testing.T) {
 	}
 }
 
+// The launcher redraws only when what it draws has moved, so a field a card
+// states and the change signature leaves out is a field that never updates.
+// A Revert changes a card's source and nothing else.
+func TestTheLibraryRedrawsWhenOnlyACardsFactsChange(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := screen(t, ctx, srv.URL, "catalogue", 1000, 800)
+
+	for _, field := range []string{"source", "level", "manifest_valid", "selection", "provenance", "approval_required", "rebuild_needed", "errors"} {
+		var moved bool
+		expr := `(async () => {
+			const { signature, newStore } = await import("/web/app.js");
+			const { studios } = await import("/fixtures/fake.js");
+			const before = newStore();
+			before.studios = structuredClone(studios);
+			const after = newStore();
+			after.studios = structuredClone(studios);
+			const wan = after.studios.find(s => s.id === "wan-studio");
+			const change = {
+				source: () => { wan.source = "registry"; },
+				level: () => { wan.level = "draft"; },
+				manifest_valid: () => { wan.manifest_valid = false; },
+				selection: () => { wan.selection = "other"; },
+				provenance: () => { wan.provenance = { kind: "duplicated" }; },
+				approval_required: () => { wan.approval_required = !wan.approval_required; },
+				rebuild_needed: () => { wan.rebuild_needed = !wan.rebuild_needed; },
+				errors: () => { wan.errors = [{ pointer: "/id", message: "x" }]; },
+			}["` + field + `"];
+			change();
+			return signature({ store: before }, "#/studios") !== signature({ store: after }, "#/studios");
+		})()`
+		if err := p.Eval(ctx, expr, &moved); err != nil {
+			t.Fatalf("%s: %v", field, err)
+		}
+		if !moved {
+			t.Errorf("changing only %s leaves the redraw signature the same, so the card would not update", field)
+		}
+	}
+}
+
 func TestTheEditorSendsAPointerAndAValue(t *testing.T) {
 	srv := fixtureServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

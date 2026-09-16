@@ -9,9 +9,8 @@
 // handing it a context whose client is a fake.
 //
 // Not here, by their own milestones: Gallery and Timeline, which read every
-// studio's items and bytes and wait for M9's cookie (M6 Q11, M8 Q20); Adding a
-// studio and the manifest editor, which are M7's; Doctor, which belongs to no
-// milestone yet and is hidden rather than shown empty.
+// studio's items and bytes and wait for M9's cookie (M6 Q11, M8 Q20); Doctor,
+// which belongs to no milestone yet and is hidden rather than shown empty.
 
 import { connect } from "./launcher.js";
 import { announce, chip, el, failure, since, themeControl, toast } from "./ui.js";
@@ -327,13 +326,19 @@ export async function start() {
 
 /**
  * signature is everything the page draws, flattened. Two polls with the same
- * signature draw the same page, so the second one is skipped.
+ * signature draw the same page, so the second one is skipped — which means a
+ * field a screen draws and this leaves out is a field that never updates.
  */
-function signature(ctx, hash) {
+export function signature(ctx, hash) {
   const s = ctx.store;
   return JSON.stringify([
     hash, s.theme, s.error, s.hfToken,
     s.studios.map((x) => [x.id, x.install_state, (x.group || {}).state, x.job_id, x.size_bytes,
+      // What a library card states beyond its install state (03 §13a). A
+      // Revert changes the source and nothing else, so without these the card
+      // would go on saying "Local" until something unrelated moved.
+      x.name, x.description, x.source, x.overrides, x.level, x.manifest_valid, (x.errors || []).length,
+      (x.provenance || {}).kind, x.approval_required, x.rebuild_needed, x.selection,
       ((x.group || {}).processes || []).map((p) => [p.spec_name, p.state, p.health_state, p.port, p.started_at])]),
     s.models.map((m) => [m.id, m.state, m.bytes_on_disk, (m.studios || []).join(",")]),
     Object.values(s.jobs).map((j) => [j.id, j.state, j.progress_num, j.progress_den,
