@@ -3746,7 +3746,7 @@ components:
         label: { type: string, description: "What the manifest calls it — a step's name, a process's name." }
         command: { type: string }
         cwd: { type: string }
-        shell: { type: boolean }
+        shell: { type: string, description: "Which shell runs it, not whether one does — `sh -c` and `bash -c` do not mean the same thing by the same string." }
         env: { $ref: "#/components/schemas/JSONObject" }
         flags:
           type: array
