@@ -904,6 +904,18 @@ M8b's brief leaves the preview "decided at M8b's kickoff" and its file list and 
 - 2026-09-16 · finding · **a dissolve without handles is accepted and renders short, where Q8 says it is refused naming the missing frames.** `checkTransition` and `CheckAgainstProbes` do not check handles, and `handlesOf` in `internal/timeline/graph.go` clamps a missing one silently; the export then fails verification (`the export is 9.250s and the sequence is 9.500s`), so nothing wrong is adopted, but the user reads a duration mismatch rather than the refusal. M8a's rules and the graph Q3 keeps for the human, so not changed in M8b; offered as its own task.
 - 2026-09-16 · finding · **helm-gallery's and helm-player's form controls are unreadable in light theme**: they sit on `--helm-ground-inset`, which is near-black in both themes, under dark text, and `ui-light.png` pins it. helm-timeline hit the same and follows `.helm-input` instead. M6b's components, so not changed in M8b; offered as its own task.
 
+
+## 2026-09-16 · M10 docs and site
+
+- 2026-09-16 · scope · **M10 is taken before M9, and M9 follows it. The human's decision: "work on the m10, we will m9 later".** M10's kickoff runs now; nothing about M9 is started, and its brief is unchanged.
+
+  What the order costs, recorded rather than solved:
+  - **The plan put docs last for reasons M9 supplies.** 01-build-plan's phase 9: "a quickstart is only worth writing once it can be run against a shipping binary"; the site's install section is "Homebrew formula and the notarised .dmg"; its screen recording is "the reason it cannot be made earlier". Each is M9's output, so what depends on it waits for M9 or is written against a source build and revisited when M9 ships.
+  - **M9 changes surfaces the docs describe:** browser auth and the CSRF cookie, the launcher's Gallery and Timeline screens, `:open` reaching a connected page, who owns a launcher export, and the bundled ffmpeg. Pages about those are written after M9, or say plainly that they will change.
+  - **M10's brief expands at a kickoff "when … the previous milestone's review findings" exist.** None exist for M6a, M6b, M7a, M8a, M7b or M8b, so documentation may describe behaviour a review changes. The generated reference follows the contract by construction; the prose does not, and is the part at risk.
+
+  The kickoff's questions are in `docs/agents/reports/10-docs-and-site.md`. [amends: the order in `docs/plan/02-milestones.md` and phase 9's "deliberately last" in `docs/plan/01-build-plan.md`]
+
 ## Changes
 
 - 2026-09-15 · M0 built the manifest schema's `helm validate` (schema validation plus the seven rules it cannot express), the four studio manifests, and the `api/openapi.yaml` outline · found one hard self-contradiction in `schema/manifest.json` itself (the `run` sugar is unusable: `processes` sits in the schema's unconditional top-level `required`, so `run:` alone always fails "missing properties: processes" regardless of the `allOf`/`not` clause that says they're alternatives) — raised in `docs/agents/reports/00-contracts.md`, not resolved in code; all four shipped manifests use `processes:` so this did not block M0.

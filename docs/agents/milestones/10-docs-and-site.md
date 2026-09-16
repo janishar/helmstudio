@@ -9,6 +9,11 @@
 > because it reads as authority. Expand it with the stronger model, and carry
 > forward the review focus that earlier milestones actually produced.
 
+**Taken before M9, 2026-09-16, by the human's decision** ("work on the m10, we
+will m9 later"). What depends on M9 — a shipping binary for the quickstart, the
+install section, the screen recording — waits for it, and the costs are recorded
+in `docs/decisions.md`. The kickoff is `docs/agents/reports/10-docs-and-site.md`.
+
 ## Shape
 
 SDK documentation good enough for a developer who has never seen this project

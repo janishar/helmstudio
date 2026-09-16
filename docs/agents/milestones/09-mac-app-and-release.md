@@ -9,6 +9,9 @@
 > because it reads as authority. Expand it with the stronger model, and carry
 > forward the review focus that earlier milestones actually produced.
 
+**Taken after M10, 2026-09-16, by the human's decision.** Its brief is
+unchanged; the reason and the costs are in `docs/decisions.md`, under M10.
+
 ## Shape
 
 Electron shell, daemon handshake and adoption, browser auth and CSRF, signing,
