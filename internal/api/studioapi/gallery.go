@@ -16,19 +16,19 @@ import (
 
 type itemRow struct {
 	id, studio, kind, assetID string
-	session, title            sql.NullString
+	session, timeline, title  sql.NullString
 	params                    string
 	starred                   bool
 	created                   int64
 	deleted                   sql.NullInt64
 }
 
-const itemCols = `i.id, i.studio_id, i.kind, i.asset_id, i.session_id, i.title, i.params, i.starred, i.created_at, i.deleted_at`
+const itemCols = `i.id, i.studio_id, i.kind, i.asset_id, i.session_id, i.timeline_id, i.title, i.params, i.starred, i.created_at, i.deleted_at`
 
 func scanItem(sc interface{ Scan(...any) error }, extra ...any) (*itemRow, error) {
 	var r itemRow
 	var starred int64
-	if err := sc.Scan(append([]any{&r.id, &r.studio, &r.kind, &r.assetID, &r.session, &r.title, &r.params, &starred, &r.created, &r.deleted}, extra...)...); err != nil {
+	if err := sc.Scan(append([]any{&r.id, &r.studio, &r.kind, &r.assetID, &r.session, &r.timeline, &r.title, &r.params, &starred, &r.created, &r.deleted}, extra...)...); err != nil {
 		return nil, err
 	}
 	r.starred = starred == 1
@@ -108,6 +108,11 @@ func (s *Service) items(ctx context.Context, q interface {
 		}
 		if r.session.Valid {
 			it.SessionID = &r.session.String
+		}
+		if r.timeline.Valid {
+			// An item that names a sequence is its export: the gallery labels
+			// it "timeline" rather than by a studio (M8 Q17).
+			it.TimelineID = &r.timeline.String
 		}
 		if r.title.Valid {
 			it.Title = &r.title.String

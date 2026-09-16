@@ -370,12 +370,18 @@ func (s *Service) AssetsThumb(ctx context.Context, w http.ResponseWriter, r *htt
 	if err != nil {
 		return err
 	}
-	if a.Kind != helm.AssetKindImage {
-		return unsupported("thumbnails for %s assets need ffmpeg, which helmstudio does not ship yet", a.Kind)
-	}
 	width := 320
 	if params.W != nil {
 		width = int(*params.W)
+	}
+	if a.Kind == helm.AssetKindVideo {
+		// A poster frame, read by ffmpeg and scaled by the same thumbnailer as
+		// an image's (M8 Q6). Sound has no picture: a waveform waits for the
+		// milestone that draws one.
+		return s.videoThumb(ctx, w, r, a, width)
+	}
+	if a.Kind != helm.AssetKindImage {
+		return unsupported("a %s asset has no picture to show; waveforms are not built yet", a.Kind)
 	}
 	abs, rel, made, err := s.media.Thumb(a.blobPath, a.SHA256, width)
 	switch {
@@ -390,6 +396,49 @@ func (s *Service) AssetsThumb(ctx context.Context, w http.ResponseWriter, r *htt
 		fi, _ := os.Stat(abs)
 		size := int64(0)
 		if fi != nil {
+			size = fi.Size()
+		}
+		_ = s.st.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `INSERT INTO derived (asset_id, variant, path, bytes) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+				a.ID, fmt.Sprintf("thumb-%d", width), rel, size)
+			return err
+		})
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	http.ServeFile(w, r, abs)
+	return nil
+}
+
+// videoThumb serves a video's poster frame, made once and kept beside the
+// image thumbnails (M8 Q6).
+func (s *Service) videoThumb(ctx context.Context, w http.ResponseWriter, r *http.Request, a *assetRow, width int) error {
+	tool, err := s.ffmpeg()
+	if err != nil {
+		return err
+	}
+	abs := filepath.Join(s.media.Derived, a.SHA256, media.ThumbName(width))
+	if fi, err := os.Stat(abs); err != nil || !fi.Mode().IsRegular() {
+		duration := 0.0
+		if a.DurationS != nil {
+			duration = *a.DurationS
+		}
+		path := s.media.BlobPath(a.blobPath)
+		if _, err := os.Stat(path); err != nil {
+			return apiError(http.StatusGone, "asset_missing", "asset %s is recorded but its file is gone", a.ID)
+		}
+		rgb, fw, fh, err := tool.PosterFrame(ctx, path, duration)
+		if err != nil {
+			// Bytes ffmpeg cannot read are refused the way an image the
+			// standard library cannot decode is, not as a fault of ours.
+			return unsupported("asset %s is not a video ffmpeg can read a frame from", a.ID)
+		}
+		var rel string
+		abs, rel, err = s.media.ThumbFromRGB(a.SHA256, width, rgb, fw, fh)
+		if err != nil {
+			return err
+		}
+		size := int64(0)
+		if fi, err := os.Stat(abs); err == nil {
 			size = fi.Size()
 		}
 		_ = s.st.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {

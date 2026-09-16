@@ -109,3 +109,46 @@ func scale(img image.Image, width int) image.Image {
 	}
 	return out
 }
+
+// ThumbFromRGB makes a derived thumbnail out of raw RGB a decoder handed over,
+// which is how a video gets a poster: ffmpeg reads one frame, and the same
+// scaler and encoder as an image's thumbnail do the rest, so the two are the
+// same kind of file (docs/decisions.md M8 Q6).
+func (e *Engine) ThumbFromRGB(sha string, width int, rgb []byte, srcWidth, srcHeight int) (abs, rel string, err error) {
+	rel = filepath.ToSlash(filepath.Join(sha, ThumbName(width)))
+	abs = filepath.Join(e.Derived, filepath.FromSlash(rel))
+	if fi, err := os.Stat(abs); err == nil && fi.Mode().IsRegular() {
+		return abs, rel, nil
+	}
+	if srcWidth <= 0 || srcHeight <= 0 || len(rgb) < srcWidth*srcHeight*3 {
+		return "", "", fmt.Errorf("a frame of %dx%d needs %d bytes and %d were given", srcWidth, srcHeight, srcWidth*srcHeight*3, len(rgb))
+	}
+	img := image.NewRGBA(image.Rect(0, 0, srcWidth, srcHeight))
+	for y := 0; y < srcHeight; y++ {
+		for x := 0; x < srcWidth; x++ {
+			i := (y*srcWidth + x) * 3
+			img.Set(x, y, color.RGBA{rgb[i], rgb[i+1], rgb[i+2], 0xff})
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(abs), 0o700); err != nil {
+		return "", "", err
+	}
+	tmp := abs + ".tmp"
+	f, err := os.Create(tmp)
+	if err != nil {
+		return "", "", err
+	}
+	if err := jpeg.Encode(f, scale(img, width), &jpeg.Options{Quality: 85}); err != nil {
+		f.Close()
+		_ = os.Remove(tmp)
+		return "", "", fmt.Errorf("encoding the poster: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return "", "", err
+	}
+	if err := os.Rename(tmp, abs); err != nil {
+		return "", "", err
+	}
+	return abs, rel, nil
+}

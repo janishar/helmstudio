@@ -238,7 +238,11 @@ func TestAssetReadRuleIsNotFoundForAnotherStudiosAsset(t *testing.T) {
 	})
 }
 
-func TestThumbnailsForImagesAndUnsupportedForVideo(t *testing.T) {
+// Thumbnails: an image is scaled by the standard library, and a video gets a
+// poster frame from ffmpeg (M8 Q6). Bytes that are not a video it can read are
+// refused as unsupported rather than reported as a fault of the daemon's — the
+// same answer an image the standard library cannot decode gets.
+func TestThumbnailsForImagesAndBytesThatAreNotAVideo(t *testing.T) {
 	each(t, func(t *testing.T, e *Env) {
 		img := upload(t, e.C(A), pngBytes(t, 640, 480, 2), helm.AssetKindImage, "big.png")
 		thumb, err := e.C(A).Assets.Thumb(ctx, img.ID, nil)
