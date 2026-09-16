@@ -75,6 +75,8 @@ func validateSemantic(file string, m *Manifest) []Error {
 	errs = append(errs, ruleModelsSubstitution(file, m, procs)...)
 	errs = append(errs, rulePortsSubstitution(file, procs, names)...)
 	errs = append(errs, ruleCwdWithinRoot(file, m, procs)...)
+	errs = append(errs, ruleDestWithinModels(file, m)...)
+	errs = append(errs, ruleSmokeWithinRoot(file, m)...)
 
 	return errs
 }
@@ -473,4 +475,79 @@ func ruleCwdWithinRoot(file string, m *Manifest, procs []procRef) []Error {
 		}
 	}
 	return errs
+}
+
+// Rule 10: weights[].dest resolves strictly under the models root.
+//
+// `dest: ../../Documents` passed validation and failed only at download time,
+// which is the wrong place to find out — by then a person has approved an
+// install and watched it start. Checked the same way rule 7 checks cwd:
+// resolved against a virtual root and cleaned, so "..cache" passes and
+// "a/../.." does not.
+//
+// Strictly under, not "under": a dest of "." resolves to the models root
+// itself, and a weight that writes there would scatter its files among every
+// other artifact's directories (docs/decisions.md M7 Q14, and the correction
+// recorded with it).
+func ruleDestWithinModels(file string, m *Manifest) []Error {
+	const root = "/models-root"
+	var errs []Error
+	for i, w := range m.Weights {
+		pointer := fmt.Sprintf("/weights/%d/dest", i)
+		if w.Dest == "" {
+			continue
+		}
+		if path.IsAbs(w.Dest) {
+			errs = append(errs, Error{
+				File: file, Pointer: pointer, Rule: "dest-within-models",
+				Message:  fmt.Sprintf("dest %q is absolute", w.Dest),
+				Expected: "a path relative to the models root",
+			})
+			continue
+		}
+		resolved := path.Clean(path.Join(root, w.Dest))
+		if resolved == root {
+			errs = append(errs, Error{
+				File: file, Pointer: pointer, Rule: "dest-within-models",
+				Message:  fmt.Sprintf("dest %q is the models root itself", w.Dest),
+				Expected: "a directory of its own under the models root",
+			})
+			continue
+		}
+		if !strings.HasPrefix(resolved, root+"/") {
+			errs = append(errs, Error{
+				File: file, Pointer: pointer, Rule: "dest-within-models",
+				Message:  fmt.Sprintf("dest %q escapes the models root", w.Dest),
+				Expected: "a path that stays within the models root after resolution",
+			})
+		}
+	}
+	return errs
+}
+
+// Rule 11: test.smoke stays under the studio root.
+//
+// The smoke harness runs it, and it is a path the manifest chose, so the same
+// containment rule applies to it as to every cwd (docs/decisions.md M7 Q14).
+func ruleSmokeWithinRoot(file string, m *Manifest) []Error {
+	if m.Test == nil || m.Test.Smoke == "" {
+		return nil
+	}
+	const root = "/studio-root"
+	smoke := m.Test.Smoke
+	if path.IsAbs(smoke) {
+		return []Error{{
+			File: file, Pointer: "/test/smoke", Rule: "smoke-within-root",
+			Message:  fmt.Sprintf("test.smoke %q is absolute", smoke),
+			Expected: "a path relative to the studio root",
+		}}
+	}
+	if resolved := path.Clean(path.Join(root, smoke)); resolved != root && !strings.HasPrefix(resolved, root+"/") {
+		return []Error{{
+			File: file, Pointer: "/test/smoke", Rule: "smoke-within-root",
+			Message:  fmt.Sprintf("test.smoke %q escapes the studio root", smoke),
+			Expected: "a path that stays within the studio root after resolution",
+		}}
+	}
+	return nil
 }

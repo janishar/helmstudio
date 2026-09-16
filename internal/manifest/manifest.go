@@ -116,6 +116,21 @@ func Validate(file string) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("reading %s: %w", file, err)
 	}
+	return ValidateBytes(file, data)
+}
+
+// ValidateBytes is Validate over bytes that are not necessarily a file: text
+// typed into the editor, pasted into the import dialog, fetched from a URL, or
+// read out of a repository without cloning it.
+//
+// It is the only validation path (docs/decisions.md M7 Q17). `helm validate`,
+// the daemon's loader, the editor and import all reach it, so none of them can
+// accept a manifest another rejects — a test requires the same verdict and the
+// same errors from every one of them for every file in testdata and studios/.
+// name is what errors are labelled with; a caller with no file passes
+// something a person can read, such as "pasted text".
+func ValidateBytes(name string, data []byte) (Result, error) {
+	file := name
 
 	if err := rejectMultiDocument(data); err != nil {
 		return Result{File: file, Errors: []Error{{
