@@ -14,6 +14,7 @@ M1 and grows as the contracts it checks come into existence.
 | conformance suite × both providers | M4 |
 | visual regression, both themes | M6 |
 | export goldens × the media fixtures | M8 |
+| the site builds, its links lead somewhere, and every sample on it runs | M10 |
 
 **Visual regression (`make visual`).**
 - **What it runs.** An installed Chrome, driven over its DevTools pipe by Go's standard library (`internal/chrome`). `HELM_CHROME` names the binary. A missing browser fails the gate unless `HELM_ALLOW_MISSING_BROWSER` is set.
@@ -31,6 +32,14 @@ hides a class of path bug that a Linux run surfaces on the first try.
 - **What it runs.** The timeline's export pipeline against the fixtures in `test/media/fixtures`, which are committed bytes made once by `test/media/make-fixtures.sh`. `HELM_FFMPEG` names the binary; a missing ffmpeg fails the gate unless `HELM_ALLOW_MISSING_FFMPEG` is set.
 - **What is compared.** A copy is compared with its sources frame for frame, because nothing re-encoded it. A conform is compared with a golden of what the filter graph produced *before* any encoder saw it (`test/media/golden/*.framemd5`), since videotoolbox's bytes move with the operating system; the encoded file is then checked by probing it, never by its bytes. Its sound is checked by where each clip's tone lands, which is how a copied stream's priming would be caught.
 - **The goldens** are tied to the ffmpeg major and the architecture in `test/media/golden/FFMPEG_MAJOR`; a different one fails and asks for a deliberate `make golden-media`.
+
+**The site (`make site`, `make site-test`).**
+- **What it builds.** `site/`'s generator, a module of its own, writes the documentation and the site into `site/out`, which is not committed: Markdown pages from `site/content`, the API reference from `api/openapi.yaml`, the manifest reference from `schema/manifest.json`, the CLI reference from `helm`'s own usage, and the four annotated manifests from `studios/*.yaml`. The output is emptied first, so a page for something the contract no longer has cannot survive a build.
+- **What fails it.** A link or `#fragment` that leads nowhere, checked in the written HTML under both `/` and a project-pages base; a documented client call the generated Go, Python or JavaScript client does not have; a studio file whose digest is not the one its annotations were written against, a field with no note, or a note for a field that is not there; a sample file on no page; and a code block written inline in a page.
+- **The samples.** Every code sample is a file under `site/samples`, and `site/gen/samples_test.go` names the test that runs each one. The quickstart runs as written, step by step, in a workspace linked to the checkout, with `helm dev` serving the example studio on port 8765 — the port the page names, so the test fails when it is taken. The Python samples run inside a studio under `helm dev`; the theming studio runs with its Python, Go and JavaScript servers; the Go embedded provider sample records with no daemon; the manifests validate. A step that needs the network — the clone, and `pip install` — is not run, and the page says so beside it, and a test fails when a sample is neither run nor marked.
+- **What it needs.** `python3`, `node` and `curl`, or `HELM_ALLOW_MISSING_CLIENTS`; `ffmpeg` for the timeline sample, or `HELM_ALLOW_MISSING_FFMPEG`.
+- **The goldens.** The landing page and the quickstart, in both themes at 1280, 1000 and 380 px, are pinned by `TestTheSiteMatchesItsGoldens` in `test/visual`, with the same Chrome and operating-system pins as helm-css's. An edit to either page changes them: `make golden`, and look at the images.
+- **The dependency diff** reads every `go.mod` in the repository, so the site module's dependencies are recorded like the root's.
 
 **Currently not run.** As of M1, by the human's direction, `go test` runs on
 the host only: the Linux and Windows test legs are out of the gate and no CI

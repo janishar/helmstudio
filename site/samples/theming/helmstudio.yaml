@@ -1,0 +1,24 @@
+# A studio whose page wears helm-css, follows the launcher's theme, and is
+# drawn in its own colour. One process, and no capabilities: theming needs no
+# token.
+id: lantern-studio
+name: lantern studio
+description: A page on helm-css, in both themes and its own hue.
+kinds: [image]
+license: MIT
+repo: https://github.com/you/lantern-studio
+hue: { dark: "#e8745a", light: "#b0442b" }
+requires:
+  os: [darwin, linux]
+  arch: [arm64, amd64]
+runtime:
+  framework: other
+  backends: [cpu]
+sdk: { runtime: "^1", css: "^1" }
+processes:
+  - name: studio
+    role: main
+    cmd: "python3 server.py --port {port}"
+    port: { prefer: 8767 }
+    health: { path: /healthz, timeout_s: 30 }
+    ui: /

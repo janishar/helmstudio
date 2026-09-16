@@ -1,0 +1,38 @@
+# A manifest written for a repository whose author never wrote one: an
+# image model with a Python server, run from a checkout at a pinned commit.
+id: tern-studio
+name: tern studio
+description: Text-to-image through PyTorch on MPS, from someone else's repository.
+kinds: [image]
+license: Apache-2.0
+repo: https://github.com/someone/tern
+ref: v0.4.2
+submodules: true
+requires:
+  os: [darwin]
+  arch: [arm64]
+  tools: [git, uv]
+  ram_gb: 32
+  disk_gb: 40
+peak_ram_gb: 18
+runtime:
+  framework: pytorch
+  backends: [mps, cpu]
+  precision: [bf16]
+python:
+  version: "3.11"
+build:
+  - name: Install the Python dependencies
+    run: uv sync --frozen
+weights:
+  - name: base
+    repo: someone/tern-base
+    dest: tern-base
+processes:
+  - name: server
+    role: main
+    heavy: true
+    cmd: "uv run python -m tern.serve --weights {models.base} --port {port}"
+    port: { prefer: 8781 }
+    health: { path: /health, timeout_s: 240 }
+    ui: /

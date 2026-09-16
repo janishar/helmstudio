@@ -1,0 +1,33 @@
+file: studios/iris-studio.yaml
+digest: sha256:25e86d194826195abc5fff7bd3ef283693527495d15e1e347df2dd24414e6af7
+title: iris studio's manifest
+intro: >-
+  iris studio makes images from FLUX.2 Klein and Z-Image through a native Metal
+  engine in C behind a Go server — the same shape as h3 studio, for stills.
+  Its registry entry carries its manifest inline. It passes four of the seven
+  criteria a manifest can answer: it declares neither memory nor disk, no test
+  profile and no SDK major.
+notes:
+  /id: "The id the studio is known by everywhere, and the file is named for it."
+  /repo: "Where helmstudio clones from, with git."
+  /ref: "A full commit, so what was reviewed is what installs."
+  /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Its id, repo and ref must equal the pointer's."
+  /manifest/id: "The same id as the pointer's."
+  /manifest/name: "The name people see."
+  /manifest/description: "One sentence saying what the studio does."
+  /manifest/kinds: "Images."
+  /manifest/license: "The studio's own licence."
+  /manifest/repo: "The same repository as the pointer's."
+  /manifest/ref: "The same commit as the pointer's."
+  /manifest/submodules: "The engine, iris.c, is a submodule, and the first build step runs inside it."
+  /manifest/peak_ram_gb: "The upper end of the README's range, as the comment says: an estimate, which is better than nothing."
+  /manifest/requires: "An Apple Silicon Mac and five tools. No memory or disk is declared, which is why criterion 2 fails."
+  /manifest/runtime: "A native kernel on Metal, in C."
+  /manifest/capabilities: "None. iris calls no platform service at this commit, so it asks for nothing and gets no token at all."
+  /manifest/network: "The hosts it is expected to contact, for its weights."
+  /manifest/build: "Two steps, in order: the engine, built with make in its submodule, then the Go server."
+  /manifest/weights: "Five checkpoints, all selectable: one is chosen before install, install downloads only that one, and the others are fetched or linked when they are wanted."
+  /manifest/processes: "One process: the Go server, which drives the engine."
+  /manifest/processes/0/heavy: "It holds the model."
+  /manifest/processes/0/cmd: "{models.selected} becomes the path of whichever checkpoint was chosen. A launch with no choice made is refused."
+  /manifest/processes/0/health: "A TCP connection on its port is enough to call it ready."

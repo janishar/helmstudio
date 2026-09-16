@@ -1,0 +1,64 @@
+{{define "base"}}<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Title}}{{.Title}} · {{end}}helmstudio</title>
+{{if .Description}}<meta name="description" content="{{.Description}}">{{end}}
+<link rel="icon" href="{{url "/favicon.svg"}}" type="image/svg+xml">
+<script>
+  // The theme before first paint. System follows the operating system; Light
+  // and Dark are kept in this browser only, and nothing else is stored.
+  try {
+    var t = localStorage.getItem("helmstudio-theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+</script>
+<link rel="stylesheet" href="{{url "/css/helm.css"}}">
+<link rel="stylesheet" href="{{url "/css/site.css"}}">
+</head>
+<body class="helm-body">
+<a class="helm-skip-link" href="#main">Skip to content</a>
+<header class="helm-topbar site-top">
+  <a class="helm-brand site-brand" href="{{url "/"}}">helmstudio</a>
+  <nav class="site-links" aria-label="Site">
+    <a class="helm-nav-link" href="{{url "/docs/"}}"{{if .InDocs}} aria-current="page"{{end}}>Docs</a>
+    <a class="helm-nav-link" href="{{.Repo}}">GitHub</a>
+  </nav>
+  <span class="helm-spacer"></span>
+  <div class="helm-segmented" role="radiogroup" aria-label="Theme">
+    <button class="helm-segment" role="radio" aria-checked="false" data-theme-choice="system">System</button>
+    <button class="helm-segment" role="radio" aria-checked="false" data-theme-choice="light">Light</button>
+    <button class="helm-segment" role="radio" aria-checked="false" data-theme-choice="dark">Dark</button>
+  </div>
+</header>
+{{template "content" .}}
+<footer class="site-footer">
+  <p class="helm-micro">helmstudio is open source under the MIT licence. <a class="helm-link" href="{{.Repo}}">The repository</a>{{if .Source}} · <a class="helm-link" href="{{.Repo}}/blob/main/{{.Source}}">This page's source</a>{{end}}{{if .GeneratedFrom}} · Generated from <span class="helm-mono">{{.GeneratedFrom}}</span>{{end}}</p>
+</footer>
+<script>
+  (function () {
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll("[data-theme-choice]");
+    function show() {
+      var current = root.getAttribute("data-theme") || "system";
+      buttons.forEach(function (b) { b.setAttribute("aria-checked", String(b.getAttribute("data-theme-choice") === current)); });
+    }
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        var choice = b.getAttribute("data-theme-choice");
+        try {
+          if (choice === "system") { root.removeAttribute("data-theme"); localStorage.removeItem("helmstudio-theme"); }
+          else { root.setAttribute("data-theme", choice); localStorage.setItem("helmstudio-theme", choice); }
+        } catch (e) {
+          if (choice === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", choice);
+        }
+        show();
+      });
+    });
+    show();
+  })();
+</script>
+</body>
+</html>
+{{end}}

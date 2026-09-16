@@ -14,11 +14,12 @@ SHELL := /bin/bash
 GO ?= go
 HELM ?= ./bin/helm
 
-.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css
+.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css site site-test
 
 # The Go modules besides the root: the runtime SDK (stdlib only), its embedded
-# provider, and the conformance suite (docs/decisions.md M4 Q2, Q25).
-MODULES := packages/helm-runtime-sdk/go packages/helm-runtime-sdk/go/embedded test/conformance
+# provider, the conformance suite (docs/decisions.md M4 Q2, Q25), and the site's
+# generator, a module of its own so the daemon never links goldmark (M10 Q7).
+MODULES := packages/helm-runtime-sdk/go packages/helm-runtime-sdk/go/embedded test/conformance site
 
 # Every file api/gen writes. A hand edit to any of them fails drift.
 GENERATED := packages/helm-runtime-sdk/go/zz_types.go packages/helm-runtime-sdk/go/zz_client.go \
@@ -27,7 +28,7 @@ GENERATED := packages/helm-runtime-sdk/go/zz_types.go packages/helm-runtime-sdk/
 	packages/helm-runtime-sdk/node/src/generated.js \
 	web/launcher.js
 
-gate: fmt vet vet-linux boundaries deps drift test sdk conformance visual validate
+gate: fmt vet vet-linux boundaries deps drift test sdk conformance site site-test visual validate
 	@echo "gate: green"
 
 fmt:
@@ -125,6 +126,21 @@ DEPS_BASE ?=
 deps:
 	@bash -c "$$DEPS_SCRIPT" deps "$(DEPS_BASE)"
 
+# The documentation and the site, into site/out (docs/decisions.md M10 Q8).
+# The output is not committed; .github/workflows/site.yml builds it again where
+# it is published.
+site: build
+	@cd site && $(GO) run ./cmd/site -helm ../bin/helm
+
+# The site module's own tests: every internal link leads somewhere, every
+# sample on every page runs or the page says why not — the quickstart as
+# written, under helm dev — the annotations are in step with the studio files,
+# the reference is the contract, and the site's stylesheet passes the theme
+# lint. A missing python3, node or curl fails unless HELM_ALLOW_MISSING_CLIENTS
+# is set; a missing ffmpeg, unless HELM_ALLOW_MISSING_FFMPEG is.
+site-test:
+	@cd site && $(GO) test -count=1 ./...
+
 test:
 	@if [ ! -f go.mod ]; then echo "test: no go.mod yet, skipping"; \
 	else $(GO) test $$($(GO) list ./... | grep -v '/test/visual$$'); fi
@@ -139,7 +155,7 @@ visual:
 # Regenerate the visual goldens and record the Chrome major and the operating
 # system they were made with. Review the images before committing them.
 golden:
-	@HELM_UPDATE_GOLDEN=1 $(GO) test -count=1 -run TestHelmCSSMatchesItsGoldensInBothThemes ./test/visual/ && echo "golden: written to test/visual/golden; review them"
+	@HELM_UPDATE_GOLDEN=1 $(GO) test -count=1 -run 'TestHelmCSSMatchesItsGoldensInBothThemes|TestTheSiteMatchesItsGoldens' ./test/visual/ && echo "golden: written to test/visual/golden; review them"
 
 # Regenerate the export goldens and record the ffmpeg major and architecture
 # they were made with (docs/decisions.md M8 Q15). These hash what the filter

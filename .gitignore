@@ -20,6 +20,9 @@
 /dist/
 /bin/
 /out/
+# The built site: make site writes it, and the site workflow builds it again
+# where it is published (docs/decisions.md M10 Q8).
+/site/out/
 *.exe
 *.test
 *.prof

@@ -1,0 +1,6 @@
+# studios/tern-studio.yaml: the whole registry entry for a studio whose
+# repository ships its own helmstudio.yaml. The ref is the commit that was
+# reviewed, so the manifest that runs is the one reviewed.
+id: tern-studio
+repo: https://github.com/someone/tern
+ref: 3f9c2a1d8e7b6c5a4f3e2d1c0b9a8f7e6d5c4b3a

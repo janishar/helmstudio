@@ -1,0 +1,73 @@
+{{define "landing"}}
+<section class="site-hero">
+  <h1 class="helm-title">Open-weight video, image and speech models on your own machine, without the afternoon of setup.</h1>
+  <p class="site-lede">helmstudio installs, runs and switches between studios — each one a repository that wraps an open model — and keeps what every studio makes in one gallery, with where it came from.</p>
+  <div class="site-actions">
+    <a class="helm-btn helm-btn-primary helm-btn-lg" href="{{url "/docs/quickstart/"}}">Read the quickstart</a>
+    <a class="helm-btn helm-btn-secondary helm-btn-lg" href="{{.Repo}}">The repository</a>
+  </div>
+  <p class="helm-micro site-status">There is no release yet, so helmstudio runs from a source build.</p>
+</section>
+
+<section class="site-section" aria-labelledby="problem">
+  <h2 id="problem">The afternoon of setup, made concrete</h2>
+  <div class="site-problems">
+    <div class="site-problem">
+      <h3>The submodule you did not clone</h3>
+      <p>A manifest names the repository, the commit and whether it has submodules, and install clones all of it at that commit, then runs the build steps the manifest lists.</p>
+    </div>
+    <div class="site-problem">
+      <h3>The Python version mismatch</h3>
+      <p>A studio declares the Python it needs, and helmstudio gives it an environment of its own, made with uv, so two studios never share one.</p>
+    </div>
+    <div class="site-problem">
+      <h3>The 60 GB download with no resume</h3>
+      <p>Weights come from Hugging Face a file at a time, and a download resumes where it stopped. Studios that name the same repository at the same revision share one copy, and a folder you already have can be linked instead.</p>
+    </div>
+    <div class="site-problem">
+      <h3>Two studios that both want port 8720</h3>
+      <p>A port in a manifest is a preference: when something else has it, the process is given a free one. And one studio holds a model in memory at a time, so launching a second says what it would stop, and asks.</p>
+    </div>
+  </div>
+</section>
+
+<section class="site-section" aria-labelledby="studios">
+  <h2 id="studios">The launch studios</h2>
+  <p class="helm-body">What each one needs, read from its manifest.</p>
+  <div class="helm-grid-cards">
+    {{range .Studios}}
+    <article class="helm-card site-studio" aria-label="{{.Name}}"{{if .HueDark}} style="--site-hue-dark: {{.HueDark}}; --site-hue-light: {{.HueLight}}"{{end}}>
+      <span class="helm-card-stripe"></span>
+      <div class="helm-row">
+        <h3 class="helm-card-title">{{.Name}}</h3>
+        <span class="helm-kind">{{join .Kinds " + "}}</span>
+      </div>
+      <p class="helm-card-desc">{{.Description}}</p>
+      <div class="site-badges">{{range .Badges}}<span class="helm-chip helm-status-idle">{{.}}</span>{{end}}</div>
+      <p class="helm-micro">{{.Licence}} · <a class="helm-link" href="{{url (printf "/docs/manifests/%s/" .ID)}}">its manifest, annotated</a> · <a class="helm-link" href="{{.Repo}}">its repository</a></p>
+    </article>
+    {{end}}
+  </div>
+</section>
+
+<section class="site-section" aria-labelledby="platforms">
+  <h2 id="platforms">What runs where</h2>
+  <ul class="helm-body">
+    <li>The launch studios are built for macOS on Apple Silicon: Metal, MPS and MLX.</li>
+    <li>helmstudio&#39;s Go code is type-checked for Linux on every gate run. Nothing has been run there: not the daemon, and not a studio.</li>
+    <li>Windows is not supported.</li>
+  </ul>
+</section>
+
+<section class="site-section" aria-labelledby="own">
+  <h2 id="own">Add your own studio</h2>
+  <p class="helm-body">Most repositories worth running will never ship a manifest, so writing one for a repository you did not write is a first-class act, not a workaround.</p>
+  <div class="site-actions">
+    <a class="helm-btn helm-btn-secondary" href="{{url "/docs/quickstart/"}}">Quickstart</a>
+    <a class="helm-btn helm-btn-secondary" href="{{url "/docs/guides/wrap-a-repository/"}}">Wrap a repository</a>
+    <a class="helm-btn helm-btn-secondary" href="{{url "/docs/reference/manifest/"}}">Manifest reference</a>
+    <a class="helm-btn helm-btn-secondary" href="{{url "/docs/publishing/"}}">Publishing</a>
+    <a class="helm-btn helm-btn-ghost" href="{{url "/docs/"}}">All the documentation</a>
+  </div>
+</section>
+{{end}}

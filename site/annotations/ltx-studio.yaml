@@ -1,0 +1,33 @@
+file: studios/ltx-studio.yaml
+digest: sha256:a9180aa3456f47d84167d446322dda086d8f190dc923d33cef658ffc23b5e012
+title: ltx studio's manifest
+intro: >-
+  ltx studio makes video with sound from LTX-2.5 on MLX, behind a Python
+  server with no front-end toolchain. Its registry entry carries its manifest
+  inline. It passes five of the seven criteria a manifest can answer: it
+  declares no test profile, and pins no SDK major. It declares no hue, so it is
+  given one from helmstudio's fixed set.
+notes:
+  /id: "The id the studio is known by everywhere, and the file is named for it."
+  /repo: "Where helmstudio clones from, with git."
+  /ref: "A full commit, so what was reviewed is what installs."
+  /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Its id, repo and ref must equal the pointer's."
+  /manifest/id: "The same id as the pointer's."
+  /manifest/name: "The name people see."
+  /manifest/description: "One sentence saying what the studio does."
+  /manifest/kinds: "Video with sound."
+  /manifest/license: "The studio's own licence."
+  /manifest/repo: "The same repository as the pointer's."
+  /manifest/ref: "The same commit as the pointer's."
+  /manifest/python: "Python 3.11. helmstudio creates an environment with uv, pinned to this version, before the build step, and the studio runs with it active. No other studio shares it."
+  /manifest/peak_ram_gb: "The memory at the validated default. The comment says why one number cannot carry the range: a longer, larger clip peaked far higher."
+  /manifest/requires: "An Apple Silicon Mac with 64 GB of memory and 90 GB of disk. uv is the one tool it needs; the build fetches everything else."
+  /manifest/runtime: "MLX on Metal, quantised on load: Apple-native, like a Metal kernel, and a different claim from one."
+  /manifest/capabilities: "Settings and sessions, the files it makes, the gallery and the timeline."
+  /manifest/network: "The hosts it is expected to contact, for its weights."
+  /manifest/build: "One step: install exactly the locked dependencies, and fail rather than change the lock file in the checkout."
+  /manifest/weights: "Three weights, two from one repository into one directory. The recommended set is required; the dev transformer and the Gemma encoder are optional, so install does not wait for them."
+  /manifest/processes: "One process: the Python server in web/."
+  /manifest/processes/0/cwd: "The command runs in web/, relative to the checkout."
+  /manifest/processes/0/cmd: "Plain python, not uv run, which would sync the environment and reach the network at every launch."
+  /manifest/processes/0/busy: "Declared, so the switch dialog asks before stopping it. Its answer is not the busy contract yet, so the dialog reads it as unknown, never as idle."

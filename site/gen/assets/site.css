@@ -1,0 +1,406 @@
+/* The site's own layout, on helm-css (docs/decisions.md M10 Q14).
+ *
+ * helm-css is the product's design system, drawn for an application; this is
+ * what a documentation site needs on top of it and a framework must not
+ * assume: a reading measure, a sidebar, prose. Every colour, space, radius and
+ * family is a helm-css token — `helm validate -theme` reads this file the way
+ * it reads a studio's stylesheet. The one thing chosen here is a larger size
+ * for prose: helm-css's 13px body is set for dense application screens, and a
+ * page read top to bottom wants more.
+ */
+
+.site-top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-wrap: wrap;
+  gap: var(--helm-space-3);
+}
+
+.site-brand {
+  color: var(--helm-text-primary);
+  text-decoration: none;
+}
+
+.site-links {
+  display: flex;
+  gap: var(--helm-space-1);
+}
+
+/* ------------------------------------------------------------------ docs */
+
+.site-docs {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: var(--helm-space-7);
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--helm-space-6) var(--helm-space-5) var(--helm-space-8);
+}
+
+.site-sidebar {
+  position: sticky;
+  top: calc(var(--helm-space-9) + var(--helm-space-2));
+  align-self: start;
+  max-height: calc(100vh - var(--helm-space-9) - var(--helm-space-4));
+  overflow-y: auto;
+  padding-right: var(--helm-space-2);
+}
+
+.site-sidebar .helm-section-label,
+.site-contents .helm-section-label {
+  margin: var(--helm-space-4) 0 var(--helm-space-1);
+}
+
+.site-sidebar ul,
+.site-contents ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* On a narrow screen the sidebar would come before the page, so it becomes a
+ * disclosure the reader opens when they want it. */
+.site-contents {
+  display: none;
+}
+
+.site-contents summary {
+  list-style: none;
+}
+
+.site-contents summary::-webkit-details-marker {
+  display: none;
+}
+
+.site-side-link {
+  display: block;
+  padding: 3px var(--helm-space-2);
+  border-radius: var(--helm-radius-sm);
+  color: var(--helm-text-secondary);
+  font: var(--helm-type-body);
+  text-decoration: none;
+}
+
+.site-side-link:hover {
+  color: var(--helm-text-primary);
+  background: var(--helm-ground-raised);
+}
+
+.site-side-link[aria-current="page"] {
+  color: var(--helm-text-primary);
+  background: var(--helm-accent-subtle);
+}
+
+.site-article,
+.site-page {
+  min-width: 0;
+  max-width: 76ch;
+  font: 400 15px/24px var(--helm-font-sans);
+  color: var(--helm-text-primary);
+}
+
+.site-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--helm-space-7) var(--helm-space-5) var(--helm-space-8);
+}
+
+.site-article h1,
+.site-page h1 {
+  font: var(--helm-type-title);
+  font-size: 28px;
+  line-height: 36px;
+  letter-spacing: var(--helm-tracking-title);
+  margin: 0 0 var(--helm-space-4);
+}
+
+.site-article h2 {
+  font: 600 19px/28px var(--helm-font-sans);
+  margin: var(--helm-space-7) 0 var(--helm-space-2);
+}
+
+.site-article h3 {
+  font: 600 15px/24px var(--helm-font-sans);
+  margin: var(--helm-space-5) 0 var(--helm-space-1);
+}
+
+.site-article p,
+.site-article ul,
+.site-article ol {
+  margin: 0 0 var(--helm-space-4);
+}
+
+.site-article li + li {
+  margin-top: var(--helm-space-1);
+}
+
+.site-article a {
+  color: var(--helm-accent-text);
+}
+
+.site-article code {
+  font-family: var(--helm-font-mono);
+  font-size: 0.88em;
+  padding: 1px 4px;
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-ground-raised);
+  border: 1px solid var(--helm-border-hairline);
+}
+
+.site-article blockquote {
+  margin: 0 0 var(--helm-space-4);
+  padding: var(--helm-space-2) var(--helm-space-4);
+  border-left: 3px solid var(--helm-accent-base);
+  background: var(--helm-ground-raised);
+  color: var(--helm-text-secondary);
+}
+
+.site-article blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* A sample is a file, and says which. Code sits on the inset ground in both
+ * themes, as a terminal does, so its text is the log colour. */
+figure.sample {
+  margin: 0 0 var(--helm-space-5);
+}
+
+figure.sample figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--helm-space-2);
+  font: var(--helm-type-micro);
+  color: var(--helm-text-muted);
+  margin-bottom: var(--helm-space-1);
+}
+
+.not-run {
+  color: var(--helm-status-warning);
+}
+
+figure.sample pre,
+.site-quote,
+.site-manifest {
+  margin: 0;
+  padding: var(--helm-space-3) var(--helm-space-4);
+  overflow-x: auto;
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-ground-inset);
+  color: var(--helm-log-text);
+  font: var(--helm-type-log);
+}
+
+figure.sample pre code,
+.site-quote code,
+.site-manifest code {
+  font: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+
+.site-quote {
+  margin-bottom: var(--helm-space-4);
+  white-space: pre-wrap;
+}
+
+.site-article table {
+  display: block;
+  overflow-x: auto;
+  margin: 0 0 var(--helm-space-5);
+  border-collapse: collapse;
+  font: var(--helm-type-body);
+}
+
+.site-article th,
+.site-article td {
+  padding: var(--helm-space-2) var(--helm-space-4) var(--helm-space-2) 0;
+  border-bottom: 1px solid var(--helm-border-hairline);
+  text-align: left;
+  vertical-align: top;
+}
+
+.site-article th {
+  font-weight: 600;
+  color: var(--helm-text-secondary);
+  border-bottom-color: var(--helm-border-strong);
+}
+
+.site-banner {
+  padding: var(--helm-space-2) var(--helm-space-3);
+  border: 1px solid var(--helm-border-strong);
+  border-left: 3px solid var(--helm-status-warning);
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-ground-raised);
+  font: var(--helm-type-body);
+}
+
+.site-prose {
+  white-space: pre-line;
+}
+
+.site-op {
+  padding-top: var(--helm-space-4);
+  border-top: 1px solid var(--helm-border-hairline);
+  margin-top: var(--helm-space-5);
+}
+
+.site-op-title {
+  font: 600 15px/24px var(--helm-font-sans);
+  margin: 0 0 var(--helm-space-1);
+}
+
+.site-verb {
+  display: inline-block;
+  min-width: 5ch;
+  font: var(--helm-type-mono);
+  font-weight: 500;
+  color: var(--helm-accent-text);
+}
+
+.site-calls th {
+  width: 12ch;
+}
+
+/* An annotated manifest: the file, and beside each field what it means. */
+.site-manifest .note {
+  display: block;
+  margin: var(--helm-space-1) 0 var(--helm-space-2);
+  padding: var(--helm-space-1) var(--helm-space-2);
+  border-left: 2px solid var(--helm-accent-base);
+  font: var(--helm-type-body);
+  color: var(--helm-text-primary);
+  background: var(--helm-ground-panel);
+  white-space: normal;
+}
+
+/* ---------------------------------------------------------------- landing */
+
+.site-hero {
+  padding: var(--helm-space-8) 0 var(--helm-space-7);
+}
+
+.site-hero h1 {
+  font-size: 34px;
+  line-height: 42px;
+  max-width: 24ch;
+}
+
+.site-lede {
+  font-size: 18px;
+  line-height: 28px;
+  color: var(--helm-text-secondary);
+  max-width: 60ch;
+}
+
+.site-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--helm-space-2);
+  margin-top: var(--helm-space-5);
+}
+
+/* A link that looks like a button is not underlined. */
+.site-actions a {
+  text-decoration: none;
+}
+
+.site-status {
+  margin-top: var(--helm-space-3);
+}
+
+.site-section {
+  padding: var(--helm-space-7) 0;
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+.site-section h2 {
+  font: var(--helm-type-title);
+  margin: 0 0 var(--helm-space-4);
+}
+
+.site-problems {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--helm-space-4);
+}
+
+.site-problem h3 {
+  font: var(--helm-type-card-title);
+  margin: 0 0 var(--helm-space-1);
+}
+
+.site-problem p {
+  margin: 0;
+  font: var(--helm-type-body);
+  color: var(--helm-text-secondary);
+}
+
+.site-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--helm-space-1);
+  margin: var(--helm-space-2) 0;
+}
+
+/* The catalogue clamps a description to one line; a visitor reading about a
+ * studio gets all of it. */
+.site-studio .helm-card-desc {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: none;
+}
+
+/* A studio's stripe wears its identity hue (03 §2c) — the one its manifest
+ * declares, or the ramp entry its id selects, as the launcher shows it — the
+ * dark or the light one as the theme is. The theme conditions are
+ * helm-tokens.css's own. */
+.site-studio {
+  --_helm-hue: var(--site-hue-dark, var(--helm-studio-accent));
+}
+
+:root[data-theme="light"] .site-studio {
+  --_helm-hue: var(--site-hue-light, var(--helm-studio-accent));
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .site-studio {
+    --_helm-hue: var(--site-hue-light, var(--helm-studio-accent));
+  }
+}
+
+.site-footer {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--helm-space-5);
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+@media (max-width: 900px) {
+  .site-docs {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--helm-space-4);
+    padding: var(--helm-space-4) var(--helm-space-4) var(--helm-space-7);
+  }
+
+  .site-sidebar {
+    display: none;
+  }
+
+  .site-contents {
+    display: block;
+    padding-bottom: var(--helm-space-3);
+    border-bottom: 1px solid var(--helm-border-hairline);
+  }
+
+  .site-page {
+    padding: var(--helm-space-5) var(--helm-space-4) var(--helm-space-7);
+  }
+
+  .site-hero h1 {
+    font-size: 28px;
+    line-height: 36px;
+  }
+}

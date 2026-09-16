@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lantern studio</title>
+<!-- helm-css, and this studio's hue for each theme, through the proxy -->
+<link rel="stylesheet" href="/helm/sdk/v1/helm.css">
+<link rel="stylesheet" href="/helm/accent.css">
+<link rel="stylesheet" href="/studio.css">
+<script type="module">
+  import { connect, themeBridge } from "/helm/sdk/v1/helm-runtime.js";
+  // Follow the launcher's System, Light and Dark as the person changes them.
+  themeBridge();
+  window.helm = connect();
+</script>
+</head>
+<body class="helm-body">
+  <main class="helm-main">
+    <input class="prompt" placeholder="a lighthouse at dusk">
+    <button class="helm-btn make">Make</button>
+  </main>
+</body>
+</html>

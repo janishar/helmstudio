@@ -1,0 +1,56 @@
+# A studio that is more than one server: a step that prepares a cache, an
+# engine that holds the model, the web server in front of it, and a worker for
+# long reads. Each is a process in one group, started in dependency order and
+# stopped in reverse.
+id: wren-studio
+name: wren studio
+description: Speech from a native engine, with a worker for long reads.
+kinds: [audio]
+license: MIT
+repo: https://github.com/someone/wren-studio
+ref: v1.2.0
+requires:
+  os: [darwin]
+  arch: [arm64]
+  tools: [git, make, cc]
+  ram_gb: 16
+  disk_gb: 12
+peak_ram_gb: 6
+runtime:
+  framework: native-kernel
+  backends: [metal]
+capabilities: [assets, gallery, jobs]
+build:
+  - name: Build the engine, the server and the worker
+    run: make all
+weights:
+  - name: voice
+    repo: someone/wren-voice
+    dest: wren-voice
+    size_gb: 4
+    files: [config.json, "*.safetensors"]
+processes:
+  - name: prepare
+    role: oneshot
+    cmd: "./bin/wren-prepare --cache {data}/cache"
+  - name: engine
+    role: sidecar
+    heavy: true
+    depends_on: [prepare]
+    cmd: "./bin/wren-engine --model {models.voice} --port {port}"
+    port: { prefer: 8791 }
+    health: { tcp: true, timeout_s: 120 }
+    restart: on-failure
+  - name: studio
+    role: main
+    depends_on: [engine]
+    cmd: "./bin/wren-studio --engine 127.0.0.1:{ports.engine} --port {port}"
+    port: { prefer: 8790 }
+    health: { path: /healthz, timeout_s: 30 }
+    busy: { path: /busy }
+    ui: /
+  - name: reader
+    role: worker
+    depends_on: [engine]
+    cmd: "./bin/wren-reader --engine 127.0.0.1:{ports.engine} --cache {data}/cache"
+    health: { exec: "./bin/wren-reader --ping" }

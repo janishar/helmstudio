@@ -1,0 +1,32 @@
+file: studios/auk-studio.yaml
+digest: sha256:46a326891d1a7790f65d1ac9e0f0a6a4f98f7356c5c2fa1fcbb03f1485ccffc2
+title: AuK studio's manifest
+intro: >-
+  AuK studio makes speech and voices with PyTorch on mps, behind a FastAPI
+  server. Its registry entry carries its manifest inline. It passes four of the
+  seven criteria a manifest can answer: it declares neither memory nor disk, no
+  test profile and no SDK major. It declares no hue, so it is given one from
+  helmstudio's fixed set.
+notes:
+  /id: "The id the studio is known by everywhere, and the file is named for it."
+  /repo: "Where helmstudio clones from, with git."
+  /ref: "A full commit, so what was reviewed is what installs."
+  /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Its id, repo and ref must equal the pointer's."
+  /manifest/id: "The same id as the pointer's."
+  /manifest/name: "The name people see."
+  /manifest/description: "One sentence saying what the studio does."
+  /manifest/kinds: "Sound."
+  /manifest/license: "The studio's own licence."
+  /manifest/repo: "The same repository as the pointer's."
+  /manifest/ref: "The same commit as the pointer's."
+  /manifest/python: "Python 3.10. helmstudio creates an environment with uv, pinned to this version, before the build steps."
+  /manifest/peak_ram_gb: "The upper end of the README's range, as the comment says."
+  /manifest/requires: "An Apple Silicon Mac, and uv. No memory or disk is declared, which is why criterion 2 fails."
+  /manifest/runtime: "PyTorch on mps, falling back to the CPU. The same framework on cuda would be a different manifest, and the comment says why this one was chosen."
+  /manifest/capabilities: "Settings and sessions, the files it makes, and the gallery."
+  /manifest/network: "The hosts it is expected to contact, for its weights."
+  /manifest/build: "Two steps, in the studio's environment: the core package, then the web server's requirements."
+  /manifest/weights: "Three checkpoints, all required. The command names none of them, so none is passed to the server as a path."
+  /manifest/processes: "One process: the FastAPI server in web/."
+  /manifest/processes/0/health: "An HTTP GET that answers 200 when the server is ready."
+  /manifest/processes/0/busy: "Declared, so the switch dialog asks before stopping it. Its health endpoint does not give the busy answer, so the dialog reads it as unknown, never as idle."

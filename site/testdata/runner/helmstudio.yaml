@@ -1,0 +1,19 @@
+# Not documentation: the studio the site's tests run every Python sample in,
+# so that each one runs exactly as it would in a real studio's process.
+id: sample-runner
+name: sample runner
+kinds: [image]
+repo: https://github.com/janishar/helmstudio
+requires:
+  os: [darwin, linux]
+  arch: [arm64, amd64]
+runtime:
+  framework: other
+  backends: [cpu]
+capabilities: [kv, assets, gallery, timeline]
+processes:
+  - name: runner
+    role: main
+    cmd: "python3 runner.py --port {port}"
+    port: { prefer: 8766 }
+    health: { path: /healthz, timeout_s: 30 }

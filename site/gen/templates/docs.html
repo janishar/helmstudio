@@ -1,0 +1,17 @@
+{{define "content"}}<div class="site-docs">
+  <nav class="site-sidebar" aria-label="Documentation">
+    {{template "contents" .}}
+  </nav>
+  <details class="site-contents">
+    <summary class="helm-btn helm-btn-secondary">Contents</summary>
+    <nav aria-label="Documentation">{{template "contents" .}}</nav>
+  </details>
+  <main class="site-article" id="main" tabindex="-1">
+    {{if .Banner}}<p class="site-banner">{{.Banner}}</p>{{end}}
+    {{.Body}}
+  </main>
+</div>{{end}}
+
+{{define "contents"}}{{range .Nav}}<p class="helm-section-label">{{.Title}}</p>
+    <ul>{{range .Items}}<li><a class="site-side-link" href="{{url .URL}}"{{if eq .URL $.URL}} aria-current="page"{{end}}>{{.Title}}</a></li>{{end}}</ul>
+    {{end}}{{end}}

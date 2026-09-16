@@ -70,8 +70,9 @@ quickstart copies an example studio kept in the repository, because `helm studio
 init` belongs to no milestone, and runs against a source build until M9 ships
 binaries. The CLI reference covers the commands that exist: `validate` and
 `dev`. The install section's `.dmg` and Homebrew, and the screen recording, wait
-for M9, with no placeholder in their place. M10 builds the static site and stops
-short of deploying it; `helmstudio.in` is the human's to serve.)
+for M9, with no placeholder in their place. M10 builds the static site; the
+human confirmed `helmstudio.in`, and `.github/workflows/site.yml` publishes it
+from GitHub Pages, so going live stays the human's (M10 Q11, resolved).)
 
 ## Cross-cutting, from day one
 

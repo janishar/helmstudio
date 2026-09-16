@@ -1,0 +1,30 @@
+# A studio helmstudio can run: one process, asking for two capabilities.
+id: hello-studio
+name: hello studio
+description: Makes a small image from a prompt, and records it with its parameters.
+kinds: [image]
+license: MIT
+# Where the studio's repository will live. helm dev runs the checkout it is
+# given, and never clones this.
+repo: https://github.com/you/hello-studio
+requires:
+  os: [darwin, linux]
+  arch: [arm64, amd64]
+  tools: [python3]
+  ram_gb: 1
+  disk_gb: 1
+peak_ram_gb: 1
+runtime:
+  framework: other
+  backends: [cpu]
+sdk: { runtime: "^1" }
+capabilities: [assets, gallery]
+processes:
+  - name: studio
+    role: main
+    # helm dev runs this in the manifest's own directory, and gives it a free
+    # port, preferring 8765.
+    cmd: "python3 studio.py --port {port}"
+    port: { prefer: 8765 }
+    health: { path: /healthz, timeout_s: 30 }
+    ui: /

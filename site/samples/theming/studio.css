@@ -1,0 +1,17 @@
+/* lantern studio's own stylesheet. Every colour is a token, so it follows the
+   launcher's theme; the studio's hue comes from /helm/accent.css. */
+.prompt {
+  width: 100%;
+  padding: var(--helm-space-2) var(--helm-space-3);
+  border: 1px solid var(--helm-border-strong);
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-ground-page);
+  color: var(--helm-text-primary);
+  font: var(--helm-type-body);
+}
+
+/* The studio's primary action, in its own hue. */
+.make {
+  background: var(--helm-studio-accent);
+  color: var(--helm-on-studio-accent);
+}
