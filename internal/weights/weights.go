@@ -1129,7 +1129,90 @@ func (s *Service) Launch(ctx context.Context, studioID string, ws []manifest.Wei
 		}
 		values[key] = real
 	}
+
+	// {models.selected} is whichever selectable weight the user chose (M7 Q20,
+	// Q21). It resolves to the same path as that weight's own placeholder, so
+	// a manifest may use either — and a studio with selectable weights and no
+	// choice is refused rather than launched with an arbitrary one.
+	if sel, ok := selectedWeight(ws); ok {
+		key := "models.selected"
+		name, err := s.selectedName(ctx, studioID)
+		switch {
+		case err != nil:
+			return nil, nil, err
+		case name == "":
+			refuse[key] = fmt.Sprintf("no checkpoint is chosen for this studio; choose one of %s before launching",
+				strings.Join(selectableNames(ws), ", "))
+		default:
+			if path, ok := values["models."+name]; ok {
+				values[key] = path
+			} else if why, ok := refuse["models."+name]; ok {
+				refuse[key] = why
+			} else {
+				refuse[key] = fmt.Sprintf("the chosen checkpoint %q is not set up for this installation; fetch or link it, or choose another", name)
+			}
+		}
+		_ = sel
+	}
 	return values, refuse, nil
+}
+
+// selectedWeight reports whether the manifest declares any selectable weight.
+func selectedWeight(ws []manifest.Weight) (manifest.Weight, bool) {
+	for _, w := range ws {
+		if w.Selectable {
+			return w, true
+		}
+	}
+	return manifest.Weight{}, false
+}
+
+func selectableNames(ws []manifest.Weight) []string {
+	var out []string
+	for _, w := range ws {
+		if w.Selectable {
+			out = append(out, w.Name)
+		}
+	}
+	return out
+}
+
+// selectedName reads the chosen checkpoint's placeholder, or "" when none is
+// chosen. The partial unique index makes at most one row possible.
+func (s *Service) selectedName(ctx context.Context, studioID string) (string, error) {
+	var name string
+	err := s.cfg.Store.Reader().QueryRowContext(ctx,
+		`SELECT placeholder FROM studio_model_bindings WHERE studio_id = ? AND selected = 1`, studioID).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return name, err
+}
+
+// Select records which selectable weight a studio launches with. Exactly one
+// is selected at a time, which the partial unique index enforces — this only
+// has to clear the old one inside the same transaction.
+func (s *Service) Select(ctx context.Context, studioID, name string) error {
+	return s.cfg.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE studio_model_bindings SET selected = 0 WHERE studio_id = ? AND selected = 1`, studioID); err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(ctx,
+			`UPDATE studio_model_bindings SET selected = 1 WHERE studio_id = ? AND placeholder = ?`, studioID, name)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return fmt.Errorf("%q is not a weight this installation has; fetch or link it first", name)
+		}
+		return nil
+	})
+}
+
+// Selected returns the chosen checkpoint's placeholder, or "".
+func (s *Service) Selected(ctx context.Context, studioID string) (string, error) {
+	return s.selectedName(ctx, studioID)
 }
 
 // managedUnready explains why a binding's files are not all downloaded, or

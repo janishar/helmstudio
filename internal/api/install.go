@@ -45,6 +45,7 @@ func (s *Server) routeInstall() {
 	}
 	// The launcher's job queue (first review #2): never task jobs, which are
 	// a studio's own and reach only its token at /jobs.
+	s.mux.HandleFunc("PUT "+Base+"/studios/{id}/selection", s.putSelection)
 	s.mux.HandleFunc("GET "+Base+"/launcher/jobs", s.listJobs)
 	s.mux.HandleFunc("GET "+Base+"/launcher/jobs/{id}", s.getJob)
 	s.mux.HandleFunc("POST "+Base+"/launcher/jobs/{action}", s.jobAction)
@@ -415,4 +416,52 @@ func (s *Server) weightAction(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, "not_found", "weight actions are :link and :fetch")
 	}
+}
+
+// PUT /studios/{id}/selection — which checkpoint a studio launches with
+// (docs/decisions.md M7 Q20, Q21).
+//
+// Changing it while the studio runs is refused: the running process was given
+// a path at spawn, and changing the row underneath would make the database
+// disagree with what is loaded in memory. Changing it while stopped needs no
+// new approval — every selectable weight was approved with the manifest, and
+// asking again at each switch would train someone to click through it.
+func (s *Server) putSelection(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if s.weights == nil {
+		writeError(w, http.StatusNotImplemented, "not_implemented", "this daemon does not serve weights")
+		return
+	}
+	var body struct {
+		Weight string `json:"weight"`
+	}
+	if !decodeBody(w, r, &body) {
+		return
+	}
+	if body.Weight == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", `the body must be {"weight": "<name>"}`)
+		return
+	}
+	if gs, err := s.sup.Status(r.Context(), id); err == nil {
+		if gs.State == "starting" || gs.State == "running" {
+			writeError(w, http.StatusConflict, "conflict",
+				"stop the studio before changing its checkpoint: the running process was handed a path when it started, and changing it now would leave the record disagreeing with what is loaded")
+			return
+		}
+	}
+	if err := s.weights.Select(r.Context(), id, body.Weight); err != nil {
+		writeError(w, http.StatusConflict, "not_fetched", err.Error()+". Use :fetch to download it, or :link to point at a copy you already have.")
+		return
+	}
+	st, ok := s.sup.Studio(id)
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]string{"id": id, "selection": body.Weight})
+		return
+	}
+	v, err := s.studio(r, st)
+	if err != nil {
+		s.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
 }

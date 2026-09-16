@@ -50,6 +50,9 @@ type Server struct {
 	secretStore *store.Store
 	approvals   *store.Store
 	library     *library.Resolver
+	local       *library.Local
+	repoReader  *library.Reader
+	fetcher     *library.Fetcher
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
@@ -86,6 +89,7 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 	}
 	s.routeTheme()
 	s.routeSecrets()
+	s.routeManifests()
 	if s.service != nil {
 		s.mux.HandleFunc("GET "+Base+"/assets:reclaim", s.service.ServeReclaim)
 		s.mux.HandleFunc("POST "+Base+"/assets:reclaim", s.service.ServeReclaim)

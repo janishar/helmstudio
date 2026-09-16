@@ -249,9 +249,10 @@ func resolvePlan(dirs *platform.Dirs, st Studio, lp launchPaths, assigned map[st
 	for k, v := range lp.models {
 		values[k] = v
 	}
-	refuse := map[string]string{
-		"models.selected": "{models.selected} needs a recorded weight selection, which lands with the library milestone",
-	}
+	// {models.selected} resolves through the weights service now (M7 Q21); a
+	// studio with selectable weights and no choice is refused there, with the
+	// choices named.
+	refuse := map[string]string{}
 	if lp.venv != "" {
 		values["venv"] = lp.venv
 	} else {
