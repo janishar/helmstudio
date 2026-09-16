@@ -46,6 +46,25 @@ finding changes a convention this brief copies (launcher tags, the Origin
 exemption, error shapes), the finding wins, and the change is raised at M7a's
 start rather than resolved in code.
 
+**Raised at M7a's start, 2026-09-16.** Four things changed under this brief
+between its being written and its being built. None needed a decision; each is
+recorded in `docs/decisions.md`.
+
+1. **Schema v6 is taken.** M8a shipped it first. Tasks 0, 6 and 7 say v6
+   throughout; **M7a takes v7**, and 02 §5 carries v7's DDL.
+2. **The plain shelf no longer exists.** Task 8 was written to add approval
+   controls to it "so the demo runs before any screen exists". M6b replaced it
+   with the launcher's screens, so **task 8 is the launcher's Install path**:
+   the approval preview as a plain dialog and the checkpoint choice, which is
+   what Q2's own answer says M6b's Install shows until M7b draws 03 §13.
+3. **Launcher operations are generated.** M6b tags every launcher operation
+   with `x-helm-group` and `x-helm-method` and generates `web/launcher.js` from
+   them, so this milestone's eleven operations carry those extensions and the
+   launcher client regenerates. The file list's "the generator's outputs if a
+   shared schema changes" now means every launcher change.
+4. **M7a is the third milestone built out of order.** M6a's review has still
+   not run, and M6b is now unreviewed beneath this too.
+
 ### Tasks
 
 0. **The contract, before any code.**

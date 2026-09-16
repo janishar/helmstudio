@@ -661,6 +661,17 @@ Each entry below is one of those answers. The defaults taken with them are the l
   - **Tests** use local bare git repositories, a counting fake fetcher and an injected resolver, and touch no models directory or user root.
   - **The approval digest covers:** the studio id, source and resolved commit; `submodules`; every command field of Q11 with its `cwd`, `shell` and `env`; capabilities, network hosts and `python.version`; and the declared weights. It does not cover sizes, free disk or the selection (Q21).
 
+### M7a · raised at its start, and task 0 (2026-09-16)
+
+Built out of order at the human's instruction: M6a's review has not run, and M6b is now unreviewed beneath this too. Task 0 — the contract, before any code — is done; tasks 1–8 are not started.
+
+- 2026-09-16 · storage · **M7a takes schema v7, not the v6 its brief names three times.** M8a shipped v6 (timelines, revisions, export identity) first, and the M8a report predicted this: "whichever lands second renumbers". v7 adds `installations.approved_digest`, `approved_commit` and `approved_at` (Q10), and the partial unique index on `studio_model_bindings.selected` (Q20). Nothing is behind the change but the order the two were built in.
+- 2026-09-16 · scope · **task 8 is the launcher's Install path, not the plain shelf.** The brief wrote it as shelf controls "so the demo runs before any screen exists"; M6b deleted the shelf and built the screens. Q2's own answer already says what to do — "Until M7b draws 03 §13, M6b's Install shows M7a's approval preview as a plain dialog" — so the approval dialog and the checkpoint choice go into `web/`'s Install path, and M7b still draws 03 §13 properly.
+- 2026-09-16 · api · **M7a's eleven launcher operations carry `x-helm-group` and `x-helm-method`,** the convention M6b introduced so the launcher's client can be generated. `web/launcher.js` regenerates with them; the runtime SDK is untouched, which `make drift` shows.
+- 2026-09-16 · api · **`api/openapi.yaml` gains two responses it referred to but never defined:** 428 `IfMatchRequired`, for a manifest save over an existing file with no digest, and 503 `Unavailable`, for a repository or URL that could not be reached. `Conflict`'s code list gains `approval_required`, `id_taken`, `not_fetched` and `already_exists`.
+- 2026-09-16 · api · **`GET /studios` is the library.** One entry per id from every source, with `source`, `overrides`, `level`, `manifest_state`, `manifest_valid`, `errors`, `provenance`, `approval_required`, `selection` and `selectable`. R2 is amended in 01: an invalid manifest is listed as invalid rather than hidden.
+- 2026-09-16 · api · **the approval digest is a query parameter shared by `:install`, `:retry` and `:launch`,** defined once in `components/parameters` so the three cannot drift in what they require.
+
 ## 2026-09-16 · M8 timeline and export
 
 M8 was scoped, not specified. Its brief set two conditions for its own expansion, and neither held: M7 and M6b are not built, and no review of M6a is recorded. At kickoff it stopped on 21 questions, recorded in `docs/agents/reports/08-timeline-and-export.md`. Several rest on measurements of h3's and ltx's real outputs, listed there under "What I measured". The human answered "recommendations for all".
