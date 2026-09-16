@@ -14,6 +14,13 @@
 Electron shell, daemon handshake and adoption, browser auth and CSRF, signing,
 notarisation, the `.dmg`.
 
+(Amended 2026-09-16, M8 Q5, Q17, Q19, Q20. M9 also:
+- builds the launcher's Timeline screen, with the Gallery that M6 Q11 moved
+  here, once the cookie exists
+- makes `POST /timeline/{id}:open` reach a connected launcher page
+- decides who owns an export the launcher starts
+- bundles the pinned LGPL ffmpeg, checked before `PATH`)
+
 ## Reads
 
 `docs/design/01-prd.md`, `docs/decisions.md` (delivery).

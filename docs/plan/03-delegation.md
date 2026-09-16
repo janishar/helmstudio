@@ -108,9 +108,11 @@ weights. Phase 3 — write the OpenAPI yourself, then fan out hard. Phase 4 —
 half and half. Phase 5 — highly parallel: each screen, each component, each CSS
 layer, the h3 token migration. Phase 6 — parallel: editor, import and export,
 criteria, approval. Phase 7 — **least delegable**; ffmpeg work is empirical and
-machine-bound, so the golden harness is delegated and the filter graph is not.
-Phase 8 — mixed; signing is yours, because the certificates are. Phase 9 — the
-most parallel of all.
+machine-bound, so the golden harness is delegated and the filter graph is not
+(note, M8 Q3: the implementer drafts the graph as a pure function under the
+golden harness, and the human signs it off on the Mac). Phase 8 — mixed;
+signing is yours, because the certificates are. Phase 9 — the most parallel of
+all.
 
 **Throughput rises sharply once a phase's contract exists and is near zero
 before it.** Which is another reason not to compress phase 3: a rushed contract

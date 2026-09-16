@@ -113,6 +113,11 @@ Read it before starting on anything and add to it when you finish. Whatever is n
   M6's amendment to 03 §5, "Rendering a studio's own stylesheet for contrast is the approval harness's job (M7)", moves with them.
 - **Raised at M7 kickoff: `weights[]` has no licence field,** so criterion 8's "any weight licences it accepts on the user's behalf" can be neither checked nor shown on the approval screen. A schema change.
 - **Raised at M7 kickoff: `peak_ram_gb` is one figure per studio,** so a studio with `selectable` weights states one peak for every checkpoint. iris's FLUX.2 Klein 4B and 9B both read 30 GB, and the switch dialog's arithmetic cannot follow the choice. A schema change.
+- **Raised at M8 kickoff: the visual goldens are pinned to the Chrome major, not the operating system.** macOS 27, installed on 2026-09-16 at 02:46, moved all eleven helm-css goldens by 537–1,718 pixels at glyph edges while Chrome stayed at 152.0.7977.83. So `make gate` is red on `main`'s tree (`docs/agents/reports/08-timeline-and-export.md`, Gate). A person needs to look at the images and run `make golden`. Undecided: whether `test/visual/golden/` also records the macOS major beside `CHROME_MAJOR`.
+- **Raised at M8 kickoff (Q21): where the conform demo's ltx, AuK and iris assets come from.** Either each studio adopts its outputs upstream first, as h3's `finishTake` does, so the clips genuinely come from three studios; or a fixture studio uploads them, and the demo says that every clip but h3's has one origin. To be chosen before M8a's integration window.
+- **Raised at M8 kickoff (Q6): waveforms, filmstrip sprites and h264 proxies (R36) belong to no milestone.** The parts of `helm-player` that need them stay `Unsupported` (M6 Q13) until one builds them.
+- **Raised at M8 kickoff (Q4): a Linux build has no videotoolbox.** Under the licensing decision, Linux needs another encoder the licence allows, or refuses conform exports. `make vet-linux` only type-checks, so nothing fails yet.
+- **Raised at M8 kickoff: h3 and ltx declare `timeline` and call no timeline API.** Criterion 9 asks for "the minimum capabilities it uses, and no more", as M7 Q3 applied to iris. Revisit when each adopts the timeline.
 
 ---
 
@@ -627,6 +632,173 @@ Each entry below is one of those answers. The defaults taken with them are the l
   - **Unsaved editor text** stays in the page.
   - **Tests** use local bare git repositories, a counting fake fetcher and an injected resolver, and touch no models directory or user root.
   - **The approval digest covers:** the studio id, source and resolved commit; `submodules`; every command field of Q11 with its `cwd`, `shell` and `env`; capabilities, network hosts and `python.version`; and the declared weights. It does not cover sizes, free disk or the selection (Q21).
+
+## 2026-09-16 · M8 timeline and export
+
+M8 was scoped, not specified. Its brief set two conditions for its own expansion, and neither held: M7 and M6b are not built, and no review of M6a is recorded. At kickoff it stopped on 21 questions, recorded in `docs/agents/reports/08-timeline-and-export.md`. Several rest on measurements of h3's and ltx's real outputs, listed there under "What I measured". The human answered "recommendations for all".
+
+Each entry below is one of those answers. The defaults taken with them are the last entry. Four answers carry a correction made while recording, and a few carry a detail added while recording; each is marked, for the human's sign-off. Nothing is built: M8a starts after M7b's review.
+
+- 2026-09-16 · process · **M8's contract is the expansion drafted at kickoff and approved by the human, now `docs/agents/milestones/08-timeline-and-export.md`** — same reason as M5 Q1. Q1.
+- 2026-09-16 · scope · **M8 is two briefs, reviewed separately, and comes after M7b: M6a's review → M7a → M6b → M7b → M8a → M8b.**
+  - **M8a, the document, the API and export:** headless. The timeline store and operations, probing, the legality check, the conform graph, export jobs and the startup sweep, the golden harness, and conformance.
+  - **M8b, the editor:** `helm-timeline`, built on a reviewed M6b, M7b and M8a. Its file list and DoD are confirmed at its own kickoff.
+
+  Reason: M8a needs M7a's schema v6 and launcher conventions but no screen; M8b needs M6b's package and structural interfaces (M6 Q12). Q2. [amends: the milestone order recorded in M7 Q2]
+- 2026-09-16 · process · **the implementer drafts the conform graph as a pure function under the golden harness, and lists each filter choice as a judgement call; the human signs the graph off on the Mac: videotoolbox settings, playback in QuickTime, Safari and Chrome, and colour by eye** — 03-delegation keeps "the filter graph" undelegated because ffmpeg's behaviour is found by trying it. The harness now makes most of that trying a test, by hashing the graph's decoded output before any encoder (Q15); what no test sees stays with the human. Q3. [amends: `docs/plan/03-delegation.md`'s phase 7 line]
+- 2026-09-16 · licensing · **ffmpeg is an LGPL build with videotoolbox.**
+  - **Encoders:** helmstudio names only `h264_videotoolbox`, FFmpeg's native `aac`, stream copy, and the uncompressed `rawvideo` and `pcm_s16le`.
+  - **A test** fails on any argument list the daemon or the embedded provider builds that names another encoder.
+  - **No golden** hashes encoded output.
+
+  Reason: 01 §15's and 05 §6's lean. It is the fast encoder on Apple Silicon, and it keeps a GPL binary out of a signed MIT `.dmg`. Costs: encoded bytes can change with the OS and the chip (the macOS 27 upgrade moved every visual golden while Chrome stayed at 152); Linux has no videotoolbox (open, above). The gate tests against Homebrew's GPL build, which is testing, not distribution. The kickoff described engineering consequences only. **Added while recording:** the kickoff's list named only the two export encoders; stream copy, and `rawvideo` and `pcm_s16le` for posters and probes, must also pass its own test. Q4. [resolves: the open entry "ffmpeg licensing: LGPL + videotoolbox (leaning) vs GPL + x264"]
+- 2026-09-16 · media · **ffmpeg is detected and instructed from M8, and bundled from M9.**
+  - **Lookup:** `HELM_FFMPEG` and `HELM_FFPROBE` when set, else `PATH`. M9's pinned binary is checked first once it exists.
+  - **Recorded:** the path, version and configuration found. A build older than M8a's recorded minimum major, or missing an allowed encoder, is not used.
+  - **Without a usable ffmpeg:** `:plan`, `:export` and a video `/thumb` answer 501 `unsupported` with `details: {code: tool_missing, tool: ffmpeg}`, naming `brew install ffmpeg` and `HELM_FFMPEG`. Creating and editing a timeline never needs ffmpeg.
+  - **The embedded provider** uses the same lookup.
+  - **The gate** requires ffmpeg and ffprobe unless `HELM_ALLOW_MISSING_FFMPEG` is set, and conform goldens are tied to an `FFMPEG_MAJOR` file.
+
+  Reason: R49 bundles ffmpeg, but no app exists before M9, and M5 Q3 decided the same for `uv`. `/thumb` already degrades to 501 (M4 Q13), and components render the reason (R56). **Correction made while recording:** the kickoff said "export and video probing answer 501". Probing is not an operation (Q6), so the answer names the three operations that need ffmpeg, and R45's "the data operation always works" holds for document writes. Q5.
+- 2026-09-16 · media · **M8a probes every clip with `ffprobe` at export time, and nothing in legality or conform comes from an adopt or upload hint; `/thumb` gains a video poster frame; waveforms, filmstrip sprites and h264 proxies are not in M8, and `helm-player` keeps those parts `Unsupported`; adopt and upload are unchanged** — the legality check needs level, extradata, colour tags and sample rate, which hints do not carry, and the editor and every gallery need a poster. Q6. [leaves open: waveforms, filmstrips and proxies, above]
+- 2026-09-16 · timeline · **time is seconds, snapped by the daemon to the target.**
+  - **Frames:** positions (`at`, `hold`, a transition's `duration`) and a video or image clip's `in` and `out` snap to the nearest whole frame at the target's rate.
+  - **Samples:** a sound clip's `in` and `out` snap to the nearest whole sample at the target's sample rate.
+  - **Canonical:** what is stored and returned is the snapped document, so writing it back changes nothing.
+  - **`fps`** is one of 23.976, 24, 25, 29.97, 30, 48, 50, 59.94 and 60, each an exact ratio.
+  - **Lengths:** checks that need a clip's length (an omitted `out`, an `out` past its end, a dissolve's handle) use the asset's recorded `duration_s` when it is written, and are made again against probed facts at export, which refuses with the same reasons. A clip whose asset records no duration must give `out`.
+
+  Reason: 5.04 s at 24 fps is 120.96 frames, NTSC rates have no exact JSON number, and two editors rounding differently would cut on different frames. Seconds keep 05's document and requests as written. **Correction made while recording:** the kickoff snapped `in` and `out` to a whole *source* frame or sample. That needs the source's rates when a timeline is written, while Q6 probes only at export and Q5 keeps writes working without ffmpeg. Snapping to the target is identical for a copy, whose rate equals the target's. The lengths clause follows from the same correction. Q7.
+- 2026-09-16 · timeline · **tracks, clips, holds, the transition and gain.**
+  - **V1:** one video track, contiguous from 0; its end is the sequence's duration.
+  - **Audio tracks A1…A8**, named by kind and position. An audio clip may sit anywhere inside the sequence, and clips on one track never overlap.
+  - **A video clip's own sound** plays under it at the clip's `gain_db`, and `"audio": false` mutes it.
+  - **`hold`** is for images only, which have no `in` or `out`.
+  - **The dissolve** is `transition_in` on any V1 clip but the first. It is centred on the cut and needs half its duration of handle on each side, refused naming the missing frames; a still has unlimited handle. It moves no `at`, and the two clips' own sounds crossfade over it.
+  - **`gain_db`** from −60 to +12 dB, on audio tracks and on any clip, with no keyframes.
+  - **Clips sent without `at`** are laid end to end from 0 on their track, in order.
+  - **The rules** go into 05 §6 and the API's schema.
+
+  Reason: 01 §14's "Cuts, holds, one transition type, audio gain" and 05 §6's example leave unsaid how many tracks, where a video clip's sound goes, gaps, overlaps, holds on video, where a dissolve's frames come from, and what gain applies to. A second video track would be compositing, which 01 §14 excludes. **Added while recording:** the clause on clips without `at`, for 05 §7's create request, which gives none. Q8.
+- 2026-09-16 · timeline · **the target, the preset and colour.**
+  - **The target** is `width` and `height` (even), `fps` (Q7) and `sample_rate` of 44100 or 48000, default 48000. Output is always stereo, with mono placed equally in both channels.
+  - **A preset names encoding only.** M8 has one, `h264`: `yuv420p`, High profile, MP4 with fast start, AAC-LC at 192 kb/s. It replaces 05 §7's `h264-1080p24`.
+  - **A conform export** is converted to and tagged as BT.709, limited range, progressive. An untagged source is read as BT.601; a tagged one as tagged.
+  - **A copy export** keeps its sources' colour tags unchanged, untagged included.
+  - **The colour rule** is checked by eye on the Mac.
+
+  Reason: the target and the preset named size and rate twice. Every h3 and ltx file is untagged, and h3's encode path writes BT.601 (a pure red frame decodes to 81, 90, 240), so reading untagged as BT.709 would shift h3's colour. **Correction made while recording:** the kickoff said "Every export is converted to, and tagged as, BT.709". Q13's copy path cannot convert pixels, and tagging BT.601 pixels as BT.709 would be false, so conversion and tags apply to conform exports. **Added while recording:** mono's placement. Q9.
+- 2026-09-16 · timeline · **the daemon keeps revisions.**
+  - **Storage:** each write stores the document it replaces, keeping the newest 100 per timeline.
+  - **Undo:** `POST /timeline/{id}:revert {revision}` writes the old document as a new revision.
+  - **Concurrency:** the `ETag` is the revision. `If-Match` is required on `PATCH` and `:revert` (409 `etag_mismatch` when stale) and checked on `DELETE` when sent. `:append` applies to the current revision and returns the new one.
+  - **Reclaim** counts only current documents.
+  - **A revert** that names an asset reclaimed since, or re-adds one the caller cannot read (Q11), is refused, naming the clips.
+
+  Reason: 05 §6's "undo is the previous revision" against 02 §5's single document; a sequence edited in a studio and then elsewhere has no one page holding its history; counting old revisions would keep deleted footage for 100 edits. **Correction made while recording:** the kickoff required `If-Match` "on every write", but Q19's `:append` may name no timeline, and then has no revision to match. Q10. [amends: 02 §5's `timelines.revision`]
+- 2026-09-16 · security · **a timeline is owned by the studio that created it.**
+  - **The column:** `timelines.studio_id`, null for the launcher.
+  - **Who:** a studio reads, edits and exports its own timelines, and every timeline when it also holds `gallery.read_all`. The launcher (M9) reads and edits all of them.
+  - **Clips:** a write may add only assets the caller can read under M4 Q9, and export checks every clip again. An unreadable asset in a write is 422, naming the clip's position and never whether the asset exists.
+  - **A clip's `studio_id`** is shown when the caller could already learn it from an item it may read (its own, its inbox's, or any item with `gallery.read_all`). Otherwise it is null, and the editor shows "another studio" in a neutral hue, with the words as well as the colour (03 §17).
+  - **04 §5's "inside any studio"** becomes "inside the studio that made it, or any studio that can read everything". M7 Q12's sentence stands.
+
+  Reason: a shared document would let a studio export another studio's asset into bytes it may read, and would hand every clip id to every `timeline` holder. 04 §7's point, one document through one set of endpoints, still holds. Q11. [amends: 04 §5, 02 §5]
+- 2026-09-16 · timeline · **`DELETE /timeline/{id}` soft-deletes, setting `deleted_at`; a deleted timeline stops holding its footage (02 §8's query gains `t.deleted_at IS NULL`); its exports keep `timeline_id`; there is no restore in M8** — `items.timeline_id` references `timelines` with no `ON DELETE` action, so an exported timeline could not be hard-deleted, and nothing in the design deletes one. Q12. [amends: 02 §5, §8]
+- 2026-09-16 · export · **the fast path copies picture only, and sound always goes through the conform graph.**
+  - **Copy is legal only when every V1 clip, probed at export:**
+    - is H.264 in MP4 or MOV, with one profile and level
+    - has the target's width, height and exact frame rate
+    - has a sample aspect ratio unset or 1:1, progressive field order, and one pixel format and time base
+    - has the same four colour tags, untagged counting as a value
+    - has byte-identical extradata
+    - is used whole, with no hold, image or transition
+  - **Sound tracks and gain** do not affect it.
+  - **`GET /timeline/{id}:plan`** returns `{mode, reasons}`, so the chip is the daemon's answer.
+  - **R47, 05 §6 and 03 §11 are amended,** and the chip reads "video stream copy".
+
+  Reason, measured on two real h3 takes: a concat copy's picture is bit-identical, but its sound gains 2,336 samples, and the second take's sound starts 81 ms after its picture. Extradata differs between h3's sizes. A trim copies at packets, not frames. A still cannot be copied, so 03 §11's chip contradicted R47. Q13. [amends: R47, 05 §6, 03 §11]
+- 2026-09-16 · export · **the conform graph fits and never crops (black letterbox or pillarbox); converts rate with the `fps` filter, without blending; loops stills for their `hold`; trims or pads each clip's sound to its picture, with silence for a clip without sound; mixes with `amix` normalisation off and gain as `volume`; dissolves with `xfade` and `acrossfade`; and applies Q9's colour rule as explicit matrices and tags. Every choice has a golden and is listed for sign-off (Q3)** — 05 §6 names the filters but not these choices. h3 has portrait takes beside landscape ones, a take's sound outlasts its picture by 8 ms, and `amix` otherwise divides by its input count. Q14.
+- 2026-09-16 · tests · **the golden tests.**
+  - **Copy:** the export's decoded picture `framemd5` equals the sources' in order, and its sound has exactly `round(duration × sample_rate)` samples and starts with the picture at every cut.
+  - **Conform:** goldens hash the graph's decoded output before any encoder, as raw frames and PCM run bit-exact, stored with `FFMPEG_MAJOR` and the architecture.
+  - **Encoded exports** are checked with `ffprobe`, never by their bytes.
+  - **Fixtures** are tiny clips made once by a committed script and committed, one per mismatch.
+  - **Planted bugs:** skipping the extradata comparison, copying sound, copying with a trim, `amix` normalising, a one-frame shift, and untagged read as BT.709.
+
+  Reason: the review focus asks for frame hashes rather than a file existing; videotoolbox's bytes are not repeatable across OS releases; whether arm64 and x86 builds agree is unverified. **Added while recording:** the rounding, since 29.97 fps at 48 kHz is not a whole number of samples per frame. Q15.
+- 2026-09-16 · export · **an interrupted export leaves nothing behind.**
+  - **Where:** `<assets>/tmp/export-<job>.mp4`, on the blob store's volume.
+  - **When it becomes an asset:** only after ffmpeg exits 0 and `ffprobe` confirms the target's size, rate and sample rate, the timeline's frame count, and a duration within one frame.
+  - **Identity:** ffmpeg leads its own process group, and its pid, start time and pgid are recorded before it writes.
+  - **The startup sweep** stops a verified survivor (SIGTERM, grace, SIGKILL), deletes its file and marks the job `interrupted`. An identity that does not match is never signalled.
+  - **Cancel** stops the group and deletes the file; the job is `cancelled`. **Retry** is a new export.
+  - **Under the embedded provider,** an export whose studio exited is `interrupted` at the next open.
+
+  Reason: the review focus's "partial file left where a finished one is expected"; M3 review #1's identity rule for build steps; M1's rule that stage shares the blob store's volume. Q16.
+- 2026-09-16 · export · **what an export becomes, and whose it is.**
+  - **Owner:** a studio's export is that studio's: the item's `studio_id`, the asset's `origin_studio` and its library folder. A launcher export's owner is decided with M9's screen.
+  - **The item** carries `timeline_id`, served on `Item`, and one `clip` input per distinct asset. The gallery labels it "timeline" because `timeline_id` is set.
+  - **Progress and cancel** are `GET /timeline/{id}/exports` and `POST /timeline/{id}/exports/{job}:cancel`, under `timeline`. The `job` event reaches the exporting studio. `/jobs` is unchanged, and the launcher's `/launcher/jobs/{id}:cancel` reaches the same runner.
+  - **The log** is `log_files` kind `export`, owner kind `job`, keeping the newest five per studio.
+
+  Reason: `items.studio_id` is `NOT NULL`, `timeline` is a valid studio id, and `_timeline` is not a valid `StudioIdValue`. h3 and ltx declare `timeline` without `jobs`, a studio cancels only its own `task` jobs (M4 first review #2), and the router checks one capability per operation. `item_inputs`' key allows one row per asset and role. **Added while recording:** `timeline_id` on the wire, which the label needs, and the launcher's cancel, which R46's "reusing install's … cancellation" implies. Q17. [amends: 02 §10's "one `item_inputs` row per clip", 05 §7's "poll /jobs/{id}"]
+- 2026-09-16 · api · **the timeline operations, all `studio-api` with `x-helm-capability: timeline`:**
+  - `POST /timeline`, from `{name, target, clips}` or `{name, target, tracks}`; `clips` go to V1 for video and images, A1 for sound
+  - `GET /timeline`, paged
+  - `GET`, `PATCH` (a merge patch) and `DELETE /timeline/{id}`
+  - `GET /timeline/{id}/revisions` and `POST /timeline/{id}:revert`
+  - `POST /timeline:append` and `POST /timeline/{id}:open`
+  - `GET /timeline/{id}:plan?preset=`
+  - `POST /timeline/{id}:export`, answering 202 with the job
+  - `GET /timeline/{id}/exports` and `POST /timeline/{id}/exports/{job}:cancel`
+
+  `:export` replaces 05 §7's `/export`, and `/timeline` stays singular. Errors: 409 `etag_mismatch`; 422 `invalid_timeline` with each clip's position and reason; 501 `unsupported` for `tool_missing`. Reason: M4 Q1 removed the timeline surface "to return with the milestone that builds it (timeline: M8)", and every other action is a colon verb. Q18. [amends: 05 §7]
+- 2026-09-16 · api · **`:open` answers 501 `unsupported` in M8, naming M9's launcher screen. From then, it publishes `open_timeline` to connected launcher pages and answers `{opened: true, surface: "browser" | "app"}`, or 501 when none is connected. `:append` appends to `timeline_id` when given, else to the most recently updated timeline the caller owns, else 409 `no_timeline`** — the daemon has no record of what is open and cannot focus a browser tab, and "no feature may be reachable only from the app". **Added while recording:** the kickoff's "the caller's most recently created or edited timeline" is read as the most recently updated one it owns (Q11), since ownership is what the daemon records. Q19. [amends: R45, 05 §7]
+- 2026-09-16 · security · **the launcher's Timeline screen waits for M9's cookie, with the Gallery; until then a cross-studio sequence is edited in a studio holding `timeline` and `gallery.read_all`** — the screen needs every studio's items and bytes, which is the exposure M6 Q11 refused under Host and Origin rules alone. Q20. [amends: M6 Q2's "Timeline (§11) is M8's"]
+- 2026-09-16 · scope · **M8's machine-bound demos.**
+  - **M8a, the fast path:** four h3 takes from one session at one size, exported to a target declared from them. It takes seconds, the plan says "video stream copy", decoded picture hashes equal the sources', sound starts with the picture at every cut, and it plays in QuickTime, Safari and Chrome.
+  - **M8a, conform:** an h3 take, an ltx clip, an iris still and an AuK line, with a dissolve and gain. It plays in the same three players, colour is compared with the sources by eye, and it appears as an item with its clips as inputs. Where the non-h3 assets come from is open, above.
+  - **M8b:** the same sequence edited in `helm-timeline` inside a fixture studio holding `timeline` and `gallery.read_all`.
+
+  Reason: the build plan's "A 14-second sequence from three studios; stream-copy verified bit-identical" describes two sequences. h3's 800×448 takes at 32 kHz and ltx's 704×448 clips at 48 kHz can never share a copy, and neither can a still or a voice line. Q21. [amends: the build plan's phase 7 demo]
+- 2026-09-16 · defaults · **taken at kickoff:**
+  - **Packages:** `internal/timeline` (the document's rules, snapping, legality and the graph, as pure functions) and `internal/export` (running ffmpeg, export jobs, the sweep), both new. Enforcement stays in `internal/api/studioapi` (M4 Q25).
+  - **No Go dependency:** `ffprobe -of json` is read with `encoding/json`, and ffmpeg is spawned through the platform seams as a process group.
+  - **Progress** comes from `ffmpeg -progress pipe:1`, as frames written over the timeline's frame count.
+  - **Schema:** the version after M7a's v6, with DDL in 02 first.
+  - **`duration_s`** is computed and served, never stored.
+  - **Tests** write only under temp roots. Fixture media and its script live under `test/media/`, a few hundred kilobytes.
+  - **Conformance** covers create, patch with `If-Match`, snapping, access, append, `:open`'s 501 and a copy export of fixtures, against both providers.
+  - **`helm dev`** serves the timeline operations, with `:open` at 501.
+  - **Added while recording:**
+    - a video poster is one frame read as `rawvideo`, then scaled and encoded by M4's thumbnailer
+    - an export needs at least one V1 clip; an empty timeline can be stored
+    - tests that encode use Q4's encoders on the gate's host, and a host without `h264_videotoolbox` fails them unless `HELM_ALLOW_MISSING_FFMPEG` is set
+
+- 2026-09-16 · process · **the human's sign-off: the four corrections made while recording stand — Q5's three operations, Q7's snapping to the target, Q9's copy keeping its sources' tags, and Q10's `If-Match` on `PATCH` and `:revert` — and so do the details added while recording** — they were put to the human as a list, and the answer was "continue with your recommendations".
+- 2026-09-16 · scope · **Q21's conform demo takes its ltx, AuK and iris clips from a fixture studio (`test/studios/sequencer/`) that uploads them with `POST /assets`, assembles the sequence and exports it. It holds `assets`, `timeline` and `gallery.read_all`, the last so that it may add h3's take (Q11). The demo says that every clip but h3's has that one origin** — chosen over each studio adopting the runtime SDK upstream first: it needs no work in three repositories outside this one, and two real origins still exercise cross-studio access and the per-studio labels. Cost: the clips are not labelled ltx, AuK and iris, so the demo shows two studios' hues rather than four. **Added while recording:** the fixture's capabilities and its place in M8a's tasks and file list, which follow from Q11. Q21. [resolves: the open entry "Raised at M8 kickoff (Q21): where the conform demo's ltx, AuK and iris assets come from"]
+
+Decisions made while building M8a, each a judgement call for the reviewer to confirm or overturn:
+
+- 2026-09-16 · code · **the pipeline is three packages: `internal/timeline` decides, `internal/export` carries out, and `internal/api/studioapi` enforces.** The rules, the snapping, the legality predicate and the ffmpeg argument list are pure functions over the document and the probed facts; `internal/export` finds ffmpeg, probes a file and runs one render in its own process group; the operations stay where every other one is enforced — the reason being that everything except the running is then checkable in the gate without a model, a GPU or a person watching.
+- 2026-09-16 · export · **the copy path is one ffmpeg invocation: the concat demuxer for the picture with `-c:v copy`, and the same clips opened again for their sound, which goes through the graph** — one process, one output, no intermediate file, and the sound is conformed exactly as it is on the slow path.
+- 2026-09-16 · export · **the graph's own choices, none of which 05 §6 states.** Each was found by running it:
+  - **`settb=AVTB` ends every chain.** `xfade` refuses two inputs whose timebases differ, and one side that has been through a `concat` counts in different units from a fresh clip.
+  - **`setparams` tags the frames**, rather than the encoder being asked for the colour afterwards: videotoolbox writes its own VUI and drops primaries and transfer, so an export came out tagged bt709 for the matrix and nothing else.
+  - **A clip's sound is placed by prefixing exactly as much silence as its position and concatenating**, not with `adelay`, which names whole milliseconds: a frame at 24 fps is 41.666 ms, so every clip would land a third of a millisecond out and the error would accumulate.
+  - **Each clip's sound is padded and then cut to its picture's length** (`apad` then `atrim`), because a take's sound rarely ends with its picture — h3's outlast theirs by 8 ms.
+  - **A dissolve's sound is a fade out on one side and a fade in on the other**, summed by the mix, which is what a crossfade is; `acrossfade` cannot be used where every clip is already a separate input of one `amix`.
+- 2026-09-16 · api · **the router tries a route whose parameter carries an action before the bare one** (`internal/api/studioapi/handler.go`): `/timeline/{id}` and `/timeline/{id}:plan` both match the same path, and without the preference a `GET` plan was read as an id ending in `:plan` and refused for not looking like one. Every earlier action was a `POST` on a path whose bare route had none, which is why this never showed. Found by the conformance suite's route sweep (M4 second review #4).
+- 2026-09-16 · security · **the same-origin proxies forward `timeline` and `timeline:append`** in all three runtime SDKs. M6 Q10's allowlist is by first path segment, so a new operation is invisible to a studio's page until it is added; the conformance suite's proxy case catches exactly that, and did.
+- 2026-09-16 · media · **a video's thumbnail is a poster frame taken a tenth of the way in**, read as `rawvideo` and scaled by M4's own thumbnailer, so an image's thumbnail and a video's are the same kind of file. Bytes ffmpeg cannot read a frame from answer 501 `unsupported`, as an image the standard library cannot decode already does, rather than reporting a fault of the daemon's. A tenth in, because a clip that fades up from black gives a black poster at zero.
+- 2026-09-16 · export · **the minimum ffmpeg is major 6**, which is where every filter and option this pipeline names has been available. The goldens are pinned separately, to the major and architecture that made them.
+- 2026-09-16 · storage · **schema v6 ships as `internal/store/migrations/0006_timeline.sql`**, with the DDL written into 02 §5 first: `timelines` gains `studio_id` and `deleted_at`, `timeline_revisions` arrives, `jobs` gains `pid`, `pid_start_time`, `pgid` and `work_path`, and `log_files.kind` gains `export`, which needs that table rebuilt as v4 rebuilt it.
+- 2026-09-16 · tests · **tests written before M8 and edited, named here for sign-off.** Each keeps its own check under the contract as M8 changed it:
+  - M1's `TestMigrationsFromEmptyCreateSchemaV1` pins version 6 and lists `timeline_revisions`, `idx_timelines_studio` and `idx_jobs_subject` — the same kind of edit M2, M3, M4 and M6 were directed to make when their migrations landed.
+  - M4's conformance case `TestThumbnailsForImagesAndUnsupportedForVideo` is renamed `…AndBytesThatAreNotAVideo` and now holds what Q6 makes true: an image is scaled, a video gets a poster, and bytes that are not a video are refused as unsupported.
+  - M4's cross-studio route sweep gains a sequence, an export job written straight into the store, bodies for the timeline's writes and an `If-Match` header for the two operations that require one — otherwise its new routes would refuse for a missing precondition rather than for ownership.
+  - The conformance studios gain the `timeline` capability on A and B, and three new studios (T, U and R) so that what one studio may see of another's sequences is a case rather than an assumption; `/me`'s capability count for B moves from 7 to 8 with it.
 
 ## Changes
 

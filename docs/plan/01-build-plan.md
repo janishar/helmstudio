@@ -13,7 +13,7 @@ architectural layer.
 | 4 | ltx and AuK — the second caller | 6–8d | Three studios, independent environments, switch dialog with real memory arithmetic |
 | 5 | helm-css, real UI, helm-ui-sdk | 10–12d | h3's take list replaced by `<helm-gallery>`; theme toggle re-themes running studios (note, M6 Q20: h3 stays at level 2 with its own take list, per 07 §5 and 08; `<helm-gallery>` is shown in a fixture studio) |
 | 6 | iris, manifest library, editor | 6–8d | Wrap a repo that never heard of helmstudio; export the manifest as a pull request |
-| 7 | Timeline and export | 10–12d | A 14-second sequence from three studios; stream-copy verified bit-identical |
+| 7 | Timeline and export | 10–12d | A 14-second sequence from three studios; stream-copy verified bit-identical (note, M8 Q21: two demos — a run of h3 takes by the fast path, its picture verified bit-identical, and a four-clip sequence from three studios through conform) |
 | 8 | Mac app and release | 7–9d | Notarised `.dmg` on a clean Mac; quit with a studio alive in the menu bar |
 | 9 | SDK docs and helmstudio.in | 8–10d | A stranger follows the quickstart on a clean Mac and reaches a generated output without asking anything |
 
@@ -131,4 +131,5 @@ and the four annotated manifests are worth more than a complete site, and the
 rest can follow.
 
 **Decide before starting:** ffmpeg licensing. It gates phase 7 and determines
-what can be bundled in a signed `.dmg`.
+what can be bundled in a signed `.dmg`. (Closed, M8 Q4: an LGPL build with
+videotoolbox.)
