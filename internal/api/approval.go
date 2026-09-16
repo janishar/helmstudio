@@ -119,6 +119,19 @@ func (s *Server) preview(ctx context.Context, st supervisor.Studio) (approval.Pr
 	if m.LocalPath != "" {
 		in.Level = string(library.LevelDraft)
 	}
+	// The library is what decides both, so the screen and the card cannot
+	// disagree about where a manifest came from. Without one — `helm dev` —
+	// the defaults above stand.
+	if s.library != nil {
+		if entries, err := s.library.Resolve(); err == nil {
+			for _, e := range entries {
+				if e.ID == m.ID {
+					in.Source, in.Level = string(e.Source), string(e.Level)
+					break
+				}
+			}
+		}
+	}
 	// The commit the preview is for. An installed studio is previewed at the
 	// commit it was built from; anything else at whatever its manifest pins,
 	// which for a Local manifest may be nothing at all.

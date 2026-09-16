@@ -164,3 +164,42 @@ func TestAMatchingDigestIsRecordedAndStopsTheAsking(t *testing.T) {
 		t.Error("after approving, the preview should say so rather than asking again")
 	}
 }
+
+// The card and the approval screen both state where a manifest came from. They
+// read it from different places, so they can disagree — and a screen that says
+// "from the registry" over a file the user wrote themselves is exactly the
+// kind of wrong that nobody notices until it matters.
+func TestTheApprovalScreenAgreesWithTheCardAboutTheSource(t *testing.T) {
+	srv, _ := libraryServer(t)
+
+	rec := do(t, srv, "GET", "/api/v1/studios", nil)
+	var page struct {
+		Items []struct {
+			ID     string `json:"id"`
+			Source string `json:"source"`
+			Level  string `json:"level"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) == 0 {
+		t.Fatal("no entries")
+	}
+	for _, e := range page.Items {
+		st, ok := srv.findStudio(e.ID)
+		if !ok {
+			t.Fatalf("the supervisor does not know %s", e.ID)
+		}
+		p, err := srv.preview(context.Background(), st)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Source != e.Source {
+			t.Errorf("%s: the card says source %q and the approval screen says %q", e.ID, e.Source, p.Source)
+		}
+		if p.Level != e.Level {
+			t.Errorf("%s: the card says level %q and the approval screen says %q", e.ID, e.Level, p.Level)
+		}
+	}
+}
