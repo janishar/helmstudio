@@ -24,6 +24,7 @@ export const PREFIX = "/helm/";
 
 export const STUDIO_SEGMENTS = new Set([
   "me", "events", "kv", "sessions", "records", "assets", "assets:adopt", "gallery", "handoff", "inbox", "jobs", "theme",
+  "timeline", "timeline:append",
 ]);
 
 const REQUEST_HEADERS = ["Accept", "Content-Type", "Range", "If-Range", "If-Match", "If-None-Match", "Last-Event-ID"];

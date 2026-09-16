@@ -278,6 +278,78 @@ export class JobsGroup {
   }
 }
 
+/** The timeline group. */
+export class TimelineGroup {
+  constructor(transport) {
+    this.t = transport;
+  }
+
+  /** Create a sequence from clips, or from whole tracks. (POST /timeline) */
+  create(body) {
+    return this.t.request("POST", "/timeline", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** The sequences the caller may read, newest first. (GET /timeline) */
+  list(params = {}) {
+    return this.t.request("GET", "/timeline", { query: {"limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
+  }
+
+  /** One sequence. One the caller may not read is 404. (GET /timeline/{id}) */
+  get(id) {
+    return this.t.request("GET", "/timeline/" + encodeURIComponent(id), { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** Edit a sequence. Every edit is a revision. (PATCH /timeline/{id}) */
+  update(id, body, params = {}) {
+    return this.t.request("PATCH", "/timeline/" + encodeURIComponent(id), { query: {}, headers: {"If-Match": params.ifMatch}, expect: "json", json: body, contentType: "application/merge-patch+json" });
+  }
+
+  /** Delete a sequence. Its exports and their lineage stay. (DELETE /timeline/{id}) */
+  delete(id, params = {}) {
+    return this.t.request("DELETE", "/timeline/" + encodeURIComponent(id), { query: {}, headers: {"If-Match": params.ifMatch}, expect: "empty" });
+  }
+
+  /** The sequence's earlier revisions, newest first. (GET /timeline/{id}/revisions) */
+  revisions(id, params = {}) {
+    return this.t.request("GET", "/timeline/" + encodeURIComponent(id) + "/revisions", { query: {"limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
+  }
+
+  /** Write an earlier revision back as the newest one. (POST /timeline/{id}:revert) */
+  revert(id, body, params = {}) {
+    return this.t.request("POST", "/timeline/" + encodeURIComponent(id) + ":revert", { query: {}, headers: {"If-Match": params.ifMatch}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Add one asset to the end of a track, without stealing focus. (POST /timeline:append) */
+  append(body) {
+    return this.t.request("POST", "/timeline:append", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Ask the framework to show its editor on this sequence. (POST /timeline/{id}:open) */
+  open(id) {
+    return this.t.request("POST", "/timeline/" + encodeURIComponent(id) + ":open", { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** Which path an export would take, and why. (GET /timeline/{id}:plan) */
+  plan(id, params = {}) {
+    return this.t.request("GET", "/timeline/" + encodeURIComponent(id) + ":plan", { query: {"preset": params.preset}, headers: {}, expect: "json" });
+  }
+
+  /** Export the sequence. Answers with the job that renders it. (POST /timeline/{id}:export) */
+  export(id, body) {
+    return this.t.request("POST", "/timeline/" + encodeURIComponent(id) + ":export", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** The sequence's export jobs, newest first. (GET /timeline/{id}/exports) */
+  exports(id, params = {}) {
+    return this.t.request("GET", "/timeline/" + encodeURIComponent(id) + "/exports", { query: {"limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
+  }
+
+  /** Stop a running export and leave nothing behind. (POST /timeline/{id}/exports/{job}:cancel) */
+  cancelExport(id, job) {
+    return this.t.request("POST", "/timeline/" + encodeURIComponent(id) + "/exports/" + encodeURIComponent(job) + ":cancel", { query: {}, headers: {}, expect: "empty" });
+  }
+}
+
 /** One property per API group, the same names as the Go and Python clients. */
 export class Client {
   constructor(transport) {
@@ -291,5 +363,6 @@ export class Client {
     this.handoff = new HandoffGroup(transport);
     this.inbox = new InboxGroup(transport);
     this.jobs = new JobsGroup(transport);
+    this.timeline = new TimelineGroup(transport);
   }
 }

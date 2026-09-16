@@ -232,6 +232,64 @@ class JobsGroup:
         """Append lines to a running task job's log. (POST /jobs/{id}/logs)"""
         return self._t.request("POST", "/jobs/" + quote(id) + "/logs", query={}, headers={}, expect="empty", json_body=body, content_type="application/json")
 
+class TimelineGroup:
+    """The timeline group."""
+
+    def __init__(self, transport: Transport) -> None:
+        self._t = transport
+
+    def create(self, body: Dict[str, Any]) -> Any:
+        """Create a sequence from clips, or from whole tracks. (POST /timeline)"""
+        return self._t.request("POST", "/timeline", query={}, headers={}, expect="json", json_body=body, content_type="application/json")
+
+    def list(self, *, limit: Optional[Any] = None, cursor: Optional[Any] = None) -> Any:
+        """The sequences the caller may read, newest first. (GET /timeline)"""
+        return self._t.request("GET", "/timeline", query={"limit": limit, "cursor": cursor}, headers={}, expect="json")
+
+    def get(self, id: str) -> Any:
+        """One sequence. One the caller may not read is 404. (GET /timeline/{id})"""
+        return self._t.request("GET", "/timeline/" + quote(id), query={}, headers={}, expect="json")
+
+    def update(self, id: str, body: Dict[str, Any], *, if_match: Any) -> Any:
+        """Edit a sequence. Every edit is a revision. (PATCH /timeline/{id})"""
+        return self._t.request("PATCH", "/timeline/" + quote(id), query={}, headers={"If-Match": if_match}, expect="json", json_body=body, content_type="application/merge-patch+json")
+
+    def delete(self, id: str, *, if_match: Optional[Any] = None) -> Any:
+        """Delete a sequence. Its exports and their lineage stay. (DELETE /timeline/{id})"""
+        return self._t.request("DELETE", "/timeline/" + quote(id), query={}, headers={"If-Match": if_match}, expect="empty")
+
+    def revisions(self, id: str, *, limit: Optional[Any] = None, cursor: Optional[Any] = None) -> Any:
+        """The sequence's earlier revisions, newest first. (GET /timeline/{id}/revisions)"""
+        return self._t.request("GET", "/timeline/" + quote(id) + "/revisions", query={"limit": limit, "cursor": cursor}, headers={}, expect="json")
+
+    def revert(self, id: str, body: Dict[str, Any], *, if_match: Any) -> Any:
+        """Write an earlier revision back as the newest one. (POST /timeline/{id}:revert)"""
+        return self._t.request("POST", "/timeline/" + quote(id) + ":revert", query={}, headers={"If-Match": if_match}, expect="json", json_body=body, content_type="application/json")
+
+    def append(self, body: Dict[str, Any]) -> Any:
+        """Add one asset to the end of a track, without stealing focus. (POST /timeline:append)"""
+        return self._t.request("POST", "/timeline:append", query={}, headers={}, expect="json", json_body=body, content_type="application/json")
+
+    def open(self, id: str) -> Any:
+        """Ask the framework to show its editor on this sequence. (POST /timeline/{id}:open)"""
+        return self._t.request("POST", "/timeline/" + quote(id) + ":open", query={}, headers={}, expect="json")
+
+    def plan(self, id: str, *, preset: Optional[Any] = None) -> Any:
+        """Which path an export would take, and why. (GET /timeline/{id}:plan)"""
+        return self._t.request("GET", "/timeline/" + quote(id) + ":plan", query={"preset": preset}, headers={}, expect="json")
+
+    def export(self, id: str, body: Dict[str, Any]) -> Any:
+        """Export the sequence. Answers with the job that renders it. (POST /timeline/{id}:export)"""
+        return self._t.request("POST", "/timeline/" + quote(id) + ":export", query={}, headers={}, expect="json", json_body=body, content_type="application/json")
+
+    def exports(self, id: str, *, limit: Optional[Any] = None, cursor: Optional[Any] = None) -> Any:
+        """The sequence's export jobs, newest first. (GET /timeline/{id}/exports)"""
+        return self._t.request("GET", "/timeline/" + quote(id) + "/exports", query={"limit": limit, "cursor": cursor}, headers={}, expect="json")
+
+    def cancel_export(self, id: str, job: str) -> Any:
+        """Stop a running export and leave nothing behind. (POST /timeline/{id}/exports/{job}:cancel)"""
+        return self._t.request("POST", "/timeline/" + quote(id) + "/exports/" + quote(job) + ":cancel", query={}, headers={}, expect="empty")
+
 
 class Client:
     """One attribute per API group, the same names as the Go and Node clients."""
@@ -247,3 +305,4 @@ class Client:
         self.handoff = HandoffGroup(transport)
         self.inbox = InboxGroup(transport)
         self.jobs = JobsGroup(transport)
+        self.timeline = TimelineGroup(transport)

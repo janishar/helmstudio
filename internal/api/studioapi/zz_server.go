@@ -64,6 +64,19 @@ type Server interface {
 	JobsCancel(ctx context.Context, id string) error
 	JobsLogs(ctx context.Context, w http.ResponseWriter, r *http.Request, id string) error
 	JobsAppendLog(ctx context.Context, id string, body *helm.LogAppend) error
+	TimelineCreate(ctx context.Context, body *helm.TimelineCreate) (*helm.Timeline, error)
+	TimelineList(ctx context.Context, params helm.TimelineListParams) (*helm.TimelinePage, error)
+	TimelineGet(ctx context.Context, id string) (*helm.Timeline, error)
+	TimelineUpdate(ctx context.Context, id string, body map[string]any, params helm.TimelineUpdateParams) (*helm.Timeline, error)
+	TimelineDelete(ctx context.Context, id string, params helm.TimelineDeleteParams) error
+	TimelineRevisions(ctx context.Context, id string, params helm.TimelineRevisionsParams) (*helm.TimelineRevisionPage, error)
+	TimelineRevert(ctx context.Context, id string, body *helm.TimelineRevert, params helm.TimelineRevertParams) (*helm.Timeline, error)
+	TimelineAppend(ctx context.Context, body *helm.TimelineAppend) (*helm.Timeline, error)
+	TimelineOpen(ctx context.Context, id string) (*helm.TimelineOpened, error)
+	TimelinePlan(ctx context.Context, id string, params helm.TimelinePlanParams) (*helm.ExportPlan, error)
+	TimelineExport(ctx context.Context, id string, body *helm.ExportRequest) (*helm.Job, error)
+	TimelineExports(ctx context.Context, id string, params helm.TimelineExportsParams) (*helm.JobPage, error)
+	TimelineCancelExport(ctx context.Context, id string, job string) error
 }
 
 var routes = []route{
@@ -108,6 +121,19 @@ var routes = []route{
 	{method: "POST", path: "/jobs/{id}:cancel", operation: "jobsCancel", capability: "jobs", serve: serveJobsCancel},
 	{method: "GET", path: "/jobs/{id}/logs", operation: "jobsLogs", capability: "jobs", serve: serveJobsLogs},
 	{method: "POST", path: "/jobs/{id}/logs", operation: "jobsAppendLog", capability: "jobs", serve: serveJobsAppendLog},
+	{method: "POST", path: "/timeline", operation: "timelineCreate", capability: "timeline", serve: serveTimelineCreate},
+	{method: "GET", path: "/timeline", operation: "timelineList", capability: "timeline", serve: serveTimelineList},
+	{method: "GET", path: "/timeline/{id}", operation: "timelineGet", capability: "timeline", serve: serveTimelineGet},
+	{method: "PATCH", path: "/timeline/{id}", operation: "timelineUpdate", capability: "timeline", serve: serveTimelineUpdate},
+	{method: "DELETE", path: "/timeline/{id}", operation: "timelineDelete", capability: "timeline", serve: serveTimelineDelete},
+	{method: "GET", path: "/timeline/{id}/revisions", operation: "timelineRevisions", capability: "timeline", serve: serveTimelineRevisions},
+	{method: "POST", path: "/timeline/{id}:revert", operation: "timelineRevert", capability: "timeline", serve: serveTimelineRevert},
+	{method: "POST", path: "/timeline:append", operation: "timelineAppend", capability: "timeline", serve: serveTimelineAppend},
+	{method: "POST", path: "/timeline/{id}:open", operation: "timelineOpen", capability: "timeline", serve: serveTimelineOpen},
+	{method: "GET", path: "/timeline/{id}:plan", operation: "timelinePlan", capability: "timeline", serve: serveTimelinePlan},
+	{method: "POST", path: "/timeline/{id}:export", operation: "timelineExport", capability: "timeline", serve: serveTimelineExport},
+	{method: "GET", path: "/timeline/{id}/exports", operation: "timelineExports", capability: "timeline", serve: serveTimelineExports},
+	{method: "POST", path: "/timeline/{id}/exports/{job}:cancel", operation: "timelineCancelExport", capability: "timeline", serve: serveTimelineCancelExport},
 }
 
 func serveMeGet(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
@@ -1141,6 +1167,307 @@ func serveJobsAppendLog(ctx context.Context, h *Handler, w http.ResponseWriter, 
 	w.WriteHeader(204)
 }
 
+func serveTimelineCreate(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	var body helm.TimelineCreate
+	if err := readBody(w, r, &body, []string{"name", "target"}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := validateTimelineCreate(&body); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.srv.TimelineCreate(ctx, &body)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	setETag(w, res.ETag)
+	writeJSON(w, 201, res)
+}
+
+func serveTimelineList(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	var params helm.TimelineListParams
+	query := r.URL.Query()
+	if vs := query["limit"]; len(vs) > 0 {
+		v_limit, err := strconv.ParseInt(vs[0], 10, 64)
+		if err != nil {
+			h.fail(w, r, badParam("limit", "must be an integer"))
+			return
+		}
+		if err := checkRange("limit", float64(v_limit), ptrFloat(1), ptrFloat(200), nil); err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		params.Limit = &v_limit
+	}
+	if vs := query["cursor"]; len(vs) > 0 {
+		v_cursor := vs[0]
+		params.Cursor = &v_cursor
+	}
+	res, err := h.srv.TimelineList(ctx, params)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineGet(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern49); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.srv.TimelineGet(ctx, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	setETag(w, res.ETag)
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineUpdate(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern50); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	body := map[string]any{}
+	if err := readObject(w, r, &body, []string{"name", "target", "tracks"}, 1); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var params helm.TimelineUpdateParams
+	if vs := r.Header.Values("If-Match"); len(vs) > 0 {
+		v_if_match := vs[0]
+		params.IfMatch = v_if_match
+	} else {
+		h.fail(w, r, badParam("If-Match", "is required"))
+		return
+	}
+	res, err := h.srv.TimelineUpdate(ctx, id, body, params)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	setETag(w, res.ETag)
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineDelete(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern51); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var params helm.TimelineDeleteParams
+	if vs := r.Header.Values("If-Match"); len(vs) > 0 {
+		v_if_match := vs[0]
+		params.IfMatch = &v_if_match
+	}
+	if err := h.srv.TimelineDelete(ctx, id, params); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func serveTimelineRevisions(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern52); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var params helm.TimelineRevisionsParams
+	query := r.URL.Query()
+	if vs := query["limit"]; len(vs) > 0 {
+		v_limit, err := strconv.ParseInt(vs[0], 10, 64)
+		if err != nil {
+			h.fail(w, r, badParam("limit", "must be an integer"))
+			return
+		}
+		if err := checkRange("limit", float64(v_limit), ptrFloat(1), ptrFloat(200), nil); err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		params.Limit = &v_limit
+	}
+	if vs := query["cursor"]; len(vs) > 0 {
+		v_cursor := vs[0]
+		params.Cursor = &v_cursor
+	}
+	res, err := h.srv.TimelineRevisions(ctx, id, params)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineRevert(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern53); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var body helm.TimelineRevert
+	if err := readBody(w, r, &body, []string{"revision"}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := validateTimelineRevert(&body); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var params helm.TimelineRevertParams
+	if vs := r.Header.Values("If-Match"); len(vs) > 0 {
+		v_if_match := vs[0]
+		params.IfMatch = v_if_match
+	} else {
+		h.fail(w, r, badParam("If-Match", "is required"))
+		return
+	}
+	res, err := h.srv.TimelineRevert(ctx, id, &body, params)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	setETag(w, res.ETag)
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineAppend(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	var body helm.TimelineAppend
+	if err := readBody(w, r, &body, []string{"asset_id"}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := validateTimelineAppend(&body); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.srv.TimelineAppend(ctx, &body)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	setETag(w, res.ETag)
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineOpen(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern57); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.srv.TimelineOpen(ctx, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+func serveTimelinePlan(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern58); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var params helm.TimelinePlanParams
+	query := r.URL.Query()
+	if vs := query["preset"]; len(vs) > 0 {
+		v_preset := helm.ExportPreset(vs[0])
+		if err := checkEnum("preset", string(v_preset), []string{"h264"}); err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		params.Preset = &v_preset
+	}
+	res, err := h.srv.TimelinePlan(ctx, id, params)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineExport(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern59); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var body helm.ExportRequest
+	if err := readBody(w, r, &body, []string{"preset"}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := validateExportRequest(&body); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.srv.TimelineExport(ctx, id, &body)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, 202, res)
+}
+
+func serveTimelineExports(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern60); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var params helm.TimelineExportsParams
+	query := r.URL.Query()
+	if vs := query["limit"]; len(vs) > 0 {
+		v_limit, err := strconv.ParseInt(vs[0], 10, 64)
+		if err != nil {
+			h.fail(w, r, badParam("limit", "must be an integer"))
+			return
+		}
+		if err := checkRange("limit", float64(v_limit), ptrFloat(1), ptrFloat(200), nil); err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		params.Limit = &v_limit
+	}
+	if vs := query["cursor"]; len(vs) > 0 {
+		v_cursor := vs[0]
+		params.Cursor = &v_cursor
+	}
+	res, err := h.srv.TimelineExports(ctx, id, params)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
+func serveTimelineCancelExport(ctx context.Context, h *Handler, w http.ResponseWriter, r *http.Request, pv []string) {
+	id := pv[0]
+	if err := checkPattern("id", id, pattern61); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	job := pv[1]
+	if err := checkPattern("job", job, pattern62); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.srv.TimelineCancelExport(ctx, id, job); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+
 var pattern0 = regexp.MustCompile("^[a-z][a-z0-9_.-]{0,63}$")
 
 var pattern1 = regexp.MustCompile("^[a-z][a-z0-9_.-]{0,63}$")
@@ -1374,3 +1701,182 @@ func validateLogAppend(v *helm.LogAppend) error {
 	}
 	return nil
 }
+
+func validateTimelineTargetInput(v *helm.TimelineTargetInput) error {
+	if err := checkRange("width", float64(v.Width), ptrFloat(2), ptrFloat(8192), nil); err != nil {
+		return err
+	}
+	if err := checkRange("height", float64(v.Height), ptrFloat(2), ptrFloat(8192), nil); err != nil {
+		return err
+	}
+	if err := checkEnum("fps", strconv.FormatFloat(float64(v.FPS), 'g', -1, 64), []string{"23.976", "24", "25", "29.97", "30", "48", "50", "59.94", "60"}); err != nil {
+		return err
+	}
+	if v.SampleRate != nil {
+		if err := checkEnum("sample_rate", strconv.FormatFloat(float64((*v.SampleRate)), 'g', -1, 64), []string{"44100", "48000"}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var pattern47 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+func validateTimelineTransition(v *helm.TimelineTransition) error {
+	if err := checkEnum("type", v.Type, []string{"dissolve"}); err != nil {
+		return err
+	}
+	if err := checkRange("duration", float64(v.Duration), nil, ptrFloat(10), ptrFloat(0)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateTimelineClip(v *helm.TimelineClip) error {
+	if err := checkPattern("asset_id", v.AssetID, pattern47); err != nil {
+		return err
+	}
+	if v.In != nil {
+		if err := checkRange("in", float64((*v.In)), ptrFloat(0), nil, nil); err != nil {
+			return err
+		}
+	}
+	if v.Out != nil {
+		if err := checkRange("out", float64((*v.Out)), nil, nil, ptrFloat(0)); err != nil {
+			return err
+		}
+	}
+	if v.At != nil {
+		if err := checkRange("at", float64((*v.At)), ptrFloat(0), nil, nil); err != nil {
+			return err
+		}
+	}
+	if v.Hold != nil {
+		if err := checkRange("hold", float64((*v.Hold)), nil, nil, ptrFloat(0)); err != nil {
+			return err
+		}
+	}
+	if v.GainDb != nil {
+		if err := checkRange("gain_db", float64((*v.GainDb)), ptrFloat(-60), ptrFloat(12), nil); err != nil {
+			return err
+		}
+	}
+	if v.TransitionIn != nil {
+		if err := validateTimelineTransition(v.TransitionIn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var pattern48 = regexp.MustCompile("^[VA][0-9]{1,2}$")
+
+func validateTimelineTrack(v *helm.TimelineTrack) error {
+	if err := checkEnum("kind", v.Kind, []string{"video", "audio"}); err != nil {
+		return err
+	}
+	if v.Name != nil {
+		if err := checkPattern("name", (*v.Name), pattern48); err != nil {
+			return err
+		}
+	}
+	if v.GainDb != nil {
+		if err := checkRange("gain_db", float64((*v.GainDb)), ptrFloat(-60), ptrFloat(12), nil); err != nil {
+			return err
+		}
+	}
+	if err := checkItems("clips", len(v.Clips), -1, 500); err != nil {
+		return err
+	}
+	for i := range v.Clips {
+		if err := validateTimelineClip(&v.Clips[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateTimelineCreate(v *helm.TimelineCreate) error {
+	if err := checkLength("name", v.Name, 1, 200); err != nil {
+		return err
+	}
+	if err := validateTimelineTargetInput(&v.Target); err != nil {
+		return err
+	}
+	if err := checkItems("clips", len(v.Clips), -1, 500); err != nil {
+		return err
+	}
+	for i := range v.Clips {
+		if err := validateTimelineClip(&v.Clips[i]); err != nil {
+			return err
+		}
+	}
+	if err := checkItems("tracks", len(v.Tracks), -1, 9); err != nil {
+		return err
+	}
+	for i := range v.Tracks {
+		if err := validateTimelineTrack(&v.Tracks[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var pattern49 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern50 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern51 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern52 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern53 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+func validateTimelineRevert(v *helm.TimelineRevert) error {
+	if err := checkRange("revision", float64(v.Revision), ptrFloat(1), nil, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+var pattern54 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern55 = regexp.MustCompile("^[VA][0-9]{1,2}$")
+
+var pattern56 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+func validateTimelineAppend(v *helm.TimelineAppend) error {
+	if err := checkPattern("asset_id", v.AssetID, pattern54); err != nil {
+		return err
+	}
+	if v.Track != nil {
+		if err := checkPattern("track", (*v.Track), pattern55); err != nil {
+			return err
+		}
+	}
+	if v.TimelineID != nil {
+		if err := checkPattern("timeline_id", (*v.TimelineID), pattern56); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var pattern57 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern58 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern59 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+func validateExportRequest(v *helm.ExportRequest) error {
+	if err := checkEnum("preset", string(v.Preset), []string{"h264"}); err != nil {
+		return err
+	}
+	return nil
+}
+
+var pattern60 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern61 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")
+
+var pattern62 = regexp.MustCompile("^[0-9A-HJKMNP-TV-Z]{26}$")

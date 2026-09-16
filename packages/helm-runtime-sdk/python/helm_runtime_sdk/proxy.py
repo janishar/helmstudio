@@ -39,7 +39,10 @@ PREFIX = "/helm/"
 # First path segments under /api/v1/ that are forwarded: every studio-api
 # operation's, and the theme stream's.
 STUDIO_SEGMENTS = frozenset(
-    ["me", "events", "kv", "sessions", "records", "assets", "assets:adopt", "gallery", "handoff", "inbox", "jobs", "theme"]
+    [
+        "me", "events", "kv", "sessions", "records", "assets", "assets:adopt", "gallery",
+        "handoff", "inbox", "jobs", "theme", "timeline", "timeline:append",
+    ]
 )
 
 REQUEST_HEADERS = ["Accept", "Content-Type", "Range", "If-Range", "If-Match", "If-None-Match", "Last-Event-ID"]

@@ -1316,6 +1316,388 @@ paths:
         "413": { $ref: "#/components/responses/TooLarge" }
 
   # ======================================================================
+  # Timeline and export (R44–R49, 05 §6, §7; docs/decisions.md M8 Q7–Q19)
+  #
+  # A sequence is the framework's document, not a studio's, and it is owned by
+  # the studio that created it: that studio reads, edits and exports it, and so
+  # does any studio holding gallery.read_all (Q11). Every clip must name an
+  # asset the caller may read, checked again at export, so a sequence can never
+  # carry bytes out of a studio that could not read them.
+  #
+  # Times are seconds, snapped by the daemon to the target's frames, or to its
+  # samples for a clip on an audio track (Q7). What is stored and returned is
+  # the snapped document, so writing it back changes nothing.
+  # ======================================================================
+
+  /timeline:
+    post:
+      tags: [studio-api]
+      operationId: timelineCreate
+      x-helm-group: timeline
+      x-helm-method: create
+      x-helm-capability: timeline
+      summary: Create a sequence from clips, or from whole tracks.
+      description: >
+        R44, R45, 05 §7. Either `clips`, which are laid end to end from 0 on
+        V1 for video and images and on A1 for sound, or `tracks` — not both.
+        Neither makes an empty sequence, which is valid to store and cannot be
+        exported until it has a video clip.
+
+        `target.sample_rate` defaults to 48000 (Q9). Every clip must name an
+        asset the caller may read (Q11); one it may not is 422
+        `invalid_timeline`, worded the same whether or not the asset exists.
+      security: [{ studioToken: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TimelineCreate" } } }
+      responses:
+        "201":
+          description: The new sequence, as it was stored after snapping.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    get:
+      tags: [studio-api]
+      operationId: timelineList
+      x-helm-group: timeline
+      x-helm-method: list
+      x-helm-capability: timeline
+      summary: The sequences the caller may read, newest first.
+      description: >
+        Q11. The caller's own, and every studio's when it holds
+        `gallery.read_all`. Deleted sequences are not listed.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of sequences.
+          content: { application/json: { schema: { $ref: "#/components/schemas/TimelinePage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /timeline/{id}:
+    get:
+      tags: [studio-api]
+      operationId: timelineGet
+      x-helm-group: timeline
+      x-helm-method: get
+      x-helm-capability: timeline
+      summary: One sequence. One the caller may not read is 404.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      responses:
+        "200":
+          description: The sequence. `ETag` is its revision.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [studio-api]
+      operationId: timelineUpdate
+      x-helm-group: timeline
+      x-helm-method: update
+      x-helm-capability: timeline
+      summary: Edit a sequence. Every edit is a revision.
+      description: >
+        05 §6, Q10. A JSON merge patch over `name`, `target` and `tracks`;
+        `target` members merge, and `tracks` replaces. `If-Match` is required,
+        and a stale one is 409 `etag_mismatch`. The document the patch produces
+        is validated and snapped as a whole, and the document it replaces is
+        kept as the previous revision.
+
+        A clip this write adds must name an asset the caller may read; one
+        already in the sequence may stay (Q11).
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/IfMatchRequired" }
+      requestBody:
+        required: true
+        content: { application/merge-patch+json: { schema: { $ref: "#/components/schemas/TimelineUpdate" } } }
+      responses:
+        "200":
+          description: The sequence as it was stored.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+    delete:
+      tags: [studio-api]
+      operationId: timelineDelete
+      x-helm-group: timeline
+      x-helm-method: delete
+      x-helm-capability: timeline
+      summary: Delete a sequence. Its exports and their lineage stay.
+      description: >
+        Q12. A soft delete: the row stays, so an exported item keeps naming it,
+        and its clips stop holding their footage against reclaim. There is no
+        restore. `If-Match` is checked when sent.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      responses:
+        "204": { description: "Deleted." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /timeline/{id}/revisions:
+    get:
+      tags: [studio-api]
+      operationId: timelineRevisions
+      x-helm-group: timeline
+      x-helm-method: revisions
+      x-helm-capability: timeline
+      summary: The sequence's earlier revisions, newest first.
+      description: >
+        Q10. Each write stores the document it replaced; the newest 100 are
+        kept. Undo is `:revert`.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of revisions.
+          content: { application/json: { schema: { $ref: "#/components/schemas/TimelineRevisionPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /timeline/{id}:revert:
+    post:
+      tags: [studio-api]
+      operationId: timelineRevert
+      x-helm-group: timeline
+      x-helm-method: revert
+      x-helm-capability: timeline
+      summary: Write an earlier revision back as the newest one.
+      description: >
+        Q10. Undo is the previous revision, written forward rather than
+        rewound, so nothing is lost. A revision naming an asset that has since
+        been reclaimed, or one the caller may not read, is refused with the
+        clips named (422 `invalid_timeline`). `If-Match` is required.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/IfMatchRequired" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TimelineRevert" } } }
+      responses:
+        "200":
+          description: The sequence, at its new revision.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /timeline:append:
+    post:
+      tags: [studio-api]
+      operationId: timelineAppend
+      x-helm-group: timeline
+      x-helm-method: append
+      x-helm-capability: timeline
+      summary: Add one asset to the end of a track, without stealing focus.
+      description: >
+        R45, Q19. With `timeline_id`, that sequence; without one, the most
+        recently updated sequence the caller owns, and 409 `no_timeline` when
+        it owns none. `track` names a track by kind and position — `V1`, `A1`,
+        `A2` — and defaults to `V1` for a video or image asset and `A1` for
+        sound. It applies to whatever the current revision is, so it needs no
+        `If-Match`.
+      security: [{ studioToken: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TimelineAppend" } } }
+      responses:
+        "200":
+          description: The sequence, with the clip appended.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /timeline/{id}:open:
+    post:
+      tags: [studio-api]
+      operationId: timelineOpen
+      x-helm-group: timeline
+      x-helm-method: open
+      x-helm-capability: timeline
+      summary: Ask the framework to show its editor on this sequence.
+      description: >
+        R45, 05 §5a, §7, Q19. The data operation always works and only the
+        presentation degrades: until the launcher has a Timeline screen, which
+        waits for M9's cookie (Q20), this answers 501 `unsupported` with a
+        reason, and a studio hides its button. From then it publishes the
+        sequence to a connected launcher page and answers `{opened, surface}`,
+        or 501 when no page is connected.
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      responses:
+        "200":
+          description: A framework surface opened the sequence.
+          content: { application/json: { schema: { $ref: "#/components/schemas/TimelineOpened" } } }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+  /timeline/{id}:plan:
+    get:
+      tags: [studio-api]
+      operationId: timelinePlan
+      x-helm-group: timeline
+      x-helm-method: plan
+      x-helm-capability: timeline
+      summary: Which path an export would take, and why.
+      description: >
+        R47, Q13. Every video clip is probed, and the answer is `copy` when
+        every one of them matches the target and each other — codec, profile,
+        level, size, aspect ratio, field order, pixel format, time base, frame
+        rate, colour tags and parameter sets — and is used whole, with no hold,
+        image or transition. Otherwise `conform`, with a reason per clip.
+
+        The picture is copied; sound always goes through the conform graph,
+        because a copied AAC stream carries its own priming and padding into
+        every cut. So the chip reads "video stream copy", not "no re-encode".
+
+        Needs ffmpeg: without it, 501 `unsupported` with `details.tool`.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - name: preset
+          in: query
+          schema: { $ref: "#/components/schemas/ExportPreset" }
+      responses:
+        "200":
+          description: The plan.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ExportPlan" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+  /timeline/{id}:export:
+    post:
+      tags: [studio-api]
+      operationId: timelineExport
+      x-helm-group: timeline
+      x-helm-method: export
+      x-helm-capability: timeline
+      summary: Export the sequence. Answers with the job that renders it.
+      description: >
+        R46, R48, Q16, Q17. Export is a Job, so progress, cancellation and the
+        log are the ones that already exist. The output is written where
+        nothing looks for it and becomes an asset only after ffmpeg exits 0 and
+        the file is probed against the target; then it is adopted, and recorded
+        as a gallery item carrying `timeline_id` with one `clip` input per
+        distinct asset.
+
+        A sequence with no video clip is 422 `invalid_timeline`. A clip the
+        caller may no longer read is 422. One export at a time per sequence:
+        another is 409 `already_exporting`. Needs ffmpeg (501 `unsupported`).
+      security: [{ studioToken: [] }]
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ExportRequest" } } }
+      responses:
+        "202":
+          description: The export job.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+  /timeline/{id}/exports:
+    get:
+      tags: [studio-api]
+      operationId: timelineExports
+      x-helm-group: timeline
+      x-helm-method: exports
+      x-helm-capability: timeline
+      summary: The sequence's export jobs, newest first.
+      description: >
+        Q17. Under `timeline`, so a studio that exports need not also hold
+        `jobs` to watch what it started. The same jobs appear in `/jobs` for a
+        studio that does hold it.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of export jobs.
+          content: { application/json: { schema: { $ref: "#/components/schemas/JobPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /timeline/{id}/exports/{job}:cancel:
+    post:
+      tags: [studio-api]
+      operationId: timelineCancelExport
+      x-helm-group: timeline
+      x-helm-method: cancelExport
+      x-helm-capability: timeline
+      summary: Stop a running export and leave nothing behind.
+      description: >
+        Q16, Q17. The ffmpeg leading the export's process group is stopped and
+        its partial file removed; the job ends `cancelled`. A finished job is
+        409 `job_finished`. The launcher's
+        `POST /launcher/jobs/{id}:cancel` reaches the same runner.
+      security: [{ studioToken: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/ExportJobId" }
+      responses:
+        "204": { description: "Cancellation requested." }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ======================================================================
   # Launcher: the job queue (docs/decisions.md M3; separated from /jobs by
   # the M4 first review, #2)
   # ======================================================================
@@ -1779,6 +2161,16 @@ components:
       in: header
       description: The etag last read. When given and stale, the write is refused with 409 `etag_mismatch`.
       schema: { type: string }
+    IfMatchRequired:
+      name: If-Match
+      in: header
+      required: true
+      description: >
+        The revision last read, as the `ETag` header gave it. Required on a
+        timeline write, because a merge patch replaces `tracks` whole and a
+        blind write would drop another editor's clips (docs/decisions.md M8
+        Q10). A stale one is 409 `etag_mismatch`.
+      schema: { type: string }
     Namespace:
       name: ns
       in: path
@@ -1811,6 +2203,8 @@ components:
     ItemId:       { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
     InboxId:      { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
     JobId:        { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    TimelineId:   { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
+    ExportJobId:  { name: job, in: path, required: true, schema: { $ref: "#/components/schemas/ULID" } }
     Pinned:
       name: pinned
       in: query
@@ -2212,7 +2606,7 @@ components:
 
     Item:
       type: object
-      required: [id, studio_id, kind, asset_id, asset, session_id, title, params, starred, tags, inputs, created_at]
+      required: [id, studio_id, kind, asset_id, asset, session_id, timeline_id, title, params, starred, tags, inputs, created_at]
       properties:
         id: { $ref: "#/components/schemas/ULID" }
         studio_id: { $ref: "#/components/schemas/StudioIdValue" }
@@ -2220,6 +2614,12 @@ components:
         asset_id: { $ref: "#/components/schemas/ULID" }
         asset: { $ref: "#/components/schemas/Asset" }
         session_id: { oneOf: [{ $ref: "#/components/schemas/ULID" }, { type: "null" }] }
+        timeline_id:
+          oneOf: [{ $ref: "#/components/schemas/ULID" }, { type: "null" }]
+          description: >
+            Set when this item is a sequence's export (R48, 02 §10). The
+            gallery labels such an item "timeline" rather than by a studio
+            (M8 Q17).
         title: { type: [string, "null"] }
         params: { $ref: "#/components/schemas/JSONObject" }
         starred: { type: boolean }
@@ -2398,6 +2798,220 @@ components:
         last_error: { $ref: "#/components/schemas/JobError" }
 
     # ---------------------------------------------------------------- studios
+
+    # ---------------------------------------------------------------- timeline
+
+    TimelineTarget:
+      type: object
+      description: >
+        What every clip is conformed to (R44, R47). Geometry and rates only:
+        the codec belongs to the export's preset, not the document (M8 Q9).
+        Output is always stereo, and is tagged BT.709 limited range when it is
+        re-encoded.
+      required: [width, height, fps, sample_rate]
+      additionalProperties: false
+      properties:
+        width: { type: integer, minimum: 2, maximum: 8192, description: "Even." }
+        height: { type: integer, minimum: 2, maximum: 8192, description: "Even." }
+        fps:
+          type: number
+          enum: [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60]
+          description: >
+            One of the rates the daemon knows exactly; 23.976, 29.97 and 59.94
+            are 24000/1001, 30000/1001 and 60000/1001, which no JSON number
+            writes exactly.
+        sample_rate: { type: integer, enum: [44100, 48000] }
+
+    TimelineTargetInput:
+      type: object
+      description: The target as a request gives it; `sample_rate` defaults to 48000.
+      required: [width, height, fps]
+      additionalProperties: false
+      properties:
+        width: { type: integer, minimum: 2, maximum: 8192 }
+        height: { type: integer, minimum: 2, maximum: 8192 }
+        fps: { type: number, enum: [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60] }
+        sample_rate: { type: integer, enum: [44100, 48000], default: 48000 }
+
+    TimelineTransition:
+      type: object
+      description: >
+        The one transition (01 §14). It is centred on the cut and takes half
+        its duration of handle from each side, so adding one moves no clip.
+      required: [type, duration]
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [dissolve] }
+        duration: { type: number, exclusiveMinimum: 0, maximum: 10 }
+
+    TimelineClip:
+      type: object
+      description: >
+        A reference with in and out points; sources are never modified or
+        copied (R44). `in` and `out` are times in the source, `at` is where it
+        sits in the sequence, and an image clip uses `hold` instead.
+      required: [asset_id]
+      additionalProperties: false
+      properties:
+        asset_id: { $ref: "#/components/schemas/ULID" }
+        in: { type: number, minimum: 0, description: "Where the clip starts in its source. Defaults to 0." }
+        out: { type: number, exclusiveMinimum: 0, description: "Where it ends in its source. Defaults to the source's end." }
+        at: { type: number, minimum: 0, description: "Where it sits in the sequence. Assigned when clips are laid end to end." }
+        hold: { type: number, exclusiveMinimum: 0, description: "How long an image is held. Images only, and never with in or out." }
+        gain_db: { type: number, minimum: -60, maximum: 12, description: "Applied to this clip's own sound. Defaults to 0." }
+        audio: { type: boolean, description: "Whether a video clip's own sound plays under it. Defaults to true." }
+        transition_in: { $ref: "#/components/schemas/TimelineTransition" }
+        studio_id:
+          type: [string, "null"]
+          description: >
+            The studio whose asset this is, for the clip's hue and name. Null
+            when the caller could not learn it from an item it may read (M8
+            Q11). Set by the daemon, and ignored in a request.
+
+    TimelineTrack:
+      type: object
+      required: [kind, clips]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [video, audio] }
+        name:
+          type: string
+          pattern: "^[VA][0-9]{1,2}$"
+          description: "V1, A1, A2 — kind and position. Assigned by the daemon, and ignored in a request."
+        gain_db: { type: number, minimum: -60, maximum: 12 }
+        clips: { type: array, items: { $ref: "#/components/schemas/TimelineClip" }, maxItems: 500 }
+
+    Timeline:
+      type: object
+      description: >
+        The framework's sequence document (R44, 05 §6). One video track, V1,
+        contiguous from 0, and up to eight audio tracks.
+      required: [id, name, target, tracks, revision, duration_s, etag, studio_id, created_at, updated_at]
+      properties:
+        id: { $ref: "#/components/schemas/ULID" }
+        name: { type: string }
+        target: { $ref: "#/components/schemas/TimelineTarget" }
+        tracks: { type: array, items: { $ref: "#/components/schemas/TimelineTrack" } }
+        revision: { type: integer, description: "Rises by one on every write. The ETag." }
+        duration_s: { type: number, description: "V1's end, computed and never stored." }
+        etag: { type: string }
+        studio_id:
+          type: [string, "null"]
+          description: The studio that created it; null for the launcher's own (M8 Q11).
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    TimelinePage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/Timeline" } }
+
+    TimelineCreate:
+      type: object
+      required: [name, target]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        target: { $ref: "#/components/schemas/TimelineTargetInput" }
+        clips:
+          type: array
+          maxItems: 500
+          description: Laid end to end from 0, on V1 for video and images and on A1 for sound. Not with `tracks`.
+          items: { $ref: "#/components/schemas/TimelineClip" }
+        tracks:
+          type: array
+          maxItems: 9
+          description: The whole document. Not with `clips`.
+          items: { $ref: "#/components/schemas/TimelineTrack" }
+
+    TimelineUpdate:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        target: { $ref: "#/components/schemas/TimelineTargetInput" }
+        tracks: { type: array, items: { $ref: "#/components/schemas/TimelineTrack" }, maxItems: 9 }
+
+    TimelineAppend:
+      type: object
+      required: [asset_id]
+      additionalProperties: false
+      properties:
+        asset_id: { $ref: "#/components/schemas/ULID" }
+        track: { type: string, pattern: "^[VA][0-9]{1,2}$" }
+        timeline_id: { $ref: "#/components/schemas/ULID" }
+
+    TimelineRevert:
+      type: object
+      required: [revision]
+      additionalProperties: false
+      properties:
+        revision: { type: integer, minimum: 1 }
+
+    TimelineRevision:
+      type: object
+      required: [revision, saved_at, duration_s, clip_count]
+      properties:
+        revision: { type: integer }
+        saved_at: { type: string, format: date-time }
+        duration_s: { type: number }
+        clip_count: { type: integer }
+
+    TimelineRevisionPage:
+      allOf:
+        - { $ref: "#/components/schemas/Page" }
+        - properties:
+            items: { type: array, items: { $ref: "#/components/schemas/TimelineRevision" } }
+
+    TimelineOpened:
+      type: object
+      required: [opened, surface]
+      properties:
+        opened: { type: boolean }
+        surface: { type: string, description: "browser or app." }
+
+    ExportPreset:
+      type: string
+      enum: [h264]
+      description: >
+        Encoding only, never size or rate, which the target already states
+        (M8 Q9). `h264` is yuv420p, High profile, MP4 with fast start, and
+        AAC-LC at 192 kb/s.
+
+    ExportReason:
+      type: object
+      description: Why an export cannot copy its picture, one per clip that stops it.
+      required: [code, message]
+      properties:
+        code: { type: string, description: "container, codec, profile, level, size, aspect, field_order, pixel_format, time_base, frame_rate, colour, parameter_sets, trimmed, image, transition, not_probed, no_video." }
+        message: { type: string }
+        track: { type: string }
+        clip: { type: integer, description: "The clip's place in its track, counting from 1." }
+
+    ExportPlan:
+      type: object
+      required: [mode, preset, target, duration_s, frames, reasons]
+      properties:
+        mode:
+          type: string
+          enum: [copy, conform]
+          description: >
+            `copy` copies the picture and re-encodes the sound; `conform`
+            re-encodes both. Nothing copies sound (M8 Q13).
+        preset: { $ref: "#/components/schemas/ExportPreset" }
+        target: { $ref: "#/components/schemas/TimelineTarget" }
+        duration_s: { type: number }
+        frames: { type: integer }
+        reasons: { type: array, items: { $ref: "#/components/schemas/ExportReason" } }
+
+    ExportRequest:
+      type: object
+      required: [preset]
+      additionalProperties: false
+      properties:
+        preset: { $ref: "#/components/schemas/ExportPreset" }
 
     InstallState:
       type: string

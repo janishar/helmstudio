@@ -78,6 +78,7 @@ var ProxyStudioSegments = map[string]bool{
 	"me": true, "events": true, "kv": true, "sessions": true, "records": true,
 	"assets": true, "assets:adopt": true, "gallery": true, "handoff": true,
 	"inbox": true, "jobs": true, "theme": true,
+	"timeline": true, "timeline:append": true,
 }
 
 // Request headers a page may send through; everything else is dropped.

@@ -243,18 +243,21 @@ type ItemUpdate struct {
 
 // Item is components.schemas.Item in api/openapi.yaml.
 type Item struct {
-	ID        string         `json:"id"`
-	StudioID  string         `json:"studio_id"`
-	Kind      AssetKind      `json:"kind"`
-	AssetID   string         `json:"asset_id"`
-	Asset     Asset          `json:"asset"`
-	SessionID *string        `json:"session_id"`
-	Title     *string        `json:"title"`
-	Params    map[string]any `json:"params"`
-	Starred   bool           `json:"starred"`
-	Tags      []string       `json:"tags"`
-	Inputs    []ItemInput    `json:"inputs"`
-	CreatedAt time.Time      `json:"created_at"`
+	ID        string    `json:"id"`
+	StudioID  string    `json:"studio_id"`
+	Kind      AssetKind `json:"kind"`
+	AssetID   string    `json:"asset_id"`
+	Asset     Asset     `json:"asset"`
+	SessionID *string   `json:"session_id"`
+	// Set when this item is a sequence's export (R48, 02 §10). The gallery labels such an
+	// item "timeline" rather than by a studio (M8 Q17).
+	TimelineID *string        `json:"timeline_id"`
+	Title      *string        `json:"title"`
+	Params     map[string]any `json:"params"`
+	Starred    bool           `json:"starred"`
+	Tags       []string       `json:"tags"`
+	Inputs     []ItemInput    `json:"inputs"`
+	CreatedAt  time.Time      `json:"created_at"`
 }
 
 // ItemPage is components.schemas.ItemPage in api/openapi.yaml.
@@ -417,6 +420,183 @@ type JobLogEnd struct {
 	LastError *JobError `json:"last_error,omitempty"`
 }
 
+// TimelineTarget: What every clip is conformed to (R44, R47). Geometry and rates only:
+// the codec belongs to the export's preset, not the document (M8 Q9). Output is always
+// stereo, and is tagged BT.709 limited range when it is re-encoded.
+type TimelineTarget struct {
+	// Even.
+	Width int64 `json:"width"`
+	// Even.
+	Height int64 `json:"height"`
+	// One of the rates the daemon knows exactly; 23.976, 29.97 and 59.94 are 24000/1001,
+	// 30000/1001 and 60000/1001, which no JSON number writes exactly.
+	FPS        float64 `json:"fps"`
+	SampleRate int64   `json:"sample_rate"`
+}
+
+// TimelineTargetInput: The target as a request gives it; `sample_rate` defaults to
+// 48000.
+type TimelineTargetInput struct {
+	Width      int64   `json:"width"`
+	Height     int64   `json:"height"`
+	FPS        float64 `json:"fps"`
+	SampleRate *int64  `json:"sample_rate,omitempty"`
+}
+
+// TimelineTransition: The one transition (01 §14). It is centred on the cut and takes
+// half its duration of handle from each side, so adding one moves no clip.
+type TimelineTransition struct {
+	Type     string  `json:"type"`
+	Duration float64 `json:"duration"`
+}
+
+// TimelineClip: A reference with in and out points; sources are never modified or
+// copied (R44). `in` and `out` are times in the source, `at` is where it sits in the
+// sequence, and an image clip uses `hold` instead.
+type TimelineClip struct {
+	AssetID string `json:"asset_id"`
+	// Where the clip starts in its source. Defaults to 0.
+	In *float64 `json:"in,omitempty"`
+	// Where it ends in its source. Defaults to the source's end.
+	Out *float64 `json:"out,omitempty"`
+	// Where it sits in the sequence. Assigned when clips are laid end to end.
+	At *float64 `json:"at,omitempty"`
+	// How long an image is held. Images only, and never with in or out.
+	Hold *float64 `json:"hold,omitempty"`
+	// Applied to this clip's own sound. Defaults to 0.
+	GainDb *float64 `json:"gain_db,omitempty"`
+	// Whether a video clip's own sound plays under it. Defaults to true.
+	Audio        *bool               `json:"audio,omitempty"`
+	TransitionIn *TimelineTransition `json:"transition_in,omitempty"`
+	// The studio whose asset this is, for the clip's hue and name. Null when the caller
+	// could not learn it from an item it may read (M8 Q11). Set by the daemon, and ignored
+	// in a request.
+	StudioID *string `json:"studio_id,omitempty"`
+}
+
+// TimelineTrack is components.schemas.TimelineTrack in api/openapi.yaml.
+type TimelineTrack struct {
+	Kind string `json:"kind"`
+	// V1, A1, A2 — kind and position. Assigned by the daemon, and ignored in a request.
+	Name   *string        `json:"name,omitempty"`
+	GainDb *float64       `json:"gain_db,omitempty"`
+	Clips  []TimelineClip `json:"clips"`
+}
+
+// Timeline: The framework's sequence document (R44, 05 §6). One video track, V1,
+// contiguous from 0, and up to eight audio tracks.
+type Timeline struct {
+	ID     string          `json:"id"`
+	Name   string          `json:"name"`
+	Target TimelineTarget  `json:"target"`
+	Tracks []TimelineTrack `json:"tracks"`
+	// Rises by one on every write. The ETag.
+	Revision int64 `json:"revision"`
+	// V1's end, computed and never stored.
+	DurationS float64 `json:"duration_s"`
+	ETag      string  `json:"etag"`
+	// The studio that created it; null for the launcher's own (M8 Q11).
+	StudioID  *string   `json:"studio_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// TimelinePage is components.schemas.TimelinePage in api/openapi.yaml.
+type TimelinePage struct {
+	// Null on the last page.
+	NextCursor *string    `json:"next_cursor"`
+	Items      []Timeline `json:"items"`
+}
+
+// TimelineCreate is components.schemas.TimelineCreate in api/openapi.yaml.
+type TimelineCreate struct {
+	Name   string              `json:"name"`
+	Target TimelineTargetInput `json:"target"`
+	// Laid end to end from 0, on V1 for video and images and on A1 for sound. Not with
+	// `tracks`.
+	Clips []TimelineClip `json:"clips,omitempty"`
+	// The whole document. Not with `clips`.
+	Tracks []TimelineTrack `json:"tracks,omitempty"`
+}
+
+// TimelineUpdate is components.schemas.TimelineUpdate in api/openapi.yaml.
+type TimelineUpdate struct {
+	Name   *string              `json:"name,omitempty"`
+	Target *TimelineTargetInput `json:"target,omitempty"`
+	Tracks []TimelineTrack      `json:"tracks,omitempty"`
+}
+
+// TimelineAppend is components.schemas.TimelineAppend in api/openapi.yaml.
+type TimelineAppend struct {
+	AssetID    string  `json:"asset_id"`
+	Track      *string `json:"track,omitempty"`
+	TimelineID *string `json:"timeline_id,omitempty"`
+}
+
+// TimelineRevert is components.schemas.TimelineRevert in api/openapi.yaml.
+type TimelineRevert struct {
+	Revision int64 `json:"revision"`
+}
+
+// TimelineRevision is components.schemas.TimelineRevision in api/openapi.yaml.
+type TimelineRevision struct {
+	Revision  int64     `json:"revision"`
+	SavedAt   time.Time `json:"saved_at"`
+	DurationS float64   `json:"duration_s"`
+	ClipCount int64     `json:"clip_count"`
+}
+
+// TimelineRevisionPage is components.schemas.TimelineRevisionPage in api/openapi.yaml.
+type TimelineRevisionPage struct {
+	// Null on the last page.
+	NextCursor *string            `json:"next_cursor"`
+	Items      []TimelineRevision `json:"items"`
+}
+
+// TimelineOpened is components.schemas.TimelineOpened in api/openapi.yaml.
+type TimelineOpened struct {
+	Opened bool `json:"opened"`
+	// browser or app.
+	Surface string `json:"surface"`
+}
+
+// ExportPreset: Encoding only, never size or rate, which the target already states (M8
+// Q9). `h264` is yuv420p, High profile, MP4 with fast start, and AAC-LC at 192 kb/s.
+type ExportPreset string
+
+const (
+	ExportPresetH264 ExportPreset = "h264"
+)
+
+// ExportReason: Why an export cannot copy its picture, one per clip that stops it.
+type ExportReason struct {
+	// container, codec, profile, level, size, aspect, field_order, pixel_format,
+	// time_base, frame_rate, colour, parameter_sets, trimmed, image, transition,
+	// not_probed, no_video.
+	Code    string  `json:"code"`
+	Message string  `json:"message"`
+	Track   *string `json:"track,omitempty"`
+	// The clip's place in its track, counting from 1.
+	Clip *int64 `json:"clip,omitempty"`
+}
+
+// ExportPlan is components.schemas.ExportPlan in api/openapi.yaml.
+type ExportPlan struct {
+	// `copy` copies the picture and re-encodes the sound; `conform` re-encodes both.
+	// Nothing copies sound (M8 Q13).
+	Mode      string         `json:"mode"`
+	Preset    ExportPreset   `json:"preset"`
+	Target    TimelineTarget `json:"target"`
+	DurationS float64        `json:"duration_s"`
+	Frames    int64          `json:"frames"`
+	Reasons   []ExportReason `json:"reasons"`
+}
+
+// ExportRequest is components.schemas.ExportRequest in api/openapi.yaml.
+type ExportRequest struct {
+	Preset ExportPreset `json:"preset"`
+}
+
 // EventsSubscribeParams holds the query and header parameters of GET /events.
 type EventsSubscribeParams struct {
 	LastEventID *string
@@ -540,6 +720,44 @@ type InboxListParams struct {
 
 // JobsListParams holds the query and header parameters of GET /jobs.
 type JobsListParams struct {
+	Limit  *int64
+	Cursor *string
+}
+
+// TimelineListParams holds the query and header parameters of GET /timeline.
+type TimelineListParams struct {
+	Limit  *int64
+	Cursor *string
+}
+
+// TimelineUpdateParams holds the query and header parameters of PATCH /timeline/{id}.
+type TimelineUpdateParams struct {
+	IfMatch string
+}
+
+// TimelineDeleteParams holds the query and header parameters of DELETE /timeline/{id}.
+type TimelineDeleteParams struct {
+	IfMatch *string
+}
+
+// TimelineRevisionsParams holds the query and header parameters of GET /timeline/{id}/revisions.
+type TimelineRevisionsParams struct {
+	Limit  *int64
+	Cursor *string
+}
+
+// TimelineRevertParams holds the query and header parameters of POST /timeline/{id}:revert.
+type TimelineRevertParams struct {
+	IfMatch string
+}
+
+// TimelinePlanParams holds the query and header parameters of GET /timeline/{id}:plan.
+type TimelinePlanParams struct {
+	Preset *ExportPreset
+}
+
+// TimelineExportsParams holds the query and header parameters of GET /timeline/{id}/exports.
+type TimelineExportsParams struct {
 	Limit  *int64
 	Cursor *string
 }

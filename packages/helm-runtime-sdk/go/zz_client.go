@@ -31,6 +31,7 @@ type Client struct {
 	Handoff  HandoffAPI
 	Inbox    InboxAPI
 	Jobs     JobsAPI
+	Timeline TimelineAPI
 }
 
 // MeAPI is the me group.
@@ -176,6 +177,43 @@ type JobsAPI interface {
 	AppendLog(ctx context.Context, id string, body LogAppend) error
 }
 
+// TimelineAPI is the timeline group.
+type TimelineAPI interface {
+	// Create: Create a sequence from clips, or from whole tracks. (POST /timeline)
+	Create(ctx context.Context, body TimelineCreate) (*Timeline, error)
+	// List: The sequences the caller may read, newest first. (GET /timeline)
+	List(ctx context.Context, params *TimelineListParams) (*TimelinePage, error)
+	// Get: One sequence. One the caller may not read is 404. (GET /timeline/{id})
+	Get(ctx context.Context, id string) (*Timeline, error)
+	// Update: Edit a sequence. Every edit is a revision. (PATCH /timeline/{id})
+	Update(ctx context.Context, id string, body map[string]any, params *TimelineUpdateParams) (*Timeline, error)
+	// Delete: Delete a sequence. Its exports and their lineage stay. (DELETE
+	// /timeline/{id})
+	Delete(ctx context.Context, id string, params *TimelineDeleteParams) error
+	// Revisions: The sequence's earlier revisions, newest first. (GET
+	// /timeline/{id}/revisions)
+	Revisions(ctx context.Context, id string, params *TimelineRevisionsParams) (*TimelineRevisionPage, error)
+	// Revert: Write an earlier revision back as the newest one. (POST
+	// /timeline/{id}:revert)
+	Revert(ctx context.Context, id string, body TimelineRevert, params *TimelineRevertParams) (*Timeline, error)
+	// Append: Add one asset to the end of a track, without stealing focus. (POST
+	// /timeline:append)
+	Append(ctx context.Context, body TimelineAppend) (*Timeline, error)
+	// Open: Ask the framework to show its editor on this sequence. (POST
+	// /timeline/{id}:open)
+	Open(ctx context.Context, id string) (*TimelineOpened, error)
+	// Plan: Which path an export would take, and why. (GET /timeline/{id}:plan)
+	Plan(ctx context.Context, id string, params *TimelinePlanParams) (*ExportPlan, error)
+	// Export: Export the sequence. Answers with the job that renders it. (POST
+	// /timeline/{id}:export)
+	Export(ctx context.Context, id string, body ExportRequest) (*Job, error)
+	// Exports: The sequence's export jobs, newest first. (GET /timeline/{id}/exports)
+	Exports(ctx context.Context, id string, params *TimelineExportsParams) (*JobPage, error)
+	// CancelExport: Stop a running export and leave nothing behind. (POST
+	// /timeline/{id}/exports/{job}:cancel)
+	CancelExport(ctx context.Context, id string, job string) error
+}
+
 func newClient(t *transport) *Client {
 	return &Client{
 		Me:       meRemote{t},
@@ -188,6 +226,7 @@ func newClient(t *transport) *Client {
 		Handoff:  handoffRemote{t},
 		Inbox:    inboxRemote{t},
 		Jobs:     jobsRemote{t},
+		Timeline: timelineRemote{t},
 	}
 }
 
@@ -854,6 +893,198 @@ func (g jobsRemote) AppendLog(ctx context.Context, id string, body LogAppend) er
 		return err
 	}
 	resp, err := g.t.do(ctx, "POST", "/jobs/"+url.PathEscape(id)+"/logs", q, h, rd, "application/json")
+	if err != nil {
+		return err
+	}
+	return drain(resp)
+}
+
+type timelineRemote struct{ t *transport }
+
+func (g timelineRemote) Create(ctx context.Context, body TimelineCreate) (*Timeline, error) {
+	q := url.Values{}
+	h := http.Header{}
+	rd, err := encodeJSON(body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.t.do(ctx, "POST", "/timeline", q, h, rd, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[Timeline](resp)
+}
+
+func (g timelineRemote) List(ctx context.Context, params *TimelineListParams) (*TimelinePage, error) {
+	q := url.Values{}
+	h := http.Header{}
+	if params != nil {
+		if params.Limit != nil {
+			q.Add("limit", strconv.FormatInt((*params.Limit), 10))
+		}
+		if params.Cursor != nil {
+			q.Add("cursor", (*params.Cursor))
+		}
+	}
+	resp, err := g.t.do(ctx, "GET", "/timeline", q, h, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[TimelinePage](resp)
+}
+
+func (g timelineRemote) Get(ctx context.Context, id string) (*Timeline, error) {
+	q := url.Values{}
+	h := http.Header{}
+	resp, err := g.t.do(ctx, "GET", "/timeline/"+url.PathEscape(id), q, h, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[Timeline](resp)
+}
+
+func (g timelineRemote) Update(ctx context.Context, id string, body map[string]any, params *TimelineUpdateParams) (*Timeline, error) {
+	q := url.Values{}
+	h := http.Header{}
+	if params != nil {
+		h.Set("If-Match", params.IfMatch)
+	}
+	rd, err := encodeJSON(body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.t.do(ctx, "PATCH", "/timeline/"+url.PathEscape(id), q, h, rd, "application/merge-patch+json")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[Timeline](resp)
+}
+
+func (g timelineRemote) Delete(ctx context.Context, id string, params *TimelineDeleteParams) error {
+	q := url.Values{}
+	h := http.Header{}
+	if params != nil {
+		if params.IfMatch != nil {
+			h.Set("If-Match", (*params.IfMatch))
+		}
+	}
+	resp, err := g.t.do(ctx, "DELETE", "/timeline/"+url.PathEscape(id), q, h, nil, "")
+	if err != nil {
+		return err
+	}
+	return drain(resp)
+}
+
+func (g timelineRemote) Revisions(ctx context.Context, id string, params *TimelineRevisionsParams) (*TimelineRevisionPage, error) {
+	q := url.Values{}
+	h := http.Header{}
+	if params != nil {
+		if params.Limit != nil {
+			q.Add("limit", strconv.FormatInt((*params.Limit), 10))
+		}
+		if params.Cursor != nil {
+			q.Add("cursor", (*params.Cursor))
+		}
+	}
+	resp, err := g.t.do(ctx, "GET", "/timeline/"+url.PathEscape(id)+"/revisions", q, h, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[TimelineRevisionPage](resp)
+}
+
+func (g timelineRemote) Revert(ctx context.Context, id string, body TimelineRevert, params *TimelineRevertParams) (*Timeline, error) {
+	q := url.Values{}
+	h := http.Header{}
+	if params != nil {
+		h.Set("If-Match", params.IfMatch)
+	}
+	rd, err := encodeJSON(body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.t.do(ctx, "POST", "/timeline/"+url.PathEscape(id)+":revert", q, h, rd, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[Timeline](resp)
+}
+
+func (g timelineRemote) Append(ctx context.Context, body TimelineAppend) (*Timeline, error) {
+	q := url.Values{}
+	h := http.Header{}
+	rd, err := encodeJSON(body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.t.do(ctx, "POST", "/timeline:append", q, h, rd, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[Timeline](resp)
+}
+
+func (g timelineRemote) Open(ctx context.Context, id string) (*TimelineOpened, error) {
+	q := url.Values{}
+	h := http.Header{}
+	resp, err := g.t.do(ctx, "POST", "/timeline/"+url.PathEscape(id)+":open", q, h, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[TimelineOpened](resp)
+}
+
+func (g timelineRemote) Plan(ctx context.Context, id string, params *TimelinePlanParams) (*ExportPlan, error) {
+	q := url.Values{}
+	h := http.Header{}
+	if params != nil {
+		if params.Preset != nil {
+			q.Add("preset", string((*params.Preset)))
+		}
+	}
+	resp, err := g.t.do(ctx, "GET", "/timeline/"+url.PathEscape(id)+":plan", q, h, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[ExportPlan](resp)
+}
+
+func (g timelineRemote) Export(ctx context.Context, id string, body ExportRequest) (*Job, error) {
+	q := url.Values{}
+	h := http.Header{}
+	rd, err := encodeJSON(body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := g.t.do(ctx, "POST", "/timeline/"+url.PathEscape(id)+":export", q, h, rd, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[Job](resp)
+}
+
+func (g timelineRemote) Exports(ctx context.Context, id string, params *TimelineExportsParams) (*JobPage, error) {
+	q := url.Values{}
+	h := http.Header{}
+	if params != nil {
+		if params.Limit != nil {
+			q.Add("limit", strconv.FormatInt((*params.Limit), 10))
+		}
+		if params.Cursor != nil {
+			q.Add("cursor", (*params.Cursor))
+		}
+	}
+	resp, err := g.t.do(ctx, "GET", "/timeline/"+url.PathEscape(id)+"/exports", q, h, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	return decodeJSON[JobPage](resp)
+}
+
+func (g timelineRemote) CancelExport(ctx context.Context, id string, job string) error {
+	q := url.Values{}
+	h := http.Header{}
+	resp, err := g.t.do(ctx, "POST", "/timeline/"+url.PathEscape(id)+"/exports/"+url.PathEscape(job)+":cancel", q, h, nil, "")
 	if err != nil {
 		return err
 	}
