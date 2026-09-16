@@ -80,6 +80,15 @@ export function state(studio, job) {
   const group = studio.group || {};
   const install = studio.install_state || "";
 
+  // An entry whose manifest does not validate is listed as invalid (R2 as
+  // amended, M7 Q6) — not running, and with nothing to stop. This is checked
+  // before `manifest_loaded`, which is false for both of them: a studio the
+  // daemon is still running without a manifest, and a library entry whose
+  // manifest never loaded in the first place.
+  if (studio.manifest_valid === false) {
+    return { chip: "Manifest invalid", tone: "error" };
+  }
+
   if (!studio.manifest_loaded) {
     return {
       chip: "Running · manifest not loaded", tone: "warning",

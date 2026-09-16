@@ -22,6 +22,8 @@ import { modelsAndDisk } from "./models.js";
 import { settings } from "./settings.js";
 import { launch, stop } from "./switch.js";
 import { guard } from "./approval.js";
+import { addStudio } from "./add.js";
+import { editor } from "./editor.js";
 
 /** How often the list is refreshed: cheap enough to leave running, short
  *  enough that a state change is seen before it is wondered about. */
@@ -29,8 +31,14 @@ const POLL_MS = 2000;
 
 const ROUTES = [
   { path: /^\/studios$/, screen: catalogue, nav: "studios" },
-  { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios" },
   { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios" },
+  { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios" },
+  // Adding and editing are their own paths rather than /studios/new, because
+  // `new` is a legal studio id and a route that shadowed one would be a bug
+  // nobody found until somebody wrote it.
+  { path: /^\/add$/, screen: addStudio, nav: "studios" },
+  { path: /^\/edit$/, screen: editor, nav: "studios" },
+  { path: /^\/edit\/([^/]+)$/, screen: editor, nav: "studios" },
   { path: /^\/models$/, screen: modelsAndDisk, nav: "models" },
   { path: /^\/settings$/, screen: settings, nav: "settings" },
 ];

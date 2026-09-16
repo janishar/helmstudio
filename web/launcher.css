@@ -42,3 +42,97 @@ dialog.helm-dialog::backdrop {
 .helm-card-actions {
   flex-wrap: wrap;
 }
+
+/* ------------------------------------------------------------- M7b screens
+ *
+ * The library, the editor, import and the approval screen. Everything here is
+ * page layout — where a pane sits, how wide a column is — which is the
+ * launcher's business and not helm-css's, because a framework must not assume
+ * the page it is on. Every value is a token.
+ */
+
+/* The three facts a card states, and the row of quiet actions under it. Both
+ * wrap: two chips, a note and three buttons do not fit 320px. */
+.helm-card-facts,
+.helm-card-manage {
+  flex-wrap: wrap;
+  gap: var(--helm-space-2);
+}
+
+.helm-card-manage {
+  margin-top: var(--helm-space-2);
+  padding-top: var(--helm-space-2);
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+/* The editor: form on the left, YAML on the right (03 §13a). It stacks at the
+ * width where two columns of form fields stop being two columns and start
+ * being two lists of truncated labels. */
+.helm-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--helm-space-4);
+  align-items: start;
+}
+
+@media (max-width: 1000px) {
+  .helm-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The YAML pane is text, so it is monospaced and tall enough to hold a
+ * manifest without becoming a two-line slot with a scrollbar. */
+.helm-yaml {
+  min-height: 28em;
+  font: var(--helm-type-mono);
+  line-height: 1.5;
+  white-space: pre;
+  overflow-wrap: normal;
+  resize: vertical;
+}
+
+/* A list of enum values as checkboxes: `kinds` is a list because ltx is video
+ * AND audio, and a multi-select that hides its options behind a scroll is the
+ * control people get wrong. */
+.helm-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--helm-space-1) var(--helm-space-3);
+}
+
+.helm-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--helm-space-1);
+  font: var(--helm-type-body);
+  color: var(--helm-text-primary);
+}
+
+/* A lone checkbox sits at the start of its field rather than stretching to the
+ * width a text input would take. */
+.helm-field > .helm-checkbox {
+  align-self: start;
+  margin: 2px 0;
+}
+
+.helm-criterion {
+  align-items: start;
+  gap: var(--helm-space-2);
+}
+
+/* Import reports before it acts, so a row is a block of prose rather than a
+ * line in a table. */
+.helm-import-row {
+  padding: var(--helm-space-2) 0;
+  border-bottom: 1px solid var(--helm-border-hairline);
+}
+
+.helm-import-row:last-of-type {
+  border-bottom: 0;
+}
+
+.helm-dialog-wide {
+  width: min(720px, calc(100vw - var(--helm-space-6)));
+  max-width: min(720px, calc(100vw - var(--helm-space-6)));
+}
