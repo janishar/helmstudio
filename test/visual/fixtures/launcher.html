@@ -50,7 +50,10 @@
   const app = document.getElementById("app");
   // A real redraw, because M7b's screens fetch and then draw themselves again.
   // A no-op would golden the loading state of every one of them.
-  const redraw = () => app.replaceChildren(...shell(ctx, HASH[screen], "127.0.0.1:8700"));
+  // `hash` draws any route, for a behaviour test that needs a screen no golden
+  // is taken of.
+  const hash = q.get("hash") || HASH[screen];
+  const redraw = () => app.replaceChildren(...shell(ctx, hash, "127.0.0.1:8700"));
   const ctx = newContext({ client: fakeClient(), store, redraw });
   redraw();
 

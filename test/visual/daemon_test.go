@@ -77,6 +77,51 @@ processes:
     ui: /
 `
 
+// pointerEntry is a registry entry, as every bundled studio is: a pointer at a
+// repository, carrying its manifest inline. Override opens one of these, so
+// the form has to edit the manifest it carries rather than the pointer.
+const pointerEntry = `id: ptr-studio
+repo: https://github.com/someone/ptr
+ref: 0123456789abcdef0123456789abcdef01234567
+
+manifest:
+  id: ptr-studio
+  name: ptr studio
+  description: A registry entry, overridden.
+  kinds: [image]
+  repo: https://github.com/someone/ptr
+  ref: 0123456789abcdef0123456789abcdef01234567
+  requires:
+    os: [darwin]
+    arch: [arm64]
+  runtime:
+    framework: other
+    backends: [cpu]
+  processes:
+    - name: studio
+      role: main
+      cmd: "./ptr --port {port}"
+      port: { prefer: 8760 }
+      health: { tcp: true, timeout_s: 30 }
+`
+
+// invalidManifest is valid YAML and not a valid manifest: it has no processes.
+// The editor exists to fix documents like this, so the form has to work on it
+// without touching anything it was not asked to.
+const invalidManifest = `# Half written: no processes yet.
+id: bad-studio
+name: bad studio
+kinds: [video]
+repo: https://github.com/someone/bad
+requires:
+  os: [darwin]
+  arch: [arm64]
+  tools: [git]
+runtime:
+  framework: other
+  backends: [cpu]
+`
+
 // mountDaemon adds /api/v1 and /schema/manifest.json to the fixture server, as
 // the daemon serves them.
 func mountDaemon(t *testing.T, mux *http.ServeMux, srv *httptest.Server) {
@@ -90,8 +135,10 @@ func mountDaemon(t *testing.T, mux *http.ServeMux, srv *httptest.Server) {
 	sup := supervisor.New(supervisor.Config{Dirs: d, Store: st, Grace: time.Second, PortMin: 43000, PortMax: 43999})
 
 	local := library.NewLocal(d.Data())
-	if _, err := local.Save("wan-studio", []byte(editorManifest), ""); err != nil {
-		t.Fatal(err)
+	for id, text := range map[string]string{"wan-studio": editorManifest, "ptr-studio": pointerEntry, "bad-studio": invalidManifest} {
+		if _, err := local.Save(id, []byte(text), ""); err != nil {
+			t.Fatal(err)
+		}
 	}
 	res := library.New(library.Dir(library.SourceLocal, local.Dir))
 	entries, err := res.Resolve()
@@ -101,7 +148,12 @@ func mountDaemon(t *testing.T, mux *http.ServeMux, srv *httptest.Server) {
 	var studios []supervisor.Studio
 	for _, e := range entries {
 		if e.Manifest == nil {
-			t.Fatalf("%s did not resolve: %v", e.ID, e.Errors)
+			// bad-studio, which is meant to be invalid. Anything else not
+			// resolving is a broken fixture.
+			if e.ID != "bad-studio" {
+				t.Fatalf("%s did not resolve: %v", e.ID, e.Errors)
+			}
+			continue
 		}
 		studios = append(studios, supervisor.Studio{Manifest: e.Manifest, File: e.File})
 	}

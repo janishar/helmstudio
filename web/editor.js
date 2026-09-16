@@ -106,21 +106,64 @@ async function load(ctx, st) {
   ctx.redraw(true);
 }
 
+/**
+ * A registry entry is a pointer — `id`, `repo`, `ref` — carrying its manifest
+ * inline under `manifest` when the repository ships none. Every bundled studio
+ * is one, so Override opens one.
+ *
+ * The form's fields are a manifest's, so on a pointer they live under
+ * /manifest. And `id`, `repo` and `ref` are stated twice there and must agree
+ * (the entry-agreement rule), so a form edit to one of them writes both copies,
+ * as Duplicate's rename does. Writing only one would turn a valid entry into an
+ * invalid one with a single keystroke, and leave the fix to the YAML pane.
+ */
+const AGREE = ["/id", "/repo", "/ref"];
+
+function isPointer(check) {
+  return !!check && check.kind === "pointer";
+}
+
+/** fields is the object the form reads its values from. */
+function fields(check) {
+  const doc = (check || {}).document || {};
+  return isPointer(check) ? (doc.manifest || {}) : doc;
+}
+
+/** targets is where one form edit lands in the document. */
+function targets(check, pointer) {
+  if (!isPointer(check)) return [pointer];
+  const inline = "/manifest" + pointer;
+  if (!AGREE.includes(pointer)) return [inline];
+  // A pointer with no inline manifest states these once. Writing a second
+  // copy would create an inline manifest holding nothing but an id.
+  return (check.document || {}).manifest ? [pointer, inline] : [pointer];
+}
+
 /** apply sends one field edit and takes the text and the verdict back. */
 async function apply(ctx, st, pointer, value) {
+  if (!st.check || !st.check.document) {
+    st.error = "The text on the right is not YAML yet, so the form cannot tell what it would be changing. Fix it there first.";
+    ctx.redraw(true);
+    return;
+  }
   st.busy = true;
   try {
-    // A pointer whose parent does not exist is refused, on purpose: an editor
-    // that guesses the shape of what is missing writes something nobody asked
-    // for. So the page asks for each empty parent by name first.
-    for (const parent of missingAncestors(st.check && st.check.document, pointer)) {
-      const made = await ctx.client.manifests.edit({ text: st.text, pointer: parent, value: {} });
-      st.text = made.text;
-      st.check = made;
+    for (const target of targets(st.check, pointer)) {
+      // Each empty parent is asked for by name, and only when it has been
+      // seen to be absent. See missingAncestors for why a guess is worse.
+      const parents = missingAncestors(st.check.document, target);
+      if (parents === null) {
+        throw new Error(`${target} sits under something that is not a mapping, so the form will not write it. Change it in the text instead.`);
+      }
+      for (const parent of parents) {
+        const made = await ctx.client.manifests.edit({ text: st.text, pointer: parent, value: {} });
+        st.text = made.text;
+        st.check = made;
+      }
+      const res = await ctx.client.manifests.edit({ text: st.text, pointer: target, value });
+      st.text = res.text;
+      st.check = res;
     }
-    const res = await ctx.client.manifests.edit({ text: st.text, pointer, value });
-    st.text = res.text;
-    st.check = res;
     st.dirty = true;
     st.error = null;
   } catch (err) {
@@ -247,18 +290,29 @@ function criteria(check) {
 }
 
 function form(ctx, st) {
-  const doc = (st.check || {}).document || {};
+  const doc = fields(st.check);
+  // No document means the text is not YAML: every control is shown, and none
+  // of them can be used until the text parses again.
+  const disabled = !(st.check && st.check.document);
   const out = [];
+  if (disabled && st.check) {
+    out.push(el("p", { class: "helm-hint helm-status-warning", text: "The text on the right is not YAML yet. The form comes back when it is." }));
+  }
+  if (isPointer(st.check)) {
+    out.push(el("p", { class: "helm-hint", text: (st.check.document || {}).manifest
+      ? "This is a registry entry. The fields below are the manifest it carries inline, and its id, repository and ref are kept in step with the entry's own."
+      : "This is a registry entry with no inline manifest: the repository's own helmstudio.yaml describes it. Filling in the form writes a manifest here, which takes precedence." }));
+  }
   for (const s of SECTIONS) {
-    const fields = s.fields
-      .map((p) => control(st.schema, p, doc, (pointer, value) => apply(ctx, st, pointer, value)))
+    const controls = s.fields
+      .map((p) => control(st.schema, p, doc, (pointer, value) => apply(ctx, st, pointer, value), { disabled }))
       .filter(Boolean);
-    if (!fields.length) continue;
+    if (!controls.length) continue;
     out.push(el("div", { class: "helm-panel" },
       el("div", { class: "helm-panel-header" }, el("span", { class: "helm-section-label", text: s.label })),
       el("div", { class: "helm-panel-body helm-stack" },
         s.hint ? el("p", { class: "helm-hint", text: s.hint }) : null,
-        ...fields)));
+        ...controls)));
   }
   out.push(el("p", { class: "helm-hint", text:
     `Edited as text on the right: ${Object.keys(YAML_ONLY).map((p) => p.slice(1)).join(", ")}.` }));
@@ -291,7 +345,7 @@ export function editor(ctx, id) {
   const file = (st.check && st.check.valid && declared)
     ? `studios/${declared}.yaml`
     : "not saved yet";
-  const localPath = valueAt((st.check || {}).document || {}, "/local_path");
+  const localPath = valueAt(fields(st.check), "/local_path");
 
   const header = el("div", { class: "helm-page-header" },
     el("h1", { class: "helm-title", text: id === "new" ? "New studio" : declared || id }),

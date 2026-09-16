@@ -91,24 +91,39 @@ function enumOf(node) {
 }
 
 /**
- * missingAncestors lists the parents a pointer needs before it can be set.
+ * missingAncestors lists the parents a pointer needs before it can be set, or
+ * returns null when the edit cannot be made safely.
  *
  * The daemon refuses an edit whose parent does not exist, deliberately: an
  * editor that invents the shape of what is missing writes something nobody
  * asked for. So the page says exactly which empty maps it wants, in order, and
  * each one is an edit of its own.
+ *
+ * It only ever creates a parent it has *seen* to be absent. With no document —
+ * text that is not YAML — it cannot see anything, and a parent it guessed was
+ * missing would be written as an empty map over the real one, taking every
+ * sibling field with it. The same goes for a parent that exists but is not a
+ * mapping. Both answer null, and nothing is sent.
  */
 export function missingAncestors(document, pointer) {
-  const segs = pointer.slice(1).split("/");
+  const isMap = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  if (!isMap(document)) return null;
   const out = [];
   let cur = document;
   let at = "";
-  for (const seg of segs.slice(0, -1)) {
+  let creating = false;
+  for (const seg of pointer.slice(1).split("/").slice(0, -1)) {
     at += "/" + seg;
-    const next = cur === null || typeof cur !== "object" ? undefined : cur[seg];
+    if (creating) {
+      out.push(at);
+      continue;
+    }
+    const next = cur[seg];
     if (next === undefined || next === null) {
       out.push(at);
-      cur = {};
+      creating = true;
+    } else if (!isMap(next)) {
+      return null;
     } else {
       cur = next;
     }
@@ -124,7 +139,7 @@ export function missingAncestors(document, pointer) {
  * A manifest with `license: ""` in it says something different from one without
  * a licence, and only one of those is what a person clearing a box meant.
  */
-export function control(schema, pointer, document, onChange) {
+export function control(schema, pointer, document, onChange, { disabled = false } = {}) {
   const node = nodeAt(schema, pointer);
   if (!node) return null;
   const value = valueAt(document, pointer);
@@ -167,6 +182,9 @@ export function control(schema, pointer, document, onChange) {
     });
   }
   if (required) input.setAttribute("aria-required", "true");
+  if (disabled) {
+    for (const c of [input, ...input.querySelectorAll("input")]) c.disabled = true;
+  }
 
   return el("div", { class: "helm-field" },
     el("label", { class: "helm-label", for: id, text: label(pointer) + (required ? " *" : "") }),

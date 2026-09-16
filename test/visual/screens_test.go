@@ -2,6 +2,7 @@ package visual
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -21,13 +22,24 @@ import (
 // screen opens one of the launcher's fixtures and waits for it to settle.
 func screen(t *testing.T, ctx context.Context, srv string, name string, w, h int) *chrome.Page {
 	t.Helper()
+	return open(t, ctx, srv+"/fixtures/launcher.html?theme=dark&screen="+name, w, h)
+}
+
+// route opens any launcher route over the fixture data and the real daemon.
+func route(t *testing.T, ctx context.Context, srv string, hash string) *chrome.Page {
+	t.Helper()
+	return open(t, ctx, srv+"/fixtures/launcher.html?theme=dark&screen=editor&hash="+url.QueryEscape(hash), 1280, 1600)
+}
+
+func open(t *testing.T, ctx context.Context, address string, w, h int) *chrome.Page {
+	t.Helper()
 	b := openBrowser(t)
 	p, err := b.NewPage(ctx, w, h, "dark")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { p.Close() })
-	if err := p.Navigate(ctx, srv+"/fixtures/launcher.html?theme=dark&screen="+name); err != nil {
+	if err := p.Navigate(ctx, address); err != nil {
 		t.Fatal(err)
 	}
 	if err := p.WaitFor(ctx, `document.documentElement.dataset.ready === "1"`); err != nil {
@@ -366,5 +378,90 @@ func TestImportNamesACollisionRatherThanResolvingIt(t *testing.T) {
 	}
 	if says != 1 {
 		t.Error("the import dialog does not say that adding is not installing")
+	}
+}
+
+// editField changes one form field the way a person does, and waits for the
+// text the daemon hands back.
+const editField = `(async (id, value, expect) => {
+	const box = document.getElementById(id);
+	box.value = value;
+	box.dispatchEvent(new Event("change"));
+	for (let i = 0; i < 100; i++) {
+		await new Promise(r => setTimeout(r, 50));
+		const t = document.querySelector("textarea.helm-yaml").value;
+		if (t.includes(expect)) return t;
+	}
+	return document.querySelector("textarea.helm-yaml").value;
+})`
+
+// Every bundled studio is a registry pointer with its manifest inline, and
+// Override opens one. A form that edited the pointer rather than the manifest
+// it carries showed empty fields, and the first thing typed into one made the
+// entry invalid: a pointer allows no `description`.
+func TestOverridingARegistryEntryEditsTheManifestItCarries(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/edit/ptr-studio")
+
+	var shown string
+	if err := p.Eval(ctx, `document.getElementById("f-description").value`, &shown); err != nil {
+		t.Fatal(err)
+	}
+	if shown != "A registry entry, overridden." {
+		t.Fatalf("the form shows description %q, not the inline manifest's", shown)
+	}
+
+	var after string
+	if err := p.Eval(ctx, editField+`("f-description", "Overridden, on purpose.", "Overridden, on purpose.")`, &after); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(after, "manifest:\n  id: ptr-studio\n  name: ptr studio\n  description: Overridden, on purpose.") {
+		t.Errorf("the description did not land in the inline manifest:\n%s", after)
+	}
+
+	// id, repo and ref are stated twice and must agree, so one form edit
+	// writes both copies and the entry stays valid.
+	if err := p.Eval(ctx, editField+`("f-repo", "https://github.com/someone-else/ptr", "someone-else")`, &after); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(after, "repo: https://github.com/someone-else/ptr"); n != 2 {
+		t.Errorf("the repository was written %d times, want both copies:\n%s", n, after)
+	}
+	var verdict string
+	if err := p.Eval(ctx, `(async () => {
+		for (let i = 0; i < 40; i++) {
+			const c = document.querySelector(".helm-editor .helm-panel-header .helm-chip");
+			if (c && c.textContent === "Valid") return "Valid";
+			await new Promise(r => setTimeout(r, 50));
+		}
+		return document.querySelector(".helm-editor .helm-panel-header .helm-chip").textContent;
+	})()`, &verdict); err != nil {
+		t.Fatal(err)
+	}
+	if verdict != "Valid" {
+		t.Errorf("after editing the repository the entry reads %q", verdict)
+	}
+}
+
+// The editor exists to fix invalid documents. When the daemon sent no decoded
+// document for one, the form guessed that every parent was missing — and a
+// guessed parent is written as an empty map over the real one. Changing the
+// minimum memory replaced all of \`requires\`.
+func TestAFormEditOnAnInvalidManifestKeepsWhatItDidNotTouch(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/edit/bad-studio")
+
+	var after string
+	if err := p.Eval(ctx, editField+`("f-requires-ram_gb", "48", "ram_gb: 48")`, &after); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"ram_gb: 48", "os: [darwin]", "arch: [arm64]", "tools: [git]", "# Half written: no processes yet."} {
+		if !strings.Contains(after, want) {
+			t.Errorf("after setting the minimum memory the text has no %q:\n%s", want, after)
+		}
 	}
 }
