@@ -47,6 +47,7 @@ type Server struct {
 
 	secrets     platform.SecretStore
 	secretStore *store.Store
+	approvals   *store.Store
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
@@ -73,6 +74,7 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 	s.mux.HandleFunc("GET "+Base+"/studios", s.listStudios)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}", s.getStudio)
 	s.mux.HandleFunc("POST "+Base+"/studios/{action}", s.studioAction)
+	s.mux.HandleFunc("GET "+Base+"/studios/{id}/approval", s.getApproval)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/processes", s.getProcesses)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/logs", s.getLogFiles)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/processes/{name}/logs", s.streamLogs)
@@ -236,8 +238,19 @@ func (s *Server) studioAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotImplemented, "not_implemented", "this daemon does not serve install")
 			return
 		}
+		// Uninstall removes; it runs nothing of the studio's, so it needs no
+		// approval. Install and retry run build steps.
+		if action != "uninstall" && !s.requireApproval(w, r, id) {
+			return
+		}
 		s.studioInstallAction(w, r, id, action)
 	case "launch":
+		// cmd and health.exec run here and never passed through install, so
+		// launch is gated too — without this, an Override that edits a command
+		// would simply run (M7 Q10).
+		if !s.requireApproval(w, r, id) {
+			return
+		}
 		// preempt carries the confirm digest of a heavy_conflict refusal
 		// (docs/decisions.md M5 Q13); a stale one is preview_changed.
 		gs, err := s.sup.Launch(r.Context(), id, supervisor.LaunchOptions{Confirm: r.URL.Query().Get("preempt")})
@@ -410,6 +423,12 @@ func (s *Server) fail(w http.ResponseWriter, err error) {
 
 func writeError(w http.ResponseWriter, status int, kind, msg string) {
 	writeJSON(w, status, errorBody{Error: kind, Message: msg})
+}
+
+// writeErrorDetails is writeError with the structured part a caller acts on —
+// the heavy arithmetic of a switch conflict, the preview of a refused install.
+func writeErrorDetails(w http.ResponseWriter, status int, kind, msg string, details map[string]any) {
+	writeJSON(w, status, errorBody{Error: kind, Message: msg, Details: details})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
