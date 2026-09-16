@@ -131,6 +131,43 @@ A component **receives** a runtime client; it never constructs one. `el.client =
         .addEventListener('frame-extracted', e => setFirstFrame(e.detail.asset))
     </script>
 
+#### The structural interfaces (2026-09-16, M6 Q12; built in M6b)
+
+A component depends on the few methods it calls, not on the runtime client's
+whole type. Each is listed with its component, so that anything implementing it
+— the runtime SDK's browser build, the launcher's own client, a fake in a test
+— can drive that component.
+
+| Component | What it calls | Optional |
+|---|---|---|
+| `helm-terminal` | `logs(ref, { lastEventId }) → async iterable of { id, name, data, json() }`, with events named `line`, `step`, `gap` and `end`. Taken from the client's `jobs` group for a `job` attribute, or from a `source` object the page sets for anything else. | — |
+| `helm-gallery` | `gallery.query({ scope, studio, kind, q, limit, cursor }) → { items, next_cursor }` | `gallery.update(id, patch)` for star and tag; `assets.thumb(id, { w })` for thumbnails; `events.subscribe({ lastEventId })` for live insertion |
+| `helm-player` | `assets.read(id, { range }) → a fetch Response` | `assets.upload(blob, contentType, { kind, filename, width, height })` for Extract frame |
+
+**A missing optional method is a reduced component, never a broken one** (§9):
+no thumbnails, no live insertion, no star, no Extract frame — the rest works.
+
+**How a component reaches bytes without knowing a URL.** `Asset.url` tells a
+*page* to prefix its proxy, and a component may not know a proxy exists (rule
+2). So a component asks the client for the bytes and takes the address off the
+response the client returns: `assets.read(id, { range: "bytes=0-0" })`, whose
+body it cancels at once, gives the `<video>` an address the client resolved. A
+thumbnail is read as a blob and shown through an object URL, released when the
+element is disconnected.
+
+**What a component does not decide.** What can be done with a selected item is
+the studio's (rule 5), so `helm-gallery` emits `select` and `pick` and takes a
+studio's own buttons in its `actions` slot.
+
+**Errors.** A component branches on the `kind` in §4's table and on nothing
+else — never on a status code, never on an error string.
+
+**The launcher's client.** It is generated from the `launcher`-tagged
+operations of `api/openapi.yaml` into `web/launcher.js` by the same generator,
+carries operations only, and takes its transport and error shape from the
+runtime SDK's own, so there is one mapping of status to kind rather than two
+that drift. It is served with the launcher's page and never under `/sdk/`.
+
 Amendments (2026-09-16, M6):
 - **Browser access (Q10).** A page never holds a token. The studio's server mounts the runtime SDK's same-origin proxy at `/helm/`: `helm.Proxy` in Go, `helm_runtime_sdk.proxy.Proxy` in Python, and `createProxy` from `@helmstudio/runtime/proxy` in Node. The proxy forwards `/helm/api/v1/<studio-api path>` with the studio's token added, `/helm/sdk/v1/*` without one, and serves `/helm/accent.css`. Anything else, launcher operations included, is 404.
   - **The client.** The browser build's `connect()` takes a base URL (default `/helm/api/v1`) and no token; it replaces `fromEnv()` in a page.
