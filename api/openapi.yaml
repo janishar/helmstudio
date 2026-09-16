@@ -1788,10 +1788,24 @@ paths:
       operationId: studiosList
       x-helm-group: studios
       x-helm-method: list
-      summary: The studios this daemon knows, with install and process state, ordered by id.
+      summary: The library — every studio this machine knows about, from every source, ordered by id.
       description: >
+        R3b, M7 Q6 and Q18. The library is the set of studios this machine
+        knows about, of which installed ones are a subset. One entry per id,
+        decided by the highest source that has a file for it — local, the
+        repository, then the registry pointer's inline manifest — and decided
+        by **existence, not validity**: an invalid winner is listed invalid,
+        with its source, its file and its errors, and the lower sources are not
+        read in its place. Every entry carries `source`, and `overrides` when
+        it shadows another.
+
         Includes studios still running from a previous daemon whose manifest
         is gone or invalid (`manifest_loaded: false`; M2 review round 1).
+
+        Nothing here touches the network: startup reads the bundled registry,
+        the local directory, installed checkouts and the manifest cache, and a
+        pointer with nothing cached is listed with `manifest_state: not_fetched`
+        (Q7).
       parameters:
         - { $ref: "#/components/parameters/Limit" }
         - { $ref: "#/components/parameters/Cursor" }
@@ -1829,7 +1843,14 @@ paths:
         for a manifest declaring `python` when uv is not on PATH (422
         `blocked` with `details: {code: tool_missing, tool: uv}`,
         docs/decisions.md M5 Q3).
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+
+        Needs `approval` unless the recorded one already matches (M7 Q10), and
+        checks out **the approved commit** rather than the ref's tip — so a
+        branch that moved after the screen was shown still builds what was
+        approved.
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/Approval" }
       responses:
         "202":
           description: The install job.
@@ -1845,7 +1866,10 @@ paths:
       x-helm-group: studios
       x-helm-method: retry
       summary: Install again, resuming at the first step that has not succeeded. The same operation as :install.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      description: Needs `approval` on the same terms as `:install` (M7 Q10).
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/Approval" }
       responses:
         "202":
           description: The install job.
@@ -1889,8 +1913,15 @@ paths:
         `port_conflict`; 422 `not_launchable` (not installed, a weight not
         fetched, a missing linked directory, a missing or mismatched Python
         environment).
+
+        Needs `approval` unless the recorded one matches (M7 Q10): `cmd` and
+        `health.exec` run here and never passed through install, so an Override
+        that edits a command shows the user the change instead of running it.
+        A studio with `selectable` weights and no selection is 422
+        `selection_required`, listing the choices (M7 Q21).
       parameters:
         - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/Approval" }
         - name: preempt
           in: query
           description: The `confirm` digest from the heavy_conflict refusal the user confirmed.
@@ -2026,6 +2057,284 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /studios/{id}/manifest:
+    get:
+      tags: [launcher]
+      operationId: studiosManifest
+      x-helm-group: studios
+      x-helm-method: manifest
+      summary: The resolved manifest text, with its digest, source and file.
+      description: >
+        Q17, Q18. The text as stored, byte for byte — the same bytes Export
+        writes — so an editor round-trips comments and key order. `digest` is
+        what `If-Match` on a save compares.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200":
+          description: The manifest.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ManifestDoc" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /studios/{id}/approval:
+    get:
+      tags: [launcher]
+      operationId: studiosApproval
+      x-helm-group: studios
+      x-helm-method: approval
+      summary: What would run, and the digest that authorises it.
+      description: >
+        R62, R63, Q10-Q13. Reads the repository and resolves `ref` to a commit
+        first, so the preview shows the source that will actually be used, then
+        returns every command grouped by when it runs, the submodules, the
+        weights with sizes, the capabilities as sentences, the declared hosts
+        and the derived level.
+
+        **Only checks that execute nothing run.** Theme conformance and the
+        smoke test are listed as not run, with the reason, never as passes.
+
+        `digest` covers everything that executes and where it comes from: the
+        id, source and resolved commit, the submodules, every command with its
+        `cwd`, `shell` and `env`, the capabilities, the network hosts,
+        `python.version` and the declared weights. It does **not** cover sizes,
+        free disk or the checkpoint selection (Q21).
+
+        Reading a repository needs the network; a repository that cannot be
+        reached is 503 with what is known.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200":
+          description: The preview.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApprovalPreview" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /studios/{id}/selection:
+    put:
+      tags: [launcher]
+      operationId: studiosSelect
+      x-helm-group: studios
+      x-helm-method: select
+      summary: Choose which of a studio's selectable weights it launches with.
+      description: >
+        Q20, Q21. Exactly one selectable binding per studio is selected, which a
+        partial unique index enforces rather than a check in Go. Changing it
+        while the studio runs is 409 `conflict`; choosing a weight that is
+        neither downloaded nor linked is 409 `not_fetched`, naming `:fetch` and
+        `:link`. Changing it while stopped needs **no new approval** — every
+        selectable weight was approved with the manifest.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SelectionRequest" } } }
+      responses:
+        "200":
+          description: The studio, with its new selection.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Studio" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ======================================================================
+  # Launcher: writing manifests (R3a-R3d, 05 §5a; docs/decisions.md M7 Q17-Q19)
+  #
+  # The page never parses YAML. It sends text and gets back errors with lines,
+  # the criteria and the document as JSON; a form edit goes as a JSON pointer
+  # and a value, and the daemon applies it to the node tree. A second parser in
+  # JavaScript would disagree with this one about anchors, merge keys, `on` and
+  # duplicate keys — and would show one manifest while validating another.
+  # ======================================================================
+
+  /launcher/manifests:validate:
+    post:
+      tags: [launcher]
+      operationId: manifestsValidate
+      x-helm-group: manifests
+      x-helm-method: validate
+      summary: Validate manifest or registry-entry text. Writes nothing.
+      description: >
+        Q17. The same validator `helm validate` and the daemon's loader use,
+        through one bytes entry point — a test requires the same verdict and
+        the same errors from all three for every file in
+        `internal/manifest/testdata` and `studios/`.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ManifestText" } } }
+      responses:
+        "200":
+          description: The verdict, whether or not it is valid.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ManifestCheck" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+
+  /launcher/manifests:edit:
+    post:
+      tags: [launcher]
+      operationId: manifestsEdit
+      x-helm-group: manifests
+      x-helm-method: edit
+      summary: Apply one field edit to manifest text, keeping comments and key order. Writes nothing.
+      description: >
+        Q17. The edit is a JSON pointer and a value; the daemon applies it to
+        the YAML node tree and returns the new text. A `null` value removes the
+        key. This is how the form and the YAML pane stay one document.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ManifestEdit" } } }
+      responses:
+        "200":
+          description: The edited text, with the verdict for it.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ManifestCheck" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /launcher/manifests/{id}:
+    put:
+      tags: [launcher]
+      operationId: manifestsSave
+      x-helm-group: manifests
+      x-helm-method: save
+      summary: Save a local manifest or pointer, creating the Local entry that overrides lower sources.
+      description: >
+        R3a, Q5, Q18. Written to `<data>/studios/<id>.yaml`. An invalid
+        document is refused with its errors (422) rather than saved broken.
+        `If-Match` carries the digest the editor last read, so two tabs cannot
+        silently overwrite each other; without it a save over an existing file
+        is 428.
+
+        Saving does not install, launch or rebuild anything. If the studio is
+        installed, the card shows `rebuild_needed`, and the next install or
+        launch goes through approval — which is what makes an Override that
+        edits a command show the change instead of running it (Q10).
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/IfMatch" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ManifestText" } } }
+      responses:
+        "200":
+          description: The saved manifest.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ManifestDoc" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422":
+          description: The document is invalid, and was not saved.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ManifestCheck" } } }
+        "428": { $ref: "#/components/responses/IfMatchRequired" }
+    delete:
+      tags: [launcher]
+      operationId: manifestsRevert
+      x-helm-group: manifests
+      x-helm-method: revert
+      summary: Revert a local manifest, so the source beneath it resolves again.
+      description: >
+        R3a, Q9. **The file is moved, never deleted**: it goes to
+        `<data>/studios/_reverted/<id>-<timestamp>.yaml`, which is not scanned,
+        and the response says where. A Revert that deleted could destroy the
+        only copy of something the user wrote. The underscore matters — an id
+        cannot start with one, so the directory can never collide with a
+        studio's own.
+
+        An installed or running studio is left alone: the group keeps running
+        and the next install or launch goes through approval.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200":
+          description: Where the file went, and what resolves now.
+          content: { application/json: { schema: { $ref: "#/components/schemas/RevertResult" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /launcher/manifests/{id}:duplicate:
+    post:
+      tags: [launcher]
+      operationId: manifestsDuplicate
+      x-helm-group: manifests
+      x-helm-method: duplicate
+      summary: Copy an entry to a Local manifest under a new id, changing the id and nothing else.
+      description: >
+        R3a, Q9. For a repository entry the resolved text is copied. Forking a
+        studio to point at different weights or flags is this plus an edit.
+        A `new_id` already in the library is 409 `id_taken`.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DuplicateRequest" } } }
+      responses:
+        "200":
+          description: The new manifest.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ManifestDoc" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /launcher/manifests:import:
+    post:
+      tags: [launcher]
+      operationId: manifestsImport
+      x-helm-group: manifests
+      x-helm-method: import
+      summary: Report on manifests given as text or fetched from a URL, then add them on confirmation.
+      description: >
+        R3c, Q14, Q18. Two phases. Without `confirm`, every item is read and
+        reported — what it is, whether it is valid, whether its id collides —
+        and a `confirm` digest is returned; **nothing is written**. With
+        `{confirm, resolutions}`, exactly the reported set is added, each item
+        Overridden, Renamed or Skipped. A stale digest is 409 `preview_changed`.
+
+        **Import is not install.** An imported manifest is a description until
+        the user installs it, and installing it goes through approval like
+        anything else (Q10) — including one with `local_path`, which the report
+        flags as "builds in &lt;path&gt; on this Mac, without cloning".
+
+        **A URL is fetched under Q14's rules:** `https://` only, no redirect to
+        another scheme or host, refused when the host resolves to a loopback,
+        link-local or private address, at most 1 MiB, 10 s, no cookies or
+        credentials. Bytes that are not a manifest are never echoed back as
+        text. Files, drops and paste are read by the page and sent as `text`:
+        the daemon opens no path a request names.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ImportRequest" } } }
+      responses:
+        "200":
+          description: The report, or what was added.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ImportReport" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /launcher/repositories:read:
+    post:
+      tags: [launcher]
+      operationId: repositoriesRead
+      x-helm-group: repositories
+      x-helm-method: read
+      summary: Read a repository's manifest without cloning or installing it. Writes nothing.
+      description: >
+        R3b, Q7, Q8, Q14. Git only, never a forge's HTTP API: a depth-1 fetch
+        of the ref without file contents, then only `helmstudio.yaml` and
+        `.gitmodules`, with the resolved commit recorded. A repository that
+        ships no manifest answers with `found: false` and the resolved commit,
+        which is what the editor pre-fills `repo` and `ref` from.
+
+        `{path}` is "From folder": a **typed absolute path**, from which only
+        `&lt;path&gt;/helmstudio.yaml` is read. There is deliberately no
+        directory-listing endpoint, and a browser folder picker never gives a
+        page an absolute path — so this is a thing a person types, not a thing
+        a page discovers.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/RepositoryRead" } } }
+      responses:
+        "200":
+          description: What the repository holds.
+          content: { application/json: { schema: { $ref: "#/components/schemas/RepositoryResult" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
 
   # ======================================================================
   # Launcher: the weights cache (01 §6, 02 §4; M3 as served)
@@ -2293,6 +2602,18 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: "^[a-z][a-z0-9_]*$", maxLength: 64 }
+    Approval:
+      name: approval
+      in: query
+      description: >
+        The digest from `GET /studios/{id}/approval`, confirming that what is
+        about to run is what was shown (M7 Q10). Required whenever the recorded
+        approval does not match what would run now; with none the answer is 409
+        `approval_required` with the preview in `details`, and with a stale one
+        409 `preview_changed`. Nothing is cloned, built or spawned in either
+        case.
+      schema: { type: string }
+
     StudioId:
       name: id
       in: path
@@ -2349,8 +2670,24 @@ components:
         `already_running`, `not_running`, `port_conflict`, `heavy_conflict`
         (with `details.heavy`), `not_installed`, `conflict`, `in_use`,
         `missing`, `confirm_required` and `preview_changed` (with
-        `details.preview`), `not_reclaimable`.
+        `details.preview`), `not_reclaimable`, and from M7:
+        `approval_required` (with `details.approval`), `id_taken`,
+        `not_fetched`, `already_exists`.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    IfMatchRequired:
+      description: >
+        The write needs `If-Match` and did not carry one. Saving a manifest
+        over an existing file without naming the digest the editor read would
+        let two tabs overwrite each other silently.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+    Unavailable:
+      description: >
+        Something outside this machine could not be reached — a repository, a
+        URL. Code `unavailable`, with what is known in `details`. Retrying may
+        work, which is what separates it from the 4xx codes.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
     TooLarge:
       description: The body is over its limit. Code `too_large`, with `details.limit` in bytes.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -3169,6 +3506,324 @@ components:
         last_failure: { $ref: "#/components/schemas/JobError" }
         size_bytes: { type: integer }
         job_id: { $ref: "#/components/schemas/ULID" }
+
+        # The library (M7 Q6, Q8, Q15, Q18, Q21). An entry exists for every id
+        # the machine knows about, installed or not, valid or not.
+        source: { $ref: "#/components/schemas/LibrarySource" }
+        overrides:
+          $ref: "#/components/schemas/LibrarySource"
+          description: "The source this entry shadows, when it shadows one. What the card means by \"overrides the registry entry\", and what Revert would go back to."
+        level: { $ref: "#/components/schemas/CertificationLevel" }
+        manifest_state: { $ref: "#/components/schemas/ManifestState" }
+        manifest_valid: { type: boolean }
+        errors:
+          type: array
+          items: { $ref: "#/components/schemas/ManifestError" }
+          description: "Why an invalid entry is invalid. It is listed rather than hidden (R2, amended M7 Q6), so a typo in an override does not make a studio vanish."
+        manifest_file: { type: string, description: "Absolute path, when the manifest is a file on this machine." }
+        provenance: { $ref: "#/components/schemas/Provenance" }
+        repo: { type: string }
+        ref: { type: string }
+        local_path: { type: string }
+        approval_required: { type: boolean, description: "True when the recorded approval does not match what would run now, so the next install, retry or launch will ask (Q10)." }
+        selection: { type: string, description: "The chosen `selectable` weight, when the studio declares any. A launch without one is refused (Q21)." }
+        selectable:
+          type: array
+          items: { $ref: "#/components/schemas/ApprovalWeight" }
+          description: "The checkpoints this studio can be launched with, and which are already downloaded or linked."
+        rebuild_needed_reason: { type: string, description: "Set when `rebuild_needed`: the manifest changed since this checkout was built from it, which an Override causes." }
+
+    LibrarySource:
+      type: string
+      enum: [local, repo, registry, running]
+      description: >
+        Where this entry's manifest came from, highest first (Q6). `local` is
+        `<data>/studios/<id>.yaml`; `repo` is `helmstudio.yaml` in the studio's
+        own repository at the pinned ref, or in its installed checkout;
+        `registry` is the inline manifest a pointer carries. `running` is a
+        studio still running from a previous daemon whose manifest is gone.
+
+    CertificationLevel:
+      type: string
+      enum: [draft, unverified, verified, registry]
+      description: >
+        Derived, never declared (Q15). A manifest with `local_path` is `draft`
+        and everything else is `unverified`, because `verified` means a smoke
+        harness ran on this machine and `registry` means CI verified it on
+        every release — and neither exists yet. A label on the card, never a
+        gate on what a user runs on their own machine.
+
+    ManifestState:
+      type: string
+      enum: [resolved, not_fetched, invalid]
+      description: >
+        `not_fetched` is a registry pointer with no inline manifest and nothing
+        cached: startup never touches the network (Q7), so it is listed with a
+        Fetch action rather than fetched behind the user's back. `invalid` is
+        listed with its errors and is not installable or launchable.
+
+    ManifestError:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        pointer: { type: string, description: "JSON pointer into the document, for the form field to highlight." }
+        line: { type: integer, description: "1-based line in the YAML, resolved against the node." }
+        column: { type: integer }
+
+    Provenance:
+      type: object
+      description: "Where a local entry came from — a note for the card, never a trust signal (Q8). Stored beside the manifest in `<id>.source.json`, not inside it, so an exported manifest stays byte-identical to what upstream would commit."
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [imported, duplicated, written, folder] }
+        url: { type: string }
+        path: { type: string }
+        from_id: { $ref: "#/components/schemas/StudioIdValue" }
+        at: { type: string, format: date-time }
+
+    Criterion:
+      type: object
+      required: [number, title, state]
+      properties:
+        number: { type: integer }
+        title: { type: string }
+        state: { type: string, enum: [pass, fail, not_checked] }
+        required: { type: boolean }
+        detail: { type: string, description: "Why it failed, or why it is not checked." }
+
+    Criteria:
+      type: object
+      description: "05 §9, scored only where a manifest alone answers (Q16). `checkable` is the denominator the count reads."
+      required: [items, passed, checkable]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Criterion" } }
+        passed: { type: integer }
+        checkable: { type: integer }
+
+    ManifestText:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, description: "The YAML, as written. A manifest or a registry entry; the validator tells them apart by shape." }
+
+    ManifestDoc:
+      type: object
+      required: [id, text, digest, source, kind]
+      properties:
+        id: { $ref: "#/components/schemas/StudioIdValue" }
+        text: { type: string, description: "Byte for byte what is stored — the same bytes Export writes." }
+        digest: { type: string, description: "sha256 of the text. `If-Match` on a save compares this." }
+        source: { $ref: "#/components/schemas/LibrarySource" }
+        kind: { type: string, enum: [manifest, pointer] }
+        file: { type: string, description: "Absolute path, when it is a file on this machine. The editor shows it and offers Reveal." }
+        commit: { type: string, description: "The commit the text was read at, for a repository source." }
+        reverted_to: { type: string, description: "Set on a Revert: where the file was moved to." }
+
+    ManifestCheck:
+      type: object
+      description: "A verdict, whether or not it is valid. `document` is the parsed YAML as JSON, which is what the form renders from — the page never parses YAML itself (Q17)."
+      required: [valid, kind, errors]
+      properties:
+        valid: { type: boolean }
+        kind: { type: string, enum: [manifest, pointer, unknown] }
+        errors: { type: array, items: { $ref: "#/components/schemas/ManifestError" } }
+        warnings: { type: array, items: { $ref: "#/components/schemas/ManifestError" } }
+        document: { $ref: "#/components/schemas/JSONObject" }
+        text: { type: string, description: "The text this verdict is for; set by :edit, which returns what it wrote." }
+        criteria: { $ref: "#/components/schemas/Criteria" }
+
+    ManifestEdit:
+      type: object
+      additionalProperties: false
+      required: [text, pointer]
+      properties:
+        text: { type: string }
+        pointer: { type: string, description: "RFC 6901 JSON pointer to the field, e.g. /processes/0/cmd." }
+        value:
+          description: "The new value. Absent or null removes the key. Comments and key order around it are kept."
+
+    RevertResult:
+      type: object
+      required: [id, moved_to]
+      properties:
+        id: { $ref: "#/components/schemas/StudioIdValue" }
+        moved_to: { type: string, description: "`<data>/studios/_reverted/<id>-<timestamp>.yaml`. The file is never deleted (Q9)." }
+        now: { $ref: "#/components/schemas/ManifestDoc" }
+
+    DuplicateRequest:
+      type: object
+      additionalProperties: false
+      required: [new_id]
+      properties:
+        new_id: { $ref: "#/components/schemas/StudioIdValue" }
+
+    ImportItem:
+      type: object
+      additionalProperties: false
+      description: "Exactly one of `text` or `url`. The daemon opens no path a request names (Q14)."
+      properties:
+        text: { type: string }
+        url: { type: string, format: uri }
+
+    ImportResolution:
+      type: object
+      additionalProperties: false
+      required: [index, action]
+      properties:
+        index: { type: integer, description: "Which reported item this resolves." }
+        action: { type: string, enum: [override, rename, skip] }
+        new_id: { $ref: "#/components/schemas/StudioIdValue" }
+
+    ImportRequest:
+      type: object
+      additionalProperties: false
+      description: "Without `confirm`, reports and writes nothing. With `{confirm, resolutions}`, adds exactly the reported set."
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ImportItem" } }
+        confirm: { type: string }
+        resolutions: { type: array, items: { $ref: "#/components/schemas/ImportResolution" } }
+
+    ImportItemReport:
+      type: object
+      required: [index, valid, errors]
+      properties:
+        index: { type: integer }
+        valid: { type: boolean }
+        id: { $ref: "#/components/schemas/StudioIdValue" }
+        name: { type: string }
+        kind: { type: string, enum: [manifest, pointer, unknown] }
+        collides_with: { $ref: "#/components/schemas/LibrarySource" }
+        errors: { type: array, items: { $ref: "#/components/schemas/ManifestError" } }
+        flags:
+          type: array
+          items: { type: string }
+          description: "Sentences worth reading before adding, such as `local_path` building in a directory on this Mac without cloning (Q14)."
+        added: { type: boolean, description: "Set on the confirmed pass." }
+
+    ImportReport:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ImportItemReport" } }
+        confirm: { type: string, description: "Send back to add exactly this set. Absent on the confirmed pass." }
+
+    RepositoryRead:
+      type: object
+      additionalProperties: false
+      description: "Exactly one of `{repo, ref}` or `{path}`. `path` is a typed absolute path, and only `<path>/helmstudio.yaml` is read."
+      properties:
+        repo: { type: string }
+        ref: { type: string }
+        path: { type: string }
+
+    RepositoryResult:
+      type: object
+      required: [found]
+      properties:
+        found: { type: boolean, description: "False when the repository ships no helmstudio.yaml — which is the common case, and what the editor pre-fills from." }
+        commit: { type: string }
+        repo: { type: string }
+        ref: { type: string }
+        text: { type: string }
+        check: { $ref: "#/components/schemas/ManifestCheck" }
+        submodules: { type: array, items: { $ref: "#/components/schemas/Submodule" } }
+
+    Submodule:
+      type: object
+      required: [path, url]
+      properties:
+        path: { type: string }
+        url: { type: string }
+
+    ApprovalCommand:
+      type: object
+      description: "One command, byte for byte as the manifest wrote it, with placeholders left as written."
+      required: [when, label, command]
+      properties:
+        when: { type: string, enum: [install, launch, first_launch], description: "`build[]` at install; each process `cmd` and `health.exec` at every launch; `import.run` once (Q11)." }
+        label: { type: string, description: "What the manifest calls it — a step's name, a process's name." }
+        command: { type: string }
+        cwd: { type: string }
+        shell: { type: boolean }
+        env: { $ref: "#/components/schemas/JSONObject" }
+        flags:
+          type: array
+          items: { type: string, enum: [control_characters, newline, zero_width, bidirectional] }
+          description: "What is in this string that a reader would not see. Shown escaped and flagged rather than rendered."
+
+    ApprovalCheck:
+      type: object
+      required: [name, state]
+      properties:
+        name: { type: string }
+        state: { type: string, enum: [pass, warn, fail, not_run] }
+        required: { type: boolean }
+        detail: { type: string, description: "For `not_run`, why — a smoke test builds and runs the studio, which is what this screen asks permission for (Q13)." }
+
+    ApprovalWeight:
+      type: object
+      required: [name, selectable]
+      properties:
+        name: { type: string }
+        hf_repo: { type: string }
+        revision: { type: string }
+        bytes: { type: integer }
+        state: { type: string, description: "Whether it is already downloaded or linked." }
+        selectable: { type: boolean }
+        optional: { type: boolean }
+
+    ApprovalPreview:
+      type: object
+      description: >
+        What would run, and the digest that authorises it (Q10-Q13). The digest
+        covers the id, source and resolved commit, the submodules, every
+        command with its `cwd`, `shell` and `env`, the capabilities, the network
+        hosts, `python.version` and the declared weights — and deliberately not
+        sizes, free disk or `selected`, none of which changes what executes.
+      required: [studio_id, source, level, digest, commands, capabilities, checks, weights]
+      properties:
+        studio_id: { $ref: "#/components/schemas/StudioIdValue" }
+        name: { type: string }
+        source: { $ref: "#/components/schemas/LibrarySource" }
+        level: { $ref: "#/components/schemas/CertificationLevel" }
+        digest: { type: string, description: "Send back as `approval=` on :install, :retry or :launch." }
+        already_approved: { type: boolean, description: "True when the recorded approval already matches, so no confirmation is needed." }
+        repo: { type: string }
+        ref: { type: string }
+        commit: { type: string }
+        transport: { type: string, description: "What the repo URL means in words, e.g. \"Clones a directory on this Mac: /Users/…\" (Q14)." }
+        local_path: { type: string, description: "Set when nothing is cloned and the build happens in a directory that is already here." }
+        submodules: { type: array, items: { $ref: "#/components/schemas/Submodule" } }
+        commands: { type: array, items: { $ref: "#/components/schemas/ApprovalCommand" } }
+        capabilities:
+          type: array
+          items: { $ref: "#/components/schemas/CapabilitySentence" }
+        network_hosts:
+          type: array
+          items: { type: string }
+          description: "Shown as \"The manifest says it contacts these hosts. helmstudio does not restrict network access.\""
+        weights: { type: array, items: { $ref: "#/components/schemas/ApprovalWeight" } }
+        selection: { type: string, description: "The checkpoint this install would use, defaulting to the first selectable weight declared. Shown here, but not covered by the digest (Q21)." }
+        checks: { type: array, items: { $ref: "#/components/schemas/ApprovalCheck" } }
+        criteria: { $ref: "#/components/schemas/Criteria" }
+
+    CapabilitySentence:
+      type: object
+      description: "A capability in the words of what it lets a studio do. The table is 03 §18, and one Go table serves it (Q12)."
+      required: [capability, sentence, warning]
+      properties:
+        capability: { type: string }
+        sentence: { type: string }
+        warning: { type: boolean, description: "True for `gallery.read_all` and `kv.shared`." }
+
+    SelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [weight]
+      properties:
+        weight: { type: string, description: "The manifest name of a `selectable` weight." }
 
     StudioPage:
       allOf:

@@ -60,7 +60,7 @@ export class StudiosGroup {
     this.t = transport;
   }
 
-  /** The studios this daemon knows, with install and process state, ordered by id. (GET /studios) */
+  /** The library — every studio this machine knows about, from every source, ordered by id. (GET /studios) */
   list(params = {}) {
     return this.t.request("GET", "/studios", { query: {"limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
   }
@@ -71,13 +71,13 @@ export class StudiosGroup {
   }
 
   /** Clone at the pinned ref, run build[], fetch required weights. (POST /studios/{id}:install) */
-  install(id) {
-    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":install", { query: {}, headers: {}, expect: "json" });
+  install(id, params = {}) {
+    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":install", { query: {"approval": params.approval}, headers: {}, expect: "json" });
   }
 
   /** Install again, resuming at the first step that has not succeeded. The same operation as :install. (POST /studios/{id}:retry) */
-  retry(id) {
-    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":retry", { query: {}, headers: {}, expect: "json" });
+  retry(id, params = {}) {
+    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":retry", { query: {"approval": params.approval}, headers: {}, expect: "json" });
   }
 
   /** Stop the group and remove the checkout helmstudio cloned. Weights and data are kept. (POST /studios/{id}:uninstall) */
@@ -87,7 +87,7 @@ export class StudiosGroup {
 
   /** Start the process group in dependency order, health-gating each member. (POST /studios/{id}:launch) */
   launch(id, params = {}) {
-    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":launch", { query: {"preempt": params.preempt}, headers: {}, expect: "json" });
+    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":launch", { query: {"approval": params.approval, "preempt": params.preempt}, headers: {}, expect: "json" });
   }
 
   /** SIGTERM the group in reverse dependency order, SIGKILL after the grace period. (POST /studios/{id}:stop) */
@@ -109,6 +109,21 @@ export class StudiosGroup {
   processLog(id, name, params = {}) {
     return this.t.request("GET", "/studios/" + encodeURIComponent(id) + "/processes/" + encodeURIComponent(name) + "/logs", { query: {}, headers: {"Last-Event-ID": params.lastEventId}, expect: "sse" });
   }
+
+  /** The resolved manifest text, with its digest, source and file. (GET /studios/{id}/manifest) */
+  manifest(id) {
+    return this.t.request("GET", "/studios/" + encodeURIComponent(id) + "/manifest", { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** What would run, and the digest that authorises it. (GET /studios/{id}/approval) */
+  approval(id) {
+    return this.t.request("GET", "/studios/" + encodeURIComponent(id) + "/approval", { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** Choose which of a studio's selectable weights it launches with. (PUT /studios/{id}/selection) */
+  select(id, body) {
+    return this.t.request("PUT", "/studios/" + encodeURIComponent(id) + "/selection", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
 }
 
 /** The weights group. */
@@ -125,6 +140,55 @@ export class WeightsGroup {
   /** Download an optional weight. (POST /studios/{id}/weights/{name}:fetch) */
   fetch(id, name) {
     return this.t.request("POST", "/studios/" + encodeURIComponent(id) + "/weights/" + encodeURIComponent(name) + ":fetch", { query: {}, headers: {}, expect: "json" });
+  }
+}
+
+/** The manifests group. */
+export class ManifestsGroup {
+  constructor(transport) {
+    this.t = transport;
+  }
+
+  /** Validate manifest or registry-entry text. Writes nothing. (POST /launcher/manifests:validate) */
+  validate(body) {
+    return this.t.request("POST", "/launcher/manifests:validate", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Apply one field edit to manifest text, keeping comments and key order. Writes nothing. (POST /launcher/manifests:edit) */
+  edit(body) {
+    return this.t.request("POST", "/launcher/manifests:edit", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Save a local manifest or pointer, creating the Local entry that overrides lower sources. (PUT /launcher/manifests/{id}) */
+  save(id, body, params = {}) {
+    return this.t.request("PUT", "/launcher/manifests/" + encodeURIComponent(id), { query: {}, headers: {"If-Match": params.ifMatch}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Revert a local manifest, so the source beneath it resolves again. (DELETE /launcher/manifests/{id}) */
+  revert(id) {
+    return this.t.request("DELETE", "/launcher/manifests/" + encodeURIComponent(id), { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** Copy an entry to a Local manifest under a new id, changing the id and nothing else. (POST /launcher/manifests/{id}:duplicate) */
+  duplicate(id, body) {
+    return this.t.request("POST", "/launcher/manifests/" + encodeURIComponent(id) + ":duplicate", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Report on manifests given as text or fetched from a URL, then add them on confirmation. (POST /launcher/manifests:import) */
+  import(body) {
+    return this.t.request("POST", "/launcher/manifests:import", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+}
+
+/** The repositories group. */
+export class RepositoriesGroup {
+  constructor(transport) {
+    this.t = transport;
+  }
+
+  /** Read a repository's manifest without cloning or installing it. Writes nothing. (POST /launcher/repositories:read) */
+  read(body) {
+    return this.t.request("POST", "/launcher/repositories:read", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
   }
 }
 
@@ -199,6 +263,8 @@ export class LauncherClient {
     this.jobs = new JobsGroup(transport);
     this.studios = new StudiosGroup(transport);
     this.weights = new WeightsGroup(transport);
+    this.manifests = new ManifestsGroup(transport);
+    this.repositories = new RepositoriesGroup(transport);
     this.models = new ModelsGroup(transport);
     this.settings = new SettingsGroup(transport);
   }
