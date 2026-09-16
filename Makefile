@@ -68,10 +68,12 @@ export BOUNDARIES_SCRIPT := $(value boundaries_script)
 boundaries:
 	@bash -c "$$BOUNDARIES_SCRIPT"
 
-# Every module path added or changed on a require or replace line of go.mod,
-# and any change to the go or toolchain line, must be named — path and version
-# as whole tokens, in one line — in a line added to docs/decisions.md over the
-# same range.
+# Every module path added or changed on a require or replace line of a go.mod,
+# and any change to a go or toolchain line, must be named — path and version as
+# whole tokens, in one line — in a line added to docs/decisions.md over the
+# same range. Every go.mod in the repository is read, tracked or not yet, so a
+# module added beside the root is held to the rule from its first line
+# (M10 task 9).
 #
 # The range starts where this branch left main (DEPS_BASE overrides it), and
 # uncommitted changes count. It is a branch check: on main itself the base is
@@ -94,19 +96,25 @@ mods() {
     /^require[ \t]+[^( \t]/ { print $2, $3; next }
     /^replace[ \t]+[^( \t]/ { print $2, rep(2); next }'
 }
-changed=$(comm -13 <(git show "$base:go.mod" 2>/dev/null | mods | sort -u) <(mods < go.mod | sort -u))
-if [ -z "$changed" ]; then echo "deps: go.mod unchanged since ${base:0:7}"; exit 0; fi
+changed=""
+while read -r f; do
+  [ -f "$f" ] || continue
+  c=$(comm -13 <(git show "$base:$f" 2>/dev/null | mods | sort -u) <(mods < "$f" | sort -u))
+  if [ -n "$c" ]; then changed="$changed$(sed "s|^|$f |" <<<"$c")"$'\n'; fi
+done < <(git ls-files -co --exclude-standard -- go.mod '*/go.mod' | sort -u)
+if [ -z "$changed" ]; then echo "deps: no go.mod changed since ${base:0:7}"; exit 0; fi
 added=$(git diff "$base" -- docs/decisions.md | grep '^+' | grep -v '^+++')
 esc() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|]/\\&/g'; }
 tok='[^A-Za-z0-9._/@+~-]'
 missing=""
-while read -r name version; do
+while read -r file name version; do
+  [ -n "$file" ] || continue
   n=$(esc "$name"); v=$(esc "$version")
   grep -E "(^|$tok)$n($tok|\$)" <<<"$added" | grep -qE "(^|$tok)$v($tok|\$)" || missing="$missing
-  $name $version"
+  $file: $name $version"
 done <<<"$changed"
 if [ -n "$missing" ]; then
-  echo "deps: go.mod changed since ${base:0:7} without a docs/decisions.md line naming each of:$missing"
+  echo "deps: a go.mod changed since ${base:0:7} without a docs/decisions.md line naming each of:$missing"
   exit 1
 fi
 echo "deps: every go.mod change since ${base:0:7} is recorded in docs/decisions.md"
