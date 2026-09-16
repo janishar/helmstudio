@@ -34,9 +34,11 @@ hides a class of path bug that a Linux run surfaces on the first try.
 
 **Currently not run.** As of M1, by the human's direction, `go test` runs on
 the host only: the Linux and Windows test legs are out of the gate and no CI
-workflow exists. `make vet-linux` type-checks the tree as Linux and runs
-nothing. See `docs/decisions.md`, "2026-09-15 · M1 foundation". Until that
-entry is superseded, the path bugs described above are not caught.
+workflow runs it. The repository's one workflow, `.github/workflows/site.yml`,
+publishes the site and checks nothing else. `make vet-linux` type-checks the
+tree as Linux and runs nothing. See `docs/decisions.md`, "2026-09-15 · M1
+foundation". Until that entry is superseded, the path bugs described above are
+not caught.
 
 ## What the gate cannot tell you
 

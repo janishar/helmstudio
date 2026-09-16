@@ -1,0 +1,57 @@
+# Builds site/ and publishes it to GitHub Pages at helmstudio.in
+# (docs/decisions.md, M10). site/out is not committed (M10 Q8), so it is built
+# here on every push to main: the reference pages are generated from
+# api/openapi.yaml, schema/manifest.json, studios/ and helm's own usage, and a
+# change to any of them has to reach the site.
+#
+# The custom domain lives in the repository's Pages settings. A deploy from a
+# workflow ignores the CNAME file the generator writes.
+#
+# This workflow runs no gate; `make gate` still runs on the host only
+# (docs/agents/gate.md).
+
+name: site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: site/go.mod
+          cache-dependency-path: |
+            go.sum
+            site/go.sum
+      - name: Build the site
+        working-directory: site
+        run: go run ./cmd/site
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/out
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

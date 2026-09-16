@@ -769,12 +769,12 @@ gate was green. `docs/agents/gate.md` puts it bluntly: an agent that writes
 "verified" about a Metal path has told you nothing except that it did not
 understand the boundary.
 
-**There is no CI yet.** As of M1, by the maintainer's direction, `go test` runs
-on the host only; the Linux and Windows legs are out of the gate and no
-workflow exists. `make vet-linux` type-checks and runs nothing. The Linux run
-is wanted eventually for a specific reason: macOS has a case-insensitive
-filesystem, which hides a class of path bug that a Linux run surfaces on the
-first try.
+**The gate has no CI yet.** As of M1, by the maintainer's direction, `go test`
+runs on the host only; the Linux and Windows legs are out of the gate. The one
+workflow, `.github/workflows/site.yml`, publishes the site and runs no gate.
+`make vet-linux` type-checks and runs nothing. The Linux run is wanted
+eventually for a specific reason: macOS has a case-insensitive filesystem,
+which hides a class of path bug that a Linux run surfaces on the first try.
 
 ---
 

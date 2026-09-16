@@ -947,6 +947,7 @@ The kickoff stopped before task 1 on fourteen questions, recorded in `docs/agent
   - The manifest reference is generated from `schema/manifest.json`'s own descriptions. A missing description is shown as missing, never invented, and listed in the report as a schema finding; the schema is not edited to fill it.
   - The CLI reference is generated from `helm`'s own usage, for the two commands that exist.
   - No page describes an unbuilt feature as if it existed.
+- 2026-09-16 · site · **the human confirms `helmstudio.in` is theirs, and the site is served from GitHub Pages from this repository: `.github/workflows/site.yml` builds `site/` with the generator's defaults (base `/`, CNAME `helmstudio.in`) on every push to `main` and deploys the output with `actions/deploy-pages`; the domain is set in the repository's Pages settings, since a deploy from a workflow ignores a `CNAME` file; it is the repository's only workflow, and it runs no gate** — `site/out` is not committed (Q8), so it is built where it is published, and a reference generated from the contract has to be rebuilt whenever the contract changes. [resolves: Q11's wait for the domain and the host]
 
 ## Changes
 
