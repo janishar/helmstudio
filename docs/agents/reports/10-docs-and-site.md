@@ -1,4 +1,296 @@
-# M10 — Docs and site — kickoff
+# M10 — Docs and site — implementation report
+
+## What was built
+
+The documentation and the site for helmstudio.in, built by `site/`, a Go module
+of its own so the daemon never links goldmark. Fifteen pages are written in
+Markdown: the overview, the quickstart, six concepts, six guides and
+publishing. The rest are generated: the API reference for the 54 `studio-api`
+and 2 `public` operations, each with its Go, Python and JavaScript call; the
+manifest and CLI references; the four launch manifests, annotated field by
+field; and a landing page whose studio cards are read from `studios/*.yaml`.
+Every code block on every page is one of 29 files under `site/samples/`. The
+gate runs 25 of them, including the quickstart as written under `helm dev`, and
+the page says why it cannot run the other four.
+
+`.github/workflows/site.yml`, from a parallel session and already on this
+branch, publishes the build to GitHub Pages. Nothing was deployed from here.
+
+## Gate
+
+    $ make gate
+    fmt: clean
+    vet: clean
+    vet-linux: clean
+    boundaries: clean
+    deps: every go.mod change since 4e71298 is recorded in docs/decisions.md
+    drift: generated clients match api/openapi.yaml
+    ?   	github.com/janishar/helmstudio/api/gen	[no test files]
+    ok  	github.com/janishar/helmstudio/cmd/helm	1.946s
+    ?   	github.com/janishar/helmstudio/cmd/helmstudio	[no test files]
+    ok  	github.com/janishar/helmstudio/internal/api	2.457s
+    ok  	github.com/janishar/helmstudio/internal/api/studioapi	1.124s
+    ok  	github.com/janishar/helmstudio/internal/approval	0.460s
+    ?   	github.com/janishar/helmstudio/internal/chrome	[no test files]
+    ok  	github.com/janishar/helmstudio/internal/css	0.442s
+    ok  	github.com/janishar/helmstudio/internal/export	0.456s
+    ok  	github.com/janishar/helmstudio/internal/install	10.104s
+    ok  	github.com/janishar/helmstudio/internal/library	1.838s
+    ok  	github.com/janishar/helmstudio/internal/manifest	0.423s
+    ok  	github.com/janishar/helmstudio/internal/media	0.982s
+    ok  	github.com/janishar/helmstudio/internal/platform	1.071s
+    ?   	github.com/janishar/helmstudio/internal/platform/platformtest	[no test files]
+    ok  	github.com/janishar/helmstudio/internal/store	1.347s
+    ok  	github.com/janishar/helmstudio/internal/supervisor	40.949s
+    ok  	github.com/janishar/helmstudio/internal/theme	1.074s
+    ok  	github.com/janishar/helmstudio/internal/themelint	0.383s
+    ok  	github.com/janishar/helmstudio/internal/timeline	0.389s
+    ok  	github.com/janishar/helmstudio/internal/weights	1.431s
+    ?   	github.com/janishar/helmstudio/internal/weights/hubtest	[no test files]
+    ok  	github.com/janishar/helmstudio/packages/helm-css	0.392s
+    ?   	github.com/janishar/helmstudio/packages/helm-css/cmd/build	[no test files]
+    ?   	github.com/janishar/helmstudio/packages/helm-runtime-sdk/node	[no test files]
+    ok  	github.com/janishar/helmstudio/packages/helm-ui-sdk	0.417s
+    ?   	github.com/janishar/helmstudio/schema	[no test files]
+    ?   	github.com/janishar/helmstudio/studios	[no test files]
+    ok  	github.com/janishar/helmstudio/test/media	3.103s
+    ?   	github.com/janishar/helmstudio/test/studios/sequencer	[no test files]
+    ok  	github.com/janishar/helmstudio/web	0.391s
+    ok  	github.com/janishar/helmstudio/packages/helm-runtime-sdk/go	0.550s
+    ?   	github.com/janishar/helmstudio/packages/helm-runtime-sdk/go/embedded	[no test files]
+    ok  	github.com/janishar/helmstudio/test/conformance	4.097s
+    site: 37 pages in /Users/janisharali/GenAI/helmstudio/site/out
+    ?   	github.com/janishar/helmstudio/site	[no test files]
+    ?   	github.com/janishar/helmstudio/site/cmd/site	[no test files]
+    ok  	github.com/janishar/helmstudio/site/gen	10.205s
+    ?   	github.com/janishar/helmstudio/site/samples/providers/embedded	[no test files]
+    ?   	github.com/janishar/helmstudio/site/samples/theming/go	[no test files]
+    ok  	github.com/janishar/helmstudio/test/visual	102.683s
+    studios/auk-studio.yaml: ok
+    studios/h3-studio.yaml: ok
+    studios/iris-studio.yaml: ok
+    studios/ltx-studio.yaml: ok
+    gate: green
+
+Run on this Mac (macOS 27, Chrome 152, Go 1.27.1, Python 3.9.6, Node 26.8.2),
+on the tree the two commits before this report hold, with nothing set to skip:
+the quickstart, every Python sample, all three theming servers and the site's
+twelve goldens ran. `internal/weights`, whose flake is offered as its own task,
+passed.
+
+## What the tests hold
+
+In `site/gen` unless named. **Each was made to fail by planting its bug**, and
+every plant failed on its first run.
+
+- **The site builds for GitHub Pages** under `/` and under `/helmstudio/`. Every
+  `href`, `src` and `#fragment` in the written HTML leads to a file and an id,
+  and `CNAME`, `.nojekyll`, `404.html`, helm-css and its fonts are in the
+  output. A planted dead link, missing fragment and relative link are each
+  reported.
+- **The command builds what `make site` builds**, so `cmd/site` is run as well
+  as the function.
+- **The navigation reaches every page**, and each link carries its page's own
+  title.
+- **A stale page does not survive a build.** A page planted in the output is
+  gone after the next build. A directory holding other files and no `.nojekyll`
+  is refused rather than emptied.
+- **The API reference is the contract**: one section per `studio-api` and
+  `public` operation in `api/openapi.yaml`, and no others. Planting a skipped
+  operation fails it. A documented call missing from a generated client fails
+  the build: `api_test.go` feeds the matcher a doc comment the Go generator has
+  wrapped, and removing the fix fails it.
+- **Annotations fail when out of step.** A changed studio file, a field with no
+  note, and a note for a field that is not there each fail with their own
+  message.
+- **Markdown**: an inline code block and a misspelt directive are refused; a
+  sample says which file it is and whether it runs; internal links go under the
+  base path; raw HTML is escaped. `@capabilities` and `@criteria` render the
+  software's own tables.
+- **Every sample is on a page, and run or marked.** A file on no page, a sample
+  both marked and run, and a sample neither marked nor run each fail.
+  `samples_test.go`'s table is what the running tests take their work from.
+- **The quickstart runs as written**: steps 2, 3 and 5 in one shell, step 6
+  exec'd so the test interrupts `helm dev` itself, then steps 7 to 9, checked
+  against what the page says each prints. `06-output.txt` is matched line by
+  line against `helm dev`'s output, with `…` for what varies. Planting a changed
+  seed in step 7, or a changed line in the output, fails it.
+- **The Python samples run** inside a studio under `helm dev`, with a token, a
+  stage directory and capabilities. Planting a wrong lineage assertion fails it.
+- **The theming studio serves what its page links**, with its Python, Go and
+  JavaScript servers in turn: helm-css, the browser runtime, the manifest's hue
+  in `accent.css`, and the theme stream through the proxy. Its stylesheet
+  passes `lint.sh`. Removing the proxy mount fails it.
+- **The embedded provider sample records** with no daemon, into `./.helm`.
+- **The manifest samples validate.** A planted unknown `depends_on` fails it.
+- **The site's stylesheet passes the theme lint**, and a planted colour literal
+  fails it.
+- **`make deps` reads every `go.mod`.** With `site/go.mod` new and no
+  decision-log line, it failed naming all twenty of its lines; with the line,
+  it passes.
+- **The site's goldens** (`test/visual/site_test.go`): the landing page and the
+  quickstart, both themes, at 1280, 1000 and 380 px. Changing the quickstart's
+  release note moved all six quickstart goldens and none of the landing's.
+
+## Tests that did not catch their bug
+
+None of the plants passed. One test failed when nothing was wrong, which is
+worth recording. The quickstart test failed two runs in three, because `helm
+dev` prints a process's output a tick after the process writes it and drops
+what it has not printed when interrupted. The test went on as soon as the
+health check answered and stopped `helm dev` within half a second. It now waits
+for the studio's own line first, as a reader does, and passed three runs in a
+row and under `-race`. The behaviour itself is an open entry.
+
+## Design contradictions raised
+
+None of these is a design document contradicting itself, the case that stops a
+milestone. Each is software that disagrees with the design, in files that are
+not M10's, so each is recorded under "Open, not yet decided" and the pages
+describe what the software does:
+
+- **The criteria table is not 05 §9's** for 3, 6, 7, 10, 11 and 12, and it has
+  10 and 14's levels the other way round. The publishing page renders the
+  software's table, so it shows the software's titles.
+- **03 §2's hues for ltx, iris and AuK are in no manifest.** The launcher, the
+  timeline and the site's cards all show ramp hues, two of them teal. An M8b
+  open entry says every launch studio declares a hue; only h3 does.
+- **05 §6's dissolve** is refused "when either side is short of handle"; today
+  it is accepted. Also, `:append` cannot add a still, and a dissolve into a
+  still exports short. The timeline guide lists all three.
+- **The schema's `run` shorthand cannot validate**, as M0 recorded. The manifest
+  page tells authors to use `processes`.
+
+## Judgement calls
+
+Each is in `docs/decisions.md` under "M10 · judgement calls while building",
+with its reason:
+
+- The quickstart installs the SDK without `-e`, and says no package is on PyPI
+  or npm in the present tense. This amends Q5.
+- Platform support says "type-checked for Linux", not "build". This amends Q13.
+- The capability sentences and criteria are read from `internal/manifest`, not
+  written into pages.
+- The proxy is shown from all three languages, plus the Go embedded provider.
+  Those are the places the clients differ in more than spelling (Q4).
+- The example declares its needs, so it fails only criteria 13 and 15.
+- The quickstart workspace links the checkout entry by entry, and step 4
+  becomes a `.pth` file.
+- The site's goldens live beside helm-css's and use the same pins.
+- `CNAME` is kept for a deploy from a branch, and a non-site output directory is
+  refused.
+
+Not in the log, because they decide nothing anyone else builds on:
+
+- The sidebar's words are each page's title.
+- Below 900 px the sidebar becomes a Contents disclosure, so a phone reader
+  reaches the page first.
+- Descriptions on the landing cards are not clamped to one line.
+- The theming sample is lantern studio, with a hue no launch studio has. It was
+  first given `#4dc1cb`, which turned out to be ltx's ramp hue.
+
+## What running it for real found
+
+- **`pip install -e` fails with the pip macOS ships** (21.2.4 on Python 3.9.6):
+  editable installs of a `pyproject.toml`-only project need pip 21.3. The
+  quickstart as drafted would have failed at step 4 on a clean Mac. A plain
+  install from the same pip works, and was run by hand.
+- **The example failed three criteria**, not the two the page said. It declared
+  no tools, memory, disk or peak. It now does.
+- **`helm validate -theme <dir> -strict`**, the order the usage line gives,
+  reads `-strict` as a manifest file.
+- **The API reference failed to build** on a doc comment the Go generator
+  wraps, which split the `(PATCH /gallery/items/{id})` marker across two lines.
+  The parallel session found it; the matcher now reads each comment whole.
+- **`helm dev` names "run install again"** for an unlinked weight, which under
+  `helm dev` means `-link`.
+- **The timeline's three problems**, above, were found running the guide's
+  sample before this report's first draft.
+
+## Could not verify
+
+- **The machine-bound demo**: the quickstart followed literally, and timed, on a
+  Mac that has never built helmstudio. This Mac has a warm Go module cache and
+  its checkout. Steps 1 and 4 need the network, so the gate does not run them.
+  Step 4 was run once by hand, with the change above. What would show it: a
+  clean macOS account with the Xcode command-line tools and Go 1.27.1, the
+  commands copied from the page one by one, and a stopwatch. Every step that
+  needs something the page does not say is a finding.
+- **The site at helmstudio.in.** Enabling Pages from Actions, the custom domain
+  in the repository's settings, and the DNS are the human's. The build was
+  served locally, and checked under `/` and `/helmstudio/`.
+- **The generator on Linux.** The workflow runs it on `ubuntu-latest`, where it
+  builds `helm` for the CLI reference. That first run on a push to `main` is its
+  first run on Linux.
+- **Assistive technology.** The pages use landmarks, a skip link, `lang` and
+  real headings, but no screen reader was run over them.
+
+## Dependencies added
+
+`site/go.mod`, a new module:
+
+- **`github.com/yuin/goldmark` v1.8.6** renders Markdown, which the standard
+  library cannot. Recorded as Q7.
+- **`gopkg.in/yaml.v3` v3.0.1** is already the root's.
+- **The root module and the two runtime SDK modules**, through `replace`.
+- **Indirectly, the root's own versions** of jsonschema, `x/sys`, SQLite and
+  SQLite's dependencies. The generator reads `internal/manifest` and
+  `internal/theme`, and the Go samples build against the embedded provider.
+
+All are named in one decision-log line, which is what `make deps` now checks
+across every `go.mod`.
+
+## Files touched outside the milestone's list
+
+- **`docs/agents/reports/10-docs-and-site.md`**: this report, above the kickoff.
+- **`.claude/launch.json`**, which is not committed: a local preview
+  configuration named `m10-site`.
+
+The workflow and its decision entry came from the parallel session. Everything
+else is in the file list: `site/**`, `Makefile`, `docs/agents/gate.md`,
+`.gitignore`, `test/visual/` (the site's test and goldens),
+`docs/plan/01-build-plan.md` and `docs/decisions.md`.
+
+## Decision-log entries appended
+
+- **Under "2026-09-16 · M10 docs and site"**, a section "M10 · judgement calls
+  while building" with nine entries:
+  - the site module's dependencies;
+  - the quickstart's SDK install (amends Q5);
+  - the Linux wording (amends Q13);
+  - the tables read from `internal/manifest`;
+  - three languages for the proxy;
+  - the example's declared needs;
+  - the quickstart's workspace;
+  - the site's goldens;
+  - `CNAME` and the output guard.
+- **Under "Open, not yet decided"**, eight entries:
+  - the criteria table against 05 §9;
+  - the missing hues;
+  - `-strict`'s position;
+  - `pip install -e` with macOS's pip;
+  - "run install again" under `helm dev`;
+  - `helm dev`'s late output;
+  - the timeline's three problems;
+  - sixteen undescribed schema fields.
+
+The phase 9 amendment in `docs/plan/01-build-plan.md` now says the site is
+published by the workflow, which Q11's resolution had overtaken.
+
+## Left undone
+
+- **The machine-bound quickstart**, above. It runs again against released
+  binaries after M9.
+- **What waits for M9** (Q2): the install section's `.dmg` and Homebrew, and the
+  screen recording. The site holds no placeholder for either.
+- **Commands the pages name as unbuilt**: `helm studio init`, `helm test`,
+  `helm doctor`, `helm adopt`, and `helm dev --fixtures` and `--fail`.
+- **The eight open entries**, each in files that are not M10's.
+- **Merging.** Nothing is merged or pushed.
+
+---
+
+## The kickoff
 
 **Nothing is built.** M10's brief is scoped, not specified: it is "expanded to
 M0-level detail at its own kickoff". This is that kickoff. It stops before task 1
