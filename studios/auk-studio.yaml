@@ -21,6 +21,8 @@ manifest:
   name: AuK studio
   description: PyTorch speech and voice generation on mps, with AuK and AuK-Flash checkpoints.
   kinds: [audio]
+  # 03 §2's identity hue.
+  hue: { dark: "#8b7cf0", light: "#5c4bc4" }
   license: MIT
   repo: https://github.com/janishar/AuK
   ref: 61ae02a65c947a8c499a27f963165b351416a146

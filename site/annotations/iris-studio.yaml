@@ -1,5 +1,5 @@
 file: studios/iris-studio.yaml
-digest: sha256:25e86d194826195abc5fff7bd3ef283693527495d15e1e347df2dd24414e6af7
+digest: sha256:423955130165e4e13c9c2fe2984589d761da308d9342b8f3c4e5218321bee889
 title: iris studio's manifest
 intro: >-
   iris studio makes images from FLUX.2 Klein and Z-Image through a native Metal
@@ -16,6 +16,7 @@ notes:
   /manifest/name: "The name people see."
   /manifest/description: "One sentence saying what the studio does."
   /manifest/kinds: "Images."
+  /manifest/hue: "Its identity colour in each theme: a stripe, a dot and its clips on the timeline in the launcher, and the accent on its own page."
   /manifest/license: "The studio's own licence."
   /manifest/repo: "The same repository as the pointer's."
   /manifest/ref: "The same commit as the pointer's."

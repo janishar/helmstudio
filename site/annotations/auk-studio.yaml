@@ -1,12 +1,11 @@
 file: studios/auk-studio.yaml
-digest: sha256:46a326891d1a7790f65d1ac9e0f0a6a4f98f7356c5c2fa1fcbb03f1485ccffc2
+digest: sha256:fc03fb23f9c3b253187579c4173003b06616e7640cccdb610a1251e0eb358745
 title: AuK studio's manifest
 intro: >-
   AuK studio makes speech and voices with PyTorch on mps, behind a FastAPI
   server. Its registry entry carries its manifest inline. It passes four of the
   seven criteria a manifest can answer: it declares neither memory nor disk, no
-  test profile and no SDK major. It declares no hue, so it is given one from
-  helmstudio's fixed set.
+  test profile and no SDK major.
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from, with git."
@@ -16,6 +15,7 @@ notes:
   /manifest/name: "The name people see."
   /manifest/description: "One sentence saying what the studio does."
   /manifest/kinds: "Sound."
+  /manifest/hue: "Its identity colour in each theme: a stripe, a dot and its clips on the timeline in the launcher, and the accent on its own page."
   /manifest/license: "The studio's own licence."
   /manifest/repo: "The same repository as the pointer's."
   /manifest/ref: "The same commit as the pointer's."

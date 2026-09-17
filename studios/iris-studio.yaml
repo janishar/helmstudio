@@ -21,6 +21,8 @@ manifest:
   name: iris studio
   description: Native Metal image generation across the FLUX.2 Klein and Z-Image checkpoints.
   kinds: [image]
+  # 03 §2's identity hue.
+  hue: { dark: "#d8558f", light: "#b12f68" }
   license: MIT
   repo: https://github.com/janishar/iris-studio
   ref: b4f857f4d484f91cbbd6e48ba79f3879e49a253c
