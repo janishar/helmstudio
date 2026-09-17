@@ -96,8 +96,8 @@ packages is published; the launcher and its daemon run from a clone.
 
 | | |
 |---|---|
-| **Built** | The daemon: supervision, install and weights, the platform API and its three clients. Python studios. The launcher, with its studio library, manifest editor and approval screen. The four components. The timeline and its export. The documentation site. |
-| **Not built yet** | The Mac app — a native shell around a `WKWebView`, signing, notarisation, bundled ffmpeg and uv — and the launcher's own Gallery and Timeline screens, which wait for it. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
+| **Built** | The daemon: supervision, install and weights, the platform API and its three clients. Python studios. The launcher, with its studio library, manifest editor and approval screen. The four components. The timeline and its export. The documentation site. The Mac app's shell — a native window around the launcher that starts the daemon or adopts one already running. |
+| **Not built yet** | The Mac app's release — signing, notarisation and a download you can trust — the ffmpeg and uv it should bundle, and the launcher's own Gallery and Timeline screens. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
 | **Verified on** | macOS on Apple Silicon. The Go code is type-checked for Linux on every gate run; nothing has been run there. |
 
 [docs/releasing.md](docs/releasing.md) says what is published where.
@@ -138,6 +138,29 @@ HELMSTUDIO_HOME=/tmp/helmstudio-scratch ./bin/helmstudio
 
 A model on a gated Hugging Face repository needs a token. Add it in
 **Settings**: it is kept in the macOS Keychain, never in the database.
+
+### The Mac app
+
+`helmstudio.app` is a native window around the same launcher the browser shows.
+It starts the daemon, adopts one that is already running, and on quit stops the
+one it started — or leaves it running, if you asked it to keep studios alive.
+Nothing is reachable only from the app.
+
+**There is no download yet.** The app is not signed, and macOS refuses an
+unsigned app that arrived from the web, so a link here would hand you something
+that will not open. It is a build from a clone until there is a Developer ID
+behind it:
+
+```bash
+make dmg
+```
+
+That writes `bin/helmstudio.app` and a `.dmg` beside it. To run it straight
+from the build with the daemon's output in your terminal:
+
+```bash
+make app-run
+```
 
 ### Write a studio
 
