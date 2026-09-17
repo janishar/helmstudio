@@ -822,3 +822,45 @@ func TestTheEditorDrawsWeightsAsEntriesWithTheirLocalDirectory(t *testing.T) {
 		t.Errorf("the second weight did not survive the edit:\n%s", after)
 	}
 }
+
+// The process group is where someone lands after launching, so the page the
+// studio serves is reachable from it. It was not: the screen offered Details
+// and Stop group and no way in.
+func TestTheProcessGroupOpensTheStudio(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/studios/ltx-studio/processes")
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		for (let i = 0; i < 100 && !document.querySelector(".helm-page-header"); i++) {
+			await new Promise(r => setTimeout(r, 50));
+		}
+		const header = document.querySelector(".helm-page-header");
+		const open = [...header.querySelectorAll("button")].find(b => b.textContent === "Open");
+		return [
+			open ? "offers Open" : "no way in",
+			open && open.classList.contains("helm-btn-primary") ? "accent" : "not the accent",
+			document.querySelectorAll("main .helm-btn-primary").length,
+		].join("|");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "offers Open|accent|1" {
+		t.Errorf("the process group header reads %q, want offers Open|accent|1", got)
+	}
+
+	// While it is still starting there is nothing to open, and nothing is
+	// offered: a page that is not up yet opens a browser tab on a refusal.
+	p2 := screen(t, ctx, srv.URL, "processes", 1280, 900)
+	if err := p2.Eval(ctx, `(() => {
+		const header = document.querySelector(".helm-page-header");
+		return [...header.querySelectorAll("button")].some(b => b.textContent === "Open") ? "offers Open" : "no Open";
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "no Open" {
+		t.Errorf("a group that is still starting %s", got)
+	}
+}

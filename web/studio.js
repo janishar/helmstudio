@@ -88,6 +88,9 @@ export function studioDetail(ctx, id) {
   const s = state(studio, job);
   const steps = (job && job.steps) || [];
   const done = steps.filter((x) => x.state === "succeeded").length;
+  // What the last install said when it stopped, which outlives the daemon
+  // that ran it.
+  const failed = !steps.length && studio.last_failure && studio.last_failure.message ? studio.last_failure : null;
 
   const header = el("div", { class: "helm-page-header" },
     el("h1", { class: "helm-title", text: studio.name }),
@@ -129,8 +132,21 @@ export function studioDetail(ctx, id) {
       steps.length ? progress(done, steps.length) : null,
       steps.length
         ? el("ol", { class: "helm-steps" }, ...steps.map((x) => step(ctx, studio, x, job)))
-        : el("p", { class: "helm-micro", text: studio.install_state === "listed" ? "Not installed yet." : "No install has run in this daemon." }),
-      s.note && !steps.some((x) => x.state === "failed") ? el("p", { class: "helm-hint", text: s.note }) : null));
+        // A daemon that restarted has the failure but not the steps that
+        // reached it. Saying "no install has run" above the reason the last
+        // one stopped was two answers to one question.
+        : failed
+          ? el("div", { class: "helm-stack" },
+            el("p", { class: "helm-body helm-status-error", text: failed.message }),
+            el("p", { class: "helm-micro", text: `It stopped in ${failed.phase}. The steps are not here: they belong to the daemon that ran them.` }),
+            el("div", { class: "helm-row" },
+              el("button", {
+                class: "helm-btn helm-btn-secondary helm-btn-strong", type: "button", text: "Retry",
+                onclick: () => ctx.act(studio, "retry"),
+              })))
+          : el("p", { class: "helm-micro", text: studio.install_state === "listed" ? "Not installed yet." : "No install has run in this daemon." }),
+      // The note repeats the failure, which is already the paragraph above.
+      s.note && !failed && !steps.some((x) => x.state === "failed") ? el("p", { class: "helm-hint", text: s.note }) : null));
 
   const right = el("section", { class: "helm-work-right" }, terminalFor(ctx, studio, job));
 

@@ -54,16 +54,21 @@ export function processGroup(ctx, id) {
   const live = procs.filter((p) => p.state === "running").length;
   const starting = group.state === "starting";
   const selected = ctx.query.get("log") || "";
+  // A page to open: a running process that declares one, with a port.
+  const open = procs.some((p) => p.state === "running" && p.ui && p.port);
 
   const header = el("div", { class: "helm-page-header" },
     el("h1", { class: "helm-title", text: studio.name }),
     chip(groupChip(group), groupTone(group)),
     el("span", { class: "helm-meta", text: group.group_run_id ? `group run ${group.group_run_id}` : "" }),
     el("span", { class: "helm-spacer" }),
-    el("a", { class: "helm-btn helm-btn-secondary helm-btn-sm", href: `#/studios/${studio.id}`, text: "Details" }),
+    el("a", { class: "helm-btn helm-btn-secondary", href: `#/studios/${studio.id}`, text: "Details" }),
     ["starting", "running"].includes(group.state)
       ? el("button", { class: "helm-btn helm-btn-danger", text: "Stop group", onclick: () => ctx.act(studio, "stop") })
-      : el("button", { class: "helm-btn helm-btn-primary", text: "Launch", onclick: () => ctx.act(studio, "launch") }));
+      : el("button", { class: "helm-btn helm-btn-primary", text: "Launch", onclick: () => ctx.act(studio, "launch") }),
+    // The page the studio serves, which is the reason to be on this screen at
+    // all. It is the screen's one accent while something is up to open.
+    open ? el("button", { class: "helm-btn helm-btn-primary", text: "Open", onclick: () => ctx.act(studio, "open") }) : null);
 
   const blocks = [header];
 
