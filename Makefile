@@ -14,7 +14,7 @@ SHELL := /bin/bash
 GO ?= go
 HELM ?= ./bin/helm
 
-.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css site site-test app app-run app-check
+.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css site site-test app app-run app-check icon
 
 # The Go modules besides the root: the runtime SDK (stdlib only), its embedded
 # provider, the conformance suite (docs/decisions.md M4 Q2, Q25), and the site's
@@ -238,12 +238,37 @@ app:
 	@cp app/.build/release/helmstudio $(APP_BUNDLE)/Contents/MacOS/helmstudio
 	@sed 's/__VERSION__/$(APP_VERSION)/g' app/Resources/Info.plist > $(APP_BUNDLE)/Contents/Info.plist
 	@printf 'APPL????' > $(APP_BUNDLE)/Contents/PkgInfo
+	@$(MAKE) -s icon
 	@mkdir -p $(APP_BUNDLE)/Contents/Resources/studios
 	@shopt -s nullglob; set -- studios/*.yaml; \
 	if [ $$# -gt 0 ]; then cp "$$@" $(APP_BUNDLE)/Contents/Resources/studios/; fi
 	@out=$$(codesign --force --sign - --timestamp=none $(APP_BUNDLE)/Contents/MacOS/helmstudio-daemon 2>&1) || { echo "$$out"; exit 1; }
 	@out=$$(codesign --force --sign - --timestamp=none $(APP_BUNDLE) 2>&1) || { echo "$$out"; exit 1; }
 	@echo "app: $(APP_BUNDLE) — ad-hoc signed, not notarised (R71 needs a Developer ID)"
+
+# The app's icon, into the bundle as helmstudio.icns, which Info.plist names.
+# An .icns is used as it is; a .png is rendered into the ten sizes the Finder,
+# the Dock and Get Info each ask for, because macOS does not scale one image
+# well and a missing size falls back to something blurry. Neither present is
+# not an error — the bundle gets the generic application icon and says so,
+# which is better than a build that refuses over an ornament.
+icon:
+	@mkdir -p $(APP_BUNDLE)/Contents/Resources
+	@if [ -f app/Resources/icon.icns ]; then \
+		cp app/Resources/icon.icns $(APP_BUNDLE)/Contents/Resources/helmstudio.icns; \
+		echo "icon: app/Resources/icon.icns"; \
+	elif [ -f app/Resources/icon.png ]; then \
+		set -e; work=$$(mktemp -d)/helmstudio.iconset; mkdir -p "$$work"; \
+		for s in 16 32 128 256 512; do \
+			sips -z $$s $$s app/Resources/icon.png --out "$$work/icon_$${s}x$${s}.png" >/dev/null; \
+			sips -z $$((s*2)) $$((s*2)) app/Resources/icon.png --out "$$work/icon_$${s}x$${s}@2x.png" >/dev/null; \
+		done; \
+		iconutil -c icns "$$work" -o $(APP_BUNDLE)/Contents/Resources/helmstudio.icns; \
+		rm -rf "$$(dirname "$$work")"; \
+		echo "icon: app/Resources/icon.png, rendered to ten sizes"; \
+	else \
+		echo "icon: none at app/Resources/icon.png or icon.icns; the bundle takes the generic one"; \
+	fi
 
 # Run the app that `make app` built, from the terminal, so its stderr is
 # visible. `open` would detach it and swallow that.

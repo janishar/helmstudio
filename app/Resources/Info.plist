@@ -10,6 +10,8 @@
 	<string>com.janishar.helmstudio</string>
 	<key>CFBundleExecutable</key>
 	<string>helmstudio</string>
+	<key>CFBundleIconFile</key>
+	<string>helmstudio</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key>
