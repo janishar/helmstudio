@@ -41,6 +41,12 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+# What setuptools leaves beside the runtime SDK's source when it is built there,
+# by python -m build as publish-python.yml runs it or by installing from the
+# directory. Scoped: packages/helm-css/cmd/build is source.
+/packages/helm-runtime-sdk/python/build/
+/packages/helm-runtime-sdk/python/dist/
+*.egg-info/
 
 # Electron packaging
 /packages/app/release/
