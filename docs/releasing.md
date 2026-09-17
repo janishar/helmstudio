@@ -78,7 +78,9 @@ each publish.
    - `verify-go-tags` fetches each Go module through the proxy and builds a
      studio against the embedded provider;
    - `release-helm` builds `helm` for macOS on Apple Silicon and for Linux on
-     x86-64 and ARM64, runs each binary on its own platform, and attaches the
+     x86-64 and ARM64, with the tag's version stamped in, runs each binary on its
+     own platform, checks that `helm --version` names that version and a tree
+     with no changes, and attaches the
      archives, their `SHA256SUMS` and their build provenance to the GitHub
      Release for `v<version>`, marked a pre-release when the version is one.
 
@@ -109,7 +111,9 @@ each holding `helm` and its licence.
 `installer/install.sh` downloads the archive for the machine and the release's
 `SHA256SUMS` over HTTPS, and refuses an archive whose checksum does not match.
 When the GitHub CLI is signed in, it also refuses one without this repository's
-build provenance. It runs the binary once, then moves it into `~/.local/bin`,
+build provenance. It runs the binary once, and refuses one whose `helm --version` names another
+version (a release from before `--version`, such as `1.0.0-rc.1`, is checked by
+its usage instead), then moves it into `~/.local/bin`,
 replacing an older helmstudio `helm` but never another program called `helm`.
 It needs no `sudo` and edits no shell profile: when the directory is not on
 `PATH`, it prints the line to add. It installs the newest release, or the newest
@@ -125,7 +129,8 @@ For example:
     HELM_VERSION=1.0.0-rc.1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/janishar/helmstudio/main/installer/install.sh)"
 
 Read a script before handing it to a shell; this one is `installer/install.sh`
-in this repository.
+in this repository. `helm --version` says which `helm` is installed, and the
+commit it was built from; a build from a clone says `dev`.
 
 **To uninstall**:
 

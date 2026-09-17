@@ -16,10 +16,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/janishar/helmstudio/internal/platform"
 	helmcss "github.com/janishar/helmstudio/packages/helm-css"
 	helmui "github.com/janishar/helmstudio/packages/helm-ui-sdk"
 )
@@ -370,19 +372,41 @@ func TestTheHelmReleaseCoversEveryPlatformItBuilds(t *testing.T) {
 	}
 }
 
-// helm cross-compiles, with cgo off and the release's flags, for every
+// helm cross-compiles, with cgo off and the release's own -ldflags, for every
 // platform the workflow releases, so a change that would break a release fails
-// here rather than at a tag.
+// here rather than at a tag. The build for this machine is run: it names the
+// version the flags stamp, as the workflow checks each release does.
 func TestHelmBuildsForEveryReleasedPlatform(t *testing.T) {
-	targets, _ := releasedPlatforms(t)
+	targets, workflow := releasedPlatforms(t)
+	m := regexp.MustCompile(`go build -trimpath -ldflags="([^"]*)"`).FindStringSubmatch(workflow)
+	if m == nil {
+		t.Fatal(`release-helm.yml builds helm with no -trimpath -ldflags="..."`)
+	}
+	if !strings.Contains(m[1], "-X main.version=$version") {
+		t.Errorf("release-helm.yml builds helm with -ldflags=%q, which does not stamp the tag's version", m[1])
+	}
+	if !strings.Contains(workflow, `reported="$("$helm" --version)"`) {
+		t.Error("release-helm.yml does not check that each binary names its version")
+	}
+	const stamped = "9.8.7-test"
+	ldflags := strings.ReplaceAll(m[1], "$version", stamped)
 	for _, target := range targets {
 		t.Run(target, func(t *testing.T) {
 			goos, goarch, _ := strings.Cut(target, "/")
-			cmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", filepath.Join(t.TempDir(), "helm"), "./cmd/helm")
+			helm := filepath.Join(t.TempDir(), "helm")
+			cmd := exec.Command("go", "build", "-trimpath", "-ldflags="+ldflags, "-o", helm, "./cmd/helm")
 			cmd.Dir = root(t)
 			cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("GOOS=%s GOARCH=%s go build ./cmd/helm: %v\n%s", goos, goarch, err, out)
+			}
+			// The operating system comes from internal/platform, the one place that may decide it.
+			if target != platform.Name+"/"+runtime.GOARCH {
+				return
+			}
+			out, err := exec.Command(helm, "--version").Output()
+			if err != nil || !strings.HasPrefix(string(out), "helm "+stamped) {
+				t.Errorf("helm --version = %q, %v; want it to name %s, the version its flags stamp", out, err, stamped)
 			}
 		})
 	}

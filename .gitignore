@@ -16,7 +16,9 @@
 .aider*
 .github/copilot-instructions.md
 
-# Go build output
+# Go build output. release-helm.yml builds helm into build/ and dist/: ignored,
+# so helm --version does not call a release built beside them modified.
+/build/
 /dist/
 /bin/
 /out/

@@ -47,7 +47,7 @@ jobs:
             arch="${target#*/}"
             name="helm_${version}_${os}_${arch}"
             mkdir -p "build/$name"
-            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" -o "build/$name/helm" ./cmd/helm
+            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w -X main.version=$version" -o "build/$name/helm" ./cmd/helm
             cp LICENSE "build/$name/"
             tar -C build -czf "dist/$name.tar.gz" "$name"
           done
@@ -88,6 +88,14 @@ jobs:
           helm="$RUNNER_TEMP/$name/helm"
           "$helm" validate studios/*.yaml
           "$helm" validate -criteria studios/h3-studio.yaml
+          # It names the tag's version, and a tree with no changes.
+          reported="$("$helm" --version)"
+          echo "$reported"
+          case "$reported" in
+            *modified*) echo "helm was built from a tree with changes"; exit 1 ;;
+            "helm ${TAG#v}" | "helm ${TAG#v} ("*) ;;
+            *) echo "helm --version does not name ${TAG#v}"; exit 1 ;;
+          esac
 
   release:
     needs: run

@@ -30,6 +30,12 @@ import (
 // helmstudio's, and runs on this machine.
 const helmstudioHelm = "#!/bin/sh\necho 'usage: helm <command> [arguments]'\necho '  validate <manifest.yaml>...   validate one or more studio manifests'\n"
 
+// versionedHelm stands in for a helm released since helm had --version, which
+// names the version it was built as.
+func versionedHelm(version string) string {
+	return "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'helm " + version + " (0123456789ab)'; exit 0; fi\n" + strings.TrimPrefix(helmstudioHelm, "#!/bin/sh\n")
+}
+
 // The platforms install.sh accepts are the platforms release-helm.yml releases.
 func TestTheInstallerKnowsEveryPlatformHelmIsReleasedFor(t *testing.T) {
 	script, err := os.ReadFile(filepath.Join(root(t), "installer", "install.sh"))
@@ -146,6 +152,32 @@ func TestTheInstallerLeavesAnotherHelmAlone(t *testing.T) {
 	if n := rel.requests.Load(); n != 0 {
 		t.Errorf("install.sh downloaded %d files it would not install", n)
 	}
+}
+
+// A helm with --version must name the version install.sh downloaded.
+func TestTheInstallerChecksTheVersionHelmNames(t *testing.T) {
+	plat := installerPlatform(t)
+	t.Run("the version downloaded", func(t *testing.T) {
+		rel := serveRelease(t, "9.8.7", plat, versionedHelm("9.8.7"), false)
+		home := t.TempDir()
+		bin := filepath.Join(home, "bin")
+		if out, err := runInstaller(t, home, "HELM_VERSION=9.8.7", "HELM_RELEASES_URL="+rel.url, "HELM_INSTALL_DIR="+bin); err != nil {
+			t.Fatalf("install.sh refused a helm that names its version: %v\n%s", err, out)
+		}
+	})
+	t.Run("another version", func(t *testing.T) {
+		rel := serveRelease(t, "9.8.7", plat, versionedHelm("1.2.3"), false)
+		home := t.TempDir()
+		bin := filepath.Join(home, "bin")
+		out, err := runInstaller(t, home, "HELM_VERSION=9.8.7", "HELM_RELEASES_URL="+rel.url, "HELM_INSTALL_DIR="+bin)
+		if err == nil || !strings.Contains(out, "says it is helm 1.2.3 (0123456789ab), not helm 9.8.7") {
+			t.Errorf("err = %v, want install.sh to refuse a helm that names another version:\n%s", err, out)
+		}
+		if _, err := os.Stat(filepath.Join(bin, "helm")); err == nil {
+			t.Error("install.sh refused the helm, and installed it anyway")
+		}
+		assertNothingLeftBehind(t, bin)
+	})
 }
 
 // uninstaller.sh removes the helm install.sh installed, and what an interrupted

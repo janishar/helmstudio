@@ -181,8 +181,9 @@ Install `helm` on macOS on Apple Silicon or on Linux, or put the clone's
 
 The installer checks the download against the release's checksums and puts
 `helm` in `~/.local/bin`; [Installing helm](docs/releasing.md#installing-helm)
-says what else it checks, and how to uninstall it. Then check the manifest and run the studio from its
-own directory:
+says what else it checks, and how to uninstall it. `helm --version` says which
+`helm` you have. Then check the manifest and run the studio from its own
+directory:
 
 ```bash
 helm validate -criteria helmstudio.yaml

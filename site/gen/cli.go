@@ -58,7 +58,7 @@ func cliReference(o Options) (*Page, error) {
 
 	var b strings.Builder
 	b.WriteString(`<h1 class="helm-title">CLI reference</h1>`)
-	b.WriteString(`<p class="helm-body">What <code>helm</code> prints about itself, verbatim. Build it from a clone with <code>go build -o bin/helm ./cmd/helm</code>; the first release will ship it.</p>`)
+	b.WriteString(`<p class="helm-body">What <code>helm</code> prints about itself, verbatim. Install it as <a class="helm-link" href="https://github.com/janishar/helmstudio/blob/main/docs/releasing.md#installing-helm">Installing helm</a> says, or build it from a clone with <code>go build -o bin/helm ./cmd/helm</code>; <code>helm --version</code> says which one you have.</p>`)
 	for _, c := range []struct{ title, text string }{
 		{"helm", top}, {"helm validate", validate}, {"helm dev", dev},
 	} {

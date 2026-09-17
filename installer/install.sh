@@ -89,7 +89,7 @@ newest() {
 }
 
 main() {
-  local plat version install_dir archive base expected actual bin existing found
+  local plat version install_dir archive base expected actual bin existing found reported
   # A version is only digits, letters, dots and hyphens, so it cannot change a URL or a path.
   local semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
   need curl
@@ -151,9 +151,18 @@ main() {
   if [ ! -f "$bin" ] || [ ! -x "$bin" ]; then
     abort "$archive holds no helm; nothing was installed"
   fi
-  case "$("$bin" </dev/null 2>&1 || true)" in
-    *"studio manifests"*) ;;
-    *) abort "the helm in $archive does not run on this machine; nothing was installed" ;;
+  # helm --version names the version a release was built as. A release from
+  # before helm had --version is known by its usage, which names studio manifests.
+  reported="$("$bin" --version </dev/null 2>/dev/null || true)"
+  case "$reported" in
+    "helm $version" | "helm $version "*) ;;
+    "helm "*) abort "the helm in $archive says it is $(printf '%s\n' "$reported" | head -n 1), not helm $version; nothing was installed" ;;
+    *)
+      case "$("$bin" </dev/null 2>&1 || true)" in
+        *"studio manifests"*) ;;
+        *) abort "the helm in $archive does not run on this machine; nothing was installed" ;;
+      esac
+      ;;
   esac
 
   chmod 0755 "$bin"
