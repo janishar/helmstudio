@@ -792,7 +792,7 @@ The recursive provenance query is the clearest case for the engine: in a hand-ro
 
 ## 9 · Engine, pragmas, migrations
 
-**Driver: `modernc.org/sqlite`** — pure Go, so `CGO_ENABLED=0` keeps cross-compilation, CI and the Electron build trivial — behind `database/sql`, so swapping to the cgo driver is a one-line change if profiling ever demands it. The stdlib-only rule is scoped explicitly to the studios, not the daemon; a component that owns a user's entire generation history has outgrown it.**
+**Driver: `modernc.org/sqlite`** — pure Go, so `CGO_ENABLED=0` keeps cross-compilation, CI and the app bundle trivial — behind `database/sql`, so swapping to the cgo driver is a one-line change if profiling ever demands it. The stdlib-only rule is scoped explicitly to the studios, not the daemon; a component that owns a user's entire generation history has outgrown it.**
 
     dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)" +
            "&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(ON)"
@@ -831,4 +831,4 @@ iris studio adopts a still: an `assets` row, a blob, a library hardlink, a thumb
 - **Media and weight bytes, and per-chunk progress.** The filesystem is the source of truth; progress is `stat`.
 - **Secrets.** The Hugging Face token is in the Keychain; the row records only that one exists and when.
 - **Telemetry.** No usage counts, no generation counts, no timings beyond what a running job needs to show its own progress.
-- **Anything the Electron shell knows.** Window bounds, update channel and the menu-bar preference live in the app's own user data; a second settings store would be a second source of truth.
+- **Anything the shell knows.** Window bounds, update channel and the menu-bar preference live in the app's own user data; a second settings store would be a second source of truth. (Amended 2026-09-18: this said "the Electron shell"; the shell is native, and where it keeps its own preferences — `UserDefaults` rather than an Electron user-data directory — changes nothing about this line, which is that helm.db does not hold them.)

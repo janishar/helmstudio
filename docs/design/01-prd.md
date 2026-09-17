@@ -195,7 +195,7 @@ Three packages with a strict one-way dependency: `helm-css` knows nothing, `helm
 - **R70** Native affordances: folder pickers for the models root, Reveal in Finder, a menu bar item showing the running studio with a Stop, notifications on install complete and failed, and Dock progress during downloads.
 - **R71** Hardened runtime, Developer ID signature and notarisation for the app and the embedded binary, so first launch is not a quarantine dialog.
 - **R72** Updates ship the shell, daemon and bundled registry together, which makes adding a studio to the catalogue a release.
-- **R73** The headless binary stays first-class; no feature is reachable only from the app, and the Electron layer contains no business logic.
+- **R73** The headless binary stays first-class; no feature is reachable only from the app, and the Electron layer contains no business logic. (Amended 2026-09-18, delivery: the shell is native — a Swift bundle around a `WKWebView` — not Electron, so read "the Electron layer" as "the shell". The requirement itself is unchanged, and it is what made the swap cost a decision rather than a rewrite: a shell with no business logic in it has none to port. `docs/decisions.md`, 2026-09-18.)
 
 ## 13 · The manifest
 
@@ -289,4 +289,4 @@ The distinction the field has to carry is not simply "Mac or not". A native Meta
 
 **M5 — Timeline and export.** The timeline document, the editor, the conform-and-concat pipeline with the stream-copy fast path, export as a Job. *Demo:* a fourteen-second sequence assembled from three studios with an AuK voice line, exported and appearing in the gallery with its clips as inputs.**
 
-**M6 — Custom studios and the Mac app.** The add flow with the approval screen, the criteria checks and certification levels, `helm studio init`; the Electron shell, signing, notarisation and the update feed. *Demo:* a notarised `.dmg` on a clean Mac — install a studio from a git URL after reading exactly what it will run, quit the app with the studio still alive in the menu bar, then take an update that ships a fifth studio.**
+**M6 — Custom studios and the Mac app.** The add flow with the approval screen, the criteria checks and certification levels, `helm studio init`; the Electron shell, signing, notarisation and the update feed. (Amended 2026-09-18, delivery: the shell is native, not Electron — `docs/decisions.md`, 2026-09-18.) *Demo:* a notarised `.dmg` on a clean Mac — install a studio from a git URL after reading exactly what it will run, quit the app with the studio still alive in the menu bar, then take an update that ships a fifth studio.**

@@ -580,12 +580,14 @@ Source, certification level and install state are three independent facts and th
 
 | What the shell adds | |
 |---|---|
-| Native folder picker for the models root | `dialog.showOpenDialog` |
-| Reveal a checkout or an asset in Finder | `shell.showItemInFolder` |
-| Menu bar item with the running studio and a Stop | Tray |
-| Notification when a 60 GB install finishes or fails | Notification |
-| Dock progress while weights download | `setProgressBar` |
-| Signed, notarised update of shell + daemon + registry | `electron-updater` |
+| Native folder picker for the models root | `NSOpenPanel` |
+| Reveal a checkout or an asset in Finder | `NSWorkspace.activateFileViewerSelecting` |
+| Menu bar item with the running studio and a Stop | `NSStatusItem` |
+| Notification when a 60 GB install finishes or fails | `UNUserNotificationCenter` |
+| Dock progress while weights download | `NSDockTile` progress |
+| Signed, notarised update of shell + daemon + registry | Sparkle, EdDSA-signed appcast |
+
+(Amended 2026-09-18, delivery: the right-hand column read `dialog.showOpenDialog`, `shell.showItemInFolder`, Tray, Notification, `setProgressBar` and `electron-updater`. The shell is native rather than Electron, so each affordance is named by what actually provides it; the left-hand column, which is what this table is for, is unchanged. `docs/decisions.md`, 2026-09-18.)
 
 The window frame is the only place the product gains a shadow it did not draw itself. Everything inside is the daemon's own UI, so a bug fixed in the browser path is fixed in the app.
 

@@ -50,8 +50,9 @@ venv/
 /packages/helm-runtime-sdk/python/dist/
 *.egg-info/
 
-# Electron packaging
+# Mac app packaging (where the app lives in the tree is an M9 kickoff question)
 /packages/app/release/
+DerivedData/
 *.dmg
 *.zip.blockmap
 

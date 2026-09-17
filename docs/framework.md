@@ -825,7 +825,7 @@ agent made, not one anybody has checked.
 | M7b | The library's screens — cards, Add a studio, import, the manifest editor, the approval screen | built, **unreviewed** |
 | M8a | Timeline document, API and export pipeline | built, **unreviewed** |
 | M8b | The timeline editor — `helm-timeline` | built, **unreviewed** |
-| M9 | The Mac app — Electron shell, signing, notarisation, bundled ffmpeg and uv | **not built** |
+| M9 | The Mac app — native shell around a `WKWebView`, signing, notarisation, bundled ffmpeg and uv | **not built** |
 | M10 | Docs and the site — `site/` and the workflow that publishes it | built, **unreviewed** |
 
 Concretely, that means:

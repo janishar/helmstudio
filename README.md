@@ -97,7 +97,7 @@ packages is published; the launcher and its daemon run from a clone.
 | | |
 |---|---|
 | **Built** | The daemon: supervision, install and weights, the platform API and its three clients. Python studios. The launcher, with its studio library, manifest editor and approval screen. The four components. The timeline and its export. The documentation site. |
-| **Not built yet** | The Mac app — an Electron shell, signing, notarisation, bundled ffmpeg and uv — and the launcher's own Gallery and Timeline screens, which wait for it. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
+| **Not built yet** | The Mac app — a native shell around a `WKWebView`, signing, notarisation, bundled ffmpeg and uv — and the launcher's own Gallery and Timeline screens, which wait for it. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
 | **Verified on** | macOS on Apple Silicon. The Go code is type-checked for Linux on every gate run; nothing has been run there. |
 
 [docs/releasing.md](docs/releasing.md) says what is published where.
