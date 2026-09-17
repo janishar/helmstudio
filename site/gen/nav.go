@@ -28,6 +28,7 @@ func navigation(groups []apiGroup) []NavSection {
 	nav := []NavSection{
 		{Title: "Start", Items: items("/docs/", "/docs/quickstart/")},
 		{Title: "Concepts", Items: items(
+			"/docs/concepts/how-a-studio-fits-together/",
 			"/docs/concepts/manifest/",
 			"/docs/concepts/process-groups/",
 			"/docs/concepts/weights/",

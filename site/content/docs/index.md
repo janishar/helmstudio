@@ -21,6 +21,7 @@ What no package will ever contain: prompt builders, parameter panels, model pick
 ## Where to start
 
 - **[Quickstart](/docs/quickstart/)** — run a studio of your own under `helm dev`, and see its first output recorded.
+- **[How a studio fits together](/docs/concepts/how-a-studio-fits-together/)** — what runs where, where each part of the SDK comes from, and how a page gets its styles and components.
 - **[The manifest](/docs/concepts/manifest/)** — what `helmstudio.yaml` says, and where helmstudio finds it.
 - **[Wrap a repository](/docs/guides/wrap-a-repository/)** — describe a model repository whose author never wrote a manifest.
 - **[Reference](/docs/reference/api/)** — every operation, every manifest field and every command, generated from the contract and the code.
