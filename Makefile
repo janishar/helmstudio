@@ -14,7 +14,7 @@ SHELL := /bin/bash
 GO ?= go
 HELM ?= ./bin/helm
 
-.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css site site-test app app-run app-check icon
+.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css site site-test app app-run app-check icon dmg
 
 # The Go modules besides the root: the runtime SDK (stdlib only), its embedded
 # provider, the conformance suite (docs/decisions.md M4 Q2, Q25), and the site's
@@ -269,6 +269,25 @@ icon:
 	else \
 		echo "icon: none at app/Resources/icon.png or icon.icns; the bundle takes the generic one"; \
 	fi
+
+# The disk image a person downloads: the app, and a link to /Applications so
+# the window is a drag from one to the other. UDZO is compressed and read-only,
+# which is what a download should be.
+#
+# Unsigned and un-notarised, like the app inside it, so macOS will quarantine
+# it on another machine (R71). A release signs both and staples the ticket.
+DMG := bin/helmstudio-$(APP_VERSION).dmg
+
+dmg: app
+	@if [ "$$(uname -s)" != "Darwin" ]; then echo "dmg: macOS only, skipping"; exit 0; fi
+	@rm -rf bin/dmg-root && mkdir -p bin/dmg-root
+	@cp -R $(APP_BUNDLE) bin/dmg-root/
+	@ln -s /Applications bin/dmg-root/Applications
+	@rm -f $(DMG)
+	@out=$$(hdiutil create -volname helmstudio -srcfolder bin/dmg-root -ov -format UDZO $(DMG) 2>&1) \
+		|| { echo "$$out"; rm -rf bin/dmg-root; exit 1; }
+	@rm -rf bin/dmg-root
+	@echo "dmg: $(DMG) ($$(du -h $(DMG) | cut -f1)) — unsigned, not notarised"
 
 # Run the app that `make app` built, from the terminal, so its stderr is
 # visible. `open` would detach it and swallow that.
