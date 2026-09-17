@@ -681,3 +681,60 @@ func TestTheEditorIsAsWideAsThePageSays(t *testing.T) {
 		}
 	}
 }
+
+// A page gives the editor a height of its own — a dialog, a pane — and the
+// panel is a flex column, so the picture was the first thing squeezed out of
+// it. A portrait sequence suffered first: 448×768 asks for 823px of stage at
+// 480 wide, and what was left after the tracks was a few pixels of it, which
+// read as "there is no video in the timeline".
+func TestThePreviewKeepsItsRoomInAShortPage(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := timelinePage(t, ctx, srv.URL, "pose=0")
+
+	var got struct {
+		Stage  float64 `json:"stage"`
+		Wrap   float64 `json:"wrap"`
+		Tracks float64 `json:"tracks"`
+		Shrink string  `json:"shrink"`
+		Cap    string  `json:"cap"`
+	}
+	eval(t, ctx, p, `(async () => {
+		`+waitJS+`
+		await wait(() => tl.shadowRoot.querySelector(".stage"));
+		// Once it has drawn its own document, so its own inline aspect ratio
+		// is in place and this replaces it rather than racing it.
+		await wait(() => tl.shadowRoot.querySelector(".facts").textContent.includes("fps"));
+		// As a dialog does: a column with a height, the editor taking what is left.
+		const box = document.createElement("div");
+		box.style.cssText = "height: 560px; display: flex; flex-direction: column";
+		tl.parentNode.insertBefore(box, tl);
+		box.append(tl);
+		tl.style.cssText = "flex: 1; min-height: 0";
+		await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+		const stageEl = tl.shadowRoot.querySelector(".stage");
+		const stage = stageEl.getBoundingClientRect();
+		const wrap = tl.shadowRoot.querySelector(".stage-wrap");
+		const body = tl.shadowRoot.querySelector(".body").getBoundingClientRect();
+		// What holds for a sequence of any shape: the picture cannot be
+		// squeezed out, and cannot take the page from the tracks either.
+		return {
+			stage: stage.height, wrap: wrap.getBoundingClientRect().height, tracks: body.height,
+			shrink: getComputedStyle(wrap).flexShrink, cap: getComputedStyle(stageEl).maxHeight,
+		};
+	})()`, &got)
+
+	if got.Stage < 120 {
+		t.Errorf("the stage is %.0fpx tall in a 560px page; the picture has been squeezed out", got.Stage)
+	}
+	if got.Shrink != "0" {
+		t.Errorf("the stage may shrink (flex-shrink: %s), so a page with a height of its own squeezes it away", got.Shrink)
+	}
+	if got.Cap != "320px" {
+		t.Errorf("the stage has no cap (max-height: %s), so a tall sequence takes the page from the tracks", got.Cap)
+	}
+	if got.Tracks < 80 {
+		t.Errorf("the tracks are %.0fpx tall; the picture has taken the page", got.Tracks)
+	}
+}

@@ -56,18 +56,22 @@ const styles = `
   .facts { font: var(--helm-type-mono); color: var(--helm-text-muted); font-variant-numeric: tabular-nums; }
   .head { flex-wrap: wrap; }
   .chip {
-    display: inline-flex; align-items: center; gap: var(--helm-space-1);
+    display: inline-flex; align-items: baseline; gap: var(--helm-space-1);
     font: var(--helm-type-micro);
     padding: 2px var(--helm-space-2);
     border: 1px solid var(--helm-border-hairline);
     border-radius: var(--helm-radius-sm);
     color: var(--helm-text-secondary);
-    max-width: 44ch;
+    /* The reason is the point of this chip (03 §11), so it wraps rather than
+       ending in an ellipsis: "a copy cuts at packets, not frames, so o…"
+       teaches nothing. The head wraps, so it takes a line of its own when the
+       row is narrow. */
+    max-width: min(100%, 72ch);
     min-width: 0;
   }
-  .chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .chip-text { min-width: 0; }
   .chip::before {
-    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    content: ""; width: 7px; height: 7px; border-radius: 50%; align-self: center;
     background: var(--_chip, var(--helm-status-idle)); flex: 0 0 auto;
   }
   .chip[data-mode="copy"] { --_chip: var(--helm-status-running); }
@@ -80,7 +84,14 @@ const styles = `
   }
   button.primary:hover { background: var(--helm-accent-hover); border-color: var(--helm-accent-hover); color: var(--helm-on-accent); }
 
+  /* The picture keeps its room. The panel is a flex column, and a page that
+     gives this component a height of its own — a dialog, a pane — would
+     otherwise squeeze the stage away, which a portrait sequence suffers first:
+     448x768 at 480 wide asks for 823px of height, and what is left after the
+     tracks is a few pixels of it. It never shrinks, and it is capped, so the
+     tracks below it are always in view. */
   .stage-wrap {
+    flex: none;
     display: flex; justify-content: center;
     background: var(--helm-ground-inset);
     border-bottom: 1px solid var(--helm-border-hairline);
@@ -89,6 +100,7 @@ const styles = `
   .stage {
     position: relative;
     width: min(100%, 480px);
+    max-height: 320px;
     background: var(--helm-ground-inset);
     outline: 1px solid var(--helm-border-hairline);
     overflow: hidden;
@@ -258,7 +270,7 @@ export class HelmTimeline extends HelmElement {
     this.chip = el("span", { class: "chip", part: "plan", hidden: true, role: "status" }, this.chipText);
     this.undoBtn = el("button", { text: "Undo", onclick: () => this.undo() });
     this.redoBtn = el("button", { text: "Redo", onclick: () => this.redo() });
-    this.addBtn = el("button", { text: "Add…", onclick: () => this.requestAdd() });
+    this.addBtn = el("button", { text: "Add clip…", onclick: () => this.requestAdd() });
     this.exportBtn = el("button", { class: "primary", part: "export", text: "Export", onclick: () => this.startExport() });
 
     this.stage = el("div", { class: "stage", part: "stage" });

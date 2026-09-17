@@ -429,6 +429,8 @@ Clips carry the identity hue of the studio that produced them, so a sequence ass
 - **A clip whose studio the viewer cannot learn** — an asset from a studio whose items they may not read — is drawn in a neutral hue and labelled "another studio", never in someone else's identity colour.
 - **This screen is the launcher's, and it ships with the Mac app** (M9), because it reads every studio's items and bytes; until then a sequence is edited inside a studio through `helm-timeline`.
 
+(Amended 2026-09-18: **the picture keeps its room.** A page that gives the editor a height of its own — a studio's dialog — must not squeeze the preview away; the stage never shrinks and is capped, so the tracks stay in view whatever shape the sequence is. **The conform chip's reason is shown in full**, wrapping rather than ending in an ellipsis: the reason is what the chip is for, and half of it teaches nothing.)
+
 ## 12 · Models and disk
 
 *[Mockup: Models & disk — 38.4 GB cache · 211 GB free, Verify, "Reclaim orphaned (4.1 GB)".]*
