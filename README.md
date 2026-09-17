@@ -91,13 +91,14 @@ wrote one.
 
 ## Status
 
-helmstudio is **pre-release**. `1.0.0-rc.1` of the `helm` CLI and of the
-packages is published; the launcher and its daemon run from a clone.
+helmstudio is **pre-release**. `1.0.0-rc.2` of the `helm` CLI, the packages and
+the Mac app is published; the app is unsigned, and the launcher and its daemon
+also run from a clone.
 
 | | |
 |---|---|
 | **Built** | The daemon: supervision, install and weights, the platform API and its three clients. Python studios. The launcher, with its studio library, manifest editor and approval screen. The four components. The timeline and its export. The documentation site. The Mac app's shell — a native window around the launcher that starts the daemon or adopts one already running. |
-| **Not built yet** | The Mac app's release — signing, notarisation and a download you can trust — the ffmpeg and uv it should bundle, and the launcher's own Gallery and Timeline screens. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
+| **Not built yet** | The Mac app's signature and notarisation — it is downloadable but unsigned — its auth cookie, and the ffmpeg and uv it should bundle. The launcher's own Gallery and Timeline screens. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
 | **Verified on** | macOS on Apple Silicon. The Go code is type-checked for Linux on every gate run; nothing has been run there. |
 
 [docs/releasing.md](docs/releasing.md) says what is published where.
@@ -146,19 +147,30 @@ It starts the daemon, adopts one that is already running, and on quit stops the
 one it started — or leaves it running, if you asked it to keep studios alive.
 Nothing is reachable only from the app.
 
-**There is no download yet.** The app is not signed, and macOS refuses an
-unsigned app that arrived from the web, so a link here would hand you something
-that will not open. It is a build from a clone until there is a Developer ID
-behind it:
+**[Download helmstudio.app](https://github.com/janishar/helmstudio/releases)** —
+`helmstudio-<version>.dmg` on the newest release, for macOS 14 or newer on Apple
+Silicon. It bundles the daemon, so there is nothing else to install. Check it
+against the release's `SHA256SUMS` if you like.
+
+**It is unsigned**, and that matters at first launch. macOS quarantines what a
+browser downloads, and for an unsigned app it reports the app as *damaged*
+rather than as unsigned — which reads like a corrupt download and is not one.
+After dragging it to Applications, clear the flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/helmstudio.app
+```
+
+Signing and notarisation need an Apple Developer ID, and until there is one that
+step is yours to take. Nothing in the app needs it otherwise: the browser at
+**127.0.0.1:8700** is the reference implementation, and `helm` or a clone runs
+the same launcher with no dialog to dismiss.
+
+To build it yourself instead — `bin/helmstudio.app` and a `.dmg` beside it, or
+running it straight from the build with the daemon's output in your terminal:
 
 ```bash
 make dmg
-```
-
-That writes `bin/helmstudio.app` and a `.dmg` beside it. To run it straight
-from the build with the daemon's output in your terminal:
-
-```bash
 make app-run
 ```
 
