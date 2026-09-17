@@ -67,7 +67,15 @@ final class Daemon {
     /// has to be for the hardened runtime and the Developer ID signature to
     /// cover it (R71).
     static var bundledBinary: URL {
-        Bundle.main.bundleURL.appending(path: "Contents/MacOS/helmstudio-daemon")
+        // Ask the bundle rather than building the path: bundleURL is not
+        // always the .app when the executable is run directly instead of
+        // launched, and "Contents/MacOS" appended to the wrong root is a
+        // daemon that is never found and an app that only says so.
+        if let u = Bundle.main.url(forAuxiliaryExecutable: "helmstudio-daemon") {
+            return u
+        }
+        return (Bundle.main.executableURL ?? Bundle.main.bundleURL)
+            .deletingLastPathComponent().appending(path: "helmstudio-daemon")
     }
 
     /// The registry the app ships with. R72 ships the shell, the daemon and
@@ -75,7 +83,13 @@ final class Daemon {
     /// release. The daemon's own default is a relative path that resolves to
     /// nothing outside the repository, so the shell always passes this.
     static var bundledStudios: URL {
-        Bundle.main.bundleURL.appending(path: "Contents/Resources/studios")
+        if let u = Bundle.main.resourceURL {
+            return u.appending(path: "studios")
+        }
+        return (Bundle.main.executableURL ?? Bundle.main.bundleURL)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appending(path: "Resources/studios")
     }
 
     /// Where the daemon would keep its data. The shell asks the daemon rather
