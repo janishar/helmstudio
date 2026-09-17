@@ -32,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             origin = url
             window.title = daemon.adopted ? "helmstudio — adopted" : "helmstudio"
-            showWeb()
+            status.working("Opening the launcher…")
             webView.load(URLRequest(url: url))
         } catch {
             status.failed(error.localizedDescription, log: daemon.log.tail)
@@ -49,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A WKWebView refuses that unless this is on, where Electron allowed
         // it by default.
         config.preferences.isElementFullscreenEnabled = true
+        // Everything below is about the first second. A WKWebView is white
+        // until its first frame lands, so without a ground of its own the app
+        // opens white and snaps to the launcher's near-black.
         // Nothing is registered on this configuration: no script message
         // handler, no URL scheme handler. A web view with no bridge into the
         // app has nothing to leak through, which is the property M9's review
@@ -59,6 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The Web Inspector, which Electron gave away in devtools. Without it
         // the launcher cannot be debugged inside the app at all.
         webView.isInspectable = true
+        webView.underPageBackgroundColor = Ground.color
+        webView.wantsLayer = true
+        webView.alphaValue = 0
+        webView.isHidden = true
         webView.translatesAutoresizingMaskIntoConstraints = false
 
         status = StatusView(frame: .zero)
@@ -66,6 +73,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onRetry = { [weak self] in Task { await self?.connect() } }
 
         let content = NSView()
+        content.wantsLayer = true
+        content.layer?.backgroundColor = Ground.color.cgColor
         for v in [webView, status] as [NSView] {
             content.addSubview(v)
             NSLayoutConstraint.activate([
@@ -80,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                           styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                           backing: .buffered, defer: false)
         window.title = "helmstudio"
+        window.backgroundColor = Ground.color
         window.contentView = content
         window.minSize = NSSize(width: 960, height: 600)
         window.center()
@@ -91,12 +101,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showStatus() {
         status.isHidden = false
+        status.alphaValue = 1
         webView.isHidden = true
+        webView.alphaValue = 0
     }
 
-    private func showWeb() {
-        status.isHidden = true
+    /// Reveal the launcher once it has actually painted, and cross-fade
+    /// rather than cut: the two grounds are the same colour, so what a person
+    /// sees is the spinner dissolving into the page instead of a swap.
+    private func revealLauncher() {
+        guard webView.alphaValue < 1 else { return }
         webView.isHidden = false
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.2
+            webView.animator().alphaValue = 1
+            status.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            self?.status.isHidden = true
+        })
     }
 
     // MARK: - quitting
@@ -205,6 +227,10 @@ extension AppDelegate: WKNavigationDelegate {
         if navigationAction.navigationType == .linkActivated {
             NSWorkspace.shared.open(url)
         }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        revealLauncher()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

@@ -15,6 +15,7 @@ final class StatusView: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true
         title.font = .systemFont(ofSize: 15, weight: .medium)
         title.alignment = .center
         title.lineBreakMode = .byWordWrapping
@@ -61,6 +62,15 @@ final class StatusView: NSView {
     }
 
     required init?(coder: NSCoder) { fatalError("not loaded from a nib") }
+
+    /// The launcher's own page ground, so the window is the right colour
+    /// before the launcher has painted anything and there is no white frame
+    /// between the two.
+    override func updateLayer() {
+        layer?.backgroundColor = Ground.color.cgColor
+    }
+
+    override var wantsUpdateLayer: Bool { true }
 
     @objc private func retryTapped() { onRetry?() }
 
