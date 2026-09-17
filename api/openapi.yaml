@@ -3858,6 +3858,7 @@ components:
         state: { type: string, description: "Whether it is already downloaded or linked." }
         selectable: { type: boolean }
         optional: { type: boolean }
+        local_path: { type: string, description: "The directory on this machine the manifest links this weight from, when it names one. Nothing is downloaded for it, and a file the directory lacks refuses the install rather than being fetched." }
 
     ApprovalPreview:
       type: object

@@ -546,3 +546,92 @@ func TestDiskMeasuresTheVolumeTheModelsDirectoryWillBeOn(t *testing.T) {
 		t.Errorf("measuring created the models directory: %v", err)
 	}
 }
+
+// A weight whose manifest names a directory on this machine is linked from it,
+// one file at a time, and never downloaded (docs/decisions.md, per-weight
+// local_path). The studio is handed a directory holding exactly the files its
+// manifest declares — not the user's directory, which holds more — and the
+// user's directory is not touched at all.
+func TestLocalPathLinksTheFilesTheManifestNames(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	user := userCheckpoint(t)
+	before := snapshot(t, user)
+	f.install("s")
+
+	w := weight("fl2va", "org/h3", "MiniMax-H3", "FL2VA/**")
+	w.LocalPath = user
+	// The funnel install itself uses: a weight with local_path never reaches
+	// Hugging Face.
+	if err := f.svc.Fetch(ctx, "s", w, nil); err != nil {
+		t.Fatalf("linking from %s: %v", user, err)
+	}
+	if n := len(f.hub.Requests("/")); n != 0 {
+		t.Fatalf("a local_path weight contacted Hugging Face: %d requests", n)
+	}
+
+	dest := filepath.Join(f.dirs.Models(), "MiniMax-H3")
+	real := mustReal(t, user)
+	for _, rel := range []string{"FL2VA/dit.safetensors", "FL2VA/config.json"} {
+		link := filepath.Join(dest, rel)
+		fi, err := os.Lstat(link)
+		if err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+			t.Fatalf("%s is not a link: %v", link, err)
+		}
+		target, _ := os.Readlink(link)
+		if target != filepath.Join(real, rel) {
+			t.Errorf("%s points at %s, want %s", link, target, filepath.Join(real, rel))
+		}
+	}
+	// Only what the weight declares. Ref2VA is in the directory and in no
+	// weight of this manifest, so it is not exposed to the studio.
+	if _, err := os.Lstat(filepath.Join(dest, "Ref2VA/dit.safetensors")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a file the weight does not declare was linked: %v", err)
+	}
+
+	// The artifact is linked: no bytes are counted, and the path it came from
+	// is what Models & disk shows.
+	arts, err := f.svc.List(ctx)
+	if err != nil || len(arts) != 1 {
+		t.Fatalf("artifacts: %v %v", arts, err)
+	}
+	if a := arts[0]; a.Source != SourceLinked || a.BytesOnDisk != 0 || a.ExternalPath != user {
+		t.Errorf("artifact = %+v; want linked from %s with no bytes counted", a, user)
+	}
+
+	// The studio is handed the directory of links.
+	values, refuse, err := f.svc.Launch(ctx, "s", []manifest.Weight{w})
+	if err != nil || len(refuse) != 0 || values["models.fl2va"] != dest {
+		t.Fatalf("launch: values=%v refuse=%v err=%v; want %s", values, refuse, err, dest)
+	}
+
+	if after := snapshot(t, user); after != before {
+		t.Errorf("the user's directory was written to:\n%s", after)
+	}
+}
+
+// A directory that lacks a file the weight declares is refused, by name, and
+// nothing is downloaded to make up the difference: half a weight from a folder
+// and half from Hugging Face is a state nobody asked for.
+func TestLocalPathRefusesWhatTheDirectoryLacks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	user := userCheckpoint(t)
+	f.install("s")
+
+	w := weight("fl2va", "org/h3", "MiniMax-H3", "FL2VA/**", "duration_head/head.safetensors")
+	w.LocalPath = user
+	err := f.svc.Fetch(ctx, "s", w, nil)
+	if err == nil {
+		t.Fatal("a directory missing a declared file was accepted")
+	}
+	if !strings.Contains(err.Error(), "duration_head/head.safetensors") {
+		t.Errorf("the refusal does not name the missing file: %v", err)
+	}
+	if n := len(f.hub.Requests("/")); n != 0 {
+		t.Errorf("a refused link downloaded something: %d requests", n)
+	}
+	if _, err := os.Lstat(filepath.Join(f.dirs.Models(), "MiniMax-H3")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a refused link left %s behind: %v", filepath.Join(f.dirs.Models(), "MiniMax-H3"), err)
+	}
+}

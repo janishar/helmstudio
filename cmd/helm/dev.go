@@ -171,6 +171,18 @@ func runDev(o devOptions) error {
 	studio := supervisor.Studio{Manifest: m, File: manifestPath}
 	sup.SetStudios([]supervisor.Studio{studio})
 	in := install.New(install.Config{Store: st, Dirs: dirs, Supervisor: sup, Weights: w, Logf: logf})
+	// A weight the manifest points at a directory on this machine needs no
+	// -link: `helm dev` links it exactly as an install would.
+	for _, wt := range m.Weights {
+		if wt.LocalPath == "" {
+			continue
+		}
+		a, err := w.LinkLocal(ctx, m.ID, wt)
+		if err != nil {
+			return fmt.Errorf("weight %s: %w", wt.Name, err)
+		}
+		logf("weight %s → %s (linked from its local_path, read-only)", wt.Name, a.ExternalPath)
+	}
 	for _, l := range o.links {
 		name, dir, ok := strings.Cut(l, "=")
 		if !ok || name == "" || dir == "" {

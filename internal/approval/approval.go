@@ -88,6 +88,9 @@ type Weight struct {
 	State      string `json:"state,omitempty"`
 	Selectable bool   `json:"selectable"`
 	Optional   bool   `json:"optional,omitempty"`
+	// LocalPath is the directory on this machine the manifest links this
+	// weight from, when it names one. Nothing is downloaded for it.
+	LocalPath string `json:"local_path,omitempty"`
 }
 
 // CheckState is how a check came out. NotRun is a first-class outcome here.
@@ -370,10 +373,13 @@ func Digest(in Input) (string, error) {
 	sort.Strings(network)
 
 	// The weights by identity, not by size or state: which model is fetched is
-	// part of what the user agreed to, how many bytes it is today is not.
+	// part of what the user agreed to, how many bytes it is today is not. The
+	// directory a weight is linked from is identity too — it decides whether
+	// anything is downloaded at all, and which files this machine hands the
+	// studio.
 	weights := make([]string, 0, len(m.Weights))
 	for _, w := range m.Weights {
-		weights = append(weights, strings.Join([]string{w.Name, w.Repo, w.Revision, w.Dest}, "\x00"))
+		weights = append(weights, strings.Join([]string{w.Name, w.Repo, w.Revision, w.Dest, w.LocalPath}, "\x00"))
 	}
 	sort.Strings(weights)
 

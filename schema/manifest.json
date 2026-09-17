@@ -164,6 +164,8 @@
           "size_gb":    { "type": "number", "minimum": 0, "description": "For the disk pre-check, before any bytes move." },
           "files":      { "type": "array", "items": { "type": "string" },
                           "description": "Allow-list of paths to fetch, and the presence check used when a directory is linked instead of downloaded." },
+          "local_path": { "type": "string",
+                          "description": "A folder on this Mac that already holds this weight, with the files above at those same paths inside it. Install links them out of that folder instead of downloading, never writes to it, and refuses by name if one is missing rather than downloading part of the weight. Development only \u2014 a registry manifest never names a folder on someone's machine." },
           "selectable": { "type": "boolean", "default": false,
                           "description": "One of a set the user picks between, bound to {models.selected}. The choice is made before install, on the approval preview, defaulting to the first selectable weight declared; install downloads only that one, and the others are fetched or linked on demand. It can be changed while the studio is not running, without a new approval. A launch with no selection is refused. iris studio takes exactly one checkpoint per run." },
           "optional":   { "type": "boolean", "default": false }

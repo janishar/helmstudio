@@ -29,6 +29,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,10 @@ var (
 	// ErrConflict refuses a link or download that would overwrite something
 	// helmstudio does not own, or a dest another repository already uses.
 	ErrConflict = errors.New("conflicts with what is already in the models directory")
+	// ErrNotLinkable refuses a directory that does not hold what a weight
+	// declares. helmstudio links what a directory holds and never completes
+	// it, so there is nothing to do but say what is missing.
+	ErrNotLinkable = errors.New("the directory does not hold this weight")
 	// ErrNoArtifact means no artifact has the id.
 	ErrNoArtifact = errors.New("no such weight")
 )
@@ -409,6 +414,15 @@ type Progress struct {
 // onStart, when set, receives the artifact id before any bytes move, so the
 // caller can record a job against it.
 func (s *Service) Fetch(ctx context.Context, studioID string, w manifest.Weight, onStart func(artifactID string)) error {
+	// A weight the manifest points at a directory on this machine is linked
+	// from it, never downloaded (docs/decisions.md, per-weight local_path).
+	if w.LocalPath != "" {
+		a, err := s.LinkLocal(ctx, studioID, w)
+		if err == nil && onStart != nil {
+			onStart(a.ID)
+		}
+		return err
+	}
 	s.mu.Lock()
 	a, err := s.ensureArtifact(ctx, w)
 	s.mu.Unlock()
@@ -861,6 +875,199 @@ func checkPresent(dir string, w manifest.Weight) error {
 // repository and revision share the artifact (one per repository), so the
 // directory must hold every one of them that is not optional; an optional one
 // it lacks is named in Unobtainable (decided in the M3 review).
+/**/
+
+// LinkLocal points a weight at files the user already has, from the manifest's
+// own `local_path`.
+//
+// Each of the weight's `files` is matched against that directory and linked
+// one file at a time into `<models>/<dest>`, at the path the manifest writes.
+// The studio is then handed a directory holding exactly what its manifest
+// declares — not the user's directory, which may hold other things, and which
+// helmstudio never writes to. A file the directory lacks is refused rather
+// than downloaded: half a weight from a folder and half from Hugging Face is
+// a state nobody asked for, and it would mean writing into a directory
+// helmstudio does not own.
+//
+// A weight that declares no `files` has nothing to join, so its directory is
+// linked whole, which is what `:link` does.
+func (s *Service) LinkLocal(ctx context.Context, studioID string, w manifest.Weight) (Artifact, error) {
+	if len(w.Files) == 0 {
+		return s.Link(ctx, studioID, w, w.LocalPath)
+	}
+	if err := checkDest(w.Dest); err != nil {
+		return Artifact{}, err
+	}
+	path := w.LocalPath
+	if !filepath.IsAbs(path) {
+		return Artifact{}, fmt.Errorf("local_path %q is not absolute; write the whole path", path)
+	}
+	real, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return Artifact{}, fmt.Errorf("local_path %s: %w", path, err)
+	}
+	if fi, err := os.Stat(real); err != nil || !fi.IsDir() {
+		return Artifact{}, fmt.Errorf("local_path %s is not a directory", path)
+	}
+	if within(s.modelsRoot(), real) {
+		return Artifact{}, fmt.Errorf("local_path %s is inside the models directory %s, which helmstudio manages; name a directory outside it", path, s.modelsRoot())
+	}
+	// What it lacks, by name, rather than a download nobody asked for.
+	if err := checkPresent(real, w); err != nil {
+		// What it lacks, by name, and the two things to do about it. The
+		// sentence is the whole message: a reader gets no help from the kind
+		// of error it is, so notLinkable carries that without saying it.
+		return Artifact{}, &notLinkable{fmt.Sprintf("%v. Put it there, or take local_path off this weight to download it instead", err)}
+	}
+	files, err := matchedFiles(real, w)
+	if err != nil {
+		return Artifact{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	root, err := s.openModels()
+	if err != nil {
+		return Artifact{}, err
+	}
+	defer root.Close()
+
+	existing, ok, err := artifactByKey(ctx, s.cfg.Store.Reader(), w.Repo, w.EffectiveRevision())
+	if err != nil {
+		return Artifact{}, err
+	}
+	dest := w.Dest
+	if ok {
+		dest = existing.dest
+		if existing.source == SourceManaged && s.bytesUnder(dest) > 0 {
+			return Artifact{}, fmt.Errorf("%s at %s is already downloaded under %s; reclaim it before linking a directory for it: %w",
+				existing.repo, existing.revision, filepath.Join(s.modelsRoot(), dest), ErrConflict)
+		}
+	} else if other, found, err := overlapping(ctx, s.cfg.Store.Reader(), dest, ""); err != nil {
+		return Artifact{}, err
+	} else if found {
+		return Artifact{}, fmt.Errorf("%s overlaps %s, where helmstudio keeps %s at %s: %w",
+			filepath.Join(s.modelsRoot(), dest), filepath.Join(s.modelsRoot(), other.dest), other.repo, other.revision, ErrConflict)
+	}
+
+	if err := linkFiles(root, dest, real, files); err != nil {
+		return Artifact{}, err
+	}
+
+	id := existingID(existing, ok, s.cfg.now())
+	err = s.cfg.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if !ok {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO model_artifacts (id, hf_repo, revision, source, local_path, external_path, realpath, state, created_at)
+				VALUES (?, ?, ?, 'linked', ?, ?, ?, 'linked', ?)`, id, w.Repo, w.EffectiveRevision(), dest, path, real, s.now()); err != nil {
+				return err
+			}
+		} else if _, err := tx.ExecContext(ctx, `UPDATE model_artifacts SET source = 'linked', state = 'linked', commit_sha = NULL, total_bytes = NULL,
+			verified_at = NULL, external_path = ?, realpath = ? WHERE id = ?`, path, real, id); err != nil {
+			return err
+		}
+		var installed int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM installations WHERE studio_id = ?`, studioID).Scan(&installed); err != nil {
+			return err
+		}
+		if installed > 0 {
+			return bindTx(ctx, tx, studioID, id, w)
+		}
+		return nil
+	})
+	if err != nil {
+		return Artifact{}, err
+	}
+	a, err := artifactByID(ctx, s.cfg.Store.Reader(), id)
+	if err != nil {
+		return Artifact{}, err
+	}
+	return s.present(ctx, a)
+}
+
+// notLinkable is ErrNotLinkable with a sentence of its own, so that what a
+// person reads ends where the advice ends.
+type notLinkable struct{ msg string }
+
+func (e *notLinkable) Error() string { return e.msg }
+
+func (e *notLinkable) Unwrap() error { return ErrNotLinkable }
+
+// existingID is the row's id, or a new one for a row about to be written.
+func existingID(a artifactRow, ok bool, now time.Time) string {
+	if ok {
+		return a.id
+	}
+	return store.NewID(now)
+}
+
+// matchedFiles is every regular file under dir that the weight's `files` match,
+// as slash paths relative to dir, in order.
+func matchedFiles(dir string, w manifest.Weight) ([]string, error) {
+	var out []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		fi, err := os.Stat(p) // a file symlink, as a Hugging Face snapshot uses, counts by its target
+		if err != nil || !fi.Mode().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		for _, pat := range w.Files {
+			if Match(pat, rel) {
+				out = append(out, rel)
+				return nil
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", dir, err)
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// linkFiles makes <models>/<dest> hold one symlink per file, pointing into the
+// user's directory. It replaces a link it made before and refuses to touch a
+// real file, which would be a download this directory is taking the place of.
+func linkFiles(root *os.Root, dest, real string, files []string) error {
+	if err := root.MkdirAll(dest, 0o755); err != nil {
+		return fmt.Errorf("making %s: %w", dest, err)
+	}
+	for _, rel := range files {
+		name := filepath.Join(dest, filepath.FromSlash(rel))
+		if dir := filepath.Dir(name); dir != "." {
+			if err := root.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("making %s: %w", dir, err)
+			}
+		}
+		switch fi, err := root.Lstat(name); {
+		case errors.Is(err, fs.ErrNotExist):
+		case err != nil:
+			return err
+		case fi.Mode()&fs.ModeSymlink != 0:
+			if err := root.Remove(name); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("%s is already a file helmstudio downloaded; reclaim it before linking a directory for it: %w",
+				filepath.Join(root.Name(), name), ErrConflict)
+		}
+		if err := root.Symlink(filepath.Join(real, filepath.FromSlash(rel)), name); err != nil {
+			return fmt.Errorf("linking %s: %w", rel, err)
+		}
+	}
+	return nil
+}
+
 func (s *Service) Link(ctx context.Context, studioID string, w manifest.Weight, path string, siblings ...manifest.Weight) (Artifact, error) {
 	if err := checkDest(w.Dest); err != nil {
 		return Artifact{}, err
@@ -1055,13 +1262,20 @@ func (s *Service) Unlink(ctx context.Context, id string) error {
 	case errors.Is(lerr, fs.ErrNotExist):
 	case lerr != nil:
 		return lerr
-	case fi.Mode()&fs.ModeSymlink == 0:
-		return fmt.Errorf("%s is not a symlink, so it is not removed: %w", filepath.Join(s.modelsRoot(), a.dest), ErrConflict)
-	default:
+	case fi.Mode()&fs.ModeSymlink != 0:
 		// os.Root.Remove on a symlink removes the link itself.
 		if err := root.Remove(a.dest); err != nil {
 			return fmt.Errorf("removing the link %s: %w", filepath.Join(s.modelsRoot(), a.dest), err)
 		}
+	case fi.IsDir():
+		// A directory of links, one per file (local_path). Only the links are
+		// removed, and only when every one of them is a link: a real file here
+		// is a download, and a download is not unlinked.
+		if err := removeLinks(root, a.dest, s.modelsRoot()); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("%s is not a link, so it is not removed: %w", filepath.Join(s.modelsRoot(), a.dest), ErrConflict)
 	}
 	return s.cfg.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM model_artifacts WHERE id = ? AND source = 'linked'`, id)
@@ -1099,7 +1313,6 @@ func (s *Service) Launch(ctx context.Context, studioID string, ws []manifest.Wei
 		}
 		linkPath := filepath.Join(s.modelsRoot(), a.dest)
 		if a.source == SourceLinked {
-			target, terr := filepath.EvalSymlinks(linkPath)
 			fi, serr := os.Stat(a.real)
 			if serr != nil || !fi.IsDir() {
 				if a.state != StateMissing {
@@ -1108,14 +1321,37 @@ func (s *Service) Launch(ctx context.Context, studioID string, ws []manifest.Wei
 				refuse[key] = fmt.Sprintf("weight %q is linked to %s, which is not there; reconnect the drive, or relink or download it", w.Name, a.external)
 				continue
 			}
-			if terr != nil || target != a.real {
-				refuse[key] = fmt.Sprintf("weight %q: the link %s no longer points at %s; relink it", w.Name, linkPath, a.real)
+			// Two shapes, both linked: the directory itself, as `:link` makes
+			// it, or a directory of links, one per file the manifest names
+			// (local_path). The studio is handed the user's directory in the
+			// first and the directory holding the links in the second, which
+			// is the one that holds exactly what the manifest declares.
+			mode, lerr := os.Lstat(linkPath)
+			switch {
+			case lerr != nil:
+				refuse[key] = fmt.Sprintf("weight %q: %s is not there; link or download it again", w.Name, linkPath)
+				continue
+			case mode.Mode()&fs.ModeSymlink != 0:
+				target, terr := filepath.EvalSymlinks(linkPath)
+				if terr != nil || target != a.real {
+					refuse[key] = fmt.Sprintf("weight %q: the link %s no longer points at %s; relink it", w.Name, linkPath, a.real)
+					continue
+				}
+				values[key] = a.real
+			case mode.IsDir():
+				if gone, err := danglingLinks(linkPath); err != nil || gone != "" {
+					refuse[key] = fmt.Sprintf("weight %q: %s is linked to %s, and %s is not there; reconnect it, or take local_path off this weight to download it",
+						w.Name, linkPath, a.external, gone)
+					continue
+				}
+				values[key] = linkPath
+			default:
+				refuse[key] = fmt.Sprintf("weight %q: %s is a file, not the link helmstudio made; remove it and install again", w.Name, linkPath)
 				continue
 			}
 			if a.state == StateMissing {
 				s.setState(ctx, a.id, StateLinked)
 			}
-			values[key] = a.real
 			continue
 		}
 		var patterns []string
@@ -1374,6 +1610,65 @@ func (s *Service) present(ctx context.Context, a artifactRow) (Artifact, error) 
 		v.BytesOnDisk = s.bytesUnder(a.dest)
 	}
 	return v, nil
+}
+
+// removeLinks deletes a directory that holds nothing but links, and the
+// directories under it. A regular file under it is a download, and nothing
+// here deletes one: it refuses and says where it is.
+func removeLinks(root *os.Root, dest, models string) error {
+	var files []string
+	var dirs []string
+	err := fs.WalkDir(root.FS(), filepath.ToSlash(dest), func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		switch {
+		case d.IsDir():
+			dirs = append(dirs, p)
+		case d.Type()&fs.ModeSymlink != 0:
+			files = append(files, p)
+		default:
+			return fmt.Errorf("%s is a file helmstudio downloaded, not a link; it is not removed: %w", filepath.Join(models, p), ErrConflict)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if err := root.Remove(f); err != nil {
+			return fmt.Errorf("removing the link %s: %w", filepath.Join(models, f), err)
+		}
+	}
+	// Deepest first, so a directory is empty by the time it is removed.
+	slices.Reverse(dirs)
+	for _, d := range dirs {
+		if err := root.Remove(d); err != nil {
+			return fmt.Errorf("removing %s: %w", filepath.Join(models, d), err)
+		}
+	}
+	return nil
+}
+
+// danglingLinks names the first link under dir whose file is not there, which
+// is what a directory of links looks like when the drive holding them is not
+// connected. It follows no link it does not have to.
+func danglingLinks(dir string) (string, error) {
+	var gone string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || gone != "" {
+			return err
+		}
+		if d.Type()&fs.ModeSymlink == 0 {
+			return nil
+		}
+		if _, err := os.Stat(p); err != nil {
+			target, _ := os.Readlink(p)
+			gone = target
+		}
+		return nil
+	})
+	return gone, err
 }
 
 // bytesUnder totals regular files below dest, never following a symlink.

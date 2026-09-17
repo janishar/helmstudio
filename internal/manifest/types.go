@@ -119,14 +119,17 @@ func (b BuildStep) EffectiveTimeoutS() int {
 }
 
 type Weight struct {
-	Name       string   `yaml:"name"`
-	Repo       string   `yaml:"repo"`
-	Revision   string   `yaml:"revision"`
-	Dest       string   `yaml:"dest"`
-	SizeGB     float64  `yaml:"size_gb"`
-	Files      []string `yaml:"files"`
-	Selectable bool     `yaml:"selectable"`
-	Optional   bool     `yaml:"optional"`
+	Name     string   `yaml:"name"`
+	Repo     string   `yaml:"repo"`
+	Revision string   `yaml:"revision"`
+	Dest     string   `yaml:"dest"`
+	SizeGB   float64  `yaml:"size_gb"`
+	Files    []string `yaml:"files"`
+	// LocalPath is a directory on this machine that already holds this
+	// weight. Install links its files instead of downloading them.
+	LocalPath  string `yaml:"local_path"`
+	Selectable bool   `yaml:"selectable"`
+	Optional   bool   `yaml:"optional"`
 }
 
 // EffectiveRevision applies the schema default ("main").

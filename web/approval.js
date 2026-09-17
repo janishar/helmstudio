@@ -139,7 +139,13 @@ export function approvalBody(p) {
 
   if ((p.weights || []).length) {
     out.push(section("Weights",
-      ...p.weights.map((w) => el("p", { class: "helm-mono", text: [w.name, w.hf_repo, w.selectable ? "selectable" : null, w.optional ? "optional" : null].filter(Boolean).join(" · ") }))));
+      ...p.weights.map((w) => el("div", { class: "helm-stack", style: "gap: 0" },
+        el("p", { class: "helm-mono", text: [w.name, w.hf_repo, w.selectable ? "selectable" : null, w.optional ? "optional" : null].filter(Boolean).join(" · ") }),
+        // Where the files come from is the difference between a download and
+        // a folder this Mac already holds, so it is said, not implied.
+        el("p", { class: "helm-hint", text: w.local_path
+          ? `Linked from ${w.local_path}: helmstudio links the files it names there, downloads nothing, and never writes to that folder.`
+          : "Downloaded from Hugging Face." })))));
   }
   return out;
 }

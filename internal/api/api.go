@@ -224,7 +224,7 @@ func (s *Server) selection(ctx context.Context, m *manifest.Manifest) (string, [
 		}
 		list = append(list, approval.Weight{
 			Name: w.Name, Repo: w.Repo, Revision: w.Revision,
-			Selectable: true, Optional: w.Optional,
+			Selectable: true, Optional: w.Optional, LocalPath: w.LocalPath,
 		})
 	}
 	if len(list) == 0 || s.weights == nil {

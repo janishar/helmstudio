@@ -84,6 +84,8 @@ func (s *Server) failInstall(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "conflict", err.Error())
 	case errors.Is(err, weights.ErrMissing):
 		writeError(w, http.StatusConflict, "missing", err.Error())
+	case errors.Is(err, weights.ErrNotLinkable):
+		writeError(w, http.StatusUnprocessableEntity, "not_linkable", err.Error())
 	default:
 		s.fail(w, err)
 	}

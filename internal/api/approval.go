@@ -146,7 +146,7 @@ func (s *Server) preview(ctx context.Context, st supervisor.Studio) (approval.Pr
 	for _, w := range m.Weights {
 		in.Weights = append(in.Weights, approval.Weight{
 			Name: w.Name, Repo: w.Repo, Revision: w.Revision,
-			Selectable: w.Selectable, Optional: w.Optional,
+			Selectable: w.Selectable, Optional: w.Optional, LocalPath: w.LocalPath,
 		})
 	}
 	return approval.Build(in)
