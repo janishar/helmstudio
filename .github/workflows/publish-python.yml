@@ -3,7 +3,8 @@
 #
 # Trusted publishing: no token is stored in the repository. PyPI trusts this workflow,
 # by its file name and the pypi environment, from janishar/helmstudio. A
-# version already on PyPI is skipped, so pushing a tag again is harmless.
+# version already on PyPI is skipped, so running it again is harmless. The pypi
+# environment is where a reviewer approves the publish (docs/publishing.md).
 #
 # This runs no gate: a tag is pushed on a commit that passed `make gate`.
 
@@ -24,6 +25,8 @@ jobs:
         working-directory: packages/helm-runtime-sdk/python
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"

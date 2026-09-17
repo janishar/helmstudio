@@ -9,6 +9,9 @@
 # already on npm is skipped here. A pre-release version goes to the next
 # dist-tag, and only a release to latest.
 #
+# Each package's trusted publisher must allow `npm publish`, and the npm
+# environment is where a reviewer approves the publish (docs/publishing.md).
+#
 # This runs no gate: a tag is pushed on a commit that passed `make gate`.
 
 name: publish-npm
@@ -26,11 +29,16 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/${{ steps.package.outputs.name }}
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
@@ -61,7 +69,12 @@ jobs:
       - name: Publish
         if: steps.package.outputs.published == 'no'
         working-directory: ${{ steps.package.outputs.dir }}
-        run: npm publish --tag "${{ steps.package.outputs.dist }}"
+        env:
+          DIST: ${{ steps.package.outputs.dist }}
+        run: npm publish --tag "$DIST"
       - name: Already published
         if: steps.package.outputs.published == 'yes'
-        run: echo "${{ steps.package.outputs.name }}@${{ steps.package.outputs.version }} is already on npm; nothing to do"
+        env:
+          NAME: ${{ steps.package.outputs.name }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: echo "$NAME@$VERSION is already on npm; nothing to do"

@@ -10,7 +10,8 @@
 # unsigned until the Mac app's release signs and notarises them (M9); Go's
 # linker signs a darwin/arm64 binary ad hoc, which is what lets it run on Apple
 # Silicon at all. Each archive gets a SHA-256 checksum and a build provenance
-# attestation.
+# attestation. The build restores no cache, so nothing another run left behind
+# can change what is released (docs/publishing.md).
 #
 # This runs no gate: a tag is pushed on a commit that passed `make gate`.
 
@@ -28,9 +29,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          cache: false
       - name: Build helm for each platform
         env:
           TAG: ${{ github.ref_name }}
@@ -67,6 +71,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v7
         with:
           name: helm
