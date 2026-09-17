@@ -81,8 +81,8 @@ export function studioDetail(ctx, id) {
   if (!studio) {
     return el("div", { class: "helm-panel" },
       el("div", { class: "helm-panel-body helm-stack" },
-        el("p", { class: "helm-body", text: "No such studio." }),
-        el("a", { class: "helm-link", href: "#/studios", text: "Back to studios" })));
+        el("h1", { class: "helm-title", text: "No such studio" }),
+        el("p", { class: "helm-body", text: `Nothing in the library is called ${id}.` })));
   }
   const job = (ctx.store.jobs || {})[studio.id];
   const s = state(studio, job);

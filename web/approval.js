@@ -272,8 +272,7 @@ export function approvalScreen(ctx, id) {
   if (!p) {
     return el("div", { class: "helm-stack" },
       el("h1", { class: "helm-title", text: `${VERBS[verb] || "Install"} ${studio.name}?` }),
-      el("p", { class: "helm-body helm-status-error", text: st.error || "There is nothing to show." }),
-      el("button", { class: "helm-btn helm-btn-secondary", text: "Back to the library", onclick: back }));
+      el("p", { class: "helm-body helm-status-error", text: st.error || "There is nothing to show." }));
   }
 
   const failed = (p.checks || []).some((c) => c.state === "fail" && c.required);
@@ -285,15 +284,17 @@ export function approvalScreen(ctx, id) {
       el("span", { class: "helm-spacer" }),
       el("a", { class: "helm-link", href: `#/edit/${encodeURIComponent(id)}`, text: "View manifest" })),
 
-    // The level and the source, as two facts and not a badge. A level is
-    // derived from what has been checked; it is never declared in a file, and
-    // it is a label rather than a gate on your own machine.
+    // The level and the source, as two facts and not a badge — and as plain
+    // text, as a studio's row states them (03 §13, amended 2026-09-17). A
+    // level is derived from what has been checked; it is never declared in a
+    // file, and it is a label rather than a gate on your own machine.
     // The repository and the ref are not repeated here: the transport line
     // below says where the code comes from and how it is fetched, which is
     // the same fact told better.
-    el("div", { class: "helm-row", style: "gap: var(--helm-space-2); flex-wrap: wrap" },
-      chip(p.level || "unverified", "idle"),
-      chip(sourceLabel(p.source), "idle")),
+    el("p", { class: "helm-studio-origin" },
+      el("span", { "data-fact": "level", text: LEVEL[p.level] || p.level || "Unverified" }),
+      document.createTextNode(" · "),
+      el("span", { "data-fact": "source", text: sourceLabel(p.source) })),
 
     el("p", { class: "helm-body", text:
       `Installing ${p.name || studio.name} runs the commands below on this Mac, with your permissions. helmstudio does not sandbox them.` }),
@@ -320,6 +321,8 @@ export function approvalScreen(ctx, id) {
       ? el("p", { class: "helm-hint", text: "A required check failed. That blocks a registry merge; it never stops you installing your own work." })
       : null);
 }
+
+const LEVEL = { draft: "Draft", unverified: "Unverified", verified: "Verified", registry: "Registry" };
 
 function sourceLabel(source) {
   return { local: "from a file you wrote", repo: "from a repository", registry: "from the registry" }[source] || "from a repository";

@@ -8,23 +8,23 @@
 // budget, never a check count, and an indeterminate bar. If the budget runs
 // out it becomes "didn't come up" with the last lines the daemon kept.
 
-import { chip, clock, el, indeterminate, since } from "./ui.js";
+import { chip, clock, el, elapsed, indeterminate } from "./ui.js";
 
-/** The health column: the probe and how long it has had. */
+/** The health column: the probe and how long it has had, counting. */
 function health(p) {
-  if (!p.health_state || p.health_state === "") return "—";
+  if (!p.health_state || p.health_state === "") return ["—"];
   if (p.state === "starting" && p.health_timeout_s) {
-    return `${p.health_state} · ${since(p.started_at)} of ${clock(p.health_timeout_s)}`;
+    return [`${p.health_state} · `, elapsed(p.started_at), ` of ${clock(p.health_timeout_s)}`];
   }
-  return p.health_state;
+  return [p.health_state];
 }
 
 function processState(p) {
   switch (p.state) {
     case "running":
-      return { text: `Running · ${since(p.started_at)}`, tone: "running" };
+      return { text: ["Running · ", elapsed(p.started_at)], tone: "running" };
     case "starting":
-      return { text: `Starting · ${since(p.started_at)}`, tone: "info" };
+      return { text: ["Starting · ", elapsed(p.started_at)], tone: "info" };
     case "stopping":
       return { text: "Stopping", tone: "info" };
     case "failed": {
@@ -46,8 +46,8 @@ export function processGroup(ctx, id) {
   if (!studio) {
     return el("div", { class: "helm-panel" },
       el("div", { class: "helm-panel-body helm-stack" },
-        el("p", { class: "helm-body", text: "No such studio." }),
-        el("a", { class: "helm-link", href: "#/studios", text: "Back to studios" })));
+        el("h1", { class: "helm-title", text: "No such studio" }),
+        el("p", { class: "helm-body", text: `Nothing in the library is called ${id}.` })));
   }
   const group = studio.group || {};
   const procs = group.processes || [];
@@ -73,7 +73,9 @@ export function processGroup(ctx, id) {
       el("div", { class: "helm-panel-body helm-stack" },
         el("p", { class: "helm-body", text: `Starting ${studio.name}` }),
         el("p", { class: "helm-micro", text: "Loading the model into memory. The first start after an install usually takes about a minute." }),
-        el("p", { class: "helm-mono", text: `${main.port ? ":" + main.port + " · " : ""}${since(main.started_at)}${main.health_timeout_s ? " of " + clock(main.health_timeout_s) : ""}` }),
+        el("p", { class: "helm-mono" },
+          main.port ? `:${main.port} · ` : "", elapsed(main.started_at),
+          main.health_timeout_s ? ` of ${clock(main.health_timeout_s)}` : ""),
         indeterminate())));
   }
 
@@ -92,11 +94,11 @@ export function processGroup(ctx, id) {
       ...["Process", "Role", "Port", "Health", "State", ""].map((h) => el("th", { text: h })))),
     el("tbody", {}, ...procs.map((p) => {
       const st = processState(p);
-      return el("tr", {},
+      return el("tr", { "data-key": p.spec_name },
         el("td", {}, el("span", { class: "helm-body", text: p.spec_name })),
         el("td", {}, el("span", { class: "helm-micro", text: [p.role, p.heavy ? "heavy" : null].filter(Boolean).join(" · ") })),
         el("td", {}, el("span", { class: "helm-mono", text: p.port ? ":" + p.port : "—" })),
-        el("td", {}, el("span", { class: "helm-mono", text: health(p) })),
+        el("td", {}, el("span", { class: "helm-mono" }, ...health(p))),
         el("td", {}, chip(st.text, st.tone)),
         el("td", {}, el("button", {
           class: "helm-btn helm-btn-ghost helm-btn-sm",

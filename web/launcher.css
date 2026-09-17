@@ -37,12 +37,6 @@ dialog.helm-dialog::backdrop {
   padding-bottom: var(--helm-space-1);
 }
 
-/* The card's actions wrap too: a chip and two buttons do not fit 320px when
- * the chip says "Needs a Hugging Face token". */
-.helm-card-actions {
-  flex-wrap: wrap;
-}
-
 /* ------------------------------------------------------------- M7b screens
  *
  * The library, the editor, import and the approval screen. Everything here is
@@ -50,14 +44,6 @@ dialog.helm-dialog::backdrop {
  * launcher's business and not helm-css's, because a framework must not assume
  * the page it is on. Every value is a token.
  */
-
-/* The three facts a card states, and the row of quiet actions under it. Both
- * wrap: two chips, a note and three buttons do not fit 320px. */
-.helm-card-facts,
-.helm-card-manage {
-  flex-wrap: wrap;
-  gap: var(--helm-space-2);
-}
 
 /* A disabled field looks disabled.
  *
@@ -72,42 +58,14 @@ dialog.helm-dialog::backdrop {
   opacity: 0.5;
 }
 
-/* The checkpoint a studio launches with, beside the action it governs. */
+/* The checkpoint a studio launches with. */
 .helm-card-checkpoint {
   gap: var(--helm-space-2);
 }
 
-.helm-card-checkpoint .helm-select {
-  flex: 1;
-  min-width: 0;
-}
-
-.helm-card-manage {
-  margin-top: var(--helm-space-2);
-  padding-top: var(--helm-space-2);
-  border-top: 1px solid var(--helm-border-hairline);
-}
-
-/* The editor: form on the left, YAML on the right (03 §13a). It stacks at the
- * width where two columns of form fields stop being two columns and start
- * being two lists of truncated labels. */
-.helm-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--helm-space-4);
-  align-items: start;
-}
-
-@media (max-width: 1000px) {
-  .helm-editor {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/* The YAML pane is text, so it is monospaced and tall enough to hold a
- * manifest without becoming a two-line slot with a scrollbar. */
+/* A manifest as text is monospaced, and keeps its lines as they are. */
 .helm-yaml {
-  min-height: 28em;
+  min-height: 8em;
   font: var(--helm-type-mono);
   line-height: 1.5;
   white-space: pre;
@@ -139,11 +97,6 @@ dialog.helm-dialog::backdrop {
   margin: 2px 0;
 }
 
-.helm-criterion {
-  align-items: start;
-  gap: var(--helm-space-2);
-}
-
 /* Import reports before it acts, so a row is a block of prose rather than a
  * line in a table. */
 .helm-import-row {
@@ -160,12 +113,9 @@ dialog.helm-dialog::backdrop {
   max-width: min(720px, calc(100vw - var(--helm-space-6)));
 }
 
-/* The approval screen is one column with a reading measure, and its buttons
+/* The approval screen is one column in the reading width, and its buttons
  * are at the bottom. You reach Install by scrolling past every command that
  * would run, which is the point of the screen (03 §13). */
-.helm-approve {
-  max-width: 76ch;
-}
 
 .helm-approve-actions {
   margin-top: var(--helm-space-5);
@@ -173,4 +123,720 @@ dialog.helm-dialog::backdrop {
   border-top: 1px solid var(--helm-border-hairline);
   gap: var(--helm-space-3);
   flex-wrap: wrap;
+}
+
+/* ------------------------------------------------- the launcher redesign
+ *
+ * docs/decisions.md, 2026-09-17 · The launcher redesign; 03 §4, §6, §12,
+ * §12a, §13 and §13a as amended. Page layout, which is the launcher's
+ * business. Every value is a token.
+ */
+
+/* Two page widths (03 §4): a page that is read, and a workspace. The top bar
+ * and the nav span the window whatever the page's width. */
+.helm-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.helm-page-reading {
+  max-width: 960px;
+}
+
+.helm-page-workspace {
+  max-width: 1440px;
+}
+
+.helm-screen {
+  min-width: 0;
+}
+
+/* Greyed and inert: the last rows the daemon served, while it cannot be
+ * reached. Inert means nothing in it can be pressed. */
+.helm-stale {
+  opacity: 0.5;
+}
+
+.helm-unreachable {
+  margin-bottom: var(--helm-space-4);
+}
+
+/* "← Studios", above the title of every page under Studios. */
+.helm-back {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--helm-space-2);
+  margin-bottom: var(--helm-space-3);
+  color: var(--helm-text-secondary);
+  font: var(--helm-type-body);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.helm-back::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.helm-back:where(:hover) {
+  color: var(--helm-text-primary);
+}
+
+/* The address in the top bar is the first thing to go on a phone. */
+@media (max-width: 640px) {
+  .helm-topbar-address {
+    display: none;
+  }
+}
+
+/* A strong outline: a row's main action when it is not the screen's one
+ * accent (03 §1 and §6, amended). */
+.helm-btn-strong {
+  border-color: var(--helm-text-secondary);
+  font-weight: 600;
+}
+
+/* A square button holding a glyph: the ⋯ that opens a row's menu. */
+.helm-btn-icon {
+  width: var(--helm-control-md);
+  padding: 0;
+}
+
+.helm-dots {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: -5px 0 0 currentColor, 5px 0 0 currentColor;
+}
+
+/* Add a studio's plus, drawn rather than typed. */
+.helm-btn-add::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background:
+    linear-gradient(currentColor, currentColor) center / 1.5px 100% no-repeat,
+    linear-gradient(currentColor, currentColor) center / 100% 1.5px no-repeat;
+}
+
+/* A row's menu. A popover is display: none until it opens, so it is given a
+ * display only while open; in the top layer it is placed against the
+ * document, beside the button that opened it. */
+.helm-menu {
+  position: absolute;
+  inset: auto;
+  min-width: 180px;
+  margin: 0;
+  padding: var(--helm-space-1);
+  border: 1px solid var(--helm-border-strong);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-ground-raised);
+  color: var(--helm-text-primary);
+}
+
+.helm-menu:popover-open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.helm-menu-item {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 var(--helm-space-3);
+  border: 0;
+  border-radius: var(--helm-radius-sm);
+  background: transparent;
+  color: var(--helm-text-primary);
+  font: var(--helm-type-body);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.helm-menu-item:where(:hover, :focus-visible) {
+  background: var(--helm-border-hairline);
+}
+
+/* Text in a status colour. helm-css's status classes colour a chip's dot and
+ * a bar and leave text as it was, so a sentence marked as an error read as
+ * any other sentence. These are on panels, where 03 §2b checks each pair; the
+ * words still say what is wrong, so colour only confirms it (§17). */
+:where(.helm-body, .helm-hint, .helm-mono, .helm-micro).helm-status-error {
+  color: var(--helm-status-error);
+}
+
+:where(.helm-body, .helm-hint, .helm-mono, .helm-micro).helm-status-warning {
+  color: var(--helm-status-warning);
+}
+
+/* ---- Studios: one row per studio (03 §6) --------------------------------- */
+
+.helm-studios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--helm-space-3);
+}
+
+/* A row: its head and body on the left, its state and actions on the right.
+ * The stripe wears the studio's hue for the theme showing (03 §2). */
+.helm-studio {
+  --_helm-hue: var(--_hue-dark);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "head side" "body side";
+  grid-template-rows: auto 1fr;
+  gap: 6px var(--helm-space-7);
+  padding: 14px var(--helm-space-4) 14px var(--helm-space-5);
+}
+
+:root[data-theme="light"] .helm-studio {
+  --_helm-hue: var(--_hue-light);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .helm-studio {
+    --_helm-hue: var(--_hue-light);
+  }
+}
+
+.helm-studio-head {
+  grid-area: head;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--helm-space-2);
+  min-width: 0;
+}
+
+.helm-studio-body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Where it comes from and how far it is checked: plain text, two facts. */
+.helm-studio-origin {
+  font: var(--helm-type-micro);
+  color: var(--helm-text-secondary);
+}
+
+.helm-studio-facts {
+  overflow-wrap: anywhere;
+}
+
+.helm-studio-progress {
+  gap: 6px;
+  padding-top: 2px;
+}
+
+/* The state above the actions it governs. */
+.helm-studio-side {
+  grid-area: side;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--helm-space-3);
+  margin-top: 0;
+}
+
+.helm-studio-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--helm-space-2);
+}
+
+.helm-card-checkpoint .helm-select {
+  flex: 0 1 260px;
+}
+
+/* Placeholder rows while the first list loads. They do not animate. */
+.helm-skeleton {
+  min-height: 96px;
+}
+
+.helm-skeleton-bar {
+  display: block;
+  height: 10px;
+  border-radius: var(--helm-radius-sm);
+  background: var(--helm-border-hairline);
+}
+
+/* A phone: the chip beside the title, the row's text, then the actions across
+ * it at a size a thumb can press. */
+@media (max-width: 640px) {
+  .helm-studio {
+    grid-template-areas: "head chip" "body body" "actions actions";
+    grid-template-rows: auto;
+    gap: var(--helm-space-2);
+    padding: var(--helm-space-3) var(--helm-space-3) var(--helm-space-3) var(--helm-space-4);
+  }
+
+  .helm-studio-side {
+    display: contents;
+  }
+
+  .helm-studio-side > .helm-chip {
+    grid-area: chip;
+    align-self: start;
+  }
+
+  .helm-studio-buttons {
+    grid-area: actions;
+  }
+
+  .helm-studio-buttons > .helm-btn {
+    flex: 1;
+    height: 36px;
+  }
+
+  .helm-studio-buttons > .helm-btn-icon {
+    flex: none;
+    width: 36px;
+  }
+}
+
+/* ---- Add a studio: four rows (03 §13) ------------------------------------ */
+
+.helm-add {
+  gap: var(--helm-space-3);
+}
+
+.helm-add-lede {
+  max-width: 720px;
+  margin-bottom: var(--helm-space-2);
+  color: var(--helm-text-secondary);
+}
+
+.helm-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--helm-space-3);
+  padding: var(--helm-space-4) var(--helm-space-5);
+  border: 1px solid var(--helm-border-hairline);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-ground-panel);
+}
+
+.helm-add-row-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--helm-space-6);
+}
+
+.helm-add-heading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.helm-add-title {
+  font: var(--helm-type-card-title);
+  color: var(--helm-text-primary);
+}
+
+.helm-add-blurb {
+  color: var(--helm-text-secondary);
+}
+
+.helm-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--helm-space-2);
+}
+
+.helm-add-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--helm-space-3);
+}
+
+.helm-add-grow {
+  flex: 1 1 280px;
+}
+
+.helm-add-ref {
+  flex: 0 1 180px;
+}
+
+.helm-add-row .helm-input {
+  min-height: var(--helm-control-lg);
+}
+
+.helm-input-mono {
+  font: var(--helm-type-mono);
+}
+
+.helm-add-found {
+  padding-top: var(--helm-space-3);
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+@media (max-width: 640px) {
+  .helm-add-row-inline {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--helm-space-3);
+  }
+}
+
+/* ---- Models & disk (03 §12) ---------------------------------------------- */
+
+.helm-table-scroll {
+  overflow-x: auto;
+}
+
+.helm-models {
+  min-width: 720px;
+}
+
+.helm-models :where(td) {
+  padding-top: var(--helm-space-3);
+  padding-bottom: var(--helm-space-3);
+  vertical-align: top;
+}
+
+.helm-models :where(th, td):first-child {
+  padding-left: var(--helm-space-4);
+}
+
+.helm-models :where(tr:last-child td) {
+  border-bottom: 0;
+}
+
+.helm-model-source {
+  gap: var(--helm-space-1);
+  min-width: 180px;
+}
+
+.helm-model-source .helm-progress {
+  width: 200px;
+  max-width: 100%;
+}
+
+.helm-model-path {
+  color: var(--helm-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.helm-num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.helm-row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---- Settings (03 §12a) --------------------------------------------------- */
+
+.helm-settings {
+  gap: var(--helm-space-3);
+}
+
+.helm-token-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--helm-space-3);
+}
+
+.helm-token-field {
+  flex: 0 1 520px;
+}
+
+.helm-token-field .helm-input {
+  min-height: var(--helm-control-lg);
+}
+
+/* A list of facts: a label, a mono value and, for a path, its Copy. */
+.helm-facts {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--helm-space-1) var(--helm-space-3);
+}
+
+.helm-facts-plain {
+  grid-template-columns: 140px minmax(0, 1fr);
+}
+
+.helm-facts :where(dt) {
+  color: var(--helm-text-secondary);
+  font-weight: 500;
+}
+
+.helm-facts :where(dd) {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .helm-facts {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .helm-facts-plain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .helm-facts :where(dt) {
+    grid-column: 1 / -1;
+    margin-top: var(--helm-space-2);
+  }
+}
+
+/* ---- the editor: a section menu, one section at a time (03 §13a) ---------- */
+
+.helm-editor-header {
+  row-gap: var(--helm-space-2);
+}
+
+.helm-unsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--helm-type-micro);
+  color: var(--helm-text-secondary);
+  --_helm-status: var(--helm-status-warning);
+}
+
+.helm-editor {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: var(--helm-space-6);
+  align-items: start;
+}
+
+.helm-editor-menu {
+  position: sticky;
+  top: var(--helm-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.helm-editor-menu-label {
+  padding: var(--helm-space-4) 10px var(--helm-space-1);
+  font: var(--helm-type-section);
+  letter-spacing: var(--helm-tracking-section);
+  text-transform: uppercase;
+  color: var(--helm-text-secondary);
+}
+
+.helm-editor-menu-label:first-child {
+  padding-top: 0;
+}
+
+.helm-editor-menu-note {
+  padding: 0 10px;
+}
+
+.helm-editor-link {
+  display: flex;
+  align-items: center;
+  gap: var(--helm-space-2);
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--helm-radius-sm);
+  color: var(--helm-text-secondary);
+  font: var(--helm-type-body);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.helm-editor-link:where(:hover) {
+  color: var(--helm-text-primary);
+}
+
+.helm-editor-link:where([aria-current="true"]) {
+  background: var(--helm-ground-raised);
+  color: var(--helm-text-primary);
+  font-weight: 600;
+}
+
+.helm-editor-count {
+  font: var(--helm-type-micro);
+  color: var(--helm-text-secondary);
+}
+
+.helm-editor-count:where(.helm-status-error) {
+  color: var(--helm-status-error);
+  font-weight: 600;
+}
+
+.helm-editor-section {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.helm-editor-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px var(--helm-space-5);
+  border-bottom: 1px solid var(--helm-border-hairline);
+}
+
+.helm-editor-section-title {
+  font: var(--helm-type-card-title);
+  color: var(--helm-text-primary);
+}
+
+.helm-editor-section-hint {
+  color: var(--helm-text-secondary);
+}
+
+.helm-editor-notes {
+  padding: var(--helm-space-3) var(--helm-space-5) 0;
+}
+
+.helm-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: var(--helm-space-5) var(--helm-space-7);
+  padding: var(--helm-space-5);
+}
+
+.helm-editor-pager {
+  display: flex;
+  align-items: center;
+  gap: var(--helm-space-3);
+  padding: var(--helm-space-3) var(--helm-space-5);
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+.helm-editor-prev,
+.helm-editor-next {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--helm-space-2);
+  color: var(--helm-text-secondary);
+  font: var(--helm-type-body);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.helm-editor-prev::before,
+.helm-editor-next::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-bottom: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+}
+
+.helm-editor-prev::before {
+  transform: rotate(45deg);
+}
+
+.helm-editor-next::after {
+  transform: rotate(-135deg);
+}
+
+.helm-editor-prev:where(:hover),
+.helm-editor-next:where(:hover) {
+  color: var(--helm-text-primary);
+}
+
+/* The text: dark in both themes, as a terminal is (03 §2). */
+.helm-editor-text {
+  overflow: hidden;
+}
+
+.helm-editor-text-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--helm-space-2);
+  padding: var(--helm-space-2) var(--helm-space-3);
+  border-bottom: 1px solid var(--helm-border-hairline);
+  background: var(--helm-ground-raised);
+}
+
+.helm-editor-text-title {
+  font-weight: 500;
+  color: var(--helm-text-primary);
+}
+
+.helm-editor-yaml {
+  display: block;
+  width: 100%;
+  min-height: 60vh;
+  margin: 0;
+  padding: 14px var(--helm-space-4);
+  border: 0;
+  background: var(--helm-ground-inset);
+  color: var(--helm-log-text);
+  font: var(--helm-type-mono);
+  line-height: 19px;
+  white-space: pre;
+  overflow-wrap: normal;
+  resize: vertical;
+}
+
+.helm-editor-problems {
+  padding: var(--helm-space-3) var(--helm-space-4);
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+.helm-editor-text-note {
+  padding: var(--helm-space-3) var(--helm-space-4);
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+.helm-criteria {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.helm-criterion {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--helm-space-3);
+  padding: var(--helm-space-3) var(--helm-space-5);
+  border-bottom: 1px solid var(--helm-border-hairline);
+}
+
+.helm-criterion:last-child {
+  border-bottom: 0;
+}
+
+.helm-criterion > .helm-chip {
+  justify-self: start;
+}
+
+@media (max-width: 900px) {
+  .helm-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .helm-editor-menu {
+    position: static;
+  }
+
+  .helm-editor-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -564,6 +564,8 @@
   color: var(--helm-text-primary);
   font: var(--helm-type-body);
   font-weight: 500;
+  /* A link drawn as a button is a button, and is not underlined. */
+  text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
   transition: background-color var(--helm-duration-hover) var(--helm-ease-standard), border-color var(--helm-duration-hover) var(--helm-ease-standard), color var(--helm-duration-hover) var(--helm-ease-standard);

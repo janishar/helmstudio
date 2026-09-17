@@ -30,6 +30,8 @@ export const studios = [
   {
     manifest_loaded: true, id: "ltx-studio", name: "ltx studio",
     source: "registry", level: "unverified", manifest_valid: true,
+    hue: { dark: "#5b8def", light: "#2f5fc4" },
+    repo: "https://github.com/janishar/ltx-2-studio", ref: "main",
     description: "LTX-2.5 video with synchronised audio, MLX on Apple Silicon.",
     kinds: ["video", "audio"], heavy: true, peak_ram_gb: 20,
     root: "~/.helmstudio/studios/ltx-studio/src", root_present: true,
@@ -45,6 +47,8 @@ export const studios = [
   {
     manifest_loaded: true, id: "h3-studio", name: "h3 studio",
     source: "repo", level: "unverified", manifest_valid: true,
+    hue: { dark: "#e0a33c", light: "#a06a10" },
+    repo: "https://github.com/janishar/h3c-studio", ref: "main",
     description: "MiniMax-H3 video and audio through a native Metal engine.",
     kinds: ["video", "audio"], heavy: true, peak_ram_gb: 21,
     root: "~/.helmstudio/studios/h3-studio/src", root_present: true,
@@ -60,6 +64,8 @@ export const studios = [
   {
     manifest_loaded: true, id: "iris-studio", name: "iris studio",
     source: "registry", level: "unverified", manifest_valid: true,
+    hue: { dark: "#d8558f", light: "#b12f68" },
+    repo: "https://github.com/janishar/iris-studio", ref: "main",
     // Downloading, so the choice is shown and cannot be changed.
     selection: "flux_klein_4b",
     selectable: [
@@ -77,6 +83,8 @@ export const studios = [
   {
     manifest_loaded: true, id: "auk-studio", name: "AuK studio",
     source: "registry", level: "unverified", manifest_valid: true,
+    hue: { dark: "#8b7cf0", light: "#5c4bc4" },
+    repo: "https://github.com/janishar/AuK", ref: "main",
     // Stopped with nothing chosen, so the choice is open and says so.
     selectable: [
       { name: "auk", hf_repo: "tencent/AuK", selectable: true },
@@ -96,6 +104,9 @@ export const studios = [
     // same question, and a card that derived one from the other would have to
     // be wrong about one of these two.
     source: "local", overrides: "registry", level: "unverified", manifest_valid: true,
+    // No hue in its manifest: the daemon serves the ramp entry its id selects.
+    hue: { dark: "#a1cb4d", light: "#5d7e1b" },
+    repo: "https://github.com/someone/wan-studio", ref: "v0.3.1",
     provenance: { kind: "imported", url: "https://example.com/wan-studio.yaml", at: "2026-09-15T18:02:00Z" },
     rebuild_needed: true,
     rebuild_needed_reason: "The manifest changed since this checkout was built from it, so the build steps would run differently now.",
@@ -115,6 +126,8 @@ export const studios = [
     // machine, so there is nothing anyone could have reviewed.
     source: "local", overrides: "registry", level: "draft",
     manifest_valid: false, manifest_state: "invalid",
+    // Its manifest did not load, and it still has a stripe.
+    hue: { dark: "#4dcbb6", light: "#1b7e6e" },
     manifest_file: "~/.helmstudio/studios/zed-studio.yaml",
     provenance: { kind: "written", at: "2026-09-16T09:12:00Z" },
     errors: [
@@ -131,6 +144,7 @@ export const studios = [
 /** A group mid-start, for 03 §9's starting screen. */
 export const starting = {
   manifest_loaded: true, id: "ltx-studio", name: "ltx studio",
+  hue: { dark: "#5b8def", light: "#2f5fc4" },
   description: "LTX-2.5 video with synchronised audio, MLX on Apple Silicon.",
   kinds: ["video", "audio"], heavy: true, peak_ram_gb: 20,
   root: "~/.helmstudio/studios/ltx-studio/src", root_present: true,
@@ -173,20 +187,20 @@ export const models = [
     id: "01JB9MMMMMMMMMMMMMMMMMMMM1", hf_repo: "MiniMaxAI/MiniMax-H3", revision: "main",
     source: "managed", state: "ready", dest: "models/minimax-h3", path: "~/.helmstudio/models/minimax-h3",
     total_bytes: 60_000_000_000, bytes_on_disk: 60_000_000_000, ref_count: 1,
-    studios: ["h3-studio"], created_at: at(86400 * 3), verified_at: at(7200),
+    studios: ["h3-studio"], created_at: at(86400 * 3), verified_at: at(7200), last_used_at: at(7200),
   },
   {
     id: "01JB9MMMMMMMMMMMMMMMMMMMM2", hf_repo: "Lightricks/LTX-2.5", revision: "main",
     source: "linked", state: "linked", dest: "models/ltx-2-5", path: "~/.helmstudio/models/ltx-2-5",
     external_path: "/Volumes/Models/LTX-2.5",
     total_bytes: 21_400_000_000, bytes_on_disk: 0, ref_count: 1,
-    studios: ["ltx-studio"], created_at: at(86400), verified_at: at(30),
+    studios: ["ltx-studio"], created_at: at(86400), verified_at: at(30), last_used_at: at(724),
   },
   {
     id: "01JB9MMMMMMMMMMMMMMMMMMMM3", hf_repo: "tencent/AuK-Flash", revision: "main",
     source: "managed", state: "ready", dest: "models/auk-flash", path: "~/.helmstudio/models/auk-flash",
     total_bytes: 4_100_000_000, bytes_on_disk: 4_100_000_000, ref_count: 0,
-    studios: [], created_at: at(86400 * 12), verified_at: at(86400 * 12),
+    studios: [], created_at: at(86400 * 12), verified_at: at(86400 * 12), last_used_at: at(86400 * 12),
   },
   {
     id: "01JB9MMMMMMMMMMMMMMMMMMMM4", hf_repo: "black-forest-labs/FLUX.2-Klein", revision: "main",
@@ -197,6 +211,22 @@ export const models = [
 ];
 
 export const hfToken = { present: true, added_at: "2026-09-14T09:31:00Z" };
+
+/** What a daemon says about itself, for Settings (03 §12a). */
+export const about = {
+  daemon_version: "dev", commit: "70a07ae3c1d2b4f5e6a7b8c9d0e1f2a3b4c5d6e7", api_version: "1.0.0",
+  sdk_majors: { css: 1, runtime: 1, ui: 1 },
+  paths: {
+    data: "/Users/you/Library/Application Support/helmstudio",
+    cache: "/Users/you/Library/Caches/helmstudio",
+    logs: "/Users/you/Library/Logs/helmstudio",
+    models: "/Users/you/.helmstudio/models",
+    library: "/Users/you/helmstudio",
+  },
+};
+
+/** The free space on the models volume (03 §12). */
+export const disk = { root: "/Users/you/.helmstudio/models", free_bytes: 285_000_000_000 };
 
 /**
  * Three documents for the import report: one that will be added, one whose id
@@ -279,7 +309,7 @@ export function fakeClient() {
       approval: (id) => real.studios.approval(id),
       select: (id, body) => real.studios.select(id, body),
     },
-    models: { list: () => page(models) },
+    models: { list: () => page(models), disk: () => Promise.resolve(disk) },
     jobs: {
       get: (id) => Promise.resolve(Object.values(jobs).find((j) => j.id === id)),
       logs: () => logStream(),
@@ -288,6 +318,7 @@ export function fakeClient() {
       theme: () => Promise.resolve({ theme: "system" }),
       setTheme: (b) => Promise.resolve(b),
       huggingFaceToken: () => Promise.resolve(hfToken),
+      about: () => Promise.resolve(about),
     },
   };
 }

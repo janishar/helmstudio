@@ -5,14 +5,23 @@
 // exists — but it still reaches it only through the generated client in
 // launcher.js. Nothing here writes a path.
 
-/** el builds an element with attributes, listeners and children in one call. */
+import { listen } from "./morph.js";
+
+/**
+ * el builds an element with attributes, listeners and children in one call.
+ *
+ * A listener is kept on the node rather than bound to it, so that a redraw
+ * which keeps this element hands it the new screen's listener (morph.js). A
+ * listener must not reach for an element its own render built: that one may
+ * never be on the page. It reads `event.currentTarget`, state, or an id.
+ */
 export function el(tag, attrs, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
     if (v === undefined || v === null || v === false) continue;
     if (k === "text") node.textContent = String(v);
     else if (k === "html") node.innerHTML = String(v);
-    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else if (k.startsWith("on")) listen(node, k.slice(2), v);
     else node.setAttribute(k, v === true ? "" : String(v));
   }
   for (const c of children.flat()) {
@@ -42,6 +51,23 @@ export function clock(seconds) {
 export function since(when) {
   if (!when) return "";
   return clock((Date.now() - new Date(when).getTime()) / 1000);
+}
+
+/**
+ * elapsed is a time since `when` that counts in the page between polls
+ * (03 §17, amended 2026-09-17). tick() moves every one of them; a redraw
+ * draws the same digits, so the two never disagree for more than a second.
+ */
+export function elapsed(when) {
+  return el("span", { class: "helm-elapsed", "data-since": when || "", text: since(when) });
+}
+
+/** tick advances every elapsed time under root. It swaps digits; nothing animates. */
+export function tick(root) {
+  for (const node of root.querySelectorAll("[data-since]")) {
+    const text = since(node.dataset.since);
+    if (node.textContent !== text) node.textContent = text;
+  }
 }
 
 /** ago is 03 §12's "2h ago", for a time a table shows rather than counts. */
@@ -102,15 +128,15 @@ export function state(studio, job) {
       const p = (group.processes || []).find((x) => x.state === "starting") || {};
       const budget = p.health_timeout_s ? ` of ${clock(p.health_timeout_s)}` : "";
       return {
-        chip: `Starting · ${since(p.started_at)}${budget}`, tone: "info",
-        primary: { label: "View progress", action: "processes" },
+        chip: ["Starting · ", elapsed(p.started_at), budget], tone: "info",
+        primary: { label: "View progress", action: "processes", quiet: true },
         secondary: { label: "Cancel", action: "stop" },
       };
     }
     case "running": {
       const p = (group.processes || []).find((x) => x.role === "main") || (group.processes || [])[0] || {};
       return {
-        chip: `Running · ${since(p.started_at)}`, tone: "running",
+        chip: ["Running · ", elapsed(p.started_at)], tone: "running",
         primary: { label: "Open", action: "open" },
         secondary: { label: "Stop", action: "stop" },
       };
@@ -141,13 +167,13 @@ export function state(studio, job) {
     case "building":
       return {
         chip: "Installing" + steps(job), tone: "info",
-        primary: { label: "View progress", action: "detail" },
+        primary: { label: "View progress", action: "detail", quiet: true },
         secondary: { label: "Cancel", action: "cancel" },
       };
     case "fetching_weights":
       return {
         chip: "Downloading" + percent(job), tone: "info",
-        primary: { label: "View progress", action: "detail" },
+        primary: { label: "View progress", action: "detail", quiet: true },
         secondary: { label: "Cancel", action: "cancel" },
       };
     case "auth_required":
@@ -210,21 +236,45 @@ function percent(job) {
   return ` ${Math.floor((job.progress_num / job.progress_den) * 100)}%`;
 }
 
-/** chip renders a state chip. Never colour alone: the dot always has a label. */
+/**
+ * chip renders a state chip. Never colour alone: the dot always has a label.
+ * The label is text, or a list of text and nodes — an elapsed time, say.
+ */
 export function chip(text, tone) {
+  const parts = [].concat(text).filter((t) => t !== undefined && t !== null && t !== "");
   return el("span", { class: `helm-chip ${STATUS[tone] || STATUS.idle}` },
-    el("span", { class: "helm-dot" }), document.createTextNode(text));
+    el("span", { class: "helm-dot" }),
+    ...parts.map((t) => (typeof t === "string" ? document.createTextNode(t) : t)));
 }
 
-/** The facts line under a card title: what the manifest declares (03 §6). */
-export function facts(studio) {
+/** repoName is a repository as a person reads it: no scheme, no `.git`. */
+export function repoName(url) {
+  return String(url || "").replace(/^[a-z+]+:\/\//, "").replace(/^git@([^:]+):/, "$1/").replace(/\.git$/, "");
+}
+
+/** shortRef is a commit as git abbreviates one, and any other ref as it is. */
+export function shortRef(ref) {
+  return /^[0-9a-f]{40}$/.test(ref) ? ref.slice(0, 7) : ref;
+}
+
+/**
+ * The facts line under a studio's title (03 §6, amended 2026-09-17): what it
+ * needs, where its code comes from and where its weights are. Where things
+ * come from is a statement here and never a switch — that choice belongs to
+ * the install screen.
+ */
+export function facts(studio, models) {
   const out = [];
-  const env = studio.runtime_env || {};
-  if (env.engine) out.push(env.engine);
-  if (env.backend) out.push(env.backend);
-  if (studio.size_bytes) out.push(bytes(studio.size_bytes));
   if (studio.peak_ram_gb) out.push(`peak ~${studio.peak_ram_gb} GB`);
   else if (studio.heavy) out.push("peak undeclared");
+  if (studio.local_path) out.push(`builds the folder ${studio.local_path}`);
+  else if (studio.repo) out.push(`clones ${repoName(studio.repo)}${studio.ref ? " at " + shortRef(studio.ref) : ""}`);
+  const mine = (models || []).filter((m) => (m.studios || []).includes(studio.id));
+  const linked = mine.filter((m) => m.source === "linked").length;
+  const downloaded = mine.length - linked;
+  const weights = [linked ? `${linked} linked` : null, downloaded ? `${downloaded} downloaded` : null].filter(Boolean);
+  if (weights.length) out.push(`weights ${weights.join(", ")}`);
+  if (studio.size_bytes) out.push(`${bytes(studio.size_bytes)} on disk`);
   return out.join(" · ");
 }
 
@@ -242,6 +292,97 @@ export function progress(num, den) {
 
 export function indeterminate() {
   return el("div", { class: "helm-progress" }, el("div", { class: "helm-progress-indeterminate" }));
+}
+
+/**
+ * menu is a ⋯ button and the menu it opens (03 §6 and §17, amended
+ * 2026-09-17): the actions a row offers that are done rarely.
+ *
+ * It is a popover, so it sits above the row rather than being clipped by it,
+ * light dismiss and Escape close it, and closing it returns focus to the
+ * button. Arrow keys, Home and End move through it, and Tab leaves it.
+ *
+ * Whether it is open lives here rather than in the row, so a redraw while it
+ * is open draws it open, where it was.
+ */
+const openMenus = new Map();
+
+export function menu(id, label, items) {
+  const actions = items.filter(Boolean);
+  if (!actions.length) return [];
+  const at = openMenus.get(id);
+  const invoker = () => document.querySelector(`[popovertarget="${CSS.escape(id)}"]`);
+  const button = el("button", {
+    class: "helm-btn helm-btn-ghost helm-btn-icon", type: "button", "data-key": "more",
+    popovertarget: id, "aria-haspopup": "menu", "aria-expanded": String(at !== undefined), "aria-label": label,
+  }, el("span", { class: "helm-dots", "aria-hidden": "true" }));
+  const list = el("div", {
+    id, class: "helm-menu", popover: "auto", role: "menu", "aria-label": label, "data-key": "menu", style: at,
+    onbeforetoggle: (e) => {
+      const from = invoker();
+      if (e.newState !== "open") {
+        openMenus.delete(id);
+        if (from) from.setAttribute("aria-expanded", "false");
+        return;
+      }
+      if (!from) return;
+      // Below the button, its right edge on the button's. In the top layer an
+      // absolute box is placed against the document, so it scrolls with it.
+      const r = from.getBoundingClientRect();
+      const style = `top: ${Math.round(r.bottom + window.scrollY + 4)}px; right: ${Math.round(document.documentElement.clientWidth - r.right - window.scrollX)}px`;
+      e.currentTarget.setAttribute("style", style);
+      openMenus.set(id, style);
+      from.setAttribute("aria-expanded", "true");
+    },
+    ontoggle: (e) => {
+      if (e.newState !== "open") return;
+      const first = e.currentTarget.querySelector('[role="menuitem"]');
+      if (first) first.focus();
+    },
+    onkeydown: (e) => {
+      const list = e.currentTarget;
+      const items = [...list.querySelectorAll('[role="menuitem"]')];
+      const i = items.indexOf(document.activeElement);
+      const to = {
+        ArrowDown: items[(i + 1) % items.length],
+        ArrowUp: items[(i - 1 + items.length) % items.length],
+        Home: items[0],
+        End: items[items.length - 1],
+      }[e.key];
+      // Escape is the platform's to handle for a popover, and not every
+      // browser hosting this page handles it; closing here makes it certain.
+      // Focus goes back to the button either way, so Tab moves on from there.
+      if (e.key === "Escape" || e.key === "Tab") {
+        if (e.key === "Escape") e.preventDefault();
+        if (list.matches(":popover-open")) list.hidePopover();
+        const from = invoker();
+        if (from) from.focus();
+        return;
+      }
+      if (to) {
+        e.preventDefault();
+        to.focus();
+      }
+    },
+  }, ...actions.map((a) => el("button", {
+    class: "helm-menu-item", type: "button", role: "menuitem", tabindex: "-1", text: a.label,
+    onclick: (e) => {
+      const list = e.currentTarget.closest("[popover]");
+      if (list.matches(":popover-open")) list.hidePopover();
+      a.run();
+    },
+  })));
+  return [button, list];
+}
+
+/** saveText hands the person a file, as a download. */
+export function saveText(name, text, type = "text/yaml") {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = el("a", { href: url, download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 /**
@@ -315,6 +456,24 @@ export function failure(err, what) {
   const i = text.indexOf("): ");
   const detail = i >= 0 ? text.slice(i + 3) : text;
   return detail ? `${what} ${detail}` : what;
+}
+
+/**
+ * copyButton copies a value, and says so. Revealing a path in Finder needs
+ * the Mac app (03 §14), so the browser copies it.
+ */
+export function copyButton(value, label, what) {
+  return el("button", {
+    class: "helm-btn helm-btn-ghost helm-btn-sm", type: "button", text: "Copy", "aria-label": label,
+    onclick: async () => {
+      try {
+        await navigator.clipboard.writeText(value);
+        toast(`${what} copied.`, "info");
+      } catch {
+        toast(`${what} could not be copied. Select it and copy it yourself.`, "error");
+      }
+    },
+  });
 }
 
 /** section is a labelled block in a rail or a panel. */

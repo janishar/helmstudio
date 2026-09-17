@@ -18,24 +18,31 @@
 /**
  * SECTIONS is the form, in the order it is drawn. Each field is a JSON pointer
  * into the manifest; the control is whatever the schema says that pointer is.
+ *
+ * The editor shows one section at a time (03 §13a, amended 2026-09-17), and
+ * `slug` is how the address names it: `#/edit/<id>?section=runtime`.
  */
 export const SECTIONS = [
   {
+    slug: "identity",
     label: "Identity & source",
     hint: "What this studio is, and where its code comes from.",
     fields: ["/id", "/name", "/description", "/kinds", "/repo", "/ref", "/submodules", "/local_path", "/license", "/license_url"],
   },
   {
+    slug: "runtime",
     label: "Runtime",
     hint: "How inference runs, and how much of the machine it wants.",
     fields: ["/runtime/framework", "/runtime/backends", "/runtime/precision", "/runtime/language", "/peak_ram_gb", "/python/version"],
   },
   {
+    slug: "host",
     label: "Host requirements",
     hint: "Checked before the first build step, so a failure happens here rather than inside make.",
     fields: ["/requires/os", "/requires/arch", "/requires/tools", "/requires/ram_gb", "/requires/disk_gb"],
   },
   {
+    slug: "platform",
     label: "Platform",
     hint: "What the studio asks helmstudio for. Every capability is read out as a sentence before anyone installs it.",
     fields: ["/capabilities", "/network", "/sdk/runtime", "/sdk/ui", "/sdk/css"],
@@ -62,6 +69,29 @@ export const YAML_ONLY = {
   "/storage": "Collection declarations, which are a schema of their own.",
   "/python/extras": "A list of extras that reads next to the build steps that install them.",
 };
+
+/** The two sections that are not form: the whole text, and the criteria. */
+export const TEXT = { slug: "yaml", label: "helmstudio.yaml" };
+export const CHECKS = { slug: "criteria", label: "Certification criteria" };
+
+/**
+ * sectionOf is the slug of the section a pointer's field is edited in: a form
+ * section when the pointer is one of its fields, under one, or a parent of
+ * one (`/requires` is Host requirements), and the text when it is not on the
+ * form. A registry entry's pointers are under /manifest, which is where its
+ * form reads from, so that prefix is set aside first.
+ */
+export function sectionOf(pointer) {
+  let p = String(pointer || "");
+  if (p === "/manifest" || p.startsWith("/manifest/")) p = p.slice("/manifest".length);
+  if (!p || p === "/") return TEXT.slug;
+  for (const s of SECTIONS) {
+    for (const f of s.fields) {
+      if (f === p || f.startsWith(p + "/") || p.startsWith(f + "/")) return s.slug;
+    }
+  }
+  return TEXT.slug;
+}
 
 /** A pointer's label: the last segment, spelled the way a person says it. */
 const LABELS = {

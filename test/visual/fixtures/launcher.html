@@ -18,8 +18,8 @@
 <script type="module">
   // The launcher's own screens, drawn from canned data. These are the real
   // modules the daemon serves — a golden of a mock would prove nothing.
-  import { newContext, newStore, shell } from "/web/app.js";
-  import { freezeTime, fakeClient, studios, starting, jobs, models, hfToken } from "./fake.js";
+  import { arrive, newContext, newStore, render } from "/web/app.js";
+  import { freezeTime, fakeClient, studios, starting, jobs, models, hfToken, about, disk } from "./fake.js";
 
   freezeTime();
 
@@ -45,16 +45,31 @@
   store.models = models;
   store.jobs = jobs;
   store.hfToken = hfToken;
+  store.about = about;
+  store.disk = disk;
+  store.loaded = true;
   store.theme = q.get("theme") || "system";
 
   const app = document.getElementById("app");
-  // A real redraw, because M7b's screens fetch and then draw themselves again.
-  // A no-op would golden the loading state of every one of them.
   // `hash` draws any route, for a behaviour test that needs a screen no golden
-  // is taken of.
-  const hash = q.get("hash") || HASH[screen];
-  const redraw = () => app.replaceChildren(...shell(ctx, hash, "127.0.0.1:8700"));
+  // is taken of. The page starts there without touching its own address —
+  // opening a fixture waits for the address it was given — and then follows
+  // the address as the launcher does, so a link to an editor section is
+  // followed rather than ignored.
+  const start = q.get("hash") || HASH[screen];
+  const current = () => location.hash || start;
+  // A real redraw, drawn in place as the launcher's is, because M7b's screens
+  // fetch and then draw themselves again. A no-op would golden the loading
+  // state of every one of them.
+  const redraw = () => render(app, ctx, current(), "127.0.0.1:8700");
   const ctx = newContext({ client: fakeClient(), store, redraw });
+  let at = current();
+  window.addEventListener("hashchange", () => {
+    const from = at;
+    at = current();
+    redraw();
+    arrive(app, from, at);
+  });
   redraw();
 
   // The switch dialog has no route of its own: it is what a heavy conflict

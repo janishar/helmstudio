@@ -64,20 +64,61 @@ func TestLibraryCardsStateThreeFacts(t *testing.T) {
 			// Unverified and a registry entry is Unverified too. A card that
 			// derived one from the other would have to disagree with one of
 			// these two.
+			// Plain text since the launcher redesign (03 §6, amended), and still
+			// each its own element.
 			"source and level are two facts, not one",
 			`(() => {
 				const card = [...document.querySelectorAll(".helm-card")].find(c => c.getAttribute("aria-label") === "wan studio");
-				const chips = [...card.querySelectorAll(".helm-card-facts .helm-chip")].map(c => c.textContent);
-				return chips.join("|") === "Local|Unverified" ? 1 : 0;
+				const facts = [...card.querySelectorAll("[data-fact]")].map(c => c.textContent);
+				return facts.join("|") === "Local|Unverified" ? 1 : 0;
 			})()`,
 			1,
 		},
 		{
-			"a registry entry wears the registry chip",
+			"a registry entry says it is from the registry",
 			`(() => {
 				const card = [...document.querySelectorAll(".helm-card")].find(c => c.getAttribute("aria-label") === "ltx studio");
-				const chips = [...card.querySelectorAll(".helm-card-facts .helm-chip")].map(c => c.textContent);
-				return chips.join("|") === "Registry|Unverified" ? 1 : 0;
+				const facts = [...card.querySelectorAll("[data-fact]")].map(c => c.textContent);
+				return facts.join("|") === "Registry|Unverified" ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			// 03 §1, amended: at most one accent on a screen, and on Studios it
+			// is the running studio's Open.
+			"the screen has one accent, and it is the running studio's Open",
+			`(() => {
+				const accents = [...document.querySelectorAll("main .helm-btn-primary")];
+				if (accents.length !== 1) return accents.length + 10;
+				return accents[0].textContent === "Open" && accents[0].closest(".helm-card").getAttribute("aria-label") === "ltx studio" ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			// Where the code comes from is stated, never switched (03 §6).
+			"a row says where its code comes from",
+			`(() => {
+				const card = [...document.querySelectorAll(".helm-card")].find(c => c.getAttribute("aria-label") === "h3 studio");
+				return card.querySelector(".helm-studio-facts").textContent.includes("clones github.com/janishar/h3c-studio at main") ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			// A stripe is the studio's own hue, never the accent (03 §2).
+			"a row's stripe is its studio's hue",
+			`(() => {
+				const card = [...document.querySelectorAll(".helm-card")].find(c => c.getAttribute("aria-label") === "h3 studio");
+				return getComputedStyle(card.querySelector(".helm-card-stripe")).backgroundColor === "rgb(224, 163, 60)" ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			// While a download runs, its bar and numbers take the facts line's
+			// place rather than being added under it.
+			"a download replaces the facts line with its progress",
+			`(() => {
+				const card = [...document.querySelectorAll(".helm-card")].find(c => c.getAttribute("aria-label") === "iris studio");
+				return card.querySelector(".helm-studio-progress [role=progressbar]") && !card.querySelector(".helm-studio-facts") ? 1 : 0;
 			})()`,
 			1,
 		},
@@ -199,7 +240,7 @@ func TestTheLibraryRedrawsWhenOnlyACardsFactsChange(t *testing.T) {
 	defer cancel()
 	p := screen(t, ctx, srv.URL, "catalogue", 1000, 800)
 
-	for _, field := range []string{"source", "level", "manifest_valid", "selection", "provenance", "approval_required", "rebuild_needed", "errors"} {
+	for _, field := range []string{"source", "level", "manifest_valid", "selection", "provenance", "approval_required", "rebuild_needed", "errors", "repo", "hue"} {
 		var moved bool
 		expr := `(async () => {
 			const { signature, newStore } = await import("/web/app.js");
@@ -218,6 +259,8 @@ func TestTheLibraryRedrawsWhenOnlyACardsFactsChange(t *testing.T) {
 				approval_required: () => { wan.approval_required = !wan.approval_required; },
 				rebuild_needed: () => { wan.rebuild_needed = !wan.rebuild_needed; },
 				errors: () => { wan.errors = [{ pointer: "/id", message: "x" }]; },
+				repo: () => { wan.repo = "https://github.com/someone-else/wan"; },
+				hue: () => { wan.hue = { dark: "#000000", light: "#ffffff" }; },
 			}["` + field + `"];
 			change();
 			return signature({ store: before }, "#/studios") !== signature({ store: after }, "#/studios");
@@ -237,10 +280,17 @@ func TestTheEditorSendsAPointerAndAValue(t *testing.T) {
 	defer cancel()
 	p := screen(t, ctx, srv.URL, "editor", 1280, 1600)
 
-	// Every field in the map that the schema describes is drawn. A form that
-	// quietly lost one would still look like a form.
+	// Every field in the map that the schema describes is drawn, one section
+	// at a time (03 §13a, amended). A form that quietly lost one would still
+	// look like a form.
 	var drawn float64
-	if err := p.Eval(ctx, `document.querySelectorAll(".helm-editor .helm-field").length`, &drawn); err != nil {
+	if err := p.Eval(ctx, `(async () => {
+		let n = 0;
+		for (const section of ["identity", "runtime", "host", "platform"]) {
+			n += (await `+visit+`(section)).querySelectorAll(".helm-editor .helm-field").length;
+		}
+		return n;
+	})()`, &drawn); err != nil {
 		t.Fatal(err)
 	}
 	if drawn < 20 {
@@ -251,9 +301,9 @@ func TestTheEditorSendsAPointerAndAValue(t *testing.T) {
 	// not. `python.version` is required *within* `python`, and nothing
 	// requires `python`.
 	var marks string
-	if err := p.Eval(ctx, `(() => {
-		const label = (id) => document.querySelector('label[for="' + id + '"]').textContent;
-		return [label("f-id"), label("f-python-version"), label("f-license")].join("|");
+	if err := p.Eval(ctx, `(async () => {
+		const label = async (section, id) => (await `+visit+`(section)).querySelector('label[for="' + id + '"]').textContent;
+		return [await label("identity", "f-id"), await label("runtime", "f-python-version"), await label("identity", "f-license")].join("|");
 	})()`, &marks); err != nil {
 		t.Fatal(err)
 	}
@@ -265,18 +315,7 @@ func TestTheEditorSendsAPointerAndAValue(t *testing.T) {
 	// author's comment and key order intact. Everything about this assertion
 	// happened on the daemon — the page sent a pointer and a value.
 	var after string
-	const edit = `(async () => {
-		const box = document.getElementById("f-description");
-		box.value = "Wan 2.6, described by somebody who got it running.";
-		box.dispatchEvent(new Event("change"));
-		for (let i = 0; i < 100; i++) {
-			await new Promise(r => setTimeout(r, 50));
-			const t = document.querySelector("textarea.helm-yaml").value;
-			if (t.includes("got it running")) return t;
-		}
-		return document.querySelector("textarea.helm-yaml").value;
-	})()`
-	if err := p.Eval(ctx, edit, &after); err != nil {
+	if err := p.Eval(ctx, editField+`("identity", "f-description", "Wan 2.6, described by somebody who got it running.", "got it running")`, &after); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
@@ -381,12 +420,25 @@ func TestImportNamesACollisionRatherThanResolvingIt(t *testing.T) {
 	}
 }
 
-// editField changes one form field the way a person does, and waits for the
-// text the daemon hands back.
-const editField = `(async (id, value, expect) => {
-	const box = document.getElementById(id);
+// visit opens one of the editor's sections the way its menu does, by address,
+// and resolves to the page once the section is drawn.
+const visit = `(async (section) => {
+	location.hash = document.querySelector(".helm-editor-link").getAttribute("href").split("?")[0] + "?section=" + section;
+	for (let i = 0; i < 100; i++) {
+		const current = document.querySelector('.helm-editor-link[aria-current="true"]');
+		if (current && current.getAttribute("href").endsWith("section=" + section)) return document;
+		await new Promise(r => setTimeout(r, 20));
+	}
+	throw new Error("section " + section + " was never drawn");
+})`
+
+// editField changes one form field the way a person does, in the section that
+// holds it, and waits in the text section for what the daemon hands back.
+const editField = `(async (section, id, value, expect) => {
+	const box = (await ` + visit + `(section)).getElementById(id);
 	box.value = value;
 	box.dispatchEvent(new Event("change"));
+	await ` + visit + `("yaml");
 	for (let i = 0; i < 100; i++) {
 		await new Promise(r => setTimeout(r, 50));
 		const t = document.querySelector("textarea.helm-yaml").value;
@@ -414,7 +466,7 @@ func TestOverridingARegistryEntryEditsTheManifestItCarries(t *testing.T) {
 	}
 
 	var after string
-	if err := p.Eval(ctx, editField+`("f-description", "Overridden, on purpose.", "Overridden, on purpose.")`, &after); err != nil {
+	if err := p.Eval(ctx, editField+`("identity", "f-description", "Overridden, on purpose.", "Overridden, on purpose.")`, &after); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(after, "manifest:\n  id: ptr-studio\n  name: ptr studio\n  description: Overridden, on purpose.") {
@@ -423,7 +475,7 @@ func TestOverridingARegistryEntryEditsTheManifestItCarries(t *testing.T) {
 
 	// id, repo and ref are stated twice and must agree, so one form edit
 	// writes both copies and the entry stays valid.
-	if err := p.Eval(ctx, editField+`("f-repo", "https://github.com/someone-else/ptr", "someone-else")`, &after); err != nil {
+	if err := p.Eval(ctx, editField+`("identity", "f-repo", "https://github.com/someone-else/ptr", "someone-else")`, &after); err != nil {
 		t.Fatal(err)
 	}
 	if n := strings.Count(after, "repo: https://github.com/someone-else/ptr"); n != 2 {
@@ -432,11 +484,11 @@ func TestOverridingARegistryEntryEditsTheManifestItCarries(t *testing.T) {
 	var verdict string
 	if err := p.Eval(ctx, `(async () => {
 		for (let i = 0; i < 40; i++) {
-			const c = document.querySelector(".helm-editor .helm-panel-header .helm-chip");
+			const c = document.querySelector(".helm-editor-verdict .helm-chip");
 			if (c && c.textContent === "Valid") return "Valid";
 			await new Promise(r => setTimeout(r, 50));
 		}
-		return document.querySelector(".helm-editor .helm-panel-header .helm-chip").textContent;
+		return document.querySelector(".helm-editor-verdict .helm-chip").textContent;
 	})()`, &verdict); err != nil {
 		t.Fatal(err)
 	}
@@ -456,12 +508,273 @@ func TestAFormEditOnAnInvalidManifestKeepsWhatItDidNotTouch(t *testing.T) {
 	p := route(t, ctx, srv.URL, "#/edit/bad-studio")
 
 	var after string
-	if err := p.Eval(ctx, editField+`("f-requires-ram_gb", "48", "ram_gb: 48")`, &after); err != nil {
+	if err := p.Eval(ctx, editField+`("host", "f-requires-ram_gb", "48", "ram_gb: 48")`, &after); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"ram_gb: 48", "os: [darwin]", "arch: [arm64]", "tools: [git]", "# Half written: no processes yet."} {
 		if !strings.Contains(after, want) {
 			t.Errorf("after setting the minimum memory the text has no %q:\n%s", want, after)
 		}
+	}
+}
+
+// The launcher redesign's reason for drawing in place: a redraw keeps what a
+// person has open and where their focus is. Replacing the page on every poll
+// closed a menu under the pointer and dropped focus to the body, so the page
+// redrew as seldom as it could.
+func TestARedrawKeepsAnOpenMenuAndFocus(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := screen(t, ctx, srv.URL, "catalogue", 1280, 1400)
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		const id = "more-ltx-studio";
+		document.querySelector('[popovertarget="' + id + '"]').click();
+		for (let i = 0; i < 50 && document.activeElement.getAttribute("role") !== "menuitem"; i++) {
+			await new Promise(r => setTimeout(r, 20));
+		}
+		const focused = document.activeElement;
+		// A redraw with nothing changed, as a poll's.
+		window.dispatchEvent(new HashChangeEvent("hashchange"));
+		await new Promise(r => setTimeout(r, 100));
+		const menu = document.getElementById(id);
+		return [
+			menu.matches(":popover-open") ? "open" : "closed",
+			document.activeElement === focused ? "focus kept" : "focus lost to " + document.activeElement.tagName,
+			document.querySelector('[popovertarget="' + id + '"]').getAttribute("aria-expanded"),
+		].join("|");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "open|focus kept|true" {
+		t.Errorf("after a redraw the menu reads %q, want open|focus kept|true", got)
+	}
+
+	// Escape closes it and gives focus back to the button that opened it.
+	if err := p.Eval(ctx, `(async () => {
+		document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+		await new Promise(r => setTimeout(r, 50));
+		return [
+			document.getElementById("more-ltx-studio").matches(":popover-open") ? "open" : "closed",
+			document.activeElement.getAttribute("aria-label"),
+		].join("|");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "closed|More actions for ltx studio" {
+		t.Errorf("after Escape the menu reads %q", got)
+	}
+}
+
+// The skip link was a link to #main, which the router read as a route and
+// answered with Studios. It moves focus, and goes nowhere.
+func TestTheSkipLinkMovesFocusWithoutNavigating(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := screen(t, ctx, srv.URL, "models", 1280, 900)
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		const before = location.href;
+		document.querySelector(".helm-skip-link").click();
+		await new Promise(r => setTimeout(r, 100));
+		return (location.href === before ? "stayed" : "went to " + location.href) + "|" + document.activeElement.id + "|" + document.querySelector("main h1").textContent;
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "stayed|main|Models & disk" {
+		t.Errorf("after the skip link: %q, want stayed|main|Models & disk", got)
+	}
+
+	// And a change of page puts focus on its title, so a screen reader says
+	// where it arrived.
+	if err := p.Eval(ctx, `(async () => {
+		location.hash = "#/settings";
+		await new Promise(r => setTimeout(r, 200));
+		return document.activeElement.tagName + "|" + document.activeElement.textContent;
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "H1|Settings" {
+		t.Errorf("after moving to Settings focus is on %q, want the page's title", got)
+	}
+}
+
+// Add a studio checks a row when it is submitted, and says what is wrong under
+// the field, tied to it — rather than a button that stayed disabled until a box
+// had something in it, and never said why (03 §13, amended).
+func TestAddAStudioSaysWhatIsWrongUnderTheField(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := screen(t, ctx, srv.URL, "add", 1280, 1000)
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		const forms = document.querySelectorAll("form.helm-add-form");
+		forms[1].querySelector("input").value = "code/wan";
+		forms[1].requestSubmit();
+		await new Promise(r => setTimeout(r, 100));
+		const box = document.getElementById("add-folder-path");
+		const said = document.getElementById("add-folder-path-error");
+		return [
+			box.getAttribute("aria-invalid"),
+			(box.getAttribute("aria-describedby") || "").split(" ").includes("add-folder-path-error") ? "described" : "not described",
+			said ? said.textContent : "no error",
+			document.activeElement === box ? "focused" : "not focused",
+			document.querySelectorAll("main .helm-btn-primary").length,
+		].join("|");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := "true|described|code/wan is not an absolute path. Start it at the root, as in /Users/you/code/wan.|focused|1"
+	if got != want {
+		t.Errorf("after submitting a relative folder:\n got %q\nwant %q", got, want)
+	}
+}
+
+// Models & disk: a linked folder is the user's, so it is not counted and it is
+// unlinked rather than deleted; and red appears only in a confirmation, never
+// on a row (03 §12, amended).
+func TestModelsAndDiskStatesWhatItOwns(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := screen(t, ctx, srv.URL, "models", 1280, 900)
+
+	var got string
+	if err := p.Eval(ctx, `(() => {
+		const row = [...document.querySelectorAll("tbody tr")].find(r => r.textContent.includes("Lightricks/LTX-2.5"));
+		return [
+			row.querySelector("td:nth-child(3)").textContent,
+			[...row.querySelectorAll("button")].map(b => b.textContent).join(","),
+			document.querySelectorAll("main .helm-btn-danger, main .helm-btn-danger-fill").length,
+			document.querySelector(".helm-page-header .helm-meta").textContent,
+		].join("|");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	// 60 GB, 4.1 GB and a 9.2 GB partial download: managed bytes, partial
+	// files included, and never the linked folder's.
+	want := "not counted|Copy,Unlink|0|73 GB used · 285 GB free"
+	if got != want {
+		t.Errorf("models read:\n got %q\nwant %q", got, want)
+	}
+}
+
+// Remove is drawn only when there is a token to remove. It was hidden with
+// `hidden`, which a button's own display overrides, so it showed with none.
+func TestSettingsOffersRemoveOnlyWithAToken(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := screen(t, ctx, srv.URL, "settings", 1280, 900)
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		const { settings } = await import("/web/settings.js");
+		const { about } = await import("/fixtures/fake.js");
+		const removes = (hfToken) => {
+			const node = settings({ store: { hfToken, about, studios: [] }, client: {}, redraw() {} });
+			return [...node.querySelectorAll("button")].filter(b => b.textContent === "Remove").length;
+		};
+		return removes({ present: true, added_at: "2026-09-14T09:31:00Z" }) + "|" + removes({ present: false });
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "1|0" {
+		t.Errorf("Remove drawn with a token and without one: %q, want 1|0", got)
+	}
+}
+
+// A criterion about a field links to the section that holds it, since a form
+// one section at a time would otherwise leave "Declares its licence: fail"
+// with nowhere to go.
+func TestACriterionLinksToItsSection(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/edit/wan-studio?section=criteria")
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		for (let i = 0; i < 100 && !document.querySelector(".helm-criterion"); i++) {
+			await new Promise(r => setTimeout(r, 50));
+		}
+		const find = (n) => [...document.querySelectorAll(".helm-criterion")].find(c => c.textContent.includes(n + ". "));
+		const href = (n) => { const a = find(n).querySelector("a"); return a ? a.getAttribute("href") : "none"; };
+		return [href(8), href(2), href(3)].join("|");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := "#/edit/wan-studio?section=identity|#/edit/wan-studio?section=host|none"
+	if got != want {
+		t.Errorf("criteria link to:\n got %q\nwant %q", got, want)
+	}
+}
+
+// The two states of Studios no golden poses: before the daemon has answered
+// at all, and when it stops answering. A blank list is not the same as an
+// empty library, and one failed poll must not throw away what the last one
+// said (03 §6, amended).
+func TestStudiosDrawsLoadingAndUnreachable(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := screen(t, ctx, srv.URL, "catalogue", 1280, 900)
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		const { newContext, newStore, shell } = await import("/web/app.js");
+		const { studios } = await import("/fixtures/fake.js");
+		const draw = (tweak) => {
+			const store = newStore();
+			tweak(store);
+			const ctx = newContext({ client: {}, store, redraw() {} });
+			const host = document.createElement("div");
+			host.append(...shell(ctx, "#/studios", "127.0.0.1:8700"));
+			return host;
+		};
+
+		// Before the first answer: placeholder rows, and no count.
+		const loading = draw(() => {});
+		const first = [
+			loading.querySelectorAll(".helm-skeleton").length,
+			loading.querySelector(".helm-studios").getAttribute("aria-busy"),
+			loading.querySelector(".helm-page-header .helm-meta") ? "counted" : "no count",
+			loading.textContent.includes("No studios yet") ? "said empty" : "said nothing about empty",
+		].join(",");
+
+		// Unreachable after a first answer: the rows it last served, greyed
+		// and inert, under one sentence.
+		const stale = draw((store) => {
+			store.studios = structuredClone(studios);
+			store.loaded = true;
+			store.error = "The daemon could not be reached. Connection refused.";
+		});
+		const screen = stale.querySelector(".helm-screen");
+		const second = [
+			stale.querySelector(".helm-unreachable") ? "said" : "silent",
+			screen.hasAttribute("inert") ? "inert" : "live",
+			screen.classList.contains("helm-stale") ? "greyed" : "bright",
+			screen.querySelectorAll(".helm-studio:not(.helm-skeleton)").length,
+		].join(",");
+
+		// And before any answer, an unreachable daemon has no rows to keep.
+		const never = draw((store) => { store.error = "The daemon could not be reached."; });
+		const third = [
+			never.querySelector(".helm-unreachable") ? "said" : "silent",
+			never.querySelector(".helm-screen") ? "drew a screen" : "drew no screen",
+		].join(",");
+		return [first, second, third].join(" | ");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := "3,true,no count,said nothing about empty | said,inert,greyed,6 | said,drew no screen"
+	if got != want {
+		t.Errorf("Studios while loading and unreachable:\n got %q\nwant %q", got, want)
 	}
 }

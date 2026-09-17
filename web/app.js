@@ -3,17 +3,22 @@
 //
 // A screen is a function of a context and its route arguments, returning a
 // node. It owns no timer and no state: the poll replaces the studio list and
-// the current screen is drawn again from it. That is what keeps four cards
+// the current screen is drawn again from it. That is what keeps four rows
 // ticking through an install while the title and stripe never move (03 §6) —
 // and it is what lets a fixture page draw any screen from canned data by
 // handing it a context whose client is a fake.
+//
+// A drawing is applied to the page in place (morph.js), so what someone has
+// focused, opened or scrolled survives the poll (the launcher redesign,
+// docs/decisions.md 2026-09-17).
 //
 // Not here, by their own milestones: Gallery and Timeline, which read every
 // studio's items and bytes and wait for M9's cookie (M6 Q11, M8 Q20); Doctor,
 // which belongs to no milestone yet and is hidden rather than shown empty.
 
 import { connect } from "./launcher.js";
-import { announce, chip, el, failure, since, themeControl, toast } from "./ui.js";
+import { kept as keptNode, morphChildren } from "./morph.js";
+import { announce, chip, el, elapsed, failure, themeControl, tick, toast } from "./ui.js";
 import { catalogue } from "./catalogue.js";
 import { studioDetail } from "./studio.js";
 import { processGroup } from "./processes.js";
@@ -28,19 +33,24 @@ import { editor } from "./editor.js";
  *  enough that a state change is seen before it is wondered about. */
 const POLL_MS = 2000;
 
+/**
+ * The routes. `width` is 03 §4's (amended 2026-09-17): a page that is read is
+ * a 960px column, a workspace is up to 1440px. `back` opens the page with a
+ * link to Studios, which every page under Studios has.
+ */
 const ROUTES = [
-  { path: /^\/studios$/, screen: catalogue, nav: "studios" },
-  { path: /^\/studios\/([^/]+)\/approve$/, screen: approvalScreen, nav: "studios" },
-  { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios" },
-  { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios" },
+  { path: /^\/studios$/, screen: catalogue, nav: "studios", width: "reading" },
+  { path: /^\/studios\/([^/]+)\/approve$/, screen: approvalScreen, nav: "studios", width: "reading", back: true },
+  { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios", width: "workspace", back: true },
+  { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios", width: "workspace", back: true },
   // Adding and editing are their own paths rather than /studios/new, because
   // `new` is a legal studio id and a route that shadowed one would be a bug
   // nobody found until somebody wrote it.
-  { path: /^\/add$/, screen: addStudio, nav: "studios" },
-  { path: /^\/edit$/, screen: editor, nav: "studios" },
-  { path: /^\/edit\/([^/]+)$/, screen: editor, nav: "studios" },
-  { path: /^\/models$/, screen: modelsAndDisk, nav: "models" },
-  { path: /^\/settings$/, screen: settings, nav: "settings" },
+  { path: /^\/add$/, screen: addStudio, nav: "studios", width: "reading", back: true },
+  { path: /^\/edit$/, screen: editor, nav: "studios", width: "workspace", back: true },
+  { path: /^\/edit\/([^/]+)$/, screen: editor, nav: "studios", width: "workspace", back: true },
+  { path: /^\/models$/, screen: modelsAndDisk, nav: "models", width: "reading" },
+  { path: /^\/settings$/, screen: settings, nav: "settings", width: "reading" },
 ];
 
 const NAV = [
@@ -56,6 +66,9 @@ export function newStore() {
     models: [],
     jobs: {},
     error: null,
+    // loaded is whether the daemon has answered at all. Before it has, a list
+    // is not empty; it is not known yet, and is drawn as placeholders.
+    loaded: false,
     theme: "system",
     get running() {
       return this.studios.filter((s) => ["starting", "running", "stopping"].includes((s.group || {}).state));
@@ -77,10 +90,15 @@ export function newContext({ client, store, redraw }) {
     /**
      * keep returns the same node across redraws. A <helm-terminal> rebuilt
      * every poll would restart its stream twice a minute; the same instance
-     * moved into the new tree keeps its buffer and resumes.
+     * moved into the new tree keeps its buffer and resumes. A kept node is
+     * marked, so a redraw puts it in place as itself (morph.js). A screen
+     * keeps its state objects here too.
      */
     keep(key, make) {
-      if (!kept.has(key)) kept.set(key, make());
+      if (!kept.has(key)) {
+        const made = make();
+        kept.set(key, made instanceof Node ? keptNode(made) : made);
+      }
       return kept.get(key);
     },
     go(hash) {
@@ -106,6 +124,7 @@ export function newContext({ client, store, redraw }) {
         }
         store.jobs = jobs;
         store.error = null;
+        store.loaded = true;
       } catch (err) {
         store.error = failure(err, "The daemon could not be reached.");
       }
@@ -224,26 +243,32 @@ export function route(hash) {
   return { ...ROUTES[0], args: [], query };
 }
 
+const GROUP_WORD = { starting: "Starting", running: "Running", stopping: "Stopping" };
+
 function topbar(ctx, address) {
   const running = ctx.store.running;
   const first = running[0];
   const bar = el("header", { class: "helm-topbar" },
     el("span", { class: "helm-brand", text: "helmstudio" }),
-    el("span", { class: "helm-micro", text: address }),
+    el("span", { class: "helm-meta helm-topbar-address", text: address }),
     el("span", { class: "helm-spacer" }));
 
   if (first) {
-    const p = ((first.group || {}).processes || []).find((x) => x.role === "main") || (first.group.processes || [])[0] || {};
+    const group = first.group || {};
+    const p = (group.processes || []).find((x) => x.role === "main") || (group.processes || [])[0] || {};
     bar.append(
-      chip(`${first.name} · ${since(p.started_at)}`, first.group.state === "running" ? "running" : "info"),
+      chip([`${GROUP_WORD[group.state]} · ${first.name} · `, elapsed(p.started_at), p.port ? ` · :${p.port}` : ""],
+        group.state === "running" ? "running" : "info"),
       el("button", {
         class: "helm-btn helm-btn-secondary helm-btn-sm",
         text: "Stop",
+        disabled: group.state === "stopping",
         onclick: () => ctx.act(first, "stop"),
-      }),
-      el("span", { class: "helm-micro", text: `${running.length} running` }));
+      }));
+    // Only worth saying when it is not the one the bar already names.
+    if (running.length > 1) bar.append(el("span", { class: "helm-micro", text: `${running.length} running` }));
   } else {
-    bar.append(el("span", { class: "helm-micro", text: "nothing running" }));
+    bar.append(el("span", { class: "helm-micro", text: "Nothing running" }));
   }
   bar.append(themeControl(ctx));
   return bar;
@@ -269,27 +294,80 @@ function nav(current) {
 }
 
 /**
+ * unreachable is the one sentence a failed poll earns. The page under it keeps
+ * the last rows the daemon served, greyed and inert, rather than a blank.
+ */
+function unreachable(ctx) {
+  return el("div", { class: "helm-panel helm-unreachable", role: "alert" },
+    el("div", { class: "helm-panel-body helm-stack" },
+      el("p", { class: "helm-body helm-status-error", text: ctx.store.error }),
+      el("p", { class: "helm-micro", text: ctx.store.loaded
+        ? "What is below is what it last said. The page keeps trying, and nothing you have installed is affected."
+        : "The page keeps trying. Nothing you have installed is affected." })));
+}
+
+/**
  * shell renders the whole page: skip link first, then the top bar, the nav and
  * the screen, which is the focus order 03 §17 asks for.
  */
 export function shell(ctx, hash, address) {
   const r = route(hash);
-  const main = el("main", { class: "helm-main", id: "main", tabindex: "-1" });
-  if (ctx.store.error) {
-    main.append(el("div", { class: "helm-panel" },
-      el("div", { class: "helm-panel-body helm-stack" },
-        el("p", { class: "helm-body", text: ctx.store.error }),
-        el("p", { class: "helm-micro", text: "The page keeps trying. Nothing you have installed is affected." }))));
-  } else {
-    ctx.query = r.query;
-    main.append(r.screen(ctx, ...r.args));
-  }
+  ctx.query = r.query;
+  const stale = !!ctx.store.error;
+  const page = el("div", { class: `helm-page helm-page-${r.width}` },
+    r.back ? el("a", { class: "helm-back", href: "#/studios", "data-key": "back", text: "Studios" }) : null,
+    stale ? unreachable(ctx) : null,
+    // Always the same wrapper, so a failed poll greys the screen in place
+    // rather than drawing it again from nothing.
+    stale && !ctx.store.loaded
+      ? null
+      : el("div", {
+        class: "helm-screen" + (stale ? " helm-stale" : ""), inert: stale,
+        // Keyed by the page, so another page is drawn fresh rather than made
+        // out of this one's elements, while a new section or log of the same
+        // page changes in place.
+        "data-key": "screen " + (hash || "#/studios").split("?")[0],
+      }, r.screen(ctx, ...r.args)));
+  // A page's title is where focus lands when the page changes (arrive), so
+  // it is focusable in every drawing. Set only by arrive, the next redraw
+  // would take it away again and focus would fall to the body.
+  for (const h of page.querySelectorAll("h1")) h.setAttribute("tabindex", "-1");
   return [
-    el("a", { class: "helm-skip-link", href: "#main", text: "Skip to content" }),
+    el("a", {
+      class: "helm-skip-link", href: "#main", text: "Skip to content",
+      // A link to #main is a route to this router, and it answered with
+      // Studios. Skipping moves focus; it goes nowhere.
+      onclick: (e) => {
+        e.preventDefault();
+        document.getElementById("main").focus();
+      },
+    }),
     topbar(ctx, address),
     nav(r.nav),
-    main,
+    el("main", { class: "helm-main", id: "main", tabindex: "-1" }, page),
   ];
+}
+
+/** render draws the page into app in place: what has not changed is not touched. */
+export function render(app, ctx, hash, address) {
+  morphChildren(app, shell(ctx, hash, address));
+}
+
+/**
+ * arrive moves focus after a navigation (03 §17, amended 2026-09-17): to the
+ * page's title when the page changed, and to a section's heading when only
+ * the editor's section did. A poll never calls it, so a poll never moves focus.
+ */
+export function arrive(app, from, to) {
+  const path = (h) => (h || "#/studios").split("?")[0];
+  let target = null;
+  if (path(from) !== path(to)) {
+    window.scrollTo(0, 0);
+    target = app.querySelector("main h1");
+  } else if (route(from).query.get("section") !== route(to).query.get("section")) {
+    target = app.querySelector("main [data-section-heading]");
+  }
+  if (target) target.focus({ preventScroll: true });
 }
 
 export async function start() {
@@ -298,19 +376,28 @@ export async function start() {
   const app = document.getElementById("app");
   let drawn = "";
   const redraw = (force) => {
-    // Redrawing on a poll that changed nothing would throw away the caret and
-    // any open menu twice a minute, so the page is rebuilt only when what it
-    // draws has actually moved — and never while someone is typing into it.
+    // A poll that changed nothing draws nothing, and a poll never draws while
+    // someone is typing: the field under the caret is left alone either way,
+    // but a page that moves under a sentence being typed is still a page
+    // moving under a sentence being typed.
     const now = signature(ctx, location.hash);
     if (!force && now === drawn) return;
     if (!force && typing(app)) return;
     drawn = now;
-    app.replaceChildren(...shell(ctx, location.hash, location.host));
+    render(app, ctx, location.hash, location.host);
     document.documentElement.dataset.ready = "1";
   };
   const ctx = newContext({ client, store, redraw });
 
-  window.addEventListener("hashchange", () => redraw(true));
+  let at = location.hash;
+  window.addEventListener("hashchange", () => {
+    const from = at;
+    at = location.hash;
+    redraw(true);
+    arrive(app, from, at);
+  });
+  // Elapsed times count between polls, a digit at a time.
+  setInterval(() => tick(app), 1000);
   try {
     const t = await client.settings.theme();
     store.theme = t.theme || "system";
@@ -332,15 +419,17 @@ export async function start() {
 export function signature(ctx, hash) {
   const s = ctx.store;
   return JSON.stringify([
-    hash, s.theme, s.error, s.hfToken,
+    hash, s.theme, s.error, s.loaded, s.hfToken, s.about, s.disk,
     s.studios.map((x) => [x.id, x.install_state, (x.group || {}).state, x.job_id, x.size_bytes,
       // What a library card states beyond its install state (03 §13a). A
       // Revert changes the source and nothing else, so without these the card
       // would go on saying "Local" until something unrelated moved.
       x.name, x.description, x.source, x.overrides, x.level, x.manifest_valid, (x.errors || []).length,
       (x.provenance || {}).kind, x.approval_required, x.rebuild_needed, x.selection,
+      // And where its code comes from, which its facts line says, and its hue.
+      x.repo, x.ref, x.local_path, (x.hue || {}).dark, (x.hue || {}).light,
       ((x.group || {}).processes || []).map((p) => [p.spec_name, p.state, p.health_state, p.port, p.started_at])]),
-    s.models.map((m) => [m.id, m.state, m.bytes_on_disk, (m.studios || []).join(",")]),
+    s.models.map((m) => [m.id, m.state, m.source, m.bytes_on_disk, m.total_bytes, m.last_used_at, m.external_path, (m.studios || []).join(",")]),
     Object.values(s.jobs).map((j) => [j.id, j.state, j.progress_num, j.progress_den,
       (j.steps || []).map((t) => [t.step_index, t.state, t.exit_code])]),
   ]);

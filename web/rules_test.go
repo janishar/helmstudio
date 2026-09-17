@@ -106,3 +106,15 @@ func TestTheEditorReadsFieldsOnlyFromTheDecodedDocument(t *testing.T) {
 		t.Errorf("editor.js reads the manifest text directly (%s). The decoded document comes back with every validation; that is the one to read", m)
 	}
 }
+
+// Every module here is one the daemon serves. The embed list is written out
+// by hand, so a new module that was imported but never added to it loads in a
+// fixture — which serves this directory from disk — and is a 404 in the
+// launcher itself, where nothing draws at all.
+func TestEveryLauncherModuleIsEmbedded(t *testing.T) {
+	for name := range sources(t) {
+		if _, err := Shelf.Open(name); err != nil {
+			t.Errorf("%s is not in web/embed.go's //go:embed list, so the daemon does not serve it: %v", name, err)
+		}
+	}
+}
