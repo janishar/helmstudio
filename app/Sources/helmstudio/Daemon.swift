@@ -92,6 +92,68 @@ final class Daemon {
             .appending(path: "Resources/studios")
     }
 
+    /// The PATH a person has in their terminal.
+    ///
+    /// launchd sets no PATH, so an app opened from the Dock or the Finder
+    /// starts with `/usr/bin:/bin:/usr/sbin:/sbin` — and almost nothing
+    /// helmstudio runs lives there. `uv` builds every Python studio, ffmpeg
+    /// probes media and makes posters, and on this Mac both are under
+    /// `/opt/homebrew/bin`. A daemon started from a terminal finds them and
+    /// the same daemon started by this app does not, which would make the app
+    /// the broken way to run helmstudio and give no hint why.
+    ///
+    /// So the login shell is asked what its PATH is, which is the same answer
+    /// the terminal gets. If it cannot answer — no SHELL, a profile that
+    /// hangs, a shell that prints something else — what we inherited is used,
+    /// widened with the prefixes a Mac actually installs into.
+    static func loginPATH() -> String {
+        let env = ProcessInfo.processInfo.environment
+        let inherited = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        var fallback = inherited.split(separator: ":").map(String.init)
+        for extra in ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin",
+                      NSHomeDirectory() + "/.local/bin"] {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: extra, isDirectory: &isDir),
+               isDir.boolValue, !fallback.contains(extra) {
+                fallback.append(extra)
+            }
+        }
+        let widened = fallback.joined(separator: ":")
+
+        guard let shell = env["SHELL"], FileManager.default.isExecutableFile(atPath: shell) else {
+            return widened
+        }
+        let proc = Process()
+        proc.executableURL = URL(filePath: shell)
+        // -l reads the login profile, which is where a PATH is set. printf
+        // rather than echo, so nothing adds a newline of its own.
+        proc.arguments = ["-l", "-c", "printf %s \"$PATH\""]
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = Pipe()
+        guard (try? proc.run()) != nil else { return widened }
+
+        // A profile can hang. Three seconds, then take what we already had.
+        let done = DispatchSemaphore(value: 0)
+        var data = Data()
+        DispatchQueue.global().async {
+            data = out.fileHandleForReading.readDataToEndOfFile()
+            done.signal()
+        }
+        if done.wait(timeout: .now() + 3) == .timedOut {
+            proc.terminate()
+            return widened
+        }
+        proc.waitUntilExit()
+        let answered = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // A shell that printed a banner, or nothing, is not an answer.
+        guard proc.terminationStatus == 0, answered.contains("/"), !answered.contains("\n") else {
+            return widened
+        }
+        return answered
+    }
+
     /// Where the daemon would keep its data. The shell asks the daemon rather
     /// than resolving it again: the precedence runs through HELMSTUDIO_HOME,
     /// HELMSTUDIO_DATA_DIR and a platform default, and a second implementation
@@ -172,6 +234,9 @@ final class Daemon {
         let proc = Process()
         proc.executableURL = binary
         proc.arguments = ["-studios", Daemon.bundledStudios.path]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = Daemon.loginPATH()
+        proc.environment = env
         let out = Pipe(), err = Pipe()
         proc.standardOutput = out
         proc.standardError = err
