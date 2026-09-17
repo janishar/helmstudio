@@ -798,9 +798,13 @@ which hides a class of path bug that a Linux run surfaces on the first try.
 
 ## 13 · What exists today, honestly
 
-As of the last commit on `main` — built and gate-green: **M0–M8 and M10**. M9,
-the Mac app, is not built: M10 was taken before it at the maintainer's
-direction. Each milestone has an implementation report in
+As of the last commit on `main` — built and gate-green: **M0–M8 and M10**, and
+M9 in part. M10 was taken before M9 at the maintainer's direction. The Mac
+app's shell is built — a native window around the launcher that starts the
+daemon or adopts one, with the handshake on both sides of it — and its release
+is not: it is unsigned and un-notarised, it bundles neither ffmpeg nor uv, and
+its auth cookie is not written. The launcher's Gallery and Timeline screens
+wait on that cookie. Each milestone has an implementation report in
 `docs/agents/reports/`, and those reports are the place to look for what a
 milestone could *not* verify.
 
@@ -825,7 +829,8 @@ agent made, not one anybody has checked.
 | M7b | The library's screens — cards, Add a studio, import, the manifest editor, the approval screen | built, **unreviewed** |
 | M8a | Timeline document, API and export pipeline | built, **unreviewed** |
 | M8b | The timeline editor — `helm-timeline` | built, **unreviewed** |
-| M9 | The Mac app — native shell around a `WKWebView`, signing, notarisation, bundled ffmpeg and uv | **not built** |
+| M9a | The Mac app's shell — window, handshake, adoption, icon, `.dmg` | built, **unreviewed** |
+| M9b | Its release — the auth cookie, signing, notarisation, bundled ffmpeg and uv | **not built** |
 | M10 | Docs and the site — `site/` and the workflow that publishes it | built, **unreviewed** |
 
 Concretely, that means:
