@@ -3,8 +3,8 @@ module github.com/janishar/helmstudio/packages/helm-runtime-sdk/go/embedded
 go 1.27.1
 
 require (
-	github.com/janishar/helmstudio v1.0.0-rc.1
-	github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v1.0.0-rc.1
+	github.com/janishar/helmstudio v1.0.0-rc.2
+	github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v1.0.0-rc.2
 )
 
 require (

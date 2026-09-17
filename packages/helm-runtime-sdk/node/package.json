@@ -1,6 +1,6 @@
 {
   "name": "@helmstudio/runtime",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.2",
   "description": "helmstudio's runtime SDK: a client for the platform API",
   "type": "module",
   "exports": {

@@ -57,6 +57,35 @@ jobs:
           name: helm
           path: dist/
 
+  # The Mac app, built where it can be: the shell is Swift and the icon is
+  # rendered with sips and iconutil, none of which exist on a Linux runner.
+  # Unsigned and un-notarised, by decision (docs/decisions.md, 2026-09-18), so
+  # what this attaches is quarantined by a browser download and the release
+  # notes say how to clear it.
+  dmg:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build helmstudio.app and its disk image
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          make dmg APP_VERSION="$version"
+          mkdir -p dmg
+          mv "bin/helmstudio-$version.dmg" dmg/
+          ls -la dmg/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: helmstudio-app
+          path: dmg/
+
   run:
     needs: build
     strategy:
@@ -98,7 +127,7 @@ jobs:
           esac
 
   release:
-    needs: run
+    needs: [run, dmg]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -109,9 +138,18 @@ jobs:
         with:
           name: helm
           path: dist/
+      - uses: actions/download-artifact@v7
+        with:
+          name: helmstudio-app
+          path: dist/
+      - name: Cover the disk image with the same SHA256SUMS
+        run: |
+          (cd dist && shasum -a 256 *.dmg >> SHA256SUMS && cat SHA256SUMS)
       - uses: actions/attest-build-provenance@v4
         with:
-          subject-path: dist/*.tar.gz
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.dmg
       - name: Attach the archives to the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -125,11 +163,21 @@ jobs:
             "Each archive holds \`helm\` and its licence. Download with curl rather than a browser: the binaries are not signed yet, and macOS quarantines what a browser downloads." \
             "" \
             "Check an archive against SHA256SUMS, or against its build provenance with \`gh attestation verify <archive> --repo $REPO\`. How to install it is in docs/releasing.md." \
+            "" \
+            "### helmstudio.app" \
+            "" \
+            "\`helmstudio-$version.dmg\` is the Mac app: a window around the launcher, for macOS 14 or newer on Apple Silicon. It bundles the daemon, so nothing else is needed to run it." \
+            "" \
+            "**It is unsigned and un-notarised.** macOS quarantines what a browser downloads, and for an unsigned app it says the app is damaged rather than that it was not signed. After dragging it to Applications, clear the flag once:" \
+            "" \
+            "    xattr -dr com.apple.quarantine /Applications/helmstudio.app" \
+            "" \
+            "The browser at 127.0.0.1:8700 is the reference implementation and needs none of this: \`helm\` above, or a clone, runs the same launcher." \
             > notes.md
           prerelease=""
           case "$version" in *-*) prerelease="--prerelease" ;; esac
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*.tar.gz dist/SHA256SUMS --repo "$REPO" --clobber
+            gh release upload "$TAG" dist/*.tar.gz dist/*.dmg dist/SHA256SUMS --repo "$REPO" --clobber
           else
-            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --repo "$REPO" --verify-tag $prerelease --title "helm $version" --notes-file notes.md
+            gh release create "$TAG" dist/*.tar.gz dist/*.dmg dist/SHA256SUMS --repo "$REPO" --verify-tag $prerelease --title "helmstudio $version" --notes-file notes.md
           fi

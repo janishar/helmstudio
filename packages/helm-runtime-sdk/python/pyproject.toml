@@ -1,6 +1,6 @@
 [project]
 name = "helm-runtime-sdk"
-version = "1.0.0rc1"
+version = "1.0.0rc2"
 description = "helmstudio's runtime SDK: a client for the platform API"
 readme = "README.md"
 requires-python = ">=3.9"

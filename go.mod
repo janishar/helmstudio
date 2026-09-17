@@ -3,13 +3,6 @@ module github.com/janishar/helmstudio
 go 1.27.1
 
 require (
-	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
-	golang.org/x/sys v0.47.0
-	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.58.0
-)
-
-require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
@@ -20,6 +13,12 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-require github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v1.0.0-rc.1
+require (
+	github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v1.0.0-rc.2
+	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
+	golang.org/x/sys v0.47.0
+	gopkg.in/yaml.v3 v3.0.1
+	modernc.org/sqlite v1.58.0
+)
 
 replace github.com/janishar/helmstudio/packages/helm-runtime-sdk/go => ./packages/helm-runtime-sdk/go
