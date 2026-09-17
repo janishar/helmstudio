@@ -104,7 +104,7 @@ Start here, in this order, depending on what you are trying to understand.
 | The API contract | [`api/openapi.yaml`](../../api/openapi.yaml) — the header comment states every convention that is not repeated per operation |
 | What a real studio declares | [`studios/h3-studio.yaml`](../../studios/h3-studio.yaml) |
 | The launcher's screens | [`web/app.js`](../../web/app.js) — the shell, the router and the one poll; each screen is a function of a context beside it |
-| A prebuilt component | [`packages/helm-ui-sdk/src/terminal.js`](../../packages/helm-ui-sdk/src/terminal.js) — the busiest of the three, and the clearest example of receiving a client rather than building one |
+| A prebuilt component | [`packages/helm-ui-sdk/src/terminal.js`](../../packages/helm-ui-sdk/src/terminal.js) — the clearest example of receiving a client rather than building one |
 | What must pass before a commit | [`Makefile`](../../Makefile), then `docs/agents/gate.md` |
 | Why something is the way it is | `docs/decisions.md` |
 
@@ -121,7 +121,8 @@ schema/            manifest.json — the manifest contract
 api/               openapi.yaml — the platform API contract, and its generator
 studios/           registry entries, one per studio
 web/               the launcher's screens and its generated client
-test/              conformance, visual and media suites
+site/              the documentation site and its generator — its own module
+test/              conformance, visual, media, packaging; fixture studios
 docs/              design, decisions, plan, agent briefs, this file
 ```
 
@@ -137,23 +138,27 @@ studios down; only `kill -9` leaves children behind, and those are what
 re-adoption is for.
 
 **`cmd/helm`** is the studio author's CLI. Today it has `validate` — schema
-plus semantic rules, with line numbers resolved against the YAML node — and
-`dev`, which is the daemon restricted to one studio and a local path, over
-`./.helm` instead of the user's data, and never downloading anything. 01 §6,
-§10 and §11 also specify `adopt`, `doctor --studio`, `test` and `studio init`;
-those land in later milestones (see §13).
+plus semantic rules, with line numbers resolved against the YAML node; with
+`-criteria` it also scores the certification criteria a manifest alone can
+answer, and with `-theme` it lints a studio's stylesheets — and `dev`, which is
+the daemon restricted to one studio and a local path, over `./.helm` instead of
+the user's data, and never downloading anything. 01 §6, §10 and §11 also
+specify `adopt`, `doctor --studio`, `test` and `studio init`; no milestone
+builds those yet (see §13).
 
 ### internal/
 
 | Package | What it does | Lines |
 |---|---|---|
 | `platform` | Every OS-specific decision: the five directory roots, the Keychain, the exclusive file lock, process groups and signals, disk free, hardlink counts. Darwin, Linux and an explicit refusal elsewhere, chosen by build constraint. | ~1.8k |
-| `store` | Opens `helm.db` with its pragmas on every connection, enforces a single writer, and runs forward-only migrations. Six schema versions so far, each a `.sql` file. | ~1.1k |
-| `manifest` | Loads and validates a manifest: JSON Schema draft 2020-12, plus the rules the schema cannot express, each error carrying a line number. | ~1.5k |
+| `store` | Opens `helm.db` with its pragmas on every connection, enforces a single writer, and runs forward-only migrations. Seven schema versions so far, each a `.sql` file. | ~1.2k |
+| `manifest` | Loads and validates a manifest: JSON Schema draft 2020-12, plus the rules the schema cannot express, each error carrying a line number. Also the editor's edits, which keep comments and key order, and the certification criteria. | ~2.9k |
+| `library` | Every studio this machine knows, resolved from three sources — a local manifest, the studio's own repository, a registry entry's inline manifest — first match by existence, not validity, so a broken override is shown broken instead of falling through to the registry's copy. | ~1.8k |
+| `approval` | What a studio would run — every command, not only the build steps — and the digest that authorises it. Nothing installs, retries or launches without a current approval. | ~0.8k |
 | `supervisor` | Manifest → resolved plan → running group: ports assigned, placeholders substituted, dependency order fixed, health probes, teardown, re-adoption, the heavy-group rule, the `busy` probe, log tailing and SSE, uv environments. | ~6.4k |
 | `install` | Clone with submodules at a pinned ref, ordered build steps with resume-from-failed-step, cancellation, the startup sweep, uninstall. | ~3.7k |
 | `weights` | The Hugging Face downloader — resumable per file, re-resolving expired signed URLs, checking size and etag and free disk — plus linked directories and reclaim. | ~3.2k |
-| `api` | The launcher's own HTTP surface: studios, processes, logs, install and weights, jobs, models, theme, and the static SDK bundles. | ~1.8k |
+| `api` | The launcher's own HTTP surface: studios, processes, logs, install and weights, jobs, models, theme, the library and its manifests, approvals, the Hugging Face token, and the static SDK bundles. | ~4.0k |
 | `api/studioapi` | The platform API itself: kv, sessions, records and their filter language, assets, gallery and lineage, handoff and inbox, jobs, events, tokens, quotas, timeline and export. One implementation, served by both providers. | ~8.3k |
 | `media` | The media engine: hashing, hardlink adoption, probing, thumbnails, posters, waveforms. | ~0.7k |
 | `timeline` | The timeline document — validation, frame and sample snapping, the render graph, the export plan. | ~1.7k |
@@ -185,7 +190,7 @@ What studios depend on, with a strict one-way dependency:
 flowchart LR
     css["helm-css<br/>tokens, base, layout, components<br/>depends on nothing — it is text"]
     rt["helm-runtime-sdk<br/>go · python · node<br/>knows the API"]
-    ui["helm-ui-sdk<br/>helm-gallery · helm-player · helm-terminal<br/>helm-timeline — M8b<br/>knows both"]
+    ui["helm-ui-sdk<br/>helm-gallery · helm-player<br/>helm-terminal · helm-timeline<br/>knows both"]
 
     api["api/openapi.yaml"] -.->|"generates"| rt
     ui --> css
@@ -209,15 +214,19 @@ flowchart LR
   client falls back to the **embedded provider** — a separate module, so a
   studio that only runs hosted never pulls SQLite into its dependency tree.
   Python and Node fail as `Unavailable` and name `helm dev` (M5 Q14).
-- **`helm-ui-sdk`** — `helm-terminal`, `helm-gallery` and `helm-player`, as
-  custom elements in Shadow DOM: helm-css's classes cannot reach inside them
-  and its custom properties can, which is exactly how they are themed. The
-  package **imports nothing at all** — a component is handed a client and calls
-  the few methods 04 §5 lists, and the only thing it knows about a failure is
-  the `kind` the runtime SDK puts on it, read off the error rather than
-  imported from it. `helm-player` ships without its filmstrip, waveform and
-  h264 proxy, which need ffmpeg; they render `Unsupported` with a reason rather
-  than being absent. `helm-timeline` ships with M8b.
+- **`helm-ui-sdk`** — `helm-terminal`, `helm-gallery`, `helm-player` and
+  `helm-timeline`, as custom elements in Shadow DOM: helm-css's classes cannot
+  reach inside them and its custom properties can, which is exactly how they
+  are themed. The package **imports nothing at all** — a component is handed a
+  client and calls the few methods 04 §5 lists, and the only thing it knows
+  about a failure is the `kind` the runtime SDK puts on it, read off the error
+  rather than imported from it. `helm-player` ships without its filmstrip,
+  waveform and h264 proxy, which need ffmpeg; they render `Unsupported` with a
+  reason rather than being absent. `helm-timeline` edits a framework-owned
+  sequence — drag and trim on the daemon's grid, dissolve and gain, undo
+  through revisions, export with progress and cancel — and previews by playing
+  each clip's own bytes in the browser, with no ffmpeg (M8b). The launcher
+  uses the same `helm-terminal` for its install and process logs.
 
 ### The four adoption levels
 
@@ -229,7 +238,7 @@ forever, and that is a success, not a gap.
 | 0 | nothing | Installs, launches, runs. No gallery, no shared cache. *This must stay viable or helmstudio is not a launcher.* |
 | 1 | `helm-css` | Looks like it belongs to the family, keeps its own identity hue. |
 | 2 | `+ helm-runtime-sdk` | Assets, gallery, records, jobs — with the studio's own UI. **All four launch studios land here**, because none wants a front-end toolchain. |
-| 3 | `+ helm-ui-sdk` | Prebuilt gallery, player and terminal; the timeline editor with M8b. |
+| 3 | `+ helm-ui-sdk` | Prebuilt gallery, player, terminal and timeline editor. |
 
 ---
 
@@ -589,6 +598,7 @@ else still works.
 | A C toolchain, `make` | Some studios build native engines | Per-studio, declared in `requires.tools` |
 | `uv` on `PATH` | Per-studio Python environments | Only for studios declaring `python:`; install is refused before the clone when it is missing |
 | `ffmpeg` / `ffprobe` | Probes, posters, timeline export | Found via `HELM_FFMPEG`/`HELM_FFPROBE` or `PATH`; without one those operations answer `501` |
+| Python 3, Node and `curl` | The Python and Node clients' smoke tests, the packaging checks, and the site's samples | Tests only; `HELM_ALLOW_MISSING_CLIENTS=1` to skip |
 | Chrome | Visual-regression tests only | `HELM_CHROME` names it; `HELM_ALLOW_MISSING_BROWSER=1` to skip |
 
 **No cgo.** SQLite is `modernc.org/sqlite`, a pure-Go translation, so the
@@ -627,7 +637,9 @@ is written; it is finished when the gate is green.
 | `test` | `go test ./...` |
 | `sdk` | The runtime SDK and embedded provider modules' own tests |
 | `conformance` | One suite against the daemon over HTTP **and** the embedded provider in process, plus the Python and Node client smoke tests |
-| `visual` | helm-css, the three components and each launcher screen at 1280, 1000 and 380 px, in both themes, pixel-exact against goldens in a real Chrome. What a picture cannot show — a thumbnail loading, a carriage-return line rewriting in place — is asserted against the DOM instead |
+| `site` | Builds the documentation site into `site/out` |
+| `site-test` | Every internal link on the site leads somewhere; every sample runs or its page says why not — the quickstart as written, under `helm dev`; the annotated manifests match the studio files; the reference matches the contract; the site's stylesheet passes the theme lint |
+| `visual` | helm-css and the four components, with the launcher's screens, the timeline editor and the site's landing and quickstart pages at 1280, 1000 and 380 px, in both themes, pixel-exact against goldens in a real Chrome. What a picture cannot show — a thumbnail loading, a carriage-return line rewriting in place — is asserted against the DOM instead |
 | `validate` | `helm validate studios/*.yaml` — every registry manifest, every time |
 
 Two more, run deliberately and never as part of the gate, because they change
@@ -678,6 +690,10 @@ From inside the studio's own checkout:
 helm validate helmstudio.yaml
 helm dev -f helmstudio.yaml
 ```
+
+`helm validate -criteria helmstudio.yaml` also scores the certification
+criteria a published studio is held to, as far as a manifest alone can answer
+them.
 
 `helm dev` is the same supervisor, manifest loader, substitution and studio API
 the daemon uses, restricted to one studio, over `./.helm`. It runs no `build[]`
@@ -782,16 +798,18 @@ which hides a class of path bug that a Linux run surfaces on the first try.
 
 ## 13 · What exists today, honestly
 
-As of the last commit on `main` — built and gate-green: **M0–M6**, plus
-**M8a**, the last two built out of order at the maintainer's instruction. Each
-milestone has an implementation report in `docs/agents/reports/`, and those
-reports are the place to look for what a milestone could *not* verify.
+As of the last commit on `main` — built and gate-green: **M0–M8 and M10**. M9,
+the Mac app, is not built: M10 was taken before it at the maintainer's
+direction. Each milestone has an implementation report in
+`docs/agents/reports/`, and those reports are the place to look for what a
+milestone could *not* verify.
 
-**Built out of order means unreviewed.** The loop in `docs/agents/README.md` is
-implement, report, review by a *different* agent, fix, land. M6a, M6b and M8a
-are on `main` without that review step having run. Whatever their reports call
-a judgement call is exactly that — a decision one agent made, not one anybody
-has checked.
+**From M6a on, nothing is reviewed.** The loop in `docs/agents/README.md` is
+implement, report, review by a *different* agent, fix, land. M6a's review never
+ran, and M6b, M7a, M7b, M8a, M8b and M10 were each built at the maintainer's
+direction on top of unreviewed work; all seven are on `main` without that step.
+Whatever their reports call a judgement call is exactly that — a decision one
+agent made, not one anybody has checked.
 
 | | Milestone | State |
 |---|---|---|
@@ -803,42 +821,65 @@ has checked.
 | M5 | Python studios — uv environments, the switch dialog with its `busy` probe | built |
 | M6a | helm-css, tokens, the theme path a running studio follows | built, **unreviewed** |
 | M6b | Components and screens — `helm-ui-sdk`, the launcher client, the six screens | built, **unreviewed** |
-| M7 | Library, editor, iris — the three-source library, the manifest editor, import/export, the approval screen | **not built** — stopped at kickoff, questions answered, brief written |
+| M7a | Library, trust and selection — three-source resolution, the approval gate, checkpoint selection | built, **unreviewed** |
+| M7b | The library's screens — cards, Add a studio, import, the manifest editor, the approval screen | built, **unreviewed** |
 | M8a | Timeline document, API and export pipeline | built, **unreviewed** |
-| M8b | The timeline editor — `helm-timeline` | **not built** — unblocked now that `packages/helm-ui-sdk/` exists |
+| M8b | The timeline editor — `helm-timeline` | built, **unreviewed** |
 | M9 | The Mac app — Electron shell, signing, notarisation, bundled ffmpeg and uv | **not built** |
-| M10 | Docs and the site | **not built** |
+| M10 | Docs and the site — `site/` and the workflow that publishes it | built, **unreviewed** |
 
 Concretely, that means:
 
-- **`helm-ui-sdk` ships three of its four components.** `helm-terminal`,
-  `helm-gallery` and `helm-player` are built and served at `/sdk/v1/ui/`;
-  `helm-timeline` moved to M8b. No studio imports them yet — h3 stays at level
-  2 (M6 Q20) — so level 3 is reachable but untravelled, and the components have
-  been driven only from fixtures.
-- **The launcher is six screens**, not the plain shelf M2 put there: the shell
-  with its System/Light/Dark control, the catalogue, studio detail and install,
-  the process group, models and disk, and settings. Three of 03's screens are
-  deliberately absent — adding a studio and the manifest editor are M7's, and
-  the Gallery and Timeline screens wait for M9's cookie, because a read-only
-  launcher gallery under today's Host and Origin rules would let any local
-  process read every studio's work.
-- **03 §7's Requirements block is not drawn**, and this is a contradiction
-  raised rather than resolved. `GET /studios` serves no `hue`, `repo`, `ref` or
-  `requires`, and nothing anywhere reports the host's OS version, memory, free
-  disk or which tools are present — so neither the "required" column nor the
-  "found" one has a source, and every card wears the accent instead of its
-  identity stripe. Four such contradictions are recorded under "Open, not yet
-  decided" in `docs/decisions.md`.
+- **`helm-ui-sdk` ships all four components.** `helm-terminal`, `helm-gallery`,
+  `helm-player` and `helm-timeline` are built and served at `/sdk/v1/ui/`. The
+  launcher uses `helm-terminal` for its install and process logs, and the
+  sequencer fixture under `test/studios/` edits its sequence in
+  `helm-timeline`; no registry studio imports them yet — h3 stays at level 2
+  (M6 Q20). `helm-player`'s filmstrip, waveform and h264 proxy belong to no
+  milestone, and render `Unsupported` with a reason.
+- **The launcher is the library and its screens**: the shell with its
+  System/Light/Dark control; the catalogue, whose cards state each studio's
+  source, level and install state, with Override, Duplicate, Revert and a
+  checkpoint choice; Add a studio, from a repository, a folder, an import or a
+  new manifest; the manifest editor, a form generated from
+  `schema/manifest.json` beside the YAML and the criteria; the approval screen;
+  studio detail and install; the process group; models and disk; and settings.
+  Three screens are deliberately absent. Gallery and Timeline wait for M9's
+  cookie, because a read-only launcher gallery under today's Host and Origin
+  rules would let any local process read every studio's work — so
+  `POST /timeline/{id}:open` answers `501` with a reason, and a sequence is
+  edited inside a studio. Doctor belongs to no milestone yet, and is hidden
+  rather than shown empty.
+- **The documentation site is built** by `site/`: fifteen written pages, and
+  API, manifest and CLI references generated from the contract and the code.
+  Every code block on it is one of 29 samples under `site/samples/`, and the
+  gate runs 25 of them — the quickstart among them, as written, under
+  `helm dev`. `.github/workflows/site.yml` publishes it to helmstudio.in;
+  turning on Pages, the domain and its DNS are the maintainer's.
+- **03 §7's Requirements block is not drawn, and every card wears the accent
+  instead of its identity stripe** — contradictions raised rather than
+  resolved. `GET /studios` serves no `hue`, `repo`, `ref` or `requires`, and
+  nothing anywhere reports the host's OS version, memory, free disk or which
+  tools are present, so neither the "required" column nor the "found" one has a
+  source. Of the four launch manifests, only h3's declares a `hue`.
+- **What the later milestones found in the design is recorded, not fixed.**
+  Each left entries under "Open, not yet decided" in `docs/decisions.md` —
+  among them where an approval is stored (schema v7's three approval columns
+  are unused), how a studio page learns another studio's name and hue for a
+  sequence's clips, a criteria table that disagrees with 05 §9, and three
+  timeline behaviours that differ from 05 §6.
 - **`helm` has `validate` and `dev`.** `helm test`, `helm doctor --studio`,
-  `helm adopt` and `helm studio init` are specified and unbuilt; the smoke
-  harness they share has no milestone placed yet.
-- **`studios/*.yaml` are full manifests, marked as a placeholder shape**,
-  pending the open decision on whether a registry entry is a four-line pointer
-  or a whole manifest. The header comment in each file says so.
-- **`POST /timeline/{id}:open` answers `501` with a reason**, by design, until
-  the launcher has a Timeline screen — which waits for the Mac app. The data
-  operation always works; only the presentation degrades.
+  `helm adopt`, `helm studio init`, and `helm dev --fixtures` and `--fail` are
+  specified and unbuilt; the smoke harness they share has no milestone placed
+  yet (M7 Q16).
+- **`studios/*.yaml` are registry entries** (`schema/registry-entry.json`): a
+  pointer — `id`, `repo` and a pinned `ref` — carrying its studio's manifest
+  inline until the studio's own repository ships a `helmstudio.yaml`. The
+  library reads a local manifest first, then the studio's own, then the inline
+  copy.
+- **No machine-bound demo from M6a on has run.** Each of those reports lists its
+  demo — on the Mac, with real weights and real outputs — under *Could not
+  verify*, with what ran instead.
 
 ---
 
