@@ -300,6 +300,8 @@ The catalogue grid is `repeat(auto-fill, minmax(320px, 1fr))` with a 16px gap. T
 - **The launcher lists studios one per row** in that column (§6) instead of the catalogue grid. `helm-grid-cards` stays in helm-css for a studio's own pages.
 - **Below 640px a row stacks**: the state chip beside the title, then the description and facts, then the actions across the row at 36px tall.)
 
+(Amended 2026-09-18, by the human's decision: the studio detail page is **`336px | 1fr | 384px`** — each side column a fifth wider. What that rail holds is a checkout path, a toolchain version and a linked weights directory, and at 280px every one of them took three or four lines. A fact in a rail is now a label and a value in two columns, so a value too long for the line wraps inside its own column instead of dropping under the label and running the width of the rail.)
+
 ## 5 · helm-css, and how studios wear it
 
 The system ships as a package so studios can look like family without importing a component library. Five files: `helm-tokens.css`, `helm-base.css`, `helm-layout.css`, `helm-components.css`, and `helm.css` concatenating them. Every class is prefixed `helm-`, nothing is `!important`, and specificity stays at a single class so a studio overrides by writing one rule rather than fighting.

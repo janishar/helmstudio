@@ -54,7 +54,8 @@ export const studios = [
     root: "~/.helmstudio/studios/h3-studio/src", root_present: true,
     install_state: "failed_build", job_id: "01JB9BBBBBBBBBBBBBBBBBBBB1",
     commit_sha: "a4f91c2d9e6b3a", size_bytes: 1_240_000_000,
-    runtime_env: { engine: "h3.c", backend: "metal", go: "1.27.1", clang: "16.0.0" },
+    runtime_env: { engine: "h3.c", backend: "metal", go: "1.27.1", clang: "16.0.0",
+      uv: "uv 0.12.1 (329541a50 2026-07-31 aarch64-apple-darwin)" },
     last_failure: {
       code: "step_failed", phase: "build", step_index: 2, exit_code: 2,
       message: "Build the Metal engine failed. make exited with code 2 — the log shows a missing Metal header, which usually means the Xcode command line tools aren't installed. Run xcode-select --install, then retry this step.",

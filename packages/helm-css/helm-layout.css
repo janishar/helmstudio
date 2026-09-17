@@ -103,12 +103,13 @@
   gap: var(--helm-space-4);
 }
 
-/* The studio detail page: 280px | 1fr | 320px above 1180px; the right column
+/* The studio detail page: 336px | 1fr | 384px above 1180px; the right column
  * drops below the centre at 1180px; everything stacks below 900px, the
- * terminal last and never under 240px tall (03 §4). */
+ * terminal last and never under 240px tall (03 §4, widened 2026-09-18 so a
+ * path or a toolchain version reads on one or two lines rather than four). */
 .helm-work {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  grid-template-columns: 336px minmax(0, 1fr) 384px;
   grid-template-areas: "left centre right";
   gap: var(--helm-space-4);
   align-items: start;
@@ -131,7 +132,7 @@
 
 @media (max-width: 1180px) {
   .helm-work {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 336px minmax(0, 1fr);
     grid-template-areas: "left centre" "left right";
   }
 }

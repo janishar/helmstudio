@@ -481,12 +481,17 @@ export function section(label, ...children) {
   return el("div", { class: "helm-stack" }, el("p", { class: "helm-section-label", text: label }), ...children);
 }
 
-/** row is a left-hand label and a right-hand machine fact. */
+/**
+ * row is a left-hand label and a right-hand machine fact.
+ *
+ * Two columns rather than a flex row with a spacer: a value too long for the
+ * line — a path, a toolchain version — then wraps inside its own column
+ * instead of dropping under the label and running the width of the rail.
+ */
 export function row(label, value, tone) {
-  return el("div", { class: "helm-row" },
-    el("span", { class: "helm-body", text: label }),
-    el("span", { class: "helm-spacer" }),
-    el("span", { class: "helm-mono" + (tone ? " " + STATUS[tone] : ""), text: value }));
+  return el("div", { class: "helm-fact" },
+    el("span", { class: "helm-body helm-fact-label", text: label }),
+    el("span", { class: "helm-mono helm-fact-value" + (tone ? " " + STATUS[tone] : ""), text: value }));
 }
 
 /**

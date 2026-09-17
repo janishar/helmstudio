@@ -888,3 +888,28 @@ dialog.helm-dialog::backdrop {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A fact in a rail: its label, and its value in the rest of the line. A path
+ * or a version too long for one line wraps inside its own column rather than
+ * dropping beneath the label and running the width of the rail. */
+.helm-fact {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--helm-space-3);
+}
+
+.helm-fact-label {
+  color: var(--helm-text-secondary);
+}
+
+.helm-fact-value {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Everything in the left rail is a machine fact of some length: a checkout
+ * path, a linked weights directory. None of it runs past the panel. */
+.helm-work-left :where(.helm-mono, .helm-micro) {
+  overflow-wrap: anywhere;
+}
