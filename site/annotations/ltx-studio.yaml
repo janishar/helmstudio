@@ -1,12 +1,11 @@
 file: studios/ltx-studio.yaml
-digest: sha256:a9180aa3456f47d84167d446322dda086d8f190dc923d33cef658ffc23b5e012
+digest: sha256:0a9b5742ed36a7124332a60924c5af0e5718f69f2a0e44b76017fbb4c0a123c9
 title: ltx studio's manifest
 intro: >-
   ltx studio makes video with sound from LTX-2.5 on MLX, behind a Python
   server with no front-end toolchain. Its registry entry carries its manifest
   inline. It passes five of the seven criteria a manifest can answer: it
-  declares no test profile, and pins no SDK major. It declares no hue, so it is
-  given one from helmstudio's fixed set.
+  declares no test profile, and pins no SDK major.
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from, with git."
@@ -16,6 +15,7 @@ notes:
   /manifest/name: "The name people see."
   /manifest/description: "One sentence saying what the studio does."
   /manifest/kinds: "Video with sound."
+  /manifest/hue: "Its identity colour in each theme: a stripe, a dot and its clips on the timeline in the launcher, and the accent on its own page."
   /manifest/license: "The studio's own licence."
   /manifest/repo: "The same repository as the pointer's."
   /manifest/ref: "The same commit as the pointer's."

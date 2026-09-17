@@ -21,6 +21,10 @@ manifest:
   name: ltx studio
   description: MLX video and audio generation against a user-selected LTX checkpoint.
   kinds: [video, audio]
+  # 03 §2's identity hue. It was in the design and in no manifest, so the
+  # stripe fell through to the §2c ramp and came out teal (docs/decisions.md,
+  # "Raised in M10").
+  hue: { dark: "#5b8def", light: "#2f5fc4" }
   license: MIT
   repo: https://github.com/janishar/ltx-2-studio
   ref: bc82d75f0182e3631a6cbcd3b704e74445a32c5f
