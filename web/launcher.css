@@ -913,3 +913,12 @@ dialog.helm-dialog::backdrop {
 .helm-work-left :where(.helm-mono, .helm-micro) {
   overflow-wrap: anywhere;
 }
+
+/* A studio that is running is tinted with the running colour, mixed into the
+ * panel it sits on, so it reads in both themes without a colour of its own
+ * (03 §6). It is a wash under the text, not a fill: the state chip and its dot
+ * still say it in words. */
+.helm-studio[data-state="running"] {
+  background: color-mix(in oklab, var(--helm-status-running) 10%, var(--helm-ground-panel));
+  border-color: color-mix(in oklab, var(--helm-status-running) 24%, var(--helm-border-hairline));
+}

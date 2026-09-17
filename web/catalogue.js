@@ -269,6 +269,9 @@ export function card(ctx, studio, accent) {
 
   return el("article", {
     class: "helm-card helm-studio", style: hue(studio), "aria-label": studio.name, "data-key": studio.id,
+    // What the row is doing, for the one thing colour says here: a studio
+    // that is running is tinted with the running colour.
+    "data-state": s.tone,
   },
     el("span", { class: "helm-card-stripe" }),
     el("div", { class: "helm-studio-head" },
@@ -303,6 +306,27 @@ export function card(ctx, studio, accent) {
         valid ? action(ctx, studio, s.secondary, "plain", "secondary") : null,
         action(ctx, studio, main, kind, "main"),
         ...more(ctx, studio, valid))));
+}
+
+/**
+ * The order the library reads in: by what a studio makes — video, then audio,
+ * then image, then text — and by id within each. The daemon serves them by id,
+ * which put an image studio between two video ones; this groups what a person
+ * is choosing between. A studio that makes several kinds takes the first of
+ * them in this order.
+ */
+const KINDS = ["video", "audio", "image", "text"];
+
+function rank(studio) {
+  const kinds = studio.kinds || [];
+  for (const [i, kind] of KINDS.entries()) {
+    if (kinds.includes(kind)) return i;
+  }
+  return KINDS.length;
+}
+
+function inOrder(studios) {
+  return [...studios].sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
 }
 
 /**
@@ -344,7 +368,7 @@ export function catalogue(ctx) {
     !loaded
       ? skeleton()
       : studios.length
-        ? el("div", { class: "helm-studios" }, ...studios.map((s) => card(ctx, s, s.id === accent)))
+        ? el("div", { class: "helm-studios" }, ...inOrder(studios).map((s) => card(ctx, s, s.id === accent)))
         : el("div", { class: "helm-panel" },
           el("div", { class: "helm-panel-body helm-stack" },
             el("p", { class: "helm-body", text: "No studios yet." }),

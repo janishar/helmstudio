@@ -300,6 +300,8 @@ The catalogue grid is `repeat(auto-fill, minmax(320px, 1fr))` with a 16px gap. T
 - **The launcher lists studios one per row** in that column (§6) instead of the catalogue grid. `helm-grid-cards` stays in helm-css for a studio's own pages.
 - **Below 640px a row stacks**: the state chip beside the title, then the description and facts, then the actions across the row at 36px tall.)
 
+(Amended 2026-09-18, by the human's decision: **the library reads in kind order** — video, then audio, then image, then text, and by id within each — rather than by id alone, which put an image studio between two video ones. A studio that makes several kinds takes the first of them in that order. And **a row whose studio is running is tinted** with the running colour mixed into the panel, in both themes: a wash under the text, never a fill, with the state chip still saying it in words.)
+
 (Amended 2026-09-18, by the human's decision: the studio detail page is **`336px | 1fr | 384px`** — each side column a fifth wider. What that rail holds is a checkout path, a toolchain version and a linked weights directory, and at 280px every one of them took three or four lines. A fact in a rail is now a label and a value in two columns, so a value too long for the line wraps inside its own column instead of dropping under the label and running the width of the rail.)
 
 ## 5 · helm-css, and how studios wear it
