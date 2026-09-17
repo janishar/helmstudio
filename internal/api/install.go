@@ -53,6 +53,7 @@ func (s *Server) routeInstall() {
 	s.mux.HandleFunc("GET "+Base+"/models", s.listModels)
 	s.mux.HandleFunc("GET "+Base+"/models/{id}", s.getModel)
 	s.mux.HandleFunc("DELETE "+Base+"/models/{id}", s.deleteModel)
+	s.mux.HandleFunc("GET "+Base+"/models:disk", s.modelsDisk)
 	s.mux.HandleFunc("GET "+Base+"/models:reclaim", s.previewReclaim)
 	s.mux.HandleFunc("POST "+Base+"/models:reclaim", s.reclaim)
 	s.mux.HandleFunc("POST "+Base+"/studios/{id}/weights/{action}", s.weightAction)
@@ -269,6 +270,16 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	if page, ok := paginate(w, r, arts, func(a weights.Artifact) string { return a.ID }); ok {
 		writeJSON(w, http.StatusOK, page)
 	}
+}
+
+// modelsDisk is the models directory and the free space on its volume.
+func (s *Server) modelsDisk(w http.ResponseWriter, r *http.Request) {
+	d, err := s.weights.Disk()
+	if err != nil {
+		s.failInstall(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 // modelView is one artifact, with the one-item reclaim preview a DELETE of

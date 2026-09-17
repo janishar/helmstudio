@@ -436,6 +436,22 @@ func (g *group) setRunning(p *proc) {
 		g.setHealth(p, healthPassing)
 		g.startMonitor(p)
 	}
+	g.weightsUsed()
+}
+
+// weightsUsed records that the studio's weights were used: 02 §7's
+// `starting` → `running` row, and Models & disk's "Last used". A failure to
+// record it is logged and changes nothing about the launch.
+func (g *group) weightsUsed() {
+	s := g.sup
+	if s.weights == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.weights.Used(ctx, g.studioID); err != nil {
+		s.logf("supervisor: recording that %s's weights were used: %v", g.studioID, err)
+	}
 }
 
 func (g *group) setHealth(p *proc, health string) {

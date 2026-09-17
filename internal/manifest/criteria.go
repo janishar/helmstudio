@@ -31,6 +31,11 @@ type Criterion struct {
 	State    CriterionState `json:"state"`
 	Required bool           `json:"required"`
 	Detail   string         `json:"detail,omitempty"`
+	// Pointer is the field the criterion is about: the first one a failing
+	// criterion is missing, or where a passing one is declared. The editor
+	// links a criterion to the section holding it. A criterion no field
+	// answers has none.
+	Pointer string `json:"pointer,omitempty"`
 }
 
 // CriteriaResult is the whole scoring. Passed is out of Checkable, not out of
@@ -87,8 +92,8 @@ func Criteria(m *Manifest) CriteriaResult {
 	return out
 }
 
-func scored(n int, title string, required, ok bool, detail string) Criterion {
-	c := Criterion{Number: n, Title: title, Required: required, State: CriterionPass}
+func scored(n int, title string, required, ok bool, detail, pointer string) Criterion {
+	c := Criterion{Number: n, Title: title, Required: required, State: CriterionPass, Pointer: pointer}
 	if !ok {
 		c.State, c.Detail = CriterionFail, detail
 	}
@@ -100,27 +105,34 @@ func scored(n int, title string, required, ok bool, detail string) Criterion {
 // parses, and an invalid one is not scored at all.
 func criterion1(m *Manifest) Criterion {
 	return scored(1, "A valid manifest with a well-formed id", true,
-		m.ID != "", "the manifest declares no id")
+		m.ID != "", "the manifest declares no id", "/id")
 }
 
 // 2: the four fields beyond what the schema already requires. os and arch are
 // required by the schema, so declaring them earns nothing.
 func criterion2(m *Manifest) Criterion {
 	var missing []string
+	pointer := "/requires"
+	undeclared := func(field, at string) {
+		if missing == nil {
+			pointer = at
+		}
+		missing = append(missing, field)
+	}
 	if len(m.Requires.Tools) == 0 {
-		missing = append(missing, "requires.tools")
+		undeclared("requires.tools", "/requires/tools")
 	}
 	if m.Requires.RAMGB == 0 {
-		missing = append(missing, "requires.ram_gb")
+		undeclared("requires.ram_gb", "/requires/ram_gb")
 	}
 	if m.Requires.DiskGB == 0 {
-		missing = append(missing, "requires.disk_gb")
+		undeclared("requires.disk_gb", "/requires/disk_gb")
 	}
 	if m.PeakRAMGB == 0 {
-		missing = append(missing, "peak_ram_gb")
+		undeclared("peak_ram_gb", "/peak_ram_gb")
 	}
 	return scored(2, "Declares what it needs: tools, memory, disk and its peak", true,
-		len(missing) == 0, fmt.Sprintf("undeclared: %v", missing))
+		len(missing) == 0, fmt.Sprintf("undeclared: %v", missing), pointer)
 }
 
 // 4: exactly one main process, with a health probe. "Realistic timeout" is in
@@ -129,36 +141,39 @@ func criterion2(m *Manifest) Criterion {
 func criterion4(m *Manifest) Criterion {
 	var mains int
 	var withProbe int
-	for _, p := range m.EffectiveProcesses() {
-		if p.Role != "main" {
+	var main string
+	for _, p := range effProcesses(m) {
+		if p.Proc.Role != "main" {
 			continue
 		}
 		mains++
-		if p.Health != nil {
+		main = p.Pointer
+		if p.Proc.Health != nil {
 			withProbe++
 		}
 	}
 	switch {
 	case mains != 1:
 		return scored(4, "Exactly one main process, with a health probe", true, false,
-			fmt.Sprintf("declares %d processes with role main; exactly one is required", mains))
+			fmt.Sprintf("declares %d processes with role main; exactly one is required", mains), processesPointer(m))
 	case withProbe != 1:
 		return scored(4, "Exactly one main process, with a health probe", true, false,
-			"its main process declares no health probe, so helmstudio cannot tell when it is ready")
+			"its main process declares no health probe, so helmstudio cannot tell when it is ready", main+"/health")
 	}
-	return scored(4, "Exactly one main process, with a health probe", true, true, "")
+	return scored(4, "Exactly one main process, with a health probe", true, true, "", main+"/health")
 }
 
 // 5: no fixed port, and {port} in the command of every process that declares
 // one. A fixed port is a studio deciding what else may run on the machine.
 func criterion5(m *Manifest) Criterion {
-	for _, p := range m.EffectiveProcesses() {
+	for _, ref := range effProcesses(m) {
+		p := ref.Proc
 		if p.Port == nil {
 			continue
 		}
 		if p.Port.Fixed != 0 {
 			return scored(5, "Takes the port it is given", true, false,
-				fmt.Sprintf("process %q declares port.fixed; a fixed port decides what else may run on the machine", p.Name))
+				fmt.Sprintf("process %q declares port.fixed; a fixed port decides what else may run on the machine", p.Name), ref.Pointer+"/port/fixed")
 		}
 		var found bool
 		for _, ph := range Placeholders(p.Cmd) {
@@ -168,23 +183,23 @@ func criterion5(m *Manifest) Criterion {
 		}
 		if !found {
 			return scored(5, "Takes the port it is given", true, false,
-				fmt.Sprintf("process %q declares a port but its cmd never substitutes {port}", p.Name))
+				fmt.Sprintf("process %q declares a port but its cmd never substitutes {port}", p.Name), ref.Pointer+"/cmd")
 		}
 	}
-	return scored(5, "Takes the port it is given", true, true, "")
+	return scored(5, "Takes the port it is given", true, true, "", processesPointer(m))
 }
 
 // 8: a licence is declared. Weight licences are not checkable — `weights[]` has
 // no licence field, which is recorded as an open question.
 func criterion8(m *Manifest) Criterion {
 	return scored(8, "Declares its licence", true,
-		m.License != "", "no license is declared")
+		m.License != "", "no license is declared", "/license")
 }
 
 // 13: a profile for the smoke harness to run.
 func criterion13(m *Manifest) Criterion {
 	ok := m.Test != nil && m.Test.Profile != ""
-	return scored(13, "Declares a test profile", false, ok, "test.profile is not declared")
+	return scored(13, "Declares a test profile", false, ok, "test.profile is not declared", "/test/profile")
 }
 
 // 15: pinned, and pinned to something. Whether a ref is a branch rather than a
@@ -192,12 +207,39 @@ func criterion13(m *Manifest) Criterion {
 // not decided here.
 func criterion15(m *Manifest) Criterion {
 	var missing []string
+	pointer := "/sdk"
 	if m.SDK == nil {
 		missing = append(missing, "sdk")
 	}
 	if m.Ref == "" && m.LocalPath == "" {
+		if missing == nil {
+			pointer = "/ref"
+		}
 		missing = append(missing, "ref")
 	}
 	return scored(15, "Pins the SDK majors it builds against, and its own ref", false,
-		len(missing) == 0, fmt.Sprintf("undeclared: %v", missing))
+		len(missing) == 0, fmt.Sprintf("undeclared: %v", missing), pointer)
+}
+
+// processesPointer is where a manifest's processes are declared: `run`, the
+// sugar for one, or the list.
+func processesPointer(m *Manifest) string {
+	if m.Run != nil {
+		return "/run"
+	}
+	return "/processes"
+}
+
+// UnderManifest moves every criterion's pointer under /manifest, for a
+// registry entry that carries its manifest inline — as an error's pointer is.
+func (r CriteriaResult) UnderManifest() CriteriaResult {
+	items := make([]Criterion, len(r.Items))
+	for i, c := range r.Items {
+		if c.Pointer != "" {
+			c.Pointer = "/manifest" + c.Pointer
+		}
+		items[i] = c
+	}
+	r.Items = items
+	return r
 }

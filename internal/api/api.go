@@ -56,6 +56,7 @@ type Server struct {
 	local       *library.Local
 	repoReader  *library.Reader
 	fetcher     *library.Fetcher
+	about       *About
 }
 
 // New returns the handler for a daemon listening on listenAddr, which must be
@@ -92,6 +93,7 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 	}
 	s.routeTheme()
 	s.routeSecrets()
+	s.routeAbout()
 	s.routeManifests()
 	if s.service != nil {
 		s.mux.HandleFunc("GET "+Base+"/assets:reclaim", s.service.ServeReclaim)
@@ -157,14 +159,33 @@ type Studio struct {
 	// the usual cause, and a card that says "rebuild needed" without saying
 	// what changed leaves someone guessing at their own edit.
 	RebuildNeededReason string `json:"rebuild_needed_reason,omitempty"`
+	// Hue is what the launcher draws the studio's stripe in, and it is always
+	// there: a stripe that fell back to the accent is what 03 §2 forbids.
+	Hue Hue `json:"hue"`
 	*install.Info
 	libraryFields
+}
+
+// Hue is a studio's identity hue per theme, "#rrggbb" (03 §2c).
+type Hue struct {
+	Dark  string `json:"dark"`
+	Light string `json:"light"`
+}
+
+// hueOf is the manifest's hue, or the ramp entry for id when there is no
+// manifest to declare one — an entry that did not load still has a stripe.
+func hueOf(m *manifest.Manifest, id string) Hue {
+	p := theme.RampFor(id)
+	if m != nil {
+		p = theme.Accent(m)
+	}
+	return Hue{Dark: p.Dark, Light: p.Light}
 }
 
 func (s *Server) studio(r *http.Request, st supervisor.Studio) (Studio, error) {
 	m := st.Manifest
 	out := Studio{ManifestLoaded: true, ID: m.ID, Name: m.Name, Description: m.Description, Kinds: m.Kinds, PeakRAMGB: m.PeakRAMGB,
-		Root: m.LocalPath}
+		Root: m.LocalPath, Hue: hueOf(m, m.ID)}
 	if s.installer != nil {
 		info, err := s.installer.Info(r.Context(), m.ID, m)
 		if err != nil {
@@ -275,7 +296,7 @@ func (s *Server) listStudios(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) unmanaged(r *http.Request, id string) (Studio, error) {
 	gs, err := s.sup.Status(r.Context(), id)
-	out := Studio{ID: id, Name: id, Kinds: []string{}, Heavy: true, Group: gs}
+	out := Studio{ID: id, Name: id, Kinds: []string{}, Heavy: true, Group: gs, Hue: hueOf(nil, id)}
 	if err == nil && s.installer != nil {
 		info, ierr := s.installer.Info(r.Context(), id, nil)
 		out.Info, err = &info, ierr

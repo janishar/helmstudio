@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/janishar/helmstudio/internal/platform/platformtest"
 	"github.com/janishar/helmstudio/internal/store"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/theme"
 	"github.com/janishar/helmstudio/internal/weights"
 )
 
@@ -159,5 +162,72 @@ func TestProvenanceIsOnlyEverALocalEntrysOwn(t *testing.T) {
 		if p := srv.provenance(e); p != nil {
 			t.Errorf("a %s entry carried a local note: %+v", e.Source, *p)
 		}
+	}
+}
+
+// Every entry has a hue, so no stripe falls back to the accent (03 §2): the
+// manifest's own when it declares one, and otherwise the ramp entry its id
+// selects — including an entry whose manifest did not load.
+func TestEveryStudioHasAHue(t *testing.T) {
+	srv, local := libraryServer(t)
+	declared := strings.Replace(localManifest, "id: wan-studio\nname: wan studio", "id: hue-studio\nname: hue studio\nhue: { dark: \"#5B8DEF\", light: \"#2F5FC4\" }", 1)
+	if _, err := local.Save("hue-studio", []byte(declared), ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local.Dir, "zed-studio.yaml"), []byte("id: zed-studio\nname: [broken\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := do(t, srv, "GET", "/api/v1/studios", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /studios: %d %s", rec.Code, rec.Body)
+	}
+	var page struct {
+		Items []struct {
+			ID  string `json:"id"`
+			Hue struct {
+				Dark  string `json:"dark"`
+				Light string `json:"light"`
+			} `json:"hue"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string][2]string{}
+	for _, e := range page.Items {
+		got[e.ID] = [2]string{e.Hue.Dark, e.Hue.Light}
+	}
+	ramp := func(id string) [2]string {
+		p := theme.RampFor(id)
+		return [2]string{p.Dark, p.Light}
+	}
+	for id, want := range map[string][2]string{
+		"hue-studio": {"#5b8def", "#2f5fc4"}, // its own, lowercased
+		"wan-studio": ramp("wan-studio"),     // declares none
+		"zed-studio": ramp("zed-studio"),     // did not load
+	} {
+		if got[id] != want {
+			t.Errorf("%s has hue %v, want %v", id, got[id], want)
+		}
+	}
+}
+
+// Models & disk's "285 GB free" is the volume the models directory is on.
+func TestModelsDiskIsTheModelsDirectorysVolume(t *testing.T) {
+	srv, _ := libraryServer(t)
+	rec := do(t, srv, "GET", "/api/v1/models:disk", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /models:disk: %d %s", rec.Code, rec.Body)
+	}
+	var got struct {
+		Root      string `json:"root"`
+		FreeBytes int64  `json:"free_bytes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(got.Root, "models") || got.FreeBytes != 1<<50 {
+		t.Errorf("models:disk = %+v; want the models directory with the volume's free space", got)
 	}
 }

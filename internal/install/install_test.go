@@ -440,3 +440,52 @@ func TestStaleGitLockNamesTheRecovery(t *testing.T) {
 		t.Fatalf("retry after removing the lock: %+v", j)
 	}
 }
+
+// 02 §7: a process going running touches its studio's weights, which is what
+// Models & disk reads as "Last used". Before any launch there is nothing to
+// say, and the field is absent rather than a made-up time.
+func TestALaunchRecordsWhenItsWeightsWereUsed(t *testing.T) {
+	f := newFixture(t, nil)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	if j := f.install("toy-studio"); j.State != JobSucceeded {
+		t.Fatalf("install job = %+v", j)
+	}
+	ctx := context.Background()
+	lastUsed := func() *time.Time {
+		t.Helper()
+		arts, err := f.w.List(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(arts) != 1 {
+			t.Fatalf("got %d artifacts, want 1", len(arts))
+		}
+		return arts[0].LastUsedAt
+	}
+	if got := lastUsed(); got != nil {
+		t.Fatalf("last used %v before anything launched", got)
+	}
+
+	before := time.Now().Add(-time.Second)
+	if _, err := f.sup.Launch(ctx, "toy-studio", supervisor.LaunchOptions{}); err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		gs, err := f.sup.Status(ctx, "toy-studio")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if gs.State == "running" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the group never went running: %+v", gs)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	got := lastUsed()
+	if got == nil || got.Before(before) {
+		t.Fatalf("after the studio went running, last used = %v; want a time after %v", got, before)
+	}
+}

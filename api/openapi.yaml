@@ -2418,6 +2418,22 @@ paths:
         "400": { $ref: "#/components/responses/Invalid" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /models:disk:
+    get:
+      tags: [launcher]
+      operationId: modelsDisk
+      x-helm-group: models
+      x-helm-method: disk
+      summary: The models directory and the free space on its volume.
+      description: >
+        03 §12's "285 GB free", read when asked. A directory that does not exist
+        yet is measured on the nearest one above it that does. Its own document
+        because a page carries only its items.
+      responses:
+        "200":
+          description: The models directory and its free space.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ModelsDisk" } } }
+
   # ======================================================================
   # Theme (03 §5, 07 §6; docs/decisions.md M6 Q8, Q9)
   # ======================================================================
@@ -2512,6 +2528,27 @@ paths:
         A platform with no secret store is 501 `unsupported`.
       responses:
         "204": { description: "No token is stored." }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+  # ======================================================================
+  # Launcher: about this daemon (03 §12a; the launcher redesign)
+  # ======================================================================
+
+  /launcher/settings/about:
+    get:
+      tags: [launcher]
+      operationId: launcherAboutGet
+      x-helm-group: settings
+      x-helm-method: about
+      summary: This daemon's version, the API and SDK majors it serves, and the directories it uses.
+      description: >
+        What Settings shows under This Mac and About. The SDK majors are what a
+        manifest's `sdk` pins are checked against at launch (04 §9). A daemon
+        started without its directories answers 501 `unsupported`.
+      responses:
+        "200":
+          description: About this daemon.
+          content: { application/json: { schema: { $ref: "#/components/schemas/LauncherAbout" } } }
         "501": { $ref: "#/components/responses/Unsupported" }
 
   /theme:
@@ -2790,6 +2827,32 @@ components:
       required: [theme]
       properties:
         theme: { type: string, enum: [system, light, dark] }
+    LauncherAbout:
+      type: object
+      required: [daemon_version, api_version, sdk_majors, paths]
+      properties:
+        daemon_version: { type: string, description: "`dev` for a build no release stamped." }
+        commit: { type: string, description: "The commit the build recorded, when it recorded one." }
+        modified: { type: boolean, description: "The build's tree had changes that commit does not hold." }
+        api_version: { type: string, description: "This document's `info.version`." }
+        sdk_majors:
+          type: object
+          description: "The major of each SDK package served under `/sdk/v<major>/`."
+          required: [css, runtime, ui]
+          properties:
+            css: { type: integer }
+            runtime: { type: integer }
+            ui: { type: integer }
+        paths:
+          type: object
+          description: "Absolute directories on this machine (06 §1)."
+          required: [data, cache, logs, models, library]
+          properties:
+            data: { type: string }
+            cache: { type: string }
+            logs: { type: string }
+            models: { type: string }
+            library: { type: string }
     SecretState:
       type: object
       description: >
@@ -3532,6 +3595,20 @@ components:
           items: { $ref: "#/components/schemas/ApprovalWeight" }
           description: "The checkpoints this studio can be launched with, and which are already downloaded or linked."
         rebuild_needed_reason: { type: string, description: "Set when `rebuild_needed`: the manifest changed since this checkout was built from it, which an Override causes." }
+        hue:
+          $ref: "#/components/schemas/StudioHue"
+          description: "The identity hue a launcher draws the studio's stripe and dot in. Always present, including for an entry whose manifest did not load (2026-09-17, the launcher redesign)."
+
+    StudioHue:
+      type: object
+      description: >
+        A studio's identity hue per theme, `#rrggbb`: the manifest's `hue`, or,
+        when it declares none or did not load, the entry 03 §2c's ramp gives its
+        id. Only ever a stripe, a dot or a timeline clip, never a fill (03 §2).
+      required: [dark, light]
+      properties:
+        dark: { type: string, pattern: "^#[0-9a-f]{6}$" }
+        light: { type: string, pattern: "^#[0-9a-f]{6}$" }
 
     LibrarySource:
       type: string
@@ -3591,6 +3668,14 @@ components:
         state: { type: string, enum: [pass, fail, not_checked] }
         required: { type: boolean }
         detail: { type: string, description: "Why it failed, or why it is not checked." }
+        pointer:
+          type: string
+          description: >
+            The field the criterion is about, as a JSON pointer into the
+            document checked: the first field a failing criterion is missing, or
+            where a passing one is declared. Under `/manifest` in a registry
+            entry, as an error's pointer is. Absent for a criterion no field
+            answers (2026-09-17, the launcher redesign).
 
     Criteria:
       type: object
@@ -3967,6 +4052,7 @@ components:
         ref_count: { type: integer, description: "The number of studio bindings, counted when read — never stored." }
         studios: { type: array, items: { type: string } }
         verified_at: { type: string, format: date-time }
+        last_used_at: { type: string, format: date-time, description: "When a process of a studio bound to it last went running (02 §7). Absent until one has." }
         created_at: { type: string, format: date-time }
         unobtainable:
           type: array
@@ -4002,3 +4088,10 @@ components:
         items: { type: array, items: { $ref: "#/components/schemas/ModelReclaimItem" } }
         total_bytes: { type: integer }
         confirm: { type: string }
+
+    ModelsDisk:
+      type: object
+      required: [root, free_bytes]
+      properties:
+        root: { type: string, description: "The models directory." }
+        free_bytes: { type: integer, description: "What an unprivileged process can still write on the volume holding it, which is what a download can use." }

@@ -105,7 +105,7 @@ func run(addr, studiosDir string) error {
 	// file removed, before anything is served (docs/decisions.md M8 Q16).
 	svc.SweepExports(ctx)
 
-	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()), api.WithStudioAPI(studioAPI, svc), api.WithSecrets(platform.Secrets(), st), api.WithApproval(st),
+	handler, err := api.New(sup, web.Shelf, addr, log.Printf, api.WithInstall(installer, w, dirs.Logs()), api.WithStudioAPI(studioAPI, svc), api.WithSecrets(platform.Secrets(), st), api.WithApproval(st), api.WithAbout(api.About{Dirs: dirs, Version: version}),
 		api.WithLibrary(library.Default(dirs.Data(), dirs.Cache(), studios.Bundled, studiosDir)),
 		api.WithManifests(library.NewLocal(dirs.Data()),
 			library.NewReader(filepath.Join(dirs.Cache(), "manifests")), library.NewFetcher()))

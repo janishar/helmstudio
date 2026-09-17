@@ -222,6 +222,11 @@ export class ModelsGroup {
   reclaim(body) {
     return this.t.request("POST", "/models:reclaim", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
   }
+
+  /** The models directory and the free space on its volume. (GET /models:disk) */
+  disk() {
+    return this.t.request("GET", "/models:disk", { query: {}, headers: {}, expect: "json" });
+  }
 }
 
 /** The settings group. */
@@ -253,6 +258,11 @@ export class SettingsGroup {
   /** Remove the stored Hugging Face token. (DELETE /launcher/settings/huggingface-token) */
   deleteHuggingFaceToken() {
     return this.t.request("DELETE", "/launcher/settings/huggingface-token", { query: {}, headers: {}, expect: "empty" });
+  }
+
+  /** This daemon's version, the API and SDK majors it serves, and the directories it uses. (GET /launcher/settings/about) */
+  about() {
+    return this.t.request("GET", "/launcher/settings/about", { query: {}, headers: {}, expect: "json" });
   }
 }
 

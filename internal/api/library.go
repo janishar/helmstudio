@@ -72,6 +72,7 @@ func (s *Server) entry(r *http.Request, e library.Entry) Studio {
 	out := Studio{
 		ID:   e.ID,
 		Name: e.ID,
+		Hue:  hueOf(e.Manifest, e.ID),
 		libraryFields: libraryFields{
 			Source: e.Source, Overrides: e.Overrides, Level: e.Level,
 			ManifestState: e.State, ManifestValid: e.Valid, Errors: e.Errors,
@@ -96,6 +97,7 @@ func (s *Server) entry(r *http.Request, e library.Entry) Studio {
 		m := e.Manifest
 		out.ManifestLoaded = true
 		out.Name, out.Description, out.Kinds, out.PeakRAMGB = m.Name, m.Description, m.Kinds, m.PeakRAMGB
+		out.Hue = hueOf(m, e.ID)
 		for _, p := range m.EffectiveProcesses() {
 			out.Heavy = out.Heavy || p.Heavy
 		}

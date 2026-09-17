@@ -195,7 +195,7 @@ func runDev(o devOptions) error {
 	}
 	svc, studioAPI := plat.Serve(studioapi.SupervisorStudios{Sup: sup})
 	svc.SweepExports(ctx)
-	handler, err := api.New(sup, web.Shelf, addr, logf, api.WithStudioAPI(studioAPI, svc))
+	handler, err := api.New(sup, web.Shelf, addr, logf, api.WithStudioAPI(studioAPI, svc), api.WithAbout(api.About{Dirs: dirs, Version: version}))
 	if err != nil {
 		return err
 	}

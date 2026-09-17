@@ -489,3 +489,60 @@ func TestLinkRequiresEveryRequiredWeightOfTheRepository(t *testing.T) {
 		t.Fatalf("unobtainable = %q; want ref2va named with its pattern", art.Unobtainable)
 	}
 }
+
+// Used marks the weights of the studio that went running and no other
+// studio's: "Last used" on a model nobody launched would be a lie.
+func TestUsedMarksOnlyThatStudiosWeights(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.install("s")
+	f.install("other")
+	mine, err := f.svc.Link(ctx, "s", weight("fl2va", "org/h3", "MiniMax-H3", "FL2VA/**"), userCheckpoint(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	theirs, err := f.svc.Link(ctx, "other", weight("fl2va", "org/h3-other", "MiniMax-H3-other", "FL2VA/**"), userCheckpoint(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.svc.Used(ctx, "s"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.svc.Get(ctx, mine.ID); got.LastUsedAt == nil {
+		t.Error("the studio that went running has no last-used time on its weights")
+	}
+	if got, _ := f.svc.Get(ctx, theirs.ID); got.LastUsedAt != nil {
+		t.Errorf("another studio's weights were marked used at %v", got.LastUsedAt)
+	}
+}
+
+// Before anything is downloaded the models directory does not exist, and the
+// free space asked about is that of the volume it will be made on — not an
+// error, and not a directory created just to measure it.
+func TestDiskMeasuresTheVolumeTheModelsDirectoryWillBeOn(t *testing.T) {
+	f := newFixture(t)
+	if err := os.RemoveAll(f.dirs.Models()); err != nil {
+		t.Fatal(err)
+	}
+	var asked string
+	svc := New(Config{Store: f.st, Dirs: f.dirs, FreeDisk: func(p string) (uint64, error) {
+		asked = p
+		return 285 << 30, nil
+	}})
+	d, err := svc.Disk()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Root != f.dirs.Models() || d.FreeBytes != 285<<30 {
+		t.Errorf("disk = %+v; want %s with 285 GiB free", d, f.dirs.Models())
+	}
+	if fi, err := os.Stat(asked); err != nil || !fi.IsDir() {
+		t.Errorf("free space was asked of %q, which is not a directory: %v", asked, err)
+	}
+	if !strings.HasPrefix(f.dirs.Models(), asked) {
+		t.Errorf("free space was asked of %q, which does not hold %s", asked, f.dirs.Models())
+	}
+	if _, err := os.Stat(f.dirs.Models()); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("measuring created the models directory: %v", err)
+	}
+}

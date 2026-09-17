@@ -174,6 +174,9 @@ type Artifact struct {
 	RefCount   int        `json:"ref_count"`
 	Studios    []string   `json:"studios"`
 	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+	// LastUsedAt is when a process of a studio bound to it last went running
+	// (02 §7); nil until one has.
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`
 	// Unobtainable, set only by Link, names the optional weights of the same
 	// repository the linked directory lacks. helmstudio never completes a
@@ -185,16 +188,17 @@ type artifactRow struct {
 	id, repo, revision, commit, source, dest, external, real, state string
 	total                                                           sql.NullInt64
 	verified                                                        sql.NullInt64
+	lastUsed                                                        sql.NullInt64
 	created                                                         int64
 }
 
-const artifactCols = `id, hf_repo, revision, COALESCE(commit_sha,''), source, local_path, COALESCE(external_path,''), COALESCE(realpath,''), state, total_bytes, verified_at, created_at`
+const artifactCols = `id, hf_repo, revision, COALESCE(commit_sha,''), source, local_path, COALESCE(external_path,''), COALESCE(realpath,''), state, total_bytes, verified_at, last_used_at, created_at`
 
 type rowScanner interface{ Scan(...any) error }
 
 func scanArtifact(r rowScanner) (artifactRow, error) {
 	var a artifactRow
-	err := r.Scan(&a.id, &a.repo, &a.revision, &a.commit, &a.source, &a.dest, &a.external, &a.real, &a.state, &a.total, &a.verified, &a.created)
+	err := r.Scan(&a.id, &a.repo, &a.revision, &a.commit, &a.source, &a.dest, &a.external, &a.real, &a.state, &a.total, &a.verified, &a.lastUsed, &a.created)
 	return a, err
 }
 
@@ -1267,6 +1271,46 @@ func (s *Service) Get(ctx context.Context, id string) (Artifact, error) {
 	return s.present(ctx, a)
 }
 
+// Used records that studioID went running, on every artifact bound to it —
+// 02 §7's `starting` → `running` row. It is what Models & disk reads as
+// "Last used".
+func (s *Service) Used(ctx context.Context, studioID string) error {
+	return s.cfg.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE model_artifacts SET last_used_at = ?
+			WHERE id IN (SELECT artifact_id FROM studio_model_bindings WHERE studio_id = ?)`, s.now(), studioID)
+		return err
+	})
+}
+
+// Disk is the models directory and the free space on its volume (03 §12).
+type Disk struct {
+	Root      string `json:"root"`
+	FreeBytes uint64 `json:"free_bytes"`
+}
+
+// Disk measures the volume the models directory is on. A directory that does
+// not exist yet — nothing has been downloaded — is measured at the nearest
+// directory above it that does, which is the volume it will be made on.
+func (s *Service) Disk() (Disk, error) {
+	root := s.modelsRoot()
+	at := root
+	for {
+		if fi, err := os.Stat(at); err == nil && fi.IsDir() {
+			break
+		}
+		up := filepath.Dir(at)
+		if up == at {
+			break
+		}
+		at = up
+	}
+	free, err := s.cfg.FreeDisk(at)
+	if err != nil {
+		return Disk{}, err
+	}
+	return Disk{Root: root, FreeBytes: free}, nil
+}
+
 // List returns every artifact, checking each linked one is still there.
 func (s *Service) List(ctx context.Context) ([]Artifact, error) {
 	rows, err := s.cfg.Store.Reader().QueryContext(ctx, `SELECT `+artifactCols+` FROM model_artifacts ORDER BY local_path`)
@@ -1321,6 +1365,10 @@ func (s *Service) present(ctx context.Context, a artifactRow) (Artifact, error) 
 	if a.verified.Valid {
 		t := time.UnixMilli(a.verified.Int64)
 		v.VerifiedAt = &t
+	}
+	if a.lastUsed.Valid {
+		t := time.UnixMilli(a.lastUsed.Int64)
+		v.LastUsedAt = &t
 	}
 	if a.source == SourceManaged {
 		v.BytesOnDisk = s.bytesUnder(a.dest)

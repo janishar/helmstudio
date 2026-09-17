@@ -134,6 +134,9 @@ func inspect(name string, data []byte) check {
 	}
 	if m != nil {
 		c := manifest.Criteria(m)
+		if kind == manifest.KindPointer {
+			c = c.UnderManifest()
+		}
 		out.Criteria = &c
 	}
 	return out

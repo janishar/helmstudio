@@ -259,3 +259,42 @@ func TestANewEntryCanBeInstalledWithoutARestart(t *testing.T) {
 		t.Errorf("an imported studio's approval screen answered %d: %s", code, out)
 	}
 }
+
+// A registry entry's fields live under /manifest, so its criteria point there
+// too — the same place its errors point, and the place the form edits.
+func TestAnEntrysCriteriaPointIntoItsInlineManifest(t *testing.T) {
+	srv, _ := libraryServer(t)
+	inline := "  " + strings.ReplaceAll(strings.TrimSuffix(localManifest, "\n"), "\n", "\n  ") + "\n"
+	entry := "id: wan-studio\nrepo: https://github.com/someone/wan\nref: v0.3.1\nmanifest:\n" + inline
+	body, err := json.Marshal(map[string]string{"text": entry})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := doJSON(t, srv, "POST", "/api/v1/launcher/manifests:validate", string(body))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("validate: %d %s", rec.Code, rec.Body)
+	}
+	var got struct {
+		Valid    bool   `json:"valid"`
+		Kind     string `json:"kind"`
+		Criteria struct {
+			Items []struct {
+				Number  int    `json:"number"`
+				Pointer string `json:"pointer"`
+			} `json:"items"`
+		} `json:"criteria"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !got.Valid || got.Kind != "pointer" {
+		t.Fatalf("the entry is %q and valid=%v: %s", got.Kind, got.Valid, rec.Body)
+	}
+	pointers := map[int]string{}
+	for _, c := range got.Criteria.Items {
+		pointers[c.Number] = c.Pointer
+	}
+	if pointers[8] != "/manifest/license" || pointers[1] != "/manifest/id" {
+		t.Errorf("criterion 8 points at %q and 1 at %q; want them under /manifest", pointers[8], pointers[1])
+	}
+}
