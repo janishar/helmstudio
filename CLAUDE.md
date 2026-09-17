@@ -22,6 +22,7 @@ The same applies to a failing test. If a test looks wrong, that is a finding, no
 
     cmd/helmstudio     the daemon
     cmd/helm           the CLI: validate, dev, test, doctor, adopt
+    installer/         install.sh, which installs helm from a GitHub Release
     internal/          daemon internals — platform, store, supervisor, install, weights, api
     packages/          helm-css, helm-runtime-sdk (go/py/node), helm-ui-sdk
     schema/            manifest.json — the manifest contract

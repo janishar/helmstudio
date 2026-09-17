@@ -91,8 +91,8 @@ wrote one.
 
 ## Status
 
-helmstudio is **pre-release**. There is no release yet and none of the packages
-is on PyPI or npm, so everything below runs from a clone.
+helmstudio is **pre-release**. `1.0.0-rc.1` of the `helm` CLI and of the
+packages is published; the launcher and its daemon run from a clone.
 
 | | |
 |---|---|
@@ -100,8 +100,7 @@ is on PyPI or npm, so everything below runs from a clone.
 | **Not built yet** | The Mac app — an Electron shell, signing, notarisation, bundled ffmpeg and uv — and the launcher's own Gallery and Timeline screens, which wait for it. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
 | **Verified on** | macOS on Apple Silicon. The Go code is type-checked for Linux on every gate run; nothing has been run there. |
 
-The packages are prepared at `1.0.0-rc.1`; [docs/releasing.md](docs/releasing.md)
-says what is published where.
+[docs/releasing.md](docs/releasing.md) says what is published where.
 
 ## Requirements
 
@@ -173,8 +172,17 @@ processes:
     ui: /
 ```
 
-Check it and run it from the studio's own directory, with `bin/helm` on your
-`PATH`:
+Install `helm` on macOS on Apple Silicon or on Linux, or put the clone's
+`bin/helm` on your `PATH`:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/janishar/helmstudio/main/installer/install.sh)"
+```
+
+The installer checks the download against the release's checksums and puts
+`helm` in `~/.local/bin`; [Installing helm](docs/releasing.md#installing-helm)
+says what else it checks. Then check the manifest and run the studio from its
+own directory:
 
 ```bash
 helm validate -criteria helmstudio.yaml
@@ -196,8 +204,9 @@ API, manifest and command reference.
 | [`helm-css`](packages/helm-css) | Tokens, layout and component classes, in light and dark | CSS |
 
 None of them is required: a studio that uses no package still installs,
-launches and runs. Until they are published, install them from a clone — for
-example `pip install ./packages/helm-runtime-sdk/python`.
+launches and runs. They are published at `1.0.0-rc.1` on PyPI, npm and the Go
+module proxy, and [docs/releasing.md](docs/releasing.md) gives the command that
+installs each.
 
 ## How it fits together
 
@@ -215,6 +224,7 @@ flowchart LR
 ```
 cmd/helmstudio   the daemon
 cmd/helm         the CLI: validate, dev
+installer/       install.sh, which installs helm from a release
 internal/        daemon internals: platform, store, supervisor, install, weights, api
 packages/        helm-css, helm-runtime-sdk (Go, Python, JavaScript), helm-ui-sdk
 web/             the launcher's screens

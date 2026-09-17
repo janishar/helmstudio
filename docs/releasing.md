@@ -102,7 +102,32 @@ binaries: `helm_<version>_darwin_arm64.tar.gz`,
 `helm_<version>_linux_amd64.tar.gz` and `helm_<version>_linux_arm64.tar.gz`,
 each holding `helm` and its licence.
 
-On a Mac with Apple Silicon, for `1.0.0-rc.1`:
+**With the installer**, on macOS on Apple Silicon or on Linux:
+
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/janishar/helmstudio/main/installer/install.sh)"
+
+`installer/install.sh` downloads the archive for the machine and the release's
+`SHA256SUMS` over HTTPS, and refuses an archive whose checksum does not match.
+When the GitHub CLI is signed in, it also refuses one without this repository's
+build provenance. It runs the binary once, then moves it into `~/.local/bin`,
+replacing an older helmstudio `helm` but never another program called `helm`.
+It needs no `sudo` and edits no shell profile: when the directory is not on
+`PATH`, it prints the line to add. It installs the newest release, or the newest
+pre-release while there are only pre-releases, and reads three variables:
+
+- `HELM_VERSION=1.0.0-rc.1` installs that version;
+- `HELM_INSTALL_DIR=<dir>` installs somewhere else;
+- `HELM_RELEASES_URL=<url>` downloads from a mirror laid out as the release is,
+  without the provenance check.
+
+For example:
+
+    HELM_VERSION=1.0.0-rc.1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/janishar/helmstudio/main/installer/install.sh)"
+
+Read a script before handing it to a shell; this one is `installer/install.sh`
+in this repository. To uninstall, delete `~/.local/bin/helm`.
+
+**By hand**, on a Mac with Apple Silicon, for `1.0.0-rc.1`:
 
     curl -fsSLO https://github.com/janishar/helmstudio/releases/download/v1.0.0-rc.1/helm_1.0.0-rc.1_darwin_arm64.tar.gz
     curl -fsSLO https://github.com/janishar/helmstudio/releases/download/v1.0.0-rc.1/SHA256SUMS
