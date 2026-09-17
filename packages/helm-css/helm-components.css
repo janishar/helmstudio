@@ -313,9 +313,9 @@
   padding: var(--helm-space-3);
 }
 
-/* Card anatomy (03 §6): 3px identity stripe, title with kind badge, one clamped
- * description line, a mono facts line, then state chip and actions. A card is
- * not a button; its primary action is. */
+/* Card anatomy (03 §6): 3px identity stripe, title with kind badge, the
+ * description in full, a mono facts line, then state chip and actions. A card
+ * is not a button; its primary action is. */
 .helm-card {
   position: relative;
   display: flex;
@@ -337,13 +337,12 @@
   background: var(--_helm-hue, var(--helm-studio-accent));
 }
 
+/* All of it: a card never hides what a studio is. A word too long for the
+ * card, such as a URL, breaks rather than running under its edge. */
 .helm-card-desc {
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
   font: var(--helm-type-body);
   color: var(--helm-text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .helm-card-actions {

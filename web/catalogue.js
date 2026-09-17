@@ -6,7 +6,7 @@
 // outcome of a typo. It is listed, with what is wrong and a way to fix it.
 //
 // Card anatomy: a 3px identity stripe, the title with a kind badge, the three
-// facts, one clamped description line, a mono facts line, then the state chip
+// facts, the description in full, a mono facts line, then the state chip
 // and the primary action. During a download only the lower rows swap — the
 // title and the stripe never move, so the grid does not reflow while four
 // cards tick.

@@ -345,14 +345,6 @@ figure.sample pre code,
   margin: var(--helm-space-2) 0;
 }
 
-/* The catalogue clamps a description to one line; a visitor reading about a
- * studio gets all of it. */
-.site-studio .helm-card-desc {
-  display: block;
-  overflow: visible;
-  -webkit-line-clamp: none;
-}
-
 /* A studio's stripe wears its identity hue (03 §2c) — the one its manifest
  * declares, or the ramp entry its id selects, as the launcher shows it — the
  * dark or the light one as the theme is. The theme conditions are

@@ -313,7 +313,9 @@ Amendments (2026-09-16, M6):
 - *iris studio (image): "FLUX.2 Klein and Z-Image-Turbo still image generation." · Metal kernel · 9.2 / 21.4 GB · 43% · 41 MB/s · ~4m left · Downloading 43% · Cancel · View progress*
 - *AuK studio (audio): "Zero-shot and instruct speech generation, editing and enhancement." · PyTorch · mps · 4.1 GB · 2 of 5 steps done · Install failed · build · View log · Retry]*
 
-Card anatomy: 3px identity stripe, title with a kind badge, one clamped description line, a mono facts line, then state chip and primary action. During a download only the lower two rows swap — the title and stripe never move, so the grid does not reflow while four cards tick.
+Card anatomy: 3px identity stripe, title with a kind badge, the description in full, a mono facts line, then state chip and primary action. During a download only the lower two rows swap — the title and stripe never move, so the grid does not reflow while four cards tick.
+
+(Amended 2026-09-17, by the human's decision: the description is shown in full rather than clamped to one line, so a card never hides what a studio is. A longer description makes its card, and the cards in its row, taller; the text does not change while a card ticks, so a download still does not reflow the grid.)
 
 | State | Chip | Primary | Secondary |
 |---|---|---|---|
