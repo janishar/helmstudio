@@ -157,18 +157,20 @@
         "type": "object", "required": ["name", "repo", "dest"], "additionalProperties": false,
         "properties": {
           "name":       { "type": "string", "pattern": "^[a-z][a-z0-9_]*$",
-                          "description": "The placeholder key: {models.<name>} in a process command." },
-          "repo":       { "type": "string", "description": "Hugging Face repo id." },
-          "revision":   { "type": "string", "default": "main" },
-          "dest":       { "type": "string", "description": "Directory name under the shared models root." },
-          "size_gb":    { "type": "number", "minimum": 0, "description": "For the disk pre-check, before any bytes move." },
+                          "description": "What this weight is called here. A process command writes {models.<name>} where its path should go, and helmstudio substitutes the real path at launch." },
+          "repo":       { "type": "string", "description": "The model's repository on Hugging Face, as owner/name — for example Lightricks/LTX-2.5." },
+          "revision":   { "type": "string", "default": "main",
+                          "description": "Which revision of that repository to take: a branch, a tag or a commit. Defaults to main. This is the model's revision, not the studio's own ref. helmstudio keeps one copy per repository and revision, so two weights naming the same pair share it, and changing it is a different copy." },
+          "dest":       { "type": "string", "description": "The folder it is kept in, under the models directory helmstudio shares between studios. Weights from the same repository and revision use the same folder." },
+          "size_gb":    { "type": "number", "minimum": 0, "description": "Roughly how many gigabytes it is, so the disk can be checked before anything is downloaded. An estimate is better than nothing." },
           "files":      { "type": "array", "items": { "type": "string" },
-                          "description": "Allow-list of paths to fetch, and the presence check used when a directory is linked instead of downloaded." },
+                          "description": "Which files to take from the repository, as paths or patterns such as vae/*.safetensors. Nothing else is downloaded. It is also what a folder must hold when this weight is linked from one instead of downloaded." },
           "local_path": { "type": "string",
                           "description": "A folder on this Mac that already holds this weight, with the files above at those same paths inside it. Install links them out of that folder instead of downloading, never writes to it, and refuses by name if one is missing rather than downloading part of the weight. Development only \u2014 a registry manifest never names a folder on someone's machine." },
           "selectable": { "type": "boolean", "default": false,
-                          "description": "One of a set the user picks between, bound to {models.selected}. The choice is made before install, on the approval preview, defaulting to the first selectable weight declared; install downloads only that one, and the others are fetched or linked on demand. It can be changed while the studio is not running, without a new approval. A launch with no selection is refused. iris studio takes exactly one checkpoint per run." },
-          "optional":   { "type": "boolean", "default": false }
+                          "description": "One of several checkpoints to choose between, rather than one the studio always needs. The chosen one is written into a command as {models.selected}, and it is the only one downloaded; the others are fetched later if the choice changes. Pick before installing, change it while the studio is stopped, and a launch with nothing chosen is refused. Use it where a studio runs one checkpoint at a time, as iris does." },
+          "optional":   { "type": "boolean", "default": false,
+                          "description": "Not needed to launch. It is left out of the install and fetched later if it is wanted, so an install is not held up by a weight the studio can run without." }
         }
       }
     },
