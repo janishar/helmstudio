@@ -6,7 +6,8 @@ this repository (`docs/design/04-packages.md` §8). This is how they get there.
 Publishing is the maintainer's: a version on a registry cannot be taken back,
 and every step below that reaches a registry is done by a person, or by a
 workflow a person started by pushing a tag. No token is stored in the
-repository or its secrets.
+repository or its secrets. `docs/publishing.md` is the setup each registry
+needs once, and what keeps anyone else from publishing.
 
 ## What is published, and where
 
@@ -34,35 +35,13 @@ PEP 440's spelling (`1.0.0rc1`), `package.json` in semver's (`1.0.0-rc.1`), and
 the `Version` constants in `packages/helm-ui-sdk` and `packages/helm-css`. The
 test in `test/packaging` fails when any of them disagree.
 
-## Once, before the first release
+## Before a registry's first release
 
-**PyPI.** Signed in to pypi.org, open *Your account → Publishing* and add a
-pending publisher for GitHub:
-
-- PyPI project name: `helm-runtime-sdk`
-- owner: `janishar`
-- repository: `helmstudio`
-- workflow: `publish-python.yml`
-- environment: `pypi`
-
-A pending publisher does not reserve the name; the first publish does. In the
-repository's *Settings → Environments*, the `pypi` environment is created by
-the first run, and can be given a required reviewer there.
-
-**npm.** Create the organisation `helmstudio` on npmjs.com; it is free for
-public packages. npm sets a trusted publisher only on a package that already
-exists, so the first version of each of the three packages is published by
-hand, from the tagged commit:
-
-    npm login
-    cd packages/helm-runtime-sdk/node && npm publish --access public --tag next
-    cd ../../helm-ui-sdk && npm publish --access public --tag next
-    cd ../helm-css && npm publish --access public --tag next
-
-Then, for each package on npmjs.com, *Settings → Trusted publishing → GitHub
-Actions*: owner `janishar`, repository `helmstudio`, workflow
-`publish-npm.yml`. From the next version on, the workflow publishes, and npm
-attaches provenance.
+PyPI needs a pending publisher before its first publish, and a new npm package
+is published by hand once and then trusts the workflow. Both are in
+`docs/publishing.md`, with the repository settings every release relies on:
+the tag ruleset, and the `pypi` and `npm` environments whose reviewer approves
+each publish.
 
 ## Each release
 
@@ -70,24 +49,32 @@ attaches provenance.
    the packages being released. helm-css writes its version into `helm.css`
    and `tokens.json`, so run `make css` after changing it. Then `make gate`,
    which fails on any version left behind.
-2. Tag that commit and push the tags. For the runtime SDK, helm-ui-sdk and
-   helm-css all at `1.0.0-rc.1`:
+2. Tag that commit and push the tags, **no more than three in one push**:
+   GitHub starts no workflow for any tag in a push of more than three. For the
+   runtime SDK, helm-ui-sdk and helm-css all at the same version:
 
-       git tag v1.0.0-rc.1
-       git tag packages/helm-runtime-sdk/go/v1.0.0-rc.1
-       git tag packages/helm-runtime-sdk/go/embedded/v1.0.0-rc.1
-       git tag packages/helm-runtime-sdk/python/v1.0.0-rc.1
-       git tag packages/helm-runtime-sdk/node/v1.0.0-rc.1
-       git tag packages/helm-ui-sdk/v1.0.0-rc.1
-       git tag packages/helm-css/v1.0.0-rc.1
-       git push origin v1.0.0-rc.1 packages/helm-runtime-sdk/go/v1.0.0-rc.1 packages/helm-runtime-sdk/go/embedded/v1.0.0-rc.1 packages/helm-runtime-sdk/python/v1.0.0-rc.1 packages/helm-runtime-sdk/node/v1.0.0-rc.1 packages/helm-ui-sdk/v1.0.0-rc.1 packages/helm-css/v1.0.0-rc.1
+       version=<version>
+       git tag "v$version"
+       git tag "packages/helm-runtime-sdk/go/v$version"
+       git tag "packages/helm-runtime-sdk/go/embedded/v$version"
+       git tag "packages/helm-runtime-sdk/python/v$version"
+       git tag "packages/helm-runtime-sdk/node/v$version"
+       git tag "packages/helm-ui-sdk/v$version"
+       git tag "packages/helm-css/v$version"
+       git push origin "v$version" "packages/helm-runtime-sdk/go/v$version" "packages/helm-runtime-sdk/go/embedded/v$version"
+       git push origin "packages/helm-runtime-sdk/node/v$version" "packages/helm-ui-sdk/v$version" "packages/helm-css/v$version"
+       git push origin "packages/helm-runtime-sdk/python/v$version"
 
-   Name the tags rather than pushing `--tags`, which sends every local tag.
+   Name the tags rather than pushing `--tags`, which sends every local tag. The
+   three Go tags go in one push: the embedded provider requires the other two
+   at its own version, and `verify-go-tags` fetches it expecting them there.
 
-3. Watch the workflows in the Actions tab:
+3. Watch the workflows in the Actions tab, and approve the `pypi` and `npm`
+   deployments when their runs ask:
    - `publish-python` checks the tag against `pyproject.toml`, builds, checks
      and imports the wheel, and publishes;
-   - `publish-npm` checks the tag against `package.json` and publishes;
+   - `publish-npm` checks the tag against `package.json` and publishes, with
+     provenance;
    - `verify-go-tags` fetches each Go module through the proxy and builds a
      studio against the embedded provider;
    - `release-helm` builds `helm` for macOS on Apple Silicon and for Linux on
@@ -96,7 +83,9 @@ attaches provenance.
      Release for `v<version>`, marked a pre-release when the version is one.
 
    A version already on its registry is skipped, and a release that exists has
-   its archives replaced, so a tag pushed again changes nothing.
+   its archives replaced, so running a workflow again changes nothing. A tag
+   that started no workflow at all is pushed again only as *When something
+   goes wrong* in `docs/publishing.md` says.
 4. When the packages are on their registries and `helm` is on the release,
    change the documentation that builds or installs from the clone — the
    quickstart's steps 2 and 4, and the theming guide's note on

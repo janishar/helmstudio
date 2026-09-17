@@ -30,7 +30,7 @@ Anything the gate cannot check — anything needing a GPU, real weights, Metal, 
 
 ## Releasing
 
-A release is a tag on a commit that passed the gate, and publishing to a registry is the maintainer's. `docs/releasing.md` says what is published where, the setup each registry needs once, and the tags each release pushes.
+A release is a tag on a commit that passed the gate, and publishing to a registry is the maintainer's. `docs/releasing.md` says what is published where and the tags each release pushes; `docs/publishing.md` says the setup each registry needs once, and what keeps anyone else from publishing.
 
 ## Code
 

@@ -236,6 +236,8 @@ test/            the conformance, visual and media suites
   that disagrees with it is wrong until the document changes
 - **[Decision log](docs/decisions.md)** — what was decided, when and why
 - **[Releasing](docs/releasing.md)** — what is published where, and how
+- **[Publishing safely](docs/publishing.md)** — the setup each registry needs,
+  and what keeps anyone else from publishing
 
 ## Contributing
 
