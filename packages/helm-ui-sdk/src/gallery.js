@@ -71,8 +71,20 @@ const styles = `
     overflow: hidden;
   }
   :host([list]) .thumb { width: 64px; aspect-ratio: 16 / 9; flex: 0 0 auto; border-radius: var(--helm-radius-sm); }
-  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
   .glyph { color: var(--helm-log-muted); font: var(--helm-type-section); letter-spacing: var(--helm-tracking-section); }
+  /* Over a thumbnail the kind is a badge, .helm-kind's on the star's ground. */
+  .thumb img ~ .glyph {
+    position: absolute; left: var(--helm-space-1); bottom: var(--helm-space-1);
+    display: flex; align-items: center;
+    height: 18px; padding: 0 6px;
+    font: var(--helm-type-micro); letter-spacing: normal;
+    color: var(--helm-text-secondary);
+    background: var(--helm-ground-panel);
+    border: 1px solid var(--helm-border-hairline);
+    border-radius: var(--helm-radius-sm);
+  }
+  :host([list]) .thumb img ~ .glyph { display: none; }
   .star {
     position: absolute; top: var(--helm-space-1); right: var(--helm-space-1);
     height: var(--helm-control-sm); width: var(--helm-control-sm);
@@ -386,7 +398,10 @@ export class HelmGallery extends HelmElement {
       if (generation !== this.generation || !this.live || !into.isConnected) return;
       const url = URL.createObjectURL(blob);
       this.urls.push(url);
-      into.prepend(el("img", { src: url, alt: "", loading: "lazy" }));
+      // One that does not decode goes again, and the kind is the well's
+      // placeholder once more.
+      const img = el("img", { src: url, alt: "", loading: "lazy", onerror: () => img.remove() });
+      into.prepend(img);
     } catch {
       // No thumbnail for this kind, or not yet. The kind glyph stays, which
       // is a reduced card rather than a broken one.

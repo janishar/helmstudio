@@ -44,6 +44,31 @@ func TestComponentsBehave(t *testing.T) {
 			5,
 		},
 		{
+			// The thumbnail fills its well rather than sharing a row with the
+			// kind label, which it would squeeze to the edge and clip.
+			"a thumbnail fills its well",
+			`[...document.getElementById("gal").shadowRoot.querySelectorAll(".thumb")].filter((well) => {
+				const img = well.querySelector("img");
+				if (!img) return false;
+				const a = well.getBoundingClientRect(), b = img.getBoundingClientRect();
+				return [a.left - b.left, a.top - b.top, a.width - b.width, a.height - b.height].every((d) => Math.abs(d) < 1);
+			}).length`,
+			5,
+		},
+		{
+			// Over a thumbnail the kind label is a badge in the lower-left
+			// corner, whole: the star has the upper-right.
+			"the kind label sits whole in the thumbnail's lower-left corner",
+			`[...document.getElementById("gal").shadowRoot.querySelectorAll(".thumb")].filter((well) => {
+				const glyph = well.querySelector(".glyph");
+				const a = well.getBoundingClientRect(), g = glyph.getBoundingClientRect();
+				return g.width > 0 && glyph.scrollWidth <= glyph.clientWidth &&
+					g.left >= a.left && g.right <= a.left + a.width / 2 &&
+					g.top >= a.top + a.height / 2 && g.bottom <= a.bottom;
+			}).length`,
+			5,
+		},
+		{
 			// Eleven line events arrive, four of them carriage-return progress
 			// writes. A terminal that printed each would hold thirteen rows
 			// with the step and the gap; one that rewrites in place holds ten.
@@ -97,6 +122,28 @@ func TestComponentsBehave(t *testing.T) {
 				t.Errorf("%s: got %v, want %v", c.expr, got, c.want)
 			}
 		})
+	}
+
+	// A thumbnail that does not decode is taken away, and the kind label is
+	// the well's placeholder again, in the middle.
+	var centred bool
+	const undecodable = `(async () => {
+		const well = document.getElementById("gal").shadowRoot.querySelector(".thumb");
+		const img = well.querySelector("img");
+		await new Promise((resolve) => {
+			img.addEventListener("error", resolve, { once: true });
+			img.src = URL.createObjectURL(new Blob([new Uint8Array([0, 1, 2, 3])], { type: "image/png" }));
+		});
+		const a = well.getBoundingClientRect(), g = well.querySelector(".glyph").getBoundingClientRect();
+		return !well.querySelector("img") &&
+			Math.abs((g.left + g.right) - (a.left + a.right)) < 2 &&
+			Math.abs((g.top + g.bottom) - (a.top + a.bottom)) < 2;
+	})()`
+	if err := page.Eval(ctx, undecodable, &centred); err != nil {
+		t.Fatal(err)
+	}
+	if !centred {
+		t.Error("a thumbnail that did not decode left the kind label out of the middle of its well")
 	}
 
 	// Picking resolves to an asset, which is what picker mode is for.
