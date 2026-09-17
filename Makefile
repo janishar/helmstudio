@@ -14,7 +14,7 @@ SHELL := /bin/bash
 GO ?= go
 HELM ?= ./bin/helm
 
-.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css site site-test
+.PHONY: gate fmt vet vet-linux boundaries deps test validate build clean generate drift sdk conformance visual golden css site site-test app app-run app-check
 
 # The Go modules besides the root: the runtime SDK (stdlib only), its embedded
 # provider, the conformance suite (docs/decisions.md M4 Q2, Q25), and the site's
@@ -28,7 +28,7 @@ GENERATED := packages/helm-runtime-sdk/go/zz_types.go packages/helm-runtime-sdk/
 	packages/helm-runtime-sdk/node/src/generated.js \
 	web/launcher.js
 
-gate: fmt vet vet-linux boundaries deps drift test sdk conformance site site-test visual validate
+gate: fmt vet vet-linux boundaries deps drift test sdk conformance app-check site site-test visual validate
 	@echo "gate: green"
 
 fmt:
@@ -204,5 +204,51 @@ validate: build
 	elif [ $$# -eq 0 ]; then echo "validate: no manifests yet, skipping"; \
 	else $(HELM) validate "$$@"; fi
 
+# The Mac app (docs/design/01-prd.md §12, docs/decisions.md 2026-09-18). The
+# bundle is assembled here rather than by Xcode: everything that goes into it
+# is visible in one place, the build needs only the Command Line Tools, and
+# there is no project file to review. The shell is `app/`; the daemon it
+# bundles is the same binary `make build` produces, and the registry beside it
+# is what R72 ships with the shell and the daemon together.
+#
+# What this cannot do is sign for anyone else: R71 wants a Developer ID
+# signature and notarisation, and this ad-hoc signs so the app runs on the
+# machine that built it. A release signs with a real identity.
+APP_VERSION ?= 0.0.0
+APP_BUNDLE := bin/helmstudio.app
+
+# The shell compiles. In the gate rather than `app` itself: a Swift error is a
+# regression anyone can cause, and catching it costs a debug build rather than
+# a release build, a bundle and a signature. Skipped where it cannot run, like
+# every other machine-bound check here.
+app-check:
+	@if [ "$$(uname -s)" != "Darwin" ]; then echo "app-check: the Mac app builds on macOS only, skipping"; exit 0; fi
+	@if ! command -v swift >/dev/null; then echo "app-check: no swift toolchain, skipping"; exit 0; fi
+	@out=$$(cd app && swift build 2>&1) || { echo "$$out"; exit 1; }; \
+	echo "app-check: the shell compiles"
+
+app:
+	@if [ "$$(uname -s)" != "Darwin" ]; then echo "app: the Mac app builds on macOS only, skipping"; exit 0; fi
+	@if ! command -v swift >/dev/null; then echo "app: no swift toolchain, skipping"; exit 0; fi
+	@rm -rf $(APP_BUNDLE)
+	@mkdir -p $(APP_BUNDLE)/Contents/MacOS $(APP_BUNDLE)/Contents/Resources
+	@$(GO) build -trimpath -ldflags="-s -w -X main.version=$(APP_VERSION)" \
+		-o $(APP_BUNDLE)/Contents/MacOS/helmstudio-daemon ./cmd/helmstudio
+	@out=$$(cd app && swift build -c release --disable-sandbox 2>&1) || { echo "$$out"; exit 1; }
+	@cp app/.build/release/helmstudio $(APP_BUNDLE)/Contents/MacOS/helmstudio
+	@sed 's/__VERSION__/$(APP_VERSION)/g' app/Resources/Info.plist > $(APP_BUNDLE)/Contents/Info.plist
+	@printf 'APPL????' > $(APP_BUNDLE)/Contents/PkgInfo
+	@mkdir -p $(APP_BUNDLE)/Contents/Resources/studios
+	@shopt -s nullglob; set -- studios/*.yaml; \
+	if [ $$# -gt 0 ]; then cp "$$@" $(APP_BUNDLE)/Contents/Resources/studios/; fi
+	@out=$$(codesign --force --sign - --timestamp=none $(APP_BUNDLE)/Contents/MacOS/helmstudio-daemon 2>&1) || { echo "$$out"; exit 1; }
+	@out=$$(codesign --force --sign - --timestamp=none $(APP_BUNDLE) 2>&1) || { echo "$$out"; exit 1; }
+	@echo "app: $(APP_BUNDLE) — ad-hoc signed, not notarised (R71 needs a Developer ID)"
+
+# Run the app that `make app` built, from the terminal, so its stderr is
+# visible. `open` would detach it and swallow that.
+app-run: app
+	@$(APP_BUNDLE)/Contents/MacOS/helmstudio
+
 clean:
-	rm -rf bin
+	rm -rf bin app/.build

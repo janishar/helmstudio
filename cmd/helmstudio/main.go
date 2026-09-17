@@ -23,6 +23,7 @@ import (
 
 	"github.com/janishar/helmstudio/internal/api"
 	"github.com/janishar/helmstudio/internal/api/studioapi"
+	"github.com/janishar/helmstudio/internal/handshake"
 	"github.com/janishar/helmstudio/internal/install"
 	"github.com/janishar/helmstudio/internal/library"
 	"github.com/janishar/helmstudio/internal/platform"
@@ -36,9 +37,25 @@ import (
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8700", "loopback address to serve the shelf and API on")
 	studiosDir := flag.String("studios", "studios", "directory of studio manifests (*.yaml)")
+	// helmstudio.app asks this before it looks for a running daemon: the
+	// record that says whether one is already up lives in the data root, and
+	// which root that is depends on HELMSTUDIO_HOME, HELMSTUDIO_DATA_DIR and
+	// the platform default. The shell asks rather than resolving it again,
+	// because a second implementation of that precedence is a second answer
+	// (docs/design/01-prd.md R73).
+	printDataDir := flag.Bool("print-data-dir", false, "print the resolved data root and exit")
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("helmstudio: ")
+	if *printDataDir {
+		dirs, err := platform.Resolve(platform.Options{})
+		if err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		fmt.Println(dirs.Data())
+		return
+	}
 	if err := run(*addr, *studiosDir); err != nil {
 		log.Print(err)
 		os.Exit(1)
@@ -115,6 +132,31 @@ func run(addr, studiosDir string) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listening on %s (is another helmstudio running?): %w", addr, err)
+	}
+
+	// The handshake (M9). helmstudio.app reads one line of JSON from stdout to
+	// learn that the daemon is listening and where, and the same record left in
+	// the data root is what lets a shell that restarts adopt a daemon that
+	// outlived it rather than start a second one. Both come after the listener
+	// is open, so a record never names a port this daemon does not own, and the
+	// record is withdrawn on every exit but kill -9 — which is the case its
+	// recorded start time is there for.
+	shake, err := handshake.Current(ln.Addr().String(), version, dirs.Data())
+	if err != nil {
+		return err
+	}
+	if err := handshake.Publish(dirs, shake); err != nil {
+		return err
+	}
+	defer func() {
+		if err := handshake.Withdraw(dirs); err != nil {
+			log.Print(err)
+		}
+	}()
+	// A daemon whose stdout has gone still serves: the handshake is how a
+	// shell finds it, not something the daemon needs for itself.
+	if err := handshake.Announce(os.Stdout, shake); err != nil {
+		log.Print(err)
 	}
 	// Log streams never end on their own; cancelling their base context on
 	// shutdown ends them, so an open browser tab cannot hold up stopping the

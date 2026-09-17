@@ -70,3 +70,6 @@ DerivedData/
 
 # Generated clients ARE committed on purpose — the gate regenerates them and
 # fails on a diff, which only works if the checked-in copy is there to compare.
+
+# The Mac app: SwiftPM's build directory (make app assembles bin/helmstudio.app).
+/app/.build/
