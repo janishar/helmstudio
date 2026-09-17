@@ -42,6 +42,12 @@ export const SECTIONS = [
     fields: ["/requires/os", "/requires/arch", "/requires/tools", "/requires/ram_gb", "/requires/disk_gb"],
   },
   {
+    slug: "weights",
+    label: "Weights",
+    hint: "The model files this studio runs on: what to download, and what it already has on this Mac.",
+    fields: ["/weights"],
+  },
+  {
     slug: "platform",
     label: "Platform",
     hint: "What the studio asks helmstudio for. Every capability is read out as a sentence before anyone installs it.",
@@ -61,7 +67,6 @@ export const YAML_ONLY = {
   "/schema_version": "Set by the tooling, not described by hand.",
   "/hue": "Two OKLCH triples. A colour picker that wrote them would be a theme editor, which this is not.",
   "/build": "An ordered list of commands with their own cwd, shell and environment. Reordering steps is what editing it mostly is, and text does that better than a form.",
-  "/weights": "Repositories, globs, destinations and sizes, often a dozen of them.",
   "/processes": "The part with the most structure and the most comments — ports, health probes, dependencies, environment.",
   "/run": "Sugar for a single process, so it is the same text as `processes`.",
   "/test": "The smoke profile and its command, which the harness will own when it exists.",

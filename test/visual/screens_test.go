@@ -778,3 +778,47 @@ func TestStudiosDrawsLoadingAndUnreachable(t *testing.T) {
 		t.Errorf("Studios while loading and unreachable:\n got %q\nwant %q", got, want)
 	}
 }
+
+// Weights are a form section, not text (03 §13a, amended 2026-09-18): the
+// weight a studio should take from a folder this Mac already holds is the one
+// thing the editor could not say, because the generated form could draw a
+// field and not a list of them.
+func TestTheEditorDrawsWeightsAsEntriesWithTheirLocalDirectory(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/edit/wan-studio?section=weights")
+
+	var drawn string
+	if err := p.Eval(ctx, `(async () => {
+		for (let i = 0; i < 100 && !document.querySelector(".helm-entry"); i++) {
+			await new Promise(r => setTimeout(r, 50));
+		}
+		const entries = [...document.querySelectorAll(".helm-entry")];
+		return [
+			entries.length,
+			entries.map(e => e.querySelector(".helm-entry-name").textContent).join(","),
+			document.getElementById("f-weights-0-local_path") ? "has a local directory" : "no local directory",
+			document.getElementById("f-weights-1-repo").value,
+		].join("|");
+	})()`, &drawn); err != nil {
+		t.Fatal(err)
+	}
+	want := "2|weight wan_t2v_5b,weight wan_t2v_14b|has a local directory|Wan-AI/Wan2.6-T2V-14B"
+	if drawn != want {
+		t.Errorf("the weights section reads:\n got %q\nwant %q", drawn, want)
+	}
+
+	// Setting one goes out as a pointer and a value, like every other field,
+	// and comes back in the text with the author's file otherwise untouched.
+	var after string
+	if err := p.Eval(ctx, editField+`("weights", "f-weights-0-local_path", "/Volumes/Models/wan-5b", "/Volumes/Models/wan-5b")`, &after); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(after, "local_path: /Volumes/Models/wan-5b") {
+		t.Errorf("the local directory did not land in the text:\n%s", after)
+	}
+	if !strings.Contains(after, "name: wan_t2v_14b") {
+		t.Errorf("the second weight did not survive the edit:\n%s", after)
+	}
+}

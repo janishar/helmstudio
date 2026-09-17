@@ -509,6 +509,8 @@ Most repos worth running will never ship a manifest, so writing one has to be a 
 - **The header** holds the title, the file, the verdict chip, the criteria score and an unsaved marker, then Import file, Export and Save to library, the accent.
 - **Both views stay live.** A form edit still goes to the daemon as a pointer and a value, and the text section shows what came back.)
 
+(Amended 2026-09-18: the form draws **a list of objects as a list of entries** — each with its own fields, its own Remove, and an Add at the end — so `weights` is a section of the form rather than text. An entry is added, removed and edited with the same pointer and value every other field uses: `/weights/2/local_path` sets a field, `/weights/2` with nothing removes the entry, and one past the end appends. What is still text is read from the map rather than written into the menu.)
+
 *[Mockup: New studio — ~/.helmstudio/studios/wan-studio.yaml, "13 of 15 criteria", Import file, Export, Test, Save to library.*
 - *Form:*
   - *Identity & source: id wan-studio, kinds video, repo github.com/someone/wan, ref v0.3.1.*

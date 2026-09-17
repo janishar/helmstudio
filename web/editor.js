@@ -231,6 +231,13 @@ function exportManifest(st) {
   toast(`${id}.yaml downloaded and copied.`, "info");
 }
 
+/** localWeights names the weights this manifest links from a folder. */
+function localWeights(st) {
+  const list = valueAt(fields(st.check), "/weights");
+  if (!Array.isArray(list)) return [];
+  return list.filter((w) => w && w.local_path).map((w) => w.name || "a weight");
+}
+
 function declaredID(check) {
   const doc = (check || {}).document;
   if (!doc) return "";
@@ -278,6 +285,17 @@ function score(check) {
   return c ? `${c.passed} of ${c.checkable}` : null;
 }
 
+/**
+ * textOnly names the parts that have no form, read from the map rather than
+ * written out here: a list in prose goes on naming a field the day it gains a
+ * section, and this one cannot.
+ */
+function textOnly() {
+  const top = Object.keys(YAML_ONLY).map((p) => p.slice(1).split("/")[0]);
+  const names = [...new Set(top)].filter((n) => !["schema_version", "hue"].includes(n));
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+}
+
 /** link is the address of one of this editor's sections. */
 function link(id, slug) {
   return `${id === "new" ? "#/edit" : `#/edit/${encodeURIComponent(id)}`}?section=${slug}`;
@@ -308,7 +326,7 @@ function sectionMenu(st, current) {
     item(TEXT.slug, TEXT.label, el("span", {
       class: "helm-editor-count" + (st.check && !st.check.valid ? " helm-status-error" : ""), text: verdictWord,
     }), true),
-    el("span", { class: "helm-hint helm-editor-menu-note", text: "build, weights, processes and storage are edited as text" }),
+    el("span", { class: "helm-hint helm-editor-menu-note", text: `${textOnly()} are edited as text` }),
     el("span", { class: "helm-editor-menu-label", text: "Checks" }),
     item(CHECKS.slug, CHECKS.label, score(st.check) ? el("span", { class: "helm-mono helm-editor-count", text: score(st.check) }) : null));
 }
@@ -452,6 +470,10 @@ export function editor(ctx, id) {
     // a directory on this Mac describes nothing anyone else can clone.
     localPath ? el("p", { class: "helm-hint", text:
       `This manifest builds ${localPath} on this Mac. Exported as it is, it will not work on anyone else's.` }) : null,
+    // The same is true of a weight linked from a folder: it is this machine's
+    // path, and nobody else has it.
+    localWeights(st).length ? el("p", { class: "helm-hint", text:
+      `${localWeights(st).join(" and ")} ${localWeights(st).length === 1 ? "is linked" : "are linked"} from a folder on this Mac, so ${localWeights(st).length === 1 ? "it is" : "they are"} not downloaded. Exported as it is, that path is nobody else's.` }) : null,
     st.check && !st.check.valid && st.dirty
       ? el("p", { class: "helm-hint", text: "Saving is offered once this is valid. The library lists an invalid manifest rather than hiding it, but writing one from here would be helmstudio breaking your library for you." })
       : null,

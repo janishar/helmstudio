@@ -44,10 +44,18 @@ function deref(schema, node) {
   return cur ? deref(schema, cur) : node;
 }
 
-/** nodeAt is the schema for a pointer, walking `properties` as it goes. */
+/**
+ * nodeAt is the schema for a pointer, walking `properties` as it goes — and
+ * `items` when the pointer names one of a list's entries, as `/weights/0/repo`
+ * does.
+ */
 export function nodeAt(schema, pointer) {
   let node = schema;
   for (const seg of pointer.slice(1).split("/")) {
+    if ((node || {}).type === "array" && /^\d+$/.test(seg)) {
+      node = deref(schema, node.items);
+      continue;
+    }
     const props = (node || {}).properties;
     if (!props || !props[seg]) return null;
     node = deref(schema, props[seg]);
@@ -67,7 +75,11 @@ function requiredAt(schema, pointer) {
   let at = "";
   for (const seg of pointer.slice(1).split("/")) {
     const parent = at === "" ? schema : nodeAt(schema, at);
-    if (!((parent || {}).required || []).includes(seg)) return false;
+    // An entry of a list is not required or optional; it is there. What the
+    // entry requires is asked of the entry.
+    if (!((parent || {}).type === "array" && /^\d+$/.test(seg))) {
+      if (!((parent || {}).required || []).includes(seg)) return false;
+    }
     at += "/" + seg;
   }
   return true;
@@ -120,9 +132,12 @@ export function missingAncestors(document, pointer) {
     }
     const next = cur[seg];
     if (next === undefined || next === null) {
+      // A list's entry is never invented: it is added by the button that adds
+      // one, so that nothing appears in a manifest nobody asked for.
+      if (Array.isArray(cur)) return null;
       out.push(at);
       creating = true;
-    } else if (!isMap(next)) {
+    } else if (!isMap(next) && !Array.isArray(next)) {
       return null;
     } else {
       cur = next;
@@ -146,6 +161,13 @@ export function control(schema, pointer, document, onChange, { disabled = false 
   const id = "f" + pointer.replace(/\//g, "-");
   const required = requiredAt(schema, pointer);
   const choices = enumOf(node);
+
+  // A list of objects — weights, build steps, collections — is a list of
+  // entries rather than one control, so it takes the whole width and has its
+  // own heading rather than a label beside a box.
+  if (node.type === "array" && (itemsOf(schema, node) || {}).type === "object") {
+    return objectList(schema, pointer, node, document, onChange, { disabled });
+  }
 
   let input;
   if (node.type === "array" && choices) {
@@ -190,6 +212,68 @@ export function control(schema, pointer, document, onChange, { disabled = false 
     el("label", { class: "helm-label", for: id, text: label(pointer) + (required ? " *" : "") }),
     input,
     node.description ? el("span", { class: "helm-hint", text: node.description }) : null);
+}
+
+/** itemsOf is what a list holds, with its $ref followed. */
+function itemsOf(schema, node) {
+  return node.items ? deref(schema, node.items) : null;
+}
+
+/**
+ * entryName is what an entry of a list is called in its heading: its own name
+ * where it has one, and its place in the list where it does not.
+ */
+function entryName(item, i) {
+  const named = item && typeof item === "object" ? item.name || item.run || item.repo : null;
+  return named ? String(named) : `${i + 1}`;
+}
+
+/**
+ * objectList draws a list of objects: one block per entry with the entry's own
+ * fields inside it, a Remove on each, and an Add at the end.
+ *
+ * Every change still leaves as a JSON pointer and a value, which is what the
+ * daemon applies to the YAML node tree: `/weights/2/local_path` sets a field,
+ * `/weights/2` with null removes the entry, and the pointer one past the end
+ * appends one. Nothing here rewrites the document.
+ */
+function objectList(schema, pointer, node, document, onChange, { disabled = false } = {}) {
+  const items = valueAt(document, pointer);
+  const list = Array.isArray(items) ? items : [];
+  const item = itemsOf(schema, node) || {};
+  const properties = Object.keys(item.properties || {});
+  const singular = label(pointer).replace(/s$/, "").toLowerCase();
+
+  const entries = list.map((entry, i) => {
+    const at = `${pointer}/${i}`;
+    const controls = properties
+      .map((name) => control(schema, `${at}/${name}`, document, onChange, { disabled }))
+      .filter(Boolean);
+    return el("div", { class: "helm-entry", "data-key": at },
+      el("div", { class: "helm-entry-head" },
+        el("span", { class: "helm-entry-name", text: `${singular} ${entryName(entry, i)}` }),
+        el("span", { class: "helm-spacer" }),
+        el("button", {
+          class: "helm-btn helm-btn-ghost helm-btn-sm", type: "button", text: "Remove", disabled,
+          "aria-label": `Remove ${singular} ${entryName(entry, i)}`,
+          onclick: () => onChange(at, null),
+        })),
+      el("div", { class: "helm-entry-fields" }, ...controls));
+  });
+
+  return el("div", { class: "helm-field helm-list" },
+    el("div", { class: "helm-list-head" },
+      el("span", { class: "helm-label", text: label(pointer) }),
+      el("span", { class: "helm-spacer" }),
+      el("button", {
+        class: "helm-btn helm-btn-secondary helm-btn-sm", type: "button", text: `Add a ${singular}`, disabled,
+        // One past the end appends; the entry starts empty and the errors
+        // under the text say what it still needs.
+        onclick: () => onChange(`${pointer}/${list.length}`, {}),
+      })),
+    node.description ? el("span", { class: "helm-hint", text: node.description }) : null,
+    ...entries,
+    list.length ? null : el("p", { class: "helm-hint", text: `No ${label(pointer).toLowerCase()} are declared.` }));
 }
 
 /**

@@ -840,3 +840,51 @@ dialog.helm-dialog::backdrop {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A list of entries inside a form section — the weights a studio needs, the
+ * steps that build it. It takes the section's width rather than one column of
+ * it, and each entry carries its own fields and its own Remove. */
+.helm-list {
+  grid-column: 1 / -1;
+  gap: var(--helm-space-3);
+}
+
+.helm-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--helm-space-3);
+}
+
+.helm-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--helm-space-3);
+  padding: var(--helm-space-3) var(--helm-space-4);
+  border: 1px solid var(--helm-border-hairline);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-ground-page);
+}
+
+.helm-entry-head {
+  display: flex;
+  align-items: center;
+  gap: var(--helm-space-2);
+}
+
+.helm-entry-name {
+  font: var(--helm-type-card-title);
+  color: var(--helm-text-primary);
+}
+
+.helm-entry-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--helm-space-4) var(--helm-space-6);
+}
+
+@media (max-width: 900px) {
+  .helm-entry-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
