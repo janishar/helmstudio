@@ -18,7 +18,25 @@
 // two seconds and a frame rebuilt on each one would reload the studio's page
 // under whoever is using it — mid-generation, at worst.
 
-import { chip, clock, el, elapsed, indeterminate, state } from "./ui.js";
+import { chip, clock, el, elapsed, indeterminate, state, toast } from "./ui.js";
+
+/**
+ * fullScreen hands the whole display to the studio's page. Escape gives it
+ * back, which is the browser's own contract and not something to reimplement.
+ *
+ * The frame carries `allow="fullscreen"`, which is what lets the studio's own
+ * page ask; this is helmstudio asking on its behalf, from a click.
+ */
+function fullScreen(frame) {
+  const ask = frame.requestFullscreen || frame.webkitRequestFullscreen;
+  if (!ask) {
+    toast("This browser will not put the studio full screen.", "error");
+    return;
+  }
+  Promise.resolve(ask.call(frame)).catch((err) => {
+    toast(`The studio could not go full screen. ${err && err.message ? err.message : ""}`.trim(), "error");
+  });
+}
 
 /** page is the address a running studio serves, or nothing. */
 function page(studio) {
@@ -89,10 +107,18 @@ export function studioPage(ctx, id) {
   const src = page(studio);
   const group = studio.group || {};
 
+  const frame = src ? frameFor(ctx, studio, src) : null;
   const header = el("div", { class: "helm-page-header helm-embed-header" },
     el("h1", { class: "helm-title", text: studio.name }),
     chip(s.chip, s.tone),
     el("span", { class: "helm-spacer" }),
+    frame
+      ? el("button", {
+        class: "helm-btn helm-btn-secondary", type: "button", text: "Full screen",
+        title: "The studio takes the whole display. Escape comes back.",
+        onclick: () => fullScreen(frame),
+      })
+      : null,
     src
       ? el("button", {
         class: "helm-btn helm-btn-secondary", type: "button", text: "Open in a tab",
@@ -107,7 +133,5 @@ export function studioPage(ctx, id) {
 
   return el("div", { class: "helm-stack helm-embed-page" },
     header,
-    src
-      ? frameFor(ctx, studio, src)
-      : group.state === "starting" ? starting(studio) : stopped(ctx, studio, s));
+    frame || (group.state === "starting" ? starting(studio) : stopped(ctx, studio, s)));
 }

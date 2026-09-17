@@ -911,6 +911,24 @@ func TestAStudioOpensInsideHelmstudio(t *testing.T) {
 		t.Errorf("the embedded studio reads:\n got %q\nwant %q", got, want)
 	}
 
+	// Full screen hands the display to the studio itself — the frame, not the
+	// launcher's page around it — and Escape is the browser's way back.
+	if err := p.Eval(ctx, `(async () => {
+		const frame = document.querySelector("iframe.helm-embed");
+		let asked = null;
+		frame.requestFullscreen = function () { asked = this; return Promise.resolve(); };
+		const button = [...document.querySelectorAll("button")].find(b => b.textContent === "Full screen");
+		if (!button) return "no button";
+		button.click();
+		await new Promise(r => setTimeout(r, 50));
+		return asked === frame ? "asks for the frame" : "asks for " + (asked && asked.tagName);
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "asks for the frame" {
+		t.Errorf("full screen %q", got)
+	}
+
 	// A studio that is still starting has no page to show yet, so it is not
 	// framed: a frame would show a browser error inside helmstudio.
 	p2 := screen(t, ctx, srv.URL, "processes", 1280, 900)

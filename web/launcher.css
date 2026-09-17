@@ -970,3 +970,10 @@ dialog.helm-dialog::backdrop {
 .helm-embed-wait {
   flex: none;
 }
+
+/* Full screen is the studio's alone: no border, no radius, no ground of ours
+ * around it. */
+.helm-embed:fullscreen {
+  border: 0;
+  border-radius: 0;
+}

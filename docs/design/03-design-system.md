@@ -401,6 +401,8 @@ a frame under helmstudio's top bar and nav, at the full width of the window.
 - **It is never rebuilt by a poll.** The page redraws every two seconds; a frame
   rebuilt or re-pointed on one of them reloads the studio's page under whoever
   is using it, mid-generation at worst.
+- **Full screen** hands the whole display to the studio's page, from a control
+  on this screen; Escape comes back, which is the browser's own contract.
 - **Fullscreen and clipboard-write are granted** to the frame. Clipboard *read*
   is not available to a cross-origin frame however it is declared, so a studio
   that reads the clipboard asks for the tab.
