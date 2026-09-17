@@ -19,6 +19,8 @@ helmstudio is the room you launch *from*. It has to read as the same family as l
 
 **Every state has words.** A coloured dot is always paired with a label. Colour confirms; it never carries the message alone.**
 
+(Amended 2026-09-17, the launcher redesign, by the human's decision: **at most one** primary action is accent-filled on a screen, and a screen with nothing to commit has none. On Studios the accent goes to the running studio's Open; with nothing running no row is yellow and each row's main action is a strong outline, and with no studios Add a studio is the yellow. A card per studio with its own yellow button had put as many primary actions on one screen as there were studios.)
+
 ## 2 · Colour
 
 The accent is **signal yellow**. It is the highest-energy hue available and it earns its place here because this is a tool where one action per screen matters — Install, Launch, Render, Export — and everything else is information. Yellow also has a property no other accent has: **a yellow fill needs dark text in every theme**, so the primary button is the same colour in light and dark, which keeps the brand steady where a blue or teal would have to shift.
@@ -153,6 +155,8 @@ Stripe, dot and timeline clip only — never a button fill in launcher chrome. A
 | AuK studio  | `#8b7cf0` | `#5c4bc4` | audio         |
 
 (Amended 2026-09-16, M6 Q7: h3 studio's manifest carries this table's `#e0a33c` / `#a06a10`, not the `#ffb454` / `#b5721a` in 08's draft manifest. The table was chosen against the accent.)
+
+(Amended 2026-09-17, the launcher redesign, by the human's decision: the daemon serves every studio's hue as `Studio.hue`, `{dark, light}` — the manifest's own, or its §2c ramp entry when it declares none or its manifest did not load — so a stripe in the launcher is never the accent. Until then every stripe fell back to it.)
 
 ## 2a · Tokens
 
@@ -289,6 +293,13 @@ Base unit 4px; scale 4, 8, 12, 16, 20, 24, 32, 40, 56. Rails take 16px of intern
 
 The catalogue grid is `repeat(auto-fill, minmax(320px, 1fr))` with a 16px gap. The studio detail page is `280px | 1fr | 320px` above 1180px, dropping the right column below the centre at 1180px and stacking entirely below 900px — requirements first, terminal last but never under 240px tall. Minimum supported width is 380px.
 
+(Amended 2026-09-17, the launcher redesign, by the human's decision:
+- **Two page widths.** A page that is read — Studios, Add a studio, the approval screen, Models & disk, Settings — is a centred column 960px wide. A workspace — a studio's install, its process group, the editor — is up to 1440px. Both keep the page gutter at any width below.
+- **The top bar and the nav span the window**, whatever the page's width.
+- **Every page under Studios opens with a "← Studios" link** above its title.
+- **The launcher lists studios one per row** in that column (§6) instead of the catalogue grid. `helm-grid-cards` stays in helm-css for a studio's own pages.
+- **Below 640px a row stacks**: the state chip beside the title, then the description and facts, then the actions across the row at 36px tall.)
+
 ## 5 · helm-css, and how studios wear it
 
 The system ships as a package so studios can look like family without importing a component library. Five files: `helm-tokens.css`, `helm-base.css`, `helm-layout.css`, `helm-components.css`, and `helm.css` concatenating them. Every class is prefixed `helm-`, nothing is `!important`, and specificity stays at a single class so a studio overrides by writing one rule rather than fighting.
@@ -337,6 +348,15 @@ Every state in the canonical vocabulary has a row here. An unmapped state falls 
 - **A failure with code `env_failed`** (M5 Q7) reads as `failed_*` with its message.
 
 The facts line shows what the manifest declares, not the mockup's "~60 GB".)
+
+(Amended 2026-09-17, the launcher redesign, by the human's decision. A card is now **a row**, one per studio, in the 960px column (§4):
+- **Left, top to bottom:** the stripe; the title with its kind badge and the source and level as plain text, `Registry · Unverified`, each its own element because they are two facts; the description in full; then the **facts line**. During a download the bar and its mono line take the facts line's place, and a failed install puts one sentence in the error colour above it.
+- **The facts line says where things come from:** the peak memory, then a clone of the repository at its ref or the folder on this Mac it builds, then the weights downloaded or linked. Local or remote is never a switch on a row; that choice belongs to the install screen.
+- **Right:** the state chip at the top, and the actions beneath it — the secondary action as an outline, the main action (the table's Primary) as a strong outline, or as the accent under §1's rule, and a ⋯ menu. An action that only navigates, such as View progress while an install runs, is a plain outline.
+- **The ⋯ menu** holds Edit (Override, for an entry that is not yours), Duplicate, Revert (where there is something to go back to) and Export. It is a menu button: arrow keys move through it, and Escape closes it and returns focus.
+- **An invalid entry**'s main action is Edit; it offers nothing to install or launch.
+- **The page header** says how many studios, how many are installed and what they hold on disk, beside Add a studio, an outline with a plus.
+- **Every state of the screen is drawn.** While the first list loads there are placeholder rows, which do not animate. When the daemon cannot be reached, the last rows it served stay, greyed and inert, under one sentence saying the page keeps trying. A linked weights folder that is not there is a warning sentence on the row.)
 
 ## 7 · Studio detail and install
 
@@ -421,6 +441,24 @@ Clips carry the identity hue of the studio that produced them, so a sequence ass
 - **No Verify yet.** It is not shown while weight verification is open.
 - **"Orphaned" is a word, not a stored state.** It labels an artifact no studio is bound to; M3 Q3 removed the stored reference count and the `orphaned` state, not the idea.)
 
+(Amended 2026-09-17, the launcher redesign:
+- **The header** reads "13.3 GB used · 285 GB free", from `GET /models:disk`, beside "Reclaim orphaned · 4.1 GB" as an outline.
+- **The columns** are Model, Source, Size, Used by, Last used and the row's actions.
+  - **Model** is the repository with its revision beneath.
+  - **Source** is Downloaded, Linked, or Downloading with its bar and numbers, with the path beneath.
+  - **Size** of a linked folder reads "not counted": it is the user's, and never counted, moved or deleted.
+  - **Last used** is `last_used_at`, written when a studio using the model goes running (02 §7), and "never" before that.
+- **Row actions are quiet buttons** — Copy path, and Unlink or Delete… — and red appears only in the confirmation, which names every studio that uses the model.)
+
+## 12a · Settings
+
+(Added 2026-09-17, the launcher redesign.) One column, three sections:
+- **Hugging Face token.** Whether one is stored and when it was added, never the token. Add token, or Replace token, is the screen's accent. Remove is drawn only when a token is stored.
+- **This Mac.** The data, models, library, logs and cache directories, from `GET /launcher/settings/about`, each in mono with Copy. Revealing one in Finder needs the Mac app (§14), so the browser copies.
+- **About.** The daemon's version and the commit its build recorded, the platform API's version, and the major of each SDK package it serves — what a studio's `sdk` pins are checked against.
+
+The theme is not here: it is the three-state control in the top bar (§17), in one place.
+
 ## 13 · Adding a studio
 
 The one screen deliberately not optimised for clicks. Installing a studio runs someone else's code on your Mac; the product's obligation is to make that visible before it happens, not to dress it up.
@@ -448,6 +486,11 @@ Checks run before install, not after. Required failures warn loudly and block a 
 - **The checkpoint choice** for a studio with `selectable` weights is made here, defaulting to the first declared; install downloads only that one. It is shown but **not covered by the digest**, since every selectable weight was approved with the manifest and a digest over the choice would ask again at every switch.
 - **What the digest proves.** Until M9's cookie, any local process can fetch a preview and send its digest back. The digest proves the screen was current, not that a person read it.
 
+(Amended 2026-09-17, the launcher redesign.)
+
+- **Add a studio**, the page before this screen, is four rows in the 960px column. Each row has a heading, one sentence, its fields, and one button sized to its label: **From a repository** (Repository and Ref, "Read repository", the page's accent), **From a folder on this Mac** ("Read folder"), **From a file someone sent you** ("Import files…") and **Write one** ("Write a manifest"). A field is checked when its row is submitted, and what is wrong is written under the field, which is marked invalid.
+- **This screen** opens with "← Studios", like every page under Studios, and states the source and level as plain text rather than chips.
+
 ## 13a · Describing a studio yourself
 
 Most repos worth running will never ship a manifest, so writing one has to be a first-class act rather than a fallback. Form on the left for the fields, YAML on the right for the parts that are really text, both live and both editable, with the criteria scoring underneath as you type.
@@ -457,6 +500,14 @@ Most repos worth running will never ship a manifest, so writing one has to be a 
 - **The page never parses YAML.** It sends text to the daemon and gets back errors with lines and pointers, the criteria, and the document as JSON; a form edit goes as a JSON pointer and a value, and the daemon applies it to the YAML node tree, keeping comments and key order. A JavaScript YAML parser would be a second implementation, and its disagreements with the daemon's — anchors, merge keys, `on` and `yes`, duplicate keys — would show one manifest and validate another.
 - **The form is generated** from `schema/manifest.json`, served to the page, with a hand-written map from pointers to the sections below. A hand-written form would be a second copy of the schema, and would silently lose a field the day the schema gained one.
 - **The criteria scored here are only those a manifest alone answers.** The rest read "Not checked: needs the smoke harness", and **there is no Test button** until that harness exists.
+
+(Amended 2026-09-17, the launcher redesign, by the human's decision: the editor is **a section menu and one section at a time**, not a form, a YAML pane and the criteria on one page. It is a workspace, up to 1440px wide (§4).
+- **The menu, on the left**, lists the form's sections (Identity & source, Runtime, Host requirements, Platform), then **helmstudio.yaml**, then **Certification criteria**. Beside each form section is its count of errors, beside helmstudio.yaml the verdict, and beside the criteria their score.
+- **The centre** shows the chosen section: a form section's fields, with the next and previous sections linked at its foot. helmstudio.yaml is the whole text in a pane of its own under a strip naming the file and its verdict, with every error and its line beneath; the parts that are only text (build, weights, processes and the rest) are edited there.
+- **The criteria section** lists every criterion; one with a `pointer` links to the section holding its field.
+- **The section is in the address**, `?section=`, so a link, Back and a reload land on it; choosing one moves focus to its heading.
+- **The header** holds the title, the file, the verdict chip, the criteria score and an unsaved marker, then Import file, Export and Save to library, the accent.
+- **Both views stay live.** A form edit still goes to the daemon as a pointer and a value, and the text section shows what came back.)
 
 *[Mockup: New studio — ~/.helmstudio/studios/wan-studio.yaml, "13 of 15 criteria", Import file, Export, Test, Save to library.*
 - *Form:*
@@ -540,6 +591,13 @@ Buttons are 26px by default, 22px compact inside card rows and panel headers, 30
 The rule is unchanged; §2b is what the gate checks.)
 
 **Focus order** runs top bar, nav, page actions, then content in DOM order; a skip link is first. Within a card: title, secondary, primary.
+
+(Amended 2026-09-17, the launcher redesign:
+- **Within a studio's row** the order is its title, then its secondary action, its main action and its ⋯ menu.
+- **The skip link** moves focus to the content without changing the address.
+- **Focus moves to the page's title when the page changes**, and to a section's heading when the editor's section changes. A poll never moves it.
+- **A redraw changes the page in place**, so focus, an open menu, a caret and a scrolled pane survive it.
+- **An elapsed time counts in the page** between polls. It swaps tabular digits and never animates (§16).)
 
 **Live regions.** Polite for step completion, studio state changes and toasts; assertive for failures only. Download progress announces at 0, 25, 50, 75 and 100 percent — never every frame — while the bar updates continuously through `aria-valuenow`.
 
