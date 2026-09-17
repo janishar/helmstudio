@@ -177,6 +177,7 @@ const styles = `
   .clip[data-dragging="true"] { cursor: grabbing; }
   .clip .who { position: relative; z-index: 1; font: var(--helm-type-micro); color: var(--helm-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .clip .what { position: relative; z-index: 1; font: var(--helm-type-mono); color: var(--helm-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .clip[aria-selected="true"] .what { color: var(--helm-text-secondary); }
   .edge { position: absolute; top: 0; bottom: 0; width: ${EDGE_PX}px; cursor: ew-resize; }
   .edge.in { left: 0; }
   .edge.out { right: 0; }
