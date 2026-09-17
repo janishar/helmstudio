@@ -125,7 +125,18 @@ For example:
     HELM_VERSION=1.0.0-rc.1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/janishar/helmstudio/main/installer/install.sh)"
 
 Read a script before handing it to a shell; this one is `installer/install.sh`
-in this repository. To uninstall, delete `~/.local/bin/helm`.
+in this repository.
+
+**To uninstall**:
+
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/janishar/helmstudio/main/installer/uninstaller.sh)"
+
+`installer/uninstaller.sh` removes `helm` from `~/.local/bin`, or from
+`HELM_INSTALL_DIR`, with whatever an interrupted install left beside it, and
+only when that `helm` is helmstudio's: another program called `helm`, and a link
+the installer never makes, are left alone. It removes nothing else, neither
+`~/.helmstudio` nor the `.helm` a studio keeps under `helm dev`, and it says so
+when there is nothing to remove.
 
 **By hand**, on a Mac with Apple Silicon, for `1.0.0-rc.1`:
 

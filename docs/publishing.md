@@ -53,8 +53,9 @@ In the repository's settings on GitHub:
   ruleset matches with `File::FNM_PATHNAME`, so `**` at the end of a pattern
   stops at the next `/` and matches no package's tag. The ruleset's page says
   how many existing tags it applies to; check it counts every release tag.
-- **The default branch.** `installer/install.sh` is served from `main`, so
-  whoever can change `main` decides what the one-line install runs. *Rulesets →
+- **The default branch.** The scripts in `installer/` are served from `main`,
+  so whoever can change `main` decides what the one-line install and uninstall
+  run. *Rulesets →
   New ruleset → New branch ruleset*: active, targeting the default branch, with
   *Restrict deletions*, *Block force pushes* and *Require a pull request before
   merging*, and the Repository admin role on the bypass list.

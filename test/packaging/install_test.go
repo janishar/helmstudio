@@ -148,6 +148,127 @@ func TestTheInstallerLeavesAnotherHelmAlone(t *testing.T) {
 	}
 }
 
+// uninstaller.sh removes the helm install.sh installed, and what an interrupted
+// install left beside it.
+func TestTheUninstallerRemovesHelmstudiosHelm(t *testing.T) {
+	needBash(t)
+	home := t.TempDir()
+	bin := filepath.Join(home, "bin")
+	leftover := filepath.Join(bin, ".helm-install.AbC123")
+	if err := os.MkdirAll(leftover, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(leftover, "helm_9.8.7_darwin_arm64.tar.gz"), []byte("partial"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "helm"), []byte(helmstudioHelm), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runUninstaller(t, home, "HELM_INSTALL_DIR="+bin)
+	if err != nil {
+		t.Fatalf("uninstaller.sh: %v\n%s", err, out)
+	}
+	if _, err := os.Lstat(filepath.Join(bin, "helm")); err == nil {
+		t.Errorf("uninstaller.sh left helm in %s:\n%s", bin, out)
+	}
+	if !strings.Contains(out, "removed "+bin+"/helm") {
+		t.Errorf("uninstaller.sh does not say what it removed:\n%s", out)
+	}
+	assertNothingLeftBehind(t, bin)
+}
+
+// Kubernetes' CLI is also called helm, and install.sh never makes a link:
+// uninstaller.sh removes neither.
+func TestTheUninstallerLeavesAnotherHelmAlone(t *testing.T) {
+	needBash(t)
+	t.Run("another program", func(t *testing.T) {
+		home := t.TempDir()
+		bin := filepath.Join(home, "bin")
+		other := "#!/bin/sh\necho 'The Kubernetes package manager'\n"
+		if err := os.MkdirAll(bin, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(bin, "helm"), []byte(other), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		out, err := runUninstaller(t, home, "HELM_INSTALL_DIR="+bin)
+		if err == nil || !strings.Contains(out, "is another program called helm") {
+			t.Errorf("err = %v, want uninstaller.sh to refuse another helm:\n%s", err, out)
+		}
+		if got, _ := os.ReadFile(filepath.Join(bin, "helm")); string(got) != other {
+			t.Errorf("uninstaller.sh changed the other helm: %q", got)
+		}
+	})
+	t.Run("a link", func(t *testing.T) {
+		home := t.TempDir()
+		bin := filepath.Join(home, "bin")
+		clone := filepath.Join(home, "helmstudio", "bin", "helm")
+		for _, dir := range []string{bin, filepath.Dir(clone)} {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(clone, []byte(helmstudioHelm), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(clone, filepath.Join(bin, "helm")); err != nil {
+			t.Fatal(err)
+		}
+		out, err := runUninstaller(t, home, "HELM_INSTALL_DIR="+bin)
+		if err == nil || !strings.Contains(out, "is a link") {
+			t.Errorf("err = %v, want uninstaller.sh to leave a link alone:\n%s", err, out)
+		}
+		if _, err := os.Lstat(filepath.Join(bin, "helm")); err != nil {
+			t.Errorf("uninstaller.sh removed the link: %v", err)
+		}
+		if _, err := os.Stat(clone); err != nil {
+			t.Errorf("uninstaller.sh removed what the link points at: %v", err)
+		}
+	})
+}
+
+func TestTheUninstallerHasNothingToRemove(t *testing.T) {
+	needBash(t)
+	home := t.TempDir()
+	out, err := runUninstaller(t, home, "HELM_INSTALL_DIR="+filepath.Join(home, "bin"))
+	if err != nil || !strings.Contains(out, "nothing to remove") {
+		t.Errorf("err = %v, want uninstaller.sh to succeed and say there is nothing to remove:\n%s", err, out)
+	}
+}
+
+// What install.sh puts in a directory, uninstaller.sh takes out again.
+func TestInstallingThenUninstallingLeavesTheDirectoryAsItWas(t *testing.T) {
+	plat := installerPlatform(t)
+	rel := serveRelease(t, "9.8.7", plat, helmstudioHelm, false)
+	home := t.TempDir()
+	bin := filepath.Join(home, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "other-tool"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := runInstaller(t, home, "HELM_VERSION=9.8.7", "HELM_RELEASES_URL="+rel.url, "HELM_INSTALL_DIR="+bin); err != nil {
+		t.Fatalf("install.sh: %v\n%s", err, out)
+	}
+	if out, err := runUninstaller(t, home, "HELM_INSTALL_DIR="+bin); err != nil {
+		t.Fatalf("uninstaller.sh: %v\n%s", err, out)
+	}
+	entries, err := os.ReadDir(bin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	if !slices.Equal(names, []string{"other-tool"}) {
+		t.Errorf("%s holds %v after installing and uninstalling, want only what was there before", bin, names)
+	}
+}
+
 // installerPlatform is this machine as install.sh names it, if helm is released for it.
 func installerPlatform(t *testing.T) string {
 	t.Helper()
@@ -228,11 +349,33 @@ func serveRelease(t *testing.T, version, plat, helm string, tampered bool) *rele
 // no HELM_* variable of the person running the tests reaches it.
 func runInstaller(t *testing.T, home string, env ...string) (string, error) {
 	t.Helper()
-	cmd := exec.Command("bash", filepath.Join(root(t), "installer", "install.sh"))
+	return runScript(t, "install.sh", os.Getenv("PATH"), home, env...)
+}
+
+// runUninstaller runs uninstaller.sh with a PATH of the system's directories
+// only, so no helm the person running the tests installed is found on it.
+func runUninstaller(t *testing.T, home string, env ...string) (string, error) {
+	t.Helper()
+	return runScript(t, "uninstaller.sh", "/usr/bin:/bin", home, env...)
+}
+
+func runScript(t *testing.T, script, path, home string, env ...string) (string, error) {
+	t.Helper()
+	cmd := exec.Command("bash", filepath.Join(root(t), "installer", script))
 	cmd.Dir = home
-	cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + home}, env...)
+	cmd.Env = append([]string{"PATH=" + path, "HOME=" + home}, env...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+func needBash(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("bash"); err != nil {
+		if os.Getenv("HELM_ALLOW_MISSING_CLIENTS") == "" {
+			t.Fatal("bash is not installed, so the installer's scripts cannot be run; install it, or set HELM_ALLOW_MISSING_CLIENTS=1 to skip on purpose")
+		}
+		t.Skip("bash is not installed; skipped because HELM_ALLOW_MISSING_CLIENTS is set")
+	}
 }
 
 func assertNothingLeftBehind(t *testing.T, dir string) {
@@ -240,7 +383,7 @@ func assertNothingLeftBehind(t *testing.T, dir string) {
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), ".helm-install.") {
-			t.Errorf("install.sh left %s behind in %s", e.Name(), dir)
+			t.Errorf("%s was left behind in %s", e.Name(), dir)
 		}
 	}
 }
