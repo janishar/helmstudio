@@ -890,17 +890,23 @@ func TestAStudioOpensInsideHelmstudio(t *testing.T) {
 		await new Promise(r => setTimeout(r, 150));
 		const after = document.querySelector("iframe.helm-embed");
 		const tab = [...document.querySelectorAll("button")].find(b => b.textContent === "Open in a tab");
+		// It fills the page. An iframe whose chain to the window is broken
+		// anywhere falls back to its own 150px and shows the studio through a
+		// letterbox.
+		const page = document.querySelector(".helm-page-full").getBoundingClientRect().height;
+		const tall = frame.getBoundingClientRect().height;
 		return [
 			frame.getAttribute("src"),
 			after === frame ? "same frame" : "rebuilt",
 			after && after.dataset.mark === "kept" ? "not reloaded" : "reloaded",
 			frame.getAttribute("allow"),
 			tab ? "tab offered" : "no tab",
+			tall > page - 120 ? "fills the page" : Math.round(tall) + "px of " + Math.round(page) + "px",
 		].join("|");
 	})()`, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := "http://127.0.0.1:8720/|same frame|not reloaded|fullscreen; clipboard-write|tab offered"
+	want := "http://127.0.0.1:8720/|same frame|not reloaded|fullscreen; clipboard-write|tab offered|fills the page"
 	if got != want {
 		t.Errorf("the embedded studio reads:\n got %q\nwant %q", got, want)
 	}

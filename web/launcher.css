@@ -938,6 +938,16 @@ dialog.helm-dialog::backdrop {
   max-width: none;
 }
 
+/* The screen a failed poll greys is also what a full page's height passes
+ * through: without this the chain from the window to the frame breaks here,
+ * and an iframe falls back to its own 150px. */
+.helm-page-full > .helm-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .helm-embed-page {
   flex: 1;
   min-height: 0;
