@@ -14,7 +14,7 @@ and keep everything they make in one place.
 
 [Documentation](https://helmstudio.in/docs/) ·
 [Quickstart](https://helmstudio.in/docs/quickstart/) ·
-[Architecture](docs/helm/framework.md) ·
+[Architecture](docs/framework.md) ·
 [Design](docs/design/00-index.md) ·
 [Contributing](CONTRIBUTING.md)
 
@@ -242,7 +242,7 @@ test/            the conformance, visual and media suites
 
 - **[Documentation site](https://helmstudio.in/docs/)** — for studio authors;
   its source is in [`site/content/docs`](site/content/docs)
-- **[Architecture guide](docs/helm/framework.md)** — a map of the repository,
+- **[Architecture guide](docs/framework.md)** — a map of the repository,
   from the bird's-eye view down
 - **[Design](docs/design/00-index.md)** — the frozen design: an implementation
   that disagrees with it is wrong until the document changes

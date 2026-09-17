@@ -156,7 +156,7 @@ Stripe, dot and timeline clip only — never a button fill in launcher chrome. A
 
 ## 2a · Tokens
 
-(Added 2026-09-16, M6 Q5. Token names are API within a major (§5): this table is the whole list, and `helm-tokens.css` and `tokens.json` carry exactly these names with these values. The values in §2 are unchanged. A value marked *proposed* was not stated anywhere in the design and needs the human's sign-off; one marked *reading copy* comes from the stylesheet of `docs/artifacts/03-design-system.html`, where the prose never stated it.)
+(Added 2026-09-16, M6 Q5. Token names are API within a major (§5): this table is the whole list, and `helm-tokens.css` and `tokens.json` carry exactly these names with these values. The values in §2 are unchanged. A value marked *proposed* was not stated anywhere in the design and needs the human's sign-off; one marked *reading copy* comes from the stylesheet of `docs/artifacts/03-design-system.html`, where the prose never stated it.) (Amended 2026-09-17: `docs/artifacts/` is removed; that page is in the repository's history, `git show 9587848:docs/artifacts/03-design-system.html`.)
 
 #### Colour — one value per theme
 

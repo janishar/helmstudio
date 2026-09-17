@@ -24,3 +24,5 @@ These eight documents are the contract for helmstudio. They were frozen on 15 Se
 ## Known gaps in the conversion
 
 Inline diagrams did not survive the conversion to markdown and are marked in place. Where a diagram mattered, its content is also stated in prose; where only the picture existed, the reading copy in `docs/artifacts/` is the reference — open `docs/artifacts/index.html` in a browser. Those pages are a snapshot, not the contract: where one differs from the markdown here, the markdown is right.
+
+(Amended 2026-09-17, by the human's decision: `docs/artifacts/` is removed from the repository. The reading copies stay in its history — `git show 9587848:docs/artifacts/index.html`, and the same for each page — and the markdown here remains the contract.)

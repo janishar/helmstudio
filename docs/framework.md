@@ -98,14 +98,14 @@ Start here, in this order, depending on what you are trying to understand.
 | To understand… | Read |
 |---|---|
 | What is being built and why | `docs/design/01-prd.md` |
-| The daemon's startup, in one function | [`cmd/helmstudio/main.go`](../../cmd/helmstudio/main.go) — `run()` is the whole boot sequence in about a hundred lines |
-| The CLI | [`cmd/helm/main.go`](../../cmd/helm/main.go), then `validate.go` and `dev.go` |
-| The manifest contract | [`schema/manifest.json`](../../schema/manifest.json), then `internal/manifest/rules.go` for the checks a JSON Schema cannot express |
-| The API contract | [`api/openapi.yaml`](../../api/openapi.yaml) — the header comment states every convention that is not repeated per operation |
-| What a real studio declares | [`studios/h3-studio.yaml`](../../studios/h3-studio.yaml) |
-| The launcher's screens | [`web/app.js`](../../web/app.js) — the shell, the router and the one poll; each screen is a function of a context beside it |
-| A prebuilt component | [`packages/helm-ui-sdk/src/terminal.js`](../../packages/helm-ui-sdk/src/terminal.js) — the clearest example of receiving a client rather than building one |
-| What must pass before a commit | [`Makefile`](../../Makefile), then `docs/agents/gate.md` |
+| The daemon's startup, in one function | [`cmd/helmstudio/main.go`](../cmd/helmstudio/main.go) — `run()` is the whole boot sequence in about a hundred lines |
+| The CLI | [`cmd/helm/main.go`](../cmd/helm/main.go), then `validate.go` and `dev.go` |
+| The manifest contract | [`schema/manifest.json`](../schema/manifest.json), then `internal/manifest/rules.go` for the checks a JSON Schema cannot express |
+| The API contract | [`api/openapi.yaml`](../api/openapi.yaml) — the header comment states every convention that is not repeated per operation |
+| What a real studio declares | [`studios/h3-studio.yaml`](../studios/h3-studio.yaml) |
+| The launcher's screens | [`web/app.js`](../web/app.js) — the shell, the router and the one poll; each screen is a function of a context beside it |
+| A prebuilt component | [`packages/helm-ui-sdk/src/terminal.js`](../packages/helm-ui-sdk/src/terminal.js) — the clearest example of receiving a client rather than building one |
+| What must pass before a commit | [`Makefile`](../Makefile), then `docs/agents/gate.md` |
 | Why something is the way it is | `docs/decisions.md` |
 
 ---
