@@ -1,5 +1,5 @@
 // Command helm is the helmstudio CLI: validate, dev, test, doctor, adopt.
-// validate and dev exist; the rest land in later milestones.
+// validate and dev exist, with upgrade; the rest land in later milestones.
 package main
 
 import (
@@ -27,6 +27,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runValidate(args[1:], stdout, stderr)
 	case "dev":
 		return runDevCommand(args[1:], stdout, stderr)
+	case "upgrade":
+		return runUpgrade(args[1:], stdout, stderr)
 	case "-h", "--help", "help":
 		usage(stderr)
 		return 0
@@ -48,6 +50,7 @@ commands:
   validate <manifest.yaml>...   validate one or more studio manifests
   validate -theme <dir>         lint a studio's stylesheets against helm-css (-strict to fail)
   dev [-f helmstudio.yaml]      run a studio against the embedded provider, no daemon
+  upgrade [--version <v>]       replace this helm with the newest release
   --version                     print which helm this is`)
 }
 

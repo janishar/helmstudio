@@ -132,6 +132,15 @@ Read a script before handing it to a shell; this one is `installer/install.sh`
 in this repository. `helm --version` says which `helm` is installed, and the
 commit it was built from; a build from a clone says `dev`.
 
+**To upgrade**, run `helm upgrade`. It replaces the running `helm` with the
+newest release, with the checks the installer makes, and says so when there is
+nothing newer. It never installs an older release unless `--version` names one:
+`helm upgrade --version 1.0.0` installs that version. A `helm` built from a clone
+is refused, and so is one reached through a link. `helm upgrade` reaches the
+network only when it is run; nothing checks for a new release on its own.
+`1.0.0-rc.1` was released before `helm upgrade`, so it is updated once by
+running the installer again.
+
 **To uninstall**:
 
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/janishar/helmstudio/main/installer/uninstaller.sh)"

@@ -21,7 +21,7 @@ The same applies to a failing test. If a test looks wrong, that is a finding, no
 ## Layout
 
     cmd/helmstudio     the daemon
-    cmd/helm           the CLI: validate, dev, test, doctor, adopt
+    cmd/helm           the CLI: validate, dev, upgrade, test, doctor, adopt
     installer/         install.sh and uninstaller.sh, which install and remove helm
     internal/          daemon internals — platform, store, supervisor, install, weights, api
     packages/          helm-css, helm-runtime-sdk (go/py/node), helm-ui-sdk
