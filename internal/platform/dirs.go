@@ -9,30 +9,32 @@ import (
 )
 
 // Root names one of the five independently resolved directory roots
-// (docs/design/06-storage.md §4, "Where the root actually is").
+// (docs/design/06-storage.md §4, "Where the root actually is"). Every root
+// defaults in one tree, ~/.helmstudio, and each can be moved on its own.
 type Root string
 
 const (
-	// RootData holds helm.db, studio checkouts and assets/blobs. Backed up.
+	// RootData holds helm.db, studio checkouts and assets/blobs, and by
+	// default every other root. Backed up.
 	RootData Root = "data"
-	// RootCache holds regenerable files only. The OS may purge it at any
-	// moment and excludes it from backup, so nothing irreplaceable goes here.
+	// RootCache holds regenerable files only, so nothing irreplaceable goes
+	// here: it can be moved where the OS purges it and backups skip it.
 	RootCache Root = "cache"
 	// RootLogs holds build and run logs.
 	RootLogs Root = "logs"
-	// RootLibrary is the human-readable media tree. Chosen for
-	// discoverability, not platform convention: it defaults to ~/helmstudio.
+	// RootLibrary is the human-readable media tree, settable so a person can
+	// keep what they made where they browse.
 	RootLibrary Root = "library"
 	// RootModels holds weights, often on an external drive.
 	RootModels Root = "models"
 )
 
-// Roots lists every root in resolution order. RootModels comes after RootData
-// because its default is derived from the resolved data root.
+// Roots lists every root in resolution order. RootData comes first because
+// every other root defaults inside the resolved data root.
 var Roots = []Root{RootData, RootCache, RootLogs, RootLibrary, RootModels}
 
 // Environment variables that override the resolved roots. A specific variable
-// wins over EnvHome; both win over a stored setting and the OS default.
+// wins over EnvHome; both win over a stored setting and the default.
 const (
 	EnvHome       = "HELMSTUDIO_HOME"
 	EnvDataDir    = "HELMSTUDIO_DATA_DIR"
@@ -60,18 +62,12 @@ func settable(r Root) bool { return r == RootLibrary || r == RootModels }
 type StoredSetting func(r Root) (path string, ok bool, err error)
 
 // Options controls resolution. The zero value resolves from the process
-// environment and the OS defaults, with no stored settings.
+// environment and the defaults, with no stored settings.
 type Options struct {
 	// LookupEnv reads an environment variable. Nil means os.LookupEnv.
 	LookupEnv func(key string) (string, bool)
 	// Stored is consulted for settable roots only. Nil means none stored.
 	Stored StoredSetting
-}
-
-// osDefaults are the OS-convention locations for the three roots the
-// operating system has an opinion about, plus the user's home directory.
-type osDefaults struct {
-	home, data, cache, logs string
 }
 
 // Dirs is the resolved set of roots and the only place a path is built.
@@ -80,15 +76,18 @@ type Dirs struct {
 }
 
 // Resolve resolves every root. For each: its specific environment variable,
-// then HELMSTUDIO_HOME/<root>, then a stored setting (library and models
-// only), then the OS default.
+// then HELMSTUDIO_HOME, then a stored setting (library and models only), then
+// the default — ~/.helmstudio for the data root, and a directory named for the
+// root inside the resolved data root for every other.
 func Resolve(opts Options) (*Dirs, error) {
-	return resolve(opts, currentDefaults)
+	return resolve(opts, defaultData)
 }
 
-// Under resolves every root beneath one directory, exactly as HELMSTUDIO_HOME
-// would, ignoring the process environment and any stored setting. This is
-// how tests, CI and `helm dev` get a tree that is not the user's.
+// Under resolves every root in one directory, exactly as HELMSTUDIO_HOME
+// would, ignoring the process environment and any stored setting: the
+// directory is the data root, and the other roots are inside it — the tree
+// ~/.helmstudio is by default, and `helm dev` keeps in ./.helm. This is how
+// tests and CI get a tree that is not the user's.
 func Under(home string) (*Dirs, error) {
 	env := func(k string) (string, bool) {
 		if k == EnvHome {
@@ -96,12 +95,20 @@ func Under(home string) (*Dirs, error) {
 		}
 		return "", false
 	}
-	return resolve(Options{LookupEnv: env}, func(func(string) (string, bool)) (osDefaults, error) {
-		return osDefaults{}, errors.New("unreachable: every root is under HELMSTUDIO_HOME")
+	return resolve(Options{LookupEnv: env}, func() (string, error) {
+		return "", errors.New("unreachable: every root is in HELMSTUDIO_HOME")
 	})
 }
 
-func resolve(opts Options, defaults func(lookupEnv func(string) (string, bool)) (osDefaults, error)) (*Dirs, error) {
+// inTree is where root r sits in a tree whose data root is data.
+func inTree(data string, r Root) string {
+	if r == RootData {
+		return data
+	}
+	return filepath.Join(data, string(r))
+}
+
+func resolve(opts Options, defaultData func() (string, error)) (*Dirs, error) {
 	lookup := opts.LookupEnv
 	if lookup == nil {
 		lookup = os.LookupEnv
@@ -116,7 +123,6 @@ func resolve(opts Options, defaults func(lookupEnv func(string) (string, bool)) 
 		return nil, fmt.Errorf("%s=%q is not an absolute path; set it to an absolute directory or unset it", EnvHome, home)
 	}
 
-	var def *osDefaults // resolved lazily: an all-override tree never asks the OS
 	d := &Dirs{roots: make(map[Root]string, len(Roots))}
 	for _, r := range Roots {
 		if v := env(envForRoot[r]); v != "" {
@@ -127,7 +133,7 @@ func resolve(opts Options, defaults func(lookupEnv func(string) (string, bool)) 
 			continue
 		}
 		if home != "" {
-			d.roots[r] = filepath.Join(home, string(r))
+			d.roots[r] = inTree(home, r)
 			continue
 		}
 		if settable(r) && opts.Stored != nil {
@@ -143,25 +149,17 @@ func resolve(opts Options, defaults func(lookupEnv func(string) (string, bool)) 
 				continue
 			}
 		}
-		if def == nil {
-			got, err := defaults(lookup)
-			if err != nil {
-				return nil, fmt.Errorf("resolving the default %s directory: %w", r, err)
-			}
-			def = &got
+		if r != RootData {
+			d.roots[r] = inTree(d.roots[RootData], r)
+			continue
 		}
-		switch r {
-		case RootData:
-			d.roots[r] = def.data
-		case RootCache:
-			d.roots[r] = def.cache
-		case RootLogs:
-			d.roots[r] = def.logs
-		case RootLibrary:
-			d.roots[r] = filepath.Join(def.home, "helmstudio")
-		case RootModels:
-			d.roots[r] = filepath.Join(d.roots[RootData], "models")
+		// Asked only when nothing overrides the data root, so an all-override
+		// tree never needs a home directory.
+		data, err := defaultData()
+		if err != nil {
+			return nil, fmt.Errorf("resolving the default data directory: %w", err)
 		}
+		d.roots[r] = data
 	}
 	return d, nil
 }

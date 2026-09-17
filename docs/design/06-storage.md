@@ -55,22 +55,25 @@ SQLite genuinely is faster than the filesystem for blobs under roughly 100 KB, w
 
 ### Where the root actually is
 
-The tree below is written as `~/.helmstudio/` for readability, but no path is hardcoded. Four roots resolve separately through a directories helper, because the operating system treats them differently and conflating them is how a 60 GB cache ends up inside a backup, or a thumbnail survives a purge that should have reclaimed it.
+Everything lives in one tree, `~/.helmstudio/`, as drawn below, on every platform — the same shape `helm dev` keeps in a studio's `./.helm/`. No path is hardcoded: five roots resolve separately through a directories helper, so any one of them can be moved on its own.
 
-| Root        | Holds                                      | macOS                                               | Linux                        | Windows                           |
-|-------------|--------------------------------------------|-----------------------------------------------------|------------------------------|-----------------------------------|
-| **data**    | `helm.db`, studios, assets/blobs           | `~/Library/Application Support/helmstudio`          | `$XDG_DATA_HOME/helmstudio`  | `%LOCALAPPDATA%\helmstudio`       |
-| **cache**   | derived thumbs, proxies, fetched manifests | `~/Library/Caches/helmstudio`                       | `$XDG_CACHE_HOME/helmstudio` | `%LOCALAPPDATA%\helmstudio\cache` |
-| **logs**    | build and run logs                         | `~/Library/Logs/helmstudio`                         | `$XDG_STATE_HOME/helmstudio` | under data                        |
-| **library** | the readable media tree                    | `~/helmstudio` by default, and settable — see below |                              |                                   |
+| Root        | Holds                                      | Default                                               |
+|-------------|--------------------------------------------|-------------------------------------------------------|
+| **data**    | `helm.db`, studios, assets/blobs, stage    | `~/.helmstudio`                                       |
+| **cache**   | derived thumbs, proxies, fetched manifests | `~/.helmstudio/cache`                                 |
+| **logs**    | build and run logs                         | `~/.helmstudio/logs`                                  |
+| **library** | the readable media tree                    | `~/.helmstudio/library`, and settable — see below     |
+| **models**  | weights                                    | `~/.helmstudio/models`, and settable                  |
 
-The cache split earns its keep immediately: those directories are excluded from Time Machine and may be purged by the OS, which is exactly right for files the media engine can regenerate and exactly wrong for the blobs it cannot. Models are a fifth root, already separately settable, because a 200 GB collection often belongs on an external drive.
+(Amended 2026-09-17, by the human's decision: every root defaults in `~/.helmstudio`. This replaces the operating systems' conventions — `~/Library/Application Support`, `~/Library/Caches` and `~/Library/Logs` on macOS, the XDG directories on Linux, `%LOCALAPPDATA%` on Windows — and `~/helmstudio` for the library, and gives up what they bought: the cache is no longer excluded from Time Machine or purgeable by the OS, and the library sits in a hidden directory, unless each is moved.)
 
-The library is the exception, on purpose
+The cache is still a root of its own because nothing in it is irreplaceable: moved to `~/Library/Caches/helmstudio`, it gets back the OS's backup exclusion and purging without touching the blobs beside it. Models are a separate root because a 200 GB collection often belongs on an external drive.
 
-Internal plumbing follows platform convention; the user's own work does not. `library/` holds the human-readable hardlinks to everything they have generated, and a person has to be able to find it without being told where an operating system hides application data. So it defaults to `~/helmstudio`, it is settable, and it is the one root chosen for discoverability rather than correctness.
+The library stays settable, on purpose
 
-Resolution order is the same for every root — `HELMSTUDIO_HOME` or the specific override variable, then the stored setting, then the OS default — which is what lets a test, a CI run and `helm dev` each work in an isolated tree without touching the user's. In Go this needs no dependency: `os.UserHomeDir`, `os.UserCacheDir` and `os.UserConfigDir` plus about thirty lines of platform switch covers it. An existing `~/.helmstudio` from an earlier version is detected and adopted in place rather than abandoned.
+`library/` holds the human-readable hardlinks to everything a person has generated, and they have to be able to find it. It defaults to `~/.helmstudio/library`, and it is settable, so it can live wherever that person browses.
+
+Resolution order is the same for every root — the specific override variable, then `HELMSTUDIO_HOME`, then the stored setting (library and models), then the default: `~/.helmstudio` for data, and a directory named for the root inside the resolved data root for every other. `HELMSTUDIO_HOME=<dir>` is that same tree at `<dir>`, which is what lets a test, a CI run and `helm dev` each work in an isolated tree without touching the user's. In Go this needs no dependency: `os.UserHomeDir` covers it. Data kept at the earlier defaults is neither moved nor adopted: no released helmstudio used them.
 
 ### The layout
 

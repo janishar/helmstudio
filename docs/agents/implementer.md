@@ -51,8 +51,8 @@ Do not start the next milestone because you have time left.
 - Add a dependency without recording it in the report and in
   `docs/decisions.md`. Go here is stdlib-first; a new module is a decision.
 - Touch anything under a user's models directory, or run reclaim, from a test.
-- Write anything to `~/helmstudio` or the OS data roots from a test. Tests get
-  a temp root through the directories helper.
+- Write anything to `~/.helmstudio`, the user's helmstudio tree, from a test.
+  Tests get a temp root through the directories helper.
 
 ## While you work
 

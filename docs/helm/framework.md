@@ -408,33 +408,35 @@ operations. If the hash already exists, the link is simply dropped — the secon
 studio to produce identical bytes stores nothing.
 
 **Derived files sit under the cache root, deliberately.** Thumbnails, posters,
-waveforms and proxies are regenerable, so they live where the OS may purge them
-and a backup skips them — which is exactly wrong for the blobs beside them.
-That is most of the reason the roots are separate in the first place.
+waveforms and proxies are regenerable, so they live in a root that can be moved
+where the OS purges it and a backup skips it — which is exactly wrong for the
+blobs beside them. That is most of the reason the roots are separate in the
+first place.
 
 ### The five roots
 
-No path is hardcoded; each root resolves separately, because the operating
-system treats them differently. Conflating them is how a 60 GB cache ends up
-inside a backup.
+Everything lives in one tree, `~/.helmstudio`, on every platform — the shape
+`helm dev` keeps in a studio's `./.helm`. No path is hardcoded: each root
+resolves separately, so any one can be moved on its own — models to an external
+drive, the cache out of a backup.
 
-| Root | Holds | macOS default | Override |
+| Root | Holds | Default | Override |
 |---|---|---|---|
-| **data** | `helm.db`, studio checkouts, `assets/blobs`, `stage/` | `~/Library/Application Support/helmstudio` | `HELMSTUDIO_DATA_DIR` |
-| **cache** | derived thumbs, proxies, fetched manifests — regenerable only | `~/Library/Caches/helmstudio` | `HELMSTUDIO_CACHE_DIR` |
-| **logs** | build and run logs | `~/Library/Logs/helmstudio` | `HELMSTUDIO_LOGS_DIR` |
-| **library** | the human-readable media tree | `~/helmstudio` | `HELMSTUDIO_LIBRARY_DIR` |
+| **data** | `helm.db`, studio checkouts, `assets/blobs`, `stage/` | `~/.helmstudio` | `HELMSTUDIO_DATA_DIR` |
+| **cache** | derived thumbs, proxies, fetched manifests — regenerable only | `<data>/cache` | `HELMSTUDIO_CACHE_DIR` |
+| **logs** | build and run logs | `<data>/logs` | `HELMSTUDIO_LOGS_DIR` |
+| **library** | the human-readable media tree | `<data>/library` | `HELMSTUDIO_LIBRARY_DIR` |
 | **models** | weights, often on an external drive | `<data>/models` | `HELMSTUDIO_MODELS_DIR` |
 
-Resolution order per root: the specific variable, then `HELMSTUDIO_HOME/<root>`,
-then a stored setting (library and models only), then the OS default. This is
-what lets a test, a CI run and `helm dev` each work in an isolated tree without
-ever touching the user's.
+Resolution order per root: the specific variable, then `HELMSTUDIO_HOME`, then
+a stored setting (library and models only), then the default in the data root.
+`HELMSTUDIO_HOME=<dir>` is the whole tree at `<dir>`, which is what lets a test,
+a CI run and `helm dev` each work in an isolated tree without ever touching the
+user's.
 
-> **Invariant — the library is chosen for discoverability, not convention.**
-> Internal plumbing follows platform convention; the user's own work does not.
-> A person has to be able to find what they made without being told where an
-> operating system hides application data.
+> **Invariant — the library can always be moved on its own.** A person has to
+> be able to find what they made, so the library is settable and lives wherever
+> they browse.
 
 > **Invariant — a linked model directory is read-only, forever.** helmstudio
 > never writes into a directory the user pointed at — no partial files, no
@@ -744,8 +746,8 @@ expected, the actual number of free bytes.
 **Testing.** 300-plus Go tests, plus three suites the gate treats separately.
 Tests assert the *contract*, not what the implementation happens to do — and
 several milestones' fixes were **mutation-checked**: break the fix, confirm its
-test fails. Tests never write to `~/helmstudio` or the OS roots; they get a
-temp tree through the directories helper. Nothing touches a user's models
+test fails. Tests never write to `~/.helmstudio`; they get a temp tree
+through the directories helper. Nothing touches a user's models
 directory, and nothing runs reclaim.
 
 **Concurrency is solved by ownership, not locking.** Studios never touch the

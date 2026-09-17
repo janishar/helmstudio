@@ -16,15 +16,15 @@ func fakeEnv(kv map[string]string) func(string) (string, bool) {
 	}
 }
 
-var testDefaults = osDefaults{home: "/home/u", data: "/os/data", cache: "/os/cache", logs: "/os/logs"}
+// fixedDefaults is the default data root as defaultData gives it for a home
+// directory of /home/u.
+func fixedDefaults() (string, error) { return "/home/u/.helmstudio", nil }
 
-func fixedDefaults(func(string) (string, bool)) (osDefaults, error) { return testDefaults, nil }
-
-func failingDefaults(func(string) (string, bool)) (osDefaults, error) {
-	return osDefaults{}, errors.New("defaults must not be consulted")
+func failingDefaults() (string, error) {
+	return "", errors.New("defaults must not be consulted")
 }
 
-func mustResolve(t *testing.T, opts Options, defaults func(func(string) (string, bool)) (osDefaults, error)) *Dirs {
+func mustResolve(t *testing.T, opts Options, defaults func() (string, error)) *Dirs {
 	t.Helper()
 	d, err := resolve(opts, defaults)
 	if err != nil {
@@ -42,33 +42,44 @@ func assertRoots(t *testing.T, d *Dirs, want map[Root]string) {
 	}
 }
 
-func TestOSDefaultsWhenNothingIsOverridden(t *testing.T) {
+// With nothing overridden every root is in one tree, ~/.helmstudio, as 06 §4
+// draws it and as `helm dev` keeps it in ./.helm.
+func TestEveryRootDefaultsInOneTree(t *testing.T) {
 	d := mustResolve(t, Options{LookupEnv: fakeEnv(nil)}, fixedDefaults)
 	assertRoots(t, d, map[Root]string{
-		RootData:    "/os/data",
-		RootCache:   "/os/cache",
-		RootLogs:    "/os/logs",
-		RootLibrary: "/home/u/helmstudio", // discoverability over convention
-		RootModels:  "/os/data/models",
+		RootData:    "/home/u/.helmstudio",
+		RootCache:   "/home/u/.helmstudio/cache",
+		RootLogs:    "/home/u/.helmstudio/logs",
+		RootLibrary: "/home/u/.helmstudio/library",
+		RootModels:  "/home/u/.helmstudio/models",
 	})
 }
 
-func TestHomePutsEveryRootUnderIt(t *testing.T) {
+// HELMSTUDIO_HOME is that tree somewhere else, so pointing it at ~/.helmstudio
+// moves nothing.
+func TestHomeIsTheSameTreeElsewhere(t *testing.T) {
 	d := mustResolve(t, Options{LookupEnv: fakeEnv(map[string]string{EnvHome: "/iso"})}, failingDefaults)
 	assertRoots(t, d, map[Root]string{
-		RootData:    "/iso/data",
+		RootData:    "/iso",
 		RootCache:   "/iso/cache",
 		RootLogs:    "/iso/logs",
 		RootLibrary: "/iso/library",
 		RootModels:  "/iso/models",
 	})
+	home := mustResolve(t, Options{LookupEnv: fakeEnv(map[string]string{EnvHome: "/home/u/.helmstudio"})}, failingDefaults)
+	defaults := mustResolve(t, Options{LookupEnv: fakeEnv(nil)}, fixedDefaults)
+	for _, r := range Roots {
+		if home.Root(r) != defaults.Root(r) {
+			t.Errorf("%s: HELMSTUDIO_HOME=~/.helmstudio gives %q, and the default is %q", r, home.Root(r), defaults.Root(r))
+		}
+	}
 }
 
 func TestSpecificVariableWinsOverHome(t *testing.T) {
 	env := fakeEnv(map[string]string{EnvHome: "/iso", EnvModelsDir: "/Volumes/ext/models/", EnvCacheDir: "/fast/cache"})
 	d := mustResolve(t, Options{LookupEnv: env}, failingDefaults)
 	assertRoots(t, d, map[Root]string{
-		RootData:    "/iso/data",
+		RootData:    "/iso",
 		RootCache:   "/fast/cache",
 		RootLogs:    "/iso/logs",
 		RootLibrary: "/iso/library",
@@ -96,9 +107,9 @@ func TestStoredSettingOnlyForLibraryAndModels(t *testing.T) {
 	}
 	d := mustResolve(t, Options{LookupEnv: fakeEnv(nil), Stored: stored}, fixedDefaults)
 	assertRoots(t, d, map[Root]string{
-		RootData:    "/os/data",
-		RootCache:   "/os/cache",
-		RootLogs:    "/os/logs",
+		RootData:    "/home/u/.helmstudio",
+		RootCache:   "/home/u/.helmstudio/cache",
+		RootLogs:    "/home/u/.helmstudio/logs",
 		RootLibrary: "/stored/library",
 		RootModels:  "/stored/models",
 	})
@@ -110,16 +121,23 @@ func TestStoredSettingOnlyForLibraryAndModels(t *testing.T) {
 func TestAbsentStoredSettingFallsBackToDefault(t *testing.T) {
 	stored := func(Root) (string, bool, error) { return "", false, nil }
 	d := mustResolve(t, Options{LookupEnv: fakeEnv(nil), Stored: stored}, fixedDefaults)
-	if got := d.Library(); got != "/home/u/helmstudio" {
+	if got := d.Library(); got != "/home/u/.helmstudio/library" {
 		t.Errorf("library = %q, want the default", got)
 	}
 }
 
-func TestModelsDefaultFollowsAnOverriddenDataRoot(t *testing.T) {
-	d := mustResolve(t, Options{LookupEnv: fakeEnv(map[string]string{EnvDataDir: "/elsewhere"})}, fixedDefaults)
-	if got := d.Models(); got != "/elsewhere/models" {
-		t.Errorf("models = %q, want /elsewhere/models", got)
-	}
+// Moving the data root moves the whole tree, without asking for a home
+// directory; a root with its own variable stays where it was put.
+func TestTheTreeFollowsAnOverriddenDataRoot(t *testing.T) {
+	env := fakeEnv(map[string]string{EnvDataDir: "/elsewhere", EnvLogsDir: "/var/log/helmstudio"})
+	d := mustResolve(t, Options{LookupEnv: env}, failingDefaults)
+	assertRoots(t, d, map[Root]string{
+		RootData:    "/elsewhere",
+		RootCache:   "/elsewhere/cache",
+		RootLogs:    "/var/log/helmstudio",
+		RootLibrary: "/elsewhere/library",
+		RootModels:  "/elsewhere/models",
+	})
 }
 
 func TestRelativePathsAreRejected(t *testing.T) {
@@ -150,10 +168,10 @@ func TestStoredSettingErrorIsReported(t *testing.T) {
 func TestDerivedPathsLiveInTheirRoots(t *testing.T) {
 	d := mustResolve(t, Options{LookupEnv: fakeEnv(map[string]string{EnvHome: "/iso"})}, failingDefaults)
 	checks := []struct{ got, want string }{
-		{d.DB(), "/iso/data/helm.db"},
-		{d.DBLock(), "/iso/data/helm.db.lock"},
-		{d.DBBackup(7), "/iso/data/helm.db.bak.7"},
-		{d.Stage(), "/iso/data/stage"}, // same volume as assets/blobs
+		{d.DB(), "/iso/helm.db"},
+		{d.DBLock(), "/iso/helm.db.lock"},
+		{d.DBBackup(7), "/iso/helm.db.bak.7"},
+		{d.Stage(), "/iso/stage"}, // same volume as assets/blobs
 	}
 	for _, c := range checks {
 		if c.got != c.want {
@@ -162,41 +180,10 @@ func TestDerivedPathsLiveInTheirRoots(t *testing.T) {
 	}
 }
 
-func TestDarwinDefaults(t *testing.T) {
-	got := darwinDefaults("/Users/u")
-	want := osDefaults{
-		home:  "/Users/u",
-		data:  "/Users/u/Library/Application Support/helmstudio",
-		cache: "/Users/u/Library/Caches/helmstudio",
-		logs:  "/Users/u/Library/Logs/helmstudio",
+func TestTheDefaultDataRootIsDotHelmstudioInTheHomeDirectory(t *testing.T) {
+	if got := defaultDataRoot("/Users/u"); got != "/Users/u/.helmstudio" {
+		t.Errorf("defaultDataRoot(/Users/u) = %q, want /Users/u/.helmstudio", got)
 	}
-	if got != want {
-		t.Errorf("darwinDefaults = %+v, want %+v", got, want)
-	}
-}
-
-func TestLinuxDefaults(t *testing.T) {
-	t.Run("xdg set", func(t *testing.T) {
-		got := linuxDefaults("/home/u", fakeEnv(map[string]string{
-			"XDG_DATA_HOME": "/xd", "XDG_CACHE_HOME": "/xc", "XDG_STATE_HOME": "/xs",
-		}))
-		want := osDefaults{home: "/home/u", data: "/xd/helmstudio", cache: "/xc/helmstudio", logs: "/xs/helmstudio"}
-		if got != want {
-			t.Errorf("got %+v, want %+v", got, want)
-		}
-	})
-	t.Run("xdg unset, empty or relative uses the spec fallbacks", func(t *testing.T) {
-		got := linuxDefaults("/home/u", fakeEnv(map[string]string{"XDG_DATA_HOME": "", "XDG_CACHE_HOME": "relative"}))
-		want := osDefaults{
-			home:  "/home/u",
-			data:  "/home/u/.local/share/helmstudio",
-			cache: "/home/u/.cache/helmstudio",
-			logs:  "/home/u/.local/state/helmstudio",
-		}
-		if got != want {
-			t.Errorf("got %+v, want %+v", got, want)
-		}
-	})
 }
 
 func TestUnderIgnoresTheProcessEnvironment(t *testing.T) {
@@ -206,7 +193,10 @@ func TestUnderIgnoresTheProcessEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, r := range Roots {
+	if d.Data() != root {
+		t.Errorf("data root = %q, want %q", d.Data(), root)
+	}
+	for _, r := range Roots[1:] {
 		if !strings.HasPrefix(d.Root(r), root+string(filepath.Separator)) {
 			t.Errorf("%s root %q escapes %q", r, d.Root(r), root)
 		}
@@ -214,7 +204,8 @@ func TestUnderIgnoresTheProcessEnvironment(t *testing.T) {
 }
 
 func TestEnsureCreatesEveryRoot(t *testing.T) {
-	d, err := Under(t.TempDir())
+	// A tree that does not exist yet, as ~/.helmstudio does not on first run.
+	d, err := Under(filepath.Join(t.TempDir(), "tree"))
 	if err != nil {
 		t.Fatal(err)
 	}

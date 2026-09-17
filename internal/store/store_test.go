@@ -484,15 +484,17 @@ func TestPathsThatNeedEscaping(t *testing.T) {
 	if _, err := os.Stat(d.DB()); err != nil {
 		t.Fatalf("database not at the resolved path: %v", err)
 	}
-	entries, err := os.ReadDir(filepath.Dir(filepath.Dir(d.DB())))
+	// A path cut short at the '?' or the '#' would put its database beside the
+	// tree rather than in it.
+	entries, err := os.ReadDir(filepath.Dir(d.Data()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 5 {
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(d.Data()) {
 		var names []string
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		t.Fatalf("unexpected files beside the roots: %v", names)
+		t.Fatalf("unexpected files beside the tree: %v", names)
 	}
 }
