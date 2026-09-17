@@ -46,10 +46,13 @@ registry publish, and says what to do when something goes wrong.
 In the repository's settings on GitHub:
 
 - **Release tags.** *Rulesets → New ruleset → New tag ruleset*: active,
-  targeting `v*` and `packages/**`, with *Restrict creations*, *Restrict
+  targeting `v*` and `packages/**/*`, with *Restrict creations*, *Restrict
   updates* and *Restrict deletions*, and the Repository admin role on the
   bypass list. Only an admin can then push a release tag, and nobody else can
-  move or delete one.
+  move or delete one. The pattern is `packages/**/*`, not `packages/**`: a
+  ruleset matches with `File::FNM_PATHNAME`, so `**` at the end of a pattern
+  stops at the next `/` and matches no package's tag. The ruleset's page says
+  how many existing tags it applies to; check it counts every release tag.
 - **Environments.** *Environments*, one for each place the workflows publish
   to, each with a required reviewer and *Deployment branches and tags* limited
   to the refs that publish there:
