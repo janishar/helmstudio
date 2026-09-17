@@ -59,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // shell injects, is what authenticates the page.
         webView = WKWebView(frame: .zero, configuration: config)
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         // The Web Inspector, which Electron gave away in devtools. Without it
         // the launcher cannot be debugged inside the app at all.
         webView.isInspectable = true
@@ -197,6 +198,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let on = !UserDefaults.standard.bool(forKey: Defaults.keepStudiosRunning)
         UserDefaults.standard.set(on, forKey: Defaults.keepStudiosRunning)
         sender.state = on ? .on : .off
+    }
+}
+
+extension AppDelegate: WKUIDelegate {
+    /// "Open in a tab" (03 §7a) asks for a new window, and a WKWebView makes
+    /// none unless it is told how. Without this the button did nothing at all
+    /// in the app, which is worse than either outcome.
+    ///
+    /// It opens in the browser the person chose, which is what "a tab" means
+    /// on a Mac, so the button keeps its promise rather than being hidden
+    /// here and present in the browser. Returning nil says no web view was
+    /// made, which is true — we handed it to somebody else.
+    func webView(_ webView: WKWebView,
+                 createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction,
+                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url {
+            NSWorkspace.shared.open(url)
+        }
+        return nil
     }
 }
 
