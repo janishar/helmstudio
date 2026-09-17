@@ -88,11 +88,11 @@ each publish.
    its archives replaced, so running a workflow again changes nothing. A tag
    that started no workflow at all is pushed again only as *When something
    goes wrong* in `docs/publishing.md` says.
-4. When the packages are on their registries and `helm` is on the release,
-   change the documentation that builds or installs from the clone — the
-   quickstart's steps 2 and 4, and the theming guide's note on
-   `@helmstudio/runtime` — so it installs from them instead. Not before: a page
-   must not name an install that fails.
+4. The documentation installs from the registries and the release: the
+   quickstart installs `helm` with the installer and the runtime SDK from
+   PyPI, and the theming guide installs `@helmstudio/runtime` from npm. A
+   release that changes how something installs changes those pages with it,
+   and only once it is published: a page must not name an install that fails.
 
 ## Installing helm
 

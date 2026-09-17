@@ -16,7 +16,7 @@ The Go and JavaScript runtime SDKs ship the same proxy, and the conformance suit
 
 @sample theming/go/main.go
 
-And in JavaScript. `@helmstudio/runtime` is not on npm yet, so install it from the clone, with `npm install` and the path to `packages/helm-runtime-sdk/node`:
+And in JavaScript, with `@helmstudio/runtime` installed from npm:
 
 @sample theming/node/server.mjs
 

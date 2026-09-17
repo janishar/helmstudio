@@ -28,16 +28,14 @@ import (
 // absent; every other sample is here, and the tests below take their work from
 // this table, so a sample added to it is run rather than listed.
 var runs = map[string]string{
-	"quickstart/02-build-helm.sh":   "TestTheQuickstartRunsAsWritten",
-	"quickstart/03-environment.sh":  "TestTheQuickstartRunsAsWritten",
-	"quickstart/05-copy-example.sh": "TestTheQuickstartRunsAsWritten",
-	"quickstart/06-run.sh":          "TestTheQuickstartRunsAsWritten",
-	"quickstart/06-output.txt":      "TestTheQuickstartRunsAsWritten",
-	"quickstart/07-make.sh":         "TestTheQuickstartRunsAsWritten",
-	"quickstart/08-items.sh":        "TestTheQuickstartRunsAsWritten",
-	"quickstart/09-validate.sh":     "TestTheQuickstartRunsAsWritten",
-	"hello-studio/helmstudio.yaml":  "TestTheQuickstartRunsAsWritten",
-	"hello-studio/studio.py":        "TestTheQuickstartRunsAsWritten",
+	"quickstart/02-environment.sh": "TestTheQuickstartRunsAsWritten",
+	"quickstart/05-run.sh":         "TestTheQuickstartRunsAsWritten",
+	"quickstart/05-output.txt":     "TestTheQuickstartRunsAsWritten",
+	"quickstart/06-make.sh":        "TestTheQuickstartRunsAsWritten",
+	"quickstart/07-items.sh":       "TestTheQuickstartRunsAsWritten",
+	"quickstart/08-validate.sh":    "TestTheQuickstartRunsAsWritten",
+	"hello-studio/helmstudio.yaml": "TestTheQuickstartRunsAsWritten",
+	"hello-studio/studio.py":       "TestTheQuickstartRunsAsWritten",
 
 	"record/record.py":     "TestThePythonSamplesRun",
 	"sessions/sessions.py": "TestThePythonSamplesRun",
@@ -295,11 +293,11 @@ func envWith(extra ...string) []string {
 
 // ---------------------------------------------------------------- the quickstart
 
-// The quickstart, followed as written in a workspace of its own: the checkout
-// is the repository under test, linked file by file so that what the steps
-// build and write lands in the workspace. Step 1 clones and step 4 installs
-// from the network, and the page says so; step 4's directory is put on the
-// environment's path instead.
+// The quickstart, followed as written in a workspace of its own. Steps 1, 3
+// and 4 need the network, and the page says so: the test checks that each
+// names what this checkout has, then stands in for it from the checkout —
+// helm built from it on the path, the runtime SDK's directory on the
+// environment's path, and the example's two files copied.
 func TestTheQuickstartRunsAsWritten(t *testing.T) {
 	need(t, "python3", envAllowMissingClients)
 	need(t, "curl", envAllowMissingClients)
@@ -315,56 +313,74 @@ func TestTheQuickstartRunsAsWritten(t *testing.T) {
 		}
 	}
 
-	ws := t.TempDir()
-	checkout := filepath.Join(ws, "helmstudio")
-	if err := os.Mkdir(checkout, 0o755); err != nil {
-		t.Fatal(err)
+	// What the steps that need the network would fetch is in this checkout.
+	const raw = "https://raw.githubusercontent.com/janishar/helmstudio/main/"
+	if got, want := onlyCommand(t, filepath.Join(q, "01-install-helm.sh")), `/bin/bash -c "$(curl -fsSL `+raw+`installer/install.sh)"`; got != want {
+		t.Errorf("step 1 runs %q; want %q", got, want)
 	}
-	entries, err := os.ReadDir(repoRoot)
+	if _, err := os.Stat(filepath.Join(repoRoot, "installer", "install.sh")); err != nil {
+		t.Errorf("step 1 runs installer/install.sh: %v", err)
+	}
+	if got := onlyCommand(t, filepath.Join(q, "03-install-sdk.sh")); got != "pip install helm-runtime-sdk" {
+		t.Errorf("step 3 runs %q; want pip install helm-runtime-sdk", got)
+	}
+	sdk := filepath.Join(repoRoot, "packages", "helm-runtime-sdk", "python")
+	if b, err := os.ReadFile(filepath.Join(sdk, "pyproject.toml")); err != nil || !strings.Contains(string(b), "\nname = \"helm-runtime-sdk\"\n") {
+		t.Errorf("step 3 installs helm-runtime-sdk, and the runtime SDK's pyproject.toml names no such package (%v)", err)
+	}
+	example := filepath.Join(siteDir, "samples", "hello-studio")
+	b, err := os.ReadFile(filepath.Join(q, "04-get-example.sh"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, e := range entries {
-		switch e.Name() {
-		case "bin", ".git", ".helm", ".venv", "tmp", ".claude":
+	var fetched []string
+	for _, l := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		name, ok := strings.CutPrefix(l, "curl -fsSLO "+raw+"site/samples/hello-studio/")
+		if !ok {
+			t.Errorf("step 4 runs %q; want a download of one of the example's files from main", l)
 			continue
 		}
-		if err := os.Symlink(filepath.Join(repoRoot, e.Name()), filepath.Join(checkout, e.Name())); err != nil {
-			t.Fatal(err)
-		}
+		fetched = append(fetched, name)
+	}
+	if got := strings.Join(fetched, " "); got != "helmstudio.yaml studio.py" {
+		t.Errorf("step 4 downloads %q; want the example's helmstudio.yaml and studio.py", got)
 	}
 
-	// Steps 2, 3 and 5, in one shell, as someone types them.
+	ws := t.TempDir()
+	bin := filepath.Join(ws, "bin")
+	build := exec.Command("go", "build", "-o", filepath.Join(bin, "helm"), "./cmd/helm")
+	build.Dir = repoRoot
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building helm, in place of step 1: %v\n%s", err, out)
+	}
+	path := "PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH")
+
 	shell := func(dir, script string) string {
 		t.Helper()
 		cmd := exec.Command("bash", "-c", "set -euo pipefail\n"+script)
 		cmd.Dir = dir
-		cmd.Env = envWith("Q="+q, "SDK="+filepath.Join(repoRoot, "packages", "helm-runtime-sdk", "python"))
+		cmd.Env = envWith(path, "Q="+q, "SDK="+sdk, "EXAMPLE="+example)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("%v\n%s\n--- the script:\n%s", err, out, script)
 		}
 		return string(out)
 	}
-	shell(checkout, `source "$Q/02-build-helm.sh"
-source "$Q/03-environment.sh"
+	// Step 2 as someone types it, then steps 3 and 4 from the checkout, in the
+	// directory and the environment step 2 left.
+	shell(ws, `source "$Q/02-environment.sh"
 python -c 'import site, sys; open(site.getsitepackages()[0] + "/helm-runtime-sdk.pth", "w").write(sys.argv[1] + "\n")' "$SDK"
-source "$Q/05-copy-example.sh"
+cp "$EXAMPLE/helmstudio.yaml" "$EXAMPLE/studio.py" .
 test "$(pwd -P)" = "$(cd "`+ws+`/hello-studio" && pwd -P)"`)
 	hello := filepath.Join(ws, "hello-studio")
-	for _, f := range []string{"helmstudio.yaml", "studio.py"} {
-		want, _ := os.ReadFile(filepath.Join(siteDir, "samples", "hello-studio", f))
-		if got, err := os.ReadFile(filepath.Join(hello, f)); err != nil || !bytes.Equal(got, want) {
-			t.Fatalf("step 5 did not copy %s as the page shows it: %v", f, err)
-		}
-	}
 
-	// Step 6, in the environment step 3 activated. Its one line is exec'd, so
-	// the process the test interrupts is helm dev itself.
-	line := onlyCommand(t, filepath.Join(q, "06-run.sh"))
-	cmd := exec.Command("bash", "-c", "source ../helmstudio/.venv/bin/activate && exec "+line)
+	// Step 5, in the environment step 2 activated, with helm on the path as
+	// step 1 leaves it. Its one line is exec'd, so the process the test
+	// interrupts is helm dev itself.
+	line := onlyCommand(t, filepath.Join(q, "05-run.sh"))
+	cmd := exec.Command("bash", "-c", "source .venv/bin/activate && exec "+line)
 	cmd.Dir = hello
-	cmd.Env = envWith()
+	cmd.Env = envWith(path)
 	dev := startDev(t, cmd)
 	// A reader goes on when the studio says where it is. helm dev tails each
 	// process's log on a timer, so the line comes a moment after the studio
@@ -372,36 +388,33 @@ test "$(pwd -P)" = "$(cd "`+ws+`/hello-studio" && pwd -P)"`)
 	dev.waitForLine(t, regexp.MustCompile(`(?m)^studio \| hello studio: http://127\.0\.0\.1:8765$`))
 	waitHealthy(t, dev, "http://127.0.0.1:8765/healthz")
 
-	// Steps 7, 8 and 9, in a second terminal.
-	var made7 map[string]string
-	if err := json.Unmarshal([]byte(shell(hello, `source "$Q/07-make.sh"`)), &made7); err != nil || made7["item_id"] == "" || made7["asset_id"] == "" {
-		t.Fatalf("step 7 answered %v (%v); want an item and its asset", made7, err)
+	// Steps 6, 7 and 8, in a second terminal.
+	var made6 map[string]string
+	if err := json.Unmarshal([]byte(shell(hello, `source "$Q/06-make.sh"`)), &made6); err != nil || made6["item_id"] == "" || made6["asset_id"] == "" {
+		t.Fatalf("step 6 answered %v (%v); want an item and its asset", made6, err)
 	}
 	var items []struct {
 		ID     string         `json:"id"`
 		Title  string         `json:"title"`
 		Params map[string]any `json:"params"`
 	}
-	if err := json.Unmarshal([]byte(shell(hello, `source "$Q/08-items.sh"`)), &items); err != nil {
-		t.Fatalf("step 8: %v", err)
+	if err := json.Unmarshal([]byte(shell(hello, `source "$Q/07-items.sh"`)), &items); err != nil {
+		t.Fatalf("step 7: %v", err)
 	}
-	if len(items) != 1 || items[0].ID != made7["item_id"] || items[0].Params["prompt"] != "a lighthouse at dusk" || items[0].Params["seed"] != float64(7) {
-		t.Errorf("step 8 listed %+v; want the item step 7 made, with its prompt and seed", items)
+	if len(items) != 1 || items[0].ID != made6["item_id"] || items[0].Params["prompt"] != "a lighthouse at dusk" || items[0].Params["seed"] != float64(7) {
+		t.Errorf("step 7 listed %+v; want the item step 6 made, with its prompt and seed", items)
 	}
-	criteria := shell(hello, `source "$Q/09-validate.sh"`)
+	criteria := shell(hello, `source "$Q/08-validate.sh"`)
 	for _, want := range []string{"helmstudio.yaml: ok", "5 of 7 checkable pass", "FAIL 13", "FAIL 15"} {
 		if !strings.Contains(criteria, want) {
-			t.Errorf("step 9 printed no %q; the page says the example fails 13 and 15:\n%s", want, criteria)
+			t.Errorf("step 8 printed no %q; the page says the example fails 13 and 15:\n%s", want, criteria)
 		}
 	}
 
 	dev.stop(t)
-	matchOutput(t, filepath.Join(q, "06-output.txt"), dev.out.String())
+	matchOutput(t, filepath.Join(q, "05-output.txt"), dev.out.String())
 	if _, err := os.Stat(filepath.Join(hello, ".helm")); err != nil {
 		t.Errorf("the studio's data is not beside its manifest, as the page says: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(checkout, "bin", "helm")); err != nil {
-		t.Errorf("step 2 built no bin/helm in the workspace: %v", err)
 	}
 }
 
