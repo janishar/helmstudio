@@ -380,6 +380,31 @@ The facts line shows what the manifest declares, not the mockup's "~60 GB".)
 
 Step glyphs are distinct shapes — hollow circle, ring, check, cross, dash — so the checklist survives greyscale. A failed row takes a 2px error bar and expands in place; recovery buttons sit inside the failure, not in a toolbar elsewhere.
 
+## 7a · A studio inside helmstudio
+
+(Added 2026-09-18, by the human's decision.) Open puts the studio's own page in
+a frame under helmstudio's top bar and nav, at the full width of the window.
+
+- **It is the studio's own origin**, on its own port, in a frame — not proxied
+  under helmstudio's. A studio is someone else's code running with your
+  permissions: on this origin it would share this page's storage and the origin
+  check that stops a page launching and installing things would no longer be
+  protecting anything. A different port is the isolation. Nothing has to be
+  changed in any studio for this to work, and nothing reads inside the frame.
+- **What that costs is stated, not hidden.** The address bar does not follow the
+  studio's own navigation, and **Open in a tab** is one click away, on this
+  screen and in a row's ⋯ menu, for when someone wants the window to itself.
+- **The frame waits for the studio.** While the group is starting the screen is
+  §9's — elapsed against the budget — and the frame appears when a process that
+  serves a page is running. A frame opened early shows a browser error page
+  inside helmstudio.
+- **It is never rebuilt by a poll.** The page redraws every two seconds; a frame
+  rebuilt or re-pointed on one of them reloads the studio's page under whoever
+  is using it, mid-generation at worst.
+- **Fullscreen and clipboard-write are granted** to the frame. Clipboard *read*
+  is not available to a cross-origin frame however it is declared, so a studio
+  that reads the clipboard asks for the tab.
+
 ## 8 · Process group
 
 *[Mockup: AuK studio, group run 01JB9…c4 · 0:38, "Group starting", Stop group. Processes: 3 declared · 1 running.]*

@@ -150,7 +150,10 @@ function more(ctx, studio, valid) {
   const local = studio.source === "local";
   const edit = () => ctx.go(`#/edit/${encodeURIComponent(studio.id)}`);
   if (studio.source === "running") return [];
+  const serving = ((studio.group || {}).processes || []).some((p) => p.state === "running" && p.ui && p.port);
   return menu(`more-${studio.id}`, `More actions for ${studio.name}`, [
+    // Open puts the studio inside helmstudio; its own window is here.
+    serving ? { label: "Open in a tab", run: () => ctx.act(studio, "open-tab") } : null,
     valid ? { label: local ? "Edit" : "Override", run: edit } : null,
     valid ? { label: "Duplicate", run: () => duplicate(ctx, studio) } : null,
     local && studio.overrides ? { label: "Revert", run: () => revert(ctx, studio) } : null,

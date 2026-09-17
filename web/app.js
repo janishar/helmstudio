@@ -27,6 +27,7 @@ import { settings } from "./settings.js";
 import { launch, stop } from "./switch.js";
 import { approvalScreen, guard } from "./approval.js";
 import { addStudio } from "./add.js";
+import { studioPage } from "./embed.js";
 import { editor } from "./editor.js";
 
 /** How often the list is refreshed: cheap enough to leave running, short
@@ -41,6 +42,8 @@ const POLL_MS = 2000;
 const ROUTES = [
   { path: /^\/studios$/, screen: catalogue, nav: "studios", width: "reading" },
   { path: /^\/studios\/([^/]+)\/approve$/, screen: approvalScreen, nav: "studios", width: "reading", back: true },
+  // The studio's own page, in a frame: its own origin, inside helmstudio.
+  { path: /^\/studios\/([^/]+)\/open$/, screen: studioPage, nav: "studios", width: "full", back: true },
   { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios", width: "workspace", back: true },
   { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios", width: "workspace", back: true },
   // Adding and editing are their own paths rather than /studios/new, because
@@ -177,7 +180,11 @@ export async function act(ctx, studio, action) {
       return launch(ctx, studio);
     case "stop":
       return stop(ctx, studio);
-    case "open": {
+    case "open":
+      // Inside helmstudio, on the studio's own origin (web/embed.js). The tab
+      // is still one click away, from there and from the row's menu.
+      return ctx.go(`#/studios/${encodeURIComponent(studio.id)}/open`);
+    case "open-tab": {
       const p = ((studio.group || {}).processes || []).find((x) => x.ui && x.port);
       if (!p) return toast(`${studio.name} declares no page to open.`, "error");
       return window.open(`http://127.0.0.1:${p.port}${p.ui}`, "_blank", "noopener");

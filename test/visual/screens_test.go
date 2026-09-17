@@ -864,3 +864,59 @@ func TestTheProcessGroupOpensTheStudio(t *testing.T) {
 		t.Errorf("a group that is still starting %s", got)
 	}
 }
+
+// A studio's own page, inside helmstudio (docs/decisions.md 2026-09-18). The
+// frame is the studio's own origin — a different port — so this asserts what
+// the launcher controls: that it points at exactly the address that studio
+// serves, that a redraw does not reload it, and that the studio's own window
+// is still one click away.
+func TestAStudioOpensInsideHelmstudio(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/studios/ltx-studio/open")
+
+	var got string
+	if err := p.Eval(ctx, `(async () => {
+		for (let i = 0; i < 100 && !document.querySelector("iframe.helm-embed"); i++) {
+			await new Promise(r => setTimeout(r, 25));
+		}
+		const frame = document.querySelector("iframe.helm-embed");
+		if (!frame) return "no frame";
+		// The poll redraws every two seconds; a frame rebuilt or re-pointed on
+		// each one reloads the studio's page under whoever is using it.
+		frame.dataset.mark = "kept";
+		window.dispatchEvent(new HashChangeEvent("hashchange"));
+		await new Promise(r => setTimeout(r, 150));
+		const after = document.querySelector("iframe.helm-embed");
+		const tab = [...document.querySelectorAll("button")].find(b => b.textContent === "Open in a tab");
+		return [
+			frame.getAttribute("src"),
+			after === frame ? "same frame" : "rebuilt",
+			after && after.dataset.mark === "kept" ? "not reloaded" : "reloaded",
+			frame.getAttribute("allow"),
+			tab ? "tab offered" : "no tab",
+		].join("|");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	want := "http://127.0.0.1:8720/|same frame|not reloaded|fullscreen; clipboard-write|tab offered"
+	if got != want {
+		t.Errorf("the embedded studio reads:\n got %q\nwant %q", got, want)
+	}
+
+	// A studio that is still starting has no page to show yet, so it is not
+	// framed: a frame would show a browser error inside helmstudio.
+	p2 := screen(t, ctx, srv.URL, "processes", 1280, 900)
+	if err := p2.Eval(ctx, `(async () => {
+		location.hash = "#/studios/ltx-studio/open";
+		await new Promise(r => setTimeout(r, 200));
+		return (document.querySelector("iframe.helm-embed") ? "framed" : "not framed") + "|" +
+			(document.body.textContent.includes("Starting ltx studio") ? "says it is starting" : "says nothing");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "not framed|says it is starting" {
+		t.Errorf("a studio that is starting: %q", got)
+	}
+}

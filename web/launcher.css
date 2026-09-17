@@ -922,3 +922,41 @@ dialog.helm-dialog::backdrop {
   background: color-mix(in oklab, var(--helm-status-running) 10%, var(--helm-ground-panel));
   border-color: color-mix(in oklab, var(--helm-status-running) 24%, var(--helm-border-hairline));
 }
+
+/* ---- a studio's own page, inside helmstudio ------------------------------- */
+
+/* The page fills what is under the nav, so the frame does. */
+.helm-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.helm-page-full {
+  flex: 1;
+  min-height: 0;
+  max-width: none;
+}
+
+.helm-embed-page {
+  flex: 1;
+  min-height: 0;
+}
+
+.helm-embed-header {
+  margin-bottom: var(--helm-space-3);
+}
+
+/* The studio's page. It is another origin, so nothing here reaches inside it. */
+.helm-embed {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--helm-border-hairline);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-ground-inset);
+}
+
+.helm-embed-wait {
+  flex: none;
+}
