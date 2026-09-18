@@ -371,18 +371,93 @@ function formSection(ctx, st, section) {
       el("a", { class: "helm-editor-next", href: link(st.id, next.slug), text: next.label })));
 }
 
+/** errorLines are the lines the daemon faulted, each once, in the order given. */
+function errorLines(check) {
+  const out = new Set();
+  for (const e of (check || {}).errors || []) if (e.line) out.add(e.line);
+  return [...out];
+}
+
+/** paneOf is the box's own wrapper; ruleOf is the numbered rule inside it. */
+function paneOf(area) {
+  return area.closest(".helm-editor-yaml-wrap");
+}
+
+function ruleOf(area) {
+  return paneOf(area).querySelector(".helm-editor-rule");
+}
+
+/**
+ * paint draws the rule: one row per line of the box, numbered, and the rows
+ * the daemon faulted marked.
+ *
+ * It counts the box's newlines and reads nothing else out of the text. Which
+ * line a fault is on came from the daemon, which is the only thing here that
+ * has read the document — the rule only puts the number where the eye is.
+ *
+ * The box is read rather than `st.text` because between a keystroke and the
+ * next verdict the box is the newer of the two, and a line that has just been
+ * typed should be numbered before it has been checked.
+ */
+function paint(area) {
+  const rows = ruleOf(area);
+  const want = area.value.split("\n").length;
+  while (rows.childElementCount > want) rows.lastElementChild.remove();
+  while (rows.childElementCount < want) {
+    rows.append(el("div", { class: "helm-editor-line" },
+      el("span", { class: "helm-editor-line-no", text: String(rows.childElementCount + 1) })));
+  }
+  // The marks are read back from the pane because an input event has no st:
+  // typing renumbers the rule, and the verdict it is marked against is
+  // whichever one the last redraw left here.
+  const marked = new Set((paneOf(area).dataset.errorLines || "").split(" "));
+  for (let i = 0; i < rows.childElementCount; i++) {
+    const row = rows.children[i];
+    if (marked.has(String(i + 1))) row.setAttribute("data-state", "error");
+    else row.removeAttribute("data-state");
+  }
+  track(area);
+}
+
+/** track keeps the rule level with the text as the box scrolls. */
+function track(area) {
+  ruleOf(area).style.transform = `translateY(${-area.scrollTop}px)`;
+}
+
 /**
  * textSection is the whole manifest as text, in a pane of its own (canvas
  * option B's, inside option A's centre). The parts that are really text are
  * edited here, and a form edit shows up here as the daemon wrote it.
+ *
+ * The box and its rule are kept together across redraws: the box so the caret
+ * and the scroll position survive a poll, the rule because it is painted from
+ * what the box holds rather than drawn from st, and a redraw must not put a
+ * stale set of numbers back.
  */
 function textSection(ctx, st) {
-  // Kept across redraws so the caret and the scroll position survive a poll.
-  const area = ctx.keep("editor-yaml:" + st.id, () => el("textarea", {
-    class: "helm-yaml helm-editor-yaml", spellcheck: "false", "aria-label": "The manifest as text",
-    onchange: (e) => revalidate(ctx, st, e.target.value),
-  }));
+  const pane = ctx.keep("editor-yaml:" + st.id, () => {
+    const box = el("textarea", {
+      class: "helm-yaml helm-editor-yaml", spellcheck: "false", "aria-label": "The manifest as text",
+      onchange: (e) => revalidate(ctx, st, e.target.value),
+      // A line typed now is a line the rule has to number now; the verdict
+      // that will mark it is a round trip away.
+      oninput: (e) => paint(e.currentTarget),
+      onscroll: (e) => track(e.currentTarget),
+    });
+    // The rule is spoken by the error list under the box, which says the same
+    // lines in words, so it is hidden from a reader rather than read twice.
+    //
+    // It is clipped by a layer of its own rather than by the pane, so that the
+    // box's focus ring — which is drawn outside its edge — is not clipped away
+    // with it (03 §15: never suppressed).
+    return el("div", { class: "helm-editor-yaml-wrap" },
+      el("div", { class: "helm-editor-rule-clip", "aria-hidden": "true" },
+        el("div", { class: "helm-editor-rule" })), box);
+  });
+  const area = pane.querySelector("textarea");
   if (document.activeElement !== area) area.value = st.text;
+  pane.dataset.errorLines = errorLines(st.check).join(" ");
+  paint(area);
 
   const verdictLine = !st.check ? "checking"
     : st.check.valid ? "valid · edits here and in the form stay in step"
@@ -391,7 +466,7 @@ function textSection(ctx, st) {
     el("div", { class: "helm-editor-text-head" },
       el("h2", { class: "helm-mono helm-editor-text-title", id: "section-yaml", "data-section-heading": "", tabindex: "-1", text: TEXT.label }),
       el("span", { class: "helm-micro", text: verdictLine })),
-    area,
+    pane,
     problems(st.check),
     el("p", { class: "helm-hint helm-editor-text-note", text:
       `Edited only as text: ${Object.keys(YAML_ONLY).map((p) => p.slice(1)).join(", ")}.` }));
