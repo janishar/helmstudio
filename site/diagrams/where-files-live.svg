@@ -1,0 +1,38 @@
+<svg viewBox="0 0 360 330" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>Where helmstudio keeps files on disk</title>
+  <desc>A directory tree. Under a helmstudio directory in your home directory: helm.db, holding all the state; an assets blobs directory, holding each file's bytes once, named by sha256; a library directory, the same bytes under names you can browse; a cache derived directory, holding thumbnails and posters, which are regenerable; a models directory, holding weights that were downloaded or linked; a stage directory, where a studio writes before its output is adopted; and a studios directory, holding one clone per studio, or nothing when a manifest's local_path points at a checkout you already have. Five roots — data, cache, logs, library and models — each move with their own environment variable. Below, separately: running helm dev instead puts the same shape in a .helm directory beside the manifest.</desc>
+
+  <rect class="d-edge" x="8" y="8" width="344" height="200" rx="3"/>
+  <text class="d-label" x="20" y="27">~/.helmstudio/</text>
+
+  <text class="d-label" x="22" y="52">helm.db</text>
+  <text class="d-sub" x="140" y="52">all the state</text>
+
+  <text class="d-label" x="22" y="76">assets/blobs/</text>
+  <text class="d-sub" x="140" y="76">the bytes, once, by sha256</text>
+
+  <text class="d-label" x="22" y="100">library/</text>
+  <text class="d-sub" x="140" y="100">the same bytes, browsable</text>
+
+  <text class="d-label" x="22" y="124">cache/derived/</text>
+  <text class="d-sub" x="140" y="124">thumbs and posters, regenerable</text>
+
+  <text class="d-label" x="22" y="148">models/</text>
+  <text class="d-sub" x="140" y="148">weights, downloaded or linked</text>
+
+  <text class="d-label" x="22" y="172">stage/</text>
+  <text class="d-sub" x="140" y="172">a studio writes here</text>
+
+  <text class="d-label" x="22" y="196">studios/</text>
+  <text class="d-sub" x="140" y="196">a clone, or your own checkout</text>
+
+  <text class="d-sub" x="180" y="226" text-anchor="middle">Five roots — data, cache, logs, library, models — each</text>
+  <text class="d-sub" x="180" y="240" text-anchor="middle">move with an environment variable of their own.</text>
+  <text class="d-sub" x="180" y="254" text-anchor="middle">Linked weights and a local_path checkout stay where</text>
+  <text class="d-sub" x="180" y="268" text-anchor="middle">they are: a symlink points out, nothing is copied in.</text>
+
+  <text class="d-sub" x="8" y="292">running helm dev instead</text>
+  <rect class="d-chip" x="8" y="298" width="344" height="28" rx="3"/>
+  <text class="d-label" x="22" y="316">./.helm</text>
+  <text class="d-sub" x="140" y="316">the same shape, beside the manifest</text>
+</svg>

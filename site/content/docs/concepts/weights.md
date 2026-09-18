@@ -2,6 +2,12 @@
 
 A studio declares the model files it needs under `weights`, and its commands refer to them by name, as `{models.<name>}`. How the files arrived — downloaded by helmstudio, or already on the machine — is invisible to the studio: either way the placeholder becomes a real path to a directory.
 
+## Where the files are
+
+Everything helmstudio keeps is under `~/.helmstudio`, and weights are one root of the five.
+
+@diagram where-files-live caption: The expensive things are never copied in. A weight you already downloaded and a checkout you already have are reached where they are, by a symlink pointing out of the tree.
+
 ## Declaring a weight
 
 | Field | Says |
