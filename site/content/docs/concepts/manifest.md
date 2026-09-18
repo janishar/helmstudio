@@ -4,12 +4,12 @@ A studio is described by one file, `helmstudio.yaml`: what it is, what it needs 
 
 ## It lives in the studio's repository
 
-The manifest sits at the root of the studio's own repository, beside the code it describes, so a studio can add a build step or a process without waiting for a helmstudio release. The registry does not keep copies: an entry is a **pointer** — an id, a repository and a pinned ref — and it carries a manifest inline only for a repository that does not ship one yet.
+The manifest sits at the root of the studio's own repository, beside the code it describes, so a studio can add a build step or a process without waiting for a helmstudio release. A registry entry is a **pointer** — an id, a repository and a pinned ref — and it carries a copy of that commit's manifest beside it. The copy is what the [annotated examples](/docs/manifests/h3-studio/) on this site read.
 
 A studio stays its own repository. helmstudio never vendors, forks, patches or imports a studio's code: it clones the repository, runs the build steps the manifest declares, and supervises the processes it names. Someone who clones a studio directly and ignores helmstudio entirely still has a studio that works. Four things follow from that:
 
 - **A studio ships on its own schedule.** A new build step or a second process reaches people with the studio's next commit, not with helmstudio's next release.
-- **There is one copy of the truth.** Two copies of a manifest drift, so the registry holds the pointer. A manifest carried inline is removed by the pull request that moves the ref to a commit that ships its own.
+- **One copy is the one that runs.** A studio's own `helmstudio.yaml` is resolved before the registry's copy, so the registry's never installs anything once the repository ships one. That is what keeps the second copy from mattering: the pull request that moves a `ref` updates it to the manifest that commit ships, so the entry goes on describing what is actually there.
 - **Adding a studio is a data change.** Supporting one never means changing helmstudio's code. If a studio cannot be described by the manifest, the schema is what is wrong.
 - **Nothing is required.** A studio that uses none of the three packages still installs, launches and runs. The packages save an author work; they are never the price of admission.
 
