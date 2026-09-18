@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -68,12 +69,21 @@ type Page struct {
 	Internal []string
 }
 
+// Heading is one of a page's own sections, for the list beside it.
+type Heading struct {
+	Text string
+	ID   string
+}
+
 // view is what a template renders.
 type view struct {
 	*Page
-	Nav    []NavSection
-	Repo   string
-	InDocs bool
+	Nav      []NavSection
+	Repo     string
+	InDocs   bool
+	Headings []Heading // this page's own H2s, for "on this page"
+	Prev     *NavItem  // the page before this one in the navigation
+	Next     *NavItem
 }
 
 // Result is what a build produced, for the tests to read.
@@ -230,6 +240,13 @@ func write(o Options, pages []*Page, nav []NavSection) error {
 		}
 		layouts[name] = t
 	}
+	// The reading order the navigation already states, flattened once, so a
+	// page can say what comes before and after it without a second list to
+	// keep in step.
+	var flat []NavItem
+	for _, sec := range nav {
+		flat = append(flat, sec.Items...)
+	}
 	seen := map[string]bool{}
 	for _, p := range pages {
 		if seen[p.URL] {
@@ -238,6 +255,8 @@ func write(o Options, pages []*Page, nav []NavSection) error {
 		seen[p.URL] = true
 		var buf bytes.Buffer
 		v := view{Page: p, Nav: nav, Repo: Repo, InDocs: strings.HasPrefix(p.URL, "/docs/")}
+		v.Headings = headingsIn(string(p.Body))
+		v.Prev, v.Next = neighbours(flat, p.URL)
 		if err := layouts[p.Layout].ExecuteTemplate(&buf, "base", v); err != nil {
 			return fmt.Errorf("%s: %w", p.URL, err)
 		}
@@ -312,6 +331,44 @@ func emptyOutput(dir string) error {
 		}
 	}
 	return os.RemoveAll(dir)
+}
+
+// h2WithID finds a heading a reader can link to. A generated operation title
+// carries no id, so it is not offered as a destination that would not work.
+var h2WithID = regexp.MustCompile(`(?s)<h2 id="([^"]+)"[^>]*>(.*?)</h2>`)
+var anyTag = regexp.MustCompile(`<[^>]+>`)
+
+// headingsIn lists a page's own sections, in the order they appear.
+func headingsIn(body string) []Heading {
+	var out []Heading
+	for _, m := range h2WithID.FindAllStringSubmatch(body, -1) {
+		text := strings.TrimSpace(html.UnescapeString(anyTag.ReplaceAllString(m[2], "")))
+		if text != "" {
+			out = append(out, Heading{Text: text, ID: m[1]})
+		}
+	}
+	// One section is not a list worth drawing.
+	if len(out) < 2 {
+		return nil
+	}
+	return out
+}
+
+// neighbours gives the pages either side of this one in the reading order.
+func neighbours(flat []NavItem, url string) (prev, next *NavItem) {
+	for i, it := range flat {
+		if it.URL != url {
+			continue
+		}
+		if i > 0 {
+			prev = &flat[i-1]
+		}
+		if i+1 < len(flat) {
+			next = &flat[i+1]
+		}
+		return prev, next
+	}
+	return nil, nil
 }
 
 // fileFor is where a URL's page is written: a directory's index.html, so

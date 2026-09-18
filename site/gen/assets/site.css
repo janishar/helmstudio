@@ -284,6 +284,67 @@ figure.sample pre code,
   white-space: normal;
 }
 
+/* ------------------------------------------------- finding your way about */
+
+/* This page's own sections, above the prose rather than floating beside it:
+   the article column is already narrow, and a second column at 1280 would be
+   a third thing competing for the same 76ch. */
+.site-onpage {
+  margin: 0 0 var(--helm-space-6);
+  padding: var(--helm-space-3) var(--helm-space-4);
+  border-left: 2px solid var(--helm-border-hairline);
+}
+
+.site-onpage ul {
+  margin: var(--helm-space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--helm-space-1) var(--helm-space-4);
+}
+
+.site-onpage li {
+  font: var(--helm-type-micro);
+}
+
+/* Where a reader is in the reading order the navigation states. */
+.site-pagenav {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--helm-space-4);
+  margin-top: var(--helm-space-8);
+  padding-top: var(--helm-space-5);
+  border-top: 1px solid var(--helm-border-hairline);
+}
+
+.site-pagenav-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--helm-space-1);
+  max-width: 22rem;
+  padding: var(--helm-space-3) var(--helm-space-4);
+  border: 1px solid var(--helm-border-hairline);
+  border-radius: var(--helm-radius-md);
+  font: var(--helm-type-body);
+  color: var(--helm-text-primary);
+  text-decoration: none;
+}
+
+.site-pagenav-link:hover {
+  border-color: var(--helm-border-strong);
+}
+
+.site-pagenav-next {
+  text-align: right;
+  margin-left: auto;
+}
+
+/* A folded sidebar section. The marker is the only affordance, so it stays. */
+.site-nav-fold > summary {
+  cursor: pointer;
+}
+
 /* --------------------------------------------------------------- diagrams */
 
 /* The shared vocabulary every diagram draws with. A diagram carries class

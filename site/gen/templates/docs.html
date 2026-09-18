@@ -8,10 +8,22 @@
   </details>
   <main class="site-article" id="main" tabindex="-1">
     {{if .Banner}}<p class="site-banner">{{.Banner}}</p>{{end}}
+    {{if .Headings}}<nav class="site-onpage" aria-label="On this page">
+      <p class="helm-section-label">On this page</p>
+      <ul>{{range .Headings}}<li><a class="helm-link" href="#{{.ID}}">{{.Text}}</a></li>{{end}}</ul>
+    </nav>{{end}}
     {{.Body}}
+    {{if or .Prev .Next}}<nav class="site-pagenav" aria-label="Nearby pages">
+      {{if .Prev}}<a class="site-pagenav-link" href="{{url .Prev.URL}}"><span class="helm-micro">Before</span><span>{{.Prev.Title}}</span></a>{{else}}<span></span>{{end}}
+      {{if .Next}}<a class="site-pagenav-link site-pagenav-next" href="{{url .Next.URL}}"><span class="helm-micro">Next</span><span>{{.Next.Title}}</span></a>{{end}}
+    </nav>{{end}}
   </main>
 </div>{{end}}
 
-{{define "contents"}}{{range .Nav}}<p class="helm-section-label">{{.Title}}</p>
+{{define "contents"}}{{range .Nav}}{{if .Fold}}{{$open := false}}{{range .Items}}{{if eq .URL $.URL}}{{$open = true}}{{end}}{{end}}<details class="site-nav-fold"{{if $open}} open{{end}}>
+    <summary class="helm-section-label">{{.Title}}</summary>
     <ul>{{range .Items}}<li><a class="site-side-link" href="{{url .URL}}"{{if eq .URL $.URL}} aria-current="page"{{end}}>{{.Title}}</a></li>{{end}}</ul>
-    {{end}}{{end}}
+    </details>
+    {{else}}<p class="helm-section-label">{{.Title}}</p>
+    <ul>{{range .Items}}<li><a class="site-side-link" href="{{url .URL}}"{{if eq .URL $.URL}} aria-current="page"{{end}}>{{.Title}}</a></li>{{end}}</ul>
+    {{end}}{{end}}{{end}}

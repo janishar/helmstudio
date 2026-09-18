@@ -15,10 +15,13 @@ type NavItem struct {
 	URL   string
 }
 
-// NavSection is a heading in the sidebar and the pages under it.
+// NavSection is a heading in the sidebar and the pages under it. A folded
+// section is shut until a reader opens it, or until the page they are on is
+// inside it.
 type NavSection struct {
 	Title string
 	Items []NavItem
+	Fold  bool
 }
 
 // studiosInOrder is the launch studios, in the order the site shows them.
@@ -53,11 +56,15 @@ func navigation(groups []apiGroup) []NavSection {
 	nav = append(nav, manifests)
 
 	ref := NavSection{Title: "Reference", Items: items("/docs/reference/manifest/", "/docs/reference/cli/", "/docs/reference/api/")}
+	// The API's groups and its types are thirteen more links, which is a
+	// third of the sidebar spent on a reference within the reference. They
+	// fold, and the page a reader is on opens them.
+	byGroup := NavSection{Title: "The API, group by group", Fold: true}
 	for _, g := range groups {
-		ref.Items = append(ref.Items, NavItem{URL: "/docs/reference/api/" + g.Name + "/"})
+		byGroup.Items = append(byGroup.Items, NavItem{URL: "/docs/reference/api/" + g.Name + "/"})
 	}
-	ref.Items = append(ref.Items, NavItem{URL: "/docs/reference/api/types/"})
-	return append(nav, ref)
+	byGroup.Items = append(byGroup.Items, NavItem{URL: "/docs/reference/api/types/"})
+	return append(nav, ref, byGroup)
 }
 
 func items(urls ...string) []NavItem {
@@ -76,7 +83,7 @@ func titled(nav []NavSection, pages []*Page) ([]NavSection, error) {
 	}
 	out := make([]NavSection, len(nav))
 	for i, sec := range nav {
-		out[i] = NavSection{Title: sec.Title}
+		out[i] = NavSection{Title: sec.Title, Fold: sec.Fold}
 		for _, it := range sec.Items {
 			t, ok := titles[it.URL]
 			if !ok {
