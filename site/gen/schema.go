@@ -54,7 +54,7 @@ func manifestReference(o Options) (*Page, error) {
 	}
 	var b strings.Builder
 	b.WriteString(`<h1 class="helm-title">Manifest reference</h1>`)
-	if d := str(doc["description"]); d != "" {
+	if d := desc(doc["description"]); d != "" {
 		fmt.Fprintf(&b, `<p class="helm-body site-prose">%s</p>`, html.EscapeString(strings.TrimSpace(d)))
 	}
 	b.WriteString(`<p class="helm-body">A studio's <span class="helm-mono">helmstudio.yaml</span>, field by field. Generated from <span class="helm-mono">schema/manifest.json</span>; <code>helm validate</code> checks a manifest against the same file, and adds rules a schema cannot state, such as a process's working directory staying inside the studio.</p>`)
@@ -120,7 +120,7 @@ func writeFacts(b *strings.Builder, doc, node map[string]any) {
 	if len(facts) > 0 {
 		fmt.Fprintf(b, `<p class="helm-mono">%s</p>`, html.EscapeString(strings.Join(facts, " · ")))
 	}
-	if d := str(node["description"]); d != "" {
+	if d := desc(node["description"]); d != "" {
 		fmt.Fprintf(b, `<p class="helm-body site-prose">%s</p>`, html.EscapeString(strings.TrimSpace(d)))
 	} else if str(node["$ref"]) == "" {
 		b.WriteString(`<p class="helm-micro">The schema gives this field no description.</p>`)

@@ -1114,6 +1114,14 @@ Decided before M9 is expanded, which is the last moment it is free: the shell is
 
   Nothing in the software changes. What changes is that a reader can now be told where a thumbnail is without the documents disagreeing, and the disk-map figure can be drawn.
 
+## 2026-09-18 · Which citations the site shows
+
+- 2026-09-18 · docs · **the generated reference keeps design citations and drops decision-log ones** — "05 §6", "R44–R49" and "03 §12a" name sections of `docs/design/`, documents a reader can go and read; "Q7", "M7 Q10" and "M4 first review #11" name answers in this project's own build record, which to a studio author is a number with nothing behind it. 71 of the former kind reached rendered pages. The contract is not edited — the citations stay in `api/openapi.yaml` and `schema/manifest.json`, whose job it is to keep them — and the gate still regenerates the reference and fails on a diff, so what is shown cannot drift from what is written.
+
+  **It is not a regex over the output.** The two kinds mix inside one clause — `(R44–R49, 05 §6, §7; docs/decisions.md M8 Q7–Q19)` — so it works segment by segment and removes a parenthesis only when nothing in it survived. Descriptions in this contract also open with a bare citation sentence, on a line of its own, so the first sentence is filtered the same way and only when every part of it is a citation: prose that merely begins with a reference is left alone. A description that was nothing but a citation becomes empty, which is right — "docs/decisions.md M3 Q6" told a studio author nothing.
+
+- 2026-09-18 · docs · **one citation is left on the page, and listed in the test that would otherwise forbid it: "Readable by the rules in Q9", in `GET /assets/{id}/blob`** — it is woven into the sentence's grammar rather than sitting beside it as apparatus, so removing it leaves broken prose, and `api/openapi.yaml` is the contract, which this repository does not edit to make a page read better. `site/gen/citations_test.go` names it, so a new one fails the gate rather than joining it quietly. **Raised for the human:** the fix is a sentence in the contract, and that is theirs to write.
+
 ## Changes
 
 - 2026-09-15 · M0 built the manifest schema's `helm validate` (schema validation plus the seven rules it cannot express), the four studio manifests, and the `api/openapi.yaml` outline · found one hard self-contradiction in `schema/manifest.json` itself (the `run` sugar is unusable: `processes` sits in the schema's unconditional top-level `required`, so `run:` alone always fails "missing properties: processes" regardless of the `allOf`/`not` clause that says they're alternatives) — raised in `docs/agents/reports/00-contracts.md`, not resolved in code; all four shipped manifests use `processes:` so this did not block M0.

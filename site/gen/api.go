@@ -89,7 +89,7 @@ func apiReference(o Options) ([]apiGroup, []*Page, error) {
 			a := apiOperation{
 				ID: str(op["operationId"]), Group: str(op["x-helm-group"]), Method: str(op["x-helm-method"]),
 				Capability: str(op["x-helm-capability"]), HTTPMethod: strings.ToUpper(method), Path: p,
-				Summary: str(op["summary"]), Description: str(op["description"]), Tag: tag,
+				Summary: desc(op["summary"]), Description: desc(op["description"]), Tag: tag,
 			}
 			if a.Group == "" {
 				a.Group = "theme"
@@ -98,7 +98,7 @@ func apiReference(o Options) ([]apiGroup, []*Page, error) {
 				pm := resolve(doc, asMap(prm))
 				a.Params = append(a.Params, apiParam{
 					Name: str(pm["name"]), In: str(pm["in"]), Required: pm["required"] == true,
-					Type: typeOf(doc, asMap(pm["schema"]), schemas), Description: str(pm["description"]),
+					Type: typeOf(doc, asMap(pm["schema"]), schemas), Description: desc(pm["description"]),
 				})
 			}
 			if rb := resolve(doc, asMap(op["requestBody"])); len(rb) > 0 {
@@ -116,7 +116,7 @@ func apiReference(o Options) ([]apiGroup, []*Page, error) {
 					schema = typeOf(doc, asMap(asMap(asMap(rm["content"])[ct])["schema"]), schemas)
 					break
 				}
-				a.Responses = append(a.Responses, apiResponse{Status: status, Description: str(rm["description"]), Schema: schema})
+				a.Responses = append(a.Responses, apiResponse{Status: status, Description: desc(rm["description"]), Schema: schema})
 			}
 			events := asMap(op["x-helm-events"])
 			for _, name := range sortedKeys(events) {
@@ -159,8 +159,8 @@ func apiIndex(o Options, raw []byte, groups []apiGroup) *Page {
 	var b strings.Builder
 	b.WriteString(`<h1 class="helm-title">API reference</h1>`)
 	b.WriteString(`<p class="helm-body">Every operation a studio calls. A studio calls them through its runtime SDK client, with the token helmstudio or <code>helm dev</code> gives it in <code>HELM_TOKEN</code>; each operation below names the capability its token needs. The two <code>public</code> operations need no token.</p>`)
-	b.WriteString(`<p class="helm-body">Generated from <span class="helm-mono">api/openapi.yaml</span>, whose conventions apply to every page here. They are quoted from the document as it is written:</p>`)
-	b.WriteString(`<pre class="site-quote"><code>` + html.EscapeString(conventions(raw)) + `</code></pre>`)
+	b.WriteString(`<p class="helm-body">Generated from <span class="helm-mono">api/openapi.yaml</span>, whose conventions apply to every page here. They are quoted from the document, without the decision-log references it keeps for its own authors:</p>`)
+	b.WriteString(`<pre class="site-quote"><code>` + html.EscapeString(withoutDecisionRefs(conventions(raw))) + `</code></pre>`)
 	b.WriteString(`<table class="helm-table"><thead><tr><th>Group</th><th>Operations</th></tr></thead><tbody>`)
 	for _, g := range groups {
 		fmt.Fprintf(&b, `<tr><td><a class="helm-link" href="%s">%s</a></td><td class="helm-mono">%d</td></tr>`,
@@ -297,7 +297,7 @@ func typesPage(o Options, doc map[string]any, used map[string]bool) (*Page, erro
 		}
 		sm := asMap(s)
 		fmt.Fprintf(&b, `<section class="site-op" id="%s"><h2 class="site-op-title helm-mono">%s</h2>`, html.EscapeString(name), html.EscapeString(name))
-		if d := str(sm["description"]); d != "" {
+		if d := desc(sm["description"]); d != "" {
 			fmt.Fprintf(&b, `<p class="helm-micro site-prose">%s</p>`, html.EscapeString(strings.TrimSpace(d)))
 		}
 		if enum := asSlice(sm["enum"]); len(enum) > 0 {
@@ -333,7 +333,7 @@ func typesPage(o Options, doc map[string]any, used map[string]bool) (*Page, erro
 					req = ` <span class="helm-micro">required</span>`
 				}
 				fmt.Fprintf(&b, `<tr><td class="helm-mono">%s%s</td><td>%s</td><td>%s</td></tr>`,
-					html.EscapeString(k), req, typeLinks(o, typeOf(doc, pm, nil)), html.EscapeString(strings.TrimSpace(str(pm["description"]))))
+					html.EscapeString(k), req, typeLinks(o, typeOf(doc, pm, nil)), html.EscapeString(strings.TrimSpace(desc(pm["description"]))))
 			}
 			b.WriteString(`</tbody></table>`)
 		}
@@ -548,6 +548,11 @@ func str(v any) string {
 	s, _ := v.(string)
 	return s
 }
+
+// desc reads a description from the contract as this site shows it: without
+// the decision-log citations the contract keeps for its own authors. See
+// citations.go.
+func desc(v any) string { return withoutDecisionRefs(str(v)) }
 
 func firstString(v any) string {
 	for _, x := range asSlice(v) {
