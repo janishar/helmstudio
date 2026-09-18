@@ -58,14 +58,15 @@ func cliReference(o Options) (*Page, error) {
 
 	var b strings.Builder
 	b.WriteString(`<h1 class="helm-title">CLI reference</h1>`)
-	b.WriteString(`<p class="helm-body">What <code>helm</code> prints about itself, verbatim. Install it as <a class="helm-link" href="https://github.com/janishar/helmstudio/blob/main/docs/releasing.md#installing-helm">Installing helm</a> says, or build it from a clone with <code>go build -o bin/helm ./cmd/helm</code>; <code>helm --version</code> says which one you have.</p>`)
+	b.WriteString(`<p class="helm-body">What <code>helm</code> prints about itself, verbatim. Install it as <a class="helm-link" href="` + joinBase(o.Base, "/docs/install-helm/") + `">Install helm</a> says, or build it from a clone with <code>go build -o bin/helm ./cmd/helm</code>; <code>helm --version</code> says which one you have.</p>`)
 	for _, c := range []struct{ title, text string }{
 		{"helm", top}, {"helm validate", validate}, {"helm dev", dev},
 	} {
 		fmt.Fprintf(&b, `<h2 id="%s">%s</h2><pre class="site-quote"><code>%s</code></pre>`,
 			strings.ReplaceAll(c.title, " ", "-"), html.EscapeString(c.title), html.EscapeString(c.text))
 	}
-	b.WriteString(`<h2 id="not-built">Not built</h2><p class="helm-body">The design names four more commands, and none of them exists yet: <code>helm studio init</code> (scaffold a studio), <code>helm test</code> (the smoke harness certification runs), <code>helm doctor</code> (which provider a studio would get, and why) and <code>helm adopt</code>. They belong to no milestone yet. <code>helm dev</code>'s design also names <code>--fixtures</code> and <code>--fail</code>, which are not built either.</p>`)
+	b.WriteString(`<h2 id="not-built">Not built</h2><p class="helm-body">The design names these, and none of them exists yet. They belong to no milestone.</p>`)
+	b.WriteString(notBuiltHTML(unbuiltCommands))
 	return &Page{
 		URL: "/docs/reference/cli/", Title: "CLI reference", Layout: "docs", Body: template.HTML(b.String()),
 		GeneratedFrom: "helm's own usage", Description: "The helm command, in its own words.",

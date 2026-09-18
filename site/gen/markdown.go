@@ -47,6 +47,9 @@ import (
 //   - A link or image whose destination starts with "/" is internal: it is
 //     written under the site's base path, and recorded so the build can fail on
 //     one that leads nowhere.
+//   - `@notbuilt` is the one list of what the design names and nobody has
+//     built, read from unbuilt.go, so a command that ships is removed once
+//     rather than hunted for across the pages that mention it.
 //   - `@capabilities` and `@criteria <manifest>` are tables read from
 //     internal/manifest, the same tables the approval screen, the editor and
 //     `helm validate -criteria` read, so a page cannot describe a capability
@@ -61,6 +64,7 @@ var (
 	sampleLine       = regexp.MustCompile(`^@sample\s+([^\s#]+)(?:#([A-Za-z0-9_-]+))?(?:\s+not-run:\s*(.+))?\s*$`)
 	regionMarker     = regexp.MustCompile(`helm:(region|endregion)(?:\s+([A-Za-z0-9_-]+))?`)
 	capabilitiesLine = regexp.MustCompile(`^@capabilities\s*$`)
+	notBuiltLine     = regexp.MustCompile(`^@notbuilt\s*$`)
 	criteriaLine     = regexp.MustCompile(`^@criteria\s+(\S+)\s*$`)
 )
 
@@ -178,6 +182,12 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, []string, er
 			out.WriteString(capabilitiesTable())
 			continue
 		}
+		if notBuiltLine.MatchString(trimmed) {
+			fence := "~~~"
+			fmt.Fprintf(&out, "%shtml raw=%s\n%s\n%s\n", fence, strconv.Quote("notbuilt"),
+				notBuiltHTML(append(append([]unbuiltThing{}, unbuiltCommands...), unbuiltScreens...)), fence)
+			continue
+		}
 		if m := criteriaLine.FindStringSubmatch(trimmed); m != nil {
 			file := filepath.Join(r.samples, filepath.FromSlash(m[1]))
 			table, err := criteriaTable(file)
@@ -221,7 +231,7 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, []string, er
 		m := sampleLine.FindStringSubmatch(trimmed)
 		if m == nil {
 			if strings.HasPrefix(strings.TrimSpace(trimmed), "@") && !strings.HasPrefix(strings.TrimSpace(trimmed), "@ ") {
-				return nil, nil, nil, fmt.Errorf("line %d: %q is not a directive; the directives are @sample, @diagram, @capabilities and @criteria", n+1, strings.TrimSpace(trimmed))
+				return nil, nil, nil, fmt.Errorf("line %d: %q is not a directive; the directives are @sample, @diagram, @notbuilt, @capabilities and @criteria", n+1, strings.TrimSpace(trimmed))
 			}
 			out.WriteString(line)
 			continue
@@ -365,6 +375,14 @@ func (sampleBlocks) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 			info = string(n.Info.Segment.Value(src))
 		}
 		lang, attrs := parseInfo(info)
+		if attrs["raw"] != "" {
+			lines := n.Lines()
+			for i := 0; i < lines.Len(); i++ {
+				seg := lines.At(i)
+				_, _ = w.Write(seg.Value(src))
+			}
+			return ast.WalkSkipChildren, nil
+		}
 		if name := attrs["diagram"]; name != "" {
 			fmt.Fprint(w, `<figure class="diagram">`)
 			lines := n.Lines()

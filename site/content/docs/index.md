@@ -20,11 +20,9 @@ These pages are for someone writing a studio, or wrapping a repository someone e
 
 `helm` is released on GitHub, the runtime SDK on PyPI, npm and the Go module proxy, and `@helmstudio/css` and `@helmstudio/ui` on npm, so writing a studio needs no clone of this repository. helmstudio itself — the launcher and its daemon — ships as an unsigned Mac app, and also runs from a clone.
 
-These are **not built**, and a page that would otherwise use one says so:
+A page that would otherwise use one of these says so where it would have.
 
-- `helm studio init`, `helm test`, `helm doctor` and `helm adopt` — four commands the design describes;
-- `helm dev --fixtures` and `--fail`;
-- the launcher's own Gallery and Timeline screens.
+@notbuilt
 
 ## Three packages, one direction
 

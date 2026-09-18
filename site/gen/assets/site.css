@@ -284,6 +284,27 @@ figure.sample pre code,
   white-space: normal;
 }
 
+/* What the design names and nobody has built. Quiet, because it is an
+   absence rather than a warning, and bordered so it reads as an aside and
+   not as prose the page is asserting. */
+.site-notbuilt {
+  margin: var(--helm-space-5) 0;
+  padding: var(--helm-space-3) var(--helm-space-4);
+  border: 1px dashed var(--helm-border-strong);
+  border-radius: var(--helm-radius-md);
+  background: var(--helm-ground-raised);
+}
+
+.site-notbuilt ul {
+  margin: var(--helm-space-2) 0 0;
+  padding-left: var(--helm-space-5);
+}
+
+.site-notbuilt li {
+  font: var(--helm-type-body);
+  color: var(--helm-text-secondary);
+}
+
 /* ------------------------------------------------- finding your way about */
 
 /* This page's own sections, above the prose rather than floating beside it:
