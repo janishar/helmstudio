@@ -54,6 +54,8 @@ var runs = map[string]string{
 	"groups/helmstudio.yaml":      "TestTheManifestSamplesValidate",
 	"publishing/tern-studio.yaml": "TestTheManifestSamplesValidate",
 	"wrap/validate.sh":            "TestTheManifestSamplesValidate",
+
+	"install/which-helm.sh": "TestTheInstallSamplesRun",
 }
 
 // A missing interpreter or tool fails, unless skipping was asked for, as the
@@ -685,6 +687,28 @@ func get(t *testing.T, address, contentType string) string {
 
 // A manifest or registry entry on a page validates, and a script that
 // validates one prints what the page says it prints.
+// Installing needs the network and the install page says so beside every
+// sample that does. This one does not: `helm --version` is how a reader tells
+// which helm they have, so the page's claim about it is run rather than
+// asserted.
+func TestTheInstallSamplesRun(t *testing.T) {
+	for _, sample := range samplesRunBy("TestTheInstallSamplesRun") {
+		file := filepath.Join(siteDir, "samples", filepath.FromSlash(sample))
+		t.Run(sample, func(t *testing.T) {
+			cmd := exec.Command("bash", file)
+			cmd.Dir = filepath.Dir(file)
+			cmd.Env = envWith("PATH=" + filepath.Dir(helmBin) + string(os.PathListSeparator) + os.Getenv("PATH"))
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("%s: %v\n%s", sample, err, out)
+			}
+			if !strings.HasPrefix(string(out), "helm ") {
+				t.Errorf("%s printed %q; want it to name the helm it ran", sample, out)
+			}
+		})
+	}
+}
+
 func TestTheManifestSamplesValidate(t *testing.T) {
 	for _, sample := range samplesRunBy("TestTheManifestSamplesValidate") {
 		file := filepath.Join(siteDir, "samples", filepath.FromSlash(sample))

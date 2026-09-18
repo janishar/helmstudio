@@ -26,7 +26,7 @@ var studiosInOrder = []string{"h3-studio", "ltx-studio", "iris-studio", "auk-stu
 
 func navigation(groups []apiGroup) []NavSection {
 	nav := []NavSection{
-		{Title: "Start", Items: items("/docs/", "/docs/quickstart/")},
+		{Title: "Start", Items: items("/docs/", "/docs/quickstart/", "/docs/install-helm/")},
 		{Title: "Concepts", Items: items(
 			"/docs/concepts/how-a-studio-fits-together/",
 			"/docs/concepts/manifest/",

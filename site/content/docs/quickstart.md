@@ -10,7 +10,7 @@ You need macOS on Apple Silicon, or Linux on x86-64 or ARM64, with Python 3.9 or
 
 @sample quickstart/01-install-helm.sh not-run: it needs the network; the gate builds helm from the checkout it tests and puts it on the path instead
 
-If `~/.local/bin` is not on your `PATH`, the installer prints the line to add. [Installing helm](https://github.com/janishar/helmstudio/blob/main/docs/releasing.md#installing-helm) covers installing a particular version, upgrading and uninstalling.
+If `~/.local/bin` is not on your `PATH`, the installer prints the line to add. [Install helm](/docs/install-helm/) covers installing a particular version, upgrading and uninstalling.
 
 ## 2. Make a directory and a Python environment
 
