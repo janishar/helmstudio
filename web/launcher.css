@@ -778,17 +778,86 @@ dialog.helm-dialog::backdrop {
   color: var(--helm-text-primary);
 }
 
+/* The text, with a rule beside it: a number for every line, and a mark across
+ * the lines the daemon faulted. The error list under the box says the same
+ * lines in words and is what a reader is given; the rule is so that an eye
+ * scanning 150 lines of YAML lands on the one that is wrong.
+ *
+ * The rule is one list laid over the pane and moved with the box's scroll, so
+ * a marked line runs the whole width — its number in the margin, its tint
+ * under the text. The box keeps its own left edge rather than being padded
+ * past the numbers: a long line then scrolls inside the box instead of sliding
+ * underneath them.
+ */
+.helm-editor-yaml-wrap {
+  /* The box's metrics, in one place, because the rule has to agree with them
+   * line for line: a rule that disagrees is worse than no rule. */
+  --helm-editor-line-height: 19px;
+  --helm-editor-line-pad: 14px;
+  --helm-editor-rule-width: 52px;
+  position: relative;
+  padding-left: var(--helm-editor-rule-width);
+  background: var(--helm-ground-inset);
+}
+
+/* The rule is clipped here rather than by the pane, so that the box's focus
+ * ring, which is drawn outside its edge, is not clipped away with it. */
+.helm-editor-rule-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.helm-editor-rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding-top: var(--helm-editor-line-pad);
+  font: var(--helm-type-mono);
+  line-height: var(--helm-editor-line-height);
+}
+
+.helm-editor-line {
+  display: grid;
+  grid-template-columns: var(--helm-editor-rule-width) minmax(0, 1fr);
+  height: var(--helm-editor-line-height);
+}
+
+.helm-editor-line-no {
+  padding-right: var(--helm-space-3);
+  color: var(--helm-log-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* A faulted line: tinted across, its number in the log's error colour, and a
+ * bar where the rule meets the text — the same inset bar a failed build step
+ * carries. Three cues, because colour alone is not one (03 §15). The log
+ * colours are the ones that hold on this ground, which is dark in both themes;
+ * --helm-status-error is for a panel and would sink into it. */
+.helm-editor-line[data-state="error"] {
+  background: color-mix(in oklab, var(--helm-log-error) 16%, var(--helm-ground-inset));
+}
+
+.helm-editor-line[data-state="error"] .helm-editor-line-no {
+  color: var(--helm-log-error);
+  box-shadow: inset -2px 0 0 var(--helm-log-error);
+}
+
 .helm-editor-yaml {
   display: block;
+  position: relative;
   width: 100%;
   min-height: 60vh;
   margin: 0;
-  padding: 14px var(--helm-space-4);
+  padding: var(--helm-editor-line-pad) var(--helm-space-4) var(--helm-editor-line-pad) var(--helm-space-3);
   border: 0;
-  background: var(--helm-ground-inset);
+  /* The pane carries the ground, so the rule shows through the box. */
+  background: transparent;
   color: var(--helm-log-text);
   font: var(--helm-type-mono);
-  line-height: 19px;
+  line-height: var(--helm-editor-line-height);
   white-space: pre;
   overflow-wrap: normal;
   resize: vertical;
