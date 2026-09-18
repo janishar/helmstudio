@@ -1,0 +1,43 @@
+<svg viewBox="0 0 360 362" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>From a manifest to a running group, and back to stopped</title>
+  <desc>Seven steps in order. First, find its manifest — from a registry pointer, the studio's own repository, or one you wrote yourself. Then approve: every command the studio will run is shown before anything runs. Then install: the repository is cloned at the pinned reference, then the build steps run and the weights arrive. Then launch, at which point the approval is re-checked and you are asked again only if a command changed. Then queued, waiting for a heavy slot or for a dependency — and a second heavy studio states what it would stop and asks first. Then starting and running: a port is assigned and the health check passes. Finally stop, which tears the group down in reverse order.</desc>
+
+  <marker id="l-arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path class="d-arrow" d="M0 0 L8 4 L0 8 z"/>
+  </marker>
+
+  <rect class="d-box" x="8" y="8" width="344" height="36" rx="3"/>
+  <text class="d-label" x="20" y="24">find its manifest</text>
+  <text class="d-sub" x="20" y="38">a registry pointer, the studio's repo, or one you wrote</text>
+  <path class="d-edge d-accent" d="M180 44 V56" marker-end="url(#l-arrowhead)"/>
+
+  <rect class="d-box" x="8" y="60" width="344" height="36" rx="3"/>
+  <text class="d-label" x="20" y="76">approve</text>
+  <text class="d-sub" x="20" y="90">every command it will run, shown before anything runs</text>
+  <path class="d-edge d-accent" d="M180 96 V108" marker-end="url(#l-arrowhead)"/>
+
+  <rect class="d-box" x="8" y="112" width="344" height="36" rx="3"/>
+  <text class="d-label" x="20" y="128">install</text>
+  <text class="d-sub" x="20" y="142">clone at the pinned ref, then build steps and weights</text>
+  <path class="d-edge d-accent" d="M180 148 V160" marker-end="url(#l-arrowhead)"/>
+
+  <rect class="d-box" x="8" y="164" width="344" height="36" rx="3"/>
+  <text class="d-label" x="20" y="180">launch</text>
+  <text class="d-sub" x="20" y="194">re-checked; you are asked again only if a command changed</text>
+  <path class="d-edge d-accent" d="M180 200 V212" marker-end="url(#l-arrowhead)"/>
+
+  <rect class="d-box" x="8" y="216" width="344" height="48" rx="3"/>
+  <text class="d-label" x="20" y="232">queued</text>
+  <text class="d-sub" x="20" y="246">waiting for a heavy slot, or for a dependency</text>
+  <text class="d-sub" x="20" y="259">a second heavy studio says what it would stop, and asks</text>
+  <path class="d-edge d-accent" d="M180 264 V276" marker-end="url(#l-arrowhead)"/>
+
+  <rect class="d-box" x="8" y="280" width="344" height="36" rx="3"/>
+  <text class="d-label" x="20" y="296">starting, then running</text>
+  <text class="d-sub" x="20" y="310">a port assigned, then the health check passes</text>
+  <path class="d-edge d-accent" d="M180 316 V328" marker-end="url(#l-arrowhead)"/>
+
+  <rect class="d-chip" x="8" y="332" width="344" height="28" rx="3"/>
+  <text class="d-label" x="20" y="343">stop</text>
+  <text class="d-sub" x="20" y="356">the group torn down in reverse order</text>
+</svg>

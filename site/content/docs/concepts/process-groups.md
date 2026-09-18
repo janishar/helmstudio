@@ -2,6 +2,8 @@
 
 A studio is not always one server. A native engine and the web server in front of it, a queue worker, a step that prepares a cache: each is a **process** under `processes`, and together they are the studio's **group**. helmstudio starts and stops a group as one thing, with one code path for every member, so an extra process is a few lines of YAML and never a special case.
 
+@diagram from-a-manifest-to-a-running-group caption: The heavy-slot rule is applied while a studio is queued, not before — which is why a second heavy launch can tell you exactly what it would stop.
+
 @sample groups/helmstudio.yaml
 
 The manifest above validates. The repository it names is an illustration, and does not exist.
