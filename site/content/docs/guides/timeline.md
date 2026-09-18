@@ -2,6 +2,8 @@
 
 Sequencing is not one studio's job. A sequence cut from a video studio's take, another studio's clip, a still and a voice line is none of those studios' documents, so the timeline belongs to helmstudio: studios hand it clips, and it keeps the sequence, its revisions and its exports. A studio never renders a track or runs ffmpeg itself.
 
+@diagram the-timeline-model caption: A sequence owns no footage. Every clip points at an asset, so an edit writes a new revision and never touches a file — and a sequence using an asset counts as a reference, so nothing can offer to delete footage it is still using.
+
 This studio holds `timeline`, `assets` and `gallery`:
 
 @sample timeline/timeline.py

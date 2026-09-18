@@ -1,0 +1,35 @@
+<svg viewBox="0 0 360 272" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>The timeline model: tracks, clips as references, and revisions</title>
+  <desc>At the top, a sequence drawn as tracks. One video track, V1, holding three clips laid end to end. One audio track, A1, holding two. A third strip notes that there are up to eight audio tracks in all. Below, three statements. First, a clip is a reference: it names an asset with in and out points, and the source is never modified or copied. Second, the rules: clips on one track never overlap, and sound never runs past the picture. Third, every edit is a patch: it writes a new revision, and undo writes an old one forward rather than rewinding, so nothing is lost by undoing.</desc>
+
+  <text class="d-sub" x="8" y="12">a sequence</text>
+
+  <text class="d-label" x="8" y="34">V1</text>
+  <rect class="d-edge" x="30" y="18" width="322" height="22" rx="2"/>
+  <rect class="d-chip" x="34" y="21" width="96" height="16" rx="2"/>
+  <rect class="d-chip" x="134" y="21" width="104" height="16" rx="2"/>
+  <rect class="d-chip" x="242" y="21" width="106" height="16" rx="2"/>
+
+  <text class="d-label" x="8" y="62">A1</text>
+  <rect class="d-edge" x="30" y="46" width="322" height="22" rx="2"/>
+  <rect class="d-chip" x="34" y="49" width="140" height="16" rx="2"/>
+  <rect class="d-chip" x="182" y="49" width="120" height="16" rx="2"/>
+
+  <rect class="d-edge" x="30" y="74" width="322" height="20" rx="2"/>
+  <text class="d-sub" x="191" y="88" text-anchor="middle">up to eight audio tracks in all</text>
+
+  <rect class="d-chip" x="8" y="104" width="344" height="48" rx="3"/>
+  <text class="d-label" x="20" y="120">a clip is a reference</text>
+  <text class="d-sub" x="20" y="134">it names an asset, with in and out points</text>
+  <text class="d-sub" x="20" y="146">the source is never modified and never copied</text>
+
+  <rect class="d-chip" x="8" y="160" width="344" height="48" rx="3"/>
+  <text class="d-label" x="20" y="176">the rules</text>
+  <text class="d-sub" x="20" y="190">clips on one track never overlap</text>
+  <text class="d-sub" x="20" y="202">and sound never runs past the picture</text>
+
+  <rect class="d-chip" x="8" y="216" width="344" height="48" rx="3"/>
+  <text class="d-label" x="20" y="232">every edit is a patch</text>
+  <text class="d-sub" x="20" y="246">it writes a new revision, and undo writes an old one</text>
+  <text class="d-sub" x="20" y="258">forward rather than rewinding, so nothing is lost</text>
+</svg>
