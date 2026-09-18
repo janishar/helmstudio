@@ -310,8 +310,11 @@ figure.diagram figcaption {
   stroke-width: 1;
 }
 
-.d-box-inset {
-  fill: var(--helm-ground-inset);
+/* --helm-ground-inset is deliberately dark in BOTH themes — it is the surface
+   a code block and a log sit on — so it is not the token for a box that holds
+   ordinary text. --helm-ground-raised is the one that follows the theme. */
+.d-chip {
+  fill: var(--helm-ground-raised);
   stroke: var(--helm-border-hairline);
   stroke-width: 1;
 }
@@ -341,8 +344,12 @@ figure.diagram figcaption {
   stroke: var(--helm-accent-base);
 }
 
+/* The arrowhead matches the line it ends: a marker cannot inherit the
+   referencing path's stroke in any SVG version browsers agree on, so the
+   colour is stated once here and every edge that carries a head is drawn
+   with .d-accent. --helm-border-strong would vanish on the dark ground. */
 .d-arrow {
-  fill: var(--helm-border-strong);
+  fill: var(--helm-accent-base);
 }
 
 /* Not built. Dashed is the whole signal — the muted colour only follows it,

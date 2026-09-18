@@ -2,6 +2,8 @@
 
 A studio can be built and run with no helmstudio installed, no daemon, no registry — and, where the model allows, without the checkpoint. `helm dev` is how, and it is not a separate imitation of helmstudio: it is the daemon's own supervisor, manifest parser and platform API, run for one studio from a local manifest.
 
+@diagram helm-dev-and-the-daemon caption: What changes between the two is how many studios run and where their roots live — not the code a studio meets.
+
 ## What `helm dev` does
 
 Run in the studio's checkout, it:

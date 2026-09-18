@@ -1,0 +1,49 @@
+<svg viewBox="0 0 360 272" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>helm dev and the helmstudio daemon</title>
+  <desc>Two columns side by side. On the left, helm dev: one studio, every root in a .helm directory beside the manifest, and it installs nothing. On the right, the helmstudio daemon: many studios, every root under a .helmstudio directory in your home directory, and it clones, builds and downloads weights. Each column ends with a dashed box of parts that are specified but not built — for helm dev, the fixtures and fail flags; for the daemon, its own Gallery and Timeline screens. An arrow leaves each column and meets a band across the foot of the figure reading "the same code, both times", holding four items: the same supervisor, the same platform API, the same token scheme, and the same UI kit.</desc>
+
+  <marker id="d-arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path class="d-arrow" d="M0 0 L8 4 L0 8 z"/>
+  </marker>
+
+  <rect class="d-box" x="8" y="8" width="164" height="22" rx="3"/>
+  <text class="d-label" x="90" y="23" text-anchor="middle">helm dev</text>
+  <rect class="d-box" x="188" y="8" width="164" height="22" rx="3"/>
+  <text class="d-label" x="270" y="23" text-anchor="middle">helmstudio daemon</text>
+
+  <rect class="d-chip" x="8" y="36" width="164" height="30" rx="3"/>
+  <text class="d-sub" x="90" y="55" text-anchor="middle">One studio</text>
+  <rect class="d-chip" x="188" y="36" width="164" height="30" rx="3"/>
+  <text class="d-sub" x="270" y="55" text-anchor="middle">Many studios</text>
+
+  <rect class="d-chip" x="8" y="72" width="164" height="30" rx="3"/>
+  <text class="d-sub" x="90" y="91" text-anchor="middle">Roots in ./.helm</text>
+  <rect class="d-chip" x="188" y="72" width="164" height="30" rx="3"/>
+  <text class="d-sub" x="270" y="91" text-anchor="middle">Roots in ~/.helmstudio</text>
+
+  <rect class="d-chip" x="8" y="108" width="164" height="30" rx="3"/>
+  <text class="d-sub" x="90" y="127" text-anchor="middle">Installs nothing</text>
+  <rect class="d-chip" x="188" y="108" width="164" height="30" rx="3"/>
+  <text class="d-sub" x="270" y="127" text-anchor="middle">Clones, builds, downloads</text>
+
+  <rect class="d-unbuilt" x="8" y="146" width="164" height="30" rx="3"/>
+  <text class="d-unbuilt-label" x="90" y="158" text-anchor="middle">not built</text>
+  <text class="d-unbuilt-label" x="90" y="170" text-anchor="middle">--fixtures · --fail</text>
+  <rect class="d-unbuilt" x="188" y="146" width="164" height="30" rx="3"/>
+  <text class="d-unbuilt-label" x="270" y="158" text-anchor="middle">not built</text>
+  <text class="d-unbuilt-label" x="270" y="170" text-anchor="middle">Gallery · Timeline screens</text>
+
+  <path class="d-edge d-accent" d="M90 180 V200" marker-end="url(#d-arrowhead)"/>
+  <path class="d-edge d-accent" d="M270 180 V200" marker-end="url(#d-arrowhead)"/>
+
+  <rect class="d-box" x="8" y="204" width="344" height="60" rx="3"/>
+  <text class="d-label" x="180" y="220" text-anchor="middle">the same code, both times</text>
+  <rect class="d-chip" x="16" y="228" width="80" height="28" rx="3"/>
+  <text class="d-sub" x="56" y="246" text-anchor="middle">supervisor</text>
+  <rect class="d-chip" x="102" y="228" width="80" height="28" rx="3"/>
+  <text class="d-sub" x="142" y="246" text-anchor="middle">platform API</text>
+  <rect class="d-chip" x="188" y="228" width="80" height="28" rx="3"/>
+  <text class="d-sub" x="228" y="246" text-anchor="middle">token scheme</text>
+  <rect class="d-chip" x="274" y="228" width="70" height="28" rx="3"/>
+  <text class="d-sub" x="309" y="246" text-anchor="middle">UI kit</text>
+</svg>
