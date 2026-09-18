@@ -28,7 +28,7 @@ An export is a job. Its progress and its cancellation are under `timeline`, so a
 
 ## Opening the editor
 
-`POST /timeline/{id}:open` asks helmstudio to show a sequence in its editor. The launcher's timeline screen ships with the Mac app, so today it answers `501`, under helmstudio and under `helm dev` alike. A studio hides its Open button when it does; the sequence is still made, edited and exported.
+`POST /timeline/{id}:open` asks helmstudio to show a sequence in its editor. The launcher's own timeline screen is not built yet, so today it answers `501`, under helmstudio and under `helm dev` alike. A studio hides its Open button when it does; the sequence is still made, edited and exported.
 
 ## Known problems
 

@@ -36,7 +36,7 @@ Where a studio may adopt from comes from `/me`, so the same code works under eve
 
 A provider that answered differently would make a studio's tests worthless. The conformance suite in `test/conformance` runs the same cases against the daemon over HTTP and against the embedded provider in process.
 
-What is deliberately different is presentation. `POST /timeline/{id}:open` asks for a window to show a sequence in, and today every provider answers `501`, because the launcher's timeline screen ships with the Mac app. The sequence is still made, edited and exported, and a studio hides its Open button. See [the timeline](/docs/guides/timeline/).
+What is deliberately different is presentation. `POST /timeline/{id}:open` asks for a window to show a sequence in, and today every provider answers `501`, because the launcher's own timeline screen is not built yet. The sequence is still made, edited and exported, and a studio hides its Open button. See [the timeline](/docs/guides/timeline/).
 
 ## Not built yet
 
