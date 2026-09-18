@@ -97,9 +97,29 @@ func landingPage(o Options, r *pageRenderer) (*Page, error) {
 			Badges: studioBadges(m), HueDark: hue.Dark, HueLight: hue.Light,
 		})
 	}
+	// The landing page is a template, not Markdown, so @diagram cannot reach
+	// it. `diagram` is the same mechanism behind a template function: the same
+	// files, the same check, and the name recorded the same way, so the test
+	// that every diagram is on a page counts this one too.
+	var used []string
+	var diagramErr error
 	t, err := template.New("landing").Funcs(template.FuncMap{
 		"url":  func(p string) string { return joinBase(o.Base, p) },
 		"join": strings.Join,
+		"diagram": func(name, caption string) template.HTML {
+			body, err := os.ReadFile(filepath.Join(o.Site, "diagrams", name+".svg"))
+			if err != nil {
+				diagramErr = fmt.Errorf("@diagram %s: %w", name, err)
+				return ""
+			}
+			if err := checkDiagram(name, string(body)); err != nil {
+				diagramErr = fmt.Errorf("@diagram %s: %w", name, err)
+				return ""
+			}
+			used = append(used, name)
+			return template.HTML(`<figure class="diagram">` + strings.TrimSpace(string(body)) +
+				`<figcaption>` + captionHTML(caption) + `</figcaption></figure>`)
+		},
 	}).ParseFS(embedded, "templates/landing.html")
 	if err != nil {
 		return nil, err
@@ -108,13 +128,18 @@ func landingPage(o Options, r *pageRenderer) (*Page, error) {
 	if err := t.ExecuteTemplate(&buf, "landing", map[string]any{"Studios": studios, "Repo": Repo}); err != nil {
 		return nil, err
 	}
+	// A template function cannot fail the execution, so it records why and the
+	// build fails here rather than writing a page with a hole in it.
+	if diagramErr != nil {
+		return nil, diagramErr
+	}
 	var internal []string
 	for _, s := range studios {
 		internal = append(internal, "/docs/manifests/"+s.ID+"/")
 	}
 	internal = append(internal, "/docs/quickstart/", "/docs/guides/wrap-a-repository/", "/docs/reference/manifest/", "/docs/publishing/", "/docs/")
 	return &Page{
-		URL: "/", Title: "", Layout: "page", Body: template.HTML(buf.String()), Internal: internal,
+		URL: "/", Title: "", Layout: "page", Body: template.HTML(buf.String()), Internal: internal, Diagrams: used,
 		Description: "Open-weight video, image and speech models on your own machine, without the afternoon of setup.",
 		Source:      "site/gen/templates/landing.html",
 	}, nil

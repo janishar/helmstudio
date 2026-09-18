@@ -9,6 +9,28 @@
   <p class="helm-micro site-status">helmstudio is pre-release. The <code>helm</code> CLI, the packages and an unsigned Mac app are published on <a class="helm-link" href="{{.Repo}}/releases">the releases page</a>; the launcher also runs from a clone.</p>
 </section>
 
+<section class="site-section" aria-labelledby="paths">
+  <h2 id="paths">Three ways in</h2>
+  <div class="helm-grid-cards">
+    <article class="helm-card">
+      <h3 class="helm-card-title">Run studios</h3>
+      <p class="helm-card-desc">Build from a clone and open the launcher, or take the unsigned Mac app. Everything stays on your machine.</p>
+      <p class="helm-micro"><a class="helm-link" href="{{.Repo}}#choose-your-path">Getting it running</a></p>
+    </article>
+    <article class="helm-card">
+      <h3 class="helm-card-title">Build a studio</h3>
+      <p class="helm-card-desc">Wrap a model repository in a manifest — your own, or one whose author never wrote one — and run it under <code>helm dev</code>.</p>
+      <p class="helm-micro"><a class="helm-link" href="{{url "/docs/quickstart/"}}">The quickstart</a> · <a class="helm-link" href="{{url "/docs/"}}">the documentation</a></p>
+    </article>
+    <article class="helm-card">
+      <h3 class="helm-card-title">Work on helmstudio</h3>
+      <p class="helm-card-desc">The design documents are the contract, and a contradiction in them is raised rather than resolved in code.</p>
+      <p class="helm-micro"><a class="helm-link" href="{{.Repo}}/blob/main/CONTRIBUTING.md">Contributing</a> · <a class="helm-link" href="{{.Repo}}/blob/main/docs/framework.md">the architecture</a></p>
+    </article>
+  </div>
+  {{diagram "what-runs-where" "Everything here runs on your own Mac. A model only ever runs inside a studio, and the only outbound calls are the ones you ask for."}}
+</section>
+
 <section class="site-section" aria-labelledby="problem">
   <h2 id="problem">The afternoon of setup, made concrete</h2>
   <div class="site-problems">
@@ -51,11 +73,13 @@
 </section>
 
 <section class="site-section" aria-labelledby="platforms">
-  <h2 id="platforms">What runs where</h2>
+  <h2 id="platforms">What exists today</h2>
   <ul class="helm-body">
     <li>The launch studios are built for macOS on Apple Silicon: Metal, MPS and MLX.</li>
     <li>helmstudio&#39;s Go code is type-checked for Linux on every gate run. Nothing has been run there: not the daemon, and not a studio.</li>
     <li>Windows is not supported.</li>
+    <li>The Mac app is unsigned. Its notarisation, its auth cookie and the ffmpeg and uv it should bundle are not built.</li>
+    <li>The launcher&#39;s own Gallery and Timeline screens are not built, and neither are <code>helm test</code>, <code>helm doctor</code>, <code>helm adopt</code> and <code>helm studio init</code>.</li>
   </ul>
 </section>
 
