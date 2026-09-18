@@ -41,6 +41,8 @@ The two halves of the SDK arrive differently because of how each is loaded:
 
 ## What the proxy answers
 
+@diagram how-a-page-reaches-the-api caption: The page holds no token and never learns the host's address. Everything it needs arrives from its own origin, and only the studio's server side ever sees `HELM_TOKEN`.
+
 The studio's server mounts the proxy at `/helm/`: `Proxy.from_env()` in Python, `createProxy()` in JavaScript and `helm.Proxy(helm.ProxyFromEnv())` in Go. [Theming](/docs/guides/theming/) mounts it in all three.
 
 | The page asks for | The proxy |

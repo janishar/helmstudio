@@ -2,6 +2,7 @@ package gen
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 	"strings"
 )
@@ -94,4 +95,23 @@ func checkDiagram(name, body string) error {
 		return fmt.Errorf("it has no <desc>, which is what a screen reader reads in place of the picture")
 	}
 	return nil
+}
+
+// captionHTML escapes a caption and gives it inline code, the one piece of
+// Markdown a caption needs: a figure about `helm dev` should say so in the
+// same face the prose does.
+func captionHTML(s string) string {
+	out := html.EscapeString(s)
+	for {
+		i := strings.Index(out, "`")
+		if i < 0 {
+			break
+		}
+		j := strings.Index(out[i+1:], "`")
+		if j < 0 {
+			break
+		}
+		out = out[:i] + "<code>" + out[i+1:i+1+j] + "</code>" + out[i+2+j:]
+	}
+	return out
 }

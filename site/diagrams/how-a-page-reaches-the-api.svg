@@ -1,0 +1,47 @@
+<svg viewBox="0 0 360 342" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>How a studio's page reaches the platform API</title>
+  <desc>A flow in three parts. At the top, in the browser, the studio's page, which holds no token and never learns the host's address. Every request it makes goes to its own origin, down to the studio's own server, which mounts the proxy at a helm path. The proxy answers four ways: an api path goes to the host's API with the studio's token added; an sdk path goes to the host's UI kit with no token; an accent stylesheet is written by the proxy itself, forwarding nothing; anything else is refused with 404, which is where install and launch stop. Below, a note: the UI kit is loaded by URL through the proxy, while the runtime SDK is imported from PyPI, npm or the Go module proxy and pinned in the studio's own lockfile.</desc>
+
+  <marker id="p-arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path class="d-arrow" d="M0 0 L8 4 L0 8 z"/>
+  </marker>
+
+  <text class="d-sub" x="8" y="14">in the browser</text>
+  <rect class="d-box" x="90" y="20" width="180" height="36" rx="3"/>
+  <text class="d-label" x="180" y="36" text-anchor="middle">the studio's page</text>
+  <text class="d-sub" x="180" y="49" text-anchor="middle">holds no token</text>
+
+  <path class="d-edge d-accent" d="M180 56 V84" marker-end="url(#p-arrowhead)"/>
+  <text class="d-edge-label" x="188" y="74">to its own origin</text>
+
+  <text class="d-sub" x="8" y="102">the studio's own server</text>
+  <rect class="d-box" x="60" y="108" width="240" height="28" rx="3"/>
+  <text class="d-label" x="180" y="126" text-anchor="middle">the proxy, mounted at /helm/</text>
+
+  <path class="d-edge d-accent" d="M180 136 V152" marker-end="url(#p-arrowhead)"/>
+
+  <rect class="d-chip" x="8" y="156" width="168" height="54" rx="3"/>
+  <text class="d-label" x="92" y="172" text-anchor="middle">/helm/api/v1/…</text>
+  <text class="d-sub" x="92" y="187" text-anchor="middle">the host's API,</text>
+  <text class="d-sub" x="92" y="201" text-anchor="middle">with the studio's token</text>
+
+  <rect class="d-chip" x="184" y="156" width="168" height="54" rx="3"/>
+  <text class="d-label" x="268" y="172" text-anchor="middle">/helm/sdk/v1/…</text>
+  <text class="d-sub" x="268" y="187" text-anchor="middle">the host's UI kit,</text>
+  <text class="d-sub" x="268" y="201" text-anchor="middle">with no token</text>
+
+  <rect class="d-chip" x="8" y="218" width="168" height="54" rx="3"/>
+  <text class="d-label" x="92" y="234" text-anchor="middle">/helm/accent.css</text>
+  <text class="d-sub" x="92" y="249" text-anchor="middle">written by the proxy,</text>
+  <text class="d-sub" x="92" y="263" text-anchor="middle">forwarding nothing</text>
+
+  <rect class="d-chip" x="184" y="218" width="168" height="54" rx="3"/>
+  <text class="d-label" x="268" y="234" text-anchor="middle">anything else</text>
+  <text class="d-sub" x="268" y="249" text-anchor="middle">404 — install and</text>
+  <text class="d-sub" x="268" y="263" text-anchor="middle">launch stop here</text>
+
+  <rect class="d-chip" x="8" y="282" width="344" height="52" rx="3"/>
+  <text class="d-sub" x="180" y="299" text-anchor="middle">The UI kit is loaded by URL, through the proxy.</text>
+  <text class="d-sub" x="180" y="313" text-anchor="middle">The runtime SDK is imported — from PyPI, npm or the Go</text>
+  <text class="d-sub" x="180" y="327" text-anchor="middle">module proxy — and pinned in the studio's own lockfile.</text>
+</svg>

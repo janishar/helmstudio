@@ -117,3 +117,21 @@ func TestEveryDiagramIsOnAPage(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// A caption may hold inline code. It is written into the block's info string,
+// and CommonMark forbids a backtick there on a backtick fence — which degrades
+// the whole block to a paragraph silently, so the page would have built and
+// shown the SVG's source as prose.
+func TestACaptionMayHoldInlineCode(t *testing.T) {
+	r, err := renderDiagram(t, goodSVG, "# Page\n\n@diagram d caption: Only the server sees `HELM_TOKEN`.\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<figcaption>Only the server sees <code>HELM_TOKEN</code>.</figcaption>`
+	if !strings.Contains(r.HTML, want) {
+		t.Errorf("the caption has no %s:\n%s", want, r.HTML)
+	}
+	if strings.Contains(r.HTML, "~~~") || strings.Contains(r.HTML, "&lt;svg") {
+		t.Errorf("the block was not read as a block:\n%s", r.HTML)
+	}
+}

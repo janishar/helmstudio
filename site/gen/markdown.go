@@ -133,6 +133,13 @@ func (r *pageRenderer) render(src []byte) (Rendered, error) {
 		return out, err
 	}
 	out.HTML = buf.String()
+	// A diagram that was included but did not become a figure means the fence
+	// carrying it was not read as a fence, which Markdown does silently rather
+	// than loudly: the page keeps building and shows the SVG's source as
+	// prose. Catch it here, where it is still a build failure.
+	if n := strings.Count(out.HTML, `<figure class="diagram">`); n != len(out.Diagrams) {
+		return out, fmt.Errorf("%d diagrams were included but %d figures were written; the block carrying one was not read as a block", len(out.Diagrams), n)
+	}
 	return out, nil
 }
 
@@ -196,9 +203,13 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, []string, er
 			// becomes an ast.RawHTML node: raw HTML in prose stays dropped,
 			// and the only markup that reaches a page is markup this package
 			// checked first.
-			fence := "```"
+			// A TILDE fence, not a backtick one: a caption may hold inline
+			// code, and CommonMark forbids a backtick in the info string of a
+			// backtick fence — which silently degrades the whole block to a
+			// paragraph rather than failing.
+			fence := "~~~"
 			for strings.Contains(string(body), fence) {
-				fence += "`"
+				fence += "~"
 			}
 			fmt.Fprintf(&out, "%ssvg diagram=%s caption=%s\n%s", fence, strconv.Quote(name), strconv.Quote(m[2]), body)
 			if !bytes.HasSuffix(body, []byte("\n")) {
@@ -361,7 +372,7 @@ func (sampleBlocks) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 				seg := lines.At(i)
 				_, _ = w.Write(seg.Value(src))
 			}
-			fmt.Fprintf(w, `<figcaption>%s</figcaption></figure>`+"\n", html.EscapeString(attrs["caption"]))
+			fmt.Fprintf(w, `<figcaption>%s</figcaption></figure>`+"\n", captionHTML(attrs["caption"]))
 			return ast.WalkSkipChildren, nil
 		}
 		fmt.Fprintf(w, `<figure class="sample">`)
