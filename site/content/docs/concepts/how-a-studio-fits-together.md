@@ -24,6 +24,23 @@ When the host starts the studio's server, it says where everything is:
 
 [Providers](/docs/concepts/providers/) lists the rest.
 
+## What one thing is called
+
+The same parts go by several names across these pages, and two of them are not synonyms. This is which is which.
+
+| You will meet | It means |
+|---|---|
+| **a provider** | Whatever serves the platform API. There are two: remote and embedded. See [providers](/docs/concepts/providers/). |
+| **the host** | The provider that serves it over HTTP — helmstudio, or `helm dev`. Every host is a provider; the **embedded** provider is not a host, because it runs inside the studio's own process and answers no address. |
+| **the daemon** | helmstudio's long-running process: the host, when the host is helmstudio rather than `helm dev`. |
+| **the launcher** | The screens helmstudio serves for a person to click, not the API a studio calls. |
+| **the platform API** | The endpoints themselves, whichever provider is serving them. |
+| **the UI kit** | helm-css, the runtime SDK's browser build and the components, served together at `/helm/sdk/v1/`. |
+| **the library** | Two things, by context: the studios this machine knows about, and the tree of what studios have made. [The manifest](/docs/concepts/manifest/) means the first; [record with provenance](/docs/guides/record-with-provenance/) means the second. |
+| **a weight**, **a checkpoint** | The same thing: the model files a studio needs. `weights` is the manifest's field name. |
+
+A package's directory name in this repository is not the name you install. `helm-css` and `helm-ui-sdk` are directories; `@helmstudio/css` and `@helmstudio/ui` are what npm carries.
+
 ## Where each piece comes from
 
 | Piece | Used by | Comes from |
