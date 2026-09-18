@@ -1,4 +1,4 @@
-# Publishing
+# Publish a studio
 
 A studio can reach people three ways, from least ceremony to most: a manifest in someone's own helmstudio, a `helmstudio.yaml` in the studio's repository that anyone can add by URL, and an entry in the registry that ships with helmstudio.
 

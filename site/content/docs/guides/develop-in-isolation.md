@@ -1,4 +1,4 @@
-# Develop in isolation
+# Develop with helm dev
 
 A studio can be built and run with no helmstudio installed, no daemon, no registry — and, where the model allows, without the checkpoint. `helm dev` is how, and it is not a separate imitation of helmstudio: it is the daemon's own supervisor, manifest parser and platform API, run for one studio from a local manifest.
 

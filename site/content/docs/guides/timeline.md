@@ -22,6 +22,13 @@ Exporting runs ffmpeg on the machine running helmstudio, found through `HELM_FFM
 
 Sources are never modified or copied: a clip is a reference with in and out points. An asset a sequence uses counts as used, so reclaiming disk never offers to delete footage a sequence needs.
 
+## Editing one, from the page or the server
+
+The host keeps every sequence and its revisions. Neither the page nor the studio's server holds one.
+
+- **From the page**, `helm-timeline` edits a sequence. It reads it with `timeline.get`, and every edit is a `timeline.update` against the revision it read. The host checks the edit, keeps it as a new revision and answers with the document, and the component draws that answer. If the sequence changed somewhere else, the host refuses the edit, and the component reads the sequence again rather than overwrite it. What goes on a sequence is the page's choice: the component's Add sends an `add-request` event, and the page calls the element's `append` with the asset it picked.
+- **From the server**, the same operations go to `HELM_API` with the token. In Python a call returns the answer, as in `helm.timeline.update(id, body, if_match=etag)`. In JavaScript it returns a promise, and options are an object, as in `await helm.timeline.update(id, body, { ifMatch: etag })`.
+
 ## Export says what it will do
 
 `plan` says, before anything runs, whether the picture can be **copied** — every clip already matches the target and the others, and is used whole — or must be **conformed**, and names the reason for each clip that must be. A still is always drawn, so a sequence with one is conformed. The sound is always re-encoded.

@@ -4,7 +4,16 @@ A studio is described by one file, `helmstudio.yaml`: what it is, what it needs 
 
 ## It lives in the studio's repository
 
-The manifest sits at the root of the studio's own repository, beside the code it describes, so a studio can add a build step or a process without waiting for a helmstudio release. The registry does not keep copies: an entry is a **pointer** — an id, a repository and a pinned ref — and it carries a manifest inline only for a repository that does not ship one yet. See [independent repositories](/docs/concepts/independent-repositories/).
+The manifest sits at the root of the studio's own repository, beside the code it describes, so a studio can add a build step or a process without waiting for a helmstudio release. The registry does not keep copies: an entry is a **pointer** — an id, a repository and a pinned ref — and it carries a manifest inline only for a repository that does not ship one yet.
+
+A studio stays its own repository. helmstudio never vendors, forks, patches or imports a studio's code: it clones the repository, runs the build steps the manifest declares, and supervises the processes it names. Someone who clones a studio directly and ignores helmstudio entirely still has a studio that works. Four things follow from that:
+
+- **A studio ships on its own schedule.** A new build step or a second process reaches people with the studio's next commit, not with helmstudio's next release.
+- **There is one copy of the truth.** Two copies of a manifest drift, so the registry holds the pointer. A manifest carried inline is removed by the pull request that moves the ref to a commit that ships its own.
+- **Adding a studio is a data change.** Supporting one never means changing helmstudio's code. If a studio cannot be described by the manifest, the schema is what is wrong.
+- **Nothing is required.** A studio that uses none of the three packages still installs, launches and runs. The packages save an author work; they are never the price of admission.
+
+The four launch studios are separate repositories with separate stacks: a native Metal engine in C behind a Go server, the same shape for images, an MLX model behind a Python server, and PyTorch behind FastAPI. None had a front-end toolchain, and none had to adopt one. A studio built against the runtime SDK talks to a [provider](/docs/concepts/providers/), not to helmstudio — under `helm dev` while it is being written, under the daemon once it is installed, and the manifest is the same file in both.
 
 ## Anyone can write one
 

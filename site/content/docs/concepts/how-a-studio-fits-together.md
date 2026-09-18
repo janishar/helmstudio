@@ -80,15 +80,6 @@ The studio's server mounts the proxy at `/helm/`: `Proxy.from_env()` in Python, 
 
 A page that wants only the tokens links `helm-tokens.css` in place of `helm.css`. helm-css declares the IBM Plex faces in its base layer, so such a page declares them itself, with their files at `/helm/sdk/v1/fonts/`.
 
-## The timeline, from both sides
-
-The host keeps every sequence and its revisions. Neither the page nor the studio's server holds one.
-
-- **From the page**, `helm-timeline` edits a sequence. It reads it with `timeline.get`, and every edit is a `timeline.update` against the revision it read. The host checks the edit, keeps it as a new revision and answers with the document, and the component draws that answer. If the sequence changed somewhere else, the host refuses the edit, and the component reads the sequence again rather than overwrite it. What goes on a sequence is the page's choice: the component's Add sends an `add-request` event, and the page calls the element's `append` with the asset it picked.
-- **From the server**, the same operations go to `HELM_API` with the token. In Python a call returns the answer, as in `helm.timeline.update(id, body, if_match=etag)`. In JavaScript it returns a promise, and options are an object, as in `await helm.timeline.update(id, body, { ifMatch: etag })`.
-
-[Hand off to the timeline](/docs/guides/timeline/) describes the sequence itself.
-
 ## With a bundler, or a Node server
 
 npm carries `@helmstudio/runtime`, `@helmstudio/css` and `@helmstudio/ui` for studios with a toolchain, and for CI.

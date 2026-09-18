@@ -1,4 +1,4 @@
-# Theme with helm-css
+# Build a studio's page
 
 helm-css is the design system helmstudio's own screens are built with: tokens for colour, space, type and motion in a dark and a light theme, and classes for layout and components, all prefixed `helm-`. A studio that wears it looks like it belongs, follows the theme the person chose in the launcher, and keeps its own colour.
 

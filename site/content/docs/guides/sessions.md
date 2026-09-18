@@ -1,4 +1,4 @@
-# Sessions
+# Save a session
 
 Almost every studio has a notion of a working session: the prompt you were refining, the seed you liked, the takes you made along the way. helmstudio makes that a platform concept, so no studio has to invent its own, and every studio's sessions have the same shape.
 

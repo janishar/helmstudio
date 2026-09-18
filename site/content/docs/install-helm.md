@@ -59,4 +59,4 @@ Then put `helm` from the unpacked directory somewhere on your `PATH`. The last l
 ## Next
 
 - [Quickstart](/docs/quickstart/) — a studio of your own, running, in a few minutes.
-- [Develop in isolation](/docs/guides/develop-in-isolation/) — what `helm dev` does, and what it does not.
+- [Develop with helm dev](/docs/guides/develop-in-isolation/) — what it does, and what it does not.

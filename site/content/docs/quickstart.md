@@ -66,11 +66,11 @@ The item comes back with the prompt and the seed that made it. That is provenanc
 
 @sample quickstart/08-validate.sh
 
-`helm validate` checks a manifest against the schema and the rules the schema cannot express. With `-criteria` it also scores the fifteen criteria a published studio is held to, as far as a manifest can answer them. The example fails two: it declares no test profile, because the harness that would run one is not built, and it pins no `ref`, because it has no repository yet. [Publishing](/docs/publishing/) explains both.
+`helm validate` checks a manifest against the schema and the rules the schema cannot express. With `-criteria` it also scores the fifteen criteria a published studio is held to, as far as a manifest can answer them. The example fails two: it declares no test profile, because the harness that would run one is not built, and it pins no `ref`, because it has no repository yet. [Publish a studio](/docs/publishing/) explains both.
 
 ## Next
 
 - [How a studio fits together](/docs/concepts/how-a-studio-fits-together/): what runs where, and where each part of the SDK comes from.
 - [The manifest](/docs/concepts/manifest/), and the [manifest reference](/docs/reference/manifest/).
 - [Record with provenance](/docs/guides/record-with-provenance/), for outputs made from other outputs.
-- [Develop in isolation](/docs/guides/develop-in-isolation/), for a studio with weights and a Python version of its own.
+- [Develop with helm dev](/docs/guides/develop-in-isolation/), for a studio with weights and a Python version of its own.

@@ -37,7 +37,6 @@ func navigation(groups []apiGroup) []NavSection {
 			"/docs/concepts/weights/",
 			"/docs/concepts/capabilities/",
 			"/docs/concepts/providers/",
-			"/docs/concepts/independent-repositories/",
 		)},
 		{Title: "Guides", Items: items(
 			"/docs/guides/wrap-a-repository/",
@@ -46,14 +45,14 @@ func navigation(groups []apiGroup) []NavSection {
 			"/docs/guides/timeline/",
 			"/docs/guides/theming/",
 			"/docs/guides/develop-in-isolation/",
+			"/docs/publishing/",
 		)},
-		{Title: "Publishing", Items: items("/docs/publishing/")},
 	}
-	manifests := NavSection{Title: "Launch manifests, annotated"}
+	examples := NavSection{Title: "Examples"}
 	for _, id := range studiosInOrder {
-		manifests.Items = append(manifests.Items, NavItem{URL: "/docs/manifests/" + id + "/"})
+		examples.Items = append(examples.Items, NavItem{URL: "/docs/manifests/" + id + "/"})
 	}
-	nav = append(nav, manifests)
+	nav = append(nav, examples)
 
 	ref := NavSection{Title: "Reference", Items: items("/docs/reference/manifest/", "/docs/reference/cli/", "/docs/reference/api/")}
 	// The API's groups and its types are thirteen more links, which is a

@@ -35,6 +35,7 @@
 {{template "content" .}}
 <footer class="site-footer">
   <p class="helm-micro">helmstudio is open source under the MIT licence. <a class="helm-link" href="{{.Repo}}">The repository</a>{{if .Source}} · <a class="helm-link" href="{{.Repo}}/blob/main/{{.Source}}">This page's source</a>{{end}}{{if .GeneratedFrom}} · Generated from <span class="helm-mono">{{.GeneratedFrom}}</span>{{end}}</p>
+  <p class="helm-micro">Working on helmstudio itself rather than on a studio: <a class="helm-link" href="{{.Repo}}/blob/main/CONTRIBUTING.md">contributing</a> · <a class="helm-link" href="{{.Repo}}/blob/main/docs/framework.md">the architecture</a> · <a class="helm-link" href="{{.Repo}}/blob/main/docs/design/00-index.md">the design</a></p>
 </footer>
 <script>
   (function () {
