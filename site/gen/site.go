@@ -64,6 +64,7 @@ type Page struct {
 	Banner        string // a line shown above the page, for a caution
 
 	Samples  []Sample
+	Diagrams []string
 	Internal []string
 }
 
@@ -77,9 +78,10 @@ type view struct {
 
 // Result is what a build produced, for the tests to read.
 type Result struct {
-	Pages   []*Page
-	Nav     []NavSection
-	Samples map[string][]string // sample path -> the pages that include it
+	Pages    []*Page
+	Nav      []NavSection
+	Samples  map[string][]string // sample path -> the pages that include it
+	Diagrams map[string][]string // diagram name -> the pages that inline it
 }
 
 // Build writes the site.
@@ -90,7 +92,7 @@ func Build(o Options) (*Result, error) {
 	if !strings.HasPrefix(o.Base, "/") || !strings.HasSuffix(o.Base, "/") {
 		return nil, fmt.Errorf("the base path %q must start and end with /", o.Base)
 	}
-	r := newRenderer(o.Base, filepath.Join(o.Site, "samples"))
+	r := newRenderer(o.Base, filepath.Join(o.Site, "samples"), filepath.Join(o.Site, "diagrams"))
 
 	var pages []*Page
 	content, err := contentPages(o, r)
@@ -136,10 +138,13 @@ func Build(o Options) (*Result, error) {
 	if err := write(o, pages, nav); err != nil {
 		return nil, err
 	}
-	res := &Result{Pages: pages, Nav: nav, Samples: map[string][]string{}}
+	res := &Result{Pages: pages, Nav: nav, Samples: map[string][]string{}, Diagrams: map[string][]string{}}
 	for _, p := range pages {
 		for _, s := range p.Samples {
 			res.Samples[s.Path] = append(res.Samples[s.Path], p.URL)
+		}
+		for _, d := range p.Diagrams {
+			res.Diagrams[d] = append(res.Diagrams[d], p.URL)
 		}
 	}
 	return res, nil
@@ -172,7 +177,7 @@ func contentPages(o Options, r *pageRenderer) ([]*Page, error) {
 		}
 		pages = append(pages, &Page{
 			URL: url, Title: out.Title, Body: template.HTML(out.HTML), Layout: "docs",
-			Source: "site/content/" + rel, Samples: out.Samples, Internal: out.Internal,
+			Source: "site/content/" + rel, Samples: out.Samples, Diagrams: out.Diagrams, Internal: out.Internal,
 			Description: description(src),
 		})
 		return nil

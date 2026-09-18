@@ -276,6 +276,89 @@ figure.sample pre code,
   white-space: normal;
 }
 
+/* --------------------------------------------------------------- diagrams */
+
+/* The shared vocabulary every diagram draws with. A diagram carries class
+   names and no colour of its own (site/gen/diagrams.go refuses one), so the
+   theme reaches it here and a diagram cannot drift from the palette around
+   it. Nothing here is a hue-only distinction: a part that is not built is
+   dashed as well as quieter, because 03 §17 says never colour alone. */
+
+figure.diagram {
+  margin: var(--helm-space-5) 0;
+}
+
+figure.diagram svg {
+  display: block;
+  width: 100%;
+  max-width: 34rem;
+  height: auto;
+  margin: 0 auto;
+}
+
+figure.diagram figcaption {
+  max-width: 56ch;
+  margin: var(--helm-space-3) auto 0;
+  font: var(--helm-type-body);
+  color: var(--helm-text-secondary);
+  text-align: center;
+}
+
+.d-box {
+  fill: var(--helm-ground-panel);
+  stroke: var(--helm-border-strong);
+  stroke-width: 1;
+}
+
+.d-box-inset {
+  fill: var(--helm-ground-inset);
+  stroke: var(--helm-border-hairline);
+  stroke-width: 1;
+}
+
+.d-label {
+  font: var(--helm-type-micro);
+  fill: var(--helm-text-primary);
+}
+
+.d-sub {
+  font: var(--helm-type-micro);
+  fill: var(--helm-text-secondary);
+}
+
+.d-edge {
+  fill: none;
+  stroke: var(--helm-border-strong);
+  stroke-width: 1;
+}
+
+.d-edge-label {
+  font: var(--helm-type-micro);
+  fill: var(--helm-text-secondary);
+}
+
+.d-accent {
+  stroke: var(--helm-accent-base);
+}
+
+.d-arrow {
+  fill: var(--helm-border-strong);
+}
+
+/* Not built. Dashed is the whole signal — the muted colour only follows it,
+   so the distinction survives being read in greyscale or by someone who
+   cannot separate the two hues. */
+.d-unbuilt {
+  stroke-dasharray: 4 3;
+  stroke: var(--helm-text-muted);
+  fill: none;
+}
+
+.d-unbuilt-label {
+  font: var(--helm-type-micro);
+  fill: var(--helm-text-muted);
+}
+
 /* ---------------------------------------------------------------- landing */
 
 .site-hero {

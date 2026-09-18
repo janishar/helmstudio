@@ -38,6 +38,12 @@ import (
 //     so an excerpt cannot drift from something that works, and a region that
 //     is renamed or deleted fails the build rather than going quiet. Nothing
 //     is re-indented: what a page shows is what the file holds.
+//   - `@diagram <name> caption: <takeaway>` inlines site/diagrams/<name>.svg.
+//     It is inlined and not linked so that the theme reaches it: its colours
+//     come from class names site.css defines in tokens. Inlining markup is
+//     what the rule below otherwise refuses, so a diagram is checked first —
+//     see diagrams.go, which is where a diagram's colours are checked or
+//     nowhere, the theme lint having skipped .svg entirely.
 //   - A link or image whose destination starts with "/" is internal: it is
 //     written under the site's base path, and recorded so the build can fail on
 //     one that leads nowhere.
@@ -70,17 +76,19 @@ type Rendered struct {
 	HTML     string
 	Title    string
 	Samples  []Sample
+	Diagrams []string // site/diagrams names, without the .svg
 	Internal []string // internal link destinations, before the base path
 }
 
 type pageRenderer struct {
-	base    string
-	samples string // the samples directory
-	md      goldmark.Markdown
+	base     string
+	samples  string // the samples directory
+	diagrams string // the diagrams directory
+	md       goldmark.Markdown
 }
 
-func newRenderer(base, samplesDir string) *pageRenderer {
-	r := &pageRenderer{base: base, samples: samplesDir}
+func newRenderer(base, samplesDir, diagramsDir string) *pageRenderer {
+	r := &pageRenderer{base: base, samples: samplesDir, diagrams: diagramsDir}
 	r.md = goldmark.New(
 		goldmark.WithExtensions(extension.GFM),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
@@ -96,11 +104,12 @@ func newRenderer(base, samplesDir string) *pageRenderer {
 // render expands samples, parses, rewrites internal links and renders.
 func (r *pageRenderer) render(src []byte) (Rendered, error) {
 	var out Rendered
-	expanded, samples, err := r.expandSamples(src)
+	expanded, samples, diagrams, err := r.expandSamples(src)
 	if err != nil {
 		return out, err
 	}
 	out.Samples = samples
+	out.Diagrams = diagrams
 
 	doc := r.md.Parser().Parse(text.NewReader(expanded))
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -146,15 +155,17 @@ func joinBase(base, p string) string {
 	return strings.TrimSuffix(base, "/") + p
 }
 
-// expandSamples replaces each @sample line with a fenced block of the file.
-func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, error) {
+// expandSamples replaces each @sample line with a fenced block of the file,
+// and each @diagram line with a checked figure.
+func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, []string, error) {
 	var out bytes.Buffer
 	var samples []Sample
+	var diagrams []string
 	for n, line := range strings.SplitAfter(string(src), "\n") {
 		trimmed := strings.TrimRight(line, "\r\n")
 		if t := strings.TrimSpace(trimmed); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
 			// Code written inline is what the directive exists to prevent.
-			return nil, nil, fmt.Errorf("line %d: a code block is written inline; put the code in site/samples and include it with @sample", n+1)
+			return nil, nil, nil, fmt.Errorf("line %d: a code block is written inline; put the code in site/samples and include it with @sample", n+1)
 		}
 		if capabilitiesLine.MatchString(trimmed) {
 			out.WriteString(capabilitiesTable())
@@ -164,16 +175,42 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, error) {
 			file := filepath.Join(r.samples, filepath.FromSlash(m[1]))
 			table, err := criteriaTable(file)
 			if err != nil {
-				return nil, nil, fmt.Errorf("line %d: @criteria %s: %w", n+1, m[1], err)
+				return nil, nil, nil, fmt.Errorf("line %d: @criteria %s: %w", n+1, m[1], err)
 			}
 			samples = append(samples, Sample{Path: m[1]})
 			out.WriteString(table)
 			continue
 		}
+		if m := diagramLine.FindStringSubmatch(trimmed); m != nil {
+			name := m[1]
+			body, err := os.ReadFile(filepath.Join(r.diagrams, name+".svg"))
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("line %d: @diagram %s: %w", n+1, name, err)
+			}
+			if err := checkDiagram(name, string(body)); err != nil {
+				return nil, nil, nil, fmt.Errorf("line %d: @diagram %s: %w", n+1, name, err)
+			}
+			diagrams = append(diagrams, name)
+			// The SVG travels as a fenced block, the same way a sample does,
+			// and sampleBlocks writes it out unescaped. It deliberately never
+			// becomes an ast.RawHTML node: raw HTML in prose stays dropped,
+			// and the only markup that reaches a page is markup this package
+			// checked first.
+			fence := "```"
+			for strings.Contains(string(body), fence) {
+				fence += "`"
+			}
+			fmt.Fprintf(&out, "%ssvg diagram=%s caption=%s\n%s", fence, strconv.Quote(name), strconv.Quote(m[2]), body)
+			if !bytes.HasSuffix(body, []byte("\n")) {
+				out.WriteString("\n")
+			}
+			out.WriteString(fence + "\n")
+			continue
+		}
 		m := sampleLine.FindStringSubmatch(trimmed)
 		if m == nil {
 			if strings.HasPrefix(strings.TrimSpace(trimmed), "@") && !strings.HasPrefix(strings.TrimSpace(trimmed), "@ ") {
-				return nil, nil, fmt.Errorf("line %d: %q is not a directive; the directives are @sample, @capabilities and @criteria", n+1, strings.TrimSpace(trimmed))
+				return nil, nil, nil, fmt.Errorf("line %d: %q is not a directive; the directives are @sample, @diagram, @capabilities and @criteria", n+1, strings.TrimSpace(trimmed))
 			}
 			out.WriteString(line)
 			continue
@@ -181,12 +218,12 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, error) {
 		s := Sample{Path: m[1], Region: m[2], NotRun: strings.TrimSpace(m[3])}
 		body, err := os.ReadFile(filepath.Join(r.samples, filepath.FromSlash(s.Path)))
 		if err != nil {
-			return nil, nil, fmt.Errorf("@sample %s: %w", s.Path, err)
+			return nil, nil, nil, fmt.Errorf("@sample %s: %w", s.Path, err)
 		}
 		if s.Region != "" {
 			body, err = cutRegion(body, s.Region)
 			if err != nil {
-				return nil, nil, fmt.Errorf("line %d: @sample %s#%s: %w", n+1, s.Path, s.Region, err)
+				return nil, nil, nil, fmt.Errorf("line %d: @sample %s#%s: %w", n+1, s.Path, s.Region, err)
 			}
 		}
 		samples = append(samples, s)
@@ -208,7 +245,7 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, error) {
 		}
 		out.WriteString(fence + "\n")
 	}
-	return out.Bytes(), samples, nil
+	return out.Bytes(), samples, diagrams, nil
 }
 
 // cutRegion returns the part of a sample file between the line that holds
@@ -317,6 +354,16 @@ func (sampleBlocks) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 			info = string(n.Info.Segment.Value(src))
 		}
 		lang, attrs := parseInfo(info)
+		if name := attrs["diagram"]; name != "" {
+			fmt.Fprint(w, `<figure class="diagram">`)
+			lines := n.Lines()
+			for i := 0; i < lines.Len(); i++ {
+				seg := lines.At(i)
+				_, _ = w.Write(seg.Value(src))
+			}
+			fmt.Fprintf(w, `<figcaption>%s</figcaption></figure>`+"\n", html.EscapeString(attrs["caption"]))
+			return ast.WalkSkipChildren, nil
+		}
 		fmt.Fprintf(w, `<figure class="sample">`)
 		if file := attrs["sample"]; file != "" {
 			fmt.Fprintf(w, `<figcaption><span class="helm-mono">%s</span>`, html.EscapeString(file))

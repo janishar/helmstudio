@@ -16,7 +16,7 @@ func renderPage(t *testing.T, base, src string) (Rendered, error) {
 	if err := os.WriteFile(filepath.Join(samples, "a", "run.sh"), []byte("echo <hello>\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return newRenderer(base, samples).render([]byte(src))
+	return newRenderer(base, samples, filepath.Join(siteDir, "diagrams")).render([]byte(src))
 }
 
 func TestCodeIsNeverWrittenInline(t *testing.T) {
@@ -83,7 +83,7 @@ func TestInternalLinksAreWrittenUnderTheBase(t *testing.T) {
 // @capabilities and @criteria are the software's own tables.
 func TestTheTablesAreTheSoftwares(t *testing.T) {
 	samples := filepath.Join(siteDir, "samples")
-	r, err := newRenderer("/", samples).render([]byte("# Page\n\n@capabilities\n\n@criteria hello-studio/helmstudio.yaml\n"))
+	r, err := newRenderer("/", samples, filepath.Join(siteDir, "diagrams")).render([]byte("# Page\n\n@capabilities\n\n@criteria hello-studio/helmstudio.yaml\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func renderWithSample(t *testing.T, name, body, src string) (Rendered, error) {
 	if err := os.WriteFile(filepath.Join(samples, name), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return newRenderer("/", samples).render([]byte(src))
+	return newRenderer("/", samples, filepath.Join(siteDir, "diagrams")).render([]byte(src))
 }
 
 // A region shows part of a file the gate runs whole, so a long sample can be
