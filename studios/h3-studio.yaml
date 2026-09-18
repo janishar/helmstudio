@@ -14,20 +14,23 @@
 
 id: h3-studio
 repo: https://github.com/janishar/h3c-studio
-ref: a6eb54f3c9d8c3e711bab22574ec6599399a03f9
+ref: 7c213728ea78903d4af0056a5a1427cfea35d64b
 
 manifest:
+  # h3 studio's manifest for helmstudio: the same studio the registry points at,
+  # described by its own repository, beside the code it runs. The registry entry
+  # keeps the pointer — id, repo and ref — and no longer needs a copy of this.
   id: h3-studio
   name: h3 studio
   description: Native Metal video and audio generation from MiniMax-H3, no PyTorch in the loop.
   kinds: [video, audio]
-  # 03 §2's identity hue, chosen against the yellow accent (docs/decisions.md M6 Q7).
+  # helmstudio 03 §2's identity hue for this studio, chosen against its yellow accent.
   hue: { dark: "#e0a33c", light: "#a06a10" }
   license: MIT
   repo: https://github.com/janishar/h3c-studio
-  ref: a6eb54f3c9d8c3e711bab22574ec6599399a03f9
+  ref: 7c213728ea78903d4af0056a5a1427cfea35d64b
   submodules: true
-  peak_ram_gb: 21 # docs/design/08-h3-dry-run.md and 01-prd.md §13; not re-measured. Added in M2 review round 1 with the human's approval.
+  peak_ram_gb: 21
   requires:
     os: [darwin]
     arch: [arm64]
@@ -39,15 +42,21 @@ manifest:
     backends: [metal]
     precision: [bf16, int8]
     language: c
-  capabilities: [kv, assets, gallery, timeline]
-  network: [huggingface.co, cdn-lfs.huggingface.co]
-  storage:
-    collections:
-      - name: takes
-        index: [seed, model, session]
-        fts: [prompt]
-    quota: { records: 100000, kv_bytes: 8388608 }
-  sdk: { runtime: "^1", css: "^1" }
+  # What h3 studio actually uses, and no more (criterion 9). A finished take is
+  # adopted as an asset and recorded as one gallery item; sequences are
+  # helmstudio's timeline; and a render is reported as a task job with its
+  # progress and its log, so the launcher can see what this studio is doing.
+  # Sessions stay h3 studio's own directories, so kv and records are not
+  # requested and a gallery item carries no session_id.
+  capabilities: [assets, gallery, timeline, jobs]
+  # The page loads helm-ui for the shared gallery; it still draws its own takes
+  # rail, viewer and timeline, so this pins what it loads and nothing else.
+  sdk: { runtime: "^1", ui: "^1", css: "^1" }
+  # Contacted at build or run time, which is what the field means and what the
+  # approval screen shows. The Go proxy and the checksum database are here
+  # because `go build` resolves helm-runtime-sdk through them; Hugging Face is
+  # where the weights come from.
+  network: [huggingface.co, cdn-lfs.huggingface.co, proxy.golang.org, sum.golang.org]
   build:
     - name: Build the Metal engine
       cwd: h3c
@@ -55,14 +64,10 @@ manifest:
     - name: Build the studio server
       cwd: .
       run: go build -o dist/h3studio .
-  # FL2VA and Ref2VA are two pipelines inside one MiniMaxAI/MiniMax-H3 repo,
-  # both expected as subdirectories of the single directory h3studio's --model
-  # flag points at (server/model.go: "FL2VA always, Ref2VA for references").
-  # Both entries share dest so {models.fl2va} and {models.ref2va} resolve to
-  # the same directory; files scopes them to their own subtree. This does not
-  # reproduce the README's manual dedup-via-symlink trick (~66 GB instead of
-  # ~196 GB) — the schema has no field for "these files are identical across
-  # two weights, hardlink them" — see the report.
+  # FL2VA and Ref2VA are two pipelines inside one MiniMaxAI/MiniMax-H3 repo, both
+  # expected as subdirectories of the single directory --model points at
+  # (server/model.go). Both share dest so {models.fl2va} and {models.ref2va}
+  # resolve to the same directory; files scopes each to its own subtree.
   weights:
     - name: fl2va
       repo: MiniMaxAI/MiniMax-H3
@@ -82,8 +87,7 @@ manifest:
       cmd: "./dist/h3studio --h3 ./h3c/h3 --model {models.fl2va} --port {port} --root {data}"
       port: { prefer: 8710 }
       health: { tcp: true, timeout_s: 30, interval_s: 2 }
-      # /api/queue does not answer the busy contract (M5 Q12), so the switch
-      # dialog reads h3 as unknown until h3 serves one; move this path, and
-      # `ref`, when it does.
+      # /api/queue does not answer the busy contract yet, so the switch dialog
+      # reads h3 as unknown until it does.
       busy: { path: /api/queue }
       ui: /

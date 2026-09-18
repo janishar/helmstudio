@@ -1,11 +1,12 @@
 file: studios/ltx-studio.yaml
-digest: sha256:0a9b5742ed36a7124332a60924c5af0e5718f69f2a0e44b76017fbb4c0a123c9
+digest: sha256:aec9729f9d5b6102ee40c52255b5ea3beafa1a66ce20c33abf1c400ee4e39e2f
 title: ltx studio's manifest
 intro: >-
   ltx studio makes video with sound from LTX-2.5 on MLX, behind a Python
-  server with no front-end toolchain. Its registry entry carries its manifest
-  inline. It passes five of the seven criteria a manifest can answer: it
-  declares no test profile, and pins no SDK major.
+  server with no front-end toolchain. Its own repository ships this manifest as
+  helmstudio.yaml; the copy here is the registry's, kept in step with it. It
+  passes six of the seven criteria a manifest can answer; it declares no test
+  profile.
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from, with git."
@@ -24,6 +25,8 @@ notes:
   /manifest/requires: "An Apple Silicon Mac with 64 GB of memory and 90 GB of disk. uv is the one tool it needs; the build fetches everything else."
   /manifest/runtime: "MLX on Metal, quantised on load: Apple-native, like a Metal kernel, and a different claim from one."
   /manifest/capabilities: "Settings and sessions, the files it makes, the gallery and the timeline."
+  /manifest/storage: "One collection, folders, indexed by session: the folders a training tool writes, which ltx studio keeps as records rather than as files of its own."
+  /manifest/sdk: "Pins major 1 of the runtime SDK, helm-css and helm-ui — the components it draws its gallery, timeline and terminal with, which is why this one names three where a studio drawing its own names two."
   /manifest/network: "The hosts it is expected to contact, for its weights."
   /manifest/build: "One step: install exactly the locked dependencies, and fail rather than change the lock file in the checkout."
   /manifest/weights: "Three weights, two from one repository into one directory. The recommended set is required; the dev transformer and the Gemma encoder are optional, so install does not wait for them."
