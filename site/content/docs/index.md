@@ -28,4 +28,4 @@ What no package will ever contain: prompt builders, parameter panels, model pick
 
 ## What is not here yet
 
-`helm` is released on GitHub, the runtime SDK on PyPI, npm and the Go module proxy, and helm-css and helm-ui-sdk on npm, so writing a studio needs no clone of this repository. helmstudio itself, the launcher and its daemon, has no release yet, and runs from a clone. Four commands the design describes are not built — `helm studio init`, `helm test`, `helm doctor` and `helm adopt` — and neither are `helm dev --fixtures` and `--fail`. Where a page would use one, it says so.
+`helm` is released on GitHub, the runtime SDK on PyPI, npm and the Go module proxy, and helm-css and helm-ui-sdk on npm, so writing a studio needs no clone of this repository. helmstudio itself — the launcher and its daemon — ships as an unsigned Mac app, and also runs from a clone. Four commands the design describes are not built — `helm studio init`, `helm test`, `helm doctor` and `helm adopt` — and neither are `helm dev --fixtures` and `--fail`. Where a page would use one, it says so.

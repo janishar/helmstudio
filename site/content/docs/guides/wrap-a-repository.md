@@ -37,7 +37,7 @@ Clone the repository, put the manifest at its root, and run it under `helm dev` 
 
 ## In helmstudio
 
-helmstudio's launcher can add the same manifest: import the file, or write it in the editor, which is a form over the schema beside the YAML, validating and scoring the criteria as you type. It saves the manifest locally, where it overrides any registry entry with the same `id`. There is no release yet, so today the launcher runs from a source build of `cmd/helmstudio`.
+helmstudio's launcher can add the same manifest: import the file, or write it in the editor, which is a form over the schema beside the YAML, validating and scoring the criteria as you type. It saves the manifest locally, where it overrides any registry entry with the same `id`. The launcher ships as an unsigned Mac app, and also runs from a source build of `cmd/helmstudio`.
 
 ## Share it
 

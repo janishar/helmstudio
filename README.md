@@ -241,7 +241,7 @@ API, manifest and command reference.
 | [`helm-css`](packages/helm-css) | Tokens, layout and component classes, in light and dark | CSS |
 
 None of them is required: a studio that uses no package still installs,
-launches and runs. They are published at `1.0.0-rc.1` on PyPI, npm and the Go
+launches and runs. They are published at `1.0.0-rc.2` on PyPI, npm and the Go
 module proxy, and [docs/releasing.md](docs/releasing.md) gives the command that
 installs each.
 
