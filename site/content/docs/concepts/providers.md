@@ -12,6 +12,11 @@ helmstudio's daemon serves the API on the machine's loopback address, and so doe
 | `HELM_TOKEN` | A token for the capabilities the manifest declares. Absent for a studio that declares none. |
 | `HELM_STUDIO_ID` | The studio's id. |
 | `HELM_STAGE_DIR` | A directory for this run's outputs, which the studio adopts from. |
+| `HELM_SDK_BASE` | Where the UI kit is served, for the major the manifest pins in `sdk`. The proxy fetches it from there. |
+| `HELM_ACCENT_DARK`, `HELM_ACCENT_LIGHT` | The studio's hue in each theme. The proxy writes `/helm/accent.css` from them. |
+| `HELM_THEME` | `system`, `light` or `dark`: the launcher's theme when the studio started. It changes afterwards over the theme stream, not by restarting. |
+
+That is every variable a studio is given. A studio run standalone is given none of them, which is how the clients tell the two apart.
 
 `from_env()` in Python, `fromEnv()` in JavaScript and `helm.FromEnv()` in Go read them and return a client. The Python and JavaScript clients are remote only: without `HELM_API` they refuse, naming helmstudio and `helm dev`, so a Python or JavaScript studio developed on its own runs under `helm dev`.
 

@@ -22,6 +22,8 @@ When the host starts the studio's server, it says where everything is:
 | `HELM_SDK_BASE` | The proxy fetches the UI kit from it, for the major the manifest pins in `sdk`. |
 | `HELM_ACCENT_DARK` and `HELM_ACCENT_LIGHT` | The proxy writes `/helm/accent.css` from them: the studio's hue in each theme. |
 
+This says which piece reads what. [Providers](/docs/concepts/providers/) has the full list of what a studio is given, and what each one holds.
+
 [Providers](/docs/concepts/providers/) lists the rest.
 
 ## What one thing is called
