@@ -34,9 +34,9 @@ Its manifest says what it is, what it asks helmstudio for, and how to run it:
 
 @sample hello-studio/helmstudio.yaml
 
-Its code is a web server that uses the runtime SDK twice: to adopt the file it made, and to record a gallery item with the parameters that made it.
+Its code is a web server. The two calls that make it a studio are these, and the rest of the file — an argument parser, a request handler, and twenty lines that draw a PNG by hand so the example needs no image library — is the studio's own business.
 
-@sample hello-studio/studio.py
+@sample hello-studio/studio.py#sdk
 
 ## 5. Run it
 

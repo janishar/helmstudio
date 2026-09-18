@@ -40,6 +40,7 @@ def make_png(prompt, seed, size=256):
             + chunk(b"IDAT", zlib.compress(b"".join(rows))) + chunk(b"IEND", b""))
 
 
+# helm:region sdk
 def make(prompt, seed):
     """Write the image to the stage, adopt it, and record it."""
     stage = os.environ["HELM_STAGE_DIR"]
@@ -58,6 +59,7 @@ def make(prompt, seed):
         "params": {"prompt": prompt, "seed": seed, "width": 256, "height": 256},
     })
     return {"item_id": item["id"], "asset_id": asset["id"]}
+# helm:endregion sdk
 
 
 class Handler(BaseHTTPRequestHandler):
