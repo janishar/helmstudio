@@ -219,6 +219,88 @@ extension AppDelegate: WKUIDelegate {
         }
         return nil
     }
+
+    // The dialogs a page expects to exist.
+    //
+    // A WKWebView answers none of these on its own, and the failure is silent
+    // rather than loud: a file input opens nothing, confirm() returns false,
+    // prompt() returns nil. A page written for a browser then looks broken in
+    // ways it never reports — a Delete that does nothing, because the confirm
+    // it asked for was answered "no" by an empty room. The browser at
+    // 127.0.0.1:8700 has all of this for free, and R73 says no feature may be
+    // the browser's alone.
+    //
+    // Each owes WebKit exactly one call to its completion handler. A sheet
+    // dismissed without one leaves the page waiting forever.
+
+    /// `<input type="file">`, which is how a studio is given an image, a clip
+    /// or audio. Without this, browse does nothing at all.
+    func webView(_ webView: WKWebView,
+                 runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.resolvesAliases = true
+        guard let host = window else {
+            completionHandler(panel.runModal() == .OK ? panel.urls : nil)
+            return
+        }
+        panel.beginSheetModal(for: host) { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+    }
+
+    /// alert(): one button, and the page waits for it.
+    func webView(_ webView: WKWebView,
+                 runJavaScriptAlertPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.addButton(withTitle: "OK")
+        runSheet(alert) { _ in completionHandler() }
+    }
+
+    /// confirm(): OK is true and anything else is false. Unanswered it is
+    /// false, so a page's destructive actions quietly stop happening.
+    func webView(_ webView: WKWebView,
+                 runJavaScriptConfirmPanelWithMessage message: String,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (Bool) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        runSheet(alert) { completionHandler($0 == .alertFirstButtonReturn) }
+    }
+
+    /// prompt(): the text typed, or nil when cancelled.
+    func webView(_ webView: WKWebView,
+                 runJavaScriptTextInputPanelWithPrompt prompt: String,
+                 defaultText: String?,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping (String?) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = prompt
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.stringValue = defaultText ?? ""
+        alert.accessoryView = field
+        runSheet(alert) { completionHandler($0 == .alertFirstButtonReturn ? field.stringValue : nil) }
+    }
+
+    /// A sheet on the window when there is one, a modal when there is not.
+    private func runSheet(_ alert: NSAlert, done: @escaping (NSApplication.ModalResponse) -> Void) {
+        guard let host = window else {
+            done(alert.runModal())
+            return
+        }
+        alert.beginSheetModal(for: host, completionHandler: done)
+    }
 }
 
 extension AppDelegate: WKNavigationDelegate {
