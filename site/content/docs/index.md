@@ -4,6 +4,8 @@ helmstudio runs **studios**: repositories that each wrap an open-weight model â€
 
 These pages are for someone writing a studio, or wrapping a repository someone else wrote.
 
+@diagram what-runs-where caption: Everything here runs on your own Mac. A model only ever runs inside a studio, and the only outbound calls are the ones you ask for.
+
 ## Three packages, one direction
 
 A studio takes as much of helmstudio as it wants. **None of it is required**: a studio that uses no package at all still installs, launches and runs.

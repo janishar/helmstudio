@@ -1,0 +1,55 @@
+<svg viewBox="0 0 360 318" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>What runs where when you use helmstudio</title>
+  <desc>A vertical flow. At the top, you, opening the launcher — a Mac app window or a browser page on the loopback address. The launcher talks to the helmstudio daemon, which installs, supervises and stores. The daemon reaches three things: a studio, which is its own repository on its own port and is the only place a model ever runs; a helmstudio directory in your home directory, holding the database, the assets, the browsable library and the models; and the network — GitHub and Hugging Face — only when you ask for something that needs it. Below, separated, the same picture for someone writing a studio: the author runs helm dev, which runs their studio from its own manifest and keeps its data in a .helm directory beside it.</desc>
+
+  <marker id="o-arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path class="d-arrow" d="M0 0 L8 4 L0 8 z"/>
+  </marker>
+
+  <text class="d-sub" x="8" y="14">running a studio</text>
+
+  <rect class="d-box" x="130" y="20" width="100" height="28" rx="3"/>
+  <text class="d-label" x="180" y="39" text-anchor="middle">you</text>
+  <path class="d-edge d-accent" d="M180 48 V62" marker-end="url(#o-arrowhead)"/>
+
+  <rect class="d-box" x="90" y="66" width="180" height="34" rx="3"/>
+  <text class="d-label" x="180" y="81" text-anchor="middle">the launcher</text>
+  <text class="d-sub" x="180" y="94" text-anchor="middle">a window, or a browser</text>
+  <path class="d-edge d-accent" d="M180 100 V114" marker-end="url(#o-arrowhead)"/>
+
+  <rect class="d-box" x="60" y="118" width="240" height="36" rx="3"/>
+  <text class="d-label" x="180" y="133" text-anchor="middle">the helmstudio daemon</text>
+  <text class="d-sub" x="180" y="147" text-anchor="middle">installs · supervises · stores</text>
+
+  <path class="d-edge d-accent" d="M180 154 V168 H62 V180" marker-end="url(#o-arrowhead)"/>
+  <path class="d-edge d-accent" d="M180 154 V180" marker-end="url(#o-arrowhead)"/>
+  <path class="d-edge d-accent" d="M180 154 V168 H298 V180" marker-end="url(#o-arrowhead)"/>
+
+  <rect class="d-chip" x="8" y="184" width="108" height="66" rx="3"/>
+  <text class="d-label" x="62" y="200" text-anchor="middle">a studio</text>
+  <text class="d-sub" x="62" y="215" text-anchor="middle">its own repo,</text>
+  <text class="d-sub" x="62" y="228" text-anchor="middle">its own port</text>
+  <text class="d-sub" x="62" y="241" text-anchor="middle">the model runs here</text>
+
+  <rect class="d-chip" x="126" y="184" width="108" height="66" rx="3"/>
+  <text class="d-label" x="180" y="200" text-anchor="middle">~/.helmstudio</text>
+  <text class="d-sub" x="180" y="215" text-anchor="middle">helm.db, assets,</text>
+  <text class="d-sub" x="180" y="228" text-anchor="middle">library, models,</text>
+  <text class="d-sub" x="180" y="241" text-anchor="middle">logs</text>
+
+  <rect class="d-chip" x="244" y="184" width="108" height="66" rx="3"/>
+  <text class="d-label" x="298" y="200" text-anchor="middle">the network</text>
+  <text class="d-sub" x="298" y="215" text-anchor="middle">GitHub and</text>
+  <text class="d-sub" x="298" y="228" text-anchor="middle">Hugging Face,</text>
+  <text class="d-sub" x="298" y="241" text-anchor="middle">only when you ask</text>
+
+  <text class="d-sub" x="8" y="274">writing one instead</text>
+  <rect class="d-box" x="8" y="280" width="100" height="30" rx="3"/>
+  <text class="d-sub" x="58" y="299" text-anchor="middle">a studio author</text>
+  <path class="d-edge d-accent" d="M108 295 H124" marker-end="url(#o-arrowhead)"/>
+  <rect class="d-box" x="128" y="280" width="104" height="30" rx="3"/>
+  <text class="d-sub" x="180" y="299" text-anchor="middle">helm dev</text>
+  <path class="d-edge d-accent" d="M232 295 H248" marker-end="url(#o-arrowhead)"/>
+  <rect class="d-box" x="252" y="280" width="100" height="30" rx="3"/>
+  <text class="d-sub" x="302" y="299" text-anchor="middle">./.helm</text>
+</svg>
