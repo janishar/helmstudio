@@ -20,6 +20,7 @@ needs once, and what keeps anyone else from publishing.
 | `@helmstudio/ui` | npm | `packages/helm-ui-sdk/v<version>` | `npm install @helmstudio/ui` |
 | `@helmstudio/css` | npm | `packages/helm-css/v<version>` | `npm install @helmstudio/css` |
 | the `helm` CLI | GitHub Releases | `v<version>`, the root module's tag | a download: see *Installing helm* below |
+| the Mac app | GitHub Releases | `v<version>`, the same tag, built by the `dmg` job | a download: `helmstudio-<version>.dmg`, unsigned |
 
 A pre-release installs with `pip install --pre`, `npm install <package>@next`,
 or its exact version. The `helm` CLI is released with the root module, at the

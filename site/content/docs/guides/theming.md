@@ -8,7 +8,7 @@ This guide builds a small studio, lantern studio, whose page does all three. It 
 
 ## The server mounts the proxy
 
-A page reaches helmstudio through its own server, at `/helm/`, never directly. The runtime SDK's proxy answers three things there: helm-css and the other SDK files at `/helm/sdk/v1/`, the studio's colour at `/helm/accent.css`, and the platform API at `/helm/api/v1/`, with the studio's token added on the way. The page never holds the token, and a launcher operation — install, launch, stop — is never forwarded.
+A page reaches helmstudio through its own server, at `/helm/`, never directly. The runtime SDK's proxy answers four things there: helm-css and the rest of the UI kit at `/helm/sdk/v1/`, the studio's colour at `/helm/accent.css`, the platform API at `/helm/api/v1/`, with the studio's token added on the way, and the host's theme stream at `/helm/api/v1/theme/events`, forwarded with no token so a page can follow the theme without holding one. The page never holds the token, and a launcher operation — install, launch, stop — is never forwarded.
 
 @sample theming/server.py
 

@@ -63,4 +63,4 @@ helmstudio checks every `interval_s` seconds (2 by default) until `timeout_s` (1
 
 ## Not built yet
 
-`autostart: false` is meant to leave a worker for someone to start from the studio's page. That page does not exist yet, so today a process with `autostart: false` does not run at all, and a process that depends on one cannot launch.
+`autostart: false` is meant to leave a worker for someone to start when they want it. Nothing can: there is no API path to start a process on demand. So today a process with `autostart: false` does not run at all, and a process that depends on one refuses the launch.
