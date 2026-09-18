@@ -30,9 +30,17 @@ Installing a studio runs someone else's code with your permissions, and so does 
 
 Approving records a digest of exactly what will execute. When a manifest changes any of that, the next install or launch asks again.
 
-## Levels are earned, never declared
+## How much of helmstudio to take
 
-A studio's level is derived from what has been checked; no field sets it. Today only two are reachable: **Draft**, for a manifest with `local_path`, and **Unverified**, for every other. Verified and Registry need a smoke harness that does not exist yet. See [publishing](/docs/publishing/).
+A manifest says which of the three packages a studio uses, and nothing obliges it to use any.
+
+@diagram the-four-adoption-levels caption: A level is a choice, not a score. A studio with an unusual interface may sit at level 2 for ever, and that is a success rather than a gap.
+
+`sdk` names the major versions a studio needs, and `capabilities` names what its token may reach — so a studio that declares no capabilities is asking helmstudio for nothing at all, and gets no token.
+
+## Certification levels are earned, never declared
+
+A studio's certification level is derived from what has been checked; no field sets it. Today only two are reachable: **Draft**, for a manifest with `local_path`, and **Unverified**, for every other. Verified and Registry need a smoke harness that does not exist yet. See [publishing](/docs/publishing/).
 
 ## Annotated examples
 

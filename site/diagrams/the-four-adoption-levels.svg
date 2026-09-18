@@ -1,0 +1,29 @@
+<svg viewBox="0 0 360 292" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>The four adoption levels</title>
+  <desc>Four levels, describing how much of helmstudio a studio chooses to take. Level 0, nothing: the studio takes none of the three packages and still installs, launches and runs, which has to stay viable or helmstudio is not a launcher. Level 1, css: it takes helm-css only, so it looks like the family and keeps its own identity hue, and stores nothing centrally. Level 2, css and runtime: assets, gallery, records and jobs, behind the studio's own interface. Level 3, all three: the prebuilt gallery, player, terminal and timeline elements. A dashed note records that helm studio init, which would scaffold level 3, is not built. These are not the certification levels, which are a separate idea.</desc>
+
+  <rect class="d-chip" x="8" y="8" width="344" height="52" rx="3"/>
+  <text class="d-label" x="20" y="26">Level 0 · nothing</text>
+  <text class="d-sub" x="20" y="41">Takes none of the three, and still installs, launches and runs.</text>
+  <text class="d-sub" x="20" y="53">This has to stay viable, or helmstudio is not a launcher.</text>
+
+  <rect class="d-chip" x="8" y="66" width="344" height="52" rx="3"/>
+  <text class="d-label" x="20" y="84">Level 1 · css</text>
+  <text class="d-sub" x="20" y="99">helm-css only. It looks like the family and keeps its own</text>
+  <text class="d-sub" x="20" y="111">identity hue, and stores nothing centrally.</text>
+
+  <rect class="d-chip" x="8" y="124" width="344" height="52" rx="3"/>
+  <text class="d-label" x="20" y="142">Level 2 · css + runtime</text>
+  <text class="d-sub" x="20" y="157">Assets, gallery, records and jobs, behind the studio's own</text>
+  <text class="d-sub" x="20" y="169">interface rather than a supplied one.</text>
+
+  <rect class="d-chip" x="8" y="182" width="344" height="52" rx="3"/>
+  <text class="d-label" x="20" y="200">Level 3 · all three</text>
+  <text class="d-sub" x="20" y="215">The prebuilt gallery, player, terminal and timeline</text>
+  <text class="d-sub" x="20" y="227">elements, as custom elements a page can place.</text>
+
+  <rect class="d-unbuilt" x="8" y="240" width="344" height="26" rx="3"/>
+  <text class="d-unbuilt-label" x="20" y="257">not built — helm studio init, which would scaffold level 3</text>
+
+  <text class="d-sub" x="180" y="284" text-anchor="middle">These are not the certification levels. That is a different idea.</text>
+</svg>
