@@ -2,6 +2,8 @@
 
 A studio's outputs belong in helmstudio's library, with what made them. Two calls do it: **adopt** the file the studio wrote, then **record** a gallery item that holds it, with the parameters that made it and the inputs it was made from. Every item made from another item can then be traced both ways.
 
+@diagram how-an-output-becomes-an-item caption: Adoption moves no bytes. An 18 MB take and a 2 GB render cost the same two operations, because the file becomes the blob rather than being copied into it.
+
 This studio holds `assets` and `gallery`:
 
 @sample record/record.py

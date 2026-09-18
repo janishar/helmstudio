@@ -1,0 +1,48 @@
+<svg viewBox="0 0 360 290" xmlns="http://www.w3.org/2000/svg" role="img">
+  <title>How a file a studio wrote becomes a gallery item</title>
+  <desc>Adoption takes a file from one of two places: the caller's stage directory, whose entry is unlinked afterwards, or the studio's own data directory, where the file stays exactly where it is. Either way adoption is a hardlink and never a copy, so the file's bytes are not moved or duplicated. The result is one blob under the assets directory, named by sha256 and written read-only. From that blob come two things: a library entry, which is the same inode under a name you can browse, and a gallery item, which records what made it — its parameters and every input it came from. A closing note: every link shares the blob's read-only mode, so a data file that has been adopted cannot be edited in place afterwards.</desc>
+
+  <marker id="a-arrowhead" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
+    <path class="d-arrow" d="M0 0 L8 4 L0 8 z"/>
+  </marker>
+
+  <text class="d-sub" x="8" y="14">where the file already is</text>
+
+  <rect class="d-chip" x="8" y="20" width="168" height="46" rx="3"/>
+  <text class="d-label" x="92" y="36" text-anchor="middle">the stage directory</text>
+  <text class="d-sub" x="92" y="50" text-anchor="middle">the entry is unlinked</text>
+  <text class="d-sub" x="92" y="62" text-anchor="middle">afterwards</text>
+
+  <rect class="d-chip" x="184" y="20" width="168" height="46" rx="3"/>
+  <text class="d-label" x="268" y="36" text-anchor="middle">the studio's own {data}</text>
+  <text class="d-sub" x="268" y="50" text-anchor="middle">the file stays exactly</text>
+  <text class="d-sub" x="268" y="62" text-anchor="middle">where it is</text>
+
+  <path class="d-edge d-accent" d="M92 66 V76 H180 V88" marker-end="url(#a-arrowhead)"/>
+  <path class="d-edge d-accent" d="M268 66 V76 H180 V88" marker-end="url(#a-arrowhead)"/>
+
+  <rect class="d-box" x="60" y="92" width="240" height="26" rx="3"/>
+  <text class="d-label" x="180" y="109" text-anchor="middle">adopt — a hardlink, never a copy</text>
+
+  <path class="d-edge d-accent" d="M180 118 V132" marker-end="url(#a-arrowhead)"/>
+
+  <rect class="d-box" x="60" y="136" width="240" height="40" rx="3"/>
+  <text class="d-label" x="180" y="153" text-anchor="middle">assets/blobs/&lt;sha256&gt;</text>
+  <text class="d-sub" x="180" y="167" text-anchor="middle">the bytes, once, read-only</text>
+
+  <path class="d-edge d-accent" d="M180 176 V186 H92 V198" marker-end="url(#a-arrowhead)"/>
+  <path class="d-edge d-accent" d="M180 176 V186 H268 V198" marker-end="url(#a-arrowhead)"/>
+
+  <rect class="d-chip" x="8" y="202" width="168" height="46" rx="3"/>
+  <text class="d-label" x="92" y="218" text-anchor="middle">library/…</text>
+  <text class="d-sub" x="92" y="232" text-anchor="middle">the same inode, under</text>
+  <text class="d-sub" x="92" y="244" text-anchor="middle">a name you can browse</text>
+
+  <rect class="d-chip" x="184" y="202" width="168" height="46" rx="3"/>
+  <text class="d-label" x="268" y="218" text-anchor="middle">a gallery item</text>
+  <text class="d-sub" x="268" y="232" text-anchor="middle">what made it: its params</text>
+  <text class="d-sub" x="268" y="244" text-anchor="middle">and every input</text>
+
+  <text class="d-sub" x="180" y="268" text-anchor="middle">Every link shares the blob's read-only mode, so a {data} file</text>
+  <text class="d-sub" x="180" y="282" text-anchor="middle">you have adopted cannot be edited in place afterwards.</text>
+</svg>
