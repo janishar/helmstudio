@@ -175,8 +175,16 @@ figure.sample figcaption {
   margin-bottom: var(--helm-space-1);
 }
 
+/* Quiet. It is a note about who runs a sample, not a warning about the
+   software: 03 §17 keeps the status colours for states a person may need to
+   act on, and a page of orange captions spends that attention on nothing.
+   The words carry the meaning, so nothing here is colour alone. */
 .not-run {
-  color: var(--helm-status-warning);
+  color: var(--helm-text-muted);
+}
+
+.not-run::before {
+  content: "· ";
 }
 
 figure.sample pre,

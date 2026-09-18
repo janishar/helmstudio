@@ -379,7 +379,7 @@ func (sampleBlocks) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 		if file := attrs["sample"]; file != "" {
 			fmt.Fprintf(w, `<figcaption><span class="helm-mono">%s</span>`, html.EscapeString(file))
 			if why := attrs["notrun"]; why != "" {
-				fmt.Fprintf(w, ` <span class="not-run">Not run by the gate: %s</span>`, html.EscapeString(why))
+				fmt.Fprintf(w, ` <span class="not-run">not run by the gate — %s</span>`, html.EscapeString(why))
 			}
 			fmt.Fprint(w, `</figcaption>`)
 		}

@@ -47,14 +47,14 @@ func TestASampleSaysWhereItIsAndWhetherItRuns(t *testing.T) {
 	}
 	for _, want := range []string{
 		`<span class="helm-mono">a/run.sh</span>`,
-		`<span class="not-run">Not run by the gate: it needs the network</span>`,
+		`<span class="not-run">not run by the gate — it needs the network</span>`,
 		`echo &lt;hello&gt;`,
 	} {
 		if !strings.Contains(r.HTML, want) {
 			t.Errorf("the page has no %s:\n%s", want, r.HTML)
 		}
 	}
-	if strings.Count(r.HTML, "Not run by the gate") != 1 {
+	if strings.Count(r.HTML, "not run by the gate") != 1 {
 		t.Errorf("the mark was not on exactly the one sample:\n%s", r.HTML)
 	}
 }
