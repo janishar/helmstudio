@@ -1,12 +1,12 @@
 file: studios/h3-studio.yaml
-digest: sha256:73e61c541685ba82b54afd827d6fdbb4fb6488d2567b1e49de8669970b8cdffa
+digest: sha256:b07748ea4916c4beb8f550b28479afecc345e7c35f4de128ae1c3ab117a0112e
 title: h3 studio's manifest
 intro: >-
   h3 studio makes video with synchronised sound from MiniMax-H3, through a
   native Metal engine written in C behind a Go server: no Python, and no
-  PyTorch. Its repository does not ship a manifest yet, so its registry entry
-  carries one inline. Scored against the criteria, it passes six of the seven a
-  manifest can answer; it declares no test profile.
+  PyTorch. Its own repository ships this manifest as helmstudio.yaml; the copy
+  here is the registry's, kept in step with it. Scored against the criteria, it
+  passes six of the seven a manifest can answer; it declares no test profile.
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from. It reads the repository with git, never through a forge's API."
@@ -26,7 +26,6 @@ notes:
   /manifest/runtime: "A native kernel on Metal, in C: the framework and the backends are separate fields because they make separate claims."
   /manifest/capabilities: "Settings and sessions, the files it makes, the gallery and the timeline: four sentences on the approval screen, and a token for exactly those."
   /manifest/network: "The hosts it is expected to contact, for its weights."
-  /manifest/storage: "A records collection for its takes, indexed on seed, model and session, with the prompt searchable, and caps on how many records and how many bytes of settings it may keep."
   /manifest/sdk: "Pins major 1 of the runtime SDK and helm-css, which is what criterion 15 asks for."
   /manifest/build: "Two steps, in order: the Metal engine, built with make in its submodule, then the Go server."
   /manifest/weights: "Two pipelines from one Hugging Face repository, in one directory, each scoped to its own files. FL2VA is required; Ref2VA is optional, so install does not wait for its 134 GB."
