@@ -102,3 +102,67 @@ func TestTheTablesAreTheSoftwares(t *testing.T) {
 		t.Errorf("the scored manifest is not counted as an included sample: %+v", r.Samples)
 	}
 }
+
+// renderWithSample renders a page against one sample file of the test's own.
+func renderWithSample(t *testing.T, name, body, src string) (Rendered, error) {
+	t.Helper()
+	samples := t.TempDir()
+	if err := os.WriteFile(filepath.Join(samples, name), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return newRenderer("/", samples).render([]byte(src))
+}
+
+// A region shows part of a file the gate runs whole, so a long sample can be
+// read a piece at a time without a second, unrun copy of it existing.
+func TestASampleCanShowOneRegionOfItself(t *testing.T) {
+	file := "before()\n# helm:region draw\ndraw()\n    indented()\n# helm:endregion\nafter()\n"
+	r, err := renderWithSample(t, "s.py", file, "# Page\n\n@sample s.py#draw\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Samples) != 1 || r.Samples[0].Path != "s.py" || r.Samples[0].Region != "draw" {
+		t.Fatalf("samples = %+v; want the bare path, so coverage still counts the file", r.Samples)
+	}
+	for _, want := range []string{"draw()", "    indented()", `<span class="helm-mono">s.py#draw</span>`} {
+		if !strings.Contains(r.HTML, want) {
+			t.Errorf("the page has no %q:\n%s", want, r.HTML)
+		}
+	}
+	for _, unwanted := range []string{"before()", "after()", "helm:region", "helm:endregion"} {
+		if strings.Contains(r.HTML, unwanted) {
+			t.Errorf("the page still shows %q:\n%s", unwanted, r.HTML)
+		}
+	}
+}
+
+// Every way of naming a region that the file does not honour is a build
+// failure: a page must not be able to go quiet when a sample is edited.
+func TestARegionThatIsNotThereFailsTheBuild(t *testing.T) {
+	for _, c := range []struct{ name, file, want string }{
+		{"missing", "a()\n", "there is no region"},
+		{"unclosed", "// helm:region r\na()\n", "never closed"},
+		{"empty", "// helm:region r\n// helm:endregion\n", "is empty"},
+		{"twice", "// helm:region r\na()\n// helm:endregion\n// helm:region r\nb()\n// helm:endregion\n", "opened twice"},
+		{"nested", "// helm:region r\n// helm:region inner\na()\n// helm:endregion\n// helm:endregion\n", "do not nest"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := renderWithSample(t, "s.go", c.file, "# Page\n\n@sample s.go#r\n")
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Errorf("err = %v; want it refused, saying %q", err, c.want)
+			}
+		})
+	}
+}
+
+// A named endregion closes its own region, so two regions can sit side by side.
+func TestRegionsSitSideBySide(t *testing.T) {
+	file := "# helm:region one\nA\n# helm:endregion one\nmiddle\n# helm:region two\nB\n# helm:endregion two\n"
+	r, err := renderWithSample(t, "s.sh", file, "# Page\n\n@sample s.sh#two\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.HTML, "B") || strings.Contains(r.HTML, "middle") || strings.Contains(r.HTML, ">A<") {
+		t.Errorf("the second region was not the one shown:\n%s", r.HTML)
+	}
+}

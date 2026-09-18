@@ -24,13 +24,20 @@ import (
 
 // Markdown, as the documentation is written (docs/decisions.md M10 Q7, Q9).
 //
-// Two things are added to plain Markdown, and nothing else:
+// What is added to plain Markdown, and nothing else:
 //
 //   - A line `@sample <path>` includes a file from site/samples as a code
 //     block. Code is never written inline in prose, because a sample that lives
 //     in a page cannot be run and rots silently; a sample that is a file is run
 //     by the gate. `@sample <path> not-run: <reason>` marks one the gate cannot
 //     run — a step that needs the network — and the page says so.
+//   - `@sample <path>#<region>` shows part of that file. The region is marked
+//     in the file itself, between a line holding `helm:region <name>` and one
+//     holding `helm:endregion`, in whatever comment syntax the file is written
+//     in; the marker lines are not shown. The gate still runs the whole file,
+//     so an excerpt cannot drift from something that works, and a region that
+//     is renamed or deleted fails the build rather than going quiet. Nothing
+//     is re-indented: what a page shows is what the file holds.
 //   - A link or image whose destination starts with "/" is internal: it is
 //     written under the site's base path, and recorded so the build can fail on
 //     one that leads nowhere.
@@ -45,7 +52,8 @@ import (
 // theme lint and the reviewer never see.
 
 var (
-	sampleLine       = regexp.MustCompile(`^@sample\s+(\S+)(?:\s+not-run:\s*(.+))?\s*$`)
+	sampleLine       = regexp.MustCompile(`^@sample\s+([^\s#]+)(?:#([A-Za-z0-9_-]+))?(?:\s+not-run:\s*(.+))?\s*$`)
+	regionMarker     = regexp.MustCompile(`helm:(region|endregion)(?:\s+([A-Za-z0-9_-]+))?`)
 	capabilitiesLine = regexp.MustCompile(`^@capabilities\s*$`)
 	criteriaLine     = regexp.MustCompile(`^@criteria\s+(\S+)\s*$`)
 )
@@ -53,6 +61,7 @@ var (
 // Sample is one file a page includes.
 type Sample struct {
 	Path   string // relative to site/samples
+	Region string // the part of it a page shows, or "" for the whole file
 	NotRun string // why the gate does not run it, or ""
 }
 
@@ -169,17 +178,27 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, error) {
 			out.WriteString(line)
 			continue
 		}
-		s := Sample{Path: m[1], NotRun: strings.TrimSpace(m[2])}
+		s := Sample{Path: m[1], Region: m[2], NotRun: strings.TrimSpace(m[3])}
 		body, err := os.ReadFile(filepath.Join(r.samples, filepath.FromSlash(s.Path)))
 		if err != nil {
 			return nil, nil, fmt.Errorf("@sample %s: %w", s.Path, err)
+		}
+		if s.Region != "" {
+			body, err = cutRegion(body, s.Region)
+			if err != nil {
+				return nil, nil, fmt.Errorf("line %d: @sample %s#%s: %w", n+1, s.Path, s.Region, err)
+			}
 		}
 		samples = append(samples, s)
 		fence := "```"
 		for strings.Contains(string(body), fence) {
 			fence += "`"
 		}
-		info := language(s.Path) + " sample=" + strconv.Quote(s.Path)
+		shown := s.Path
+		if s.Region != "" {
+			shown += "#" + s.Region
+		}
+		info := language(s.Path) + " sample=" + strconv.Quote(shown)
 		if s.NotRun != "" {
 			info += " notrun=" + strconv.Quote(s.NotRun)
 		}
@@ -190,6 +209,52 @@ func (r *pageRenderer) expandSamples(src []byte) ([]byte, []Sample, error) {
 		out.WriteString(fence + "\n")
 	}
 	return out.Bytes(), samples, nil
+}
+
+// cutRegion returns the part of a sample file between the line that holds
+// `helm:region <name>` and the next one that holds `helm:endregion`, with both
+// marker lines dropped. The markers are looked for anywhere in a line so that
+// each sample can write them in its own comment syntax, and the bytes between
+// them are returned untouched: a page shows what the file holds, at the
+// indentation the file holds it at.
+//
+// Every way of getting it wrong is a build failure rather than a quiet empty
+// block, because a region is a claim about a file that the file can stop
+// honouring without anyone editing the page.
+func cutRegion(body []byte, name string) ([]byte, error) {
+	lines := strings.Split(string(body), "\n")
+	start, end := -1, -1
+	for i, l := range lines {
+		m := regionMarker.FindStringSubmatch(l)
+		if m == nil {
+			continue
+		}
+		if m[1] == "region" {
+			switch {
+			case start >= 0 && end < 0 && m[2] != name:
+				return nil, fmt.Errorf("region %q holds another region, opened at line %d; regions do not nest", name, i+1)
+			case m[2] != name:
+			case start >= 0:
+				return nil, fmt.Errorf("region %q is opened twice, at lines %d and %d", name, start+1, i+1)
+			default:
+				start = i
+			}
+			continue
+		}
+		if start >= 0 && end < 0 && (m[2] == "" || m[2] == name) {
+			end = i
+		}
+	}
+	if start < 0 {
+		return nil, fmt.Errorf("there is no region %q in it; mark one with \"helm:region %s\" and \"helm:endregion\"", name, name)
+	}
+	if end < 0 {
+		return nil, fmt.Errorf("region %q is opened at line %d and never closed with \"helm:endregion\"", name, start+1)
+	}
+	if end == start+1 {
+		return nil, fmt.Errorf("region %q is empty", name)
+	}
+	return []byte(strings.Join(lines[start+1:end], "\n") + "\n"), nil
 }
 
 // language names a sample's language from its extension, for the class a
