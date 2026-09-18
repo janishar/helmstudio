@@ -638,7 +638,8 @@ A studio does not keep its own store. Session settings, domain documents and pre
     ~/.helmstudio/
     ├── helm.db                          # every row above
     ├── assets/
-    │   ├── blobs/7c/1f/7c1fa9…e2.mp4    # bytes, once, named by sha256, real extension kept
+    │   └── blobs/7c/1f/7c1fa9…e2.mp4    # bytes, once, named by sha256, real extension kept
+    ├── cache/
     │   └── derived/7c1fa9…e2/{thumb-320.jpg, poster.jpg, proxy.mp4}
     ├── library/h3-studio/2026-09/cafe-window-drift.mp4   # hardlink — same inode, no copy
     ├── models/MiniMax-H3/…              # weights
@@ -649,7 +650,7 @@ No path in this document is hardcoded
 
 The tree is where everything lives by default, `~/.helmstudio/`, but five roots resolve separately through a directories helper — data, cache, logs, the user-visible library and models — so any one can be moved on its own (06 §4). `settings` stores a root only when the user overrides it, so an absent key means "use the default" and a settings row copied between machines still resolves correctly. (Amended 2026-09-17: the roots default in `~/.helmstudio` rather than in each operating system's conventional directories.) `assets.blob_path` being relative to the assets root is what makes all of this work without rewriting rows.
 
-Two paths, one copy. The content-addressed path gives idempotent writes, dedup as a uniqueness constraint and detectable corruption; the library path gives a person a tree they can browse, drag from and back up. `assets.blob_path` is stored relative to the assets root so moving the library to an external drive is a settings change rather than a rewrite of every row. Backup is exactly two things: `helm.db` via `VACUUM INTO`, and `assets/blobs/` — `derived/` and `stage/` are regenerable by definition, which is most of why they are separate directories.
+Two paths, one copy. The content-addressed path gives idempotent writes, dedup as a uniqueness constraint and detectable corruption; the library path gives a person a tree they can browse, drag from and back up. `assets.blob_path` is stored relative to the assets root so moving the library to an external drive is a settings change rather than a rewrite of every row. Backup is exactly two things: `helm.db` via `VACUUM INTO`, and `assets/blobs/` — `cache/derived/` and `stage/` are regenerable by definition, which is most of why they are roots of their own. (Amended 2026-09-18: derived files sit under the cache root, not under `assets/`; see 06 §4.)
 
 `helmstudio fsck` reconciles both directions, because a person will move something in Finder and that is not corruption. A row with no file sets `assets.state = 'missing'` and the gallery keeps the item, greyed, with its prompt and params intact — losing the record of what you made is worse than losing the file. A file with no row is reported as reclaimable and never deleted silently.
 

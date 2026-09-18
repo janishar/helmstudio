@@ -29,7 +29,7 @@ An earlier draft of this section proposed three hand-built mechanisms — a JSON
 |-------------------------------------------------------------------------------------------------------|-----------------------------------|---------------------------------------------------------------------------------------------------------------------|
 | KV namespaces, records, asset index, gallery, provenance, tags, plus the daemon's own lifecycle state | `helm.db`                         | One transaction boundary, one backup file, one migration path. Two persistence mechanisms is a tax paid forever.    |
 | Media bytes                                                                                           | `assets/blobs/<ab>/<cd>/<sha256>` | Content-addressed files: hardlink adoption, `Range` streaming, dedup as a side effect. A 2 GB video is never a row. |
-| Thumbnails, posters, waveforms                                                                        | `assets/derived/<sha256>/`        | Regenerable, so they must sit outside the thing you back up.                                                        |
+| Thumbnails, posters, waveforms                                                                        | `cache/derived/<sha256>/`         | Regenerable, so they must sit outside the thing you back up.                                                        |
 | Build and run logs                                                                                    | `studios/<id>/logs/`              | Append-only files. Subprocess stdout must never be a transaction.                                                   |
 | Download progress                                                                                     | Nowhere                           | Derived from `.part` lengths at startup. A database does not make a pointless write worth making.                   |
 
@@ -100,7 +100,7 @@ Adoption hardlinks the staged file into the blob store and unlinks the stage ent
 | Path                                    | Holds                                                                                                       |
 |-----------------------------------------|-------------------------------------------------------------------------------------------------------------|
 | assets/blobs/\<ab\>/\<cd\>/\<sha256\>   | Immutable bytes, two-level fan-out so no directory holds 100k entries.                                      |
-| assets/derived/\<sha256\>/thumb-320.jpg | Thumbnails, poster frames, waveform PNGs, generated lazily via ffmpeg and safe to delete.                   |
+| cache/derived/\<sha256\>/thumb-320.jpg | Thumbnails, poster frames, waveform PNGs, generated lazily via ffmpeg and safe to delete.                   |
 | stage/\<studio\>/\<group_run\>/         | Per-launch scratch the studio writes into. Cleared when the group stops; anything not adopted is discarded. |
 | state/\<studio\>/\<ns\>.json            | That studio's documents. Never readable by another studio.                                                  |
 

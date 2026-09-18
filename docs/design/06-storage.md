@@ -44,7 +44,7 @@ Note what this does to the stdlib-only principle: it bends, deliberately, and on
 | Installations, step runs, processes, jobs, model artifacts, bindings, settings | `helm.db`                  | One transaction boundary, one backup, one migration path. Two persistence mechanisms is a tax paid forever. |
 | KV namespaces, records, asset index, gallery, inputs, tags                     | `helm.db`                  | This is the relational part. It is why the database is here.                                                |
 | **Images, audio, video**                                                       | **Directories on disk**    | Never a BLOB column. Layout below.                                                                          |
-| Derived thumbs, posters, waveforms                                             | `assets/derived/<sha256>/` | Regenerable. Safe to delete, so they must sit outside the thing you back up.                                |
+| Derived thumbs, posters, waveforms                                             | `cache/derived/<sha256>/`  | Regenerable. Safe to delete, so they must sit outside the thing you back up.                                |
 | Model weights                                                                  | `models/<dest>/`           | Unchanged. The database indexes them; it never holds them.                                                  |
 | Build and run logs                                                             | `studios/<id>/logs/*.log`  | Append-only files. Subprocess stdout must never be a transaction.                                           |
 | Download progress                                                              | Nowhere                    | Still derived from `.part` file lengths. A database does not make a pointless write worth making.           |
@@ -77,10 +77,13 @@ Resolution order is the same for every root — the specific override variable, 
 
 ### The layout
 
+(Amended 2026-09-18, by the human's decision: derived files live under the **cache** root, `cache/derived/<sha256>/`, not under `assets/`. The table below already put “derived thumbs, proxies” in the cache root and the implementation followed it — `internal/api/studioapi/platform.go` joins `Dirs.Cache()` with `derived` — so this document disagreed with itself, and with 02 §6 and 07 §4, in the direction that mattered: `assets/` is the thing you back up, and a regenerable file inside it is the one arrangement the rule against backing up derived files exists to prevent.)
+
     ~/.helmstudio/
     ├── helm.db                          # all state. ~ tens of MB at 100k items
     ├── assets/
-    │   ├── blobs/7c/1f/7c1fa9…e2.mp4    # the bytes, once, named by content hash
+    │   └── blobs/7c/1f/7c1fa9…e2.mp4    # the bytes, once, named by content hash
+    ├── cache/
     │   └── derived/7c1fa9…e2/
     │       ├── thumb-320.jpg            # regenerable, excluded from backup
     │       └── poster.jpg
@@ -108,7 +111,7 @@ Two files-and-rows systems disagree eventually, usually because a person moved s
 - **Row with no file.** Mark the asset `missing` rather than deleting the row: the gallery shows the item greyed with its metadata and prompt intact, offers Locate, and regenerates the thumbnail if the file comes back. Losing the record of what you made is worse than losing the file.
 - **File with no row.** Left alone by default and reported as reclaimable bytes; never deleted silently, because a stray file under a user's library is far more likely to be theirs than garbage.
 - **Hash mismatch on verify.** The file changed underneath us. Flag it, keep both facts, and let the user decide — an automatic re-download is fine for weights and wrong for a render that cannot be regenerated.
-- **Backup is two things:** `helm.db` (via `VACUUM INTO`) and `assets/blobs/`. `derived/` and `stage/` are excluded by definition, which is most of the reason they are separate directories.
+- **Backup is two things:** `helm.db` (via `VACUUM INTO`) and `assets/blobs/`. `cache/derived/` and `stage/` are excluded by definition, which is most of the reason they are roots of their own.
 
 ## 5 · Schema
 

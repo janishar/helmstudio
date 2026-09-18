@@ -1106,6 +1106,14 @@ Decided before M9 is expanded, which is the last moment it is free: the shell is
 
   A diagram that no page inlines fails the build, the way a sample on no page already does: a drawing nobody shows is a drawing nobody checked against the software.
 
+## 2026-09-18 · Where derived files live
+
+- 2026-09-18 · design · **the human's decision: derived files live under the cache root, `cache/derived/<sha256>/`. 06 §4, 02 §6 and 07 §4 are amended to say so** — raised while drawing the disk map for the site, which could not be drawn because the frozen design said both things. `docs/design/06-storage.md` contradicted itself sixteen lines apart: its table of what is stored where put derived thumbs and posters at `assets/derived/<sha256>/` at line 47 and its own roots table put "derived thumbs, proxies, fetched manifests" in the **cache** root at line 63. `02-data-model.md` §6 and `07-platform-services.md` §4 followed the first reading; `internal/api/studioapi/platform.go` followed the second, joining `Dirs.Cache()` with `derived`.
+
+  The implementation was right and three sections of the design were wrong, which is the direction that matters here: `assets/` is defined as the thing you back up, and both documents say in as many words that derived files are excluded from backup "by definition". A regenerable directory inside the backed-up root is the one arrangement that rule exists to prevent, and it would also have put thumbnails on an external drive when someone moved the library, for no reason.
+
+  Nothing in the software changes. What changes is that a reader can now be told where a thumbnail is without the documents disagreeing, and the disk-map figure can be drawn.
+
 ## Changes
 
 - 2026-09-15 · M0 built the manifest schema's `helm validate` (schema validation plus the seven rules it cannot express), the four studio manifests, and the `api/openapi.yaml` outline · found one hard self-contradiction in `schema/manifest.json` itself (the `run` sugar is unusable: `processes` sits in the schema's unconditional top-level `required`, so `run:` alone always fails "missing properties: processes" regardless of the `allOf`/`not` clause that says they're alternatives) — raised in `docs/agents/reports/00-contracts.md`, not resolved in code; all four shipped manifests use `processes:` so this did not block M0.
