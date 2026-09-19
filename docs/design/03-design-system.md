@@ -524,6 +524,11 @@ Checks run before install, not after. Required failures warn loudly and block a 
 - **Add a studio**, the page before this screen, is four rows in the 960px column. Each row has a heading, one sentence, its fields, and one button sized to its label: **From a repository** (Repository and Ref, "Read repository", the page's accent), **From a folder on this Mac** ("Read folder"), **From a file someone sent you** ("Import files…") and **Write one** ("Write a manifest"). A field is checked when its row is submitted, and what is wrong is written under the field, which is marked invalid.
 - **This screen** opens with "← Studios", like every page under Studios, and states the source and level as plain text rather than chips.
 
+(Amended 2026-09-19, after the first h3 install on a Mac.)
+
+- **Cancel and Install are pinned to the foot of the window** while the column continues below them, and settle at its end when it runs out. The row stays last in the column, under a hairline with the page scrolling behind it. The reason is length: h3 studio's screen is two and a half windows tall — checks, every command grouped by when it runs, what it may do, hosts, weights — and a screen whose only answer is that far below the question reads as one that cannot be answered at all.
+- **What this gives up, plainly.** Install can be clicked before the commands have been read. The rule it replaces made reading a precondition of answering, and this does not. What still holds the screen up is everything else about it: every command is here verbatim, grouped by *when* it runs; it is a route and not a dialog; and a required failure still turns the button into "Install anyway". The screen is honest rather than quick, and this amendment trades one of the two things that made it slow.
+
 ## 13a · Describing a studio yourself
 
 Most repos worth running will never ship a manifest, so writing one has to be a first-class act rather than a fallback. Form on the left for the fields, YAML on the right for the parts that are really text, both live and both editable, with the criteria scoring underneath as you type.

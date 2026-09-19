@@ -113,14 +113,24 @@ dialog.helm-dialog::backdrop {
   max-width: min(720px, calc(100vw - var(--helm-space-6)));
 }
 
-/* The approval screen is one column in the reading width, and its buttons
- * are at the bottom. You reach Install by scrolling past every command that
- * would run, which is the point of the screen (03 §13). */
+/* The approval screen is one column in the reading width, and its buttons are
+ * last in it and pinned to the foot of the window while the column continues
+ * below them (03 §13, amended 2026-09-19). The screen is two and a half
+ * windows tall for a studio like h3, and an answer only reachable at the very
+ * end of that reads as a screen with no answer at all.
+ *
+ * The ground is opaque on purpose: the commands scroll behind the row rather
+ * than through it. What this costs is written down in 03 §13 — Install can be
+ * pressed before the commands have been read — and is the trade the amendment
+ * made, not an oversight here. */
 
 .helm-approve-actions {
+  position: sticky;
+  bottom: 0;
   margin-top: var(--helm-space-5);
-  padding-top: var(--helm-space-4);
+  padding: var(--helm-space-4) 0;
   border-top: 1px solid var(--helm-border-hairline);
+  background: var(--helm-ground-page);
   gap: var(--helm-space-3);
   flex-wrap: wrap;
 }
