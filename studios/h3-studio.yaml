@@ -78,8 +78,7 @@ manifest:
       repo: MiniMaxAI/MiniMax-H3
       dest: MiniMax-H3
       files: ["Ref2VA/**"]
-      size_gb: 134
-      optional: true
+      size_gb: 62
   processes:
     - name: studio
       role: main
