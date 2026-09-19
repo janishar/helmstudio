@@ -157,7 +157,10 @@ export class HelmGallery extends HelmElement {
   build() {
     this.kindSel = el("select", { "aria-label": "Kind", onchange: () => this.reload() },
       el("option", { value: "", text: "All kinds" }),
-      ...["video", "image", "audio", "text"].map((k) => el("option", { value: k, text: k })));
+      // The kinds AssetKind has. "text" was offered here and is not one of
+      // them, so choosing it could only ever be refused as an invalid
+      // parameter.
+      ...["video", "image", "audio", "other"].map((k) => el("option", { value: k, text: k })));
     this.search = el("input", { type: "search", placeholder: "Search prompts", "aria-label": "Search prompts" });
     this.search.addEventListener("change", () => this.reload());
     this.listBtn = el("button", {
@@ -234,6 +237,13 @@ export class HelmGallery extends HelmElement {
     this.grid.replaceChildren();
     this.paint();
     const generation = (this.generation = (this.generation || 0) + 1);
+    // Any page still in flight belongs to the generation just left behind, and
+    // its result is discarded below on arrival. Leaving `loading` set would
+    // make the fetch under it return without asking for anything: the grid was
+    // cleared a moment ago, so a filter changed while the first page was still
+    // loading emptied the gallery and left it empty, with no count and no
+    // error to say why.
+    this.loading = false;
     await this.page();
     if (generation === this.generation) this.watch();
   }
