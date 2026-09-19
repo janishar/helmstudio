@@ -271,6 +271,23 @@ async function approve(ctx, st, studio, verb) {
   await ctx.act(studio, verb);
 }
 
+/**
+ * approvalActions is what this screen puts in the shell's header row (03 §4,
+ * §13, both amended 2026-09-20): the manifest itself, as a quiet button.
+ *
+ * It is a page action and is drawn as one. It used to be an accent link at
+ * the right-hand end of the title row, which spent the screen's accent on
+ * something that is not the screen's answer and left it 900px from the title
+ * it belongs to. Install is the accent here, and nothing else is.
+ */
+export function approvalActions(ctx, id) {
+  return [el("a", {
+    class: "helm-btn helm-btn-secondary helm-btn-sm",
+    href: `#/edit/${encodeURIComponent(id)}`,
+    text: "View manifest",
+  })];
+}
+
 export function approvalScreen(ctx, id) {
   const st = approvalState(ctx, id);
   const verb = ctx.query.get("do") || "install";
@@ -296,9 +313,7 @@ export function approvalScreen(ctx, id) {
 
   return el("div", { class: "helm-stack helm-approve" },
     el("div", { class: "helm-page-header" },
-      el("h1", { class: "helm-title", text: `${label} ${p.name || studio.name}?` }),
-      el("span", { class: "helm-spacer" }),
-      el("a", { class: "helm-link", href: `#/edit/${encodeURIComponent(id)}`, text: "View manifest" })),
+      el("h1", { class: "helm-title", text: `${label} ${p.name || studio.name}?` })),
 
     // The level and the source, as two facts and not a badge — and as plain
     // text, as a studio's row states them (03 §13, amended 2026-09-17). A

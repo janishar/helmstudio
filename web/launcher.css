@@ -173,14 +173,30 @@ dialog.helm-dialog::backdrop {
   margin-bottom: var(--helm-space-4);
 }
 
-/* "← Studios", above the title of every page under Studios. */
+/* The header row above the title of every page under Studios (03 §4, amended
+ * 2026-09-20): the back link on the left, the page's own actions on the right.
+ * A page action alone at the right-hand end of a 960px line has nothing
+ * holding it; here it has a sibling. */
+.helm-crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--helm-space-3);
+  min-height: var(--helm-control-sm);
+  margin-bottom: var(--helm-space-3);
+}
+
+/* "← All studios", not "Studios": the nav tab two rows above says Studios and
+ * is the current tab, so the word carried nothing in either place. The padding
+ * is what makes it a target rather than a word with a chevron, and the
+ * negative margin keeps the text on the column's edge despite it. */
 .helm-back {
   display: inline-flex;
-  align-self: flex-start;
   align-items: center;
   gap: var(--helm-space-2);
-  margin-bottom: var(--helm-space-3);
-  color: var(--helm-text-secondary);
+  margin-left: calc(var(--helm-space-2) * -1);
+  padding: var(--helm-space-1) var(--helm-space-2);
+  border-radius: var(--helm-radius-sm);
+  color: var(--helm-text-muted);
   font: var(--helm-type-body);
   font-weight: 500;
   text-decoration: none;
@@ -197,6 +213,7 @@ dialog.helm-dialog::backdrop {
 }
 
 .helm-back:where(:hover) {
+  background: var(--helm-ground-panel);
   color: var(--helm-text-primary);
 }
 

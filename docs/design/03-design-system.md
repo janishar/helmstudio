@@ -308,6 +308,11 @@ The catalogue grid is `repeat(auto-fill, minmax(320px, 1fr))` with a 16px gap. T
 (Amended 2026-09-19, by the human's decision, after watching an install on this page: the studio detail page is **a page that is read, 960px**, and its columns are **`336px | 1fr` with the output under both at the full width**. Two reasons, and the second is why it moved out of the workspace list. A log is the widest thing on this page and had the narrowest column: 384px wrapped every path h3 printed onto three lines, while the install panel beside it sat mostly empty. And at 1440px on a large display the page reads as filling the screen rather than as a column. What it costs: the install panel is 608px rather than 688px, so a long build command wraps sooner.)
 
 (Amended 2026-09-19, by the human's decision: a studio's **open** page keeps the full width of the window only while it has a frame in it. With none — stopped, or running and declaring no page — the waiting state takes the reading width instead. A sentence and a Launch button stretched across a large display read as a page that had failed to load rather than as a studio that is not running.)
+
+(Amended 2026-09-20, by the human's decision: **the back link is a header row, not a lone link.** It reads **"← All studios"**, and that page's page-level actions — the ones that act on the page rather than on anything in it — are right-aligned in the same row as quiet buttons. Three reasons. The nav tab already says Studios, so a link repeating the word two rows below it spends a line saying where you already know you are. A page action alone at the far right of a 960px line has nothing holding it; in the row it has a sibling. And the link takes a padded hover surface, so it is a target rather than a word with a chevron.
+
+**There is no trailing crumb.** On four of the six pages that carry a back link — a studio's detail, its processes, the approval screen and the editor — the crumb would be the studio's name, which is the `<h1>` directly beneath it. A trail that repeats the title is the thing this amendment removed from the other end of the row.)
+
 ## 5 · helm-css, and how studios wear it
 
 The system ships as a package so studios can look like family without importing a component library. Five files: `helm-tokens.css`, `helm-base.css`, `helm-layout.css`, `helm-components.css`, and `helm.css` concatenating them. Every class is prefixed `helm-`, nothing is `!important`, and specificity stays at a single class so a studio overrides by writing one rule rather than fighting.
@@ -541,12 +546,16 @@ Checks run before install, not after. Required failures warn loudly and block a 
 (Amended 2026-09-17, the launcher redesign.)
 
 - **Add a studio**, the page before this screen, is four rows in the 960px column. Each row has a heading, one sentence, its fields, and one button sized to its label: **From a repository** (Repository and Ref, "Read repository", the page's accent), **From a folder on this Mac** ("Read folder"), **From a file someone sent you** ("Import files…") and **Write one** ("Write a manifest"). A field is checked when its row is submitted, and what is wrong is written under the field, which is marked invalid.
-- **This screen** opens with "← Studios", like every page under Studios, and states the source and level as plain text rather than chips.
+- **This screen** opens with a back link, like every page under Studios, and states the source and level as plain text rather than chips.
 
 (Amended 2026-09-19, after the first h3 install on a Mac.)
 
 - **Cancel and Install are pinned to the foot of the window** while the column continues below them, and settle at its end when it runs out. The row stays last in the column, under a hairline with the page scrolling behind it. The reason is length: h3 studio's screen is two and a half windows tall — checks, every command grouped by when it runs, what it may do, hosts, weights — and a screen whose only answer is that far below the question reads as one that cannot be answered at all.
 - **What this gives up, plainly.** Install can be clicked before the commands have been read. The rule it replaces made reading a precondition of answering, and this does not. What still holds the screen up is everything else about it: every command is here verbatim, grouped by *when* it runs; it is a route and not a dialog; and a required failure still turns the button into "Install anyway". The screen is honest rather than quick, and this amendment trades one of the two things that made it slow.
+
+(Amended 2026-09-20, by the human's decision, after reading the screen beside its own mockup.)
+
+- **`View manifest` is a quiet button in the header row** (§4, amended the same day), not an accent link in the title row. It is a page action rather than a link in a sentence, and helm-css already says what that means: a link drawn as a button is a button, and is not underlined. It was `.helm-link` — accent and underlined — alone at the right-hand end of a 960px line, which both left it unanchored and spent the screen's accent on something that is not the screen's answer. On this screen the accent belongs to Install, and to nothing else.
 
 ## 13a · Describing a studio yourself
 
