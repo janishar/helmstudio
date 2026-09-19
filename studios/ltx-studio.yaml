@@ -14,8 +14,7 @@
 
 id: ltx-studio
 repo: https://github.com/janishar/ltx-2-studio
-ref: 36c001d4cacf88d7e7a07f33101c970bffe74154
-
+ref: main
 manifest:
   # ltx studio's manifest for helmstudio: the same studio the registry points at,
   # described by its own repository, beside the code it runs.
@@ -26,7 +25,7 @@ manifest:
   hue: { dark: "#5b8def", light: "#2f5fc4" }
   license: MIT
   repo: https://github.com/janishar/ltx-2-studio
-  ref: 36c001d4cacf88d7e7a07f33101c970bffe74154
+  ref: main
   python: { version: "3.11" }
   peak_ram_gb: 21
   requires:

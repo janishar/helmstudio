@@ -1,5 +1,5 @@
 file: studios/auk-studio.yaml
-digest: sha256:fc03fb23f9c3b253187579c4173003b06616e7640cccdb610a1251e0eb358745
+digest: sha256:9a5eeab75a45b287ce6b94e7f685ae51a80f7667b074605a5420386a389e12ec
 title: AuK studio's manifest
 intro: >-
   AuK studio makes speech and voices with PyTorch on mps, behind a FastAPI
@@ -9,7 +9,7 @@ intro: >-
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from, with git."
-  /ref: "A full commit, so what was reviewed is what installs."
+  /ref: "A branch, so an install takes whatever it points at when the clone runs. A registry entry normally pins a commit; docs/decisions.md 2026-09-19 says why this one does not."
   /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Its id, repo and ref must equal the pointer's."
   /manifest/id: "The same id as the pointer's."
   /manifest/name: "The name people see."
@@ -18,7 +18,7 @@ notes:
   /manifest/hue: "Its identity colour in each theme: a stripe, a dot and its clips on the timeline in the launcher, and the accent on its own page."
   /manifest/license: "The studio's own licence."
   /manifest/repo: "The same repository as the pointer's."
-  /manifest/ref: "The same commit as the pointer's."
+  /manifest/ref: "The same branch as the pointer's."
   /manifest/python: "Python 3.10. helmstudio creates an environment with uv, pinned to this version, before the build steps."
   /manifest/peak_ram_gb: "The upper end of the README's range, as the comment says."
   /manifest/requires: "An Apple Silicon Mac, and uv. No memory or disk is declared, which is why criterion 2 fails."

@@ -1,5 +1,5 @@
 file: studios/ltx-studio.yaml
-digest: sha256:aec9729f9d5b6102ee40c52255b5ea3beafa1a66ce20c33abf1c400ee4e39e2f
+digest: sha256:1296c998b0c31d988930216d732bd21205c185868e53d8453e45be77b355fd10
 title: ltx studio's manifest
 intro: >-
   ltx studio makes video with sound from LTX-2.5 on MLX, behind a Python
@@ -10,7 +10,7 @@ intro: >-
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from, with git."
-  /ref: "A full commit, so what was reviewed is what installs."
+  /ref: "A branch, so an install takes whatever it points at when the clone runs. A registry entry normally pins a commit; docs/decisions.md 2026-09-19 says why this one does not."
   /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Its id, repo and ref must equal the pointer's."
   /manifest/id: "The same id as the pointer's."
   /manifest/name: "The name people see."
@@ -19,7 +19,7 @@ notes:
   /manifest/hue: "Its identity colour in each theme: a stripe, a dot and its clips on the timeline in the launcher, and the accent on its own page."
   /manifest/license: "The studio's own licence."
   /manifest/repo: "The same repository as the pointer's."
-  /manifest/ref: "The same commit as the pointer's."
+  /manifest/ref: "The same branch as the pointer's."
   /manifest/python: "Python 3.11. helmstudio creates an environment with uv, pinned to this version, before the build step, and the studio runs with it active. No other studio shares it."
   /manifest/peak_ram_gb: "The memory at the validated default. The comment says why one number cannot carry the range: a longer, larger clip peaked far higher."
   /manifest/requires: "An Apple Silicon Mac with 64 GB of memory and 90 GB of disk. uv is the one tool it needs; the build fetches everything else."
