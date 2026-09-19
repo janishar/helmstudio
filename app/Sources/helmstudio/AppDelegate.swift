@@ -201,6 +201,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// Every completion handler here is `@MainActor`, or none of this is here.
+//
+// WKUIDelegate is an Objective-C protocol and WebKit finds these by selector.
+// A method that does not satisfy the requirement is not exported at all, and
+// an optional method WebKit cannot find means WebKit answers the page itself
+// — by doing nothing. WebKit declares these handlers WK_SWIFT_UI_ACTOR, so
+// the requirement is `@escaping @MainActor (…) -> Void`; written without it
+// each one only "nearly matches" (the compiler says exactly that, in a
+// warning), and the app silently answered no dialog at all: browse opened
+// nothing, alert() returned in a millisecond, confirm() was false, and the
+// studio inside the frame looked broken. `createWebViewWith` takes no
+// handler, so it matched and Open in a tab went on working — which is what
+// made this look like a file-picker bug rather than a delegate WebKit could
+// not see.
 extension AppDelegate: WKUIDelegate {
     /// "Open in a tab" (03 §7a) asks for a new window, and a WKWebView makes
     /// none unless it is told how. Without this the button did nothing at all
@@ -233,18 +247,29 @@ extension AppDelegate: WKUIDelegate {
     // Each owes WebKit exactly one call to its completion handler. A sheet
     // dismissed without one leaves the page waiting forever.
 
+    /// The window a sheet has to go on: the one the web view is in *now*.
+    ///
+    /// Full screen (03 §7a) is element fullscreen, and WebKit answers it by
+    /// moving the web view into a fullscreen window of its own. The app's own
+    /// window is still there, still visible to AppKit, and completely covered.
+    /// A sheet put on it opens behind the studio, where nobody can see or
+    /// answer it — and every one of these dialogs is something the page is
+    /// waiting on, so browse looked broken in full screen and stayed broken
+    /// until the frame left it.
+    private var sheetHost: NSWindow? { webView?.window ?? window }
+
     /// `<input type="file">`, which is how a studio is given an image, a clip
     /// or audio. Without this, browse does nothing at all.
     func webView(_ webView: WKWebView,
                  runOpenPanelWith parameters: WKOpenPanelParameters,
                  initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping ([URL]?) -> Void) {
+                 completionHandler: @escaping @MainActor ([URL]?) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = parameters.allowsDirectories
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
         panel.resolvesAliases = true
-        guard let host = window else {
+        guard let host = sheetHost else {
             completionHandler(panel.runModal() == .OK ? panel.urls : nil)
             return
         }
@@ -257,7 +282,7 @@ extension AppDelegate: WKUIDelegate {
     func webView(_ webView: WKWebView,
                  runJavaScriptAlertPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping () -> Void) {
+                 completionHandler: @escaping @MainActor () -> Void) {
         let alert = NSAlert()
         alert.messageText = message
         alert.addButton(withTitle: "OK")
@@ -269,7 +294,7 @@ extension AppDelegate: WKUIDelegate {
     func webView(_ webView: WKWebView,
                  runJavaScriptConfirmPanelWithMessage message: String,
                  initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping (Bool) -> Void) {
+                 completionHandler: @escaping @MainActor (Bool) -> Void) {
         let alert = NSAlert()
         alert.messageText = message
         alert.addButton(withTitle: "OK")
@@ -282,7 +307,7 @@ extension AppDelegate: WKUIDelegate {
                  runJavaScriptTextInputPanelWithPrompt prompt: String,
                  defaultText: String?,
                  initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping (String?) -> Void) {
+                 completionHandler: @escaping @MainActor (String?) -> Void) {
         let alert = NSAlert()
         alert.messageText = prompt
         alert.addButton(withTitle: "OK")
@@ -293,9 +318,9 @@ extension AppDelegate: WKUIDelegate {
         runSheet(alert) { completionHandler($0 == .alertFirstButtonReturn ? field.stringValue : nil) }
     }
 
-    /// A sheet on the window when there is one, a modal when there is not.
+    /// A sheet on the window the web view is in, a modal when there is none.
     private func runSheet(_ alert: NSAlert, done: @escaping (NSApplication.ModalResponse) -> Void) {
-        guard let host = window else {
+        guard let host = sheetHost else {
             done(alert.runModal())
             return
         }
