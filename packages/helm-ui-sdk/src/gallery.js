@@ -227,8 +227,22 @@ export class HelmGallery extends HelmElement {
   }
 
   disconnectedCallback() {
+    this.closeViewer();
     this.releaseURLs();
     super.disconnectedCallback();
+  }
+
+  /**
+   * closeViewer stops what is playing and puts the viewer away.
+   *
+   * Closing the dialog drops the asset, which is what stops the sound. This
+   * is called whenever the gallery stops being visible as well as when it is
+   * taken off the page: a studio may close a dialog of its own with this
+   * inside it, and the viewer never hears about that — a video that went on
+   * playing then was a sound with nothing on screen making it.
+   */
+  closeViewer() {
+    if (this.viewerDialog && this.viewerDialog.open) this.viewerDialog.close();
   }
 
   releaseURLs() {
@@ -485,6 +499,16 @@ export class HelmGallery extends HelmElement {
   /** The viewer dialog, built the first time something is looked at. */
   viewer() {
     if (this.viewerDialog) return this.viewerDialog;
+    // Hidden is not closed. An ancestor that goes away — a studio's own
+    // dialog closing over this one — leaves the viewer open and playing with
+    // nothing to see, so being unable to see it is what puts it away.
+    if (typeof IntersectionObserver === "function") {
+      const watch = new IntersectionObserver((entries) => {
+        if (entries.some((e) => !e.isIntersecting)) this.closeViewer();
+      });
+      watch.observe(this);
+      this.onCleanup(() => watch.disconnect());
+    }
     this.viewerTitle = el("span", { class: "label", part: "viewer-title" });
     // The viewer's own status. It cannot share the selection line: paint()
     // owns that and rewrites it on the next redraw, so a refusal written

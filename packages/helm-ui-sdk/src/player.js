@@ -169,6 +169,9 @@ export class HelmPlayer extends HelmElement {
 
   disconnectedCallback() {
     this.stopClock();
+    // A media element taken off the page keeps playing, and what is left is a
+    // sound with nothing on screen making it.
+    if (this.media) this.media.pause();
     for (const u of this.urls.splice(0)) URL.revokeObjectURL(u);
     super.disconnectedCallback();
   }
