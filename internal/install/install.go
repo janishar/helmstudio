@@ -1092,6 +1092,13 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 		f := in.fetchOne(ctx, m.ID, w)
 		switch {
 		case f == nil:
+		// Cancellation arrives as a failure like any other, and it is not a
+		// weight being unavailable. Today every optional weight that reaches
+		// this loop names a local_path, so it links rather than downloads and
+		// the race barely exists; without this, a cancel landing on one would
+		// be swallowed and the install would go on to record itself ready.
+		case ctx.Err() != nil:
+			return f
 		// An optional weight the directory does not hold is not a failed
 		// install. The studio starts without that pipeline and says so, which
 		// is what optional means; the job records why.

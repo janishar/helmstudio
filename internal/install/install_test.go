@@ -15,6 +15,7 @@ import (
 
 	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/weights/hubtest"
 )
 
 // A studio goes from listed to launchable: cloned at its pinned commit,
@@ -553,5 +554,48 @@ func TestOptionalWeightMissingFromTheDirectoryStillInstalls(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(f.dirs.Models(), "MiniMax-H3", "FL2VA", "dit.safetensors")); err != nil {
 		t.Errorf("the required weight was not linked: %v", err)
+	}
+}
+
+// Cancel stops an install that is downloading a weight, not only one running a
+// build step. TestCancelKillsTheStepGroupAndKeepsWork covers the step; this is
+// the other half, and it is the state a person actually sits in front of —
+// gigabytes, for hours, with one button.
+func TestCancelStopsAWeightDownload(t *testing.T) {
+	f := newFixture(t, nil)
+	const size = 4 << 20
+	f.hub.Add("org/big", "model.safetensors", hubtest.Content(size, 7), true)
+	f.hub.StallAt["model.safetensors"] = int64(size * 6 / 10)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	st, _ := f.sup.Studio("toy-studio")
+	st.Manifest.Weights = []manifest.Weight{{Name: "big", Repo: "org/big", Dest: "Big"}}
+
+	j, err := f.in.Install(context.Background(), "toy-studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-f.hub.Stalled:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the download never started, so there was nothing to cancel")
+	}
+
+	ctx, stop := context.WithTimeout(context.Background(), 30*time.Second)
+	defer stop()
+	began := time.Now()
+	if err := f.in.Cancel(ctx, j.ID); err != nil {
+		t.Fatalf("cancelling a download: %v", err)
+	}
+	t.Logf("cancel returned in %s", time.Since(began).Round(time.Millisecond))
+
+	got, err := f.in.Job(context.Background(), j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != JobCancelled {
+		t.Fatalf("job = %+v, want cancelled", got)
+	}
+	if s := f.info("toy-studio"); s.State == StateReady {
+		t.Errorf("a cancelled install reports ready: %+v", s)
 	}
 }
