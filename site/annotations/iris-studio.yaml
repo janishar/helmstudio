@@ -1,17 +1,18 @@
 file: studios/iris-studio.yaml
-digest: sha256:6d141b2d11b93746605124eb112ed4e6c38d26ec3e32bcffebf1b28ac58ea8e8
+digest: sha256:742a999ec09de1a0320b332f64e8c899e2e6b05f10cd2fce5d0f6c64713a3e3a
 title: iris studio's manifest
 intro: >-
   iris studio makes images from FLUX.2 Klein and Z-Image through a native Metal
   engine in C behind a Go server — the same shape as h3 studio, for stills.
-  Its registry entry carries its manifest inline. It passes four of the seven
-  criteria a manifest can answer: it declares neither memory nor disk, no test
-  profile and no SDK major.
+  Its repository ships this manifest, and the registry entry carries a copy so
+  the studio can be described before it is fetched. It passes five of the seven
+  criteria a manifest can answer: it declares neither memory nor disk, and no
+  test profile.
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from, with git."
   /ref: "A branch, so an install takes whatever it points at when the clone runs. A registry entry normally pins a commit; docs/decisions.md 2026-09-19 says why this one does not."
-  /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Its id, repo and ref must equal the pointer's."
+  /manifest: "A copy of the helmstudio.yaml the repository ships. Resolution never reaches the network, so this is the only manifest there is until the studio is fetched — an entry without one is shown as not fetched. What matters is that it agrees with the repository; one that had drifted described iris before it ran under helmstudio at all. Its id, repo and ref must equal the pointer's."
   /manifest/id: "The same id as the pointer's."
   /manifest/name: "The name people see."
   /manifest/description: "One sentence saying what the studio does."
@@ -19,16 +20,17 @@ notes:
   /manifest/hue: "Its identity colour in each theme: a stripe, a dot and its clips on the timeline in the launcher, and the accent on its own page."
   /manifest/license: "The studio's own licence."
   /manifest/repo: "The same repository as the pointer's."
-  /manifest/ref: "The same branch as the pointer's."
   /manifest/submodules: "The engine, iris.c, is a submodule, and the first build step runs inside it."
   /manifest/peak_ram_gb: "The upper end of the README's range, as the comment says: an estimate, which is better than nothing."
   /manifest/requires: "An Apple Silicon Mac and five tools. No memory or disk is declared, which is why criterion 2 fails."
   /manifest/runtime: "A native kernel on Metal, in C."
-  /manifest/capabilities: "None. iris calls no platform service at this commit, so it asks for nothing and gets no token at all."
-  /manifest/network: "The hosts it is expected to contact, for its weights."
+  /manifest/capabilities: "Three. A finished take is adopted as an asset and recorded as one gallery item, and a render is reported as a task job with its log. No timeline: a sequence is an edit of video clips and this studio makes stills. This is also what earns it a token — a studio declaring none gets none, and iris refuses to start without one."
+  /manifest/sdk: "The majors its page loads through the /helm/ proxy: the runtime client, the components it draws helmstudio's gallery and the render log with, and helm-css."
+  /manifest/network: "The hosts it is expected to contact: Hugging Face for its weights, and the Go module proxy because the second build step resolves helmstudio's runtime SDK through it."
   /manifest/build: "Two steps, in order: the engine, built with make in its submodule, then the Go server."
   /manifest/weights: "Five checkpoints, all selectable: one is chosen before install, install downloads only that one, and the others are fetched or linked when they are wanted."
   /manifest/processes: "One process: the Go server, which drives the engine."
   /manifest/processes/0/heavy: "It holds the model."
-  /manifest/processes/0/cmd: "{models.selected} becomes the path of whichever checkpoint was chosen. A launch with no choice made is refused."
+  /manifest/processes/0/cmd: "{models.selected} becomes the path of whichever checkpoint was chosen. {data} is the directory the studio keeps sessions in; it makes none of its own and will not start without one, and a take has to be inside it for helmstudio to adopt it."
   /manifest/processes/0/health: "A TCP connection on its port is enough to call it ready."
+  /manifest/processes/0/busy: "Where the launcher asks whether the studio is mid-render before offering to stop it. /api/queue does not answer that contract yet, so it reads as unknown."
