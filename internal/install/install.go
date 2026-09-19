@@ -1081,7 +1081,13 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 	if err != nil {
 		return &Failure{Phase: "weights", Code: "weights_failed", Message: err.Error()}
 	}
-	if chosen == "" {
+	// A recorded choice this manifest no longer declares is no choice: a
+	// checkpoint can be renamed or dropped by an update, and taking the name
+	// at its word would skip every selectable weight and leave the studio
+	// installed with none. The first declared stands in, as it does when
+	// nothing was chosen at all.
+	if chosen == "" || !weights.DeclaresCheckpoint(m.Weights, chosen) {
+		chosen = ""
 		for _, w := range m.Weights {
 			if w.Selectable {
 				chosen = w.Name
@@ -1153,6 +1159,16 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 		case w.Optional:
 		default:
 			return f
+		}
+	}
+	// The choice may have been made before there was a binding to hold it —
+	// on the approval screen, where no installation exists yet. There is one
+	// now, so it moves onto it and the pending row goes. Passing the declared
+	// weights keeps this quiet when the chosen one still is not bound, which
+	// is the case for a checkpoint whose download the user cancelled.
+	if chosen != "" {
+		if err := in.cfg.Weights.Select(ctx, m.ID, chosen, m.Weights...); err != nil {
+			return &Failure{Phase: "weights", Code: "weights_failed", Message: err.Error()}
 		}
 	}
 	if err := in.setState(ctx, m.ID, StateReady, `, last_failure = NULL`); err != nil {

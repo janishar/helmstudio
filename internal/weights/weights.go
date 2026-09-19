@@ -1493,7 +1493,32 @@ func (s *Service) selectedName(ctx context.Context, studioID string) (string, er
 // Select records which selectable weight a studio launches with. Exactly one
 // is selected at a time, which the partial unique index enforces — this only
 // has to clear the old one inside the same transaction.
-func (s *Service) Select(ctx context.Context, studioID, name string) error {
+// A choice made before there is an installation to hang it on lives here.
+//
+// **This is not where M7 Q20 says it goes.** That decision put the selection
+// on `studio_model_bindings.selected`, and once a studio is installed it is
+// still there. But a binding's `studio_id` references
+// `installations(studio_id)` and its `artifact_id` is NOT NULL, so before an
+// install there is no row a choice could be written to — while 03 §5 says the
+// choice is made on the approval screen, which is exactly then. So it waits
+// in `settings`, beside the approval that has the same problem for the same
+// reason (internal/api/approval.go), and the install that creates the binding
+// moves it there. One place holds it at any moment, never two.
+func checkpointKey(studioID string) string { return "checkpoint:" + studioID }
+
+// Select records which checkpoint a studio launches with.
+//
+// Exactly one binding is selected at a time, which the partial unique index
+// enforces — this only has to clear the old one inside the same transaction.
+// Given the studio's declared weights it will also accept a checkpoint that is
+// not bound yet, which is what the approval screen needs; without them it
+// keeps the older behaviour of refusing one, so a caller that cannot see the
+// manifest cannot record a name nothing declares.
+func (s *Service) Select(ctx context.Context, studioID, name string, declared ...manifest.Weight) error {
+	if len(declared) > 0 && !DeclaresCheckpoint(declared, name) {
+		return fmt.Errorf("%q is not a checkpoint this studio declares; choose one of %s",
+			name, strings.Join(selectableNames(declared), ", "))
+	}
 	return s.cfg.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE studio_model_bindings SET selected = 0 WHERE studio_id = ? AND selected = 1`, studioID); err != nil {
@@ -1504,16 +1529,47 @@ func (s *Service) Select(ctx context.Context, studioID, name string) error {
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
+		if n, _ := res.RowsAffected(); n > 0 {
+			// It is bound, so the binding holds the choice and anything
+			// waiting in settings for this studio is spent.
+			_, err := tx.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, checkpointKey(studioID))
+			return err
+		}
+		if len(declared) == 0 {
 			return fmt.Errorf("%q is not a weight this installation has; fetch or link it first", name)
 		}
-		return nil
+		_, err = tx.ExecContext(ctx,
+			`INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+			 ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+			checkpointKey(studioID), name, time.Now().UnixMilli())
+		return err
 	})
 }
 
-// Selected returns the chosen checkpoint's placeholder, or "".
+// DeclaresCheckpoint reports whether name is one of the selectable weights.
+func DeclaresCheckpoint(ws []manifest.Weight, name string) bool {
+	for _, w := range ws {
+		if w.Selectable && w.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Selected returns the chosen checkpoint's placeholder, or "". A binding
+// answers first; a choice made before there was one waits in settings.
 func (s *Service) Selected(ctx context.Context, studioID string) (string, error) {
-	return s.selectedName(ctx, studioID)
+	name, err := s.selectedName(ctx, studioID)
+	if err != nil || name != "" {
+		return name, err
+	}
+	var pending string
+	err = s.cfg.Store.Reader().QueryRowContext(ctx,
+		`SELECT value FROM settings WHERE key = ?`, checkpointKey(studioID)).Scan(&pending)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return pending, err
 }
 
 // managedUnready explains why a binding's files are not all downloaded, or

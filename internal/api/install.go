@@ -16,6 +16,7 @@ import (
 
 	"github.com/janishar/helmstudio/internal/api/studioapi"
 	"github.com/janishar/helmstudio/internal/install"
+	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/weights"
 )
 
@@ -463,11 +464,18 @@ func (s *Server) putSelection(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.weights.Select(r.Context(), id, body.Weight); err != nil {
+	// The manifest's weights go with the name: they are what says the choice
+	// is one this studio offers, and they are what lets it be made before the
+	// studio is installed, which is where 03 §5 puts it.
+	st, ok := s.sup.Studio(id)
+	var declared []manifest.Weight
+	if ok {
+		declared = st.Manifest.Weights
+	}
+	if err := s.weights.Select(r.Context(), id, body.Weight, declared...); err != nil {
 		writeError(w, http.StatusConflict, "not_fetched", err.Error()+". Use :fetch to download it, or :link to point at a copy you already have.")
 		return
 	}
-	st, ok := s.sup.Studio(id)
 	if !ok {
 		writeJSON(w, http.StatusOK, map[string]string{"id": id, "selection": body.Weight})
 		return

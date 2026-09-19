@@ -624,13 +624,84 @@ func TestInstallDownloadsOnlyTheChosenCheckpoint(t *testing.T) {
 	}
 }
 
-// The other half of what the schema promises — "the others are fetched later
-// if the choice changes" — has no test here, because it cannot be reached.
-// weights.Select needs a studio_model_bindings row, and Link only writes one
-// when the studio is already installed (internal/weights/weights.go, "if
-// installed > 0"), so before an install every checkpoint but the default is
-// refused with "is not a weight this installation has". That is a separate
-// defect, recorded in docs/decisions.md; this change does not touch it.
+// The other half of what the schema promises: "the others are fetched later if
+// the choice changes". The choice is made before the studio is installed,
+// which is where 03 §5 puts it and where no binding can exist yet.
+func TestTheChosenCheckpointIsTheOneInstalled(t *testing.T) {
+	f := newFixture(t, nil)
+	f.hub.Add("org/small", "small.bin", []byte("small"), true)
+	f.hub.Add("org/large", "large.bin", []byte("large"), true)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	checkpoints(f, "toy-studio")
+	st, _ := f.sup.Studio("toy-studio")
+
+	// Nothing is installed and nothing is bound: this is the approval screen.
+	if err := f.w.Select(context.Background(), "toy-studio", "large", st.Manifest.Weights...); err != nil {
+		t.Fatalf("choose a checkpoint before installing: %v", err)
+	}
+	if got, err := f.w.Selected(context.Background(), "toy-studio"); err != nil || got != "large" {
+		t.Fatalf("Selected = %q, %v; want large", got, err)
+	}
+
+	f.install("toy-studio")
+	if n := len(f.hub.Requests("org/large")); n == 0 {
+		t.Error("the chosen checkpoint was not downloaded")
+	}
+	if n := len(f.hub.Requests("org/small")); n != 0 {
+		t.Fatalf("install downloaded the first declared checkpoint over the chosen one: %d requests for org/small", n)
+	}
+	// Once installed the binding holds the choice, which is where M7 Q20 put
+	// it, and nothing is left waiting in settings.
+	if n := f.count(`SELECT count(*) FROM studio_model_bindings WHERE studio_id = ? AND placeholder = ? AND selected = 1`,
+		"toy-studio", "large"); n != 1 {
+		t.Errorf("the choice did not move onto the binding: %d selected rows", n)
+	}
+	if n := f.count(`SELECT count(*) FROM settings WHERE key = ?`, "checkpoint:toy-studio"); n != 0 {
+		t.Errorf("the pending choice outlived the install: %d rows", n)
+	}
+}
+
+// A choice an update has since renamed or dropped is not honoured: taking it
+// at its word would skip every checkpoint and install none of them.
+func TestAStaleChoiceFallsBackToTheFirstDeclared(t *testing.T) {
+	f := newFixture(t, nil)
+	f.hub.Add("org/small", "small.bin", []byte("small"), true)
+	f.hub.Add("org/large", "large.bin", []byte("large"), true)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	checkpoints(f, "toy-studio")
+	st, _ := f.sup.Studio("toy-studio")
+
+	if err := f.w.Select(context.Background(), "toy-studio", "large", st.Manifest.Weights...); err != nil {
+		t.Fatal(err)
+	}
+	// The manifest changes under it: large is gone.
+	st.Manifest.Weights = st.Manifest.Weights[:len(st.Manifest.Weights)-1]
+	f.sup.SetStudios([]supervisor.Studio{st})
+
+	f.install("toy-studio")
+	if got := f.info("toy-studio"); got.State != StateReady {
+		t.Fatalf("install = %+v; want ready", got)
+	}
+	if n := len(f.hub.Requests("org/small")); n == 0 {
+		t.Error("nothing stood in for the checkpoint that went away, so none was installed")
+	}
+}
+
+// A name no checkpoint has is refused rather than written.
+func TestAnUndeclaredCheckpointIsNotAChoice(t *testing.T) {
+	f := newFixture(t, nil)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	checkpoints(f, "toy-studio")
+	st, _ := f.sup.Studio("toy-studio")
+	err := f.w.Select(context.Background(), "toy-studio", "enormous", st.Manifest.Weights...)
+	if err == nil || !strings.Contains(err.Error(), "small, large") {
+		t.Fatalf("Select of an undeclared checkpoint = %v; want a refusal naming the choices", err)
+	}
+	// "base" is declared, but it is not selectable: it is not a choice either.
+	if err := f.w.Select(context.Background(), "toy-studio", "base", st.Manifest.Weights...); err == nil {
+		t.Fatal("a weight that is not selectable was accepted as a checkpoint")
+	}
+}
 
 // checkpoints gives a studio two selectable weights beside the plain one the
 // fixture declares, so a test can tell "the chosen one" from "all of them".

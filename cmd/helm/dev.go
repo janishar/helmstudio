@@ -208,7 +208,7 @@ func runDev(o devOptions) error {
 	// checkpoint is what M7 Q21 refused, and the refusal already names the
 	// choices.
 	if o.selected != "" {
-		if err := w.Select(ctx, m.ID, o.selected); err != nil {
+		if err := w.Select(ctx, m.ID, o.selected, m.Weights...); err != nil {
 			return fmt.Errorf("-select %s: %w", o.selected, err)
 		}
 		logf("weight %s → selected; {models.selected} is this one", o.selected)
