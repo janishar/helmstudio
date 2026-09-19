@@ -23,6 +23,10 @@
 // buttons in the `actions` slot.
 
 import { HelmElement, bytes, define, el, kindOf, message } from "./base.js";
+// Registers <helm-player>, which the viewer below mounts. A gallery imported
+// on its own would otherwise open a dialog around an element that never
+// upgrades.
+import "./player.js";
 
 const PAGE = 48;
 const THUMB_W = 320;
@@ -119,6 +123,20 @@ const styles = `
     flex: 0 0 auto;
   }
   .more { display: flex; justify-content: center; padding: var(--helm-space-4) 0; }
+  dialog.viewer {
+    width: min(1100px, 92vw);
+    max-width: 92vw;
+    border: 1px solid var(--helm-border-hairline);
+    border-radius: var(--helm-radius-md);
+    background: var(--helm-ground-panel);
+    color: var(--helm-text-primary);
+    padding: 0;
+  }
+  dialog.viewer::backdrop { background: var(--helm-scrim); }
+  dialog.viewer .head { display: flex; align-items: center; gap: var(--helm-space-2); padding: var(--helm-space-3); }
+  dialog.viewer helm-player { display: block; }
+  dialog.viewer:fullscreen { width: 100vw; max-width: 100vw; height: 100vh; border: 0; border-radius: 0; }
+
 `;
 
 /** The label under an item: the studio, or "timeline" for a sequence's export. */
@@ -379,9 +397,9 @@ export class HelmGallery extends HelmElement {
       role: "option",
       tabindex: "0",
       "aria-selected": String(this.selected === item.id),
-      onclick: () => this.select(item),
+      onclick: () => this.activate(item),
       onkeydown: (e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.select(item); }
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); this.activate(item); }
         if (e.key === "Enter" && this.hasAttribute("picker")) this.pick();
       },
       ondblclick: () => { this.select(item); this.pick(); },
@@ -429,6 +447,65 @@ export class HelmGallery extends HelmElement {
       this.paint();
       this.selectionText.textContent = message(err, "That item could not be changed.");
     }
+  }
+
+  /**
+   * activate is what a click or Enter on an item does: it selects, and in a
+   * gallery that is not a picker it opens the item to be looked at (04 §11,
+   * amended 2026-09-19). Picking is unchanged, and so is `select`.
+   */
+  activate(item) {
+    this.select(item);
+    if (!this.hasAttribute("picker")) this.view(item);
+  }
+
+  /**
+   * view shows an item in a <helm-player>, in one dialog the component keeps.
+   *
+   * The player is given the client this gallery was given, so a page that
+   * handed one over is not made to hand it over twice. What it does with it —
+   * the one-byte range that resolves an address for the media element — is the
+   * player's business and not repeated here.
+   */
+  view(item) {
+    if (!item || !item.asset_id) return;
+    const dialog = this.viewer();
+    this.viewerTitle.textContent = item.title || item.id;
+    this.player.client = this.client;
+    const fps = item.params && item.params.fps;
+    if (fps) this.player.setAttribute("fps", String(fps));
+    else this.player.removeAttribute("fps");
+    this.player.setAttribute("asset", item.asset_id);
+    // A second activation while it is open changes what is playing rather
+    // than opening a dialog that is already open, which throws.
+    if (!dialog.open) dialog.showModal();
+  }
+
+  /** The viewer dialog, built the first time something is looked at. */
+  viewer() {
+    if (this.viewerDialog) return this.viewerDialog;
+    this.viewerTitle = el("span", { class: "label", part: "viewer-title" });
+    this.player = el("helm-player");
+    this.viewerDialog = el("dialog", { class: "viewer", part: "viewer" },
+      el("div", { class: "head" },
+        this.viewerTitle,
+        el("span", { class: "spacer" }),
+        el("button", { text: "Full screen", onclick: () => this.fullScreen() }),
+        el("button", { text: "Close", onclick: () => this.viewerDialog.close() })),
+      this.player);
+    // A closed viewer holds nothing: dropping the asset stops the media
+    // element and releases what it was playing.
+    this.viewerDialog.addEventListener("close", () => this.player.removeAttribute("asset"));
+    this.shadowRoot.append(this.viewerDialog);
+    return this.viewerDialog;
+  }
+
+  /** Full screen is the dialog's, so the player keeps its own controls. */
+  fullScreen() {
+    const dialog = this.viewerDialog;
+    if (!dialog) return;
+    if (this.shadowRoot.fullscreenElement || document.fullscreenElement) document.exitFullscreen();
+    else if (dialog.requestFullscreen) dialog.requestFullscreen();
   }
 
   select(item) {
