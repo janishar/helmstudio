@@ -1051,7 +1051,12 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 	}
 	var todo []manifest.Weight
 	for _, w := range m.Weights {
-		if w.Optional {
+		// Optional means it is not downloaded — a hundred gigabytes nobody
+		// asked for — and not that it is ignored. One with a local_path is
+		// linked, because a symlink to files already on this disk costs
+		// nothing and reaches nothing. Skipping those left h3 studio's
+		// References mode switched off beside a folder that held Ref2VA.
+		if w.Optional && w.LocalPath == "" {
 			continue
 		}
 		values, _, err := in.cfg.Weights.Launch(ctx, m.ID, []manifest.Weight{w})
@@ -1072,6 +1077,9 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 		if err != nil {
 			return &Failure{Phase: "weights", Code: "weights_failed", Message: err.Error()}
 		}
+		if missing && w.Optional {
+			continue
+		}
 		if missing {
 			return &Failure{Phase: "weights", Code: "linked_missing", Message: fmt.Sprintf(
 				"weight %q is linked to %s, which is not there; reconnect it and install again. The install state is unchanged", w.Name, path)}
@@ -1081,7 +1089,21 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 		return &Failure{Phase: "weights", Code: "weights_failed", Message: err.Error()}
 	}
 	for _, w := range todo {
-		if f := in.fetchOne(ctx, m.ID, w); f != nil {
+		f := in.fetchOne(ctx, m.ID, w)
+		switch {
+		case f == nil:
+		// Cancellation arrives as a failure like any other, and it is not a
+		// weight being unavailable. Today every optional weight that reaches
+		// this loop names a local_path, so it links rather than downloads and
+		// the race barely exists; without this, a cancel landing on one would
+		// be swallowed and the install would go on to record itself ready.
+		case ctx.Err() != nil:
+			return f
+		// An optional weight the directory does not hold is not a failed
+		// install. The studio starts without that pipeline and says so, which
+		// is what optional means; the job records why.
+		case w.Optional:
+		default:
 			return f
 		}
 	}

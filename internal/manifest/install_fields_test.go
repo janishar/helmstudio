@@ -26,9 +26,36 @@ func TestLoadReturnsInstallAndWeightFields(t *testing.T) {
 		t.Fatal("a build step's name should default to its command")
 	}
 	w := m.Weights[1]
-	if w.Name != "ref2va" || !w.Optional || !slices.Equal(w.Files, []string{"Ref2VA/**"}) || w.EffectiveRevision() != "main" {
+	if w.Name != "ref2va" || !slices.Equal(w.Files, []string{"Ref2VA/**"}) || w.EffectiveRevision() != "main" {
 		t.Fatalf("weight decoded as %+v", w)
 	}
+	// `optional` is decoded against a manifest written here, not against the
+	// registry's: h3's entry declared it until 2026-09-19 and no longer does,
+	// and asserting it is false there would assert the zero value and prove
+	// nothing.
+	ws := weightsOf(t, `weights:
+  - name: base
+    repo: org/base
+    dest: Base
+  - name: extra
+    repo: org/extra
+    dest: Extra
+    optional: true
+`)
+	if len(ws) != 2 || ws[0].Optional || !ws[1].Optional {
+		t.Fatalf("optional decoded as %+v", ws)
+	}
+}
+
+// weightsOf decodes goodManifest with a weights block appended, through the
+// same path a registry entry's manifest takes.
+func weightsOf(t *testing.T, weights string) []Weight {
+	t.Helper()
+	m, res, err := LoadBytes("toy.yaml", []byte(goodManifest+weights))
+	if err != nil || !res.OK() {
+		t.Fatalf("Load: %v %v", err, res.Errors)
+	}
+	return m.Weights
 }
 
 // The digest follows values, not formatting: a comment or reordered keys keep

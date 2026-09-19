@@ -304,6 +304,8 @@ The catalogue grid is `repeat(auto-fill, minmax(320px, 1fr))` with a 16px gap. T
 
 (Amended 2026-09-18, by the human's decision: the studio detail page is **`336px | 1fr | 384px`** — each side column a fifth wider. What that rail holds is a checkout path, a toolchain version and a linked weights directory, and at 280px every one of them took three or four lines. A fact in a rail is now a label and a value in two columns, so a value too long for the line wraps inside its own column instead of dropping under the label and running the width of the rail.)
 
+
+(Amended 2026-09-19, by the human's decision, after watching an install on this page: the studio detail page is **a page that is read, 960px**, and its columns are **`336px | 1fr` with the output under both at the full width**. Two reasons, and the second is why it moved out of the workspace list. A log is the widest thing on this page and had the narrowest column: 384px wrapped every path h3 printed onto three lines, while the install panel beside it sat mostly empty. And at 1440px on a large display the page reads as filling the screen rather than as a column. What it costs: the install panel is 608px rather than 688px, so a long build command wraps sooner.)
 ## 5 · helm-css, and how studios wear it
 
 The system ships as a package so studios can look like family without importing a component library. Five files: `helm-tokens.css`, `helm-base.css`, `helm-layout.css`, `helm-components.css`, and `helm.css` concatenating them. Every class is prefixed `helm-`, nothing is `!important`, and specificity stays at a single class so a studio overrides by writing one rule rather than fighting.
@@ -523,6 +525,11 @@ Checks run before install, not after. Required failures warn loudly and block a 
 
 - **Add a studio**, the page before this screen, is four rows in the 960px column. Each row has a heading, one sentence, its fields, and one button sized to its label: **From a repository** (Repository and Ref, "Read repository", the page's accent), **From a folder on this Mac** ("Read folder"), **From a file someone sent you** ("Import files…") and **Write one** ("Write a manifest"). A field is checked when its row is submitted, and what is wrong is written under the field, which is marked invalid.
 - **This screen** opens with "← Studios", like every page under Studios, and states the source and level as plain text rather than chips.
+
+(Amended 2026-09-19, after the first h3 install on a Mac.)
+
+- **Cancel and Install are pinned to the foot of the window** while the column continues below them, and settle at its end when it runs out. The row stays last in the column, under a hairline with the page scrolling behind it. The reason is length: h3 studio's screen is two and a half windows tall — checks, every command grouped by when it runs, what it may do, hosts, weights — and a screen whose only answer is that far below the question reads as one that cannot be answered at all.
+- **What this gives up, plainly.** Install can be clicked before the commands have been read. The rule it replaces made reading a precondition of answering, and this does not. What still holds the screen up is everything else about it: every command is here verbatim, grouped by *when* it runs; it is a route and not a dialog; and a required failure still turns the button into "Install anyway". The screen is honest rather than quick, and this amendment trades one of the two things that made it slow.
 
 ## 13a · Describing a studio yourself
 

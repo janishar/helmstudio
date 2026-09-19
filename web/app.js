@@ -45,7 +45,9 @@ const ROUTES = [
   // The studio's own page, in a frame: its own origin, inside helmstudio.
   { path: /^\/studios\/([^/]+)\/open$/, screen: studioPage, nav: "studios", width: "full", back: true },
   { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios", width: "workspace", back: true },
-  { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios", width: "workspace", back: true },
+  // Reading width, not workspace (03 §4, amended 2026-09-19): with the output
+  // under the install rather than beside it, the page is a column to read down.
+  { path: /^\/studios\/([^/]+)$/, screen: studioDetail, nav: "studios", width: "reading", back: true },
   // Adding and editing are their own paths rather than /studios/new, because
   // `new` is a legal studio id and a route that shadowed one would be a bug
   // nobody found until somebody wrote it.

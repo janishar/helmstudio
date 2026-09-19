@@ -1,5 +1,5 @@
 file: studios/h3-studio.yaml
-digest: sha256:b07748ea4916c4beb8f550b28479afecc345e7c35f4de128ae1c3ab117a0112e
+digest: sha256:8734330010bc1bd240b6747d1933c22e89fe70fd421a51b032880a2eb0aac2dc
 title: h3 studio's manifest
 intro: >-
   h3 studio makes video with synchronised sound from MiniMax-H3, through a
@@ -28,7 +28,7 @@ notes:
   /manifest/network: "The hosts it is expected to contact, for its weights."
   /manifest/sdk: "Pins major 1 of the runtime SDK and helm-css, which is what criterion 15 asks for."
   /manifest/build: "Two steps, in order: the Metal engine, built with make in its submodule, then the Go server."
-  /manifest/weights: "Two pipelines from one Hugging Face repository, in one directory, each scoped to its own files. FL2VA is required; Ref2VA is optional, so install does not wait for its 134 GB."
+  /manifest/weights: "Two pipelines from one Hugging Face repository, in one directory, each scoped to its own files. Both are required here, so an install fetches both before the studio is ready."
   /manifest/processes: "One process: the Go server, which drives the engine."
   /manifest/processes/0/heavy: "It holds the model, so only one heavy studio runs beside it: none."
   /manifest/processes/0/cmd: "{models.fl2va} becomes the real path of the weights directory, and {data} the data directory helmstudio keeps for the studio."

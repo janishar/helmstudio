@@ -15,6 +15,7 @@ import (
 
 	"github.com/janishar/helmstudio/internal/manifest"
 	"github.com/janishar/helmstudio/internal/supervisor"
+	"github.com/janishar/helmstudio/internal/weights/hubtest"
 )
 
 // A studio goes from listed to launchable: cloned at its pinned commit,
@@ -487,5 +488,114 @@ func TestALaunchRecordsWhenItsWeightsWereUsed(t *testing.T) {
 	got := lastUsed()
 	if got == nil || got.Before(before) {
 		t.Fatalf("after the studio went running, last used = %v; want a time after %v", got, before)
+	}
+}
+
+// An optional weight with a local_path is linked at install. Optional says
+// "do not download a hundred gigabytes nobody asked for", not "ignore files
+// already on this disk": h3 studio's Ref2VA is optional and shares its folder
+// with the required FL2VA, and skipping it left References switched off beside
+// a directory that held it.
+func TestOptionalWeightWithALocalPathIsLinked(t *testing.T) {
+	f := newFixture(t, nil)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	user := filepath.Join(t.TempDir(), "MiniMax-H3")
+	for _, rel := range []string{"FL2VA/dit.safetensors", "Ref2VA/dit.safetensors"} {
+		p := filepath.Join(user, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st, _ := f.sup.Studio("toy-studio")
+	st.Manifest.Weights = []manifest.Weight{
+		{Name: "fl2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"FL2VA/**"}, LocalPath: user},
+		{Name: "ref2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"Ref2VA/**"}, LocalPath: user, Optional: true},
+	}
+	f.install("toy-studio")
+
+	link := filepath.Join(f.dirs.Models(), "MiniMax-H3", "Ref2VA", "dit.safetensors")
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the optional weight was not linked: %v", err)
+	}
+	if n := len(f.hub.Requests("org/h3")); n != 0 {
+		t.Errorf("a local_path weight contacted Hugging Face: %d requests", n)
+	}
+	if got := f.info("toy-studio"); got.State != StateReady {
+		t.Errorf("after install: %+v, want ready", got)
+	}
+}
+
+// An optional weight the directory does not hold leaves the install ready.
+// The studio starts without that pipeline and says so, which is what optional
+// means; a required one missing is still a refused install.
+func TestOptionalWeightMissingFromTheDirectoryStillInstalls(t *testing.T) {
+	f := newFixture(t, nil)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	user := filepath.Join(t.TempDir(), "MiniMax-H3")
+	p := filepath.Join(user, "FL2VA", "dit.safetensors")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := f.sup.Studio("toy-studio")
+	st.Manifest.Weights = []manifest.Weight{
+		{Name: "fl2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"FL2VA/**"}, LocalPath: user},
+		{Name: "ref2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"Ref2VA/**"}, LocalPath: user, Optional: true},
+	}
+	f.install("toy-studio")
+
+	if got := f.info("toy-studio"); got.State != StateReady {
+		t.Fatalf("an optional weight the folder lacks failed the install: %+v", got)
+	}
+	if _, err := os.Lstat(filepath.Join(f.dirs.Models(), "MiniMax-H3", "FL2VA", "dit.safetensors")); err != nil {
+		t.Errorf("the required weight was not linked: %v", err)
+	}
+}
+
+// Cancel stops an install that is downloading a weight, not only one running a
+// build step. TestCancelKillsTheStepGroupAndKeepsWork covers the step; this is
+// the other half, and it is the state a person actually sits in front of —
+// gigabytes, for hours, with one button.
+func TestCancelStopsAWeightDownload(t *testing.T) {
+	f := newFixture(t, nil)
+	const size = 4 << 20
+	f.hub.Add("org/big", "model.safetensors", hubtest.Content(size, 7), true)
+	f.hub.StallAt["model.safetensors"] = int64(size * 6 / 10)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	st, _ := f.sup.Studio("toy-studio")
+	st.Manifest.Weights = []manifest.Weight{{Name: "big", Repo: "org/big", Dest: "Big"}}
+
+	j, err := f.in.Install(context.Background(), "toy-studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-f.hub.Stalled:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the download never started, so there was nothing to cancel")
+	}
+
+	ctx, stop := context.WithTimeout(context.Background(), 30*time.Second)
+	defer stop()
+	began := time.Now()
+	if err := f.in.Cancel(ctx, j.ID); err != nil {
+		t.Fatalf("cancelling a download: %v", err)
+	}
+	t.Logf("cancel returned in %s", time.Since(began).Round(time.Millisecond))
+
+	got, err := f.in.Job(context.Background(), j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.State != JobCancelled {
+		t.Fatalf("job = %+v, want cancelled", got)
+	}
+	if s := f.info("toy-studio"); s.State == StateReady {
+		t.Errorf("a cancelled install reports ready: %+v", s)
 	}
 }

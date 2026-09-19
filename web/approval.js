@@ -8,10 +8,13 @@
 // Three things about the layout are decisions, not taste:
 //
 //   - It is a screen, not a dialog. A dialog is something you dismiss.
-//   - It is one column, read top to bottom, and the buttons are at the bottom.
-//     You reach Install by scrolling past every command that would run. A
-//     button beside the title would let someone approve a screen they never
-//     read, which is the failure this whole screen exists to prevent.
+//   - It is one column, read top to bottom, with the buttons last in it and
+//     pinned to the foot of the window while the column continues below them
+//     (03 §13, amended 2026-09-19). They used to be reachable only by
+//     scrolling past every command, which made reading a precondition of
+//     answering; two and a half windows of screen made that read as a page
+//     with no answer on it. What the amendment gives up is written down where
+//     it was decided, and it is not nothing.
 //   - Every command is here verbatim, grouped by *when* it runs. "This runs
 //     every time you launch it" is a different question from "this runs once".
 //
@@ -313,7 +316,14 @@ export function approvalScreen(ctx, id) {
     ...approvalBody(p),
     checkpoint(p, (name) => { st.selection = name; }),
 
-    // Two buttons, at the bottom, after everything above.
+    // A required failure is read before the button, not under it: the row
+    // below is pinned to the foot of the window, so anything after it in the
+    // column would be the one line on this screen that can be missed.
+    failed
+      ? el("p", { class: "helm-hint", text: "A required check failed. That blocks a registry merge; it never stops you installing your own work." })
+      : null,
+
+    // Two buttons, last in the column and pinned to the foot of the window.
     el("div", { class: "helm-row helm-approve-actions" },
       el("button", { class: "helm-btn helm-btn-secondary helm-btn-lg", text: "Cancel", onclick: back }),
       el("span", { class: "helm-spacer" }),
@@ -322,10 +332,7 @@ export function approvalScreen(ctx, id) {
         text: failed ? `${label} anyway` : label,
         disabled: st.busy,
         onclick: () => approve(ctx, st, studio, verb),
-      })),
-    failed
-      ? el("p", { class: "helm-hint", text: "A required check failed. That blocks a registry merge; it never stops you installing your own work." })
-      : null);
+      })));
 }
 
 const LEVEL = { draft: "Draft", unverified: "Unverified", verified: "Verified", registry: "Registry" };

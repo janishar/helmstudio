@@ -13,7 +13,7 @@
 // disk or which tools are present. See this milestone's report; inventing an
 // endpoint here would be the divergence the rule against it exists to stop.
 
-import { bytes, chip, dialog, el, failure, progress, row, section, state, toast } from "./ui.js";
+import { bytes, chip, dialog, el, failure, progress, row, section, state, weightBytes, toast } from "./ui.js";
 
 const GLYPH = {
   pending: "pending", running: "running", succeeded: "done",
@@ -51,18 +51,27 @@ function stepTiming(s) {
 }
 
 /** The weights panel, from the artifacts bound to this studio. */
-function weights(ctx, studio) {
+function weights(ctx, studio, stoppable) {
   const mine = (ctx.store.models || []).filter((m) => (m.studios || []).includes(studio.id));
   if (!mine.length) return null;
   const rows = mine.map((m) => {
     const ready = m.state === "ready" || m.state === "linked";
     const done = m.total_bytes ? `${bytes(m.bytes_on_disk)} of ${bytes(m.total_bytes)}` : bytes(m.bytes_on_disk);
+    // Stop it where it is being watched. This block is where a download is
+    // read — "78 MB of 144 GB" under a bar — and until now the only Cancel
+    // for it was on another screen.
+    const stop = !ready && stoppable
+      ? el("button", {
+        class: "helm-btn helm-btn-secondary helm-btn-sm", type: "button", text: "Cancel",
+        onclick: () => ctx.act(studio, "cancel"),
+      })
+      : null;
     return el("div", { class: "helm-stack", style: "gap: 2px" },
       row(m.hf_repo, ready ? bytes(m.total_bytes || m.bytes_on_disk) : done),
       el("div", { class: "helm-row" },
         chip(ready ? (m.source === "linked" ? "Linked" : "Ready") : m.state, ready ? "running" : "info"),
         el("span", { class: "helm-spacer" }),
-        el("span", { class: "helm-micro", text: m.source === "linked" ? m.external_path || "" : "" })),
+        stop || el("span", { class: "helm-micro", text: m.source === "linked" ? m.external_path || "" : "" })),
       !ready && m.total_bytes ? progress(m.bytes_on_disk, m.total_bytes) : null);
   });
   return section("Weights", ...rows);
@@ -85,12 +94,17 @@ export function studioDetail(ctx, id) {
         el("p", { class: "helm-body", text: `Nothing in the library is called ${id}.` })));
   }
   const job = (ctx.store.jobs || {})[studio.id];
-  const s = state(studio, job);
+  const s = state(studio, job, weightBytes(ctx.store.models, studio.id));
   const steps = (job && job.steps) || [];
   const done = steps.filter((x) => x.state === "succeeded").length;
   // What the last install said when it stopped, which outlives the daemon
   // that ran it.
   const failed = !steps.length && studio.last_failure && studio.last_failure.message ? studio.last_failure : null;
+
+  // Cancel is offered wherever a job of this studio's is running — cloning,
+  // building or fetching weights — which is what ui.js calls its secondary
+  // action for those states.
+  const stoppable = !!(s.secondary && s.secondary.action === "cancel" && studio.job_id);
 
   const header = el("div", { class: "helm-page-header" },
     el("h1", { class: "helm-title", text: studio.name }),
@@ -103,6 +117,14 @@ export function studioDetail(ctx, id) {
       class: "helm-btn helm-btn-primary",
       text: s.primary.label,
       onclick: () => ctx.act(studio, s.primary.action),
+    }) : null,
+    // The stop control for whatever is running, on the page that shows it
+    // running. This header drew only the primary action, so an install or a
+    // download watched from here had no way to stop it: the Cancel existed on
+    // the card in Studios and nowhere else.
+    stoppable ? el("button", {
+      class: "helm-btn helm-btn-danger", text: "Cancel",
+      onclick: () => ctx.act(studio, "cancel"),
     }) : null,
     ["ready", "update_available"].includes(studio.install_state)
       ? el("button", { class: "helm-btn helm-btn-danger", text: "Uninstall", onclick: () => uninstall(ctx, studio) })
@@ -121,13 +143,17 @@ export function studioDetail(ctx, id) {
       studio.size_bytes ? row("on disk", bytes(studio.size_bytes)) : null,
       studio.rebuild_needed ? row("manifest", "changed since the build") : null),
     runtime(studio),
-    weights(ctx, studio));
+    weights(ctx, studio, stoppable));
 
   const centre = el("section", { class: "helm-work-centre helm-panel" },
     el("div", { class: "helm-panel-header" },
       el("span", { class: "helm-section-label", text: "Install" }),
       el("span", { class: "helm-spacer" }),
-      el("span", { class: "helm-micro", text: steps.length ? `step ${Math.min(done + 1, steps.length)} of ${steps.length}` : "" })),
+      el("span", { class: "helm-micro", text: steps.length ? `step ${Math.min(done + 1, steps.length)} of ${steps.length}` : "" }),
+      stoppable ? el("button", {
+        class: "helm-btn helm-btn-secondary helm-btn-sm", text: "Cancel",
+        onclick: () => ctx.act(studio, "cancel"),
+      }) : null),
     el("div", { class: "helm-panel-body helm-stack" },
       steps.length ? progress(done, steps.length) : null,
       steps.length
@@ -148,6 +174,8 @@ export function studioDetail(ctx, id) {
       // The note repeats the failure, which is already the paragraph above.
       s.note && !failed && !steps.some((x) => x.state === "failed") ? el("p", { class: "helm-hint", text: s.note }) : null));
 
+  // Output goes under the install it belongs to, the full width of the page:
+  // a log column 384px wide wrapped every path it printed.
   const right = el("section", { class: "helm-work-right" }, terminalFor(ctx, studio, job));
 
   return el("div", { class: "helm-stack" }, header, identity,

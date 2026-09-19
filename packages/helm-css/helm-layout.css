@@ -103,14 +103,17 @@
   gap: var(--helm-space-4);
 }
 
-/* The studio detail page: 336px | 1fr | 384px above 1180px; the right column
- * drops below the centre at 1180px; everything stacks below 900px, the
- * terminal last and never under 240px tall (03 §4, widened 2026-09-18 so a
- * path or a toolchain version reads on one or two lines rather than four). */
+/* The studio detail page: the rail and the install beside each other, and the
+ * output under both at the page's full width (03 §4, amended 2026-09-19).
+ * A log is the widest thing on that page and it had the narrowest column:
+ * 384px wrapped every path h3 printed onto three lines. Everything stacks
+ * below 900px, the terminal last and never under 240px tall. */
 .helm-work {
   display: grid;
-  grid-template-columns: 336px minmax(0, 1fr) 384px;
-  grid-template-areas: "left centre right";
+  grid-template-columns: 336px minmax(0, 1fr);
+  grid-template-areas:
+    "left centre"
+    "right right";
   gap: var(--helm-space-4);
   align-items: start;
 }
@@ -128,13 +131,6 @@
 .helm-work-right {
   grid-area: right;
   min-width: 0;
-}
-
-@media (max-width: 1180px) {
-  .helm-work {
-    grid-template-columns: 336px minmax(0, 1fr);
-    grid-template-areas: "left centre" "left right";
-  }
 }
 
 @media (max-width: 900px) {

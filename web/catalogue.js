@@ -18,7 +18,7 @@
 // installs it. Collapsing them into one badge would be the product deciding
 // that where a file came from is the same question as whether it works.
 
-import { announce, bytes, chip, dialog, el, facts, failure, menu, progress, saveText, state, toast } from "./ui.js";
+import { announce, bytes, chip, dialog, el, facts, failure, menu, progress, saveText, state, weightBytes, toast } from "./ui.js";
 
 /**
  * The identity hue a row's stripe wears, for both themes (03 §2, amended
@@ -259,7 +259,7 @@ function action(ctx, studio, a, kind, key) {
 
 export function card(ctx, studio, accent) {
   const job = (ctx.store.jobs || {})[studio.id] || null;
-  const s = state(studio, job);
+  const s = state(studio, job, weightBytes(ctx.store.models, studio.id));
   const valid = studio.manifest_valid !== false;
   const flight = valid ? inFlight(job) : null;
 
