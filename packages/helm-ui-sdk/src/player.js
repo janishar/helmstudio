@@ -156,10 +156,16 @@ export class HelmPlayer extends HelmElement {
       if (e.key === "ArrowRight") { e.preventDefault(); this.step(e.shiftKey ? this.fps : 1); }
       if (e.key === " ") { e.preventDefault(); this.toggle(); }
     });
-    this.tabIndex = 0;
   }
 
   connectedCallback() {
+    // The host is focusable, and it is made so here rather than in the
+    // constructor. A custom element's constructor may not give its element an
+    // attribute: document.createElement refuses one that does and answers an
+    // HTMLUnknownElement — an element with no shadow root that never draws
+    // anything — while the same element written in markup is upgraded and
+    // works. A page that sets its own tabindex keeps it.
+    if (!this.hasAttribute("tabindex")) this.tabIndex = 0;
     this.reload();
   }
 

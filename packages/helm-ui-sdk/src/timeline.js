@@ -27,6 +27,13 @@
 //   assets.read(id, { range })                    → Response      the preview
 //   me.get()                                      → { studio_id }  own hue
 //
+// And two properties a page sets on the element, each optional:
+//
+//   el.labelFor = (clip) => string            what to call a clip
+//   el.hueFor   = (clip) => {dark, light}     every studio's identity hue,
+//                                             which only a page reading the
+//                                             library can know (03 §11)
+//
 // What is added to the sequence is the studio's to decide (04 §11 rule 5):
 // "Add" emits `add-request`, and the page calls `el.append(assetId)` with
 // whatever its own picker chose.
@@ -271,6 +278,7 @@ export class HelmTimeline extends HelmElement {
     this.queue = Promise.resolve();
     this.exportJob = null;
     this.labelFor = null;     // (clip) => string, set by a page that knows its files
+    this.hueFor = null;       // (clip) => {dark, light}, set by a page that knows every studio's hue
     this.build();
   }
 
@@ -339,12 +347,18 @@ export class HelmTimeline extends HelmElement {
     });
     this.onCleanup(() => this.preview.destroy());
 
-    this.tabIndex = 0;
     this.addEventListener("keydown", (e) => this.onKey(e));
     this.resizer = typeof ResizeObserver === "function" ? new ResizeObserver(() => this.drawTracks()) : null;
   }
 
   connectedCallback() {
+    // The host is focusable, and it is made so here rather than in the
+    // constructor. A custom element's constructor may not give its element an
+    // attribute: document.createElement refuses one that does and answers an
+    // HTMLUnknownElement — an element with no shadow root that never draws
+    // anything — while the same element written in markup is upgraded and
+    // works. A page that sets its own tabindex keeps it.
+    if (!this.hasAttribute("tabindex")) this.tabIndex = 0;
     if (this.resizer) this.resizer.observe(this);
     this.onCleanup(() => this.resizer && this.resizer.disconnect());
     this.reload();
@@ -618,14 +632,22 @@ export class HelmTimeline extends HelmElement {
   /**
    * who is the clip's studio in words, and the hue it wears.
    *
-   * The caller's own clips wear its identity hue. Everyone else's are neutral:
-   * the studio API serves no other studio's hue, and a guessed one would be
-   * someone else's identity colour (03 §11). A clip whose studio the caller may
-   * not learn says "another studio" — in words as well as colour (03 §17).
+   * The caller's own clips wear its identity hue. Everyone else's are neutral
+   * unless the page can say otherwise: the studio API serves no other studio's
+   * hue, and a guessed one would be someone else's identity colour (03 §11).
+   * `hueFor` is how a page that does know them — the launcher, which reads the
+   * library — says so, in both themes, and `light-dark()` picks the one
+   * showing from the `color-scheme` helm-css sets. A clip whose studio cannot
+   * be learnt at all says "another studio", in words as well as colour
+   * (03 §17).
    */
   who(clip) {
     if (clip.studio_id === null || clip.studio_id === undefined) {
       return { name: "another studio", hue: "var(--helm-status-idle)" };
+    }
+    const given = this.hueFor ? this.hueFor(clip) : null;
+    if (given && given.dark && given.light) {
+      return { name: clip.studio_id, hue: `light-dark(${given.light}, ${given.dark})` };
     }
     const own = this.me && this.me.studio_id === clip.studio_id;
     return { name: clip.studio_id, hue: own ? "var(--helm-studio-accent)" : "var(--helm-status-idle)" };
