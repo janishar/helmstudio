@@ -141,3 +141,79 @@ processes:
 		t.Fatal("the studio API still answers after helm dev stopped")
 	}
 }
+
+// A studio with selectable weights needs a choice before it can launch
+// ({models.selected}, M7 Q21). An install makes it on the approval screen;
+// `helm dev` has no approval screen, so -select is where a checkout says it —
+// and with nothing said, the launch is refused with the choices named rather
+// than run against an arbitrary checkpoint.
+func TestHelmDevSelectsTheCheckpointToLaunchWith(t *testing.T) {
+	studio := t.TempDir()
+	os.WriteFile(filepath.Join(studio, "helmstudio.yaml"), []byte(`id: pick-studio
+name: pick studio
+kinds: [image]
+repo: https://example.com/pick-studio.git
+license: MIT
+requires: { os: [darwin, linux], arch: [arm64, amd64] }
+runtime: { framework: other, backends: [cpu] }
+capabilities: []
+weights:
+  - { name: small, repo: example/small, dest: small, selectable: true }
+  - { name: large, repo: example/large, dest: large, selectable: true }
+processes:
+  - name: web
+    role: main
+    cmd: "echo model={models.selected}; sleep 60"
+`), 0o644)
+	large := t.TempDir()
+	os.WriteFile(filepath.Join(large, "model.safetensors"), []byte("weights"), 0o644)
+
+	// No choice: refused, and the refusal says what may be chosen.
+	var quiet syncBuffer
+	err := runDev(devOptions{manifest: filepath.Join(studio, "helmstudio.yaml"), addr: "127.0.0.1:0",
+		links: []string{"large=" + large}, stdout: &quiet, stderr: &quiet, stop: make(chan struct{})})
+	if err == nil || !strings.Contains(err.Error(), "no checkpoint is chosen") || !strings.Contains(err.Error(), "large") {
+		t.Fatalf("helm dev with no -select = %v; want a refusal naming the choices", err)
+	}
+
+	stop := make(chan struct{})
+	ready := make(chan string, 1)
+	var stdout, stderr syncBuffer
+	done := make(chan error, 1)
+	go func() {
+		done <- runDev(devOptions{manifest: filepath.Join(studio, "helmstudio.yaml"), addr: "127.0.0.1:0",
+			links: []string{"large=" + large}, selected: "large",
+			stdout: &stdout, stderr: &stderr, stop: stop, ready: ready})
+	}()
+	select {
+	case <-ready:
+	case err := <-done:
+		t.Fatalf("helm dev ended before it was ready: %v\n%s", err, stderr.String())
+	case <-time.After(20 * time.Second):
+		t.Fatal("helm dev never became ready")
+	}
+	// {models.selected} is the chosen weight's own path: the directory -link
+	// pointed at, which is what that weight resolves to.
+	for deadline := time.Now().Add(10 * time.Second); !strings.Contains(stdout.String(), "web | model="); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the studio never reported its model: %s", stdout.String())
+		}
+	}
+	want, err := filepath.EvalSymlinks(large) // the link is to the real path
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line := stdout.String(); !strings.Contains(line, "model="+want) {
+		t.Errorf("{models.selected} was not the chosen checkpoint %s: %s", want, line)
+	}
+
+	close(stop)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("helm dev: %v\n%s", err, stderr.String())
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("helm dev did not stop")
+	}
+}

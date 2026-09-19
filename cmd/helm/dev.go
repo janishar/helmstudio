@@ -41,6 +41,7 @@ type devOptions struct {
 	manifest string
 	addr     string
 	links    []string
+	selected string
 	// venv is the author's own Python environment, for a manifest that
 	// declares python: (docs/decisions.md M5 Q15).
 	venv   string
@@ -59,15 +60,17 @@ func runDevCommand(args []string, stdout, stderr io.Writer) int {
 	addr := fs.String("addr", "127.0.0.1:0", "loopback address for the studio API (port 0 picks a free one)")
 	var links linkFlags
 	fs.Var(&links, "link", "use an existing weights directory: -link <weight>=<directory> (repeatable)")
+	selected := fs.String("select", "", "which checkpoint to launch with, for a studio with selectable weights: -select <weight>")
 	venv := fs.String("venv", os.Getenv("VIRTUAL_ENV"), "the Python environment a studio that declares python: runs in (default: the active one, $VIRTUAL_ENV)")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "usage: helm dev [-f helmstudio.yaml] [-addr 127.0.0.1:0] [-link weight=dir]... [-venv dir]")
+		fmt.Fprintln(stderr, "usage: helm dev [-f helmstudio.yaml] [-addr 127.0.0.1:0] [-link weight=dir]... [-select weight] [-venv dir]")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := runDev(devOptions{manifest: *file, addr: *addr, links: links, venv: *venv, stdout: stdout, stderr: stderr}); err != nil {
+	if err := runDev(devOptions{manifest: *file, addr: *addr, links: links, selected: *selected, venv: *venv,
+		stdout: stdout, stderr: stderr}); err != nil {
 		fmt.Fprintf(stderr, "helm dev: %v\n", err)
 		return 1
 	}
@@ -197,6 +200,18 @@ func runDev(o devOptions) error {
 			return fmt.Errorf("-link %s: %w", l, err)
 		}
 		logf("weight %s → %s (linked, read-only)", name, a.Realpath)
+	}
+	// The choice a studio with selectable weights needs before it can launch.
+	// An install makes it on the approval screen, defaulting to the first
+	// declared (03 §5, M7 Q21); `helm dev` has no approval screen, so the
+	// developer says it here. Nothing is defaulted: launching an arbitrary
+	// checkpoint is what M7 Q21 refused, and the refusal already names the
+	// choices.
+	if o.selected != "" {
+		if err := w.Select(ctx, m.ID, o.selected); err != nil {
+			return fmt.Errorf("-select %s: %w", o.selected, err)
+		}
+		logf("weight %s → selected; {models.selected} is this one", o.selected)
 	}
 	if _, err := sup.Readopt(ctx); err != nil {
 		return fmt.Errorf("re-adopting what the last helm dev left running: %w", err)

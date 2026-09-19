@@ -708,6 +708,7 @@ left running instead of starting a second copy, and stops the group on
 | `-f` | `helmstudio.yaml` | The manifest to run |
 | `-addr` | `127.0.0.1:0` | Port 0 picks a free one |
 | `-link` | — | `-link <weight>=<directory>`, repeatable: use weights you already have |
+| `-select` | — | `-select <weight>`: which checkpoint a studio with `selectable` weights launches with |
 | `-venv` | `$VIRTUAL_ENV` | The Python environment a studio declaring `python:` runs in |
 
 A studio's stylesheets can be checked against helm-css without running

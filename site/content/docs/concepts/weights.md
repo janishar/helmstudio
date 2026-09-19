@@ -48,3 +48,5 @@ A linked directory is **read-only** to helmstudio. It never writes into it, neve
 ## Under `helm dev`
 
 `helm dev` downloads nothing. Link each weight a command uses with `-link <name>=<directory>`; a launch whose command uses a weight that is not linked is refused, naming it. See [develop in isolation](/docs/guides/develop-in-isolation/).
+
+A studio with `selectable` weights also needs to be told which one to launch with. Installing makes that choice on the approval screen; `helm dev` has no approval screen, so `-select <name>` is where you make it. With nothing selected the launch is refused and the choices are named — an arbitrary one is never picked for you. The choice is kept in the checkout's own `.helm`, so it holds until you change it.
