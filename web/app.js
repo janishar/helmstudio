@@ -28,6 +28,7 @@ import { launch, stop } from "./switch.js";
 import { approvalScreen, guard } from "./approval.js";
 import { addStudio } from "./add.js";
 import { studioPage } from "./embed.js";
+import { galleryScreen } from "./gallery.js";
 import { editor } from "./editor.js";
 
 /** How often the list is refreshed: cheap enough to leave running, short
@@ -54,12 +55,16 @@ const ROUTES = [
   { path: /^\/add$/, screen: addStudio, nav: "studios", width: "reading", back: true },
   { path: /^\/edit$/, screen: editor, nav: "studios", width: "workspace", back: true },
   { path: /^\/edit\/([^/]+)$/, screen: editor, nav: "studios", width: "workspace", back: true },
+  // A grid of every studio's work, which is a workspace rather than a column
+  // to read (03 §4, §10).
+  { path: /^\/gallery$/, screen: galleryScreen, nav: "gallery", width: "grid" },
   { path: /^\/models$/, screen: modelsAndDisk, nav: "models", width: "reading" },
   { path: /^\/settings$/, screen: settings, nav: "settings", width: "reading" },
 ];
 
 const NAV = [
   { id: "studios", label: "Studios", href: "#/studios" },
+  { id: "gallery", label: "Gallery", href: "#/gallery" },
   { id: "models", label: "Models & disk", href: "#/models" },
   { id: "settings", label: "Settings", href: "#/settings" },
 ];

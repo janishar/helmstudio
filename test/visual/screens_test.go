@@ -944,3 +944,113 @@ func TestAStudioOpensInsideHelmstudio(t *testing.T) {
 		t.Errorf("a studio that is starting: %q", got)
 	}
 }
+
+// The Gallery, in the nav and on a studio's own screen (03 §10 and §7a, both
+// amended 2026-09-19). What a golden cannot hold: that the chips narrow the
+// same component rather than drawing a second one, that a studio's screen
+// scopes it to that studio without being asked, and that switching to it hides
+// the studio's frame rather than taking it off the page — a rebuilt frame
+// reloads the studio's own page under whoever is using it.
+func TestTheGalleryIsOneComponentInTwoPlaces(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	for _, c := range []struct {
+		name string
+		hash string
+		expr string
+		want float64
+	}{
+		{
+			"every studio's items, with no scope chosen",
+			"#/gallery",
+			`document.querySelector("helm-gallery").shadowRoot.querySelectorAll(".item").length`,
+			6,
+		},
+		{
+			"the launcher's gallery asks for every studio",
+			"#/gallery",
+			`document.querySelector("helm-gallery").getAttribute("scope") === "all" ? 1 : 0`,
+			1,
+		},
+		{
+			// The chip is a link to a scope, and the component it narrows is
+			// the same element: a second <helm-gallery> would reload from
+			// nothing and lose whatever was open in it.
+			"a chip narrows the gallery to one studio",
+			"#/gallery?studio=h3-studio",
+			`(() => {
+				const g = document.querySelector("helm-gallery");
+				const items = [...g.shadowRoot.querySelectorAll(".item .facts")].map(f => f.textContent);
+				return g.getAttribute("studio") === "h3-studio" ? items.length : 0;
+			})()`,
+			3,
+		},
+		{
+			// 03 §10, amended M8 Q17: an item with a timeline_id is a
+			// sequence's export, and it says "timeline" rather than naming a
+			// studio. h3's three items are two takes and one export.
+			"an export is labelled timeline, not by the studio that ran it",
+			"#/gallery?studio=h3-studio",
+			`(() => {
+				const g = document.querySelector("helm-gallery");
+				const origins = [...g.shadowRoot.querySelectorAll(".item .origin")].map(o => o.textContent).sort();
+				return JSON.stringify(origins) === JSON.stringify(["h3-studio", "h3-studio", "timeline"]) ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			"the chosen chip is the current one, and it is the only one",
+			"#/gallery?studio=h3-studio",
+			`(() => {
+				const on = [...document.querySelectorAll(".helm-scope[aria-current=true]")];
+				return on.length === 1 && on[0].textContent === "h3 studio" ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			// An item is another studio's: the launcher may not star it, so
+			// there is no star to press (04 §9).
+			"the launcher draws no star",
+			"#/gallery",
+			`document.querySelector("helm-gallery").shadowRoot.querySelectorAll(".star").length`,
+			0,
+		},
+		{
+			"a studio's own screen scopes the gallery to it",
+			"#/studios/ltx-studio/open?view=gallery",
+			`document.querySelector("helm-gallery").getAttribute("studio") === "ltx-studio" ? 1 : 0`,
+			1,
+		},
+		{
+			"and the studio's frame is hidden rather than taken off the page",
+			"#/studios/ltx-studio/open?view=gallery",
+			`(() => {
+				const frame = document.querySelector("iframe.helm-embed");
+				return frame && frame.hidden && frame.offsetParent === null ? 1 : 0;
+			})()`,
+			1,
+		},
+		{
+			"the page comes back to the frame, showing the same one",
+			"#/studios/ltx-studio/open",
+			`(() => {
+				const frame = document.querySelector("iframe.helm-embed");
+				return frame && !frame.hidden && !document.querySelector("helm-gallery") ? 1 : 0;
+			})()`,
+			1,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := route(t, ctx, srv.URL, c.hash)
+			var got float64
+			if err := p.Eval(ctx, c.expr, &got); err != nil {
+				t.Fatalf("evaluating %s: %v", c.expr, err)
+			}
+			if got != c.want {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}

@@ -1065,3 +1065,100 @@ dialog.helm-dialog::backdrop {
   border: 0;
   border-radius: 0;
 }
+
+/* ---- the Gallery ---------------------------------------------------------- */
+
+/* A page whose content scrolls inside itself is bounded by the window. The
+ * shell's middle row is 1fr of a container with only a *minimum* height, so it
+ * grows with its content by default: the gallery panel would then never
+ * overflow, and <helm-gallery> pages the next 48 items when its own body
+ * scrolls near its end — which, in a panel that never scrolls, is never. This
+ * is also what keeps the window's scrollbar and the panel's from being on
+ * screen at once, each moving a different half of the same grid. */
+.helm-app:has(.helm-page-grid),
+.helm-app:has(.helm-page-full) {
+  height: 100vh;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* The workspace width (03 §4), filling the height as well. */
+.helm-page-grid {
+  flex: 1;
+  min-height: 0;
+  max-width: 1440px;
+}
+
+.helm-page-grid > .helm-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.helm-gallery-screen {
+  flex: 1;
+  min-height: 0;
+}
+
+.helm-gallery-screen helm-gallery {
+  flex: 1;
+  min-height: 320px;
+}
+
+/* A scope chip carries the studio's hue for the theme showing (03 §2c) as a
+ * dot, with the name beside it: colour is never the only thing saying which
+ * studio this is. */
+.helm-scope {
+  --_helm-hue: var(--_hue-dark);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.helm-scope:where(:hover) {
+  border-color: var(--helm-border-strong);
+}
+
+.helm-scope-on {
+  border-color: var(--helm-accent-base);
+}
+
+.helm-hue-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--_helm-hue, var(--helm-studio-accent));
+}
+
+:root[data-theme="light"] .helm-scope {
+  --_helm-hue: var(--_hue-light);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .helm-scope {
+    --_helm-hue: var(--_hue-light);
+  }
+}
+
+/* A studio's own gallery, where its frame would be: a grid fills the page the
+ * way the frame does. */
+.helm-embed-page helm-gallery {
+  flex: 1;
+  min-height: 320px;
+}
+
+/* The view switch is links, so the segments are anchors (03 §7a). A link is
+ * not pressed; the one you are on is the current page, which is what says so
+ * both to the eye and to a screen reader. */
+a.helm-segment {
+  display: inline-flex;
+  align-items: center;
+  color: var(--helm-text-secondary);
+  text-decoration: none;
+}
+
+a.helm-segment:where([aria-current="true"]) {
+  background: var(--helm-ground-raised);
+  color: var(--helm-text-primary);
+}
