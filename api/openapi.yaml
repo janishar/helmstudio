@@ -1779,6 +1779,129 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
 
   # ======================================================================
+  # Launcher: the gallery across every studio (03 §10; docs/decisions.md
+  # 2026-09-19, which amends M6 Q11's "not until M9's cookie" and records
+  # what that costs)
+  # ======================================================================
+  #
+  # These are the studio-api gallery and asset operations served to the
+  # launcher's own page. They are mirrored here rather than opened to a
+  # tokenless caller on their own paths, because "every studio endpoint
+  # refuses a request with no token" (07 §3) is a property with a test. The
+  # daemon answers them with the same service methods, under a launcher
+  # principal holding `gallery` and `gallery.read_all`, so the query, Q9's
+  # read rule and the paging are one implementation, not two.
+
+  /launcher/gallery/items:
+    get:
+      tags: [launcher]
+      operationId: launcherGalleryQuery
+      x-helm-group: gallery
+      x-helm-method: query
+      summary: Every studio's items, newest first.
+      description: >
+        No token. Always every studio: there is no `scope`, because the
+        launcher has no items of its own. `studio` narrows to one. The
+        filters, the ordering and the cursor are `GET /gallery/items`'s, and
+        deleted items are never returned.
+      parameters:
+        - name: studio
+          in: query
+          schema: { $ref: "#/components/schemas/StudioIdValue" }
+        - name: kind
+          in: query
+          schema: { $ref: "#/components/schemas/AssetKind" }
+        - name: tag
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string } }
+        - name: starred
+          in: query
+          schema: { type: boolean }
+        - name: asset_id
+          in: query
+          schema: { $ref: "#/components/schemas/ULID" }
+        - name: since
+          in: query
+          description: Items created at or after this time.
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          description: Items created before this time.
+          schema: { type: string, format: date-time }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 500 }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of items.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ItemPage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+
+  /launcher/assets/{id}:
+    get:
+      tags: [launcher]
+      operationId: launcherAssetsRead
+      x-helm-group: assets
+      x-helm-method: read
+      summary: The asset's bytes, with Range.
+      description: >
+        No token, and no read rule to apply: the launcher reads every asset.
+        Otherwise `GET /assets/{id}` exactly — `ETag` is the sha256, a single
+        range answers 206, an unsatisfiable one 416, and a row whose file is
+        gone answers 410. A page sets this URL on a `<video>` or `<img>`
+        directly, which is what the Bearer header makes impossible for a
+        studio (M6 Q10).
+      parameters:
+        - { $ref: "#/components/parameters/AssetId" }
+        - name: Range
+          in: header
+          schema: { type: string }
+      responses:
+        "200":
+          description: The whole file.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+            Accept-Ranges: { schema: { type: string, const: bytes } }
+          content: { "*/*": { schema: { type: string, contentMediaType: application/octet-stream } } }
+        "206":
+          description: The requested range.
+          headers:
+            Content-Range: { schema: { type: string } }
+          content: { "*/*": { schema: { type: string, contentMediaType: application/octet-stream } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "416":
+          description: Range not satisfiable. Code `range_not_satisfiable`.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /launcher/assets/{id}/thumb:
+    get:
+      tags: [launcher]
+      operationId: launcherAssetsThumb
+      x-helm-group: assets
+      x-helm-method: thumb
+      summary: A thumbnail, generated once and cached.
+      description: >
+        No token. `GET /assets/{id}/thumb` otherwise: the only width is 320,
+        and a kind with no thumbnailer answers 501 `unsupported`.
+      parameters:
+        - { $ref: "#/components/parameters/AssetId" }
+        - name: w
+          in: query
+          schema: { type: integer, enum: [320], default: 320 }
+      responses:
+        "200":
+          description: The thumbnail.
+          content: { image/jpeg: { schema: { type: string, contentMediaType: image/jpeg } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "410": { $ref: "#/components/responses/Gone" }
+        "501": { $ref: "#/components/responses/Unsupported" }
+
+  # ======================================================================
   # Launcher: studios, install, supervision (01 §6-7; M2 and M3 as served)
   # ======================================================================
 

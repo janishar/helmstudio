@@ -25,6 +25,16 @@ export class AssetsGroup {
   reclaim(body) {
     return this.t.request("POST", "/assets:reclaim", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
   }
+
+  /** The asset's bytes, with Range. (GET /launcher/assets/{id}) */
+  read(id, params = {}) {
+    return this.t.request("GET", "/launcher/assets/" + encodeURIComponent(id), { query: {}, headers: {"Range": params.range}, expect: "raw" });
+  }
+
+  /** A thumbnail, generated once and cached. (GET /launcher/assets/{id}/thumb) */
+  thumb(id, params = {}) {
+    return this.t.request("GET", "/launcher/assets/" + encodeURIComponent(id) + "/thumb", { query: {"w": params.w}, headers: {}, expect: "raw" });
+  }
 }
 
 /** The jobs group. */
@@ -51,6 +61,18 @@ export class JobsGroup {
   /** A lifecycle job's build log as server-sent events. A task job is 404. (GET /launcher/jobs/{id}/logs) */
   logs(id) {
     return this.t.request("GET", "/launcher/jobs/" + encodeURIComponent(id) + "/logs", { query: {}, headers: {}, expect: "sse" });
+  }
+}
+
+/** The gallery group. */
+export class GalleryGroup {
+  constructor(transport) {
+    this.t = transport;
+  }
+
+  /** Every studio's items, newest first. (GET /launcher/gallery/items) */
+  query(params = {}) {
+    return this.t.request("GET", "/launcher/gallery/items", { query: {"studio": params.studio, "kind": params.kind, "tag": params.tag, "starred": params.starred, "asset_id": params.assetId, "since": params.since, "until": params.until, "q": params.q, "limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
   }
 }
 
@@ -281,6 +303,7 @@ export class LauncherClient {
   constructor(transport) {
     this.assets = new AssetsGroup(transport);
     this.jobs = new JobsGroup(transport);
+    this.gallery = new GalleryGroup(transport);
     this.studios = new StudiosGroup(transport);
     this.weights = new WeightsGroup(transport);
     this.manifests = new ManifestsGroup(transport);
