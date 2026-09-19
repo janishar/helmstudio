@@ -364,3 +364,64 @@ func TestBuildLogRetentionNeverFollowsASymlinkedDirectory(t *testing.T) {
 		}
 	}
 }
+
+// Uninstalling a studio that was installed and never run leaves no directory
+// behind; one that has written sessions keeps them, which is what uninstall
+// promises and what 2026-09-15 decided.
+func TestUninstallTidiesAnEmptyStudioDirectoryAndKeepsData(t *testing.T) {
+	f := newFixture(t, nil)
+	ctx := context.Background()
+	dirOf := func(id string) string { return filepath.Join(f.dirs.Data(), "studios", id) }
+
+	// One that never ran.
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	f.install("toy-studio")
+	if _, err := os.Stat(dirOf("toy-studio")); err != nil {
+		t.Fatalf("the install left no directory to remove: %v", err)
+	}
+	j, err := f.in.Uninstall(ctx, "toy-studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.wait(j); got.State != JobSucceeded {
+		t.Fatalf("uninstall job = %+v", got)
+	}
+	waitGone(t, dirOf("toy-studio"))
+
+	// One that wrote something of its own.
+	f.studio("second-studio", f.repoLine(), f.defaultBuild())
+	f.install("second-studio")
+	data := filepath.Join(dirOf("second-studio"), "data", "sessions")
+	if err := os.MkdirAll(data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	take := filepath.Join(data, "take.mp4")
+	if err := os.WriteFile(take, []byte("a render"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	j2, err := f.in.Uninstall(ctx, "second-studio")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := f.wait(j2); got.State != JobSucceeded {
+		t.Fatalf("uninstall job = %+v", got)
+	}
+	waitGone(t, filepath.Join(dirOf("second-studio"), "src"))
+	if b, err := os.ReadFile(take); err != nil || string(b) != "a render" {
+		t.Errorf("uninstall removed what the studio had written: %v", err)
+	}
+}
+
+func waitGone(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s is still there", path)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

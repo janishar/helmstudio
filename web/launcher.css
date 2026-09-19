@@ -1027,6 +1027,15 @@ dialog.helm-dialog::backdrop {
   flex-direction: column;
 }
 
+/* A studio's open page with no frame in it: the waiting states are read, not
+ * filled, so they take the reading width (03 §4) rather than the window's.
+ * The frame itself keeps the whole width — that is the point of the page. */
+.helm-embed-idle {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
 .helm-embed-page {
   flex: 1;
   min-height: 0;

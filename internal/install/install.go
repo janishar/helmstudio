@@ -1337,6 +1337,7 @@ func (in *Installer) uninstall(ctx context.Context, studioID, root string) *Fail
 	if err := in.removeStudioEntry(studioID, "venv"); err != nil {
 		return fail("removing the Python environment: %v", err)
 	}
+	in.tidyStudioDir(studioID)
 	err := in.cfg.Store.Update(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM installations WHERE studio_id = ?`, studioID)
 		return err
@@ -1345,6 +1346,27 @@ func (in *Installer) uninstall(ctx context.Context, studioID, root string) *Fail
 		return fail("removing the installation record: %v", err)
 	}
 	return nil
+}
+
+// tidyStudioDir removes <data>/studios/<id> once the checkout and the
+// environment are gone and nothing else is in it, so a studio that was
+// installed and never run leaves no directory behind.
+//
+// It removes rather than removes-all, which is the whole safety of it: a
+// directory still holding the studio's own data — its sessions, and what it
+// rendered — refuses with ENOTEMPTY and is kept, which is what uninstall
+// promises and what the 2026-09-15 decision fixed. A failure is logged and
+// never fails the uninstall: an empty directory left behind is untidy, not
+// wrong. A .DS_Store counts as content, so a folder Finder has visited stays.
+func (in *Installer) tidyStudioDir(studioID string) {
+	dir := filepath.Join(in.cfg.Dirs.Data(), "studios", studioID)
+	fi, err := os.Lstat(dir)
+	if err != nil || !fi.IsDir() {
+		return // gone already, or not a real directory: leave it alone
+	}
+	if err := os.Remove(dir); err != nil {
+		in.cfg.Logf("install: %s keeps %s: %v", studioID, dir, err)
+	}
 }
 
 // removeCheckout removes <data>/studios/<id>/src when that is the recorded

@@ -131,7 +131,12 @@ export function studioPage(ctx, id) {
       ? el("button", { class: "helm-btn helm-btn-danger", type: "button", text: "Stop", onclick: () => ctx.act(studio, "stop") })
       : null);
 
-  return el("div", { class: "helm-stack helm-embed-page" },
+  // The frame takes the whole window, which is what 03 §4 asks for: a studio's
+  // page is the page. Without one there is nothing to fill it with — a
+  // sentence and a Launch button stretched across a display read as a page
+  // that had failed to load — so the waiting states take the reading width
+  // every other page under Studios uses.
+  return el("div", { class: `helm-stack helm-embed-page${frame ? "" : " helm-embed-idle"}` },
     header,
     frame || (group.state === "starting" ? starting(studio) : stopped(ctx, studio, s)));
 }

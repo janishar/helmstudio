@@ -306,6 +306,8 @@ The catalogue grid is `repeat(auto-fill, minmax(320px, 1fr))` with a 16px gap. T
 
 
 (Amended 2026-09-19, by the human's decision, after watching an install on this page: the studio detail page is **a page that is read, 960px**, and its columns are **`336px | 1fr` with the output under both at the full width**. Two reasons, and the second is why it moved out of the workspace list. A log is the widest thing on this page and had the narrowest column: 384px wrapped every path h3 printed onto three lines, while the install panel beside it sat mostly empty. And at 1440px on a large display the page reads as filling the screen rather than as a column. What it costs: the install panel is 608px rather than 688px, so a long build command wraps sooner.)
+
+(Amended 2026-09-19, by the human's decision: a studio's **open** page keeps the full width of the window only while it has a frame in it. With none — stopped, or running and declaring no page — the waiting state takes the reading width instead. A sentence and a Launch button stretched across a large display read as a page that had failed to load rather than as a studio that is not running.)
 ## 5 · helm-css, and how studios wear it
 
 The system ships as a package so studios can look like family without importing a component library. Five files: `helm-tokens.css`, `helm-base.css`, `helm-layout.css`, `helm-components.css`, and `helm.css` concatenating them. Every class is prefixed `helm-`, nothing is `!important`, and specificity stays at a single class so a studio overrides by writing one rule rather than fighting.
