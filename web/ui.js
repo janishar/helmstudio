@@ -102,7 +102,7 @@ export const STATUS = {
  * over the install state, because a running studio is running whatever its
  * checkout says.
  */
-export function state(studio, job) {
+export function state(studio, job, bytesSoFar) {
   const group = studio.group || {};
   const install = studio.install_state || "";
 
@@ -172,7 +172,7 @@ export function state(studio, job) {
       };
     case "fetching_weights":
       return {
-        chip: "Downloading" + percent(job), tone: "info",
+        chip: "Downloading" + downloaded(bytesSoFar), tone: "info",
         primary: { label: "View progress", action: "detail", quiet: true },
         secondary: { label: "Cancel", action: "cancel" },
       };
@@ -230,10 +230,36 @@ function steps(job) {
   return ` · step ${Math.min(n, list.length)} of ${list.length}`;
 }
 
-/** " 43%", when a job counts bytes rather than steps. */
-function percent(job) {
-  if (!job || !job.progress_den) return "";
-  return ` ${Math.floor((job.progress_num / job.progress_den) * 100)}%`;
+/**
+ * weightBytes totals what a studio's weights have and what they want, which is
+ * what "Downloading 43%" is about (03 §12).
+ *
+ * A download cannot be read from the install job: its progress counts build
+ * steps, so a studio that had finished step 2 of 2 and was 78 MB into 144 GB
+ * read "Downloading 100%". The bytes are on the artifacts, where the rail
+ * already reads them.
+ */
+export function weightBytes(models, studioID) {
+  let done = 0;
+  let total = 0;
+  for (const m of models || []) {
+    if (!(m.studios || []).includes(studioID)) continue;
+    done += m.bytes_on_disk || 0;
+    total += m.total_bytes || 0;
+  }
+  return total > 0 ? { done, total } : null;
+}
+
+/**
+ * " 43%" of the bytes, and nothing at all until an artifact reports a total.
+ *
+ * There is no fallback to the job's own progress on purpose: that counts build
+ * steps, so it read "Downloading 100%" beside a weight 78 MB into 144 GB. A
+ * chip that says only "Downloading" is true; one that says 100% is not.
+ */
+function downloaded(bytesSoFar) {
+  if (!bytesSoFar) return "";
+  return ` ${Math.floor((bytesSoFar.done / bytesSoFar.total) * 100)}%`;
 }
 
 /**

@@ -18,7 +18,7 @@
 // two seconds and a frame rebuilt on each one would reload the studio's page
 // under whoever is using it — mid-generation, at worst.
 
-import { chip, clock, el, elapsed, indeterminate, state, toast } from "./ui.js";
+import { chip, clock, el, elapsed, indeterminate, state, weightBytes, toast } from "./ui.js";
 
 /**
  * fullScreen hands the whole display to the studio's page. Escape gives it
@@ -103,7 +103,7 @@ export function studioPage(ctx, id) {
         el("p", { class: "helm-body", text: `Nothing in the library is called ${id}.` })));
   }
   const job = (ctx.store.jobs || {})[studio.id] || null;
-  const s = state(studio, job);
+  const s = state(studio, job, weightBytes(ctx.store.models, studio.id));
   const src = page(studio);
   const group = studio.group || {};
 
