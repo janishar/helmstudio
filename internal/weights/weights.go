@@ -837,17 +837,23 @@ const (
 // ../Ref2VA/tokenizer — without its tokenizer, passing the presence check and
 // failing the first render.
 func walkFiles(dir string, escapes escapePolicy, fn func(rel string, fi os.FileInfo)) error {
-	seen := map[string]bool{}
-	var walk func(at, rel string) error
-	walk = func(at, rel string) error {
+	var walk func(at, rel string, ancestors []string) error
+	walk = func(at, rel string, ancestors []string) error {
 		real, err := filepath.EvalSymlinks(at)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", at, err)
 		}
-		if seen[real] { // a link back up its own tree, walked once
+		// A cycle is a directory inside itself, so what stops one is its own
+		// ancestry and not everywhere the walk has been. Two paths to one real
+		// directory are not a cycle: a deduplicated checkpoint is exactly
+		// that, FL2VA/tokenizer and Ref2VA/tokenizer being one directory, and
+		// both pipelines declare the files under it. Skipping the second
+		// linked Ref2VA without the five subdirectories FL2VA had already
+		// walked — 17 of its 82 files.
+		if slices.Contains(ancestors, real) {
 			return nil
 		}
-		seen[real] = true
+		ancestors = append(ancestors, real)
 		entries, err := os.ReadDir(at)
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", at, err)
@@ -872,7 +878,7 @@ func walkFiles(dir string, escapes escapePolicy, fn func(rel string, fi os.FileI
 						continue
 					}
 				}
-				if err := walk(name, path.Join(rel, e.Name())); err != nil {
+				if err := walk(name, path.Join(rel, e.Name()), ancestors); err != nil {
 					return err
 				}
 			case fi.Mode().IsRegular():
@@ -881,7 +887,7 @@ func walkFiles(dir string, escapes escapePolicy, fn func(rel string, fi os.FileI
 		}
 		return nil
 	}
-	return walk(dir, "")
+	return walk(dir, "", nil)
 }
 
 // checkPresent is the linked-directory check (R14a): every files pattern

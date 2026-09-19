@@ -706,3 +706,51 @@ func TestLocalPathRefusesASubdirectoryLinkedOutside(t *testing.T) {
 		t.Errorf("a refused link left the destination behind: %v", err)
 	}
 }
+
+// A deduplicated checkpoint is one directory under two names: MiniMax-H3's
+// FL2VA/tokenizer *is* Ref2VA/tokenizer, and both pipelines declare the files
+// under it. A walk that remembers every real directory it has visited links
+// whichever pipeline it reached first and leaves the other one short — Ref2VA
+// arrived with 17 of its 82 files, and h3 could not read the tokenizer it
+// then asked for by its Ref2VA path.
+func TestLocalPathLinksASharedSubdirectoryUnderBothNames(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	user := userCheckpoint(t)
+	shared := filepath.Join(user, "Ref2VA", "tokenizer")
+	if err := os.MkdirAll(shared, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shared, "tokenizer.json"), hubtest.Content(64, 7), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "Ref2VA", "tokenizer"), filepath.Join(user, "FL2VA", "tokenizer")); err != nil {
+		t.Fatal(err)
+	}
+	f.install("s")
+
+	fl2va := weight("fl2va", "org/h3", "MiniMax-H3", "FL2VA/**")
+	fl2va.LocalPath = user
+	ref2va := weight("ref2va", "org/h3", "MiniMax-H3", "Ref2VA/**")
+	ref2va.LocalPath = user
+	// The order install uses: the first weight walks the shared directory
+	// under FL2VA, and the second must still find it under Ref2VA.
+	for _, w := range []manifest.Weight{fl2va, ref2va} {
+		if err := f.svc.Fetch(ctx, "s", w, nil); err != nil {
+			t.Fatalf("linking %s: %v", w.Name, err)
+		}
+	}
+
+	dest := filepath.Join(f.dirs.Models(), "MiniMax-H3")
+	for _, rel := range []string{"FL2VA/tokenizer/tokenizer.json", "Ref2VA/tokenizer/tokenizer.json"} {
+		link := filepath.Join(dest, rel)
+		fi, err := os.Lstat(link)
+		if err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+			t.Errorf("%s was not linked: %v", rel, err)
+			continue
+		}
+		if b, rerr := os.ReadFile(link); rerr != nil || len(b) != 64 {
+			t.Errorf("%s does not resolve to the file: %d bytes, %v", rel, len(b), rerr)
+		}
+	}
+}
