@@ -28,6 +28,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -479,7 +480,7 @@ func (s *Service) bindLinked(ctx context.Context, studioID string, a artifactRow
 		return fmt.Errorf("weight %q is linked to %s, which is not there; reconnect it, or to download instead, %s: %w",
 			w.Name, a.external, afterUninstalling(ctx, r, a.id, "unlink it and install again"), ErrMissing)
 	}
-	if err := checkPresent(a.real, w); err != nil {
+	if err := checkPresent(a.real, w, skipEscapes); err != nil {
 		return fmt.Errorf("weight %q: %s at %s is linked to %s, which helmstudio never completes or writes into: %w. Link a directory that holds every weight of %s these studios use, or to download instead, %s",
 			w.Name, a.repo, a.revision, a.external, err, a.repo, afterUninstalling(ctx, r, a.id, "unlink it and install again"))
 	}
@@ -800,29 +801,100 @@ func (s *Service) ArtifactProgress(ctx context.Context, id string) (done, total 
 	return done, total, rows.Err()
 }
 
+// escapePolicy says what happens at a subdirectory symlink whose target
+// leaves the directory being read. Neither policy descends it.
+type escapePolicy bool
+
+const (
+	// skipEscapes leaves it alone: the directory is linked whole, so
+	// <models>/<dest> is a symlink to it and a studio reaching that
+	// subdirectory walks the user's own tree, exactly as it would with no
+	// helmstudio in the picture. Refusing would protect nothing. What
+	// protects what it points at is that no delete path follows a symlink
+	// (R19a).
+	skipEscapes escapePolicy = false
+	// refuseEscapes refuses the whole directory: here the files are linked
+	// out one at a time, so descending would put links to another directory
+	// under <models>/<dest> — files from a folder the approval screen never
+	// named.
+	refuseEscapes escapePolicy = true
+)
+
+// walkFiles calls fn for every regular file under dir, as a slash path
+// relative to dir.
+//
+// Symlinks are followed, with one asymmetry that is the whole reason this is
+// not filepath.WalkDir. A *file* symlink counts by its target wherever it
+// points, which is what a Hugging Face cache snapshot needs: every file in a
+// snapshot links to ../../blobs, outside the snapshot directory. A *directory*
+// symlink is descended only while its target stays inside dir; one that leaves
+// is refused or skipped by policy, never followed.
+//
+// filepath.WalkDir does neither: a symlinked subdirectory reaches the callback
+// as a non-directory entry whose Stat is a directory, so it is neither
+// descended nor matched, and everything under it disappears. That is what
+// linked a deduplicated MiniMax-H3 checkout — whose FL2VA/tokenizer links to
+// ../Ref2VA/tokenizer — without its tokenizer, passing the presence check and
+// failing the first render.
+func walkFiles(dir string, escapes escapePolicy, fn func(rel string, fi os.FileInfo)) error {
+	seen := map[string]bool{}
+	var walk func(at, rel string) error
+	walk = func(at, rel string) error {
+		real, err := filepath.EvalSymlinks(at)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", at, err)
+		}
+		if seen[real] { // a link back up its own tree, walked once
+			return nil
+		}
+		seen[real] = true
+		entries, err := os.ReadDir(at)
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", at, err)
+		}
+		for _, e := range entries {
+			name := filepath.Join(at, e.Name())
+			fi, err := os.Stat(name) // a symlink by what it points at
+			if err != nil {
+				continue // a broken link is not a file, and not an error here
+			}
+			switch {
+			case fi.IsDir():
+				if e.Type()&fs.ModeSymlink != 0 {
+					target, err := filepath.EvalSymlinks(name)
+					if err != nil {
+						return fmt.Errorf("reading %s: %w", name, err)
+					}
+					if !within(dir, target) {
+						if escapes == refuseEscapes {
+							return fmt.Errorf("%s links to %s, which is outside %s; helmstudio links only what is inside the directory it is given", name, target, dir)
+						}
+						continue
+					}
+				}
+				if err := walk(name, path.Join(rel, e.Name())); err != nil {
+					return err
+				}
+			case fi.Mode().IsRegular():
+				fn(path.Join(rel, e.Name()), fi)
+			}
+		}
+		return nil
+	}
+	return walk(dir, "")
+}
+
 // checkPresent is the linked-directory check (R14a): every files pattern
 // matches at least one regular file under dir, and when size_gb is declared
 // the matched files total at least 90% of it. It only reads.
-func checkPresent(dir string, w manifest.Weight) error {
+func checkPresent(dir string, w manifest.Weight, escapes escapePolicy) error {
 	patterns := w.Files
 	matched := make(map[string]bool, len(patterns))
 	var total int64
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if p == dir || d.IsDir() {
-			return nil
-		}
-		rel, _ := filepath.Rel(dir, p)
-		rel = filepath.ToSlash(rel)
-		fi, err := os.Stat(p) // a file symlink, as in a Hugging Face cache snapshot, counts by its target
-		if err != nil || !fi.Mode().IsRegular() {
-			return nil
-		}
+	err := walkFiles(dir, escapes, func(rel string, fi os.FileInfo) {
 		if len(patterns) == 0 {
 			total += fi.Size()
-			return nil
+			return
 		}
 		hit := false
 		for _, pat := range patterns {
@@ -834,10 +906,9 @@ func checkPresent(dir string, w manifest.Weight) error {
 		if hit {
 			total += fi.Size()
 		}
-		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", dir, err)
+		return err
 	}
 	var missing []string
 	for _, p := range patterns {
@@ -913,7 +984,7 @@ func (s *Service) LinkLocal(ctx context.Context, studioID string, w manifest.Wei
 		return Artifact{}, fmt.Errorf("local_path %s is inside the models directory %s, which helmstudio manages; name a directory outside it", path, s.modelsRoot())
 	}
 	// What it lacks, by name, rather than a download nobody asked for.
-	if err := checkPresent(real, w); err != nil {
+	if err := checkPresent(real, w, refuseEscapes); err != nil {
 		// What it lacks, by name, and the two things to do about it. The
 		// sentence is the whole message: a reader gets no help from the kind
 		// of error it is, so notLinkable carries that without saying it.
@@ -1004,32 +1075,16 @@ func existingID(a artifactRow, ok bool, now time.Time) string {
 // as slash paths relative to dir, in order.
 func matchedFiles(dir string, w manifest.Weight) ([]string, error) {
 	var out []string
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		fi, err := os.Stat(p) // a file symlink, as a Hugging Face snapshot uses, counts by its target
-		if err != nil || !fi.Mode().IsRegular() {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
+	err := walkFiles(dir, refuseEscapes, func(rel string, _ os.FileInfo) {
 		for _, pat := range w.Files {
 			if Match(pat, rel) {
 				out = append(out, rel)
-				return nil
+				return
 			}
 		}
-		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", dir, err)
+		return nil, err
 	}
 	slices.Sort(out)
 	return out, nil
@@ -1085,7 +1140,7 @@ func (s *Service) Link(ctx context.Context, studioID string, w manifest.Weight, 
 	if _, err := os.ReadDir(real); err != nil {
 		return Artifact{}, fmt.Errorf("link %s: not readable: %w", path, err)
 	}
-	if err := checkPresent(real, w); err != nil {
+	if err := checkPresent(real, w, skipEscapes); err != nil {
 		return Artifact{}, fmt.Errorf("link %s: %w", path, err)
 	}
 	var unobtainable []string
@@ -1093,7 +1148,7 @@ func (s *Service) Link(ctx context.Context, studioID string, w manifest.Weight, 
 		if sib.Name == w.Name || sib.Repo != w.Repo || sib.EffectiveRevision() != w.EffectiveRevision() {
 			continue
 		}
-		err := checkPresent(real, sib)
+		err := checkPresent(real, sib, skipEscapes)
 		switch {
 		case err == nil:
 		case sib.Optional:

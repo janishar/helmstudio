@@ -635,3 +635,74 @@ func TestLocalPathRefusesWhatTheDirectoryLacks(t *testing.T) {
 		t.Errorf("a refused link left %s behind: %v", filepath.Join(f.dirs.Models(), "MiniMax-H3"), err)
 	}
 }
+
+// The layout MiniMax-H3 actually ships: FL2VA's tokenizer, processor, text
+// encoder and VAEs are symlinks to Ref2VA's, so seventy gigabytes are not on
+// the disk twice. A walk that does not follow them linked FL2VA without its
+// tokenizer, and the first render failed on a file the install had just
+// reported present.
+func TestLocalPathFollowsADeduplicatedCheckpoint(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	user := userCheckpoint(t)
+	real := filepath.Join(user, "Ref2VA", "tokenizer")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "tokenizer.json"), hubtest.Content(64, 7), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", "Ref2VA", "tokenizer"), filepath.Join(user, "FL2VA", "tokenizer")); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshot(t, user)
+	f.install("s")
+
+	w := weight("fl2va", "org/h3", "MiniMax-H3", "FL2VA/**")
+	w.LocalPath = user
+	if err := f.svc.Fetch(ctx, "s", w, nil); err != nil {
+		t.Fatalf("linking %s: %v", user, err)
+	}
+	link := filepath.Join(f.dirs.Models(), "MiniMax-H3", "FL2VA", "tokenizer", "tokenizer.json")
+	fi, err := os.Lstat(link)
+	if err != nil || fi.Mode()&fs.ModeSymlink == 0 {
+		t.Fatalf("the file behind a symlinked subdirectory was not linked: %v", err)
+	}
+	if b, err := os.ReadFile(link); err != nil || len(b) != 64 {
+		t.Errorf("the link does not resolve to the file: %d bytes, %v", len(b), err)
+	}
+	if after := snapshot(t, user); after != before {
+		t.Errorf("the user's directory was written to:\n%s", after)
+	}
+}
+
+// A subdirectory linked out of the directory refuses it, naming where it
+// points. Following it would hand the studio files from a directory nobody
+// named; a file symlink is the other way round — a Hugging Face snapshot's
+// files all point at ../../blobs — and still counts by its target.
+func TestLocalPathRefusesASubdirectoryLinkedOutside(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	user := userCheckpoint(t)
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "tokenizer.json"), hubtest.Content(32, 3), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(user, "FL2VA", "tokenizer")); err != nil {
+		t.Fatal(err)
+	}
+	f.install("s")
+
+	w := weight("fl2va", "org/h3", "MiniMax-H3", "FL2VA/**")
+	w.LocalPath = user
+	err := f.svc.Fetch(ctx, "s", w, nil)
+	if err == nil {
+		t.Fatal("a subdirectory linked outside the directory was accepted")
+	}
+	if !strings.Contains(err.Error(), mustReal(t, outside)) {
+		t.Errorf("the refusal does not say where the link points: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(f.dirs.Models(), "MiniMax-H3")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a refused link left the destination behind: %v", err)
+	}
+}
