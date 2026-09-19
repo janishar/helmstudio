@@ -388,11 +388,40 @@ export class HelmTimeline extends HelmElement {
     // Nothing named: the first is what "open the editor" means here. Setting
     // the attribute reloads, and this runs again on that pass — it sets
     // nothing the second time, so it settles rather than looping.
+    //
+    // Only once it can be seen, though. A page may mount the editor hidden
+    // and show it later, and opening a sequence into a hidden editor loads a
+    // preview nobody asked for: audio played on a page showing no video at
+    // all, from an element with `hidden` on it.
     if (!current) {
-      this.setAttribute("timeline", items[0].id);
+      if (this.visible()) this.setAttribute("timeline", items[0].id);
+      else this.openWhenSeen();
       return;
     }
     if (items.some((t) => t.id === current)) this.chooser.value = current;
+  }
+
+  /** visible is whether this is being shown at all, hidden or laid out away. */
+  visible() {
+    if (this.hasAttribute("hidden")) return false;
+    if (typeof this.checkVisibility === "function") return this.checkVisibility();
+    return !!(this.offsetWidth || this.offsetHeight || this.getClientRects().length);
+  }
+
+  /** openWhenSeen opens the first sequence once there is something to see. */
+  openWhenSeen() {
+    if (this.watcher || typeof IntersectionObserver !== "function") return;
+    this.watcher = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      this.watcher.disconnect();
+      this.watcher = null;
+      if (!this.getAttribute("timeline")) this.reload();
+    });
+    this.watcher.observe(this);
+    this.onCleanup(() => {
+      if (this.watcher) this.watcher.disconnect();
+      this.watcher = null;
+    });
   }
 
   // -------------------------------------------------------------------- load
