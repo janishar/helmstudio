@@ -599,3 +599,50 @@ func TestCancelStopsAWeightDownload(t *testing.T) {
 		t.Errorf("a cancelled install reports ready: %+v", s)
 	}
 }
+
+// A studio with selectable weights installs with one checkpoint, not with all
+// of them: schema/manifest.json says the chosen one "is the only one
+// downloaded; the others are fetched later if the choice changes", and M7 Q21
+// amended M3 Q6 to say so. With nothing chosen yet the first declared is the
+// one, which is what the approval screen offers by default (03 §5).
+func TestInstallDownloadsOnlyTheChosenCheckpoint(t *testing.T) {
+	f := newFixture(t, nil)
+	f.hub.Add("org/small", "small.bin", []byte("small"), true)
+	f.hub.Add("org/large", "large.bin", []byte("large"), true)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	checkpoints(f, "toy-studio")
+
+	f.install("toy-studio")
+	if n := len(f.hub.Requests("org/toy")); n == 0 {
+		t.Error("the weight that is not selectable was not downloaded")
+	}
+	if n := len(f.hub.Requests("org/small")); n == 0 {
+		t.Error("the first declared checkpoint was not downloaded, and nothing else was chosen")
+	}
+	if n := len(f.hub.Requests("org/large")); n != 0 {
+		t.Fatalf("install downloaded a checkpoint nobody chose: %d requests for org/large", n)
+	}
+}
+
+// The other half of what the schema promises — "the others are fetched later
+// if the choice changes" — has no test here, because it cannot be reached.
+// weights.Select needs a studio_model_bindings row, and Link only writes one
+// when the studio is already installed (internal/weights/weights.go, "if
+// installed > 0"), so before an install every checkpoint but the default is
+// refused with "is not a weight this installation has". That is a separate
+// defect, recorded in docs/decisions.md; this change does not touch it.
+
+// checkpoints gives a studio two selectable weights beside the plain one the
+// fixture declares, so a test can tell "the chosen one" from "all of them".
+func checkpoints(f *fixture, id string) {
+	f.t.Helper()
+	st, _ := f.sup.Studio(id)
+	base := st.Manifest.Weights[0]
+	add := func(name, repo, dest string) manifest.Weight {
+		w := base
+		w.Name, w.Repo, w.Dest, w.Files, w.Selectable = name, repo, dest, nil, true
+		return w
+	}
+	st.Manifest.Weights = append(st.Manifest.Weights,
+		add("small", "org/small", "Small"), add("large", "org/large", "Large"))
+}

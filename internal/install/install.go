@@ -1072,6 +1072,24 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 	if err := in.cfg.Weights.Unbind(ctx, m.ID, names); err != nil {
 		return &Failure{Phase: "weights", Code: "weights_failed", Message: err.Error()}
 	}
+	// A studio with selectable weights installs with one checkpoint, not with
+	// all of them (M7 Q21, amending M3 Q6; schema/manifest.json's `selectable`
+	// says "it is the only one downloaded"). The choice is the user's, made on
+	// the approval screen; with none recorded it is the first declared, which
+	// is what that screen offers by default (03 §5).
+	chosen, err := in.cfg.Weights.Selected(ctx, m.ID)
+	if err != nil {
+		return &Failure{Phase: "weights", Code: "weights_failed", Message: err.Error()}
+	}
+	if chosen == "" {
+		for _, w := range m.Weights {
+			if w.Selectable {
+				chosen = w.Name
+				break
+			}
+		}
+	}
+
 	var todo []manifest.Weight
 	for _, w := range m.Weights {
 		// Optional means it is not downloaded — a hundred gigabytes nobody
@@ -1080,6 +1098,13 @@ func (in *Installer) fetchWeights(ctx context.Context, m *manifest.Manifest, sta
 		// nothing and reaches nothing. Skipping those left h3 studio's
 		// References mode switched off beside a folder that held Ref2VA.
 		if w.Optional && w.LocalPath == "" {
+			continue
+		}
+		// A checkpoint that was not chosen waits until it is. One with a
+		// local_path is still linked, for the reason an optional one is: a
+		// symlink costs nothing, and having it bound is what lets the choice
+		// move to it later without a download.
+		if w.Selectable && w.Name != chosen && w.LocalPath == "" {
 			continue
 		}
 		values, _, err := in.cfg.Weights.Launch(ctx, m.ID, []manifest.Weight{w})
