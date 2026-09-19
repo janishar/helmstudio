@@ -64,6 +64,7 @@ var installStatus = map[install.ErrorKind]int{
 	install.KindNotInstalled: http.StatusConflict,
 	install.KindBlocked:      http.StatusUnprocessableEntity,
 	install.KindConflict:     http.StatusConflict,
+	install.KindUnavailable:  http.StatusServiceUnavailable,
 }
 
 // failInstall maps install and weights errors; anything else goes to fail.

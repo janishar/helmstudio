@@ -1878,6 +1878,70 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
         "422": { $ref: "#/components/responses/Unprocessable" }
 
+  /studios/{id}:update:
+    post:
+      tags: [launcher]
+      operationId: studiosUpdate
+      x-helm-group: studios
+      x-helm-method: update
+      summary: Fetch the manifest's ref again and rebuild at its tip.
+      description: >
+        What `:install` deliberately does not do. `:install` checks out the
+        approved commit so a branch that moved still builds what was approved;
+        this asks for the move, on purpose.
+
+        The tip is resolved before anything is fetched, and `approval` must
+        name it: new code from upstream passes the screen like any other code
+        (2026-09-16 security, 2026-09-19). With no approval for that commit the
+        answer is 409 `approval_required`, carrying the preview of what the
+        update would run.
+
+        Refused for a studio built from `local_path` (422 `blocked`, `details:
+        {code: not_a_repository}`): there is no upstream to pull, and the
+        directory is the author's own. Refused when the tip is the commit
+        already installed (422 `blocked`, `details: {code: up_to_date}`), and
+        while the studio runs (409 `conflict`).
+
+        Reaching the repository needs the network; one that cannot be reached
+        is 503.
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - { $ref: "#/components/parameters/Approval" }
+      responses:
+        "202":
+          description: The install job, which clones at the tip and builds.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Job" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /studios/{id}:check-update:
+    post:
+      tags: [launcher]
+      operationId: studiosCheckUpdate
+      x-helm-group: studios
+      x-helm-method: checkUpdate
+      summary: Ask the repository where its ref points now.
+      description: >
+        Records `remote_sha` and `remote_checked_at`, and reports
+        `update_available` when the tip is not the installed commit (02 §5).
+        It is a write because it reaches the network and records what it found,
+        and it runs only when asked: helmstudio does not poll a repository on a
+        timer (docs/decisions.md 2026-09-19).
+
+        Refused for a studio built from `local_path` (422 `blocked`), which has
+        no upstream. A repository that cannot be reached is 503, and what was
+        known before is unchanged.
+      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+      responses:
+        "200":
+          description: The studio, with what the check found.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Studio" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
   /studios/{id}:uninstall:
     post:
       tags: [launcher]
@@ -2101,7 +2165,17 @@ paths:
 
         Reading a repository needs the network; a repository that cannot be
         reached is 503 with what is known.
-      parameters: [{ $ref: "#/components/parameters/StudioId" }]
+
+        `for` says which operation the preview is for, because they do not all
+        run the same commit: `install`, `retry` and `launch` show the commit an
+        installed studio already has, and `update` shows the ref's tip, which
+        is what an update would check out.
+      parameters:
+        - { $ref: "#/components/parameters/StudioId" }
+        - name: for
+          in: query
+          description: The operation this preview is for. Defaults to install.
+          schema: { type: string, enum: [install, retry, launch, update], default: install }
       responses:
         "200":
           description: The preview.

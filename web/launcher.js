@@ -80,6 +80,16 @@ export class StudiosGroup {
     return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":retry", { query: {"approval": params.approval}, headers: {}, expect: "json" });
   }
 
+  /** Fetch the manifest's ref again and rebuild at its tip. (POST /studios/{id}:update) */
+  update(id, params = {}) {
+    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":update", { query: {"approval": params.approval}, headers: {}, expect: "json" });
+  }
+
+  /** Ask the repository where its ref points now. (POST /studios/{id}:check-update) */
+  checkUpdate(id) {
+    return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":check-update", { query: {}, headers: {}, expect: "json" });
+  }
+
   /** Stop the group and remove the checkout helmstudio cloned. Weights and data are kept. (POST /studios/{id}:uninstall) */
   uninstall(id) {
     return this.t.request("POST", "/studios/" + encodeURIComponent(id) + ":uninstall", { query: {}, headers: {}, expect: "json" });
@@ -116,8 +126,8 @@ export class StudiosGroup {
   }
 
   /** What would run, and the digest that authorises it. (GET /studios/{id}/approval) */
-  approval(id) {
-    return this.t.request("GET", "/studios/" + encodeURIComponent(id) + "/approval", { query: {}, headers: {}, expect: "json" });
+  approval(id, params = {}) {
+    return this.t.request("GET", "/studios/" + encodeURIComponent(id) + "/approval", { query: {"for": params.for}, headers: {}, expect: "json" });
   }
 
   /** Choose which of a studio's selectable weights it launches with. (PUT /studios/{id}/selection) */

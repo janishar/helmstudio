@@ -216,6 +216,24 @@ export async function act(ctx, studio, action) {
         toast(failure(err, `${studio.name} could not be removed.`), "error");
       }
       return ctx.refresh();
+    case "update": {
+      // New code from upstream, so the approval screen stands in front of it
+      // exactly as it does for an install — for the commit the update would
+      // take, which is what `do=update` asks the screen to show.
+      const started = await guard(ctx, studio, "update", (approval) =>
+        ctx.client.studios.update(studio.id, { approval }));
+      if (started) announce(`${studio.name} is updating.`);
+      return ctx.refresh();
+    }
+    case "check": {
+      try {
+        await ctx.client.studios.checkUpdate(studio.id);
+      } catch (err) {
+        toast(failure(err, `Whether ${studio.name} has an update could not be read.`), "error");
+        return undefined;
+      }
+      return ctx.refresh();
+    }
     case "cancel":
       if (!studio.job_id) return;
       try {
