@@ -74,7 +74,11 @@ export class Preview {
     for (const [key, entry] of this.elements) {
       if (!keep.has(key)) this.drop(key, entry);
     }
-    this.apply(false);
+    // Parked unless the preview is already playing. A document arrives when a
+    // sequence is opened and again after every edit, and `false` here told the
+    // media elements to run: opening a sequence started it playing, and so did
+    // dragging a clip.
+    this.apply(!this.playing);
   }
 
   get time() {
