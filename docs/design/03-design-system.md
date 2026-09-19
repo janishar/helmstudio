@@ -411,6 +411,13 @@ a frame under helmstudio's top bar and nav, at the full width of the window.
   is not available to a cross-origin frame however it is declared, so a studio
   that reads the clipboard asks for the tab.
 
+(Amended 2026-09-19.) The screen is the studio's page **and** its gallery: one
+control switches between the frame and §10's grid, scoped to this studio. The
+gallery is helmstudio's, drawn where the frame would be, so a studio that
+builds its own take list keeps it and one that does not gets this. Switching
+away does not tear the frame down — it is hidden, because a studio reloaded
+mid-generation is exactly what the poll rule above exists to prevent.
+
 ## 8 · Process group
 
 *[Mockup: AuK studio, group run 01JB9…c4 · 0:38, "Group starting", Stop group. Processes: 3 declared · 1 running.]*
@@ -447,6 +454,11 @@ An item whose `timeline_id` is set is a sequence's export, and the gallery label
 One query serves both views: the launcher's cross-studio gallery and a studio's own panel differ only by scope. Selecting an item exposes what can be done with it — the provenance chip on the left says where it came from, which is the thing only a central store can know.
 
 (Amended 2026-09-16, M6 Q11: the launcher's cross-studio gallery waits for M9's cookie. Until then only a studio's own panel exists, through `helm-gallery`.)
+
+(Amended 2026-09-19, by the human's decision, which `docs/decisions.md` records with what it costs: the launcher's gallery does not wait for the cookie. It is a screen in the nav, over `helm-gallery` and the launcher's own client.
+
+- **A studio's screen carries the same gallery**, beside its page and scoped to it, with a toggle to every studio. It is helmstudio's screen either way — §7a puts a studio's page in a frame on its own origin and nothing reaches inside it — so the two views are one screen with a different scope, which is what the line above already asked of the query.
+- **The launcher stars nothing.** An item belongs to the studio that made it and a PATCH of another's is refused, so the launcher's client carries no update and the component draws no star. The mockup's grid is read-only apart from what an item can be *used* for.)
 
 ## 11 · Timeline
 
