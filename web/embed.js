@@ -19,7 +19,6 @@
 // under whoever is using it — mid-generation, at worst.
 
 import { chip, clock, el, elapsed, indeterminate, state, weightBytes, toast } from "./ui.js";
-import { grid } from "./gallery.js";
 
 /**
  * fullScreen hands the whole display to the studio's page. Escape gives it
@@ -95,23 +94,6 @@ function stopped(ctx, studio, s) {
         : null));
 }
 
-/**
- * views is the switch between the studio's page and its gallery (03 §7a,
- * amended 2026-09-19). They are links rather than buttons, so a view is a
- * place: a reload, a Back and a bookmark all land where you were.
- */
-function views(studio, current) {
-  const base = `#/studios/${encodeURIComponent(studio.id)}/open`;
-  const one = (id, label, href) => el("a", {
-    class: "helm-segment", href,
-    "aria-current": id === current ? "true" : undefined,
-    text: label,
-  });
-  return el("div", { class: "helm-segmented", role: "group", "aria-label": "View" },
-    one("page", "Studio page", base),
-    one("gallery", "Gallery", base + "?view=gallery"));
-}
-
 export function studioPage(ctx, id) {
   const studio = (ctx.store.studios || []).find((s) => s.id === id);
   if (!studio) {
@@ -124,15 +106,13 @@ export function studioPage(ctx, id) {
   const s = state(studio, job, weightBytes(ctx.store.models, studio.id));
   const src = page(studio);
   const group = studio.group || {};
-  const showing = ctx.query.get("view") === "gallery" ? "gallery" : "page";
 
   const frame = src ? frameFor(ctx, studio, src) : null;
   const header = el("div", { class: "helm-page-header helm-embed-header" },
     el("h1", { class: "helm-title", text: studio.name }),
     chip(s.chip, s.tone),
-    views(studio, showing),
     el("span", { class: "helm-spacer" }),
-    frame && showing === "page"
+    frame
       ? el("button", {
         class: "helm-btn helm-btn-secondary", type: "button", text: "Full screen",
         title: "The studio takes the whole display. Escape comes back.",
@@ -151,25 +131,12 @@ export function studioPage(ctx, id) {
       ? el("button", { class: "helm-btn helm-btn-danger", type: "button", text: "Stop", onclick: () => ctx.act(studio, "stop") })
       : null);
 
-  // The gallery is this studio's work, and it needs nothing running: a studio
-  // that is stopped still has everything it has ever made. It is drawn only
-  // once it is asked for, and reloads when it is asked for again, which costs
-  // a query. The frame is the other way round: it is hidden rather than taken
-  // off the page, because rebuilding it would reload the studio's page under
-  // whoever is using it — the same reason the poll does not rebuild it.
-  const gallery = showing === "gallery" ? grid(ctx, studio.id, studio.id) : null;
-  if (frame) frame.hidden = showing !== "page";
-
   // The frame takes the whole window, which is what 03 §4 asks for: a studio's
   // page is the page. Without one there is nothing to fill it with — a
   // sentence and a Launch button stretched across a display read as a page
   // that had failed to load — so the waiting states take the reading width
-  // every other page under Studios uses. The gallery fills it as the frame
-  // does: it is a grid, not a column to read.
-  const filled = showing === "gallery" || frame;
-  const waiting = showing === "page" && !frame
-    ? (group.state === "starting" ? starting(studio) : stopped(ctx, studio, s))
-    : null;
-  return el("div", { class: `helm-stack helm-embed-page${filled ? "" : " helm-embed-idle"}` },
-    header, frame, gallery, waiting);
+  // every other page under Studios uses.
+  return el("div", { class: `helm-stack helm-embed-page${frame ? "" : " helm-embed-idle"}` },
+    header,
+    frame || (group.state === "starting" ? starting(studio) : stopped(ctx, studio, s)));
 }

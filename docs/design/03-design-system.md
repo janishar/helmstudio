@@ -387,7 +387,11 @@ Step glyphs are distinct shapes — hollow circle, ring, check, cross, dash — 
 ## 7a · A studio inside helmstudio
 
 (Added 2026-09-18, by the human's decision.) Open puts the studio's own page in
-a frame under helmstudio's top bar and nav, at the full width of the window.
+a frame under helmstudio's top bar, at the full width of the window. (Amended
+2026-09-19, by the human's decision: **under the top bar, and not under the
+nav.** Five links to places that are not this studio sat above someone else's
+page taking the whole window; Studios is still one click away in this screen's
+own back link, and the top bar still says what is running and stops it.)
 
 - **It is the studio's own origin**, on its own port, in a frame — not proxied
   under helmstudio's. A studio is someone else's code running with your
@@ -411,12 +415,11 @@ a frame under helmstudio's top bar and nav, at the full width of the window.
   is not available to a cross-origin frame however it is declared, so a studio
   that reads the clipboard asks for the tab.
 
-(Amended 2026-09-19.) The screen is the studio's page **and** its gallery: one
-control switches between the frame and §10's grid, scoped to this studio. The
-gallery is helmstudio's, drawn where the frame would be, so a studio that
-builds its own take list keeps it and one that does not gets this. Switching
-away does not tear the frame down — it is hidden, because a studio reloaded
-mid-generation is exactly what the poll rule above exists to prevent.
+(Amended 2026-09-19.) This screen is the studio's page and nothing else. A
+gallery was put beside it for a day and taken out again: a studio that draws
+its own gallery — h3 does — then had two, one inside the frame and one above
+it, over the same items. §10's screen narrowed by that studio's chip is the
+one place helmstudio shows a studio's work.
 
 ## 8 · Process group
 
@@ -457,7 +460,7 @@ One query serves both views: the launcher's cross-studio gallery and a studio's 
 
 (Amended 2026-09-19, by the human's decision, which `docs/decisions.md` records with what it costs: the launcher's gallery does not wait for the cookie. It is a screen in the nav, over `helm-gallery` and the launcher's own client.
 
-- **A studio's screen carries the same gallery**, beside its page and scoped to it, with a toggle to every studio. It is helmstudio's screen either way — §7a puts a studio's page in a frame on its own origin and nothing reaches inside it — so the two views are one screen with a different scope, which is what the line above already asked of the query.
+- **One studio's work is this screen with that studio's chip chosen**, `#/gallery?studio=<id>`. It was briefly a second gallery on the studio's own screen (§7a) and is not: a studio that draws its own gallery inside the frame would have had two above each other, over the same items.
 - **The launcher stars nothing.** An item belongs to the studio that made it and a PATCH of another's is refused, so the launcher's client carries no update and the component draws no star. The mockup's grid is read-only apart from what an item can be *used* for.)
 
 ## 11 · Timeline

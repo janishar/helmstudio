@@ -1141,28 +1141,6 @@ dialog.helm-dialog::backdrop {
   }
 }
 
-/* A studio's own gallery, where its frame would be: a grid fills the page the
- * way the frame does. */
-.helm-embed-page helm-gallery {
-  flex: 1;
-  min-height: 320px;
-}
-
-/* The view switch is links, so the segments are anchors (03 §7a). A link is
- * not pressed; the one you are on is the current page, which is what says so
- * both to the eye and to a screen reader. */
-a.helm-segment {
-  display: inline-flex;
-  align-items: center;
-  color: var(--helm-text-secondary);
-  text-decoration: none;
-}
-
-a.helm-segment:where([aria-current="true"]) {
-  background: var(--helm-ground-raised);
-  color: var(--helm-text-primary);
-}
-
 /* The picker is the gallery in a dialog, so it takes a dialog's width from
  * the grid rather than the 430px a question takes. */
 .helm-picker {
@@ -1178,4 +1156,15 @@ a.helm-segment:where([aria-current="true"]) {
 .helm-gallery-screen helm-timeline {
   flex: 1;
   min-height: 420px;
+}
+
+/* A screen with no nav is two rows, not three: the middle row was the nav's
+ * (03 §7a, amended 2026-09-19), and without this the page lands in an `auto`
+ * row and a frame inside it falls back to its own 150px. It names the same
+ * pages the rule above does, because that one is two classes deep and this
+ * one has to reach past it. */
+.helm-app-bare:has(.helm-page-full),
+.helm-app-bare:has(.helm-page-grid),
+.helm-app-bare {
+  grid-template-rows: auto minmax(0, 1fr);
 }

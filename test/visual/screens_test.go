@@ -945,13 +945,11 @@ func TestAStudioOpensInsideHelmstudio(t *testing.T) {
 	}
 }
 
-// The Gallery, in the nav and on a studio's own screen (03 §10 and §7a, both
-// amended 2026-09-19). What a golden cannot hold: that the chips narrow the
-// same component rather than drawing a second one, that a studio's screen
-// scopes it to that studio without being asked, and that switching to it hides
-// the studio's frame rather than taking it off the page — a rebuilt frame
-// reloads the studio's own page under whoever is using it.
-func TestTheGalleryIsOneComponentInTwoPlaces(t *testing.T) {
+// The Gallery in the nav (03 §10, amended 2026-09-19). What a golden cannot
+// hold: that a chip narrows the same component rather than drawing a second
+// one, that an export says "timeline" rather than naming the studio that ran
+// it, and that the launcher draws no star on work it may not change.
+func TestTheGalleryIsEveryStudiosWork(t *testing.T) {
 	srv := fixtureServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -1016,30 +1014,6 @@ func TestTheGalleryIsOneComponentInTwoPlaces(t *testing.T) {
 			"#/gallery",
 			`document.querySelector("helm-gallery").shadowRoot.querySelectorAll(".star").length`,
 			0,
-		},
-		{
-			"a studio's own screen scopes the gallery to it",
-			"#/studios/ltx-studio/open?view=gallery",
-			`document.querySelector("helm-gallery").getAttribute("studio") === "ltx-studio" ? 1 : 0`,
-			1,
-		},
-		{
-			"and the studio's frame is hidden rather than taken off the page",
-			"#/studios/ltx-studio/open?view=gallery",
-			`(() => {
-				const frame = document.querySelector("iframe.helm-embed");
-				return frame && frame.hidden && frame.offsetParent === null ? 1 : 0;
-			})()`,
-			1,
-		},
-		{
-			"the page comes back to the frame, showing the same one",
-			"#/studios/ltx-studio/open",
-			`(() => {
-				const frame = document.querySelector("iframe.helm-embed");
-				return frame && !frame.hidden && !document.querySelector("helm-gallery") ? 1 : 0;
-			})()`,
-			1,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1141,5 +1115,38 @@ func TestClipsWearTheirStudiosHues(t *testing.T) {
 	want := `[["h3-studio","light-dark(#a06a10, #e0a33c)"],["ltx-studio","light-dark(#2f5fc4, #5b8def)"],["iris-studio","light-dark(#b12f68, #d8558f)"],["another studio","#716b5e"],["auk-studio","light-dark(#5c4bc4, #8b7cf0)"]]`
 	if got != want {
 		t.Errorf("clips are\n%s\nwant\n%s", got, want)
+	}
+}
+
+// A studio's page is the page there (03 §7a, amended 2026-09-19): the nav is
+// not drawn above it, and the way back is this screen's own link.
+func TestAStudiosScreenDrawsNoNav(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	p := route(t, ctx, srv.URL, "#/studios/ltx-studio/open")
+	var got string
+	if err := p.Eval(ctx, `JSON.stringify({
+		nav: document.querySelectorAll(".helm-nav-link").length,
+		back: !!document.querySelector(".helm-back"),
+		topbar: !!document.querySelector(".helm-topbar"),
+		rows: getComputedStyle(document.getElementById("app")).gridTemplateRows.split(" ").length,
+	})`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `"nav":0`) || !strings.Contains(got, `"back":true`) ||
+		!strings.Contains(got, `"topbar":true`) || !strings.Contains(got, `"rows":2`) {
+		t.Errorf("a studio's screen is %s; want no nav, a back link, the top bar, and two rows", got)
+	}
+
+	// And every other screen still has it.
+	q := route(t, ctx, srv.URL, "#/gallery")
+	var links float64
+	if err := q.Eval(ctx, `document.querySelectorAll(".helm-nav-link").length`, &links); err != nil {
+		t.Fatal(err)
+	}
+	if links != 5 {
+		t.Errorf("the Gallery screen has %v nav links; want the five the nav has", links)
 	}
 }
