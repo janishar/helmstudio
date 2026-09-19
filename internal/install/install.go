@@ -68,6 +68,10 @@ const (
 	KindNotInstalled ErrorKind = "not_installed"
 	KindBlocked      ErrorKind = "blocked"
 	KindConflict     ErrorKind = "conflict"
+	// KindUnavailable is 503: something outside this Mac did not answer.
+	// Nothing was refused, and asking again later may work, which is what
+	// tells it apart from every other kind here.
+	KindUnavailable ErrorKind = "unavailable"
 )
 
 // Error is a refusal a user can act on. Details, when set, carries what a UI
@@ -362,6 +366,14 @@ func (in *Installer) start(a *active, kind string, run func(ctx context.Context)
 // not an error: it returns a job that finds nothing to do. When the studio
 // already has an install job running, that job is returned.
 func (in *Installer) Install(ctx context.Context, studioID string) (Job, error) {
+	return in.install(ctx, studioID, false)
+}
+
+// install is Install and Update: the same job, differing only in whether the
+// clone phase runs again. An install resumes where it stopped and leaves an
+// installed checkout alone; an update asks for the ref again, which is the
+// whole of what it does differently.
+func (in *Installer) install(ctx context.Context, studioID string, again bool) (Job, error) {
 	st, ok := in.cfg.Supervisor.Studio(studioID)
 	if !ok {
 		return Job{}, refuse(KindNotFound, "no studio %q is known", studioID)
@@ -406,6 +418,17 @@ func (in *Installer) Install(ctx context.Context, studioID string) (Job, error) 
 			// studio it records the checkout without cloning.
 			fresh := StateCloning
 			switch {
+			case again && exists:
+				// An update fetches the ref again, so the checkout is about to
+				// become a different commit and every step that ran against
+				// the old one is void.
+				if _, err := tx.ExecContext(ctx, `DELETE FROM step_runs WHERE studio_id = ?`, studioID); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `UPDATE installations SET manifest_digest = ?, root_path = ?, install_state = ?, updated_at = ? WHERE studio_id = ?`,
+					m.Digest, root, fresh, in.nowMs(), studioID); err != nil {
+					return err
+				}
 			case !exists:
 				if _, err := tx.ExecContext(ctx, `INSERT INTO installations (studio_id, manifest_digest, root_path, install_state, created_at, updated_at)
 					VALUES (?, ?, ?, ?, ?, ?)`, studioID, m.Digest, root, fresh, in.nowMs(), in.nowMs()); err != nil {

@@ -105,6 +105,10 @@ export function studioDetail(ctx, id) {
   // building or fetching weights — which is what ui.js calls its secondary
   // action for those states.
   const stoppable = !!(s.secondary && s.secondary.action === "cancel" && studio.job_id);
+  // A studio cloned from a repository can be asked where its ref points now,
+  // and built at that. One built from a directory on this Mac has no upstream;
+  // the daemon refuses it by name, and there is no reason to offer it here.
+  const fromRepo = !!studio.repo && ["ready", "update_available"].includes(studio.install_state) && !studio.job_id;
 
   const header = el("div", { class: "helm-page-header" },
     el("h1", { class: "helm-title", text: studio.name }),
@@ -126,6 +130,20 @@ export function studioDetail(ctx, id) {
       class: "helm-btn helm-btn-danger", text: "Cancel",
       onclick: () => ctx.act(studio, "cancel"),
     }) : null,
+    fromRepo && studio.install_state === "update_available"
+      ? el("button", {
+        class: "helm-btn helm-btn-secondary helm-btn-strong", text: "Update",
+        title: `Build what ${studio.ref || "its branch"} points at now`,
+        onclick: () => ctx.act(studio, "update"),
+      })
+      : null,
+    fromRepo && studio.install_state !== "update_available"
+      ? el("button", {
+        class: "helm-btn helm-btn-secondary", text: "Check for updates",
+        title: "Ask the repository where its ref points now",
+        onclick: () => ctx.act(studio, "check"),
+      })
+      : null,
     ["ready", "update_available"].includes(studio.install_state)
       ? el("button", { class: "helm-btn helm-btn-danger", text: "Uninstall", onclick: () => uninstall(ctx, studio) })
       : null);

@@ -217,16 +217,23 @@ export async function guard(ctx, studio, verb, run) {
 
 // ------------------------------------------------------------------ screen
 
-const VERBS = { install: "Install", retry: "Retry", launch: "Launch" };
+const VERBS = { install: "Install", retry: "Retry", launch: "Launch", update: "Update" };
 
 function approvalState(ctx, id) {
   return ctx.keep("approve:" + id, () => ({ preview: null, selection: null, busy: false, error: null, loaded: false }));
 }
 
-async function fetchPreview(ctx, st, id) {
+/**
+ * fetchPreview reads what the operation being approved would run.
+ *
+ * `for` matters: install, retry and launch run the commit an installed studio
+ * already has, and an update runs the ref's tip. The digest covers the commit,
+ * so a screen built for the wrong one would authorise the wrong thing.
+ */
+async function fetchPreview(ctx, st, id, verb) {
   st.busy = true;
   try {
-    st.preview = await ctx.client.studios.approval(id);
+    st.preview = await ctx.client.studios.approval(id, { for: verb || "install" });
     st.error = null;
   } catch (err) {
     st.error = failure(err, "What this would run could not be read.");
@@ -266,9 +273,9 @@ async function approve(ctx, st, studio, verb) {
 
 export function approvalScreen(ctx, id) {
   const st = approvalState(ctx, id);
-  if (!st.loaded && !st.busy) fetchPreview(ctx, st, id);
-
   const verb = ctx.query.get("do") || "install";
+  if (!st.loaded && !st.busy) fetchPreview(ctx, st, id, verb);
+
   const studio = (ctx.store.studios || []).find((s) => s.id === id) || { id, name: id };
   const back = () => ctx.go("#/studios");
 

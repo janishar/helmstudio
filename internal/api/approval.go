@@ -108,8 +108,18 @@ func (s *Server) record(ctx context.Context, id string, p approval.Preview) erro
 	})
 }
 
-// preview builds the approval preview for a studio the supervisor knows.
+// preview builds the approval preview for a studio the supervisor knows, for
+// the operation that asked: install unless something says otherwise.
 func (s *Server) preview(ctx context.Context, st supervisor.Studio) (approval.Preview, error) {
+	return s.previewFor(ctx, st, "install")
+}
+
+// previewFor is preview for one operation. They do not all run the same
+// commit — install, retry and launch run what an installed studio already
+// has, and an update runs the ref's tip, which is the whole point of it — and
+// the digest covers the commit, so the screen must be built for the operation
+// that will answer it.
+func (s *Server) previewFor(ctx context.Context, st supervisor.Studio, intent string) (approval.Preview, error) {
 	m := st.Manifest
 	in := approval.Input{
 		Manifest: m,
@@ -140,6 +150,13 @@ func (s *Server) preview(ctx context.Context, st supervisor.Studio) (approval.Pr
 			in.Commit = info.CommitSHA
 		}
 	}
+	if intent == "update" && s.installer != nil {
+		tip, err := s.installer.RemoteTip(ctx, m)
+		if err != nil {
+			return approval.Preview{}, err
+		}
+		in.Commit = tip
+	}
 	if in.Commit == "" {
 		in.Commit = m.Ref
 	}
@@ -159,9 +176,16 @@ func (s *Server) getApproval(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", fmt.Sprintf("no studio %q", id))
 		return
 	}
-	p, err := s.preview(r.Context(), st)
+	intent := r.URL.Query().Get("for")
+	switch intent {
+	case "", "install", "retry", "launch", "update":
+	default:
+		writeError(w, http.StatusUnprocessableEntity, "invalid", "for must be install, retry, launch or update")
+		return
+	}
+	p, err := s.previewFor(r.Context(), st, intent)
 	if err != nil {
-		s.fail(w, err)
+		s.failInstall(w, err)
 		return
 	}
 	rec, err := s.recorded(r.Context(), id)
@@ -185,6 +209,10 @@ func (s *Server) getApproval(w http.ResponseWriter, r *http.Request) {
 // requireApproval is the gate. It answers true when the operation may proceed,
 // and writes the refusal itself when it may not.
 func (s *Server) requireApproval(w http.ResponseWriter, r *http.Request, id string) bool {
+	return s.requireApprovalFor(w, r, id, "install")
+}
+
+func (s *Server) requireApprovalFor(w http.ResponseWriter, r *http.Request, id, intent string) bool {
 	if s.approvals == nil {
 		return true // ungated, as `helm dev` is
 	}
@@ -193,9 +221,11 @@ func (s *Server) requireApproval(w http.ResponseWriter, r *http.Request, id stri
 		writeError(w, http.StatusNotFound, "not_found", fmt.Sprintf("no studio %q", id))
 		return false
 	}
-	p, err := s.preview(r.Context(), st)
+	p, err := s.previewFor(r.Context(), st, intent)
 	if err != nil {
-		s.fail(w, err)
+		// A repository that cannot be reached is 503 and not a refusal, which
+		// only failInstall knows how to say.
+		s.failInstall(w, err)
 		return false
 	}
 	rec, err := s.recorded(r.Context(), id)

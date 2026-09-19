@@ -193,7 +193,9 @@ export function state(studio, job, bytesSoFar) {
       return {
         chip: "Update available", tone: "warning",
         primary: { label: "Launch", action: "launch" },
-        secondary: { label: "Update", action: "install" },
+        // :install builds the approved commit on purpose, so it cannot be
+        // what Update does. :update asks for the ref again (03 §12).
+        secondary: { label: "Update", action: "update" },
       };
     default:
       break;

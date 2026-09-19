@@ -1,4 +1,4 @@
-// <helm-player asset="as_01J…" fps="24">
+// <helm-player asset="as_01J…" fps="24" autoplay>
 //
 // A frame-accurate transport (04 §5): arrow keys step one frame, the frame
 // counter is authoritative and the timecode is derived from it, A/B compare
@@ -35,6 +35,27 @@ const styles = `
     background: var(--helm-ground-inset);
     display: flex; align-items: center; justify-content: center;
     min-height: 160px;
+  }
+
+  /* Full screen: the picture takes the screen and the transport sits under
+   * it. Without this the media keeps its intrinsic size, so a take made at
+   * 800x448 stayed 800x448 in the middle of a display's worth of ground.
+   *
+   * The prefixed selectors are written out rather than joined by commas: a
+   * pseudo-class a browser does not know invalidates the whole selector list
+   * it appears in, which would take the unprefixed rule down with it.
+   */
+  :host(:fullscreen) { height: 100vh; }
+  :host(:fullscreen) .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  :host(:fullscreen) .stage { flex: 1; min-height: 0; }
+  :host(:fullscreen) .stage > video, :host(:fullscreen) .stage > img {
+    width: 100%; height: 100%; object-fit: contain;
+  }
+  :host(:-webkit-full-screen) { height: 100vh; }
+  :host(:-webkit-full-screen) .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  :host(:-webkit-full-screen) .stage { flex: 1; min-height: 0; }
+  :host(:-webkit-full-screen) .stage > video, :host(:-webkit-full-screen) .stage > img {
+    width: 100%; height: 100%; object-fit: contain;
   }
   .stage .empty { color: var(--helm-log-text); }
   .stage .empty .why { color: var(--helm-log-muted); }
@@ -80,6 +101,9 @@ export class HelmPlayer extends HelmElement {
   static get observedAttributes() {
     return ["asset", "fps", "compare"];
   }
+
+  // `autoplay` is read when the media mounts rather than observed: it says
+  // what a newly shown asset does, not something to react to later.
 
   constructor() {
     super(styles);
@@ -145,6 +169,9 @@ export class HelmPlayer extends HelmElement {
 
   disconnectedCallback() {
     this.stopClock();
+    // A media element taken off the page keeps playing, and what is left is a
+    // sound with nothing on screen making it.
+    if (this.media) this.media.pause();
     for (const u of this.urls.splice(0)) URL.revokeObjectURL(u);
     super.disconnectedCallback();
   }
@@ -209,6 +236,10 @@ export class HelmPlayer extends HelmElement {
 
     media.playbackRate = Number(this.speed.value);
     media.loop = this.loopBtn.getAttribute("aria-pressed") === "true";
+    // A host that says autoplay means "start when it is shown". The browser
+    // may still refuse — no user activation, or sound without a gesture — and
+    // a refusal is not an error here: the transport is right there.
+    if (this.hasAttribute("autoplay")) media.play().catch(() => {});
     media.addEventListener("loadedmetadata", () => this.onMeta());
     media.addEventListener("play", () => { this.playBtn.textContent = "Pause"; this.startClock(); });
     media.addEventListener("pause", () => { this.playBtn.textContent = "Play"; this.stopClock(); this.readFrame(); });

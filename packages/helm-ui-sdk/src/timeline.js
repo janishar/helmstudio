@@ -1,4 +1,4 @@
-// <helm-timeline timeline="tl_01J…" editable>
+// <helm-timeline timeline="tl_01J…" editable chooser>
 //
 // The editor for a framework-owned sequence (04 §5, §7; docs/decisions.md M8
 // Q7–Q13, Q17–Q20): tracks, clips coloured by the studio that made them, drag
@@ -22,6 +22,7 @@
 //   timeline.export(id, { preset })               → Job           Export
 //   timeline.exports(id, { limit })               → { items }     progress
 //   timeline.cancelExport(id, job)                               Cancel
+//   timeline.list({ limit })                      → { items }     the chooser
 //   timeline.append({ asset_id, track, timeline_id }) → Timeline  el.append()
 //   assets.read(id, { range })                    → Response      the preview
 //   me.get()                                      → { studio_id }  own hue
@@ -29,6 +30,12 @@
 // What is added to the sequence is the studio's to decide (04 §11 rule 5):
 // "Add" emits `add-request`, and the page calls `el.append(assetId)` with
 // whatever its own picker chose.
+//
+// Which sequence to edit is not that (04 §11, amended 2026-09-19). With
+// `chooser` the editor lists the sequences the caller may read and opens the
+// one picked: it is its own list, read with the same client, and every page
+// that mounted this was writing the same <select> over timeline.list() to
+// supply it.
 
 import { HelmElement, define, el, kindOf as errorKind, message, timecode } from "./base.js";
 import * as seq from "./sequence.js";
@@ -54,6 +61,16 @@ const styles = `
   .panel { height: 100%; }
   .name { font: var(--helm-type-title); color: var(--helm-text-primary); }
   .facts { font: var(--helm-type-mono); color: var(--helm-text-muted); font-variant-numeric: tabular-nums; }
+  .chooser {
+    font: var(--helm-type-body);
+    height: var(--helm-control-sm);
+    max-width: 22ch;
+    padding: 0 var(--helm-space-2);
+    color: var(--helm-text-primary);
+    background: var(--helm-ground-page);
+    border: 1px solid var(--helm-border-strong);
+    border-radius: var(--helm-radius-sm);
+  }
   .head { flex-wrap: wrap; }
   .chip {
     display: inline-flex; align-items: baseline; gap: var(--helm-space-1);
@@ -239,7 +256,7 @@ const styles = `
 
 export class HelmTimeline extends HelmElement {
   static get observedAttributes() {
-    return ["timeline", "editable"];
+    return ["timeline", "editable", "chooser"];
   }
 
   constructor() {
@@ -293,9 +310,18 @@ export class HelmTimeline extends HelmElement {
     this.exportsRow = el("div", { class: "exports", part: "exports", hidden: true, role: "status", "aria-live": "polite" });
     this.notice = el("div", { class: "notice", part: "notice", role: "status", "aria-live": "polite", hidden: true });
 
+    // The chooser. Hidden until there is something to choose, so an editor
+    // opened on one sequence looks exactly as it did before this existed.
+    this.chooser = el("select", {
+      class: "chooser", part: "chooser", "aria-label": "Sequence", hidden: true,
+      onchange: () => {
+        if (this.chooser.value) this.setAttribute("timeline", this.chooser.value);
+      },
+    });
+
     this.mountPanel(el("div", { class: "panel" },
       el("div", { class: "head" },
-        el("span", { class: "label", text: "Timeline" }), this.nameText, this.factsText,
+        el("span", { class: "label", text: "Timeline" }), this.chooser, this.nameText, this.factsText,
         el("span", { class: "spacer" }), this.chip, this.undoBtn, this.redoBtn, this.addBtn, this.exportBtn),
       el("div", { class: "stage-wrap" }, this.stage),
       el("div", { class: "transport" },
@@ -333,16 +359,86 @@ export class HelmTimeline extends HelmElement {
     super.disconnectedCallback();
   }
 
+  // ----------------------------------------------------------------- chooser
+
+  /**
+   * fillChooser lists the sequences this caller may read and, with none
+   * named, opens the first.
+   *
+   * `timeline.list` is optional (04 §9): a client without it leaves the
+   * chooser hidden and the editor is the smaller one, opened by whatever set
+   * its `timeline`. A list that fails is the same answer — the editor still
+   * opens what it was given, and a chooser is not worth an error over.
+   */
+  async fillChooser() {
+    if (!this.has("timeline.list")) return;
+    let items = [];
+    try {
+      const page = await this.client.timeline.list({ limit: 50 });
+      items = page.items || [];
+    } catch {
+      return;
+    }
+    if (!this.live) return;
+    this.chooser.hidden = items.length === 0;
+    const current = this.getAttribute("timeline");
+    this.chooser.replaceChildren(...items.map((t) =>
+      el("option", { value: t.id, text: `${t.name} · r${t.revision}` })));
+    if (!items.length) return;
+    // Nothing named: the first is what "open the editor" means here. Setting
+    // the attribute reloads, and this runs again on that pass — it sets
+    // nothing the second time, so it settles rather than looping.
+    //
+    // Only once it can be seen, though. A page may mount the editor hidden
+    // and show it later, and opening a sequence into a hidden editor loads a
+    // preview nobody asked for: audio played on a page showing no video at
+    // all, from an element with `hidden` on it.
+    if (!current) {
+      if (this.visible()) this.setAttribute("timeline", items[0].id);
+      else this.openWhenSeen();
+      return;
+    }
+    if (items.some((t) => t.id === current)) this.chooser.value = current;
+  }
+
+  /** visible is whether this is being shown at all, hidden or laid out away. */
+  visible() {
+    if (this.hasAttribute("hidden")) return false;
+    if (typeof this.checkVisibility === "function") return this.checkVisibility();
+    return !!(this.offsetWidth || this.offsetHeight || this.getClientRects().length);
+  }
+
+  /** openWhenSeen opens the first sequence once there is something to see. */
+  openWhenSeen() {
+    if (this.watcher || typeof IntersectionObserver !== "function") return;
+    this.watcher = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      this.watcher.disconnect();
+      this.watcher = null;
+      if (!this.getAttribute("timeline")) this.reload();
+    });
+    this.watcher.observe(this);
+    this.onCleanup(() => {
+      if (this.watcher) this.watcher.disconnect();
+      this.watcher = null;
+    });
+  }
+
   // -------------------------------------------------------------------- load
 
   async reload() {
     if (!this.needClient(this.region)) return;
+    // The chooser is filled before anything is opened, because with nothing
+    // named it is what decides which sequence that is.
+    if (this.hasAttribute("chooser")) await this.fillChooser();
     const id = this.getAttribute("timeline");
     const generation = (this.generation = (this.generation || 0) + 1);
     if (!id) {
       this.region.replaceChildren(el("div", { class: "empty", part: "empty" },
         el("p", { text: "No sequence" }),
-        el("p", { class: "why", text: "Set the timeline attribute to the id of a sequence to edit." })));
+        el("p", { class: "why", text: this.hasAttribute("chooser")
+          ? "Nothing to edit yet. A sequence made anywhere in this studio appears here."
+          : "Set the timeline attribute to the id of a sequence to edit." })));
       return;
     }
     try {

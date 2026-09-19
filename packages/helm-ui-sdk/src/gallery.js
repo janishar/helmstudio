@@ -227,8 +227,22 @@ export class HelmGallery extends HelmElement {
   }
 
   disconnectedCallback() {
+    this.closeViewer();
     this.releaseURLs();
     super.disconnectedCallback();
+  }
+
+  /**
+   * closeViewer stops what is playing and puts the viewer away.
+   *
+   * Closing the dialog drops the asset, which is what stops the sound. This
+   * is called whenever the gallery stops being visible as well as when it is
+   * taken off the page: a studio may close a dialog of its own with this
+   * inside it, and the viewer never hears about that — a video that went on
+   * playing then was a sound with nothing on screen making it.
+   */
+  closeViewer() {
+    if (this.viewerDialog && this.viewerDialog.open) this.viewerDialog.close();
   }
 
   releaseURLs() {
@@ -471,6 +485,7 @@ export class HelmGallery extends HelmElement {
     if (!item || !item.asset_id) return;
     const dialog = this.viewer();
     this.viewerTitle.textContent = item.title || item.id;
+    this.viewerStatus.textContent = "";
     this.player.client = this.client;
     const fps = item.params && item.params.fps;
     if (fps) this.player.setAttribute("fps", String(fps));
@@ -484,15 +499,39 @@ export class HelmGallery extends HelmElement {
   /** The viewer dialog, built the first time something is looked at. */
   viewer() {
     if (this.viewerDialog) return this.viewerDialog;
+    // Hidden is not closed. An ancestor that goes away — a studio's own
+    // dialog closing over this one — leaves the viewer open and playing with
+    // nothing to see, so being unable to see it is what puts it away.
+    if (typeof IntersectionObserver === "function") {
+      const watch = new IntersectionObserver((entries) => {
+        if (entries.some((e) => !e.isIntersecting)) this.closeViewer();
+      });
+      watch.observe(this);
+      this.onCleanup(() => watch.disconnect());
+    }
     this.viewerTitle = el("span", { class: "label", part: "viewer-title" });
-    this.player = el("helm-player");
+    // The viewer's own status. It cannot share the selection line: paint()
+    // owns that and rewrites it on the next redraw, so a refusal written
+    // there vanished before it could be read.
+    this.viewerStatus = el("span", { class: "micro", part: "viewer-status", role: "status" });
     this.viewerDialog = el("dialog", { class: "viewer", part: "viewer" },
       el("div", { class: "head" },
         this.viewerTitle,
+        this.viewerStatus,
         el("span", { class: "spacer" }),
         el("button", { text: "Full screen", onclick: () => this.fullScreen() }),
-        el("button", { text: "Close", onclick: () => this.viewerDialog.close() })),
-      this.player);
+        el("button", { text: "Close", onclick: () => this.viewerDialog.close() })));
+    // The parser makes the player, not createElement. WebKit hands back an
+    // HTMLUnknownElement for <helm-player> from createElement even with the
+    // definition registered — `new` works, the parser works, createElement
+    // does not — and an element that never upgrades renders nothing at all,
+    // which is a dialog that opens on emptiness. h3 studio's own page carries
+    // the same workaround for the same two tags.
+    //
+    // The markup is one fixed tag with no attributes and no data in it, so
+    // this is not the innerHTML that CONTRIBUTING warns about.
+    this.viewerDialog.insertAdjacentHTML("beforeend", "<helm-player autoplay></helm-player>");
+    this.player = this.viewerDialog.lastElementChild;
     // A closed viewer holds nothing: dropping the asset stops the media
     // element and releases what it was playing.
     this.viewerDialog.addEventListener("close", () => this.player.removeAttribute("asset"));
@@ -500,12 +539,37 @@ export class HelmGallery extends HelmElement {
     return this.viewerDialog;
   }
 
-  /** Full screen is the dialog's, so the player keeps its own controls. */
+  /**
+   * Full screen is the player's, not the dialog's.
+   *
+   * WebKit refuses a <dialog> outright — "Dialog elements are invalid" — so
+   * asking the dialog was a button that could never work. The player is a
+   * valid target and the better one anyway: it takes the screen with its own
+   * transport under it, and Escape comes back.
+   *
+   * The prefixed names are still wanted here, as the launcher's own
+   * full-screen button found, and a refusal arrives as a rejected promise
+   * rather than a throw — so it is caught and said out loud.
+   */
   fullScreen() {
     const dialog = this.viewerDialog;
     if (!dialog) return;
-    if (this.shadowRoot.fullscreenElement || document.fullscreenElement) document.exitFullscreen();
-    else if (dialog.requestFullscreen) dialog.requestFullscreen();
+    const open = this.shadowRoot.fullscreenElement || document.fullscreenElement ||
+      document.webkitFullscreenElement;
+    if (open) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) Promise.resolve(exit.call(document)).catch(() => {});
+      return;
+    }
+    const target = this.player || dialog;
+    const ask = target.requestFullscreen || target.webkitRequestFullscreen;
+    if (!ask) {
+      this.viewerStatus.textContent = "This browser will not put the viewer full screen.";
+      return;
+    }
+    Promise.resolve(ask.call(target)).catch((err) => {
+      this.viewerStatus.textContent = `Full screen was refused. ${err && err.message ? err.message : ""}`.trim();
+    });
   }
 
   select(item) {

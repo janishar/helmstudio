@@ -59,6 +59,19 @@ around the same launcher, bundling the daemon. Being unsigned, macOS reports it
 as damaged until you clear the quarantine flag once; the release notes give the
 line.
 
+**Update the Mac app from a clone.** `make app` builds the bundle — the Swift
+shell, the daemon and the registry beside it — and installing it is a copy:
+
+```bash
+make app && osascript -e 'quit app "helmstudio"'; rm -rf /Applications/helmstudio.app && ditto bin/helmstudio.app /Applications/helmstudio.app && open -a helmstudio
+```
+
+Quit it before copying. A running daemon holds `127.0.0.1:8700`, so a new
+bundle put over a running one serves the old code until that process goes —
+and the page looks unchanged for reasons that have nothing to do with the
+build. The bundle is ad-hoc signed for the machine that built it, which is
+enough to run it there and not enough to move it anywhere else.
+
 **Build a studio.** Install the `helm` CLI, then follow the quickstart:
 
 ```bash

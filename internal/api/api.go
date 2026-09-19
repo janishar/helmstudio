@@ -367,6 +367,52 @@ func (s *Server) studioAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.studioInstallAction(w, r, id, action)
+	case "update":
+		if s.installer == nil {
+			writeError(w, http.StatusNotImplemented, "not_implemented", "this daemon does not serve install")
+			return
+		}
+		// Whether there is anything to update is answered before anyone is
+		// asked to approve anything: "you already have it" after reading a
+		// screen and pressing Update is no answer at all.
+		if err := s.installer.Updatable(r.Context(), id); err != nil {
+			s.failInstall(w, err)
+			return
+		}
+		// An update takes code nobody has approved: the preview is built at
+		// the ref's tip, so the screen names the commit about to be built.
+		if !s.requireApprovalFor(w, r, id, "update") {
+			return
+		}
+		job, err := s.installer.Update(r.Context(), id)
+		if err != nil {
+			s.failInstall(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, job)
+	case "check-update":
+		if s.installer == nil {
+			writeError(w, http.StatusNotImplemented, "not_implemented", "this daemon does not serve install")
+			return
+		}
+		// Reading where a ref points runs nothing of the studio's, so it needs
+		// no approval; it reaches the network, which is why it is a POST and
+		// why it only happens when asked.
+		if _, err := s.installer.CheckUpdate(r.Context(), id); err != nil {
+			s.failInstall(w, err)
+			return
+		}
+		st, ok := s.sup.Studio(id)
+		if !ok {
+			writeError(w, http.StatusNotFound, "not_found", fmt.Sprintf("no studio %q", id))
+			return
+		}
+		v, err := s.studio(r, st)
+		if err != nil {
+			s.fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, v)
 	case "launch":
 		// cmd and health.exec run here and never passed through install, so
 		// launch is gated too — without this, an Override that edits a command

@@ -174,6 +174,18 @@ What a studio gains by this rule elsewhere, it loses nothing of here: the
 viewer is opened by an activation the studio can already see, and a studio that
 wants its own may keep the item and open one.)
 
+(Amended 2026-09-19, by the human's decision: **which of its own sequences to
+edit is the one thing `helm-timeline` does decide.** With `chooser` it lists
+the sequences the caller may read and opens the one picked, setting its own
+`timeline`. Rule 5 is untouched for what goes *into* a sequence — Add still
+emits `add-request` and the page still answers with its own picker — because
+that is a choice about the studio's own material. Which sequence to open is
+not: it is the component's own list, read with the same client, and every page
+that mounted the editor was writing the same `<select>` over `timeline.list()`
+to supply it. `timeline.list` joins the optional methods: without it the
+chooser is absent and the editor is the smaller one §9 describes, not a broken
+one.)
+
 **Errors.** A component branches on the `kind` in §4's table and on nothing
 else — never on a status code, never on an error string.
 
