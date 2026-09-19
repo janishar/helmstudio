@@ -1,4 +1,4 @@
-// <helm-player asset="as_01J…" fps="24">
+// <helm-player asset="as_01J…" fps="24" autoplay>
 //
 // A frame-accurate transport (04 §5): arrow keys step one frame, the frame
 // counter is authoritative and the timecode is derived from it, A/B compare
@@ -80,6 +80,9 @@ export class HelmPlayer extends HelmElement {
   static get observedAttributes() {
     return ["asset", "fps", "compare"];
   }
+
+  // `autoplay` is read when the media mounts rather than observed: it says
+  // what a newly shown asset does, not something to react to later.
 
   constructor() {
     super(styles);
@@ -209,6 +212,10 @@ export class HelmPlayer extends HelmElement {
 
     media.playbackRate = Number(this.speed.value);
     media.loop = this.loopBtn.getAttribute("aria-pressed") === "true";
+    // A host that says autoplay means "start when it is shown". The browser
+    // may still refuse — no user activation, or sound without a gesture — and
+    // a refusal is not an error here: the transport is right there.
+    if (this.hasAttribute("autoplay")) media.play().catch(() => {});
     media.addEventListener("loadedmetadata", () => this.onMeta());
     media.addEventListener("play", () => { this.playBtn.textContent = "Pause"; this.startClock(); });
     media.addEventListener("pause", () => { this.playBtn.textContent = "Play"; this.stopClock(); this.readFrame(); });

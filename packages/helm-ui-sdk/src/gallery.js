@@ -500,7 +500,7 @@ export class HelmGallery extends HelmElement {
     //
     // The markup is one fixed tag with no attributes and no data in it, so
     // this is not the innerHTML that CONTRIBUTING warns about.
-    this.viewerDialog.insertAdjacentHTML("beforeend", "<helm-player></helm-player>");
+    this.viewerDialog.insertAdjacentHTML("beforeend", "<helm-player autoplay></helm-player>");
     this.player = this.viewerDialog.lastElementChild;
     // A closed viewer holds nothing: dropping the asset stops the media
     // element and releases what it was playing.
@@ -509,12 +509,37 @@ export class HelmGallery extends HelmElement {
     return this.viewerDialog;
   }
 
-  /** Full screen is the dialog's, so the player keeps its own controls. */
+  /**
+   * Full screen is the player's, not the dialog's.
+   *
+   * WebKit refuses a <dialog> outright — "Dialog elements are invalid" — so
+   * asking the dialog was a button that could never work. The player is a
+   * valid target and the better one anyway: it takes the screen with its own
+   * transport under it, and Escape comes back.
+   *
+   * The prefixed names are still wanted here, as the launcher's own
+   * full-screen button found, and a refusal arrives as a rejected promise
+   * rather than a throw — so it is caught and said out loud.
+   */
   fullScreen() {
     const dialog = this.viewerDialog;
     if (!dialog) return;
-    if (this.shadowRoot.fullscreenElement || document.fullscreenElement) document.exitFullscreen();
-    else if (dialog.requestFullscreen) dialog.requestFullscreen();
+    const open = this.shadowRoot.fullscreenElement || document.fullscreenElement ||
+      document.webkitFullscreenElement;
+    if (open) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) Promise.resolve(exit.call(document)).catch(() => {});
+      return;
+    }
+    const target = this.player || dialog;
+    const ask = target.requestFullscreen || target.webkitRequestFullscreen;
+    if (!ask) {
+      this.selectionText.textContent = "This browser will not put the viewer full screen.";
+      return;
+    }
+    Promise.resolve(ask.call(target)).catch((err) => {
+      this.selectionText.textContent = `Full screen was refused. ${err && err.message ? err.message : ""}`.trim();
+    });
   }
 
   select(item) {
