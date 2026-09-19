@@ -14,8 +14,7 @@
 
 id: h3-studio
 repo: https://github.com/janishar/h3c-studio
-ref: 7c213728ea78903d4af0056a5a1427cfea35d64b
-
+ref: main
 manifest:
   # h3 studio's manifest for helmstudio: the same studio the registry points at,
   # described by its own repository, beside the code it runs. The registry entry
@@ -28,7 +27,7 @@ manifest:
   hue: { dark: "#e0a33c", light: "#a06a10" }
   license: MIT
   repo: https://github.com/janishar/h3c-studio
-  ref: 7c213728ea78903d4af0056a5a1427cfea35d64b
+  ref: main
   submodules: true
   peak_ram_gb: 21
   requires:

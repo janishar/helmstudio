@@ -14,8 +14,7 @@
 
 id: iris-studio
 repo: https://github.com/janishar/iris-studio
-ref: b4f857f4d484f91cbbd6e48ba79f3879e49a253c
-
+ref: main
 manifest:
   id: iris-studio
   name: iris studio
@@ -25,7 +24,7 @@ manifest:
   hue: { dark: "#d8558f", light: "#b12f68" }
   license: MIT
   repo: https://github.com/janishar/iris-studio
-  ref: b4f857f4d484f91cbbd6e48ba79f3879e49a253c
+  ref: main
   submodules: true
   peak_ram_gb: 30 # README: "fits your disk/RAM; ~16-30GB per model" — upper bound, unverified against a real checkpoint
   requires:

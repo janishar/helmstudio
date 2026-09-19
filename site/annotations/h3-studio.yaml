@@ -1,5 +1,5 @@
 file: studios/h3-studio.yaml
-digest: sha256:8734330010bc1bd240b6747d1933c22e89fe70fd421a51b032880a2eb0aac2dc
+digest: sha256:89a4de216bb23643233636a16fec130f6e0020b6f2dc7f83d8b6c64b00d4696b
 title: h3 studio's manifest
 intro: >-
   h3 studio makes video with synchronised sound from MiniMax-H3, through a
@@ -10,7 +10,7 @@ intro: >-
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from. It reads the repository with git, never through a forge's API."
-  /ref: "A full commit, not a branch, so what was reviewed is what installs."
+  /ref: "A branch, so an install takes whatever it points at when the clone runs. A registry entry normally pins a commit; docs/decisions.md 2026-09-19 says why this one does not."
   /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Where it sets id, repo and ref, each must equal the pointer's, and the validator checks that they do."
   /manifest/id: "The same id as the pointer's."
   /manifest/name: "The name people see."
@@ -19,7 +19,7 @@ notes:
   /manifest/hue: "Its identity colour in each theme: a stripe, a dot and its clips on the timeline in the launcher, and the accent on its own page."
   /manifest/license: "The studio's own licence. A weight has no licence field yet, so the model's licence is not declared anywhere in the manifest."
   /manifest/repo: "The same repository as the pointer's."
-  /manifest/ref: "The same commit as the pointer's."
+  /manifest/ref: "The same branch as the pointer's."
   /manifest/submodules: "The engine, h3c, is a submodule, and the first build step runs inside it, so the clone fetches submodules too."
   /manifest/peak_ram_gb: "What the model occupies once loaded. It is the number the arithmetic uses when another heavy studio is running; the comment says where it came from."
   /manifest/requires: "An Apple Silicon Mac with 64 GB of memory and 200 GB of disk, and the tools the build and the studio call, ffmpeg among them."

@@ -14,8 +14,7 @@
 
 id: auk-studio
 repo: https://github.com/janishar/AuK
-ref: 61ae02a65c947a8c499a27f963165b351416a146
-
+ref: main
 manifest:
   id: auk-studio
   name: AuK studio
@@ -25,7 +24,7 @@ manifest:
   hue: { dark: "#8b7cf0", light: "#5c4bc4" }
   license: MIT
   repo: https://github.com/janishar/AuK
-  ref: 61ae02a65c947a8c499a27f963165b351416a146
+  ref: main
   python: { version: "3.10" }
   peak_ram_gb: 25 # web/README.md: "each is ~15-25GB" per checkpoint variant — upper bound, unverified against a real checkpoint
   requires:
