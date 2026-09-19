@@ -2,10 +2,16 @@
 # (schema/registry-entry.json, docs/design/05-sdk-and-custom-studios.md §5a).
 #
 # The manifest belongs in the studio's own repository as helmstudio.yaml, beside
-# the code it describes, so that a studio can announce a new build step without
-# waiting for a helmstudio release. iris studio does not ship one yet, so the
-# manifest is carried inline here — and the pull request that moves `ref` to a
-# commit where it does ship one deletes the inline copy, leaving one copy again.
+# the code it describes, and iris studio ships one. This copy is not dead weight
+# for that: resolution reaches nothing over the network (M7 Q7), so before a
+# studio is fetched this is the only manifest there is, and an entry without one
+# shows on the shelf as `not_fetched` — no description, no hue, no checkpoint to
+# choose. So the copy stays, and the thing that matters about it is that it
+# agrees with the repository. One that had drifted described iris before it ran
+# under helmstudio at all: `capabilities: []` meant the daemon issued no token,
+# and a `cmd` with no `--root {data}` gave it nowhere to keep sessions, so the
+# studio exited 2 on every launch. An installed studio is launched from its own
+# checkout's manifest, which is why that only bit a machine installing fresh.
 #
 # Where the inline manifest sets id, repo or ref, each must equal this entry's;
 # the validator enforces it. There is no `certified` field: a level is derived
@@ -20,11 +26,10 @@ manifest:
   name: iris studio
   description: Native Metal image generation across the FLUX.2 Klein and Z-Image checkpoints.
   kinds: [image]
-  # 03 §2's identity hue.
+  # helmstudio 03 §2's identity hue for this studio.
   hue: { dark: "#d8558f", light: "#b12f68" }
   license: MIT
   repo: https://github.com/janishar/iris-studio
-  ref: main
   submodules: true
   peak_ram_gb: 30 # README: "fits your disk/RAM; ~16-30GB per model" — upper bound, unverified against a real checkpoint
   requires:
@@ -36,12 +41,23 @@ manifest:
     backends: [metal]
     precision: [bf16]
     language: c
-  # None: iris at this ref has no helmstudio dependency in its go.mod, so it
-  # calls no platform service. Declaring capabilities it does not use would
-  # ask the user to grant access nothing reaches for, which is criterion 9
-  # backwards (docs/decisions.md M7 Q3).
-  capabilities: []
-  network: [huggingface.co, cdn-lfs.huggingface.co]
+  # What iris studio actually uses, and no more (criterion 9). A finished take is
+  # adopted as an asset and recorded as one gallery item, and a render is
+  # reported as a task job with its progress and its log, so the launcher can see
+  # what this studio is doing. There is no timeline: a sequence is an edit of
+  # video clips, and this studio makes stills. Sessions stay iris studio's own
+  # directories under {data}, so kv and records are not requested and a gallery
+  # item carries no session_id.
+  capabilities: [assets, gallery, jobs]
+  # The page loads helm-ui for the shared gallery and the render's log; it still
+  # draws its own takes rail, preview and terminal, so this pins what it loads
+  # and nothing else.
+  sdk: { runtime: "^1", ui: "^1", css: "^1" }
+  # Contacted at build or run time, which is what the field means and what the
+  # approval screen shows. The Go proxy and the checksum database are here
+  # because `go build` resolves helm-runtime-sdk through them; Hugging Face is
+  # where the weights come from.
+  network: [huggingface.co, cdn-lfs.huggingface.co, proxy.golang.org, sum.golang.org]
   build:
     - name: Build the iris engine
       cwd: iris.c
@@ -49,6 +65,9 @@ manifest:
     - name: Build the studio server
       cwd: .
       run: go build -o iris-studio .
+  # One checkpoint at a time: iris loads the directory --model points at, and the
+  # five below are the ones download_model.sh produces. Each is selectable, so
+  # {models.selected} is whichever one is chosen in the launcher.
   weights:
     - { name: flux_klein_4b, repo: black-forest-labs/FLUX.2-klein-4B, dest: flux-klein-4b, selectable: true }
     - { name: flux_klein_4b_base, repo: black-forest-labs/FLUX.2-klein-base-4B, dest: flux-klein-4b-base, selectable: true }
@@ -59,7 +78,10 @@ manifest:
     - name: studio
       role: main
       heavy: true
-      cmd: "./iris-studio --iris ./iris.c/iris --model {models.selected} --port {port}"
+      cmd: "./iris-studio --iris ./iris.c/iris --model {models.selected} --port {port} --root {data}"
       port: { prefer: 8720 }
       health: { tcp: true, timeout_s: 30, interval_s: 2 }
+      # /api/queue does not answer the busy contract yet, so the switch dialog
+      # reads iris as unknown until it does.
+      busy: { path: /api/queue }
       ui: /
