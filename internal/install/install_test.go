@@ -489,3 +489,69 @@ func TestALaunchRecordsWhenItsWeightsWereUsed(t *testing.T) {
 		t.Fatalf("after the studio went running, last used = %v; want a time after %v", got, before)
 	}
 }
+
+// An optional weight with a local_path is linked at install. Optional says
+// "do not download a hundred gigabytes nobody asked for", not "ignore files
+// already on this disk": h3 studio's Ref2VA is optional and shares its folder
+// with the required FL2VA, and skipping it left References switched off beside
+// a directory that held it.
+func TestOptionalWeightWithALocalPathIsLinked(t *testing.T) {
+	f := newFixture(t, nil)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	user := filepath.Join(t.TempDir(), "MiniMax-H3")
+	for _, rel := range []string{"FL2VA/dit.safetensors", "Ref2VA/dit.safetensors"} {
+		p := filepath.Join(user, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st, _ := f.sup.Studio("toy-studio")
+	st.Manifest.Weights = []manifest.Weight{
+		{Name: "fl2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"FL2VA/**"}, LocalPath: user},
+		{Name: "ref2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"Ref2VA/**"}, LocalPath: user, Optional: true},
+	}
+	f.install("toy-studio")
+
+	link := filepath.Join(f.dirs.Models(), "MiniMax-H3", "Ref2VA", "dit.safetensors")
+	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the optional weight was not linked: %v", err)
+	}
+	if n := len(f.hub.Requests("org/h3")); n != 0 {
+		t.Errorf("a local_path weight contacted Hugging Face: %d requests", n)
+	}
+	if got := f.info("toy-studio"); got.State != StateReady {
+		t.Errorf("after install: %+v, want ready", got)
+	}
+}
+
+// An optional weight the directory does not hold leaves the install ready.
+// The studio starts without that pipeline and says so, which is what optional
+// means; a required one missing is still a refused install.
+func TestOptionalWeightMissingFromTheDirectoryStillInstalls(t *testing.T) {
+	f := newFixture(t, nil)
+	f.studio("toy-studio", f.repoLine(), f.defaultBuild())
+	user := filepath.Join(t.TempDir(), "MiniMax-H3")
+	p := filepath.Join(user, "FL2VA", "dit.safetensors")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := f.sup.Studio("toy-studio")
+	st.Manifest.Weights = []manifest.Weight{
+		{Name: "fl2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"FL2VA/**"}, LocalPath: user},
+		{Name: "ref2va", Repo: "org/h3", Dest: "MiniMax-H3", Files: []string{"Ref2VA/**"}, LocalPath: user, Optional: true},
+	}
+	f.install("toy-studio")
+
+	if got := f.info("toy-studio"); got.State != StateReady {
+		t.Fatalf("an optional weight the folder lacks failed the install: %+v", got)
+	}
+	if _, err := os.Lstat(filepath.Join(f.dirs.Models(), "MiniMax-H3", "FL2VA", "dit.safetensors")); err != nil {
+		t.Errorf("the required weight was not linked: %v", err)
+	}
+}
