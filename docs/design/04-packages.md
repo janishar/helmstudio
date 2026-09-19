@@ -162,6 +162,18 @@ studio's own buttons in its `actions` slot. For the same reason `helm-timeline`
 does not embed a picker: its Add emits `add-request`, and the page calls
 `el.append(assetId)` with whatever its own picker chose (M8b).
 
+(Amended 2026-09-19, by the human's decision: **looking at an item is the one
+thing `helm-gallery` does decide.** Activating an item in a gallery that is not
+a picker opens it in a `helm-player` in a dialog of the component's own, with a
+full-screen control. Rule 5 still holds for everything else — `select` and
+`pick` are emitted as before and the `actions` slot is still where a studio's
+own buttons go — and the exception is drawn narrowly on purpose: a gallery of
+video whose items cannot be watched is not a gallery, and every studio that
+mounted one would otherwise write the same dialog around the same component.
+What a studio gains by this rule elsewhere, it loses nothing of here: the
+viewer is opened by an activation the studio can already see, and a studio that
+wants its own may keep the item and open one.)
+
 **Errors.** A component branches on the `kind` in §4's table and on nothing
 else — never on a status code, never on an error string.
 
