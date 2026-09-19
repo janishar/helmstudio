@@ -372,6 +372,13 @@ func (s *Server) studioAction(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotImplemented, "not_implemented", "this daemon does not serve install")
 			return
 		}
+		// Whether there is anything to update is answered before anyone is
+		// asked to approve anything: "you already have it" after reading a
+		// screen and pressing Update is no answer at all.
+		if err := s.installer.Updatable(r.Context(), id); err != nil {
+			s.failInstall(w, err)
+			return
+		}
 		// An update takes code nobody has approved: the preview is built at
 		// the ref's tip, so the screen names the commit about to be built.
 		if !s.requireApprovalFor(w, r, id, "update") {

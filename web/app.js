@@ -216,24 +216,36 @@ export async function act(ctx, studio, action) {
         toast(failure(err, `${studio.name} could not be removed.`), "error");
       }
       return ctx.refresh();
-    case "update": {
-      // New code from upstream, so the approval screen stands in front of it
-      // exactly as it does for an install — for the commit the update would
-      // take, which is what `do=update` asks the screen to show.
-      const started = await guard(ctx, studio, "update", (approval) =>
-        ctx.client.studios.update(studio.id, { approval }));
-      if (started) announce(`${studio.name} is updating.`);
-      return ctx.refresh();
-    }
-    case "check": {
+    case "update":
       try {
-        await ctx.client.studios.checkUpdate(studio.id);
+        // New code from upstream, so the approval screen stands in front of it
+        // exactly as it does for an install — for the commit the update would
+        // take, which is what `do=update` asks the screen to show.
+        const started = await guard(ctx, studio, "update", (approval) =>
+          ctx.client.studios.update(studio.id, { approval }));
+        if (started) {
+          announce(`${studio.name} is updating.`);
+          ctx.go(`#/studios/${studio.id}`);
+        }
       } catch (err) {
-        toast(failure(err, `Whether ${studio.name} has an update could not be read.`), "error");
-        return undefined;
+        // Already at the tip, no repository to pull from, or one that could
+        // not be reached: every one of those is a sentence the daemon wrote,
+        // and none of them may be swallowed into a button that does nothing.
+        toast(failure(err, `${studio.name} could not be updated.`), "error");
       }
       return ctx.refresh();
-    }
+    case "check":
+      try {
+        const after = await ctx.client.studios.checkUpdate(studio.id);
+        // A check that says nothing is a check nobody can trust: up to date
+        // and cannot-be-reached look identical when both are silent.
+        toast(after && after.install_state === "update_available"
+          ? `${studio.name} has an update.`
+          : `${studio.name} is up to date.`);
+      } catch (err) {
+        toast(failure(err, `Whether ${studio.name} has an update could not be read.`), "error");
+      }
+      return ctx.refresh();
     case "cancel":
       if (!studio.job_id) return;
       try {

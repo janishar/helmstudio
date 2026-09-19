@@ -485,14 +485,23 @@ export class HelmGallery extends HelmElement {
   viewer() {
     if (this.viewerDialog) return this.viewerDialog;
     this.viewerTitle = el("span", { class: "label", part: "viewer-title" });
-    this.player = el("helm-player");
     this.viewerDialog = el("dialog", { class: "viewer", part: "viewer" },
       el("div", { class: "head" },
         this.viewerTitle,
         el("span", { class: "spacer" }),
         el("button", { text: "Full screen", onclick: () => this.fullScreen() }),
-        el("button", { text: "Close", onclick: () => this.viewerDialog.close() })),
-      this.player);
+        el("button", { text: "Close", onclick: () => this.viewerDialog.close() })));
+    // The parser makes the player, not createElement. WebKit hands back an
+    // HTMLUnknownElement for <helm-player> from createElement even with the
+    // definition registered — `new` works, the parser works, createElement
+    // does not — and an element that never upgrades renders nothing at all,
+    // which is a dialog that opens on emptiness. h3 studio's own page carries
+    // the same workaround for the same two tags.
+    //
+    // The markup is one fixed tag with no attributes and no data in it, so
+    // this is not the innerHTML that CONTRIBUTING warns about.
+    this.viewerDialog.insertAdjacentHTML("beforeend", "<helm-player></helm-player>");
+    this.player = this.viewerDialog.lastElementChild;
     // A closed viewer holds nothing: dropping the asset stops the media
     // element and releases what it was playing.
     this.viewerDialog.addEventListener("close", () => this.player.removeAttribute("asset"));

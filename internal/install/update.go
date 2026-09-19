@@ -97,6 +97,41 @@ func (in *Installer) CheckUpdate(ctx context.Context, studioID string) (Info, er
 	return in.Info(ctx, studioID, m)
 }
 
+// Updatable answers whether an update would do anything, without starting
+// one: there is a repository, the studio is installed, and its tip is not the
+// commit already built.
+//
+// The API asks this before the approval gate, so that "you already have it"
+// is said immediately rather than after a screen has been read and answered.
+func (in *Installer) Updatable(ctx context.Context, studioID string) error {
+	_, err := in.updateTarget(ctx, studioID)
+	return err
+}
+
+// updateTarget is the commit an update would build, or why there is not one.
+func (in *Installer) updateTarget(ctx context.Context, studioID string) (string, error) {
+	st, ok := in.cfg.Supervisor.Studio(studioID)
+	if !ok {
+		return "", refuse(KindNotFound, "no studio %q is known", studioID)
+	}
+	m := st.Manifest
+	tip, err := in.RemoteTip(ctx, m)
+	if err != nil {
+		return "", err
+	}
+	r, exists, err := in.row(ctx, in.cfg.Store.Reader(), studioID)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "", refuse(KindBlocked, "%s is not installed, so there is nothing to update; install it instead", m.Name)
+	}
+	if r.commit == tip {
+		return "", refuse(KindBlocked, "%s is already at %s, which is where %s points", m.Name, short(tip), refName(m))
+	}
+	return tip, nil
+}
+
 // Update fetches the manifest's ref again and builds what is at its tip.
 //
 // The tip is resolved first so that the refusals a person should see — there
@@ -107,20 +142,9 @@ func (in *Installer) Update(ctx context.Context, studioID string) (Job, error) {
 	if !ok {
 		return Job{}, refuse(KindNotFound, "no studio %q is known", studioID)
 	}
-	m := st.Manifest
-	tip, err := in.RemoteTip(ctx, m)
-	if err != nil {
+	_ = st
+	if _, err := in.updateTarget(ctx, studioID); err != nil {
 		return Job{}, err
-	}
-	r, exists, err := in.row(ctx, in.cfg.Store.Reader(), studioID)
-	if err != nil {
-		return Job{}, err
-	}
-	if !exists {
-		return Job{}, refuse(KindBlocked, "%s is not installed, so there is nothing to update; install it instead", m.Name)
-	}
-	if r.commit == tip {
-		return Job{}, refuse(KindBlocked, "%s is already at %s, which is where %s points", m.Name, short(tip), refName(m))
 	}
 	return in.install(ctx, studioID, true)
 }
