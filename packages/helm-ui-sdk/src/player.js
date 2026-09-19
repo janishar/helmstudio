@@ -36,6 +36,27 @@ const styles = `
     display: flex; align-items: center; justify-content: center;
     min-height: 160px;
   }
+
+  /* Full screen: the picture takes the screen and the transport sits under
+   * it. Without this the media keeps its intrinsic size, so a take made at
+   * 800x448 stayed 800x448 in the middle of a display's worth of ground.
+   *
+   * The prefixed selectors are written out rather than joined by commas: a
+   * pseudo-class a browser does not know invalidates the whole selector list
+   * it appears in, which would take the unprefixed rule down with it.
+   */
+  :host(:fullscreen) { height: 100vh; }
+  :host(:fullscreen) .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  :host(:fullscreen) .stage { flex: 1; min-height: 0; }
+  :host(:fullscreen) .stage > video, :host(:fullscreen) .stage > img {
+    width: 100%; height: 100%; object-fit: contain;
+  }
+  :host(:-webkit-full-screen) { height: 100vh; }
+  :host(:-webkit-full-screen) .panel { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+  :host(:-webkit-full-screen) .stage { flex: 1; min-height: 0; }
+  :host(:-webkit-full-screen) .stage > video, :host(:-webkit-full-screen) .stage > img {
+    width: 100%; height: 100%; object-fit: contain;
+  }
   .stage .empty { color: var(--helm-log-text); }
   .stage .empty .why { color: var(--helm-log-muted); }
   video, audio, img { display: block; max-width: 100%; max-height: 60vh; }

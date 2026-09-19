@@ -471,6 +471,7 @@ export class HelmGallery extends HelmElement {
     if (!item || !item.asset_id) return;
     const dialog = this.viewer();
     this.viewerTitle.textContent = item.title || item.id;
+    this.viewerStatus.textContent = "";
     this.player.client = this.client;
     const fps = item.params && item.params.fps;
     if (fps) this.player.setAttribute("fps", String(fps));
@@ -485,9 +486,14 @@ export class HelmGallery extends HelmElement {
   viewer() {
     if (this.viewerDialog) return this.viewerDialog;
     this.viewerTitle = el("span", { class: "label", part: "viewer-title" });
+    // The viewer's own status. It cannot share the selection line: paint()
+    // owns that and rewrites it on the next redraw, so a refusal written
+    // there vanished before it could be read.
+    this.viewerStatus = el("span", { class: "micro", part: "viewer-status", role: "status" });
     this.viewerDialog = el("dialog", { class: "viewer", part: "viewer" },
       el("div", { class: "head" },
         this.viewerTitle,
+        this.viewerStatus,
         el("span", { class: "spacer" }),
         el("button", { text: "Full screen", onclick: () => this.fullScreen() }),
         el("button", { text: "Close", onclick: () => this.viewerDialog.close() })));
@@ -534,11 +540,11 @@ export class HelmGallery extends HelmElement {
     const target = this.player || dialog;
     const ask = target.requestFullscreen || target.webkitRequestFullscreen;
     if (!ask) {
-      this.selectionText.textContent = "This browser will not put the viewer full screen.";
+      this.viewerStatus.textContent = "This browser will not put the viewer full screen.";
       return;
     }
     Promise.resolve(ask.call(target)).catch((err) => {
-      this.selectionText.textContent = `Full screen was refused. ${err && err.message ? err.message : ""}`.trim();
+      this.viewerStatus.textContent = `Full screen was refused. ${err && err.message ? err.message : ""}`.trim();
     });
   }
 
