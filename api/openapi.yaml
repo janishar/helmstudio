@@ -1902,6 +1902,156 @@ paths:
         "501": { $ref: "#/components/responses/Unsupported" }
 
   # ======================================================================
+  # Launcher: sequences across every studio (03 §11; docs/decisions.md
+  # 2026-09-19, with the gallery above)
+  # ======================================================================
+  #
+  # The same mirroring, and the same principal: what the launcher may reach is
+  # every sequence, because it holds `gallery.read_all` (05 §5, Q11). There is
+  # deliberately no export here — `POST /timeline/{id}:export`, its plan, its
+  # job and `:open` are not mirrored — because who owns a launcher export was
+  # left to be decided with this screen (2026-09-16, M8 Q14) and is still
+  # open. Until it is answered, a sequence assembled here is exported from a
+  # studio, and `helm-timeline` is 04 §9's smaller editor rather than a broken
+  # one: no Export button and no conform chip.
+
+  /launcher/timeline:
+    get:
+      tags: [launcher]
+      operationId: launcherTimelineList
+      x-helm-group: timeline
+      x-helm-method: list
+      summary: Every sequence, newest first.
+      description: >
+        No token. Every studio's and the launcher's own; deleted sequences are
+        not listed.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: A page of sequences.
+          content: { application/json: { schema: { $ref: "#/components/schemas/TimelinePage" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+    post:
+      tags: [launcher]
+      operationId: launcherTimelineCreate
+      x-helm-group: timeline
+      x-helm-method: create
+      summary: Create a sequence the launcher owns.
+      description: >
+        `POST /timeline` otherwise. The sequence's `studio_id` is null, which
+        is what "owned by the launcher" is (01 §6 R44): no studio made it, and
+        a clip in it may come from any of them.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TimelineCreate" } } }
+      responses:
+        "201":
+          description: The new sequence, as it was stored after snapping.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /launcher/timeline:append:
+    post:
+      tags: [launcher]
+      operationId: launcherTimelineAppend
+      x-helm-group: timeline
+      x-helm-method: append
+      summary: Add one asset to the end of a track.
+      description: >
+        `POST /timeline:append`, with one difference that follows from having
+        no studio: without `timeline_id` there is no "the sequence I own most
+        recently", so the launcher sends one and a request without it is 409
+        `no_timeline`.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TimelineAppend" } } }
+      responses:
+        "200":
+          description: The sequence, with the clip appended.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /launcher/timeline/{id}:
+    get:
+      tags: [launcher]
+      operationId: launcherTimelineGet
+      x-helm-group: timeline
+      x-helm-method: get
+      summary: One sequence, whichever studio made it.
+      parameters: [{ $ref: "#/components/parameters/TimelineId" }]
+      responses:
+        "200":
+          description: The sequence. `ETag` is its revision.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [launcher]
+      operationId: launcherTimelineUpdate
+      x-helm-group: timeline
+      x-helm-method: update
+      summary: Edit a sequence. Every edit is a revision.
+      description: >
+        `PATCH /timeline/{id}`: a merge patch, `If-Match` required, the
+        document validated and snapped as a whole, the one it replaces kept.
+        A clip this write adds may name any studio's asset, which is the point
+        of editing here.
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/IfMatchRequired" }
+      requestBody:
+        required: true
+        content: { application/merge-patch+json: { schema: { $ref: "#/components/schemas/TimelineUpdate" } } }
+      responses:
+        "200":
+          description: The sequence as it was stored.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  /launcher/timeline/{id}:revert:
+    post:
+      tags: [launcher]
+      operationId: launcherTimelineRevert
+      x-helm-group: timeline
+      x-helm-method: revert
+      summary: Write an earlier revision back as the newest one.
+      description: >
+        `POST /timeline/{id}:revert`. Undo is the previous revision written
+        forward, so nothing is lost by undoing.
+      parameters:
+        - { $ref: "#/components/parameters/TimelineId" }
+        - { $ref: "#/components/parameters/IfMatchRequired" }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/TimelineRevert" } } }
+      responses:
+        "200":
+          description: The sequence, at its new revision.
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Timeline" } } }
+        "400": { $ref: "#/components/responses/Invalid" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/Unprocessable" }
+
+  # ======================================================================
   # Launcher: studios, install, supervision (01 §6-7; M2 and M3 as served)
   # ======================================================================
 

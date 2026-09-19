@@ -68,3 +68,33 @@ export function galleryScreen(ctx) {
       ...chips(ctx, studioID, (id) => (id ? `#/gallery?studio=${encodeURIComponent(id)}` : "#/gallery"))),
     grid(ctx, "launcher", studioID));
 }
+
+/**
+ * pickAsset opens the gallery as a picker over every studio and resolves to
+ * the asset chosen, or null. What goes into a sequence is the page's choice,
+ * not the editor's (04 §11 rule 5): `helm-timeline` asks, and this answers.
+ */
+export function pickAsset(ctx) {
+  return new Promise((resolve) => {
+    let chosen = null;
+    const gallery = document.createElement("helm-gallery");
+    gallery.setAttribute("scope", "all");
+    gallery.setAttribute("picker", "");
+    gallery.client = ctx.client;
+    gallery.addEventListener("pick", (e) => {
+      chosen = e.detail && e.detail.asset;
+      node.close();
+    });
+    const node = el("dialog", { class: "helm-dialog helm-picker", "aria-labelledby": "pick-title" },
+      el("h2", { class: "helm-dialog-title", id: "pick-title", text: "Add from the gallery" }),
+      gallery,
+      el("div", { class: "helm-dialog-actions" },
+        el("button", { class: "helm-btn", type: "button", text: "Cancel", onclick: () => node.close() })));
+    node.addEventListener("close", () => {
+      node.remove();
+      resolve(chosen);
+    });
+    document.body.append(node);
+    node.showModal();
+  });
+}

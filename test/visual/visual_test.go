@@ -147,7 +147,7 @@ type shot struct {
 // The launcher's screens (docs/decisions.md M6 Q2). Each is drawn from the
 // canned data in fixtures/fake.js, at the three widths 03's layout collapses
 // at, in both themes.
-var screens = []string{"catalogue", "install", "processes", "gallery", "models", "settings", "switch", "add", "editor", "import", "approve"}
+var screens = []string{"catalogue", "install", "processes", "gallery", "timeline", "models", "settings", "switch", "add", "editor", "import", "approve"}
 
 func shots() []shot {
 	var out []shot

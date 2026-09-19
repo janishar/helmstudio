@@ -196,12 +196,14 @@ func (t *Tokens) Authenticate(r *http.Request) (context.Context, error) {
 // id is the empty string, which no studio id can be: `scope=self` finds
 // nothing, an item can never be recorded as the launcher's, and what it may
 // read comes from gallery.read_all alone — which is the whole of what the
-// screen is, and what the decision entry says it costs.
+// screens are, and what the decision entry says they cost. A sequence it
+// creates is owned by nobody, which is what the launcher owning it is.
 func Launcher() Principal {
 	return Principal{Capabilities: []string{
 		string(helm.CapabilityGallery),
 		string(helm.CapabilityGalleryReadAll),
 		string(helm.CapabilityAssets),
+		string(helm.CapabilityTimeline),
 	}}
 }
 

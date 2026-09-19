@@ -1054,3 +1054,92 @@ func TestTheGalleryIsOneComponentInTwoPlaces(t *testing.T) {
 		})
 	}
 }
+
+// Adding a clip from any studio (03 §11, amended 2026-09-19). What a golden
+// cannot hold: that "Add" reaches a picker over every studio rather than one
+// studio's own work, and that what it picks is what is appended.
+func TestTheTimelineAddsFromEveryStudio(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/timeline?id=01JBTM00000000000000SEQ01A")
+
+	// The editor asks; the page answers with the gallery, over every studio.
+	if err := p.Eval(ctx, `(() => {
+		const editor = document.querySelector("helm-timeline");
+		[...editor.shadowRoot.querySelectorAll("button")].find(b => b.textContent.startsWith("Add clip")).click();
+		return 1;
+	})()`, new(float64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.WaitFor(ctx, `!!document.querySelector("dialog.helm-picker helm-gallery")
+		&& document.querySelector("dialog.helm-picker helm-gallery").shadowRoot.querySelectorAll(".item").length === 6`); err != nil {
+		t.Fatalf("waiting for the picker: %v", err)
+	}
+	var scope string
+	if err := p.Eval(ctx, `document.querySelector("dialog.helm-picker helm-gallery").getAttribute("scope")`, &scope); err != nil {
+		t.Fatal(err)
+	}
+	if scope != "all" {
+		t.Errorf("the picker's scope is %q; a picker that offered one studio's work is the thing this screen exists to replace", scope)
+	}
+
+	// ltx studio's plate, chosen from h3's sequence.
+	if err := p.Eval(ctx, `(() => {
+		const g = document.querySelector("dialog.helm-picker helm-gallery");
+		const item = [...g.shadowRoot.querySelectorAll(".item")].find(i => i.textContent.includes("rain street plate"));
+		item.click();
+		[...g.shadowRoot.querySelectorAll("button")].find(b => b.textContent === "Use this").click();
+		return 1;
+	})()`, new(float64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.WaitFor(ctx, `globalThis.appended.length === 1`); err != nil {
+		t.Fatalf("waiting for the clip to be appended: %v", err)
+	}
+	var added string
+	if err := p.Eval(ctx, `JSON.stringify(globalThis.appended[0])`, &added); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(added, `"asset_id":"as_2"`) || !strings.Contains(added, `"timeline_id":"01JBTM00000000000000SEQ01A"`) {
+		t.Errorf("appended %s; want ltx studio's asset on this sequence", added)
+	}
+
+	// And the picker is gone: it answered one question and closed.
+	var open float64
+	if err := p.Eval(ctx, `document.querySelectorAll("dialog.helm-picker").length`, &open); err != nil {
+		t.Fatal(err)
+	}
+	if open != 0 {
+		t.Errorf("%v pickers are still open after choosing", open)
+	}
+}
+
+// A sequence assembled here reads as what it is: four studios, each clip in
+// the hue of the one that made it, and the one whose studio cannot be learnt
+// neutral and labelled (03 §11, §17). Inside a studio every other studio's
+// clip is neutral, because the studio API serves no other studio's hue; the
+// launcher is the page that has read the library.
+func TestClipsWearTheirStudiosHues(t *testing.T) {
+	srv := fixtureServer(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	p := route(t, ctx, srv.URL, "#/timeline?id=01JBTM00000000000000SEQ01A")
+
+	var got string
+	if err := p.Eval(ctx, `(() => {
+		const editor = document.querySelector("helm-timeline");
+		return JSON.stringify([...editor.shadowRoot.querySelectorAll(".clip")].map(c => [
+			c.querySelector(".who").textContent,
+			getComputedStyle(c).getPropertyValue("--_hue").trim(),
+		]));
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	// The hue a page gave is substituted as written; the neutral one is
+	// --helm-status-idle, which resolves to its value.
+	want := `[["h3-studio","light-dark(#a06a10, #e0a33c)"],["ltx-studio","light-dark(#2f5fc4, #5b8def)"],["iris-studio","light-dark(#b12f68, #d8558f)"],["another studio","#716b5e"],["auk-studio","light-dark(#5c4bc4, #8b7cf0)"]]`
+	if got != want {
+		t.Errorf("clips are\n%s\nwant\n%s", got, want)
+	}
+}

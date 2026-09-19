@@ -29,6 +29,7 @@ import { approvalScreen, guard } from "./approval.js";
 import { addStudio } from "./add.js";
 import { studioPage } from "./embed.js";
 import { galleryScreen } from "./gallery.js";
+import { timelineScreen } from "./timeline.js";
 import { editor } from "./editor.js";
 
 /** How often the list is refreshed: cheap enough to leave running, short
@@ -58,6 +59,7 @@ const ROUTES = [
   // A grid of every studio's work, which is a workspace rather than a column
   // to read (03 §4, §10).
   { path: /^\/gallery$/, screen: galleryScreen, nav: "gallery", width: "grid" },
+  { path: /^\/timeline$/, screen: timelineScreen, nav: "timeline", width: "grid" },
   { path: /^\/models$/, screen: modelsAndDisk, nav: "models", width: "reading" },
   { path: /^\/settings$/, screen: settings, nav: "settings", width: "reading" },
 ];
@@ -65,6 +67,7 @@ const ROUTES = [
 const NAV = [
   { id: "studios", label: "Studios", href: "#/studios" },
   { id: "gallery", label: "Gallery", href: "#/gallery" },
+  { id: "timeline", label: "Timeline", href: "#/timeline" },
   { id: "models", label: "Models & disk", href: "#/models" },
   { id: "settings", label: "Settings", href: "#/settings" },
 ];

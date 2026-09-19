@@ -88,7 +88,7 @@ func New(sup *supervisor.Supervisor, shelf fs.FS, listenAddr string, logf func(s
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/logs", s.getLogFiles)
 	s.mux.HandleFunc("GET "+Base+"/studios/{id}/processes/{name}/logs", s.streamLogs)
 	s.routeInstall()
-	s.routeGallery()
+	s.routeMirrored()
 	if s.service != nil {
 		s.theme = s.service.Theme()
 	}

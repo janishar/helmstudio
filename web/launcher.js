@@ -76,6 +76,43 @@ export class GalleryGroup {
   }
 }
 
+/** The timeline group. */
+export class TimelineGroup {
+  constructor(transport) {
+    this.t = transport;
+  }
+
+  /** Every sequence, newest first. (GET /launcher/timeline) */
+  list(params = {}) {
+    return this.t.request("GET", "/launcher/timeline", { query: {"limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
+  }
+
+  /** Create a sequence the launcher owns. (POST /launcher/timeline) */
+  create(body) {
+    return this.t.request("POST", "/launcher/timeline", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Add one asset to the end of a track. (POST /launcher/timeline:append) */
+  append(body) {
+    return this.t.request("POST", "/launcher/timeline:append", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** One sequence, whichever studio made it. (GET /launcher/timeline/{id}) */
+  get(id) {
+    return this.t.request("GET", "/launcher/timeline/" + encodeURIComponent(id), { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** Edit a sequence. Every edit is a revision. (PATCH /launcher/timeline/{id}) */
+  update(id, body, params = {}) {
+    return this.t.request("PATCH", "/launcher/timeline/" + encodeURIComponent(id), { query: {}, headers: {"If-Match": params.ifMatch}, expect: "json", json: body, contentType: "application/merge-patch+json" });
+  }
+
+  /** Write an earlier revision back as the newest one. (POST /launcher/timeline/{id}:revert) */
+  revert(id, body, params = {}) {
+    return this.t.request("POST", "/launcher/timeline/" + encodeURIComponent(id) + ":revert", { query: {}, headers: {"If-Match": params.ifMatch}, expect: "json", json: body, contentType: "application/json" });
+  }
+}
+
 /** The studios group. */
 export class StudiosGroup {
   constructor(transport) {
@@ -304,6 +341,7 @@ export class LauncherClient {
     this.assets = new AssetsGroup(transport);
     this.jobs = new JobsGroup(transport);
     this.gallery = new GalleryGroup(transport);
+    this.timeline = new TimelineGroup(transport);
     this.studios = new StudiosGroup(transport);
     this.weights = new WeightsGroup(transport);
     this.manifests = new ManifestsGroup(transport);

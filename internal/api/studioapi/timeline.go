@@ -217,8 +217,13 @@ func (s *Service) TimelineCreate(ctx context.Context, body *helm.TimelineCreate)
 		if err != nil {
 			return err
 		}
+		// A sequence is owned by the studio that made it, or by the launcher
+		// (01 §6 R44), and null is what the launcher's ownership is: the
+		// launcher has no studio id, so an empty string would be an owner
+		// whose hue and name nothing could look up.
+		owner := sql.NullString{String: p.StudioID, Valid: p.StudioID != ""}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO timelines (id, studio_id, name, target, tracks, revision, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, 1, ?, ?)`, id, p.StudioID, body.Name, targetJSON, tracksJSON, now, now); err != nil {
+			VALUES (?, ?, ?, ?, ?, 1, ?, ?)`, id, owner, body.Name, targetJSON, tracksJSON, now, now); err != nil {
 			return err
 		}
 		r, err := s.readTimeline(ctx, tx, p, id)
