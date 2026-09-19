@@ -297,6 +297,49 @@ async function* logStream() {
  * that invented them would pin a golden of a screen drawn from a shape the
  * daemon no longer returns.
  */
+// What four studios have made, for the launcher's Gallery (03 §10). The
+// shapes are the API's: an item carries its studio, its params and the asset
+// whose bytes it is.
+export const items = [
+  { id: "it_1", studio_id: "h3-studio", kind: "video", asset_id: "as_1", title: "café window drift", starred: true, tags: [{ name: "keeper" }], inputs: [{ item_id: "take-052505" }], params: { seed: 42 }, created_at: at(600), asset: { id: "as_1", kind: "video", width: 800, height: 448, duration_s: 5.0, bytes: 5_200_000 } },
+  { id: "it_2", studio_id: "ltx-studio", kind: "video", asset_id: "as_2", title: "rain street plate", starred: false, tags: [], inputs: [], params: { seed: 7 }, created_at: at(1800), asset: { id: "as_2", kind: "video", width: 1280, height: 720, duration_s: 4.2, bytes: 8_100_000 } },
+  { id: "it_3", studio_id: "iris-studio", kind: "image", asset_id: "as_3", title: "klein still 11", starred: false, tags: [{ name: "ref" }], inputs: [], params: { seed: 991 }, created_at: at(3000), asset: { id: "as_3", kind: "image", width: 1024, height: 1024, bytes: 1_400_000 } },
+  { id: "it_4", studio_id: "auk-studio", kind: "audio", asset_id: "as_4", title: "line 04 — arshi", starred: false, tags: [], inputs: [], params: {}, created_at: at(4200), asset: { id: "as_4", kind: "audio", duration_s: 3.0, bytes: 120_000 } },
+  { id: "it_5", studio_id: "h3-studio", kind: "video", asset_id: "as_5", title: "take-053255", starred: false, tags: [], inputs: [{ asset_id: "as_1" }], params: { seed: 42 }, created_at: at(5400), asset: { id: "as_5", kind: "video", width: 800, height: 448, duration_s: 5.2, bytes: 5_400_000 } },
+  { id: "it_6", studio_id: "h3-studio", timeline_id: "tl_1", kind: "video", asset_id: "as_6", title: "café sequence", starred: false, tags: [], inputs: [{ asset_id: "as_1" }, { asset_id: "as_2" }], params: {}, created_at: at(7200), asset: { id: "as_6", kind: "video", width: 1920, height: 1080, duration_s: 14.16, bytes: 31_000_000 } },
+];
+
+// One sequence with four studios in it, for the launcher's Timeline (03 §11).
+// It is stored as the daemon stores it: laid out, with each clip's own studio
+// on it, and the fourth clip's studio null — a caller who cannot learn it sees
+// "another studio" rather than somebody else's colour.
+export const sequences = [{
+  id: "01JBTM00000000000000SEQ01A",
+  studio_id: null,
+  name: "café sequence",
+  target: { width: 1920, height: 1080, fps: 24, sample_rate: 48000 },
+  tracks: [
+    { kind: "video", name: "V1", clips: [
+      { asset_id: "as_1", studio_id: "h3-studio", at: 0, in: 0, out: 5.04 },
+      { asset_id: "as_2", studio_id: "ltx-studio", at: 5.04, in: 0, out: 4.04 },
+      { asset_id: "as_3", studio_id: "iris-studio", at: 9.08, hold: 2.2 },
+      { asset_id: "as_7", studio_id: null, at: 11.28, in: 0, out: 2.88 },
+    ] },
+    { kind: "audio", name: "A1", clips: [
+      { asset_id: "as_4", studio_id: "auk-studio", at: 1, in: 0, out: 3 },
+    ] },
+  ],
+  revision: 4,
+  duration_s: 14.16,
+  etag: "4",
+  created_at: at(9000),
+  updated_at: at(600),
+}];
+
+// What the picker added, for a behaviour test to read. The fixture records it
+// the way fixtures/timeline.html records the editor's calls.
+globalThis.appended = [];
+
 export function fakeClient() {
   const real = connect();
   const page = (items) => Promise.resolve({ items, next_cursor: null });
@@ -311,6 +354,32 @@ export function fakeClient() {
       select: (id, body) => real.studios.select(id, body),
     },
     models: { list: () => page(models), disk: () => Promise.resolve(disk) },
+    // The launcher's gallery reads every studio's items and narrows by chip,
+    // so the fixture filters as the daemon does. There is no update here and
+    // no event stream, which is what the launcher's own client has: no star,
+    // and no live insertion.
+    gallery: {
+      query: ({ studio, kind } = {}) => page(items.filter((i) =>
+        (!studio || i.studio_id === studio) && (!kind || i.kind === kind))),
+    },
+    // The launcher edits every studio's sequences, and adds clips from any of
+    // them. There is no export: who owns a launcher export is still open.
+    timeline: {
+      list: () => page(sequences),
+      get: (id) => Promise.resolve(sequences.find((s) => s.id === id) || sequences[0]),
+      update: (id, body) => Promise.resolve({ ...sequences[0], ...body, revision: 5, etag: "5" }),
+      append: (body) => {
+        globalThis.appended.push(body);
+        return Promise.resolve(sequences[0]);
+      },
+    },
+    assets: {
+      // No thumbnail. A decoded raster composites differently from run to run
+      // at a rounded corner, and these goldens are exact (M6 Q16); the kind
+      // glyph is what the grid draws without one.
+      thumb: () => Promise.reject(Object.assign(new Error("thumb (501): not in this fixture"), { kind: "Unsupported" })),
+      read: () => Promise.reject(Object.assign(new Error("read (501): not in this fixture"), { kind: "Unsupported" })),
+    },
     jobs: {
       get: (id) => Promise.resolve(Object.values(jobs).find((j) => j.id === id)),
       logs: () => logStream(),

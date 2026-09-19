@@ -163,3 +163,51 @@ func TestComponentsBehave(t *testing.T) {
 		t.Errorf("picking the second item emitted asset %q, want as_2", picked)
 	}
 }
+
+// The gallery's viewer opens on a player that works (docs/decisions.md
+// 2026-09-19). It used to open on an element that never upgraded — nothing
+// drawn, no controls, no shadow root — because <helm-player>'s constructor
+// gave its element a tabindex, which document.createElement refuses. The
+// symptom was invisible to every golden: the dialog was there and correct,
+// and empty.
+func TestTheGalleryViewerOpensOnAPlayerThatUpgraded(t *testing.T) {
+	b := openBrowser(t)
+	srv := fixtureServer(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	page, err := b.NewPage(ctx, 1100, 900, "dark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer page.Close()
+	if err := page.Navigate(ctx, srv.URL+"/fixtures/ui.html?theme=dark"); err != nil {
+		t.Fatal(err)
+	}
+	if err := page.WaitFor(ctx, `document.documentElement.dataset.ready === "1"`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := page.Eval(ctx, `(() => {
+		const g = document.getElementById("gal");
+		g.shadowRoot.querySelector(".item").click();
+		return 1;
+	})()`, new(float64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := page.WaitFor(ctx, `!!document.getElementById("gal").shadowRoot.querySelector("dialog.viewer[open]")`); err != nil {
+		t.Fatalf("waiting for the viewer: %v", err)
+	}
+
+	var got string
+	if err := page.Eval(ctx, `(() => {
+		const player = document.getElementById("gal").shadowRoot.querySelector("dialog.viewer helm-player");
+		if (!player) return "no player";
+		return player.constructor.name + (player.shadowRoot ? " with a shadow root" : " with none");
+	})()`, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got != "HelmPlayer with a shadow root" {
+		t.Errorf("the viewer's player is %q; an element that did not upgrade draws nothing at all", got)
+	}
+}

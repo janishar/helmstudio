@@ -1065,3 +1065,106 @@ dialog.helm-dialog::backdrop {
   border: 0;
   border-radius: 0;
 }
+
+/* ---- the Gallery ---------------------------------------------------------- */
+
+/* A page whose content scrolls inside itself is bounded by the window. The
+ * shell's middle row is 1fr of a container with only a *minimum* height, so it
+ * grows with its content by default: the gallery panel would then never
+ * overflow, and <helm-gallery> pages the next 48 items when its own body
+ * scrolls near its end — which, in a panel that never scrolls, is never. This
+ * is also what keeps the window's scrollbar and the panel's from being on
+ * screen at once, each moving a different half of the same grid. */
+.helm-app:has(.helm-page-grid),
+.helm-app:has(.helm-page-full) {
+  height: 100vh;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* The workspace width (03 §4), filling the height as well. */
+.helm-page-grid {
+  flex: 1;
+  min-height: 0;
+  max-width: 1440px;
+}
+
+.helm-page-grid > .helm-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.helm-gallery-screen {
+  flex: 1;
+  min-height: 0;
+}
+
+.helm-gallery-screen helm-gallery {
+  flex: 1;
+  min-height: 320px;
+}
+
+/* A scope chip carries the studio's hue for the theme showing (03 §2c) as a
+ * dot, with the name beside it: colour is never the only thing saying which
+ * studio this is. */
+.helm-scope {
+  --_helm-hue: var(--_hue-dark);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.helm-scope:where(:hover) {
+  border-color: var(--helm-border-strong);
+}
+
+.helm-scope-on {
+  border-color: var(--helm-accent-base);
+}
+
+.helm-hue-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--_helm-hue, var(--helm-studio-accent));
+}
+
+:root[data-theme="light"] .helm-scope {
+  --_helm-hue: var(--_hue-light);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .helm-scope {
+    --_helm-hue: var(--_hue-light);
+  }
+}
+
+/* The picker is the gallery in a dialog, so it takes a dialog's width from
+ * the grid rather than the 430px a question takes. */
+.helm-picker {
+  width: min(960px, 92vw);
+}
+
+.helm-picker helm-gallery {
+  display: block;
+  height: min(60vh, 520px);
+  margin-top: var(--helm-space-3);
+}
+
+.helm-gallery-screen helm-timeline {
+  flex: 1;
+  min-height: 420px;
+}
+
+/* A screen with no nav is two rows, not three: the middle row was the nav's
+ * (03 §7a, amended 2026-09-19), and without this the page lands in an `auto`
+ * row and a frame inside it falls back to its own 150px. It names the same
+ * pages the rule above does, because that one is two classes deep and this
+ * one has to reach past it. */
+.helm-app-bare:has(.helm-page-full),
+.helm-app-bare:has(.helm-page-grid),
+.helm-app-bare {
+  grid-template-rows: auto minmax(0, 1fr);
+}

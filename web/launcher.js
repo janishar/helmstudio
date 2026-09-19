@@ -25,6 +25,16 @@ export class AssetsGroup {
   reclaim(body) {
     return this.t.request("POST", "/assets:reclaim", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
   }
+
+  /** The asset's bytes, with Range. (GET /launcher/assets/{id}) */
+  read(id, params = {}) {
+    return this.t.request("GET", "/launcher/assets/" + encodeURIComponent(id), { query: {}, headers: {"Range": params.range}, expect: "raw" });
+  }
+
+  /** A thumbnail, generated once and cached. (GET /launcher/assets/{id}/thumb) */
+  thumb(id, params = {}) {
+    return this.t.request("GET", "/launcher/assets/" + encodeURIComponent(id) + "/thumb", { query: {"w": params.w}, headers: {}, expect: "raw" });
+  }
 }
 
 /** The jobs group. */
@@ -51,6 +61,55 @@ export class JobsGroup {
   /** A lifecycle job's build log as server-sent events. A task job is 404. (GET /launcher/jobs/{id}/logs) */
   logs(id) {
     return this.t.request("GET", "/launcher/jobs/" + encodeURIComponent(id) + "/logs", { query: {}, headers: {}, expect: "sse" });
+  }
+}
+
+/** The gallery group. */
+export class GalleryGroup {
+  constructor(transport) {
+    this.t = transport;
+  }
+
+  /** Every studio's items, newest first. (GET /launcher/gallery/items) */
+  query(params = {}) {
+    return this.t.request("GET", "/launcher/gallery/items", { query: {"studio": params.studio, "kind": params.kind, "tag": params.tag, "starred": params.starred, "asset_id": params.assetId, "since": params.since, "until": params.until, "q": params.q, "limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
+  }
+}
+
+/** The timeline group. */
+export class TimelineGroup {
+  constructor(transport) {
+    this.t = transport;
+  }
+
+  /** Every sequence, newest first. (GET /launcher/timeline) */
+  list(params = {}) {
+    return this.t.request("GET", "/launcher/timeline", { query: {"limit": params.limit, "cursor": params.cursor}, headers: {}, expect: "json" });
+  }
+
+  /** Create a sequence the launcher owns. (POST /launcher/timeline) */
+  create(body) {
+    return this.t.request("POST", "/launcher/timeline", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** Add one asset to the end of a track. (POST /launcher/timeline:append) */
+  append(body) {
+    return this.t.request("POST", "/launcher/timeline:append", { query: {}, headers: {}, expect: "json", json: body, contentType: "application/json" });
+  }
+
+  /** One sequence, whichever studio made it. (GET /launcher/timeline/{id}) */
+  get(id) {
+    return this.t.request("GET", "/launcher/timeline/" + encodeURIComponent(id), { query: {}, headers: {}, expect: "json" });
+  }
+
+  /** Edit a sequence. Every edit is a revision. (PATCH /launcher/timeline/{id}) */
+  update(id, body, params = {}) {
+    return this.t.request("PATCH", "/launcher/timeline/" + encodeURIComponent(id), { query: {}, headers: {"If-Match": params.ifMatch}, expect: "json", json: body, contentType: "application/merge-patch+json" });
+  }
+
+  /** Write an earlier revision back as the newest one. (POST /launcher/timeline/{id}:revert) */
+  revert(id, body, params = {}) {
+    return this.t.request("POST", "/launcher/timeline/" + encodeURIComponent(id) + ":revert", { query: {}, headers: {"If-Match": params.ifMatch}, expect: "json", json: body, contentType: "application/json" });
   }
 }
 
@@ -281,6 +340,8 @@ export class LauncherClient {
   constructor(transport) {
     this.assets = new AssetsGroup(transport);
     this.jobs = new JobsGroup(transport);
+    this.gallery = new GalleryGroup(transport);
+    this.timeline = new TimelineGroup(transport);
     this.studios = new StudiosGroup(transport);
     this.weights = new WeightsGroup(transport);
     this.manifests = new ManifestsGroup(transport);

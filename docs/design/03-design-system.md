@@ -387,7 +387,11 @@ Step glyphs are distinct shapes — hollow circle, ring, check, cross, dash — 
 ## 7a · A studio inside helmstudio
 
 (Added 2026-09-18, by the human's decision.) Open puts the studio's own page in
-a frame under helmstudio's top bar and nav, at the full width of the window.
+a frame under helmstudio's top bar, at the full width of the window. (Amended
+2026-09-19, by the human's decision: **under the top bar, and not under the
+nav.** Five links to places that are not this studio sat above someone else's
+page taking the whole window; Studios is still one click away in this screen's
+own back link, and the top bar still says what is running and stops it.)
 
 - **It is the studio's own origin**, on its own port, in a frame — not proxied
   under helmstudio's. A studio is someone else's code running with your
@@ -410,6 +414,12 @@ a frame under helmstudio's top bar and nav, at the full width of the window.
 - **Fullscreen and clipboard-write are granted** to the frame. Clipboard *read*
   is not available to a cross-origin frame however it is declared, so a studio
   that reads the clipboard asks for the tab.
+
+(Amended 2026-09-19.) This screen is the studio's page and nothing else. A
+gallery was put beside it for a day and taken out again: a studio that draws
+its own gallery — h3 does — then had two, one inside the frame and one above
+it, over the same items. §10's screen narrowed by that studio's chip is the
+one place helmstudio shows a studio's work.
 
 ## 8 · Process group
 
@@ -448,6 +458,11 @@ One query serves both views: the launcher's cross-studio gallery and a studio's 
 
 (Amended 2026-09-16, M6 Q11: the launcher's cross-studio gallery waits for M9's cookie. Until then only a studio's own panel exists, through `helm-gallery`.)
 
+(Amended 2026-09-19, by the human's decision, which `docs/decisions.md` records with what it costs: the launcher's gallery does not wait for the cookie. It is a screen in the nav, over `helm-gallery` and the launcher's own client.
+
+- **One studio's work is this screen with that studio's chip chosen**, `#/gallery?studio=<id>`. It was briefly a second gallery on the studio's own screen (§7a) and is not: a studio that draws its own gallery inside the frame would have had two above each other, over the same items.
+- **The launcher stars nothing.** An item belongs to the studio that made it and a PATCH of another's is refused, so the launcher's client carries no update and the component draws no star. The mockup's grid is read-only apart from what an item can be *used* for.)
+
 ## 11 · Timeline
 
 *[Mockup: café sequence — 1920×1080 · 24 fps · 48 kHz · 00:14.16, chip "stream copy · no re-encode", Add from gallery, Export; a ruler 0s–14s; track V1 video with clips take-052505 (0–5.04s), ltx-drift-04 (5.04–9.1s), klein-11 (hold 2.2s), take-053255 (11.3–14.16s), each in its studio's hue; tracks A1 dialogue and A2 ambience.]*
@@ -458,7 +473,7 @@ Clips carry the identity hue of the studio that produced them, so a sequence ass
 - **The chip reads "video stream copy".** The picture is copied and the sound is always re-encoded, because a copied AAC stream drags its own priming into every cut. The conform chip names the first reason the copy could not be taken, which is what teaches which edits are cheap.
 - **The mockup's own sequence would conform,** not copy: it holds a still, clips of three sizes and a separate voice line. A copy is a run of takes from one studio, used whole.
 - **A clip whose studio the viewer cannot learn** — an asset from a studio whose items they may not read — is drawn in a neutral hue and labelled "another studio", never in someone else's identity colour.
-- **This screen is the launcher's, and it ships with the Mac app** (M9), because it reads every studio's items and bytes; until then a sequence is edited inside a studio through `helm-timeline`.
+- **This screen is the launcher's, and it ships with the Mac app** (M9), because it reads every studio's items and bytes; until then a sequence is edited inside a studio through `helm-timeline`. (Amended 2026-09-19: it does not wait for the cookie either, with the Gallery and at the same cost, and it ships **without export** — who owns a launcher export is still open, so the editor here has no Export and no conform chip, and a sequence assembled in the launcher is exported from a studio. **Every clip wears its own studio's hue on this screen**, which is what the paragraph above asks for and what no studio's own page can do: the launcher has read the library and tells the component, through `hueFor`.)
 
 (Amended 2026-09-18: **the picture keeps its room.** A page that gives the editor a height of its own — a studio's dialog — must not squeeze the preview away; the stage never shrinks and is capped, so the tracks stay in view whatever shape the sequence is. **The conform chip's reason is shown in full**, wrapping rather than ending in an ellipsis: the reason is what the chip is for, and half of it teaches nothing.)
 

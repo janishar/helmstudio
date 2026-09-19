@@ -28,6 +28,8 @@ import { launch, stop } from "./switch.js";
 import { approvalScreen, guard } from "./approval.js";
 import { addStudio } from "./add.js";
 import { studioPage } from "./embed.js";
+import { galleryScreen } from "./gallery.js";
+import { timelineScreen } from "./timeline.js";
 import { editor } from "./editor.js";
 
 /** How often the list is refreshed: cheap enough to leave running, short
@@ -43,7 +45,7 @@ const ROUTES = [
   { path: /^\/studios$/, screen: catalogue, nav: "studios", width: "reading" },
   { path: /^\/studios\/([^/]+)\/approve$/, screen: approvalScreen, nav: "studios", width: "reading", back: true },
   // The studio's own page, in a frame: its own origin, inside helmstudio.
-  { path: /^\/studios\/([^/]+)\/open$/, screen: studioPage, nav: "studios", width: "full", back: true },
+  { path: /^\/studios\/([^/]+)\/open$/, screen: studioPage, nav: "studios", width: "full", back: true, bare: true },
   { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios", width: "workspace", back: true },
   // Reading width, not workspace (03 §4, amended 2026-09-19): with the output
   // under the install rather than beside it, the page is a column to read down.
@@ -54,12 +56,18 @@ const ROUTES = [
   { path: /^\/add$/, screen: addStudio, nav: "studios", width: "reading", back: true },
   { path: /^\/edit$/, screen: editor, nav: "studios", width: "workspace", back: true },
   { path: /^\/edit\/([^/]+)$/, screen: editor, nav: "studios", width: "workspace", back: true },
+  // A grid of every studio's work, which is a workspace rather than a column
+  // to read (03 §4, §10).
+  { path: /^\/gallery$/, screen: galleryScreen, nav: "gallery", width: "grid" },
+  { path: /^\/timeline$/, screen: timelineScreen, nav: "timeline", width: "grid" },
   { path: /^\/models$/, screen: modelsAndDisk, nav: "models", width: "reading" },
   { path: /^\/settings$/, screen: settings, nav: "settings", width: "reading" },
 ];
 
 const NAV = [
   { id: "studios", label: "Studios", href: "#/studios" },
+  { id: "gallery", label: "Gallery", href: "#/gallery" },
+  { id: "timeline", label: "Timeline", href: "#/timeline" },
   { id: "models", label: "Models & disk", href: "#/models" },
   { id: "settings", label: "Settings", href: "#/settings" },
 ];
@@ -382,13 +390,24 @@ export function shell(ctx, hash, address) {
       },
     }),
     topbar(ctx, address),
-    nav(r.nav),
+    // A studio's page takes the window, and the nav above it is five links to
+    // places that are not it. Studios is still one click away, in the back
+    // link this route already carries, and the top bar still says what is
+    // running and stops it.
+    r.bare ? null : nav(r.nav),
     el("main", { class: "helm-main", id: "main", tabindex: "-1" }, page),
-  ];
+    // Filtered, because morphChildren walks this list and a null is not a
+    // node: a screen that leaves the nav out would otherwise stop the walk
+    // where the nav was, and the page under it would never be put on screen.
+  ].filter(Boolean);
 }
 
 /** render draws the page into app in place: what has not changed is not touched. */
 export function render(app, ctx, hash, address) {
+  // A bare screen is the shell without its nav, which is two rows and not
+  // three. The class goes on the shell rather than inside it, because what
+  // changes is how the window is divided (03 §7a, amended 2026-09-19).
+  app.classList.toggle("helm-app-bare", !!route(hash).bare);
   morphChildren(app, shell(ctx, hash, address));
 }
 
