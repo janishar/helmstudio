@@ -24,6 +24,8 @@ Link each weight a command uses to the directory that holds it. The directory is
 
 A launch whose command uses a weight that is not linked is refused, naming the weight.
 
+A studio whose weights are `selectable` also needs one chosen: `-select <weight>`. Without it the launch is refused with the choices named, because picking one for you is what the launcher's approval screen is for.
+
 ## Python
 
 A studio that declares `python` runs in your environment: the active one, or the one `-venv` names. `helm dev` checks it is the Python version the manifest declares, and never creates or changes an environment — without one, it refuses and says how to make one.
