@@ -234,6 +234,20 @@ extension AppDelegate: WKUIDelegate {
         return nil
     }
 
+    /// A studio asking for the microphone — a speech studio recording its
+    /// reference clip. Unanswered, WebKit denies it and the page is given no
+    /// `navigator.mediaDevices` at all, so recording looks broken rather than
+    /// refused. Granting here is not the real decision: macOS still asks for
+    /// the microphone once, for helmstudio, and what is being granted is
+    /// loopback-local code the person installed and started themselves.
+    func webView(_ webView: WKWebView,
+                 requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo,
+                 type: WKMediaCaptureType,
+                 decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void) {
+        decisionHandler(type == .microphone ? .grant : .deny)
+    }
+
     // The dialogs a page expects to exist.
     //
     // A WKWebView answers none of these on its own, and the failure is silent

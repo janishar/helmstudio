@@ -28,6 +28,11 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>helmstudio</string>
+	<!-- A studio that records — a speech studio taking a reference clip — asks
+	     the page for the microphone. Without this string macOS terminates the
+	     app instead of prompting the first time it is asked. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A studio you run can record audio, such as a reference voice clip. Nothing leaves this Mac.</string>
 	<!-- App Transport Security refuses plain http by default, which would
 	     include the daemon on loopback. This is the documented exemption for
 	     it, and it is the narrowest one: local networking only, not arbitrary
