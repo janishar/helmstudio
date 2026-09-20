@@ -1,5 +1,5 @@
 file: studios/ltx-studio.yaml
-digest: sha256:ac6966454b465dfccb246598177896fd335df0dd113c6ded8fdec6ec1692452a
+digest: sha256:c82ec2cf48b23adae6c1084349be549e9b849b6246e8dd95e38962fed90dbe4f
 title: ltx studio's manifest
 intro: >-
   ltx studio makes video with sound from LTX-2.5 on MLX, behind a Python
