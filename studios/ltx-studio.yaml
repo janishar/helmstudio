@@ -65,6 +65,12 @@ manifest:
         - latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
         - model_patches/ltx-2.5-duration-head-bf16.safetensors
       size_gb: 71
+    - name: ltx_video_vae_av
+      repo: Lightricks/LTX-2.5
+      dest: LTX-2.5
+      files: ["vae/ltx-2.5-video-vae-bf16.safetensors"]
+      size_gb: 2
+      optional: true
     - name: ltx_dev_transformer
       repo: Lightricks/LTX-2.5
       dest: LTX-2.5

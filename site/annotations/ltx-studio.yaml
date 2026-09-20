@@ -1,5 +1,5 @@
 file: studios/ltx-studio.yaml
-digest: sha256:1296c998b0c31d988930216d732bd21205c185868e53d8453e45be77b355fd10
+digest: sha256:ac6966454b465dfccb246598177896fd335df0dd113c6ded8fdec6ec1692452a
 title: ltx studio's manifest
 intro: >-
   ltx studio makes video with sound from LTX-2.5 on MLX, behind a Python
@@ -29,7 +29,7 @@ notes:
   /manifest/sdk: "Pins major 1 of the runtime SDK, helm-css and helm-ui — the components it draws its gallery, timeline and terminal with, which is why this one names three where a studio drawing its own names two."
   /manifest/network: "The hosts it is expected to contact, for its weights."
   /manifest/build: "One step: install exactly the locked dependencies, and fail rather than change the lock file in the checkout."
-  /manifest/weights: "Three weights, two from one repository into one directory. The recommended set is required; the dev transformer and the Gemma encoder are optional, so install does not wait for them."
+  /manifest/weights: "Three weights, all from one repository into one directory. The first set is required. The AV video VAE and the dev transformer are optional, so an install does not wait for them: the first is what --video-decoder diffusion decodes with, the second is what --pipeline dev runs."
   /manifest/processes: "One process: the Python server in web/."
   /manifest/processes/0/cwd: "The command runs in web/, relative to the checkout."
   /manifest/processes/0/cmd: "Plain python, not uv run, which would sync the environment and reach the network at every launch."
