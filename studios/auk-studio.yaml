@@ -25,8 +25,11 @@ manifest:
   license: MIT
   repo: https://github.com/janishar/AuK
   ref: main
-  python: { version: "3.10" }
-  peak_ram_gb: 25 # web/README.md: "each is ~15-25GB" per checkpoint variant — upper bound, unverified against a real checkpoint
+  # 3.12, not the 3.10 in AuK's pyproject: scipy's last 3.10 wheel (1.15.3) no
+  # longer loads on macOS 27, and qwen-omni-utils imports it through librosa, so
+  # a 3.10 environment installs and then fails at generation time.
+  python: { version: "3.12" }
+  peak_ram_gb: 25 # measured 13.8 GB resident for AuK-Flash on mps/bf16; base is larger, and generation adds latents on top
   requires:
     os: [darwin]
     arch: [arm64]
