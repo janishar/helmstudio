@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v1.0.0-rc.3
+	github.com/janishar/helmstudio/packages/helm-runtime-sdk/go v1.0.0-rc.4
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1

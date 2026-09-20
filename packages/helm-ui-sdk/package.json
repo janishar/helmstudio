@@ -1,6 +1,6 @@
 {
   "name": "@helmstudio/ui",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0-rc.4",
   "description": "helmstudio's prebuilt components: helm-terminal, helm-gallery, helm-player and helm-timeline",
   "type": "module",
   "exports": {
@@ -14,8 +14,8 @@
     "src"
   ],
   "peerDependencies": {
-    "@helmstudio/css": "^1.0.0-rc.3",
-    "@helmstudio/runtime": "^1.0.0-rc.3"
+    "@helmstudio/css": "^1.0.0-rc.4",
+    "@helmstudio/runtime": "^1.0.0-rc.4"
   },
   "peerDependenciesMeta": {
     "@helmstudio/css": {
