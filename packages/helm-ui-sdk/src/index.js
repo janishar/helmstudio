@@ -25,4 +25,4 @@ export { HelmTimeline, clockText } from "./timeline.js";
 export * as sequence from "./sequence.js";
 
 /** Version is helm-ui-sdk's own; it moves independently of css and runtime (04 §9). */
-export const VERSION = "1.0.0-rc.3";
+export const VERSION = "1.0.0-rc.4";

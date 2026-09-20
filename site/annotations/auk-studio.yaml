@@ -1,16 +1,16 @@
 file: studios/auk-studio.yaml
-digest: sha256:9a5eeab75a45b287ce6b94e7f685ae51a80f7667b074605a5420386a389e12ec
+digest: sha256:8d30d124ad8cf1ddfb1ff74b818790531d28ab88be0bd7cda96283564f658aeb
 title: AuK studio's manifest
 intro: >-
   AuK studio makes speech and voices with PyTorch on mps, behind a FastAPI
-  server. Its registry entry carries its manifest inline. It passes four of the
-  seven criteria a manifest can answer: it declares neither memory nor disk, no
-  test profile and no SDK major.
+  server. Its repository ships this manifest, and the registry entry carries a
+  copy so the studio can be described before it is fetched. It passes six of the
+  seven criteria a manifest can answer: it declares no test profile.
 notes:
   /id: "The id the studio is known by everywhere, and the file is named for it."
   /repo: "Where helmstudio clones from, with git."
   /ref: "A branch, so an install takes whatever it points at when the clone runs. A registry entry normally pins a commit; docs/decisions.md 2026-09-19 says why this one does not."
-  /manifest: "Inline, because the repository ships no helmstudio.yaml at this commit. Its id, repo and ref must equal the pointer's."
+  /manifest: "A copy of the helmstudio.yaml the repository ships. Resolution reaches nothing over the network, so without it the studio has no description, hue or checkpoint to choose until it is fetched. Its id, repo and ref must equal the pointer's."
   /manifest/id: "The same id as the pointer's."
   /manifest/name: "The name people see."
   /manifest/description: "One sentence saying what the studio does."
@@ -19,14 +19,15 @@ notes:
   /manifest/license: "The studio's own licence."
   /manifest/repo: "The same repository as the pointer's."
   /manifest/ref: "The same branch as the pointer's."
-  /manifest/python: "Python 3.10. helmstudio creates an environment with uv, pinned to this version, before the build steps."
-  /manifest/peak_ram_gb: "The upper end of the README's range, as the comment says."
-  /manifest/requires: "An Apple Silicon Mac, and uv. No memory or disk is declared, which is why criterion 2 fails."
+  /manifest/python: "Python 3.12. helmstudio creates an environment with uv, pinned to this version, before the build steps. The comment says why not 3.10: scipy's last wheel for it no longer loads on recent macOS."
+  /manifest/peak_ram_gb: "Measured for the distilled checkpoint and rounded up to cover the base one, as the comment says."
+  /manifest/requires: "An Apple Silicon Mac, uv, and the memory and disk an install needs."
   /manifest/runtime: "PyTorch on mps, falling back to the CPU. The same framework on cuda would be a different manifest, and the comment says why this one was chosen."
-  /manifest/capabilities: "Settings and sessions, the files it makes, and the gallery."
+  /manifest/capabilities: "Sessions and their settings, the files it makes, the gallery, and a job per render whose log its page streams."
+  /manifest/sdk: "The SDK majors its page is written against, so a helmstudio update never moves it across one."
   /manifest/network: "The hosts it is expected to contact, for its weights."
   /manifest/build: "Two steps, in the studio's environment: the core package, then the web server's requirements."
-  /manifest/weights: "Three checkpoints, all required. The command names none of them, so none is passed to the server as a path."
+  /manifest/weights: "The encoder it always needs, and two checkpoints to choose between. Only the chosen one is downloaded, and the command is given its path."
   /manifest/processes: "One process: the FastAPI server in web/."
   /manifest/processes/0/health: "An HTTP GET that answers 200 when the server is ready."
-  /manifest/processes/0/busy: "Declared, so the switch dialog asks before stopping it. Its health endpoint does not give the busy answer, so the dialog reads it as unknown, never as idle."
+  /manifest/processes/0/busy: "The same endpoint, which answers the busy contract: busy while a generation holds the engine, so the switch dialog never reads it as idle mid-render."

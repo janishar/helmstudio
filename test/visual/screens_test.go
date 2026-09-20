@@ -345,7 +345,7 @@ func TestTheApprovalScreenPutsItsButtonAfterTheCommands(t *testing.T) {
 	// approve a screen they never read.
 	var below float64
 	if err := p.Eval(ctx, `(() => {
-		const cmds = [...document.querySelectorAll(".helm-step-command")];
+		const cmds = [...document.querySelectorAll(".helm-command")];
 		if (!cmds.length) return 0;
 		const last = Math.max(...cmds.map(c => c.getBoundingClientRect().bottom));
 		const go = [...document.querySelectorAll("button")].find(b => b.textContent.startsWith("Install"));
@@ -906,7 +906,7 @@ func TestAStudioOpensInsideHelmstudio(t *testing.T) {
 	})()`, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := "http://127.0.0.1:8720/|same frame|not reloaded|fullscreen; clipboard-write|tab offered|fills the page"
+	want := "http://127.0.0.1:8720/|same frame|not reloaded|fullscreen; clipboard-write; microphone|tab offered|fills the page"
 	if got != want {
 		t.Errorf("the embedded studio reads:\n got %q\nwant %q", got, want)
 	}

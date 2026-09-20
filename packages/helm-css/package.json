@@ -1,6 +1,6 @@
 {
   "name": "@helmstudio/css",
-  "version": "1.0.0-rc.3",
+  "version": "1.0.0-rc.4",
   "description": "helm-css: helmstudio's design system — tokens, base, layout and components, in a dark and a light theme",
   "style": "helm.css",
   "exports": {
