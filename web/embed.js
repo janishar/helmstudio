@@ -53,7 +53,9 @@ function frameFor(ctx, studio, src) {
     class: "helm-embed",
     // The studio's page is its own; these are what a page cannot take for
     // itself from inside a frame and a studio may legitimately want.
-    allow: "fullscreen; clipboard-write",
+    // microphone: a speech studio records its reference audio in the page, and
+    // without it navigator.mediaDevices is undefined inside the frame.
+    allow: "fullscreen; clipboard-write; microphone",
     title: `${studio.name}, running on this Mac`,
   }));
   if (node.dataset.src !== src) {
