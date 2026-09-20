@@ -20,7 +20,8 @@
 //
 // What can be done with a selected item is the studio's business, not a
 // component's (rule 5): selecting emits `select`, and a studio puts its own
-// buttons in the `actions` slot.
+// buttons in the `actions` slot, or in `viewer-actions` for the item the
+// viewer has open.
 
 import { HelmElement, bytes, define, el, kindOf, message } from "./base.js";
 // Registers <helm-player>, which the viewer below mounts. A gallery imported
@@ -519,6 +520,11 @@ export class HelmGallery extends HelmElement {
         this.viewerTitle,
         this.viewerStatus,
         el("span", { class: "spacer" }),
+        // Where a page puts what it can do with the item in front of it —
+        // Save, Use as a reference, Send somewhere. Selecting happens before
+        // the viewer opens, so what is slotted here has already been told
+        // which item this is (rule 5, as for the toolbar's `actions`).
+        el("slot", { name: "viewer-actions" }),
         el("button", { text: "Full screen", onclick: () => this.fullScreen() }),
         el("button", { text: "Close", onclick: () => this.viewerDialog.close() })));
     // createElement, which is what this always should have been. It used to

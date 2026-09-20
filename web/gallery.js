@@ -18,10 +18,36 @@
 
 import { el } from "./ui.js";
 
+// What a take is called once it leaves helmstudio. The mime is on the item, so
+// naming the file costs no request; anything unmapped keeps the mime's own
+// subtype, which is right often enough and never empty.
+const EXTENSION = {
+  "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif",
+  "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm",
+  "audio/wav": "wav", "audio/x-wav": "wav", "audio/mpeg": "mp3", "audio/flac": "flac", "audio/ogg": "ogg",
+};
+
+function saveName(item) {
+  const asset = item.asset || {};
+  const mime = asset.mime || "";
+  const ext = EXTENSION[mime] || mime.split("/")[1] || "bin";
+  const stem = String(item.title || item.id).replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return (stem || "take") + "." + ext;
+}
+
 /**
  * grid keeps one <helm-gallery> per key across redraws. A poll runs every two
  * seconds; a gallery rebuilt on each one would lose its scroll, its filters
  * and whatever is playing in its viewer.
+ *
+ * Save is the launcher's own, in the viewer's `viewer-actions` slot — beside
+ * Full screen, on the item being looked at, which is where someone decides
+ * they want to keep it. What can be done with an item is not a component's
+ * business (04 §11 rule 5). It
+ * is a link with `download` rather than a fetch, so the browser and the Mac
+ * app take the same path — WebKit turns it into a `WKDownload` the app's
+ * delegate writes to ~/Downloads, and the context menu's own Download Image,
+ * which reaches neither, stops being the only way to keep a render.
  */
 export function grid(ctx, key, studioID) {
   const gallery = ctx.keep("gallery:" + key, () => {
@@ -30,6 +56,19 @@ export function grid(ctx, key, studioID) {
     // operation has no scope to send anyway.
     g.setAttribute("scope", "all");
     g.client = ctx.client;
+    const save = el("a", { class: "helm-btn helm-gallery-save", slot: "viewer-actions", hidden: true, download: "" });
+    save.textContent = "Save";
+    g.append(save);
+    g.addEventListener("select", (e) => {
+      const item = (e.detail && e.detail.item) || null;
+      if (!item || !item.asset_id) {
+        save.hidden = true;
+        return;
+      }
+      save.href = "/api/v1/launcher/assets/" + encodeURIComponent(item.asset_id);
+      save.download = saveName(item);
+      save.hidden = false;
+    });
     return g;
   });
   if (studioID) gallery.setAttribute("studio", studioID);
