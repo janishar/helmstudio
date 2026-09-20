@@ -88,14 +88,14 @@ repository, including what you need installed to build it.
 
 ## Status
 
-helmstudio is **pre-release**. `1.0.0-rc.2` of the `helm` CLI, the packages and
+helmstudio is **pre-release**. `1.0.0-rc.4` of the `helm` CLI, the packages and
 the Mac app is published; the app is unsigned, and the launcher and its daemon
 also run from a clone.
 
 | | |
 |---|---|
 | **Built** | The daemon: supervision, install and weights, the platform API and its three clients. Python studios. The launcher, with its studio library, manifest editor and approval screen. The four components. The timeline and its export. The documentation site. The Mac app's shell — a native window around the launcher that starts the daemon or adopts one already running. |
-| **Not built yet** | The Mac app's signature and notarisation — it is downloadable but unsigned — its auth cookie, and the ffmpeg and uv it should bundle. The launcher's own Gallery and Timeline screens. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. |
+| **Not built yet** | The Mac app's signature and notarisation — it is downloadable but unsigned — its auth cookie, and the ffmpeg and uv it should bundle. The launcher's own Gallery and Timeline screens. `helm test`, `helm doctor`, `helm adopt` and `helm studio init`. **Using one studio's work in another:** the platform has both routes — the `gallery.read_all` capability and `POST /handoff` into a studio's inbox — but no studio asks for either, so every picker is `scope="self"` and lists only its own takes. Until one does, the way across is the filesystem: takes are read-only files under `~/.helmstudio/library/<studio-id>/<year>-<month>/`, so an iris still can be browsed straight into ltx studio. |
 | **Verified on** | macOS on Apple Silicon. The Go code is type-checked for Linux on every gate run; nothing has been run there. |
 
 ## Studios
