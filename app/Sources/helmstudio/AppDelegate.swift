@@ -10,6 +10,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The origin the daemon serves. Set once the handshake is in; until then
     /// there is nothing the window is allowed to navigate to.
     private var origin: URL?
+    /// Where each running download is being written, so the one that finishes
+    /// can tell the Dock about the file it made.
+    fileprivate var destinations: [ObjectIdentifier: URL] = [:]
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
@@ -353,6 +356,16 @@ extension AppDelegate: WKNavigationDelegate {
     func webView(_ webView: WKWebView,
                  decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+        // Save, and the context menu's Download Image. It has to be answered
+        // before anything else: a thumbnail is a `blob:` URL and a take is
+        // served by the daemon, and the origin check below cancelled both, so
+        // the download was refused before it could become a `WKDownload` and
+        // the delegate that would have run it was never asked.
+        if navigationAction.shouldPerformDownload {
+            NSLog("helmstudio: download requested for %@", navigationAction.request.url?.absoluteString ?? "(no url)")
+            decisionHandler(.download)
+            return
+        }
         guard navigationAction.targetFrame?.isMainFrame ?? true else {
             decisionHandler(.allow)
             return
@@ -371,6 +384,20 @@ extension AppDelegate: WKNavigationDelegate {
         }
     }
 
+    /// A download: the gallery's Save, or the context menu's Download Image.
+    ///
+    /// WebKit turns the navigation into a `WKDownload` and asks who will run
+    /// it. Unanswered, the download is dropped and the page is told nothing —
+    /// in the app that looked like a menu item that did nothing at all.
+    func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
+    /// The same, for a response that turns out to be an attachment.
+    func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+        download.delegate = self
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         revealLauncher()
     }
@@ -383,5 +410,48 @@ extension AppDelegate: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         status.failed("The launcher did not load: \(error.localizedDescription)", log: daemon.log.tail)
         showStatus()
+    }
+}
+
+// Downloads land in ~/Downloads, where a browser would put them.
+//
+// The app is not sandboxed, so this needs no panel and no permission; a Save
+// panel per take would be in the way of the one thing the gallery's download
+// is for, which is keeping a render without hunting for it in the store.
+extension AppDelegate: WKDownloadDelegate {
+    func download(_ download: WKDownload,
+                  decideDestinationUsing response: URLResponse,
+                  suggestedFilename: String,
+                  completionHandler: @escaping @MainActor (URL?) -> Void) {
+        let fm = FileManager.default
+        let dir = fm.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+        // WKDownload refuses a destination that exists, so the second copy of
+        // a take becomes "take-2.png" rather than a download that fails with
+        // nothing on screen to say why.
+        let name = suggestedFilename.isEmpty ? "download" : suggestedFilename
+        var url = dir.appendingPathComponent(name)
+        let ext = url.pathExtension, stem = url.deletingPathExtension().lastPathComponent
+        var n = 2
+        while fm.fileExists(atPath: url.path) {
+            url = dir.appendingPathComponent(ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)")
+            n += 1
+        }
+        destinations[ObjectIdentifier(download)] = url
+        completionHandler(url)
+    }
+
+    func downloadDidFinish(_ download: WKDownload) {
+        guard let url = destinations.removeValue(forKey: ObjectIdentifier(download)) else { return }
+        // What tells the Dock's Downloads stack to bounce and show the file.
+        // Without it a download that worked looks exactly like one that did
+        // not, which is the bug this whole extension is here to fix.
+        DistributedNotificationCenter.default().postNotificationName(
+            .init("com.apple.DownloadFileFinished"), object: url.path, userInfo: nil, deliverImmediately: true)
+    }
+
+    func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+        destinations.removeValue(forKey: ObjectIdentifier(download))
+        NSLog("helmstudio: download failed: %@", error.localizedDescription)
     }
 }
