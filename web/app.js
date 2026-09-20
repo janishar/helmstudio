@@ -25,7 +25,7 @@ import { processGroup } from "./processes.js";
 import { modelsAndDisk } from "./models.js";
 import { settings } from "./settings.js";
 import { launch, stop } from "./switch.js";
-import { approvalScreen, guard } from "./approval.js";
+import { approvalScreen, guard, approvalActions } from "./approval.js";
 import { addStudio } from "./add.js";
 import { studioPage } from "./embed.js";
 import { galleryScreen } from "./gallery.js";
@@ -38,12 +38,14 @@ const POLL_MS = 2000;
 
 /**
  * The routes. `width` is 03 §4's (amended 2026-09-17): a page that is read is
- * a 960px column, a workspace is up to 1440px. `back` opens the page with a
- * link to Studios, which every page under Studios has.
+ * a 960px column, a workspace is up to 1440px. `back` opens the page with the
+ * header row, which every page under Studios has: the link to Studios on the
+ * left, and `actions` — this page's page-level actions, if it has any — on
+ * the right of the same row (03 §4, amended 2026-09-20).
  */
 const ROUTES = [
   { path: /^\/studios$/, screen: catalogue, nav: "studios", width: "reading" },
-  { path: /^\/studios\/([^/]+)\/approve$/, screen: approvalScreen, nav: "studios", width: "reading", back: true },
+  { path: /^\/studios\/([^/]+)\/approve$/, screen: approvalScreen, nav: "studios", width: "reading", back: true, actions: approvalActions },
   // The studio's own page, in a frame: its own origin, inside helmstudio.
   { path: /^\/studios\/([^/]+)\/open$/, screen: studioPage, nav: "studios", width: "full", back: true, bare: true },
   { path: /^\/studios\/([^/]+)\/processes$/, screen: processGroup, nav: "studios", width: "workspace", back: true },
@@ -362,7 +364,15 @@ export function shell(ctx, hash, address) {
   ctx.query = r.query;
   const stale = !!ctx.store.error;
   const page = el("div", { class: `helm-page helm-page-${r.width}` },
-    r.back ? el("a", { class: "helm-back", href: "#/studios", "data-key": "back", text: "Studios" }) : null,
+    // The header row (03 §4, amended 2026-09-20): back on the left, this
+    // page's own actions on the right. The row is the shell's so that every
+    // page under Studios opens the same way; what goes in its right-hand end
+    // is the page's, supplied by the route rather than drawn a second time
+    // inside the screen.
+    r.back ? el("div", { class: "helm-crumbs", "data-key": "crumbs" },
+      el("a", { class: "helm-back", href: "#/studios", "data-key": "back", text: "All studios" }),
+      el("span", { class: "helm-spacer" }),
+      ...(r.actions ? r.actions(ctx, ...r.args) : [])) : null,
     stale ? unreachable(ctx) : null,
     // Always the same wrapper, so a failed poll greys the screen in place
     // rather than drawing it again from nothing.

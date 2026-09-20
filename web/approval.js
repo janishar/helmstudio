@@ -22,7 +22,7 @@
 // test are listed as not run, with the reason: a smoke test builds and runs
 // the studio, which is the thing this screen is asking permission for.
 
-import { chip, el, failure } from "./ui.js";
+import { el, failure } from "./ui.js";
 
 const WHEN = {
   install: "Runs once, when you install it",
@@ -67,14 +67,28 @@ export function escapeInvisible(text) {
   return out;
 }
 
+/**
+ * commandBlock is one command, drawn as a command (03 §13, amended
+ * 2026-09-20): the console ground, primary text and a `$` gutter, with the
+ * directory it runs in attached to the block rather than floating at the far
+ * end of the line above it.
+ *
+ * It used to be `.helm-step-command` — `--helm-text-muted` at 12px, the token
+ * for de-emphasis — on the one screen whose purpose is to make these visible.
+ * What is drawn is unchanged: the same string, byte for byte, escaped and
+ * flagged. Only the ink is.
+ */
 function commandBlock(c) {
-  const node = el("div", { class: "helm-stack", style: "gap: 2px; margin-bottom: var(--helm-space-2)" },
-    el("div", { class: "helm-row" },
-      el("span", { class: "helm-body", style: "font-weight: 500", text: c.label || "" }),
-      el("span", { class: "helm-spacer" }),
-      c.cwd ? el("span", { class: "helm-micro", text: "in " + c.cwd }) : null,
-      c.shell && c.shell !== "sh" ? el("span", { class: "helm-micro", text: c.shell }) : null),
-    el("code", { class: "helm-step-command", style: "display: block", text: escapeInvisible(c.command) }));
+  const node = el("div", { class: "helm-command" },
+    el("div", { class: "helm-command-head" },
+      el("span", { class: "helm-command-name", text: c.label || "" }),
+      c.cwd ? el("span", { class: "helm-command-where", text: c.cwd }) : null,
+      c.shell && c.shell !== "sh" ? el("span", { class: "helm-command-where", text: c.shell }) : null),
+    el("pre", { class: "helm-command-text" },
+      // The prompt is decoration and never selects, so copying the block
+      // copies the command and not a shell prompt with it.
+      el("span", { class: "helm-command-gutter", "aria-hidden": "true", text: "$ " }),
+      document.createTextNode(escapeInvisible(c.command))));
 
   for (const f of c.flags || []) {
     node.append(el("p", { class: "helm-hint", text: "This command " + (FLAG[f] || f) + "." }));
@@ -82,13 +96,15 @@ function commandBlock(c) {
   return node;
 }
 
-function section(label, ...children) {
+/**
+ * section is one labelled part of the column. `key` is what the verdict line
+ * scrolls to; a section nothing points at passes "".
+ */
+function section(label, key, ...children) {
   if (!children.filter(Boolean).length) return null;
-  return el("div", { class: "helm-stack", style: "margin-top: var(--helm-space-4)" },
+  return el("div", { class: "helm-approve-section", "data-section": key || null },
     el("p", { class: "helm-section-label", text: label }), ...children);
 }
-
-const CHECK_TONE = { pass: "running", warn: "warning", fail: "error" };
 
 /**
  * checks is the list 03 §13 leads with, including the two that deliberately
@@ -98,59 +114,173 @@ const CHECK_TONE = { pass: "running", warn: "warning", fail: "error" };
 function checks(p) {
   const list = p.checks || [];
   if (!list.length) return null;
-  return el("div", { class: "helm-stack" },
-    ...list.map((c) => el("div", { class: "helm-stack", style: "gap: 0" },
-      el("div", { class: "helm-row" }, chip(c.name, CHECK_TONE[c.state] || "idle")),
-      c.detail ? el("p", { class: "helm-hint", text: c.detail }) : null)));
+  return el("div", { class: "helm-checks" },
+    ...list.map((c) => {
+      // A pass says its detail on the line it is on; anything else keeps a
+      // paragraph and a rule down the side, so the eye finds it first. That
+      // is what `not_run` being first-class should have meant all along.
+      const quiet = c.state === "pass";
+      return el("div", { class: "helm-check" + (quiet ? "" : " helm-check-loud") },
+        el("span", { class: "helm-check-dot", "data-state": c.state || "not_run" }),
+        // Name and detail share one cell, so a name long enough to wrap
+        // wraps under itself rather than pushing the dot onto its own line.
+        el("div", { class: "helm-check-body" },
+          el("span", { class: "helm-check-name", text: c.name }),
+          c.detail ? el("span", { class: "helm-check-detail", text: c.detail }) : null));
+    }));
 }
 
-/** body is the preview, laid out. Exported so a fixture can draw it. */
-export function approvalBody(p) {
-  const out = [];
-
-  out.push(el("p", { class: "helm-mono", text: [p.transport, p.commit ? p.commit.slice(0, 7) : null].filter(Boolean).join(" · ") }));
-  out.push(section("Checks", checks(p)));
-
-  // Commands, grouped by when they run.
-  for (const when of ["install", "first_launch", "launch"]) {
-    const group = (p.commands || []).filter((c) => c.when === when);
-    if (!group.length) continue;
-    out.push(section(WHEN[when], ...group.map(commandBlock)));
+/**
+ * verdict is the line of counts under the title (03 §13, amended 2026-09-20):
+ * an entry point for an eye that had none.
+ *
+ * Every tile is derived from what is already below it and scrolls to the
+ * section that says it in full. A tile that cannot be derived is not drawn —
+ * this line never knows anything the screen does not.
+ *
+ * The tiles are buttons and not links: the launcher is hash-routed, so an
+ * `href="#checks"` would be an address, and this one would leave the screen.
+ */
+function verdict(p) {
+  const tiles = [];
+  const commands = p.commands || [];
+  if (commands.length) {
+    const by = (when) => commands.filter((c) => c.when === when).length;
+    const parts = [];
+    if (by("install")) parts.push(`${by("install")} at install`);
+    if (by("first_launch")) parts.push(`${by("first_launch")} on first start`);
+    if (by("launch")) parts.push(`${by("launch")} at each launch`);
+    tiles.push(tile(count(commands.length, "command"), parts.join(", "), "commands"));
   }
 
-  if ((p.submodules || []).length) {
-    out.push(section("It also clones",
-      ...p.submodules.map((s) => el("p", { class: "helm-mono", text: `${s.path} — ${s.url}` }))));
+  const selectable = (p.weights || []).filter((w) => w.selectable);
+  if (selectable.length > 1) {
+    const chosen = p.selection || selectable[0].name;
+    const w = selectable.find((x) => x.name === chosen) || selectable[0];
+    tiles.push(tile(`1 of ${selectable.length} checkpoints`,
+      w.local_path ? `${w.name} · linked, not downloaded` : w.name, "weights"));
+  } else if ((p.weights || []).length) {
+    tiles.push(tile(count(p.weights.length, "weight"), "it needs to run", "weights"));
   }
 
   const caps = p.capabilities || [];
-  out.push(section("What it may do",
+  tiles.push(caps.length
+    ? tile(count(caps.length, "thing"), "it may do with your library", "capabilities")
+    : tile("No services", "it gets no access token", "capabilities"));
+
+  // Whichever of these there is something to say about; a screen where every
+  // check ran and passed says so, which is also worth a tile.
+  const bad = (p.checks || []).filter((c) => c.state === "fail");
+  const held = (p.checks || []).filter((c) => c.state === "not_run");
+  if (bad.length) tiles.push(tile(count(bad.length, "check"), "failed", "checks", true));
+  else if (held.length) tiles.push(tile(count(held.length, "check"), "could not run before install", "checks", true));
+  else if ((p.checks || []).length) tiles.push(tile(count(p.checks.length, "check"), "all ran, all passed", "checks"));
+
+  if (!tiles.length) return null;
+  return el("div", { class: "helm-verdict" }, ...tiles);
+}
+
+function count(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function tile(headline, note, key, warn) {
+  return el("button", {
+    class: "helm-verdict-tile",
+    type: "button",
+    onclick: () => {
+      const target = document.querySelector(`[data-section="${key}"]`);
+      if (!target) return;
+      const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+    },
+  },
+    el("span", { class: "helm-verdict-headline" + (warn ? " helm-verdict-warn" : ""), text: headline }),
+    el("span", { class: "helm-verdict-note", text: note }));
+}
+
+/** body is the preview, laid out. Exported so a fixture can draw it. */
+export function approvalBody(p, onPick = () => {}) {
+  const out = [];
+
+  out.push(verdict(p));
+  out.push(section("Checks", "checks", checks(p)));
+
+  // Commands, grouped by when they run. The group is one section each, and
+  // the verdict line points at the first of them.
+  let first = true;
+  for (const when of ["install", "first_launch", "launch"]) {
+    const group = (p.commands || []).filter((c) => c.when === when);
+    if (!group.length) continue;
+    out.push(section(WHEN[when], first ? "commands" : "", ...group.map(commandBlock)));
+    first = false;
+  }
+
+  if ((p.submodules || []).length) {
+    out.push(section("It also clones", "",
+      ...p.submodules.map((s) => el("p", { class: "helm-mono", text: `${s.path} — ${s.url}` }))));
+  }
+
+  if ((p.weights || []).length) {
+    // The choice is above the table, not below it (03 §13, amended
+    // 2026-09-20): five checkpoints read as five downloads until you reach
+    // the picker that says only one of them is fetched.
+    out.push(section("Weights", "weights", checkpoint(p, onPick), weightTable(p)));
+  }
+
+  const caps = p.capabilities || [];
+  out.push(section("What it may do", "capabilities",
     caps.length
-      ? el("div", { class: "helm-stack", style: "gap: var(--helm-space-1)" },
-        ...caps.map((c) => el("p", {
-          class: c.warning ? "helm-body" : "helm-micro",
-          style: c.warning ? "color: var(--helm-status-warning)" : "",
+      ? el("ul", { class: "helm-may" },
+        ...caps.map((c) => el("li", {
+          class: c.warning ? "helm-may-warning" : "",
           text: c.sentence,
         })))
       : el("p", { class: "helm-micro", text: "Uses no helmstudio services. It gets no access token." })));
 
   if ((p.network_hosts || []).length) {
-    out.push(section("Network",
+    out.push(section("Network", "network",
       el("p", { class: "helm-micro", text: "The manifest says it contacts these hosts. helmstudio does not restrict network access." }),
-      el("p", { class: "helm-mono", text: p.network_hosts.join(", ") })));
-  }
-
-  if ((p.weights || []).length) {
-    out.push(section("Weights",
-      ...p.weights.map((w) => el("div", { class: "helm-stack", style: "gap: 0" },
-        el("p", { class: "helm-mono", text: [w.name, w.hf_repo, w.selectable ? "selectable" : null, w.optional ? "optional" : null].filter(Boolean).join(" · ") }),
-        // Where the files come from is the difference between a download and
-        // a folder this Mac already holds, so it is said, not implied.
-        el("p", { class: "helm-hint", text: w.local_path
-          ? `Linked from ${w.local_path}: helmstudio links the files it names there, downloads nothing, and never writes to that folder.`
-          : "Downloaded from Hugging Face." })))));
+      el("div", { class: "helm-hosts" }, ...p.network_hosts.map((h) => el("code", { text: h })))));
   }
   return out;
+}
+
+/**
+ * weightTable is the weights as one table rather than a stack of pairs.
+ *
+ * Where the files come from is the difference between a download and a folder
+ * this Mac already holds, so it is still said in full for a linked weight
+ * rather than implied by a word. What the table cannot say is how big any of
+ * this is: `ApprovalWeight` carries `bytes`, the daemon sets it for nothing,
+ * and this screen does not estimate. That is an open entry in
+ * docs/decisions.md, not an omission here.
+ */
+function weightTable(p) {
+  const selectable = (p.weights || []).filter((w) => w.selectable);
+  const chosen = selectable.length > 1 ? (p.selection || selectable[0].name) : null;
+  const linked = (p.weights || []).filter((w) => w.local_path);
+
+  return el("div", { class: "helm-stack", style: "gap: var(--helm-space-2)" },
+    el("table", { class: "helm-weights" },
+      el("thead", {}, el("tr", {},
+        el("th", { text: "Weight" }),
+        el("th", { text: "Hugging Face" }),
+        el("th", { text: "Where the files come from" }))),
+      el("tbody", {}, ...(p.weights || []).map((w) => el("tr", { class: w.name === chosen ? "helm-weight-chosen" : "" },
+        el("td", {},
+          document.createTextNode(w.name),
+          w.name === chosen ? el("span", { class: "helm-weight-mark", text: "chosen" }) : null,
+          w.optional ? el("span", { class: "helm-weight-note", text: "optional" }) : null),
+        el("td", { text: w.hf_repo || "—" }),
+        el("td", { class: "helm-weight-source" }, w.local_path
+          ? el("span", { text: `Linked from ${w.local_path}` })
+          : el("span", { text: chosen && w.selectable && w.name !== chosen ? "Downloaded if chosen" : "Downloaded from Hugging Face" })))))),
+    // Said once under the table rather than repeated per row, and only when
+    // there is a linked weight for it to be about.
+    linked.length
+      ? el("p", { class: "helm-hint", text: "helmstudio links the files a local folder names, downloads nothing for it, and never writes to that folder." })
+      : null);
 }
 
 /**
@@ -166,8 +296,8 @@ function checkpoint(p, onPick) {
   const selectable = (p.weights || []).filter((w) => w.selectable);
   if (selectable.length < 2) return null;
   const chosen = p.selection || selectable[0].name;
-  return el("div", { class: "helm-field", style: "margin-top: var(--helm-space-4)" },
-    el("label", { class: "helm-label", for: "helm-checkpoint", text: "Checkpoint" }),
+  return el("div", { class: "helm-field helm-checkpoint" },
+    el("label", { class: "helm-label", for: "helm-checkpoint", text: "Which checkpoint" }),
     el("select", { class: "helm-select", id: "helm-checkpoint", onchange: (e) => onPick(e.target.value) },
       ...selectable.map((w) => el("option", { value: w.name, text: w.name, selected: w.name === chosen }))),
     el("span", { class: "helm-hint", text: "Only this one is downloaded. The others can be fetched later, and the choice can be changed while the studio is stopped." }));
@@ -271,6 +401,23 @@ async function approve(ctx, st, studio, verb) {
   await ctx.act(studio, verb);
 }
 
+/**
+ * approvalActions is what this screen puts in the shell's header row (03 §4,
+ * §13, both amended 2026-09-20): the manifest itself, as a quiet button.
+ *
+ * It is a page action and is drawn as one. It used to be an accent link at
+ * the right-hand end of the title row, which spent the screen's accent on
+ * something that is not the screen's answer and left it 900px from the title
+ * it belongs to. Install is the accent here, and nothing else is.
+ */
+export function approvalActions(ctx, id) {
+  return [el("a", {
+    class: "helm-btn helm-btn-secondary helm-btn-sm",
+    href: `#/edit/${encodeURIComponent(id)}`,
+    text: "View manifest",
+  })];
+}
+
 export function approvalScreen(ctx, id) {
   const st = approvalState(ctx, id);
   const verb = ctx.query.get("do") || "install";
@@ -294,25 +441,39 @@ export function approvalScreen(ctx, id) {
   const failed = (p.checks || []).some((c) => c.state === "fail" && c.required);
   const label = VERBS[verb] || "Install";
 
-  return el("div", { class: "helm-stack helm-approve" },
+  // The studio's own hue (03 §2, §13 amended 2026-09-20). It comes from the
+  // launcher's library, which has every studio's; the preview carries none
+  // and is not asked to, because a hue changes nothing about what runs.
+  const h = studio.hue;
+  return el("div", { class: "helm-stack helm-approve", style: h && h.dark && h.light
+    ? `--_hue-dark: ${h.dark}; --_hue-light: ${h.light}` : null },
     el("div", { class: "helm-page-header" },
-      el("h1", { class: "helm-title", text: `${label} ${p.name || studio.name}?` }),
-      el("span", { class: "helm-spacer" }),
-      el("a", { class: "helm-link", href: `#/edit/${encodeURIComponent(id)}`, text: "View manifest" })),
+      el("span", { class: "helm-approve-dot" }),
+      el("h1", { class: "helm-title", text: `${label} ${p.name || studio.name}?` })),
 
     // The level and the source, as two facts and not a badge — and as plain
     // text, as a studio's row states them (03 §13, amended 2026-09-17). A
     // level is derived from what has been checked; it is never declared in a
     // file, and it is a label rather than a gate on your own machine.
-    // The repository and the ref are not repeated here: the transport line
-    // below says where the code comes from and how it is fetched, which is
-    // the same fact told better.
+    // The repository and the ref are not repeated here: the source line
+    // under it says where the code comes from and how it is fetched, which
+    // is the same fact told better.
     el("p", { class: "helm-studio-origin" },
       el("span", { "data-fact": "level", text: LEVEL[p.level] || p.level || "Unverified" }),
       document.createTextNode(" · "),
       el("span", { "data-fact": "source", text: sourceLabel(p.source) })),
 
-    el("p", { class: "helm-body", text:
+    // The transport and the commit: where this code comes from and which of
+    // it. It was under the title in mono with nothing marking it as the
+    // subject of "View manifest"; it belongs with the level and the source.
+    el("p", { class: "helm-approve-source", text:
+      [p.transport, p.commit ? p.commit.slice(0, 7) : null].filter(Boolean).join(" · ") }),
+
+    el("div", { class: "helm-approve-rule" }),
+
+    // The one line on this screen set larger than body (03 §13, amended
+    // 2026-09-20). It was the size of "Downloaded from Hugging Face."
+    el("p", { class: "helm-approve-lede", text:
       `Installing ${p.name || studio.name} runs the commands below on this Mac, with your permissions. helmstudio does not sandbox them.` }),
 
     st.error ? el("p", { class: "helm-body helm-status-error", text: st.error }) : null,
@@ -320,8 +481,7 @@ export function approvalScreen(ctx, id) {
       ? el("p", { class: "helm-hint", text: "You have approved exactly this before. Nothing about it has changed since." })
       : null,
 
-    ...approvalBody(p),
-    checkpoint(p, (name) => { st.selection = name; }),
+    ...approvalBody(p, (name) => { st.selection = name; }),
 
     // A required failure is read before the button, not under it: the row
     // below is pinned to the foot of the window, so anything after it in the
