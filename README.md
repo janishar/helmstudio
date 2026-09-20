@@ -1,3 +1,4 @@
+
 <div align="center">
 
 # helmstudio
@@ -20,10 +21,7 @@ and keep everything they make in one place.
 
 </div>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="test/visual/golden/screen-catalogue-dark-1280.png">
-  <img alt="The helmstudio launcher: a shelf of studios, one running, one downloading its weights, and one whose build failed, with the reason and a Retry button" src="test/visual/golden/screen-catalogue-light-1280.png">
-</picture>
+https://github.com/user-attachments/assets/e3896e6a-759a-45f9-a22b-de8c61f94e9b
 
 <div align="center"><sub>The launcher's library screen. This is the visual-regression golden, drawn from the canned data in <code>test/visual/fixtures</code> — not a recording of a session.</sub></div>
 
