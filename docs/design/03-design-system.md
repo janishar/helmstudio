@@ -557,6 +557,19 @@ Checks run before install, not after. Required failures warn loudly and block a 
 
 - **`View manifest` is a quiet button in the header row** (§4, amended the same day), not an accent link in the title row. It is a page action rather than a link in a sentence, and helm-css already says what that means: a link drawn as a button is a button, and is not underlined. It was `.helm-link` — accent and underlined — alone at the right-hand end of a 960px line, which both left it unanchored and spent the screen's accent on something that is not the screen's answer. On this screen the accent belongs to Install, and to nothing else.
 
+(Amended 2026-09-20, by the human's decision, after reading the screen beside its own mockup. The obligation is unchanged and so is everything the screen says; what changes is that it can be read.)
+
+- **A verdict line under the title**: three or four tiles giving the counts this screen answers — the commands and when they run, the checkpoint, what it may do, and the checks that could not run. Each scrolls to the section that says it in full. **It adds nothing that is not below it.** It is an entry point for an eye that had none, not a summary that stands in for reading; a tile that could not be derived from what is already on the screen is not drawn.
+- **A command is drawn as a command**: the console ground, primary text, a `$` gutter and its `cwd` on the block. They were `--helm-text-muted` at 12px — the token for de-emphasis — on the one screen whose purpose is to make them visible. Verbatim, grouped by when they run, escaped and flagged is unchanged; this is only the ink.
+- **A check that passed puts its detail on its own line**; `warn`, `fail` and `not_run` keep a paragraph and a rule down the side. `not_run` is still first-class and still never a pass — it is now the one a reader's eye finds first, which is what being first-class should have meant.
+- **The screen wears the studio's hue** (§2): a dot at the title, a rule under the header, and the marker on the chosen checkpoint. This is that studio's page and it wore none of it. The hue is the launcher's own `Studio.hue`; the preview does not carry one and is not asked to.
+- **The weights are one table with the choice above them.** Five checkpoints as stacked pairs, with the picker below the fold, meant reading all five before learning that only one is fetched.
+- **One line is set larger than body**: "helmstudio does not sandbox them." It was the same size as "Downloaded from Hugging Face."
+
+**Unchanged, and deliberately**: every command verbatim and grouped by *when* it runs, with its `cwd`, `shell`, `env`, escapes and flags; no disclosure over a command; two buttons, "Install anyway" on a required failure, pinned to the foot; a route and not a dialog; the level and the source as plain text; the hosts sentence; the sentence that says a linked weight is linked; and the checkpoint shown but not covered by the digest.
+
+**Not shown, and why**: how much would be downloaded. `ApprovalWeight` carries `bytes`, the daemon never sets it, and a screen that exists to state what will happen will not estimate it. That is an open entry, not an omission here.
+
 ## 13a · Describing a studio yourself
 
 Most repos worth running will never ship a manifest, so writing one has to be a first-class act rather than a fallback. Form on the left for the fields, YAML on the right for the parts that are really text, both live and both editable, with the criteria scoring underneath as you type.
