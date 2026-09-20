@@ -69,7 +69,7 @@ manifest:
       repo: Lightricks/LTX-2.5
       dest: LTX-2.5
       files: ["vae/ltx-2.5-video-vae-bf16.safetensors"]
-      size_gb: 2
+      size_gb: 1.4
       optional: true
     - name: ltx_dev_transformer
       repo: Lightricks/LTX-2.5
