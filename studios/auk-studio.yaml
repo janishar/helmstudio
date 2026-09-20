@@ -2,10 +2,12 @@
 # (schema/registry-entry.json, docs/design/05-sdk-and-custom-studios.md §5a).
 #
 # The manifest belongs in the studio's own repository as helmstudio.yaml, beside
-# the code it describes, so that a studio can announce a new build step without
-# waiting for a helmstudio release. AuK studio does not ship one yet, so the
-# manifest is carried inline here — and the pull request that moves `ref` to a
-# commit where it does ship one deletes the inline copy, leaving one copy again.
+# the code it describes, and AuK studio ships one. This copy is not dead weight
+# for that: resolution reaches nothing over the network (M7 Q7), so before a
+# studio is fetched this is the only manifest there is, and an entry without one
+# shows on the shelf as `not_fetched` — no description, no hue, no checkpoint to
+# choose. So the copy stays, and the thing that matters about it is that it
+# agrees with the repository.
 #
 # Where the inline manifest sets id, repo or ref, each must equal this entry's;
 # the validator enforces it. There is no `certified` field: a level is derived
@@ -18,33 +20,42 @@ ref: main
 manifest:
   id: auk-studio
   name: AuK studio
-  description: PyTorch speech and voice generation on mps, with AuK and AuK-Flash checkpoints.
+  description: PyTorch speech generation and editing on mps, with AuK and AuK-Flash checkpoints.
   kinds: [audio]
-  # 03 §2's identity hue.
   hue: { dark: "#8b7cf0", light: "#5c4bc4" }
   license: MIT
   repo: https://github.com/janishar/AuK
   ref: main
-  # 3.12, not the 3.10 in AuK's pyproject: scipy's last 3.10 wheel (1.15.3) no
-  # longer loads on macOS 27, and qwen-omni-utils imports it through librosa, so
-  # a 3.10 environment installs and then fails at generation time.
+  # Matching pyproject's requires-python: scipy's last 3.10 wheel (1.15.3) no
+  # longer loads on recent macOS, and qwen-omni-utils imports it through librosa.
+  # 3.12 resolves scipy 1.18, which does.
   python: { version: "3.12" }
-  peak_ram_gb: 25 # measured 13.8 GB resident for AuK-Flash on mps/bf16; base is larger, and generation adds latents on top
+  # Measured on this repo, AuK-Flash on mps/bf16: 13.8 GB resident after load
+  # (DiT 5.7 fp32 + Qwen 7.5 bf16 + VAE 0.6). AuK base is larger, and generation
+  # adds transient latents on top, so this is an upper bound over both variants.
+  peak_ram_gb: 25
   requires:
     os: [darwin]
     arch: [arm64]
     tools: [uv]
+    ram_gb: 32
+    disk_gb: 40
   runtime:
     framework: pytorch
-    # web/server.py:53 (_default_device) supports cuda too. Two defensible
-    # manifests follow from that: widen requires to linux/amd64 and keep cuda,
-    # or keep darwin/arm64 and match docs/design/01-prd.md §13's table (mps,
-    # cpu). This takes the second; the reason is in docs/decisions.md (M0,
-    # "AuK's backends").
+    # web/server.py's _default_device supports cuda too, but nothing here has been
+    # run on it; the manifest claims only what has been verified on this machine.
     backends: [mps, cpu]
-    precision: [bf16]
+    precision: [bf16, fp16, fp32]
     language: python
-  capabilities: [kv, assets, gallery]
+  # AuK studio keeps nothing of its own. Sessions, the reference audio they hold
+  # and every generation go through helmstudio: sessions and the settings they
+  # carry (kv — the sessions API is backed by it, and is 403 without it),
+  # reference clips and rendered takes (assets), takes with the instruction and
+  # sampling parameters that made them (gallery), and each generation as a task
+  # job whose log the page's helm-terminal streams (jobs). web/README.md says
+  # where each one goes.
+  capabilities: [kv, assets, gallery, jobs]
+  sdk: { runtime: "^1", ui: "^1", css: "^1" }
   network: [huggingface.co, cdn-lfs.huggingface.co]
   build:
     - name: Install the core package
@@ -52,25 +63,35 @@ manifest:
     - name: Install the web server
       run: uv pip install -r web/requirements.txt
   weights:
-    - name: auk
-      repo: tencent/AuK
-      dest: AuK
-    - name: auk_flash
-      repo: tencent/AuK-Flash
-      dest: AuK-Flash
+    # The MLLM text encoder both checkpoints condition on: needed by either.
     - name: qwen
       repo: Qwen/Qwen2.5-Omni-3B
       dest: Qwen2.5-Omni-3B
+      size_gb: 11
+    # One checkpoint at a time: each is 14-25 GB resident, so AuK studio holds a
+    # single engine and helmstudio owns which one that is. Both are selectable,
+    # and only the chosen one is downloaded; the studio reads which it was given
+    # from the config.yaml beside the weights.
+    - name: auk_flash
+      repo: tencent/AuK-Flash
+      dest: AuK-Flash
+      size_gb: 7
+      selectable: true
+    - name: auk
+      repo: tencent/AuK
+      dest: AuK
+      size_gb: 7
+      selectable: true
   processes:
     - name: studio
       role: main
       heavy: true
       cwd: web
-      cmd: "python3 server.py --host 127.0.0.1 --port {port}"
+      # Not `uv run`, which would sync the environment at every launch.
+      cmd: "python server.py --host 127.0.0.1 --port {port} --checkpoint {models.selected} --qwen {models.qwen}"
       port: { prefer: 8420 }
-      health: { path: /api/health, timeout_s: 30, interval_s: 2 }
-      # /api/health answers 200 without a busy boolean, so the switch dialog
-      # reads AuK as unknown until it serves the busy contract (M5 Q12); move
-      # this path, and `ref`, when it does.
+      health: { path: /api/health, timeout_s: 60, interval_s: 2 }
+      # /api/health carries `busy`: true while a generation holds the engine, so
+      # the switch dialog knows not to stop the studio mid-render.
       busy: { path: /api/health }
       ui: /
