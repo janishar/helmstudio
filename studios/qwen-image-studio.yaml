@@ -1,0 +1,79 @@
+# A registry entry: a pointer at qwen image studio's repository
+# (schema/registry-entry.json, docs/design/05-sdk-and-custom-studios.md §5a).
+#
+# The manifest belongs in the studio's own repository as helmstudio.yaml, beside
+# the code it describes, and qwen image studio ships one. This copy is not dead
+# weight for that: resolution reaches nothing over the network (M7 Q7), so before
+# a studio is fetched this is the only manifest there is, and an entry without one
+# shows on the shelf as `not_fetched` — no description, no hue, no checkpoint to
+# choose. So the copy stays, and the thing that matters about it is that it
+# agrees with the repository.
+#
+# Where the inline manifest sets id, repo or ref, each must equal this entry's;
+# the validator enforces it. There is no `certified` field: a level is derived
+# from what has actually been checked, never declared by the thing being
+# checked (docs/decisions.md M7 Q4, Q15).
+
+id: qwen-image-studio
+repo: https://github.com/janishar/qwen-image-2.1-studio
+ref: main
+manifest:
+  id: qwen-image-studio
+  name: qwen image studio
+  description: Qwen-Image-2.1 text-to-image and multi-image editing on PyTorch (mps), with the PE prompt enhancers.
+  kinds: [image]
+  # Teal, at least 30° from helmstudio's accent and every other studio's hue (AuK is violet).
+  hue: { dark: "#45c4b0", light: "#1a7f70" }
+  license: MIT
+  repo: https://github.com/janishar/qwen-image-2.1-studio
+  ref: main
+  python: { version: "3.12" }
+  # An estimate, not measured: ~30 GB of bf16 weights (transformer 13, text encoder 16, VAE 1.3)
+  # plus activations at 2048x2048. The 9B enhancer is freed before the image model loads.
+  peak_ram_gb: 60
+  requires:
+    os: [darwin]
+    arch: [arm64]
+    tools: [uv]
+    ram_gb: 64
+  runtime:
+    framework: pytorch
+    backends: [mps, cuda, cpu]
+    precision: [bf16]
+    language: python
+  # Sessions keep their settings and reference images (kv for the page's paths);
+  # references and takes are assets; takes with their settings are gallery items;
+  # renders with their logs are jobs. There is no timeline: this studio makes stills.
+  capabilities: [kv, assets, gallery, jobs]
+  sdk: { runtime: "^1", ui: "^1", css: "^1" }
+  # github.com because uv.lock pins diffusers to its git main, for QwenImage21Pipeline.
+  network: [huggingface.co, cdn-lfs.huggingface.co, github.com]
+  build:
+    # --locked: install exactly uv.lock, and fail rather than rewrite it.
+    - name: Sync dependencies
+      run: uv sync --locked
+  weights:
+    - name: qwen_image
+      repo: Qwen/Qwen-Image-2.1
+      dest: Qwen-Image-2.1
+      size_gb: 31
+      files: ["model_index.json", "processor/**", "scheduler/**", "text_encoder/**", "transformer/**", "vae/**"]
+    - name: pe_t2i
+      repo: Qwen/Qwen-Image-2.1-PE-T2I
+      dest: Qwen-Image-2.1-PE-T2I
+      size_gb: 18
+    - name: pe_i2i
+      repo: Qwen/Qwen-Image-2.1-PE-I2I
+      dest: Qwen-Image-2.1-PE-I2I
+      size_gb: 18
+  processes:
+    - name: studio
+      role: main
+      heavy: true
+      cwd: web
+      # Not `uv run`, which would sync the environment at every launch.
+      cmd: "python server.py --host 127.0.0.1 --port {port} --model {models.qwen_image} --pe-t2i {models.pe_t2i} --pe-i2i {models.pe_i2i}"
+      port: { prefer: 8730 }
+      health: { tcp: true, timeout_s: 30, interval_s: 2 }
+      busy: { path: /api/queue }
+      ui: /

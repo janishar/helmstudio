@@ -100,7 +100,7 @@ also run from a clone.
 
 ## Studios
 
-The registry in [`studios/`](studios) points at four studios, each in its own
+The registry in [`studios/`](studios) points at five studios, each in its own
 repository:
 
 | Studio | Makes | Built on |
@@ -109,6 +109,7 @@ repository:
 | [ltx studio](https://github.com/janishar/ltx-2-studio) | video and audio | LTX checkpoints on MLX |
 | [iris studio](https://github.com/janishar/iris-studio) | images | FLUX.2 Klein and Z-Image on native Metal |
 | [AuK studio](https://github.com/janishar/AuK) | speech and voice | AuK and AuK-Flash on PyTorch (mps) |
+| [qwen image studio](https://github.com/janishar/qwen-image-2.1-studio) | images | Qwen-Image-2.1, with its PE prompt enhancers, on PyTorch (mps) |
 
 Any repository can become a studio: its manifest can live in the studio's own
 repository, or be written in the launcher for a repository whose author never
