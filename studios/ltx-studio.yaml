@@ -74,8 +74,11 @@ manifest:
     - name: ltx_dev_transformer
       repo: Lightricks/LTX-2.5
       dest: LTX-2.5
-      files: ["diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors"]
-      size_gb: 42
+      # The distilled LoRA is what stage 2 of every dev pipeline fuses.
+      files:
+        - diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors
+        - loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors
+      size_gb: 51
       optional: true
   processes:
     - name: studio
