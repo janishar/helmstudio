@@ -1235,4 +1235,8 @@ Decided before M9 is expanded, which is the last moment it is free: the shell is
 
 - 2026-09-23 · manifest · **studio id `qwen-image-studio`, and a teal identity hue `#45c4b0` / `#1a7f70`** — qwen image studio (Qwen-Image-2.1 and its PE prompt enhancers on PyTorch, mps) joins the registry as `studios/qwen-image-studio.yaml`, pointing at `main` as the other four do (2026-09-19 · library). `id` is immutable once published, so the slug is recorded here. The studio first chose a violet, which sat within 5° of AuK's `#8b7cf0`; teal is at least 49° from the accent and from every launch studio's hue in both themes, and 8.5:1 / 4.9:1 on `ground-panel`. 03 §2's hue table lists the launch studios only and is not amended. The site's `studiosInOrder` stays at the four launch studios, so it has no annotated manifest page and no landing card; adding one means an annotations file and new site goldens.
 
+## 2026-10-31 · A sixth studio
+
+- 2026-10-31 · manifest · **studio id `flux-klein-studio`, and a green identity hue `#8fcf4f` / `#4f8a1f`** — flux klein studio (FLUX 3 Image Klein and its prompt upsampler on PyTorch, mps) joins the registry as `studios/flux-klein-studio.yaml`, pointing at `main` as the other five do, with the studio's helmstudio.yaml carried inline so it is described before it is fetched. The hue is at least 30° from helmstudio's accent and every other studio's. iris studio's FLUX.2 Klein is a different model on a native Metal engine, so the two stay separate studios. The site stays at the four launch studios.
+
 <!-- date · what was built · what it changed about the decisions above -->
