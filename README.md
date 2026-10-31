@@ -107,7 +107,7 @@ repository:
 |---|---|---|
 | [h3 studio](https://github.com/janishar/h3c-studio) | video and audio | MiniMax-H3 on a native Metal engine, no PyTorch in the loop |
 | [ltx studio](https://github.com/janishar/ltx-2-studio) | video and audio | LTX checkpoints on MLX |
-| [iris studio](https://github.com/janishar/iris-studio) | images | FLUX.2 Klein and Z-Image on native Metal |
+| [iris studio](https://github.com/janishar/iris-studio) | images | FLUX.2 Klein, FLUX.3 Image Klein and Z-Image on native Metal |
 | [AuK studio](https://github.com/janishar/AuK) | speech and voice | AuK and AuK-Flash on PyTorch (mps) |
 | [qwen image studio](https://github.com/janishar/qwen-image-2.1-studio) | images | Qwen-Image-2.1, with its PE prompt enhancers, on PyTorch (mps) |
 | [flux klein studio](https://github.com/janishar/flux-3-klein-studio) | images | FLUX 3 Image Klein, with its prompt upsampler, on PyTorch (mps) |
