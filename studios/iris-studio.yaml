@@ -56,9 +56,10 @@ manifest:
   # Contacted at build or run time, which is what the field means and what the
   # approval screen shows. The Go proxy and the checksum database are here
   # because `go build` resolves helm-runtime-sdk through them; Hugging Face is
-  # where the weights come from. github.com because pup's uv.lock pins diffusers
-  # to a git revision.
-  network: [huggingface.co, cdn-lfs.huggingface.co, proxy.golang.org, sum.golang.org, github.com]
+  # where the weights come from. pypi.org and files.pythonhosted.org are where
+  # pup's uv sync gets its packages, and github.com is there because pup's uv.lock
+  # pins diffusers to a git revision.
+  network: [huggingface.co, cdn-lfs.huggingface.co, proxy.golang.org, sum.golang.org, pypi.org, files.pythonhosted.org, github.com]
   build:
     - name: Build the iris engine
       cwd: iris.c
@@ -68,10 +69,12 @@ manifest:
       run: go build -o iris-studio .
     # Optional, and no python block: a block would refuse to launch the studio
     # without this environment, and all a failure here costs, uv missing included,
-    # is Upsample. So uv is not in requires.tools either.
+    # is Upsample. So uv is not in requires.tools either. A failed sync leaves a
+    # .venv with a python and no packages, and the studio would offer Upsample on
+    # that python, so it goes.
     - name: Sync the prompt upsampler
       cwd: pup
-      run: uv sync --locked
+      run: uv sync --locked || { rm -rf .venv; exit 1; }
       optional: true
   # One checkpoint at a time: iris loads the directory --model points at. The
   # FLUX.2 and Z-Image entries are the ones download_model.sh produces. FLUX.3
@@ -89,7 +92,8 @@ manifest:
     - { name: flux_3_klein_base, repo: black-forest-labs/flux-3-image-klein-base, dest: flux-3-image-klein-base, size_gb: 21, files: ["transformer/**", "text_encoder/**", "vae/**"], selectable: true }
     # The prompt upsampler. Optional, so it is not in the command (an unfetched
     # optional weight refuses any command naming it): the studio looks for it
-    # beside --model, or wherever Paths points.
+    # beside --model, which for a linked checkpoint is the directory it links to,
+    # or wherever Paths points.
     - { name: pup, repo: black-forest-labs/flux-3-image-klein-pup, dest: flux-3-image-klein-pup, size_gb: 19, optional: true }
   processes:
     - name: studio
