@@ -254,11 +254,32 @@ func LoadEntryBytes(name string, data []byte) (*Entry, Result, error) {
 		if e.Manifest.Ref == "" {
 			e.Manifest.Ref = e.Ref
 		}
-		if e.Manifest.Digest, err = digest(data); err != nil {
+		e.Manifest.EntryDigest = e.Digest
+		if e.Manifest.Digest, err = inlineDigest(data, e); err != nil {
 			return nil, Result{}, fmt.Errorf("registry entry %s: computing its digest: %w", name, err)
 		}
 	}
 	return e, res, nil
+}
+
+// inlineDigest is the digest of the entry's inline manifest on its own,
+// with the ref it takes from the pointer, so that it equals the digest of the
+// repository's helmstudio.yaml whenever the two agree. The whole entry's digest
+// never does: an install records the digest of the manifest it ran, and once
+// the checkout exists the library reads the studio's manifest from there, so an
+// install recorded against the entry read as a changed manifest from then on.
+func inlineDigest(data []byte, e *Entry) (string, error) {
+	doc, err := decodeGeneric(data)
+	if err != nil {
+		return "", err
+	}
+	m, _ := doc.(map[string]any)["manifest"].(map[string]any)
+	// The schema has the inline manifest declare id and repo; ref it may leave
+	// to the pointer.
+	if _, ok := m["ref"]; !ok && e.Ref != "" {
+		m["ref"] = e.Ref
+	}
+	return digestOf(m)
 }
 
 // LoadBytes validates a manifest given as bytes and returns it decoded.

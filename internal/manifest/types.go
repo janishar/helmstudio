@@ -52,6 +52,10 @@ type Manifest struct {
 	// (docs/design/02-data-model.md §4, manifest_digest). A formatting or
 	// comment change to the YAML does not change it.
 	Digest string `yaml:"-"`
+	// EntryDigest is, for a manifest read inline from a registry entry, the
+	// digest of the whole entry. Until 2026-11-14 that was what Digest held
+	// for one, so it is what installs made before then recorded.
+	EntryDigest string `yaml:"-"`
 }
 
 type Requires struct {

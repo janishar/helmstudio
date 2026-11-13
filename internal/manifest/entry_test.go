@@ -268,3 +268,31 @@ func loadInlineManifest(t *testing.T, file string) (*Manifest, Result, error) {
 	}
 	return e.Manifest, res, nil
 }
+
+// An inline manifest has the digest the same manifest has in the studio's own
+// repository, whether or not it repeats the ref it takes from the pointer: an
+// install records that digest, and the library reads the checkout's copy once
+// there is one, so a difference would read as a changed manifest.
+func TestAnInlineManifestDigestsAsTheRepositoryCopy(t *testing.T) {
+	m, _, err := LoadBytes("helmstudio.yaml", []byte(goodManifest))
+	if err != nil || m == nil {
+		t.Fatalf("loading the standalone manifest: %v", err)
+	}
+	full := strings.TrimPrefix(goodManifest, "\n")
+	bare := strings.Replace(full, "ref: v0.3.1\n", "", 1)
+	for name, body := range map[string]string{"repeating the pointer's ref": full, "leaving it out": bare} {
+		t.Run(name, func(t *testing.T) {
+			entry := []byte("# a comment changes nothing\nid: wan-studio\nrepo: https://github.com/someone/wan-studio\nref: v0.3.1\nmanifest:\n" + indent(body, "  "))
+			e, res, err := LoadEntryBytes("wan-studio.yaml", entry)
+			if err != nil || !res.OK() {
+				t.Fatalf("loading the entry: %v %v", err, res.Errors)
+			}
+			if e.Manifest.Digest != m.Digest {
+				t.Errorf("inline manifest digest %s, want the repository copy's %s", e.Manifest.Digest, m.Digest)
+			}
+			if e.Digest == m.Digest || e.Manifest.EntryDigest != e.Digest {
+				t.Errorf("the entry's own digest should still cover the whole entry, and the manifest should carry it")
+			}
+		})
+	}
+}

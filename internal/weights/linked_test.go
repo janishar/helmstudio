@@ -754,3 +754,55 @@ func TestLocalPathLinksASharedSubdirectoryUnderBothNames(t *testing.T) {
 		}
 	}
 }
+
+// Finder's .DS_Store and hf's .cache/huggingface bookkeeping go with the links;
+// a file that could be a weight still stops the unlink.
+func TestRemoveLinksTakesClutterButNotDownloads(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		extra string
+		ok    bool
+	}{
+		{"finder and hf clutter", "", true},
+		{"a downloaded file", "vae/model.safetensors", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			models := t.TempDir()
+			write := func(p string) {
+				full := filepath.Join(models, "M", p)
+				if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(full, nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.MkdirAll(filepath.Join(models, "M", "vae"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("/nowhere/w.safetensors", filepath.Join(models, "M", "vae", "w.safetensors")); err != nil {
+				t.Fatal(err)
+			}
+			write(".DS_Store")
+			write("vae/.DS_Store")
+			write(".cache/huggingface/CACHEDIR.TAG")
+			write(".cache/huggingface/download/vae/w.safetensors.lock")
+			if c.extra != "" {
+				write(c.extra)
+			}
+			root, err := os.OpenRoot(models)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer root.Close()
+			err = removeLinks(root, "M", models)
+			_, statErr := os.Stat(filepath.Join(models, "M"))
+			if c.ok && (err != nil || !os.IsNotExist(statErr)) {
+				t.Fatalf("want the directory gone, got %v (stat %v)", err, statErr)
+			}
+			if !c.ok && (!errors.Is(err, ErrConflict) || statErr != nil) {
+				t.Fatalf("want ErrConflict and the directory kept, got %v (stat %v)", err, statErr)
+			}
+		})
+	}
+}

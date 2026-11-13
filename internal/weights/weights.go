@@ -1731,7 +1731,7 @@ func (s *Service) present(ctx context.Context, a artifactRow) (Artifact, error) 
 
 // removeLinks deletes a directory that holds nothing but links, and the
 // directories under it. A regular file under it is a download, and nothing
-// here deletes one: it refuses and says where it is.
+// here deletes one: it refuses and says where it is. Clutter is the exception.
 func removeLinks(root *os.Root, dest, models string) error {
 	var files []string
 	var dirs []string
@@ -1742,7 +1742,7 @@ func removeLinks(root *os.Root, dest, models string) error {
 		switch {
 		case d.IsDir():
 			dirs = append(dirs, p)
-		case d.Type()&fs.ModeSymlink != 0:
+		case d.Type()&fs.ModeSymlink != 0, clutter(filepath.ToSlash(dest), p):
 			files = append(files, p)
 		default:
 			return fmt.Errorf("%s is a file helmstudio downloaded, not a link; it is not removed: %w", filepath.Join(models, p), ErrConflict)
@@ -1765,6 +1765,15 @@ func removeLinks(root *os.Root, dest, models string) error {
 		}
 	}
 	return nil
+}
+
+// clutter is a regular file under a directory of links that holds no weights:
+// what Finder writes into any folder it shows (.DS_Store), and the bookkeeping
+// `hf download --local-dir` keeps beside what it fetched (.cache/huggingface:
+// locks, metadata, CACHEDIR.TAG). Without this, opening the folder in Finder
+// once was enough to make it impossible to unlink.
+func clutter(dest, p string) bool {
+	return path.Base(p) == ".DS_Store" || strings.HasPrefix(p, dest+"/.cache/huggingface/")
 }
 
 // danglingLinks names the first link under dir whose file is not there, which
