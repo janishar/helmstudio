@@ -1,0 +1,78 @@
+# A registry entry: a pointer at minimax h3 image studio's repository
+# (schema/registry-entry.json, docs/design/05-sdk-and-custom-studios.md §5a).
+#
+# The manifest belongs in the studio's own repository as helmstudio.yaml, beside
+# the code it describes, and minimax h3 image studio ships one. This copy is there
+# because resolution reaches nothing over the network (M7 Q7): before a studio is
+# fetched this is the only manifest there is, and an entry without one shows on the
+# shelf as `not_fetched` — no description, no hue, no checkpoint to choose. What
+# matters about it is that it agrees with the repository.
+#
+# Where the inline manifest sets id, repo or ref, each must equal this entry's;
+# the validator enforces it. There is no `certified` field: a level is derived
+# from what has actually been checked, never declared by the thing being
+# checked (docs/decisions.md M7 Q4, Q15).
+
+id: minimax-h3-image-studio
+repo: https://github.com/janishar/MiniMax-H3-Image-Studio
+ref: main
+manifest:
+  id: minimax-h3-image-studio
+  name: minimax h3 image studio
+  description: MiniMax-H3-Image (6 steps) for text-to-image and multi-image editing on PyTorch (mps), with the MiniMax-H3-Image-PE prompt enhancer.
+  kinds: [image]
+  # Red, at least 30° from helmstudio's accent and every other studio's hue: MiniMax's own
+  # orange-red #FF6C37 sits 22° from h3's amber, so it is pulled towards red, short of iris's pink.
+  hue: { dark: "#f0564a", light: "#c0392b" }
+  license: MIT
+  repo: https://github.com/janishar/MiniMax-H3-Image-Studio
+  ref: main
+  python: { version: "3.12" }
+  # Measured on an M5 Pro: 41.9 GB of Metal memory at 4096x4096 (16 MP), in the decode. The models
+  # take turns as int8: the PE (34 GB, 38 on an edit) and the text encoder (30) are each freed before the next loads,
+  # and denoising holds the transformer and VAE (38). A 4 MP edit with one 2048 px reference peaked at 39.
+  peak_ram_gb: 42
+  requires:
+    os: [darwin]
+    arch: [arm64]
+    tools: [uv]
+    ram_gb: 64
+  runtime:
+    framework: pytorch
+    backends: [mps, cuda, cpu]
+    precision: [bf16, int8]
+    language: python
+  # Sessions keep their settings and reference images (kv for the page's paths);
+  # references and takes are assets; takes with their settings are gallery items;
+  # renders with their logs are jobs. There is no timeline: this studio makes stills.
+  capabilities: [kv, assets, gallery, jobs]
+  sdk: { runtime: "^1", ui: "^1", css: "^1" }
+  network: [huggingface.co, cdn-lfs.huggingface.co]
+  build:
+    # --locked: install exactly uv.lock, and fail rather than rewrite it.
+    - name: Sync dependencies
+      run: uv sync --locked
+  weights:
+    # The diffusers layout only: the repo's transformer/ and vae/ (the original format),
+    # examples/ and assets/ are not needed. The text encoder is byte-identical to MiniMax-H3's
+    # Ref2VA/text_encoder; locally it is file symlinks into it.
+    - name: minimax_h3_image
+      repo: MiniMaxAI/MiniMax-H3-Image
+      dest: MiniMax-H3-Image
+      size_gb: 135
+      files: ["model_index.json", "modular_model_index.json", "scheduler/**", "tokenizer/**", "processor/**", "text_encoder/**", "transformer_diffusers/**", "vae_diffusers/**"]
+    - name: pe
+      repo: MiniMaxAI/MiniMax-H3-Image-PE
+      dest: MiniMax-H3-Image-PE
+      size_gb: 18
+  processes:
+    - name: studio
+      role: main
+      heavy: true
+      cwd: web
+      # Not `uv run`, which would sync the environment at every launch.
+      cmd: "python server.py --host 127.0.0.1 --port {port} --model {models.minimax_h3_image} --pe {models.pe}"
+      port: { prefer: 8740 }
+      health: { tcp: true, timeout_s: 30, interval_s: 2 }
+      busy: { path: /api/queue }
+      ui: /
