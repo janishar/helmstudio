@@ -297,7 +297,7 @@ export function card(ctx, studio, accent) {
       // installed has never been approved, and telling someone that what it
       // would run "has changed" when they have never seen it is a sentence
       // about nothing.
-      studio.approval_required && studio.install_state && studio.install_state !== "listed"
+      studio.approval_required && installed(studio)
         ? el("p", { class: "helm-hint helm-status-warning", text: "What this would run has changed since you approved it. The next install or launch will show it again." })
         : null,
       s.note && !failed ? el("p", { class: "helm-hint", text: s.note }) : null,
@@ -312,11 +312,15 @@ export function card(ctx, studio, accent) {
 }
 
 /**
- * The order the library reads in: by what a studio makes — video, then audio,
- * then image, then text — and by id within each. The daemon serves them by id,
- * which put an image studio between two video ones; this groups what a person
- * is choosing between. A studio that makes several kinds takes the first of
- * them in this order.
+ * The order the library reads in: installed studios first, then those only
+ * listed (03 §4, amended 2026-11-14), so what a person can launch is on top.
+ * Within each, by what a studio makes — video, then audio, then image, then
+ * text — and by id. The daemon serves them by id, which put an image studio
+ * between two video ones; this groups what a person is choosing between. A
+ * studio that makes several kinds takes the first of them in this order.
+ *
+ * The list is sorted on every render, so a studio moves up as its install
+ * starts and down when it is uninstalled.
  */
 const KINDS = ["video", "audio", "image", "text"];
 
@@ -328,8 +332,11 @@ function rank(studio) {
   return KINDS.length;
 }
 
+/** A studio with an installation, finished or under way, rather than one only listed. */
+const installed = (studio) => Boolean(studio.install_state) && studio.install_state !== "listed";
+
 function inOrder(studios) {
-  return [...studios].sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
+  return [...studios].sort((a, b) => installed(b) - installed(a) || rank(a) - rank(b) || a.id.localeCompare(b.id));
 }
 
 /**
