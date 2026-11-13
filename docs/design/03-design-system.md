@@ -313,6 +313,8 @@ The catalogue grid is `repeat(auto-fill, minmax(320px, 1fr))` with a 16px gap. T
 
 **There is no trailing crumb.** On four of the six pages that carry a back link — a studio's detail, its processes, the approval screen and the editor — the crumb would be the studio's name, which is the `<h1>` directly beneath it. A trail that repeats the title is the thing this amendment removed from the other end of the row.)
 
+(Amended 2026-11-14, by the human's decision: **installed studios come first.** The library lists every studio with an installation — installed, installing, updating, failed or running — above those only listed, and the kind order of the 2026-09-18 amendment, then id, applies within each of the two. It is sorted on every render, so a studio moves up as its install starts and down when it is uninstalled. What a person can launch is what they reach for most; a registry that grows pushed it further down the page.)
+
 ## 5 · helm-css, and how studios wear it
 
 The system ships as a package so studios can look like family without importing a component library. Five files: `helm-tokens.css`, `helm-base.css`, `helm-layout.css`, `helm-components.css`, and `helm.css` concatenating them. Every class is prefixed `helm-`, nothing is `!important`, and specificity stays at a single class so a studio overrides by writing one rule rather than fighting.

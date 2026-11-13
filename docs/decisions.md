@@ -1243,4 +1243,8 @@ Decided before M9 is expanded, which is the last moment it is free: the shell is
 
 - 2026-11-14 · manifest · **studio id `minimax-h3-image-studio`, and a red identity hue `#f0564a` / `#c0392b`** — minimax h3 image studio (MiniMax-H3-Image and its PE prompt enhancer on PyTorch, mps) joins the registry as `studios/minimax-h3-image-studio.yaml`, pointing at `main` as the other six do, with the studio's helmstudio.yaml carried inline so it is described before it is fetched. MiniMax's own orange-red sits 22° from h3 studio's amber, so the hue is pulled towards red: about 4–6°, which keeps it at least 31° from every other studio's hue (iris studio's pink and h3 studio's amber are the nearest) and 41° from helmstudio's accent, in both themes. h3 studio runs MiniMax-H3, the video and audio model, on a native Metal engine; this is the separate image checkpoint on PyTorch, so the two stay separate studios. Both of its 33B models load as int8 weight-only to fit a 64 GB Mac, which the manifest's precision lists. The site stays at the four launch studios.
 
+## 2026-11-14 · Installed studios first
+
+- 2026-11-14 · launcher · **the library lists installed studios above those only listed** — by the human's decision, amending 03 §4's kind order (2026-09-18), which now applies within each of the two groups, then id. "Installed" is any install_state but `listed`, so a studio installing, updating or whose install failed is with the installed ones, where it needs attention. The order is computed on every render, so it follows install and uninstall as they happen.
+
 <!-- date · what was built · what it changed about the decisions above -->
