@@ -717,3 +717,17 @@ func checkpoints(f *fixture, id string) {
 	st.Manifest.Weights = append(st.Manifest.Weights,
 		add("small", "org/small", "Small"), add("large", "org/large", "Large"))
 }
+
+// An install recorded against an inline manifest's old whole-entry digest is
+// still the same build; anything else is not.
+func TestBuiltFromAcceptsTheLegacyEntryDigest(t *testing.T) {
+	m := &manifest.Manifest{Digest: "new", EntryDigest: "entry"}
+	for digest, want := range map[string]bool{"new": true, "entry": true, "other": false} {
+		if got := builtFrom(digest, m); got != want {
+			t.Errorf("builtFrom(%q) = %v, want %v", digest, got, want)
+		}
+	}
+	if builtFrom("", &manifest.Manifest{Digest: "new"}) {
+		t.Error("an empty EntryDigest should match nothing")
+	}
+}

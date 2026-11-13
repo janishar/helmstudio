@@ -41,6 +41,11 @@ func digest(data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return digestOf(doc)
+}
+
+// digestOf hashes a document already decoded by decodeGeneric.
+func digestOf(doc any) (string, error) {
 	canonical, err := json.Marshal(doc)
 	if err != nil {
 		return "", err

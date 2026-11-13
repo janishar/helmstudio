@@ -260,7 +260,7 @@ func (in *Installer) Info(ctx context.Context, studioID string, m *manifest.Mani
 	if fi, err := os.Stat(r.root); err == nil && fi.IsDir() {
 		info.RootPresent = true
 	}
-	info.RebuildNeeded = m != nil && m.Digest != "" && m.Digest != r.digest
+	info.RebuildNeeded = m != nil && m.Digest != "" && !builtFrom(r.digest, m)
 	if r.runtimeEnv.Valid {
 		info.RuntimeEnv = json.RawMessage(r.runtimeEnv.String)
 	}
@@ -269,6 +269,13 @@ func (in *Installer) Info(ctx context.Context, studioID string, m *manifest.Mani
 		_ = json.Unmarshal([]byte(r.lastFailure.String), info.LastFailure)
 	}
 	return info, nil
+}
+
+// builtFrom says whether an installation that recorded digest was built from
+// m, accepting the whole-entry digest that installs from an inline manifest
+// recorded before Digest became the manifest's own.
+func builtFrom(digest string, m *manifest.Manifest) bool {
+	return digest == m.Digest || (m.EntryDigest != "" && digest == m.EntryDigest)
 }
 
 // checkHost applies R5 and R5a: os, arch and backends block; memory and disk
@@ -434,7 +441,7 @@ func (in *Installer) install(ctx context.Context, studioID string, again bool) (
 					VALUES (?, ?, ?, ?, ?, ?)`, studioID, m.Digest, root, fresh, in.nowMs(), in.nowMs()); err != nil {
 					return fmt.Errorf("recording the installation (is %s already another studio's checkout?): %w", root, err)
 				}
-			case r.digest != m.Digest || r.root != root:
+			case !builtFrom(r.digest, m) || r.root != root:
 				// The manifest changed since this checkout was built: start
 				// again from the clone phase, and forget which steps
 				// succeeded, since they ran against something else.
