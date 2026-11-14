@@ -93,11 +93,19 @@ func inputRows(workflow registry.Workflow, in dto.BatchRowsIn, repeat int) ([]ma
 		if !ok {
 			return nil, in.Lines.Param + ": not a param of this workflow"
 		}
-		if param.Type != "string" && param.Type != "text" && param.Type != "enum" {
-			return nil, in.Lines.Param + ": lines need a text, string or enum param"
+		field, takesImages := param.ImageInput()
+		if param.Type != "string" && param.Type != "text" && param.Type != "enum" && !takesImages {
+			return nil, in.Lines.Param + ": lines need a text, string, enum or image param"
 		}
 		for _, value := range in.Lines.Values {
-			out = append(out, map[string]any{in.Lines.Param: value})
+			var cell any = value
+			if takesImages { // each line a take id: {take_id}, or the one-item list [{<field>: {take_id}}]
+				cell = map[string]any{"take_id": value}
+				if param.Type == "rows" {
+					cell = []any{map[string]any{field: cell}}
+				}
+			}
+			out = append(out, map[string]any{in.Lines.Param: cell})
 		}
 	case in.Table != nil:
 		for i, cells := range in.Table.Rows {

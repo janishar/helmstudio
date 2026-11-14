@@ -17,8 +17,9 @@ workflow against the node schemas at start, so a broken pack stops the runner in
 `runner_service/tests/test_packs.py` fails when a pack's values drift from the canonical contract fixtures
 (`contracts/fixtures/registry/<family>.{nodes,workflows}.valid.json`).
 
-The core also provides four nodes in the same grammar (`runner_service/core/nodes.yaml`), published when a
-workflow uses them: `prompt` (→ `text: Text`), `seed` (→ `seed: Seed`), `canvas` (→ `canvas: Canvas`) and
+The core also provides five nodes in the same grammar (`runner_service/core/nodes.yaml`), published when a
+workflow uses them or a pack lists them in `publish`: `prompt` (→ `text: Text`), `seed` (→ `seed: Seed`), `canvas`
+(`mode` auto | fixed, `width`, `height` → `canvas: Canvas`), `image` (param `image: image` → `image: Image`) and
 `output` (`media: Image` in; stores it as the run's next output).
 
 ## model.yaml
@@ -28,6 +29,7 @@ workflow uses them: `prompt` (→ `text: Text`), `seed` (→ `seed: Seed`), `can
 id: qwen-image-2.1                # the model id (registry `models`, residency keys)
 family: qwen-image                # node kinds are <family>/<stage>; the model node is <family>/model
 title: Qwen Image 2.1             # the model's title and the model node's title
+publish: [image]                  # core nodes to publish even when no workflow uses them (for graphs)
 runtimes:
   torch: {env: torch}             # runtime key = module file (torch.py); env = the runner env that loads it
 model:                            # the generated <family>/model node (see below)
@@ -55,14 +57,17 @@ components:                       # weight components the residency manager load
 stages:                           # one node kind each: <family>/<stage>; the function <stage>() in torch.py
   encode:
     title: Encode prompt
-    help: Encodes the prompt with the text encoder.
-    uses: [text_encoder]          # the components it may ask for (admission, cache keys)
+    help: Encodes the prompt and up to 10 reference images; with references the run is an edit.
+    uses: [text_encoder, vae]     # the vae encodes the references          # the components it may ask for (admission, cache keys)
     inputs: {model: Model, prompt: Text}
     outputs: {cond: Conditioning}
     params:
       transparent: {type: bool, label: Transparent, default: false,
                     help: Ask for an RGBA image with a transparent background.}
-    peak_gb: "1"
+      refs: {type: rows, label: References, default: [], min: 0, max: 10, item: {image: Image},
+             mention: "<image{n}>",
+             help: "Images to edit or combine, in order; the prompt names them <image1>, <image2>, …"}
+    peak_gb: "2.5 + 1.5 * images"   # images: how many Image values reach the stage
   sample:
     title: Sample
     help: Denoises from the seed's noise.
@@ -89,8 +94,8 @@ stages:                           # one node kind each: <family>/<stage>; the fu
 
 Keys the core understands; anything else is ignored:
 
-- **Top level**: `id`, `family`, `title`, `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`,
-  `stages`. A pack without `variants` (echo) has no model node and its `models` entry is `{id, family, title}`.
+- **Top level**: `id`, `family`, `title`, `publish` (core node kinds to publish without a workflow using them),
+  `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`, `stages`. A pack without `variants` (echo) has no model node and its `models` entry is `{id, family, title}`.
 - **`variants.<id>`**: `dir`, `shares` (component names loaded from the first variant's folder, so they are one
   residency entry and one cache identity across variants).
 - **`components.<name>`**: `files`, `dtype` (`bf16` | `fp16` | `fp32`, default bf16), `precision` (default
@@ -100,11 +105,13 @@ Keys the core understands; anything else is ignored:
   `precision` (enum: every precision a component offers, in the order bf16, fp16, int8), output `model: Model`.
 - **`stages.<name>`**: `title`, `help`, `params`, `inputs`, `outputs`, `uses`, `peak_gb`, `stall_s`.
   - `params`: name → a registry `paramSchema` without `name`, copied verbatim (`type` int | float | bool |
-    string | text | enum | seed; `label`, `default`, `min`, `max`, `step`, `enum`, `help`, `when`). Order is
-    kept. **YAML 1.1 reads bare `on`, `off`, `yes`, `no` as booleans: quote them.**
+    string | text | enum | seed | image | rows; `label`, `default`, `min`, `max`, `step`, `enum`, `help`, `when`,
+    and for rows `item` (field → `Image` or a param schema) and `mention` (`<image{n}>`)). Order is kept.
+    **YAML 1.1 reads bare `on`, `off`, `yes`, `no` as booleans: quote them.**
   - `inputs` / `outputs`: port name → port type, in order. Types: `Text`, `Image`, `Int`, `Float`, `Seed`,
     `Canvas` (plain values) and the family-scoped handles `Model`, `Conditioning`, `Latent`.
-  - `peak_gb`: a Python expression over `mp` (megapixels of the nearest upstream Canvas, 0 without one) and the
+  - `peak_gb`: a Python expression over `mp` (megapixels of the nearest upstream Canvas, 0 without one),
+    `images` (how many Image values the params of the stage and of every node upstream of it hold) and the
     stage's own params: numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
     `max()`. Anything else fails at start.
 
@@ -138,16 +145,22 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
 
 - **`params`**: the node's params, resolved and validated against its schema (a `seed` param arrives as an
   int: null and -1 were replaced by a random 0..2^53-1, reported as the run's `resolved.seed` and each output's
-  `seed`).
-- **`inputs`**: port → upstream value. `Text`: `str`. `Seed`: `int`. `Canvas`: `{"width", "height"}`. `Image`:
-  a `PIL.Image` (the core `output` node stores it as PNG; RGBA is fine). `Model`: a `core.pack.ModelRef`
+  `seed`). An Image value (an `image` param, an Image field of a `rows` item) arrives as a `PIL.Image`: before the
+  stage's first step the core reads the command's resolved value (`{take_id, key, …, bytes, etag}`) from the
+  object store, only under `u/<owner_id>/`, at most 64 MB and exactly `bytes` long (else the run fails `input
+  image <take_id> is gone`), decodes it with Pillow (PNG, JPEG or WebP) and applies its EXIF orientation. The
+  mode is kept as decoded (RGB, RGBA, P, …); the bytes are dropped. A `rows` param is a list of dicts.
+- **`inputs`**: port → upstream value. `Text`: `str`. `Seed`: `int`. `Canvas`: `{"width", "height", "mode"}`
+  (the stage applies `mode`: auto may size from the references). `Image`: a `PIL.Image` (the core `output` node
+  stores it as PNG; RGBA is fine). `Model`: a `core.pack.ModelRef`
   (`variant`, `precision`, `pack.spec`, `folder(component=None)` → the variant's folder for configs, the
   tokenizer and the scheduler, which the pack reads itself). `Conditioning` / `Latent`: whatever object the
   pack returns. Handles never leave the process.
 - **Results are cached** per (owner, node id) by a key over the owner, kind, pack code hash (model.yaml + the
   module), params, upstream keys, and for a Model input only the files (size, mtime) and precision of the
   components the stage `uses`. A new seed re-runs sample and decode, not encode; base → turbo re-runs sample
-  but not encode. So a handle must be materialised (`.clone()`, `.contiguous()`): never a view into weights, and
+  but not encode. An Image param counts as its resolved value, so `(owner, key, etag)`: a changed reference
+  re-runs encode, an unchanged one is a hit and is not read again. So a handle must be materialised (`.clone()`, `.contiguous()`): never a view into weights, and
   it must not depend on anything outside `params` and `inputs`.
 - **`ctx`**:
   - `ctx.component(model, name)`: the component loaded on `ctx.device` (`mps`, `cuda` or `cpu`) at

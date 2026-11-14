@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/helmstudio/studio_service/registry"
@@ -52,7 +53,7 @@ func TestResolveFillsDefaults(t *testing.T) {
 	if detail != "" {
 		t.Fatal(detail)
 	}
-	want := `{"echo":{"kind":"echo/echo","params":{"delay_ms":300,"fail":false,"steps":20},"in":{"text":"prompt.text"}},` +
+	want := `{"echo":{"kind":"echo/echo","params":{"delay_ms":300,"fail":false,"refs":[],"steps":20},"in":{"text":"prompt.text"}},` +
 		`"output":{"kind":"output","params":{},"in":{"media":"echo.image"}},"prompt":{"kind":"prompt","params":{"text":"a red fox"}}}`
 	if got, _ := json.Marshal(nodes); string(got) != want {
 		t.Fatalf("got  %s\nwant %s", got, want)
@@ -153,5 +154,90 @@ func TestResolveQwen(t *testing.T) {
 		if _, detail := resolve(workflow, inputs(t, body)); detail != want {
 			t.Errorf("%s: %q, want %q", body, detail, want)
 		}
+	}
+}
+
+const (
+	takeA = "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+	takeB = "4e6a8c0b-2d4f-4a6c-9e8b-1f3a5c7e9b62"
+)
+
+// Image values: {take_id} alone or in rows items, checked for shape and count; items are named from 1; an image param
+// left null is required. The walker lists them in input order and parents dedupes them.
+func TestResolveImages(t *testing.T) {
+	workflow := qwen(t)
+	nodes, detail := resolve(workflow, inputs(t, `{"encode.refs": [{"image": {"take_id": "`+takeA+`"}},
+		{"image": {"take_id": "`+takeB+`"}}, {"image": {"take_id": "`+takeA+`"}}]}`))
+	if detail != "" {
+		t.Fatal(detail)
+	}
+	got := images(nodes)
+	if len(got) != 3 || got[1] != (imageAt{Path: "encode.refs[2].image", TakeID: takeB}) {
+		t.Fatalf("%+v", got)
+	}
+	graph, _ := json.Marshal(nodes)
+	if p := parents(graph); len(p) != 2 || p[0] != takeA || p[1] != takeB {
+		t.Fatalf("parents %v", p)
+	}
+	eleven := `[` + strings.Repeat(`{"image": {"take_id": "`+takeA+`"}},`, 10) + `{"image": {"take_id": "` + takeA + `"}}]`
+	for body, want := range map[string]string{
+		`{"encode.refs": ` + eleven + `}`:                                          "encode.refs: at most 10 items",
+		`{"encode.refs": {"image": {"take_id": "` + takeA + `"}}}`:                 "encode.refs: must be a list of items",
+		`{"encode.refs": [{"image": {"take_id": "x"}}]}`:                           `encode.refs[1].image: must be {"take_id": <uuid>}`,
+		`{"encode.refs": [{"image": {"take_id": "` + takeA + `", "key": "u/a"}}]}`: `encode.refs[1].image: must be {"take_id": <uuid>}`,
+		`{"encode.refs": [{"image": {"url": "/files/x"}}]}`:                        `encode.refs[1].image: must be {"take_id": <uuid>}`,
+		`{"encode.refs": [{"image": "` + takeA + `"}]}`:                            `encode.refs[1].image: must be {"take_id": <uuid>}`,
+		`{"encode.refs": [{"image": {"take_id": "` + takeA + `"}}, {}]}`:           "encode.refs[2].image: an image is required",
+		`{"encode.refs": [{"image": {"take_id": "` + takeA + `"}, "w": 1}]}`:       "encode.refs[1]: unknown field w",
+		`{"encode.refs": ["x"]}`:                                                   "encode.refs[1]: must be an object",
+	} {
+		if _, detail := resolve(workflow, inputs(t, body)); detail != want {
+			t.Errorf("%s: %q, want %q", body, detail, want)
+		}
+	}
+	// the image kind and an item param: null is required, an item param gets its default
+	workflow.Nodes["image"] = registry.Node{Kind: "image", Params: map[string]any{}}
+	workflow.NodeSchemas["image"] = registry.NodeSchema{Kind: "image", Params: []registry.Param{{Name: "image", Type: "image"}}}
+	if _, detail := resolve(workflow, nil); detail != "image.image: an image is required" {
+		t.Fatal(detail)
+	}
+	nodes, detail = resolve(workflow, inputs(t, `{"image.image": {"take_id": "`+takeB+`"}}`))
+	if detail != "" || images(nodes)[0] != (imageAt{Path: "image.image", TakeID: takeB}) {
+		t.Fatal(detail, images(nodes))
+	}
+	one := 1.0
+	rows := registry.Param{Type: "rows", Min: &one, Item: map[string]json.RawMessage{"image": json.RawMessage(`"Image"`),
+		"weight": json.RawMessage(`{"type": "float", "default": 1, "max": 2}`)}}
+	if value, detail := check(rows, []any{map[string]any{"image": map[string]any{"take_id": takeA}}}); detail != "" ||
+		value.([]any)[0].(map[string]any)["weight"] != float64(1) {
+		t.Fatal(value, detail)
+	}
+	if _, detail := check(rows, []any{}); detail != "at least 1 items" {
+		t.Fatal(detail)
+	}
+	if _, detail := check(rows, []any{map[string]any{"image": map[string]any{"take_id": takeA}, "weight": 3.0}}); detail != "[1].weight: must be at most 2" {
+		t.Fatal(detail)
+	}
+	if field, ok := rows.ImageInput(); !ok || field != "image" {
+		t.Fatal("rows with one Image field takes images")
+	}
+}
+
+// Lines on an image input: each line a take id, as {take_id} or a one-item rows list.
+func TestExpandImageLines(t *testing.T) {
+	parsed, shape := batchBody(t, `{"workflow_id":"qwen-image","rows":{"lines":{"param":"encode.refs","values":["`+takeA+`","`+takeB+`"]}}}`)
+	if shape != "" {
+		t.Fatal(shape)
+	}
+	rows, detail := expand(qwen(t), parsed, func() int64 { return 0 })
+	if detail != "" || len(rows) != 2 {
+		t.Fatal(rows, detail)
+	}
+	if got, _ := json.Marshal(rows[1]["encode.refs"]); string(got) != `[{"image":{"take_id":"`+takeB+`"}}]` {
+		t.Fatalf("%s", got)
+	}
+	parsed, _ = batchBody(t, `{"workflow_id":"qwen-image","rows":{"lines":{"param":"encode.refs","values":["nope"]}}}`)
+	if _, detail := expand(qwen(t), parsed, func() int64 { return 0 }); detail != `row 1: encode.refs[1].image: must be {"take_id": <uuid>}` {
+		t.Fatal(detail)
 	}
 }

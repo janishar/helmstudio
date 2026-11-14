@@ -21,9 +21,11 @@ type Output struct {
 	Key, Kind                 string
 	Width, Height             *int
 	Bytes                     int64
+	Etag                      *string // md5 hex of the object, when the runner sent it (evt.run.output etag)
 	MadeWith                  dto.MadeWith
 	CreatedAt                 *time.Time // when the output was made; nil: now
 	BatchID                   *string    // a batch run's: the take's source is pipeline
+	Parents                   []string   // the takes of the run's Image values, each once, in input order
 }
 
 // contentTypes maps a run output key's extension to its content type.
@@ -39,13 +41,19 @@ func Record(ctx context.Context, tx pgx.Tx, output Output) (string, error) {
 	}
 	var id string
 	err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
-		session_id, run_id, output_idx, made_with, ready, created_at, batch_id)
+		session_id, run_id, output_idx, made_with, ready, created_at, batch_id, etag)
 		VALUES ($1, $2, $3, CASE WHEN $15::uuid IS NULL THEN 'create' ELSE 'pipeline' END, $4, $5, $6, $7, $8, $9, $10, $11,
-		$12, $13, true, coalesce($14, clock_timestamp()), $15)
+		$12, $13, true, coalesce($14, clock_timestamp()), $15, $16)
 		ON CONFLICT (run_id, output_idx) DO UPDATE SET run_id = EXCLUDED.run_id RETURNING id::text`,
 		utility.NewID(), output.OwnerID, output.Kind, Title(output.MadeWith), output.Key, contentType, output.Width,
 		output.Height, output.Bytes, output.SessionID, output.RunID, output.Index, output.MadeWith, output.CreatedAt,
-		output.BatchID).Scan(&id)
+		output.BatchID, output.Etag).Scan(&id)
+	if err != nil || len(output.Parents) == 0 {
+		return id, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO take_parents (take_id, parent_id, owner_id, idx)
+		SELECT $1, parent, $2, idx - 1 FROM unnest($3::uuid[]) WITH ORDINALITY AS u(parent, idx)
+		ON CONFLICT DO NOTHING`, id, output.OwnerID, output.Parents)
 	return id, err
 }
 

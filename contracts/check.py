@@ -41,7 +41,7 @@ REGISTRY_KEYS = [
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
 # openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
 HTTP_SCHEMAS = [
-    "Run", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "UploadCreate", "Upload",
+    "Run", "RunRequest", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "TakeUse", "UploadCreate", "Upload",
     "Batch", "BatchCreate", "BatchRow", "BatchEvent",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
@@ -128,6 +128,22 @@ def value_error(param: dict, v) -> str | None:
     """What studio checks when it resolves a run (type, min/max, enum); also applied to every default."""
     t = param["type"]
     if t == "seed" and v is None:
+        return None
+    if t == "image":  # a registry workflow holds no takes: an image param stays empty
+        return None if v is None else f"{v!r}: a workflow cannot fill an image param"
+    if t == "rows":
+        if not isinstance(v, list):
+            return f"{v!r} is not a list"
+        if not param.get("min", 0) <= len(v) <= param["max"]:
+            return f"{len(v)} items is outside {param.get('min', 0)}..{param['max']}"
+        for i, row in enumerate(v, 1):
+            if not isinstance(row, dict) or set(row) - set(param["item"]):
+                return f"item {i}: fields must be among {sorted(param['item'])}"
+            for f, spec in param["item"].items():
+                if spec == "Image":  # a take; never in a registry workflow
+                    return f"item {i}.{f}: a workflow cannot fill an image"
+                if f in row and (err := value_error(spec, row[f])):
+                    return f"item {i}.{f}: {err}"
         return None
     if t in ("int", "seed") and (not isinstance(v, int) or isinstance(v, bool)):
         return f"{v!r} is not an integer"

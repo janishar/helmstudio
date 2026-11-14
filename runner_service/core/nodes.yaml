@@ -1,6 +1,6 @@
 # The core nodes, in every runner, in the stage grammar of packs/README.md (no family: the kind is the name).
-# Functions of the same names are in core/nodes.py. A runner publishes the ones its workflows use: the sources
-# first, then the packs' nodes, then the sinks (nodes without outputs).
+# Functions of the same names are in core/nodes.py. A runner publishes the ones its workflows use (and those a
+# pack lists in `publish`): the sources first, then the packs' nodes, then the sinks (nodes without outputs).
 stages:
   prompt:
     title: Prompt
@@ -16,11 +16,19 @@ stages:
     outputs: {seed: Seed}
   canvas:
     title: Canvas
-    help: The output size in pixels.
+    help: The output size in pixels; auto follows the last reference in an edit.
     params:
+      mode: {type: enum, label: Size, default: auto, enum: [auto, fixed],
+             help: "auto: with references, about 1 MP (1024 × 1024 area) at the last reference's aspect, sides rounded to 32; without, width × height. fixed: always width × height."}
       width: {type: int, label: Width, default: 1024, min: 256, max: 4096, step: 32}
       height: {type: int, label: Height, default: 1024, min: 256, max: 4096, step: 32}
     outputs: {canvas: Canvas}
+  image:
+    title: Image
+    help: An image from the gallery, as an input.
+    params:
+      image: {type: image, label: Image, default: null}
+    outputs: {image: Image}
   output:
     title: Output
     help: Stores its input as a run output.

@@ -15,6 +15,7 @@
     "kind": "image",
     "width": 1024,
     "height": 1024,
-    "bytes": 48213
+    "bytes": 48213,
+    "etag": "5d41402abc4b2a76b9719d911017c592"
   }
 }

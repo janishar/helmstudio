@@ -1,10 +1,12 @@
 """A run end to end on fakes: the events it publishes (order, seq, Nats-Msg-Id, contract), the PNG, the ack."""
 
+import hashlib
 import io
 import json
 import threading
 
-from conftest import CONTRACTS, IMPLS, FakeJS, FakeKV, FakeMsg, FakeQwen, command, consumer
+from conftest import IMPLS, FakeJS, FakeKV, FakeMsg, FakeQwen, command, consumer
+from conftest import qwen_command as qwen_fixture
 from PIL import Image
 
 from consumer import SHUTDOWN, STALLED
@@ -71,6 +73,7 @@ async def test_echo_run_succeeds_with_progress_and_a_png():
         "width": image.width,
         "height": image.height,
         "bytes": len(data),
+        "etag": hashlib.md5(data).hexdigest(),
     }
     assert msg.log == [("ack", len(js.sent))]  # acked after the terminal status
     assert c.host.run_id is None and json.loads(c.host.kv.data["fake.fake"])["state"] == "idle"
@@ -193,7 +196,7 @@ async def test_a_publish_that_fails_once_is_retried_with_the_same_msg_id(monkeyp
 
 
 def qwen_command(seed=None) -> dict:
-    cmd = json.loads((CONTRACTS / "fixtures/messages/cmd.run.execute.valid.2.json").read_text())
+    cmd = qwen_fixture()
     cmd["data"]["workflow"]["nodes"]["seed"]["params"]["seed"] = seed
     return cmd
 

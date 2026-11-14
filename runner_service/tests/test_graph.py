@@ -1,10 +1,9 @@
 import asyncio
 import copy
-import json
 import types
 
 import pytest
-from conftest import CONTRACTS, SCHEMAS, FakeQwen, command
+from conftest import SCHEMAS, FakeQwen, command, qwen_command
 
 from core import graph
 from core.graph import Cache, Cancelled, Ctx, RunError
@@ -157,8 +156,7 @@ def test_resolve_picks_a_seed_for_null_and_minus_one_only():
 
 
 def qwen_nodes(**edits) -> dict:
-    cmd = json.loads((CONTRACTS / "fixtures/messages/cmd.run.execute.valid.2.json").read_text())
-    nodes = cmd["data"]["workflow"]["nodes"]
+    nodes = qwen_command()["data"]["workflow"]["nodes"]
     nodes["seed"]["params"]["seed"] = 1
     for path, value in edits.items():
         nid, name = path.split("__")
@@ -199,6 +197,17 @@ async def test_cache_reruns_only_what_a_change_reaches(tmp_path, monkeypatch):
     # each component loaded once: the transformer (turbo int8, base int8, base bf16), the text encoder (int8,
     # bf16) and the vae (bf16 only)
     assert len(q.loads) == len(set(q.loads)) == 6
+
+
+def test_cache_keeps_only_the_most_recent_owners():
+    cache = Cache()
+    for owner in "abcde":
+        cache[(owner, "encode")] = ("k", {})
+        cache[(owner, "sample")] = ("k", {})
+    cache[("b", "encode")] = ("k2", {})  # b stores again: the most recent
+    cache[("f", "encode")] = ("k", {})
+    assert sorted({o for o, _ in cache}) == ["b", "d", "e", "f"]
+    assert ("b", "sample") in cache
 
 
 async def test_cache_key_changes_with_the_weights_files(tmp_path, monkeypatch):

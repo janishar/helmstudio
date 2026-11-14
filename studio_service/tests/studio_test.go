@@ -28,8 +28,10 @@ import (
 	"github.com/helmstudio/helmgo/micro"
 	"github.com/helmstudio/helmgo/middleware"
 	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/storage"
 	"github.com/helmstudio/helmgo/utility"
 
+	"github.com/helmstudio/studio_service/api/gallery"
 	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/gen"
@@ -55,6 +57,7 @@ type env struct {
 	revoked   atomic.Bool // the token check of open event streams fails
 	unreached bool        // the KV cancels write fails
 	service   *studio.Service
+	store     *storage.Memory // the objects reference images are checked against
 }
 
 // setup migrates a fresh schema, loads the fake runner's registry values and serves the API. It skips without
@@ -83,7 +86,7 @@ func setup(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	e := &env{t: t, pool: pool, registry: &registry.Registry{}, events: &micro.NatsJetStreamGroup{}}
+	e := &env{t: t, pool: pool, registry: &registry.Registry{}, events: &micro.NatsJetStreamGroup{}, store: storage.NewMemory()}
 	for _, kind := range []string{"nodes", "workflows", "models"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "contracts", "fixtures", "registry", kind+".valid.json"))
 		if err != nil {
@@ -118,8 +121,9 @@ func setup(t *testing.T) *env {
 		}
 		return nil
 	}
-	e.service = studio.NewService(pool, signer, e.registry, cancel)
-	router.LoadControllers(studio.NewController(e.service, recheck, shutdown))
+	e.service = studio.NewService(pool, signer, e.registry, cancel, e.store)
+	router.LoadControllers(studio.NewController(e.service, recheck, shutdown),
+		gallery.NewController(gallery.NewService(pool, signer, e.store, e.registry)))
 	e.srv = httptest.NewServer(router.Engine())
 	t.Cleanup(e.srv.Close)
 	return e

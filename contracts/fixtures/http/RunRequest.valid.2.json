@@ -1,0 +1,18 @@
+{
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "prompt.text": "Place the fox from <image1> in the field from <image2>",
+    "encode.refs": [
+      {
+        "image": {
+          "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+        }
+      },
+      {
+        "image": {
+          "take_id": "4e6a8c0b-2d4f-4a6c-9e8b-1f3a5c7e9b62"
+        }
+      }
+    ]
+  }
+}

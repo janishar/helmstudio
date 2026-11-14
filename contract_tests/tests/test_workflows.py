@@ -22,7 +22,7 @@ def test_echo_with_node_schemas(api):
     assert set(schemas) == {"prompt", "echo/echo", "output"}
     echo = schemas["echo/echo"]
     params = {p["name"]: p for p in echo["params"]}
-    assert [p["name"] for p in echo["params"]] == ["steps", "delay_ms", "fail"]
+    assert [p["name"] for p in echo["params"]] == ["steps", "delay_ms", "fail", "refs"]
     assert (
         params["steps"]["type"],
         params["steps"]["default"],

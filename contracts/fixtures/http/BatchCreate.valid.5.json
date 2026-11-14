@@ -1,0 +1,38 @@
+{
+  "workflow_id": "qwen-image",
+  "rows": {
+    "table": {
+      "columns": [
+        "prompt.text",
+        "encode.refs"
+      ],
+      "rows": [
+        [
+          "at night",
+          [
+            {
+              "image": {
+                "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+              }
+            }
+          ]
+        ],
+        [
+          "in fog",
+          [
+            {
+              "image": {
+                "take_id": "4e6a8c0b-2d4f-4a6c-9e8b-1f3a5c7e9b62"
+              }
+            },
+            {
+              "image": {
+                "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+              }
+            }
+          ]
+        ]
+      ]
+    }
+  }
+}

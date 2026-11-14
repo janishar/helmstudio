@@ -75,6 +75,11 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		if detail != "" {
 			return network.NewUnprocessableError(detail, nil)
 		}
+		if detail, err := checkImages(ctx, tx, s.store, caller.ID, nodes); err != nil {
+			return err
+		} else if detail != "" {
+			return network.NewUnprocessableError(detail, nil)
+		}
 		graph, _ := json.Marshal(nodes)
 		status, failure := "queued", (*string)(nil)
 		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph}

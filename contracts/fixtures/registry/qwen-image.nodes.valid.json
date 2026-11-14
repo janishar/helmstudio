@@ -56,8 +56,19 @@
       "kind": "canvas",
       "title": "Canvas",
       "family": null,
-      "help": "The output size in pixels.",
+      "help": "The output size in pixels; auto follows the last reference in an edit.",
       "params": [
+        {
+          "name": "mode",
+          "type": "enum",
+          "label": "Size",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "fixed"
+          ],
+          "help": "auto: with references, about 1 MP (1024 × 1024 area) at the last reference's aspect, sides rounded to 32; without, width × height. fixed: always width × height."
+        },
         {
           "name": "width",
           "type": "int",
@@ -82,6 +93,27 @@
         {
           "name": "canvas",
           "type": "Canvas"
+        }
+      ]
+    },
+    {
+      "kind": "image",
+      "title": "Image",
+      "family": null,
+      "help": "An image from the gallery, as an input.",
+      "params": [
+        {
+          "name": "image",
+          "type": "image",
+          "label": "Image",
+          "default": null
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "Image"
         }
       ]
     },
@@ -126,7 +158,7 @@
       "kind": "qwen-image/encode",
       "title": "Encode prompt",
       "family": "qwen-image",
-      "help": "Encodes the prompt with the text encoder.",
+      "help": "Encodes the prompt and up to 10 reference images; with references the run is an edit.",
       "params": [
         {
           "name": "transparent",
@@ -134,6 +166,19 @@
           "label": "Transparent",
           "default": false,
           "help": "Ask for an RGBA image with a transparent background."
+        },
+        {
+          "name": "refs",
+          "type": "rows",
+          "label": "References",
+          "default": [],
+          "min": 0,
+          "max": 10,
+          "item": {
+            "image": "Image"
+          },
+          "mention": "<image{n}>",
+          "help": "Images to edit or combine, in order; the prompt names them <image1>, <image2>, …"
         }
       ],
       "inputs": [

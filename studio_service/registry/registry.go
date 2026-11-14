@@ -19,7 +19,7 @@ const Stale = 30 * time.Second
 // Param is one param of a node schema.
 type Param struct {
 	Name    string   `json:"name"`
-	Type    string   `json:"type"` // int | float | bool | string | text | enum | seed
+	Type    string   `json:"type"` // int | float | bool | string | text | enum | seed | image | rows
 	Label   string   `json:"label,omitempty"`
 	Default any      `json:"default"`
 	Min     *float64 `json:"min,omitempty"`
@@ -28,6 +28,32 @@ type Param struct {
 	Enum    []string `json:"enum,omitempty"`
 	Help    string   `json:"help,omitempty"`
 	When    string   `json:"when,omitempty"` // a visibility expression, carried through, not evaluated
+	// rows only: field → "Image" (a port type) or an item param (a Param without name), kept raw so it round-trips
+	Item    map[string]json.RawMessage `json:"item,omitempty"`
+	Mention string                     `json:"mention,omitempty"` // rows only: how the prompt names item n, e.g. <image{n}>
+}
+
+// IsImageField reports whether a rows item field holds an Image.
+func IsImageField(raw json.RawMessage) bool { return string(raw) == `"Image"` }
+
+// ImageInput reports whether the param takes images, and the item field that holds one: "" for an image param, the
+// only Image field for a rows param whose item has exactly one (ok false for any other param).
+func (p Param) ImageInput() (field string, ok bool) {
+	if p.Type == "image" {
+		return "", true
+	}
+	if p.Type != "rows" {
+		return "", false
+	}
+	for name, raw := range p.Item {
+		if IsImageField(raw) {
+			if ok {
+				return "", false
+			}
+			field, ok = name, true
+		}
+	}
+	return field, ok
 }
 
 // Port is a typed input or output of a node.

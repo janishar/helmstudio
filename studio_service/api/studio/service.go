@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/storage"
 	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/api/studio/dto"
@@ -26,17 +27,18 @@ var errNotFound = network.NewNotFoundError("not found", nil)
 type Cancel func(ctx context.Context, runID string) error
 
 // Service owns the studio tables. registry is what the runners publish, signer turns output keys into links, cancel
-// reaches the runners.
+// reaches the runners, store is read to check a run's reference images.
 type Service struct {
 	db       *pgxpool.Pool
 	signer   *common.Signer
 	registry *registry.Registry
 	cancel   Cancel
+	store    storage.Store
 }
 
 // NewService returns the service.
-func NewService(db *pgxpool.Pool, signer *common.Signer, registry *registry.Registry, cancel Cancel) *Service {
-	return &Service{db: db, signer: signer, registry: registry, cancel: cancel}
+func NewService(db *pgxpool.Pool, signer *common.Signer, registry *registry.Registry, cancel Cancel, store storage.Store) *Service {
+	return &Service{db: db, signer: signer, registry: registry, cancel: cancel, store: store}
 }
 
 // tx runs fn in a transaction scoped to the caller as a plain user: an admin sees only their own rows here too.

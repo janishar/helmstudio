@@ -31,6 +31,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PATCH("/takes/:id", c.updateHandler)
 	group.DELETE("/takes/:id", c.deleteHandler)
 	group.POST("/takes/:id/reuse", c.reuseHandler)
+	group.POST("/takes/:id/use", c.useHandler)
 	group.GET("/sessions/:id/takes", c.sessionTakesHandler)
 	group.POST("/uploads", c.createUploadHandler)
 	group.POST("/uploads/:id/complete", c.completeUploadHandler)
@@ -102,6 +103,17 @@ func (c *controller) deleteHandler(ctx *gin.Context) {
 // reuseHandler: POST /takes/{id}/reuse.
 func (c *controller) reuseHandler(ctx *gin.Context) {
 	out, err := c.service.Reuse(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// useHandler: POST /takes/{id}/use.
+func (c *controller) useHandler(ctx *gin.Context) {
+	body, err := network.ReqBody[dto.TakeUse](ctx)
+	if err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	out, err := c.service.Use(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
 	reply(ctx, http.StatusOK, out, err)
 }
 

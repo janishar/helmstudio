@@ -63,13 +63,14 @@ type Progress struct {
 // Output is evt.run.output's data.
 type Output struct {
 	Base
-	Index  int    `json:"index"`
-	Key    string `json:"key"`
-	Kind   string `json:"kind"`
-	Width  *int   `json:"width"`
-	Height *int   `json:"height"`
-	Bytes  int64  `json:"bytes"`
-	Seed   *int64 `json:"seed"`
+	Index  int     `json:"index"`
+	Key    string  `json:"key"`
+	Kind   string  `json:"kind"`
+	Width  *int    `json:"width"`
+	Height *int    `json:"height"`
+	Bytes  int64   `json:"bytes"`
+	Etag   *string `json:"etag"`
+	Seed   *int64  `json:"seed"`
 }
 
 // ------------------------------------------------------------------ batches (pipelines_service)

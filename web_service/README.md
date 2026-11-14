@@ -29,6 +29,12 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   The takes strip is the session's takes (`GET /v1/studio/sessions/{id}/takes`) plus runs still working or failed;
   a take can be starred on the stage. `?reuse=<take id>` fills the form from `POST /v1/studio/takes/{id}/reuse`;
   without it the workflow is the session's newest run's.
+- Image inputs (`lib/refs.ts`, `components/create/refs.tsx`): a workflow's `image` / Image-rows param is the
+  references row above the prompt and the inspector's References (the rows editor: gallery picker
+  `components/gallery/picker.tsx`, upload / drop / paste, drag or Alt + arrows to reorder, `<image{n}>` labels); a drop on
+  the stage adds one; sent as `{take_id}`. `?use=<take>&w=<workflow>` (and the strip's "Use in…") call
+  `POST /v1/studio/takes/{id}/use`. Canvas Auto with references follows the last one (about 1 MP); a picked size sets
+  `canvas.mode: fixed`.
 - `/gallery` (`components/gallery/`, `lib/takes.ts`): every take, search and filter chips, infinite scroll by
   cursor, upload (picker or drop: `POST /v1/studio/uploads` → `PUT` of the signed `/files` link with progress →
   `.../complete`), Select several (bulk star / delete), and the selected take's panel: Made with, Reuse settings,

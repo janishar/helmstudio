@@ -94,12 +94,13 @@ const output: S<"SessionEvent"> = {
 };
 
 describe("the form derived from the echo workflow", () => {
-  it("has the prompt text, then steps, delay and fail, keyed node.param, starting from the workflow's values", () => {
+  it("has the prompt text, then steps, delay, fail and refs, keyed node.param, starting from the workflow's values", () => {
     expect(fields(echo).map((f) => [f.key, f.param.type, f.initial])).toEqual([
       ["prompt.text", "text", ""],
       ["echo.steps", "int", 10],
       ["echo.delay_ms", "int", 300],
       ["echo.fail", "bool", false],
+      ["echo.refs", "rows", []],
     ]);
   });
 
@@ -357,7 +358,8 @@ describe("following a session's events", () => {
 describe("the inspector and the canvas", () => {
   it("puts the canvas node's params in Canvas, enums and numbers in tiles, bools in switches", () => {
     const s = sections(fields(qwen));
-    expect(s.canvas.map((f) => f.key)).toEqual(["canvas.width", "canvas.height"]);
+    expect(s.canvas.map((f) => f.key)).toEqual(["canvas.mode", "canvas.width", "canvas.height"]);
+    expect(s.refs.map((f) => f.key)).toEqual(["encode.refs"]);
     expect(s.tiles.map((f) => f.key)).toEqual([
       "model.variant",
       "model.precision",

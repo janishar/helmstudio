@@ -47,6 +47,19 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
 5. Cancel: a run not released, or still in the outbox, is cancelled at once and never sent. Otherwise the run is marked and its id written
    to the KV `cancels`; the runner reports `cancelled`.
 
+## Image inputs (API 1.4)
+
+- `resolve.go` checks `image` and `rows` values (`{take_id}` only, item fields, count); `images.go` checks the takes
+  when a run is created (Create, each batch row at Submit, `studio.runs.create`) with an explicit owner check: the
+  owner's ready, undeleted image with its object present and of its size, else 422 `encode.refs[2].image: take <id> not
+  found` / `is not an image`. The run keeps `{take_id}` (so `made_with` and `reuse` do).
+- `takes.etag` is the object's md5 hex (the S3 ETag of a single-part PUT): set at upload complete, and lazily, the first
+  time a run output is used as a reference (no backfill job).
+- Release (`dispatcher.go`) resolves each `{take_id}` as System into `{take_id, key, content_type, width, height, bytes,
+  etag}`; a reference deleted since the run was created fails it (`input image <take_id> is gone`), never sent.
+- Lineage: the projector stores `take_parents` (input order, each once); deleted parents are left out on read;
+  `GET /takes/{id}` adds `children`. `POST /takes/{id}/use` (gallery) fills a workflow's image input.
+
 ## Batches (pipelines_service runs them)
 
 - `POST /batches` builds the rows (lines, table or grid, then seed repeats; `batch_rows.go` `expand`), checks each with

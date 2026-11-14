@@ -27,10 +27,13 @@ type workflow struct {
 	} `json:"nodes"`
 	NodeSchemas map[string]struct {
 		Params []struct {
-			Name string `json:"name"`
-			Type string `json:"type"`
+			Name string         `json:"name"`
+			Type string         `json:"type"`
+			Item map[string]any `json:"item"`
 		} `json:"params"`
 	} `json:"node_schemas"`
+	// upload stores a file as a take and returns its id: set by helm run for @file image values.
+	upload func(file string) (string, error)
 }
 
 type runOutput struct {
@@ -86,10 +89,10 @@ func (w workflow) inputs(ps []string) (map[string]any, error) {
 // value types one node.param value by the workflow's node schemas (text when the param is unknown).
 func (w workflow) value(key, val string) (any, error) {
 	node, name, _ := strings.Cut(key, ".")
-	typ := ""
+	typ, item := "", map[string]any(nil)
 	for _, ps := range w.NodeSchemas[w.Nodes[node].Kind].Params {
 		if ps.Name == name {
-			typ = ps.Type
+			typ, item = ps.Type, ps.Item
 		}
 	}
 	var v any = val
@@ -107,11 +110,59 @@ func (w workflow) value(key, val string) (any, error) {
 		} else {
 			v, err = strconv.ParseInt(val, 10, 64)
 		}
+	case "image", "rows":
+		return w.images(key, typ, item, val)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: not a valid %s", key, typ)
 	}
 	return v, nil
+}
+
+// images types an image or rows value: a comma list of take ids and @files (uploaded first). A rows item gets its
+// one Image field set; an image param takes exactly one.
+func (w workflow) images(key, typ string, item map[string]any, val string) (any, error) {
+	field := ""
+	for f, t := range item {
+		if t == "Image" {
+			if field != "" {
+				return nil, fmt.Errorf("%s: its items hold several images", key)
+			}
+			field = f
+		}
+	}
+	if typ == "rows" && field == "" {
+		return nil, fmt.Errorf("%s: its items hold no image", key)
+	}
+	refs := []any{}
+	for _, s := range strings.Split(val, ",") {
+		if s = strings.TrimSpace(s); s == "" {
+			continue
+		}
+		if file, ok := strings.CutPrefix(s, "@"); ok {
+			if w.upload == nil {
+				return nil, fmt.Errorf("%s: @%s: only helm run uploads files; give take ids", key, file)
+			}
+			id, err := w.upload(file)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", key, err)
+			}
+			s = id
+		}
+		ref := map[string]any{"take_id": s}
+		if typ == "rows" {
+			refs = append(refs, map[string]any{field: ref})
+		} else {
+			refs = append(refs, ref)
+		}
+	}
+	if typ == "rows" {
+		return refs, nil
+	}
+	if len(refs) != 1 {
+		return nil, fmt.Errorf("%s: want one image", key)
+	}
+	return refs[0], nil
 }
 
 func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) error {
@@ -139,6 +190,13 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	var wf workflow
 	if err := c.call(http.MethodGet, "/v1/studio/workflows/"+url.PathEscape(wfID), nil, http.StatusOK, &wf); err != nil {
 		return fmt.Errorf("workflow %s: %w", wfID, err)
+	}
+	wf.upload = func(file string) (string, error) {
+		t, err := c.upload(file)
+		if err == nil {
+			fmt.Fprintf(stdout, "uploaded %s as take %s\n", file, t.ID)
+		}
+		return t.ID, err
 	}
 	inputs, err := wf.inputs(ps)
 	if err != nil {

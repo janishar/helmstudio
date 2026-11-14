@@ -97,5 +97,5 @@ class RunEvents:
         return await self.publish("progress", data)
 
     async def output(self, **data) -> dict:
-        """One output stored: index, key, kind, width, height, bytes, seed."""
+        """One output stored: index, key, kind, width, height, bytes, etag, seed."""
         return await self.publish("output", {k: v for k, v in data.items() if v is not None})

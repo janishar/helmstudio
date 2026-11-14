@@ -67,14 +67,177 @@
       "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
       "description": "<node id>.<output name> of another node in the same graph"
     },
-    "paramValue": {
+    "scalarValue": {
       "type": [
         "string",
         "number",
         "boolean",
         "null"
       ],
-      "description": "a param value: int, float, bool, string, text, enum or seed (see registry.schema.json paramSchema); null only for a seed (random)"
+      "description": "an int, float, bool, string, text, enum or seed value; null only for a seed (random) or an image param left empty"
+    },
+    "imageRef": {
+      "type": "object",
+      "description": "an Image value as a client writes it (RunRequest.inputs, batch rows, made_with, every pipelines message): a take of the caller, by id. Never an object key or a URL: studio resolves it (contracts/README.md, Image inputs)",
+      "required": [
+        "take_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "take_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "description": "an Image value as studio resolves it for cmd.run.execute: the take's immutable object, owned by the envelope's owner_id. The runner reads `key` from the object store and nothing else; its cache key for the image is (owner_id, key, etag)",
+      "required": [
+        "take_id",
+        "key",
+        "content_type",
+        "width",
+        "height",
+        "bytes",
+        "etag"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "take_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "key": {
+          "$ref": "#/$defs/objectKey",
+          "description": "the take's object, u/<owner_id>/runs/… or u/<owner_id>/uploads/…"
+        },
+        "content_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the object's size"
+        },
+        "etag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "the object's ETag (quotes stripped) from studio's HEAD when it resolved the run; with the key, the content's identity for the runner's cache"
+        }
+      }
+    },
+    "inputValue": {
+      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar or {take_id})",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/scalarValue"
+        },
+        {
+          "$ref": "#/$defs/imageRef"
+        },
+        {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/scalarValue"
+                },
+                {
+                  "$ref": "#/$defs/imageRef"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "resolvedValue": {
+      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image`",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/scalarValue"
+        },
+        {
+          "$ref": "#/$defs/image"
+        },
+        {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/scalarValue"
+                },
+                {
+                  "$ref": "#/$defs/image"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "paramValue": {
+      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/scalarValue"
+        },
+        {
+          "$ref": "#/$defs/imageRef"
+        },
+        {
+          "$ref": "#/$defs/image"
+        },
+        {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/scalarValue"
+                },
+                {
+                  "$ref": "#/$defs/imageRef"
+                },
+                {
+                  "$ref": "#/$defs/image"
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     "graphNode": {
       "type": "object",
@@ -131,7 +294,7 @@
         "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/paramValue"
+        "$ref": "#/$defs/inputValue"
       }
     },
     "workflowSnapshot": {

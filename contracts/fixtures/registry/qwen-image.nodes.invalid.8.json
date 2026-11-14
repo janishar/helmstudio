@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner torch 0.2.0",
+  "nodes": [
+    {
+      "kind": "prompt",
+      "title": "Prompt",
+      "family": null,
+      "help": "The text the workflow starts from.",
+      "params": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Prompt",
+          "default": "",
+          "min": 0,
+          "max": 4000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ]
+    },
+    {
+      "kind": "seed",
+      "title": "Seed",
+      "family": null,
+      "help": "The noise seed; -1 picks a random one, reported with the result.",
+      "params": [
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ]
+    },
+    {
+      "kind": "canvas",
+      "title": "Canvas",
+      "family": null,
+      "help": "The output size in pixels; auto follows the last reference in an edit.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "enum",
+          "label": "Size",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "fixed"
+          ],
+          "help": "auto: with references, about 1 MP (1024 × 1024 area) at the last reference's aspect, sides rounded to 32; without, width × height. fixed: always width × height."
+        },
+        {
+          "name": "width",
+          "type": "int",
+          "label": "Width",
+          "default": 1024,
+          "min": 256,
+          "max": 4096,
+          "step": 32
+        },
+        {
+          "name": "height",
+          "type": "int",
+          "label": "Height",
+          "default": 1024,
+          "min": 256,
+          "max": 4096,
+          "step": 32
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        }
+      ]
+    },
+    {
+      "kind": "image",
+      "title": "Image",
+      "family": null,
+      "help": "An image from the gallery, as an input.",
+      "params": [
+        {
+          "name": "image",
+          "type": "image",
+          "label": "Image",
+          "default": null
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "Image"
+        }
+      ]
+    },
+    {
+      "kind": "qwen-image/model",
+      "title": "Qwen Image 2.1",
+      "family": "qwen-image",
+      "help": "Which weights to load and at what precision.",
+      "params": [
+        {
+          "name": "variant",
+          "type": "enum",
+          "label": "Variant",
+          "default": "base",
+          "enum": [
+            "base",
+            "turbo"
+          ],
+          "help": "Turbo: 8 fixed steps, much faster."
+        },
+        {
+          "name": "precision",
+          "type": "enum",
+          "label": "Precision",
+          "default": "int8",
+          "enum": [
+            "bf16",
+            "int8"
+          ],
+          "help": "int8 quantizes the transformer and text encoder at load: about half the memory."
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ]
+    },
+    {
+      "kind": "qwen-image/encode",
+      "title": "Encode prompt",
+      "family": "qwen-image",
+      "help": "Encodes the prompt and up to 10 reference images; with references the run is an edit.",
+      "params": [
+        {
+          "name": "transparent",
+          "type": "bool",
+          "label": "Transparent",
+          "default": false,
+          "help": "Ask for an RGBA image with a transparent background.",
+          "mention": "<image{n}>"
+        },
+        {
+          "name": "refs",
+          "type": "rows",
+          "label": "References",
+          "default": [],
+          "min": 0,
+          "max": 10,
+          "item": {
+            "image": "Image"
+          },
+          "mention": "<image{n}>",
+          "help": "Images to edit or combine, in order; the prompt names them <image1>, <image2>, …"
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "prompt",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        }
+      ]
+    },
+    {
+      "kind": "qwen-image/sample",
+      "title": "Sample",
+      "family": "qwen-image",
+      "help": "Denoises from the seed's noise.",
+      "params": [
+        {
+          "name": "steps",
+          "type": "int",
+          "label": "Steps",
+          "default": 40,
+          "min": 1,
+          "max": 200,
+          "step": 1,
+          "when": "model.variant != 'turbo'",
+          "help": "Turbo uses its own 8-step schedule and ignores this."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ]
+    },
+    {
+      "kind": "qwen-image/decode",
+      "title": "Decode",
+      "family": "qwen-image",
+      "help": "Turns the latent into an RGBA image with the VAE.",
+      "params": [
+        {
+          "name": "tiled",
+          "type": "enum",
+          "label": "Tiled decode",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "on",
+            "off"
+          ],
+          "help": "Tiling cuts decode memory (27 GB vs 65 GB at 4 MP) but changes pixels; auto tiles only when needed."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "Image"
+        }
+      ]
+    },
+    {
+      "kind": "output",
+      "title": "Output",
+      "family": null,
+      "help": "Stores its input as a run output.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "media",
+          "type": "Image"
+        }
+      ],
+      "outputs": []
+    }
+  ]
+}

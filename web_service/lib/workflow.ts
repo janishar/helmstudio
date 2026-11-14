@@ -19,8 +19,12 @@ export type Field = {
   model: boolean;
 };
 
-/** What a form control holds: a switch's boolean, or the text typed ("" in a seed field is random). */
-export type Raw = string | boolean;
+/** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's
+ * take id ("" for none), or a rows param's items. */
+export type Raw = string | boolean | S<"RowItem">[];
+/** A new value for a control, or how to make it from what it holds (undefined: the field's initial value). Uploads
+ * and picks finish late, so they add to the list as it is then. */
+export type Update = Raw | ((old: Raw | undefined) => Raw);
 
 /** Every param of every node in the workflow, nodes in graph order, params in schema order. */
 export function fields(w: S<"Workflow">): Field[] {
@@ -141,9 +145,13 @@ export function visible(fs: Field[], raws: Record<string, Raw>): Field[] {
   });
 }
 
-/** A value as a form control of param p holds it; a random seed (null or -1) is "". */
-export const toRaw = (v: Value, p: Param): Raw =>
-  typeof v === "boolean" ? v : v == null || (p.type === "seed" && v === -1) ? "" : String(v);
+/** A value as a form control of param p holds it; a random seed (null or -1) is "", an image its take id. */
+export function toRaw(v: Value, p: Param): Raw {
+  if (p.type === "rows") return Array.isArray(v) ? v : [];
+  if (p.type === "image") return v && typeof v === "object" && "take_id" in v ? v.take_id : "";
+  if (typeof v === "boolean") return v;
+  return v == null || typeof v === "object" || (p.type === "seed" && v === -1) ? "" : String(v);
+}
 
 /** The form's controls filled from a run's inputs (a reused take's settings): only the workflow's params, each as
  * its control holds it. */
@@ -156,6 +164,18 @@ export function rawsFrom(fs: Field[], inputs: Record<string, Value>): Record<str
 /** The form control's content as a value, or why it is not one (worded like studio_service's 422). */
 export function readValue(p: Param, raw: Raw): { value: Value } | { error: string } {
   if (p.type === "bool") return { value: raw === true };
+  if (p.type === "rows") {
+    const items = Array.isArray(raw) ? raw : [];
+    if (p.max != null && items.length > p.max) return { error: `at most ${p.max} items` };
+    if (p.min != null && items.length < p.min) return { error: `at least ${p.min} items` };
+    const need = Object.keys(p.item ?? {}).filter((k) => p.item?.[k] === "Image");
+    const bad = items.findIndex((it) => need.some((k) => !isRef(it[k])));
+    return bad < 0 ? { value: items } : { error: `item ${bad + 1}: an image is required` };
+  }
+  if (p.type === "image")
+    return typeof raw === "string" && raw
+      ? { value: { take_id: raw } }
+      : { error: "an image is required" };
   const text = String(raw);
   if (p.type === "seed") {
     const t = text.trim();
@@ -181,6 +201,10 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
   return { value: text };
 }
 
+/** Whether a value is an Image (`{take_id}`). */
+export const isRef = (v: unknown): v is S<"ImageRef"> =>
+  !!v && typeof v === "object" && typeof (v as { take_id?: unknown }).take_id === "string";
+
 /** "must be between 1 and 200", "must be at least 1", "must be at most 4000 characters". */
 function bounds(min: number | undefined, max: number | undefined, unit: string): string {
   if (min != null && max != null) return `must be between ${min} and ${max}${unit}`;
@@ -194,11 +218,15 @@ export function buildInputs(fs: Field[], raws: Record<string, Raw>) {
   for (const f of fs) {
     const r = readValue(f.param, raws[f.key] ?? toRaw(f.initial, f.param));
     if ("error" in r) errors[f.key] = r.error;
-    else if (r.value !== f.initial && !(r.value === -1 && f.initial === null))
+    else if (!same(r.value, f.initial) && !(r.value === -1 && f.initial === null))
       inputs[f.key] = r.value;
   }
   return { inputs, errors };
 }
+
+/** Equal values; a list or an image compares by content. */
+const same = (a: Value, b: Value) =>
+  a === b || (typeof a === "object" && JSON.stringify(a) === JSON.stringify(b));
 
 /** A node id's title from its schema ("sample" → "Sample"), else the id. */
 export function nodeTitle(w: S<"Workflow"> | undefined, node: string) {
@@ -222,11 +250,13 @@ export function graphOrder(w: S<"Workflow">): string[] {
 
 const rank = (f: Field) => (f.model ? 0 : f.param.type === "seed" ? 2 : 1);
 
-/** The inspector's sections: the canvas node's params, label-over-value tiles, switches, and the rest. */
+/** The inspector's sections: image inputs (References), the canvas node's params, label-over-value tiles,
+ * switches, and the rest. */
 export function sections(fs: Field[]) {
   const rest = fs.filter((f) => f.param.type !== "text");
   const other = rest.filter((f) => !f.canvas);
   return {
+    refs: other.filter((f) => f.param.type === "rows" || f.param.type === "image"),
     canvas: rest.filter((f) => f.canvas),
     // the model node's first, then graph order, the seed last (its home is the composer's chip), as in the mock
     tiles: other

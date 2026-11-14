@@ -57,7 +57,7 @@ func TestExpandErrors(t *testing.T) {
 	for body, want := range map[string]string{
 		`{"workflow_id":"echo","rows":{"table":{"columns":["prompt.text","echo.steps"],"rows":[["a",3],["b",0]]}}}`:                                                         "row 2: echo.steps: must be between 1 and 200",
 		`{"workflow_id":"echo","rows":{"table":{"columns":["prompt.text"],"rows":[["a"],["b","c"]]}}}`:                                                                      "row 2: has 2 cells; the table has 1 columns",
-		`{"workflow_id":"echo","rows":{"lines":{"param":"echo.steps","values":["1"]}}}`:                                                                                     "echo.steps: lines need a text, string or enum param",
+		`{"workflow_id":"echo","rows":{"lines":{"param":"echo.steps","values":["1"]}}}`:                                                                                     "echo.steps: lines need a text, string, enum or image param",
 		`{"workflow_id":"echo","rows":{"lines":{"param":"echo.nope","values":["1"]}}}`:                                                                                      "echo.nope: not a param of this workflow",
 		`{"workflow_id":"echo","rows":{"lines":{"param":"prompt.text","values":["a"]}},"seeds":{"count":2}}`:                                                                "seeds needs a workflow with exactly one seed param; echo has 0",
 		`{"workflow_id":"echo","rows":{"grid":{"axes":[{"param":"echo.steps","values":[` + strings.Repeat("1,", 300) + `1]},{"param":"prompt.text","values":["a","b"]}]}}}`: "a batch has 1 to 500 rows; this one has 602",

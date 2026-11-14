@@ -6,7 +6,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Maximize, Star, X } from "lucide-react";
 import { FullScreen, Media, useFullScreenKey } from "@/components/media";
-import { ErrorNote, Modal } from "@/components/kit";
+import { ErrorNote, Info, Modal } from "@/components/kit";
+import { RefThumbs } from "@/components/create/refs";
+import { imageWorkflows, targetLabel } from "@/lib/refs";
+import { remember, useTakes } from "@/lib/take-cache";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import {
@@ -39,7 +42,7 @@ const SOURCES: [S<"TakeSource">, string][] = [
 ];
 
 /** A filter chip: pressed is the light chip of the mock. */
-function Chip({
+export function Chip({
   pressed,
   onClick,
   children,
@@ -65,27 +68,17 @@ const del = (id: string) =>
 const patch = (id: string, body: S<"TakePatch">) =>
   ok(api.PATCH("/v1/studio/takes/{take_id}", { params: { path: { take_id: id } }, body }));
 
-/** The Gallery screen; `initial` is the unfiltered first page, read on the server. */
-export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
-  const [filter, setFilter] = useState<Filter>({});
-  const [q, setQ] = useState("");
-  const [query, setQuery] = useState("");
+/** The take list for a filter and a search (typed text, waited on): pages load as `sentinel` nears the view, a new
+ * filter or search replaces the list. `initial` stands for the first page of `filter` with no search. Shared by the
+ * Gallery and the gallery picker. */
+export function useTakePages(filter: Filter, q: string, initial?: S<"TakePage">, limit = PAGE) {
+  const [query, setQuery] = useState(q);
   const [takes, setTakes] = useState<Take[] | null>(initial?.takes ?? null);
   const [next, setNext] = useState<string | null>(initial?.next_cursor ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [currentId, setCurrentId] = useState<string | null>(null);
-  const [selecting, setSelecting] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [uploads, setUploads] = useState<Upload[]>([]);
-  const [dragging, setDragging] = useState(false);
-  const [modal, setModal] = useState<"rename" | "delete" | "bulk-delete" | null>(null);
-  const [actionError, setActionError] = useState("");
-  const [full, setFull] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
-  const uploadSeq = useRef(0);
 
   // the search waits for a pause in typing
   useEffect(() => {
@@ -101,7 +94,7 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
       setError("");
       ok(
         api.GET("/v1/studio/takes", {
-          params: { query: { ...takeQuery(filter, query, cursor), limit: PAGE } },
+          params: { query: { ...takeQuery(filter, query, cursor), limit } },
         }),
       )
         .then((p) => {
@@ -112,7 +105,7 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
         .catch((e) => n === seq.current && setError(message(e)))
         .finally(() => n === seq.current && setLoading(false));
     },
-    [filter, query],
+    [filter, query, limit],
   );
   // a new filter or search: the first page replaces the list (the old one stays until it comes)
   // the server's first page stands for the unfiltered list (the first fetchPage) until the filter or search changes
@@ -132,7 +125,102 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
     return () => io.disconnect();
   }, [next, loading, error, fetchPage]);
 
-  const current = takes?.find((t) => t.id === currentId) ?? (selecting ? undefined : takes?.[0]);
+  return { takes, setTakes, next, loading, error, query, fetchPage, sentinel };
+}
+
+/** One take in a grid: its picture (or kind), star, the selection tick, title and sub line. */
+export function TakeCard({
+  take: t,
+  on,
+  selecting,
+  disabled,
+  onClick,
+}: {
+  take: Take;
+  on: boolean;
+  selecting: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className="bevel flex w-full flex-col gap-1.5 rounded-[10px] bg-transparent text-left disabled:opacity-50"
+    >
+      <span className="relative block w-full">
+        {t.kind === "image" ? (
+          <img
+            src={safeUrl(t.thumb_url)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className={`block aspect-[16/10] w-full rounded-[10px] bg-s1 object-cover ${on ? "outline-2 -outline-offset-2 outline-a1" : ""}`}
+          />
+        ) : (
+          <i
+            className={`flex aspect-[16/10] items-center justify-center rounded-[10px] bg-s1 text-[11px] text-t2 not-italic ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
+          >
+            {t.kind}
+          </i>
+        )}
+        {t.starred && (
+          <Star
+            size={14}
+            aria-label="starred"
+            className="absolute top-2 right-2 fill-a1 text-a1 drop-shadow"
+          />
+        )}
+        {selecting && on && (
+          <Check
+            size={14}
+            strokeWidth={3}
+            aria-hidden
+            className="absolute top-2 left-2 rounded-full bg-a1 p-0.5 text-on1"
+          />
+        )}
+      </span>
+      <b className="truncate text-[12px] font-semibold">{t.title}</b>
+      <small className="mono truncate text-[10px] text-t2">{subLine(t)}</small>
+    </button>
+  );
+}
+
+/** The Gallery screen; `initial` is the unfiltered first page, read on the server; `workflows` offer "Use in…". */
+export function Gallery({
+  initial,
+  workflows,
+}: {
+  initial?: S<"TakePage">;
+  workflows?: S<"Workflow">[];
+}) {
+  const [filter, setFilter] = useState<Filter>({});
+  const [q, setQ] = useState("");
+  const { takes, setTakes, next, loading, error, query, fetchPage, sentinel } = useTakePages(
+    filter,
+    q,
+    initial,
+  );
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [modal, setModal] = useState<"rename" | "delete" | "bulk-delete" | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [full, setFull] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadSeq = useRef(0);
+
+  // a take picked from another one's lineage may not be in the list loaded
+  const outside = currentId && !takes?.some((t) => t.id === currentId) ? currentId : null;
+  const lookup = useTakes(outside ? [outside] : []);
+  const current =
+    takes?.find((t) => t.id === currentId) ??
+    (currentId ? lookup(currentId) : null) ??
+    (selecting ? undefined : takes?.[0]);
   useFullScreenKey(!!current && !modal && !full, () => setFull(true));
   const replace = (t: Take) => setTakes((list) => list && list.map((x) => (x.id === t.id ? t : x)));
   const remove = (ids: string[]) =>
@@ -372,47 +460,12 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
             const on = selecting ? picked.has(t.id) : t.id === current?.id;
             return (
               <div key={t.id} role="listitem" className="min-w-0">
-                <button
-                  type="button"
-                  aria-pressed={on}
+                <TakeCard
+                  take={t}
+                  on={on}
+                  selecting={selecting}
                   onClick={() => (selecting ? toggle(t.id) : setCurrentId(t.id))}
-                  className="bevel flex w-full flex-col gap-1.5 rounded-[10px] bg-transparent text-left"
-                >
-                  <span className="relative block w-full">
-                    {t.kind === "image" ? (
-                      <img
-                        src={safeUrl(t.thumb_url)}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className={`block aspect-[16/10] w-full rounded-[10px] bg-s1 object-cover ${on ? "outline-2 -outline-offset-2 outline-a1" : ""}`}
-                      />
-                    ) : (
-                      <i
-                        className={`flex aspect-[16/10] items-center justify-center rounded-[10px] bg-s1 text-[11px] text-t2 not-italic ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
-                      >
-                        {t.kind}
-                      </i>
-                    )}
-                    {t.starred && (
-                      <Star
-                        size={14}
-                        aria-label="starred"
-                        className="absolute top-2 right-2 fill-a1 text-a1 drop-shadow"
-                      />
-                    )}
-                    {selecting && on && (
-                      <Check
-                        size={14}
-                        strokeWidth={3}
-                        aria-hidden
-                        className="absolute top-2 left-2 rounded-full bg-a1 p-0.5 text-on1"
-                      />
-                    )}
-                  </span>
-                  <b className="truncate text-[12px] font-semibold">{t.title}</b>
-                  <small className="mono truncate text-[10px] text-t2">{subLine(t)}</small>
-                </button>
+                />
               </div>
             );
           })}
@@ -451,6 +504,11 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
             onRename={() => setModal("rename")}
             onDelete={() => setModal("delete")}
             onFull={() => setFull(true)}
+            onPick={(t) => {
+              if ("url" in t) remember([t]);
+              setCurrentId(t.id);
+            }}
+            workflows={workflows ? imageWorkflows(workflows) : []}
           />
         ) : (
           <p className="text-[13px] text-t2">
@@ -532,16 +590,35 @@ function TakePanel({
   onRename,
   onDelete,
   onFull,
+  onPick,
+  workflows,
 }: {
   take: Take;
   onStar: () => void;
   onRename: () => void;
   onDelete: () => void;
   onFull: () => void;
+  /** selects a take of its lineage */
+  onPick: (t: Take | S<"TakeRef">) => void;
+  /** the workflows that take an image ("Use in…") */
+  workflows: S<"Workflow">[];
 }) {
   const url = safeUrl(t.url);
   const m = t.made_with;
   const size = sizeSeed(t);
+  // "Used in" is only on the take itself (GET /takes/{id}), not in lists
+  const [children, setChildren] = useState<{ id: string; list: S<"TakeRef">[] } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    ok(api.GET("/v1/studio/takes/{take_id}", { params: { path: { take_id: t.id } } }))
+      .then((d) => !stop && setChildren({ id: t.id, list: d.children ?? [] }))
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [t.id]);
+  const used = children?.id === t.id ? children.list : [];
+  const session = t.session_id ? `s=${encodeURIComponent(t.session_id)}&` : "";
   return (
     <>
       <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
@@ -565,12 +642,61 @@ function TakePanel({
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
       </div>
 
+      {(t.parents.length > 0 || used.length > 0) && (
+        <div className="flex flex-col gap-1.5">
+          <h2 className="heading">Lineage</h2>
+          {t.parents.length > 0 && (
+            <div className="flex justify-between gap-2.5 text-[13px]">
+              <span>Made from</span>
+              <RefThumbs ids={t.parents} onPick={onPick} />
+            </div>
+          )}
+          {used.length > 0 && (
+            <div className="flex justify-between gap-2.5 text-[13px]">
+              <span className="shrink-0">Used in</span>
+              <span className="mono flex flex-wrap justify-end gap-x-1 text-right text-[12px] text-t2">
+                {used.map((c, i) => (
+                  <span key={c.id}>
+                    <button
+                      type="button"
+                      className="underline-offset-2 hover:text-t1 hover:underline"
+                      onClick={() => onPick(c)}
+                    >
+                      {c.title}
+                    </button>
+                    {i < used.length - 1 && " ·"}
+                  </span>
+                ))}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {t.kind === "image" && workflows.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="heading flex items-center">
+            Use in…
+            <Info>
+              Opens the workflow in Create with this take as its reference. Every image input in the
+              app is picked from the gallery.
+            </Info>
+          </h2>
+          {workflows.map((w, i) => (
+            <Link
+              key={w.id}
+              href={`/?${session}use=${encodeURIComponent(t.id)}&w=${encodeURIComponent(w.id)}`}
+              className={`act ${i === 0 ? "bg-a1 font-semibold text-on1" : ""}`}
+            >
+              {targetLabel(w)}
+            </Link>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         {m && (
-          <Link
-            href={`/?${t.session_id ? `s=${encodeURIComponent(t.session_id)}&` : ""}reuse=${encodeURIComponent(t.id)}`}
-            className="act"
-          >
+          <Link href={`/?${session}reuse=${encodeURIComponent(t.id)}`} className="act">
             Reuse settings
           </Link>
         )}

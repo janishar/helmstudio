@@ -60,6 +60,11 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		if detail != "" {
 			return network.NewUnprocessableError(detail, nil)
 		}
+		if detail, err := s.checkRowImages(ctx, tx, caller.ID, workflow, rows); err != nil {
+			return err
+		} else if detail != "" {
+			return network.NewUnprocessableError(detail, nil)
+		}
 		nodes, _ := resolve(workflow, rows[0])
 		graph, _ := json.Marshal(nodes)
 		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph}
@@ -529,6 +534,11 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 		created := errors.Is(err, errNotFound)
 		if created {
 			nodes, detail := resolve(workflow, req.Inputs)
+			if detail == "" {
+				if detail, err = checkImages(ctx, tx, s.store, req.OwnerID, nodes); err != nil {
+					return err
+				}
+			}
 			if detail != "" {
 				refused = invalid(detail)
 				return nil
@@ -590,4 +600,27 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 		return run, runEnded(ctx, tx, run)
 	}
 	return run, nil
+}
+
+// checkRowImages checks the Image values of every row as Create does, each distinct take once: the detail of the first
+// bad one ("row 3: encode.refs[1].image: take <id> not found"), "" when all are good.
+func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string, workflow registry.Workflow,
+	rows []map[string]any) (string, error) {
+	perRow := make([][]imageAt, len(rows))
+	var all []imageAt
+	for i, inputs := range rows {
+		nodes, _ := resolve(workflow, inputs) // expand checked them
+		perRow[i] = images(nodes)
+		all = append(all, perRow[i]...)
+	}
+	problems, err := vetTakes(ctx, tx, s.store, ownerID, all)
+	if err != nil {
+		return "", err
+	}
+	for i, refs := range perRow {
+		if detail := firstBad(refs, problems); detail != "" {
+			return fmt.Sprintf("row %d: %s", i+1, detail), nil
+		}
+	}
+	return "", nil
 }

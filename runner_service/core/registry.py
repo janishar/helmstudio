@@ -1,7 +1,7 @@
 """This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows and .models, written once at start.
 
 The values are built from the packs whose runtime env is RUNNER_ENV (core.pack) plus the core nodes their
-workflows use, with this runner's published_at and published_by. Each is checked against registry.schema.json,
+workflows use or their model.yaml lists in `publish`, with this runner's published_at and published_by. Each is checked against registry.schema.json,
 and every workflow against the node schemas, so a bad pack stops the runner instead of reaching studio."""
 
 import json
@@ -26,6 +26,12 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     pack_nodes = {kind: n for _, nodes in loaded for kind, n in nodes.items()}
     workflows = [w for p, _ in loaded for w in p.workflows]
     used = {n["kind"] for w in workflows for n in w["nodes"].values()}
+    offered = {
+        k for p, _ in loaded for k in p.spec.get("publish", [])
+    }  # core nodes a pack offers unused
+    if unknown := offered - core.keys():
+        raise ValueError(f"publish: unknown core nodes {sorted(unknown)}")
+    used |= offered
     sources = [k for k, (s, _) in core.items() if k in used and s["outputs"]]
     sinks = [k for k, (s, _) in core.items() if k in used and not s["outputs"]]
     every = {k: core[k] for k in sources} | pack_nodes | {k: core[k] for k in sinks}

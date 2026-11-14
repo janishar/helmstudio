@@ -68,6 +68,7 @@ def test_run_output_is_a_take(api, anon, echo_done):
             "echo.steps": 3,
             "echo.delay_ms": 50,
             "echo.fail": False,
+            "echo.refs": [],
         },
         "prompt": "a red fox",
         "seed": None,  # echo has no seed node
@@ -168,7 +169,7 @@ def test_rename_and_star(api, gallery):
     assert (t["title"], t["starred"]) == ("Heron at dawn", False)
     t = ok(api.patch(f"{STUDIO}/takes/{tid}", json={"starred": True}))
     assert (t["title"], t["starred"]) == ("Heron at dawn", True)
-    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == t
+    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == {**t, "children": []}  # children only on GET
     starred = all_takes(api, session_id=gallery["session_id"], starred="true")
     assert [x["id"] for x in starred] == [tid]
     for body in ({}, {"title": "   "}, {"title": "x" * 201}, {"starred": "yes"}, {"kind": "video"}):

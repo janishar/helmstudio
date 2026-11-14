@@ -3,9 +3,11 @@ package gallery
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"database/sql"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -29,6 +31,7 @@ import (
 	"github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/migrations"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 const (
@@ -72,6 +75,25 @@ func encoded(t *testing.T, format string) []byte {
 	return out.Bytes()
 }
 
+// oriented is encoded(t, "jpeg") with an APP1 Exif segment whose IFD0 holds Orientation.
+func oriented(t *testing.T, order binary.AppendByteOrder, orientation uint16) []byte {
+	tiff := []byte("MM\x00\x2a")
+	if order == binary.AppendByteOrder(binary.LittleEndian) {
+		tiff = []byte("II\x2a\x00")
+	}
+	tiff = order.AppendUint32(tiff, 8)
+	tiff = order.AppendUint16(tiff, 1)
+	tiff = order.AppendUint16(tiff, 0x0112)
+	tiff = order.AppendUint16(tiff, 3) // SHORT
+	tiff = order.AppendUint32(tiff, 1)
+	tiff = order.AppendUint16(tiff, orientation)
+	tiff = append(tiff, 0, 0, 0, 0, 0, 0) // value padding, then no next IFD
+	app1 := append([]byte("Exif\x00\x00"), tiff...)
+	segment := binary.BigEndian.AppendUint16([]byte{0xFF, 0xE1}, uint16(len(app1)+2))
+	jpg := encoded(t, "jpeg")
+	return append(append(append([]byte{}, jpg[:2]...), append(segment, app1...)...), jpg[2:]...)
+}
+
 // checkImage takes only a real image of the declared type, at most MaxSide a side.
 func TestCheckImage(t *testing.T) {
 	for _, test := range []struct {
@@ -89,6 +111,11 @@ func TestCheckImage(t *testing.T) {
 		{"16384 wide", "image/png", pngHeader(16384, 1), 16384, 1, ""},
 		{"too wide", "image/png", pngHeader(16385, 1), 0, 0, "image is larger than 16384 px"},
 		{"too tall", "image/png", pngHeader(1, 20000), 0, 0, "image is larger than 16384 px"},
+		{"50 MP", "image/png", pngHeader(10000, 5000), 10000, 5000, ""},
+		{"over 50 MP", "image/png", pngHeader(13000, 13000), 0, 0, "image is larger than 50 MP"},
+		{"jpeg turned a quarter", "image/jpeg", oriented(t, binary.BigEndian, 6), 2, 3, ""},
+		{"jpeg turned a quarter (II)", "image/jpeg", oriented(t, binary.LittleEndian, 8), 2, 3, ""},
+		{"jpeg upside down", "image/jpeg", oriented(t, binary.LittleEndian, 3), 3, 2, ""},
 	} {
 		w, h, detail := checkImage(test.head, test.contentType)
 		if w != test.w || h != test.h || detail != test.detail {
@@ -217,7 +244,7 @@ func setup(t *testing.T) *fixture {
 	}
 	t.Cleanup(pool.Close)
 	f := &fixture{t: t, pool: pool, store: storage.NewMemory(), sessionID: utility.NewID(), runID: utility.NewID()}
-	f.service = NewService(pool, common.NewSigner("test-secret-0123456789", "http://kong", time.Hour), f.store)
+	f.service = NewService(pool, common.NewSigner("test-secret-0123456789", "http://kong", time.Hour), f.store, &registry.Registry{})
 	f.system(`INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, 'S')`, f.sessionID, userA)
 	f.system(`INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status) VALUES ($1, $2, $3, 'echo', 'fake', '{}', 'running')`,
 		f.runID, userA, f.sessionID)
@@ -439,6 +466,12 @@ func TestUploads(t *testing.T) {
 	if err != nil || take.Source != "upload" || *take.Width != 3 || *take.Height != 2 || take.Title != "fox" ||
 		take.MadeWith != nil || take.SessionID != nil {
 		t.Fatal(take, err)
+	}
+	var etag string // the content hash, set at complete
+	if err := common.System(ctx, f.pool, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT etag FROM takes WHERE id = $1`, take.ID).Scan(&etag)
+	}); err != nil || etag != fmt.Sprintf("%x", md5.Sum(image)) {
+		t.Fatal("etag", etag, err)
 	}
 	if again, err := f.service.CompleteUpload(ctx, callerA, upload.TakeID); err != nil || again.ID != take.ID {
 		t.Fatal("a repeated complete", again, err)

@@ -1,5 +1,6 @@
 """Opt-in (QWEN=1): the qwen-image workflow on the native Mac torch runner (host mac, env torch), through Kong.
-Turbo at int8, 768x768: one run with a fixed seed, then one with a random seed (the model is warm by then). A cold
+Turbo at int8, 768x768: one run with a fixed seed, then one with a random seed (the model is warm by then), then
+one multi-reference edit of an uploaded image (canvas fixed at 768x768). A cold
 model load is most of the time, so each run may take up to 15 minutes.
 
 The runner must have joined the stack BASE_URL points at (`make runners` joins the dev stack's NATS and S3 ports;
@@ -10,7 +11,7 @@ import os
 
 import pytest
 from conftest import headers, make_client, sign_in
-from helpers import STUDIO, TERMINAL, new_session, ok, start_run, wait_for
+from helpers import STUDIO, TERMINAL, new_session, ok, ref, start_run, upload, wait_for
 from PIL import Image
 
 pytestmark = pytest.mark.skipif(
@@ -126,3 +127,23 @@ def test_qwen_turbo_random_seed(qapi, anon):
     done, events = run_qwen(qapi, sid, INPUTS | {"seed.seed": None})
     check_run(done, events, anon)
     assert done["inputs"]["seed.seed"] is None  # as requested; the seed used is in resolved
+
+
+def test_qwen_turbo_edit_with_reference(qapi, anon):
+    """An uploaded reference as <image1>: an edit of the canvas size whose take lists the reference as its parent."""
+    buf = io.BytesIO()
+    Image.linear_gradient("L").resize((512, 384)).convert("RGB").save(buf, "PNG")
+    reference = upload(qapi, anon, buf.getvalue(), "gradient.png")["id"]
+    sid = new_session(qapi, "Contract qwen edit")["id"]
+    inputs = INPUTS | {
+        "prompt.text": "<image1> repainted as a watercolor of a red fox in snow",
+        "seed.seed": SEED,
+        "canvas.mode": "fixed",
+        "encode.refs": [ref(reference)],
+    }
+    done, events = run_qwen(qapi, sid, inputs)
+    assert any(e["data"].get("phase") == "encoding" for e in events if e["type"] == "progress")
+    check_run(done, events, anon)
+    take = get(qapi, f"{STUDIO}/takes/{done['outputs'][0]['take_id']}")
+    assert take["parents"] == [reference]
+    assert take["made_with"]["inputs"]["encode.refs"] == [ref(reference)]

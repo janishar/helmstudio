@@ -20,6 +20,8 @@ import secrets
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from core import images
+
 log = logging.getLogger("graph")
 
 GPU = ThreadPoolExecutor(
@@ -37,7 +39,17 @@ class Cancelled(Exception):
 
 
 class Cache(dict):
-    """(owner, node id) → (key, outputs): the latest result of each node per owner."""
+    """(owner, node id) → (key, outputs): the latest result of each node, for the OWNERS owners who stored one most
+    recently (an older owner's entries go, so the cache cannot grow with the number of users)."""
+
+    OWNERS = 4  # ponytail: a count, not bytes; size by memory if cached outputs ever get large
+
+    def __setitem__(self, key, value) -> None:
+        self.pop(key, None)  # re-inserted: the most recent
+        super().__setitem__(key, value)
+        owners = list(dict.fromkeys(o for o, _ in reversed(self)))
+        for k in [k for k in self if k[0] in owners[self.OWNERS :]]:
+            del self[k]
 
 
 class Ctx:
@@ -48,7 +60,8 @@ class Ctx:
     - `progress(step, of, phase=None)`: step `step` of `of` of the running node is done;
     - `output(data, ext=, kind=, width=, height=)`: store the run's next output;
     - `component(model, name)`: the loaded component of a Model handle, through the residency manager;
-    - `device`, `owner`, `seed` (the run's resolved seed or None), `node` (the running node id)."""
+    - `device`, `owner`, `seed` (the run's resolved seed or None), `node` (the running node id);
+    - `fetch(key, limit, etag)`: the core's object-store read for Image params (core.images), set by the consumer."""
 
     def __init__(
         self, *, progress, output, check, owner="", residency=None, device="cpu", loop=None
@@ -56,6 +69,7 @@ class Ctx:
         self._progress, self._output, self._check = progress, output, check
         self.owner, self.residency, self.device, self.loop = owner, residency, device, loop
         self.node, self.impl, self.seed = "", None, None
+        self.fetch = None  # async (key, limit) -> bytes | None
         self.outputs = 0  # outputs stored so far: the next one's index
         self.started = time.monotonic()  # when the running node started
         self.alive = (
@@ -106,6 +120,11 @@ def _check_param(spec: dict, value) -> str | None:
     t = spec["type"]
     if t == "seed" and value is None:
         return None
+    # image: null (a registry workflow) or resolved (the message schema checked its fields)
+    if t == "image":
+        return None if value is None or _image(value) else "must be an image"
+    if t == "rows":
+        return _check_rows(spec, value)
     if t == "bool":
         return None if isinstance(value, bool) else "must be a bool"
     if t == "enum":
@@ -123,6 +142,27 @@ def _check_param(spec: dict, value) -> str | None:
         return f"is below the minimum {spec['min']}"
     if "max" in spec and size > spec["max"]:
         return f"is above the maximum {spec['max']}"
+    return None
+
+
+def _image(value) -> bool:
+    return isinstance(value, dict) and "key" in value
+
+
+def _check_rows(spec: dict, value) -> str | None:
+    if not isinstance(value, list):
+        return "must be a list"
+    if not spec.get("min", 0) <= len(value) <= spec["max"]:
+        return f"must have {spec.get('min', 0)} to {spec['max']} items"
+    for i, row in enumerate(value, 1):
+        if not isinstance(row, dict) or row.keys() - spec["item"].keys():
+            return f"item {i}: fields must be among {sorted(spec['item'])}"
+        for f, item in spec["item"].items():
+            if item == "Image":
+                if not _image(row.get(f)):
+                    return f"item {i}.{f}: an image is required"
+            elif f in row and (why := _check_param(item, row[f])):
+                return f"item {i}.{f} {why}"
     return None
 
 
@@ -209,8 +249,30 @@ def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
     return out
 
 
+def _image_values(nodes: dict, schemas: dict, nid: str) -> list[dict]:
+    """The Image values in the params of `nid` and of every node upstream of it, in graph order."""
+    seen, queue = set(), [nid]
+    while queue:
+        cur = queue.pop()
+        if cur not in seen:
+            seen.add(cur)
+            queue += [ref.partition(".")[0] for ref in nodes[cur].get("in", {}).values()]
+    return [
+        v
+        for n in order(nodes)
+        if n in seen
+        for v in images.values(schemas[nodes[n]["kind"]]["params"], nodes[n].get("params", {}))
+    ]
+
+
+def _images(nodes: dict, schemas: dict, nid: str) -> int:
+    """How many Image values the params of `nid` and of every node upstream of it hold (peak_gb's `images`)."""
+    return len(_image_values(nodes, schemas, nid))
+
+
 def _canvas_mp(nodes: dict, schemas: dict, nid: str) -> float:
-    """Megapixels of the Canvas nearest upstream of `nid` (breadth first), or 0 without one."""
+    """Megapixels of the Canvas nearest upstream of `nid` (breadth first), or 0 without one. Canvas `auto` with Image
+    values upstream is sized from the last one (images.auto_size), as the stage sizes its output."""
     queue, seen = [nid], set()
     while queue:
         cur = queue.pop(0)
@@ -219,7 +281,10 @@ def _canvas_mp(nodes: dict, schemas: dict, nid: str) -> float:
         seen.add(cur)
         node = nodes[cur]
         if any(o["type"] == "Canvas" for o in schemas[node["kind"]]["outputs"]):
-            p = node.get("params", {})
+            p, refs = node.get("params", {}), _image_values(nodes, schemas, nid)
+            if p.get("mode") == "auto" and refs:
+                width, height = images.auto_size(refs[-1]["width"], refs[-1]["height"])
+                return width * height / 1e6
             return p["width"] * p["height"] / 1e6
         queue += [ref.partition(".")[0] for ref in node.get("in", {}).values()]
     return 0.0
@@ -257,7 +322,8 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
             if impl.peak is not None:
                 from core.pack import evaluate
 
-                peak = evaluate(impl.peak, params | {"mp": _canvas_mp(nodes, schemas, nid)})
+                mp, n = _canvas_mp(nodes, schemas, nid), _images(nodes, schemas, nid)
+                peak = evaluate(impl.peak, params | {"mp": mp, "images": n})
             ctx.residency.admit(needs, peak, later() - set(needs))
         return impl.fn(ctx, params, inputs)
 
@@ -278,7 +344,11 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
             inputs[port] = (await get(src))[out]
         ctx.node, ctx.impl, ctx.started = nid, impl, time.monotonic()
         pending.discard(nid)
-        outs = await loop.run_in_executor(GPU, job, nid, impl, node.get("params", {}), inputs)
+        params, specs = node.get("params", {}), schemas[node["kind"]]["params"]
+        # read the Image values before the node's first step; the bytes go after decoding
+        if images.values(specs, params):
+            params = await images.load(specs, params, ctx.owner, ctx.fetch)
+        outs = await loop.run_in_executor(GPU, job, nid, impl, params, inputs)
         log.info("%s: ran in %.1f s", nid, time.monotonic() - ctx.started)
         if not sink:
             cache[(ctx.owner, nid)] = (k[nid], outs)

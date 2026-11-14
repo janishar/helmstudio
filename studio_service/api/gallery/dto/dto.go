@@ -4,6 +4,7 @@ package dto
 
 import (
 	"encoding/json"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -29,23 +30,65 @@ type Model struct {
 
 // Take is one item of the caller's gallery: signed links only, never the key.
 type Take struct {
-	ID          string    `json:"id"`
-	Kind        string    `json:"kind"`
-	Source      string    `json:"source"`
-	Title       string    `json:"title"`
-	URL         string    `json:"url"`
-	ThumbURL    string    `json:"thumb_url"`
-	ContentType string    `json:"content_type"`
-	Width       *int      `json:"width"`
-	Height      *int      `json:"height"`
-	Bytes       int64     `json:"bytes"`
-	CreatedAt   time.Time `json:"created_at"`
-	Starred     bool      `json:"starred"`
-	SessionID   *string   `json:"session_id"`
-	RunID       *string   `json:"run_id"`
-	MadeWith    *MadeWith `json:"made_with"`
-	Parents     []string  `json:"parents"`
-	BatchID     *string   `json:"batch_id,omitempty"`
+	ID          string     `json:"id"`
+	Kind        string     `json:"kind"`
+	Source      string     `json:"source"`
+	Title       string     `json:"title"`
+	URL         string     `json:"url"`
+	ThumbURL    string     `json:"thumb_url"`
+	ContentType string     `json:"content_type"`
+	Width       *int       `json:"width"`
+	Height      *int       `json:"height"`
+	Bytes       int64      `json:"bytes"`
+	CreatedAt   time.Time  `json:"created_at"`
+	Starred     bool       `json:"starred"`
+	SessionID   *string    `json:"session_id"`
+	RunID       *string    `json:"run_id"`
+	MadeWith    *MadeWith  `json:"made_with"`
+	Parents     []string   `json:"parents"`
+	Children    *[]TakeRef `json:"children,omitempty"` // only GET /takes/{id}
+	BatchID     *string    `json:"batch_id,omitempty"`
+}
+
+// TakeRef is a take in a take's children ("Used in").
+type TakeRef struct {
+	ID       string `json:"id"`
+	Kind     string `json:"kind"`
+	Title    string `json:"title"`
+	ThumbURL string `json:"thumb_url"`
+}
+
+// TakeUse is POST /takes/{id}/use: the workflow, and which of its image inputs (absent: the only one).
+type TakeUse struct {
+	WorkflowID string  `json:"workflow_id"`
+	Param      *string `json:"param"`
+	unknown    string
+}
+
+// UnmarshalJSON decodes the fields and remembers an unknown one (additionalProperties: false).
+func (b *TakeUse) UnmarshalJSON(data []byte) error {
+	type plain TakeUse
+	if err := json.Unmarshal(data, (*plain)(b)); err != nil {
+		return err
+	}
+	b.unknown = unknownField(data, "workflow_id", "param")
+	return nil
+}
+
+// paramKey is a "<node id>.<param>" input key.
+var paramKey = regexp.MustCompile(`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`)
+
+// Validate wants a workflow_id and a param of the form <node>.<param>.
+func (b *TakeUse) Validate() string {
+	switch {
+	case b.unknown != "":
+		return b.unknown + ": not a field of TakeUse"
+	case b.WorkflowID == "":
+		return "workflow_id is required"
+	case b.Param != nil && !paramKey.MatchString(*b.Param):
+		return "param must be <node>.<param>"
+	}
+	return ""
 }
 
 // TakePage is a page of takes, newest first.

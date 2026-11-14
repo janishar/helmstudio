@@ -16,7 +16,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/evt.studio.run_finished.schema.json` | studio → pipelines_service: a batch run ended (any terminal status) |
 | `messages/req.studio.runs.create.schema.json` | NATS request/reply pipelines → studio (not enveloped): create a batch-lane run, idempotent on its key |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
-| `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph) |
+| `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef`, `resolvedValue` with `image`) |
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (bucket `registry`), `$defs/host` (bucket `hosts`) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
@@ -58,8 +58,8 @@ env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-
   the run is created `failed` (`no live host for env <env>`) and nothing is sent.
 - **Workflows.** A workflow (registry `workflows`) is `{id, title, family, env, nodes}`; `nodes` maps a node id to
   `{kind, params, in}`, `in` wires an input port to `<node id>.<output>`. A node schema (registry `nodes`) gives a
-  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed` with `default`, `min`, `max`,
-  `step`, `enum`, `help`, `when`) and typed `inputs` / `outputs`. Port types: `Text`, `Image`, `Int`, `Float`, `Seed`,
+  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed`, `image`, `rows` with `default`,
+  `min`, `max`, `step`, `enum`, `item`, `mention`, `help`, `when`; see Image inputs) and typed `inputs` / `outputs`. Port types: `Text`, `Image`, `Int`, `Float`, `Seed`,
   `Canvas`, and the family-scoped handles `Model`, `Conditioning`, `Latent` (they wire nodes of one family inside one
   workflow and never cross a process). `when` is a visibility expression (`model.variant != 'turbo'`), carried
   through as is: studio evaluates it in a later stage, the runner ignores it. `GET /v1/studio/workflows/{id}` serves the workflow with
@@ -68,20 +68,29 @@ env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-
   `RunRequest.inputs` (`"<node id>.<param>": value`, checked against type, `min`/`max`, `enum`: 422). The command
   carries the whole graph with every param filled, so the runner needs no defaults.
 - **The echo family (fake).** Workflow `echo`: `prompt` (kind `prompt`, param `text`) → `echo` (kind `echo/echo`,
-  params `steps`, `delay_ms`, `fail`; input `text`: Text, output `image`: Image) → `output` (kind `output`, input
-  `media`: Image). Running it: `status running` (seq 1), one `progress` per step (node `echo`, step 1..steps, each
+  params `steps`, `delay_ms`, `fail`, `refs` (rows, max 10, item `image`: Image, default `[]`); input `text`: Text,
+  output `image`: Image) → `output` (kind `output`, input `media`: Image). Before its first step the fake runner reads
+  every `refs` image (Image inputs, below); the PNG it writes is unchanged. Running it: `status running` (seq 1), one `progress` per step (node `echo`, step 1..steps, each
   after `delay_ms`), the PNG written to `<output_prefix>0.png` and one `output` (index 0), then `succeeded`; when `fail` is true, no PNG and
   `failed` after the last step. Cancel is checked before each step.
 - **Seeds.** A `seed` param is an integer (≤ 2^53−1); `null` or `-1` means random: the runner picks one and reports it
   in `evt.run.status` `succeeded` `data.resolved.seed` and in each `evt.run.output` `data.seed` (both ≥ 0).
-- **The qwen-image family (torch).** Workflow `qwen-image` (env `torch`), text-to-image:
-  `prompt` (kind `prompt`, `text`) · `seed` (kind `seed`, `seed` default -1) · `canvas` (kind `canvas`, `width`,
-  `height` 256–4096 step 32, default 1024) · `model` (`qwen-image/model`, `variant` base|turbo, `precision` bf16|int8
-  default int8) → `encode` (`qwen-image/encode`, in `model`, `prompt`; `transparent`) → `sample`
+- **The qwen-image family (torch).** Workflow `qwen-image` (env `torch`), text-to-image, and multi-reference edit
+  when `encode.refs` is not empty:
+  `prompt` (kind `prompt`, `text`) · `seed` (kind `seed`, `seed` default -1) · `canvas` (kind `canvas`, `mode`
+  auto|fixed default auto, `width`, `height` 256–4096 step 32, default 1024) · `model` (`qwen-image/model`,
+  `variant` base|turbo, `precision` bf16|int8 default int8) → `encode` (`qwen-image/encode`, in `model`, `prompt`;
+  `transparent`, `refs`: rows, 0–10 items `{image: Image}`, mention `<image{n}>`, default `[]`) → `sample`
   (`qwen-image/sample`, in `model`, `cond`, `canvas`, `seed`; `steps` 1–200 default 40, hidden for turbo) → `decode`
   (`qwen-image/decode`, in `model`, `latent`; `tiled` auto|on|off) → `output`. Progress events add `phase`
   (`loading transformer`, `encoding`, `sampling`, `decoding`; a phase without steps is step 1 of 1) and `eta_s`.
-  Reference images (multi-reference edit) are not in the graph yet.
+  Canvas `auto`: with references, the size is about 1 MP at the **last** reference's aspect (the diffusers pipeline's
+  `calculate_dimensions(1024², w/h)`: sides rounded to multiples of 32), as the old studio did with no size given
+  (generate.py `plan_size(…, images[-1], …)`); without references, `width` × `height`. `fixed`: always `width` ×
+  `height` (the UI sets it when the user picks a size in an edit). The sample stage applies it (it sees the
+  references through `cond`); the take's `width` / `height` are the real size, `made_with` keeps `mode: auto`.
+  The registry also has the core source kind `image` (param `image`: image, output `image`: Image), unused by
+  `qwen-image` in this version.
 - **Models and memory.** The registry `models` value lists, per model id, `variants` with `presence`
   (`present` | `missing`), `bytes` on disk and the `precisions` it can load as: a full-precision variant offers
   load-time quantization (`[bf16, int8]`), an already-quantized one only its own (`[int8]`). The hosts value adds
@@ -134,7 +143,7 @@ create, terminal status and cancel, and every few seconds.
   `Nats-Msg-Id` is `<run_id>:<attempt>:<seq>`. The projector dedupes on `(job_id, attempt, seq)` and drops events of an
   attempt that is not the run's current one. The runner sets `attempt` in its hosts value while busy.
 - **Cancel** of a run not yet released: `cancelled` at once, never sent. Of a released one: KV `cancels`, as before.
-- Not in API 1.3: evict hand-over between two envs of one host, memory admission.
+- Not in API 1.4: evict hand-over between two envs of one host, memory admission.
 
 ## Takes, the gallery and uploads (plan 9.1, 17.2)
 
@@ -143,7 +152,7 @@ create, terminal status and cancel, and every few seconds.
   the key's extension, `made_with` snapshotted from the run: workflow id and title, the resolved inputs of every node
   with the event's `seed` in place of a random one, the `prompt` node's text, the `<family>/model` node) and puts
   its id in the output (`RunOutput.take_id`). The take keeps the object key; the API shows only signed links.
-- **Lineage**: `parents` (take ids) is empty until workflows take media inputs; it is stored as edges.
+- **Lineage**: see Image inputs: `parents` and, on `GET /v1/studio/takes/{id}`, `children`, stored as edges.
 - **Deleting** a take is soft (gone from every answer at once); a sweep deletes the object later. Deleting a session
   keeps its takes (`session_id`, `run_id` → null).
 - **Uploads**: `POST /v1/studio/uploads` stores a pending take and returns `upload_url`, a signed `PUT` link to
@@ -167,7 +176,10 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
   `grid` (cartesian product, at most two axes), each optionally repeated `seeds.count` times with consecutive seeds.
   A row's inputs = base `inputs`, then its values, then its seed. Every check happens here (workflow, each row's
   inputs with the run rules, 1–500 rows, at most 5 unfinished batches per user, a live host, at most 768 KB of row
-  inputs); a failure is 422 naming the input row. Studio stores the batch `queued` with its **snapshot** (the
+  inputs); a failure is 422 naming the input row. Image values ride in rows by take id: a `table` cell or `grid` value
+  is the param's value (`{take_id}`, or a rows list); `lines` on an image param, or on a rows param whose item has one
+  Image field, take one take id per line (gallery multi-select "Use in…"). Studio checks them at Submit and resolves
+  them again when `studio.runs.create` makes each row's run (a take deleted since: that row fails, `invalid`). Studio stores the batch `queued` with its **snapshot** (the
   registry workflow as published now), every row (`queued`, attempt 1), and the outbox row `cmd.pipeline.submit`
   carrying the snapshot and every row's full inputs. The batch runs that snapshot, never a later version.
 - **Threads**: one LangGraph thread per row, `thread_id = "<batch_id>:<row>"`, state small plain JSON (row inputs,
@@ -218,6 +230,43 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
 - **Ending**: `done` when every row has ended (some may have failed), `stopped` after Stop, `failed` when the engine
   cannot run the batch at all (`reason`). Then its threads are deleted; the snapshot stays in `pipelines` (Retry).
   Takes made by a batch have `source: pipeline` and the batch's `batch_id` (its collection).
+
+## Image inputs (API 1.4)
+
+- **Params.** `image`: one Image, default `null` (a run needs one: `<node>.<param>: an image is required`). `rows`: an
+  ordered list of items, default `[]`; `min`/`max` bound the count (max ≤ 100); `item` maps each field to a port type
+  (only `Image` in this version: required in every item) or a param schema without `name` (optional, its default
+  when left out); `mention` (`<image{n}>`) is how the prompt names item n, from 1: the rows editor labels items with
+  it, the prompt travels as typed, the pack never rewrites it. The core source kind `image` outputs its param as
+  `Image`. A registry workflow never holds a take (its `image` params are null, its rows have no Image item).
+- **Over HTTP** (RunRequest.inputs, batch rows, `made_with`, `reuse`, `use`) and in every pipelines message an Image
+  value is `{"take_id": "<uuid>"}` (`imageRef`, closed): never an object key or a URL. Example:
+  `"encode.refs": [{"image": {"take_id": "…"}}, {"image": {"take_id": "…"}}]`.
+- **Studio resolves** each one when it creates the run (Create, and `studio.runs.create` for a batch row), as the
+  caller (row-level security): the take must be the caller's, completed, not deleted, `kind: image`; studio HEADs its
+  object (it must exist) and takes its ETag (a run output's comes from `evt.run.output` `etag`; one recorded without it
+  is hashed on first use). Errors are 422 naming the param and item from 1:
+  `encode.refs[2].image: take <id> not found` (unknown, another user's, deleted, pending, object missing: one
+  message, nothing leaks), `… take <id> is not an image`, `… take <id> has no size` (an output recorded without
+  `width` / `height`), `encode.refs: at most 10 items`, `encode.refs[1]: unknown field <f>`. A batch row: the same text in the 422 (`row 3: …`) or the `invalid` reply.
+- **In `cmd.run.execute`** every Image is resolved (`defs image`): `{take_id, key, content_type, width, height, bytes,
+  etag}`, `key` under `u/<owner_id>/` (the take's object: `…/runs/<run_id>/<attempt>/<n>.<ext>` or
+  `…/uploads/<take_id>.<ext>`). `check.py`'s foreign-key rule covers these keys like any other.
+- **The runner** reads only the keys in the command's image values, only under the envelope owner's prefix (anything
+  else: the command fails its check and goes to `dlq`), straight from the object store, never through a URL. It checks
+  the size against `bytes` and reads with `If-Match: <etag>`; a missing object, another size or another ETag (the object
+  was PUT again after studio checked it) fails the run (`input image <take_id> is gone`). It decodes PNG, JPEG (a
+  multi-picture JPEG: its first frame) and WebP of at most 50 MP (`… is larger than 50 MP`; uploads are capped the
+  same), and applies a JPEG's EXIF orientation, as studio does when it records an upload's `width` / `height`. Its
+  cache key for an image and everything derived from it (VL / VAE encodings) includes `(owner_id, key, etag)`; keys
+  are immutable, the ETag guards that.
+- **Lineage.** When the projector stores a take, `parents` = the take ids of every Image value of the run's inputs,
+  each once, in input order (node, then item); stored as edges. `made_with.inputs` keeps the values as `{take_id}`.
+  A deleted parent is left out of `parents`; `GET /v1/studio/takes/{id}` adds `children` (made from it, newest first,
+  at most 50, `{id, kind, title, thumb_url}`) for the gallery's "Used in".
+- **"Use in…"** `POST /v1/studio/takes/{id}/use {workflow_id, param?}` → `{workflow_id, inputs}` with one key: the
+  workflow's only image or Image-rows param (or `param`) holding this take (as reference 1). The client merges it
+  over the form. 422 when the workflow has no such param, several and no `param`, or the take is not an image.
 
 ## Rules
 

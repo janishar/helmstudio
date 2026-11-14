@@ -7,7 +7,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // errNotFound answers an unknown, malformed, deleted or another user's id alike.
@@ -38,16 +41,17 @@ const (
 const visible = `t.deleted_at IS NULL AND t.ready`
 
 // Service owns the takes table. signer makes the links (GET for takes, PUT for uploads), store is read to check an
-// upload.
+// upload, registry has the workflows "Use in…" fills.
 type Service struct {
-	db     *pgxpool.Pool
-	signer *common.Signer
-	store  storage.Store
+	db       *pgxpool.Pool
+	signer   *common.Signer
+	store    storage.Store
+	registry *registry.Registry
 }
 
 // NewService returns the service.
-func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store) *Service {
-	return &Service{db: db, signer: signer, store: store}
+func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, registry *registry.Registry) *Service {
+	return &Service{db: db, signer: signer, store: store, registry: registry}
 }
 
 // tx runs fn scoped to the caller as a plain user: an admin sees only their own takes here too.
@@ -222,10 +226,30 @@ func (s *Service) SessionTakes(ctx context.Context, caller common.Caller, sessio
 
 // ------------------------------------------------------------------ one take
 
-// Get returns one visible take.
+// Get returns one visible take with its children: the visible takes made from it, newest first, at most 50.
 func (s *Service) Get(ctx context.Context, caller common.Caller, id string) (dto.Take, error) {
-	row, err := s.get(ctx, caller, id)
-	return s.takeDTO(row), err
+	if !utility.IsUUID(id) {
+		return dto.Take{}, errNotFound
+	}
+	var out dto.Take
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		row, err := take(ctx, tx, `SELECT `+model.TakeCols+` FROM takes t WHERE t.id = $1 AND `+visible, id)
+		if err != nil {
+			return err
+		}
+		out = s.takeDTO(row)
+		type child struct{ ID, Kind, Title, Key string }
+		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.kind, t.title, t.key FROM take_parents p JOIN takes t ON t.id = p.take_id
+			WHERE p.parent_id = $1 AND `+visible+` ORDER BY t.created_at DESC, t.id DESC LIMIT 50`, id)
+		children, err := pgx.CollectRows(rows, pgx.RowToStructByPos[child])
+		refs := make([]dto.TakeRef, len(children))
+		for i, c := range children {
+			refs[i] = dto.TakeRef{ID: c.ID, Kind: c.Kind, Title: c.Title, ThumbURL: s.signer.Sign(c.Key)}
+		}
+		out.Children = &refs
+		return err
+	})
+	return out, err
 }
 
 // get reads one visible take.
@@ -294,6 +318,65 @@ func (s *Service) Reuse(ctx context.Context, caller common.Caller, id string) (d
 		madeWith.Inputs = map[string]any{}
 	}
 	return dto.TakeReuse{WorkflowID: madeWith.WorkflowID, Inputs: madeWith.Inputs}, nil
+}
+
+// Use answers "Use in…": the inputs that put the take into the workflow's image input (body.Param, else its only
+// one): {take_id} for an image param, [{<field>: {take_id}}] for a rows param whose item has one Image field.
+func (s *Service) Use(ctx context.Context, caller common.Caller, id string, body *dto.TakeUse) (dto.TakeReuse, error) {
+	row, err := s.get(ctx, caller, id)
+	if err != nil {
+		return dto.TakeReuse{}, err
+	}
+	if row.Kind != "image" {
+		return dto.TakeReuse{}, network.NewUnprocessableError("take "+id+" is not an image", nil)
+	}
+	if row.Width == nil || row.Height == nil { // release needs them (studio vetTakes)
+		return dto.TakeReuse{}, network.NewUnprocessableError("take "+id+" has no size", nil)
+	}
+	if !s.registry.Ready() {
+		return dto.TakeReuse{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	workflow, ok := s.registry.Workflow(body.WorkflowID)
+	if !ok {
+		return dto.TakeReuse{}, network.NewUnprocessableError("unknown workflow "+body.WorkflowID, nil)
+	}
+	key, param, detail := imageInput(workflow, body.Param)
+	if detail != "" {
+		return dto.TakeReuse{}, network.NewUnprocessableError(detail, nil)
+	}
+	field, _ := param.ImageInput()
+	var value any = map[string]any{"take_id": row.ID}
+	if param.Type == "rows" {
+		value = []any{map[string]any{field: value}}
+	}
+	return dto.TakeReuse{WorkflowID: workflow.ID, Inputs: map[string]any{key: value}}, nil
+}
+
+// imageInput picks the workflow's image input: want ("<node>.<param>") when given, else its only one. The third
+// result is the 422 detail.
+func imageInput(workflow registry.Workflow, want *string) (string, registry.Param, string) {
+	var keys []string
+	params := map[string]registry.Param{}
+	for _, nodeID := range slices.Sorted(maps.Keys(workflow.Nodes)) {
+		for _, param := range workflow.NodeSchemas[workflow.Nodes[nodeID].Kind].Params {
+			if _, ok := param.ImageInput(); ok {
+				keys = append(keys, nodeID+"."+param.Name)
+				params[nodeID+"."+param.Name] = param
+			}
+		}
+	}
+	switch {
+	case want != nil:
+		if _, ok := params[*want]; !ok {
+			return "", registry.Param{}, *want + ": not an image input of workflow " + workflow.ID
+		}
+		return *want, params[*want], ""
+	case len(keys) == 0:
+		return "", registry.Param{}, "workflow " + workflow.ID + " takes no image input"
+	case len(keys) > 1:
+		return "", registry.Param{}, "workflow " + workflow.ID + " has several image inputs; name one in param"
+	}
+	return keys[0], params[keys[0]], ""
 }
 
 // takeDTO maps a row, signing its key: the original is its own thumbnail in API 1.2.

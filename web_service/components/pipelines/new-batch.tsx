@@ -6,6 +6,10 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { ErrorNote, Modal } from "@/components/kit";
 import { Inspector, TextFields } from "@/components/create/form";
+import { useRefUploads } from "@/components/create/refs";
+import { GalleryPicker } from "@/components/gallery/picker";
+import { imageInputs } from "@/lib/refs";
+import { remember } from "@/lib/take-cache";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   MAX_AXES,
@@ -23,7 +27,14 @@ import {
   typedLines,
   type RowError,
 } from "@/lib/batches";
-import { buildInputs, fields as fieldsOf, visible, type Field, type Raw } from "@/lib/workflow";
+import {
+  buildInputs,
+  fields as fieldsOf,
+  visible,
+  type Field,
+  type Raw,
+  type Update,
+} from "@/lib/workflow";
 
 type Mode = "lines" | "table" | "grid";
 const MODES: [Mode, string][] = [
@@ -141,14 +152,17 @@ export function NewBatch({
   const base = visible(all, raws).filter(
     (f) => !built.varied.includes(f.key) && f.key !== seedField?.key,
   );
-  const change = (key: string, raw: Raw) => {
-    setRaws((r) => ({ ...r, [key]: raw }));
+  const change = (key: string, u: Update) => {
+    setRaws((r) => ({ ...r, [key]: typeof u === "function" ? u(r[key]) : u }));
     setErrors((e) => {
       const n = { ...e };
       delete n[key];
       return n;
     });
   };
+  const uploads = useRefUploads(change);
+  const [picking, setPicking] = useState(false);
+  const lineIsImage = !!lineField && imageInputs([lineField]).length > 0;
 
   function pickWorkflow(id: string) {
     setWorkflowId(id);
@@ -272,6 +286,27 @@ export function NewBatch({
                     ))}
                   </select>
                 </label>
+                {lineIsImage && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="chip bevel border border-dashed border-dash bg-transparent"
+                      onClick={() => setPicking(true)}
+                    >
+                      Pick from gallery
+                    </button>
+                    <span className="text-[12px] text-t2">one take id per line, one row each</span>
+                    <GalleryPicker
+                      open={picking}
+                      onClose={() => setPicking(false)}
+                      max={100}
+                      onPick={(takes) => {
+                        remember(takes);
+                        setLines((l) => [...lineValues(l), ...takes.map((t) => t.id)].join("\n"));
+                      }}
+                    />
+                  </div>
+                )}
                 <label className="flex flex-col gap-1.5">
                   <span className="label flex justify-between">
                     <span>Lines</span>
@@ -281,7 +316,9 @@ export function NewBatch({
                   </span>
                   <textarea
                     className="in h-40 resize-y py-2 leading-5"
-                    placeholder={"a fox at dusk\na heron in the reeds"}
+                    placeholder={
+                      lineIsImage ? "a take id per line" : "a fox at dusk\na heron in the reeds"
+                    }
                     value={lines}
                     onChange={(e) => setLines(e.target.value)}
                   />
@@ -498,6 +535,7 @@ export function NewBatch({
               onChange={change}
               open={openKey}
               setOpen={setOpenKey}
+              uploads={uploads}
             />
           </section>
         </div>

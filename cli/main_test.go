@@ -19,7 +19,8 @@ import (
 const echoWorkflow = `{"id":"echo","title":"Echo","family":"echo","env":"fake",
  "nodes":{"prompt":{"kind":"prompt"},"echo":{"kind":"echo/echo","in":{"text":"prompt.text"}},"output":{"kind":"output"}},
  "node_schemas":{"prompt":{"params":[{"name":"text","type":"text","default":""}]},
-  "echo/echo":{"params":[{"name":"steps","type":"int","default":10},{"name":"delay_ms","type":"int","default":300},{"name":"fail","type":"bool","default":false}]},
+  "echo/echo":{"params":[{"name":"steps","type":"int","default":10},{"name":"delay_ms","type":"int","default":300},{"name":"fail","type":"bool","default":false},
+   {"name":"refs","type":"rows","default":[],"max":10,"item":{"image":"Image"},"mention":"<image{n}>"}]},
   "output":{"params":[]}}}`
 
 var png = []byte("\x89PNG\r\n\x1a\nfake")
@@ -41,6 +42,7 @@ type fakeAPI struct {
 	uploaded    []byte         // the body PUT to the upload link
 	batchBody   map[string]any // the last POST /v1/studio/batches body
 	batchEvents []string       // the BatchEvents GET /v1/studio/batches/b1/events serves, seq = index + 1
+	useBody     map[string]any // the last POST /v1/studio/takes/t1/use body
 }
 
 func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +155,14 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(w, takeJSON)
+	case "POST /v1/studio/takes/t1/use":
+		f.useBody = nil
+		_ = json.NewDecoder(r.Body).Decode(&f.useBody)
+		if f.useBody["workflow_id"] != "echo" {
+			http.Error(w, fmt.Sprintf(`{"detail":"workflow %s takes no image input"}`, f.useBody["workflow_id"]), 422)
+			return
+		}
+		fmt.Fprint(w, `{"workflow_id":"echo","inputs":{"echo.refs":[{"image":{"take_id":"t1"}}]}}`)
 	case "POST /v1/studio/batches":
 		f.batchBody = nil
 		_ = json.NewDecoder(r.Body).Decode(&f.batchBody)
@@ -404,6 +414,65 @@ func TestUpload(t *testing.T) {
 	}
 	if code := helm([]string{"upload", text}, nil, &out, &errb, nil); code != 1 || !strings.Contains(errb.String(), "only png, jpeg and webp") {
 		t.Fatalf("text upload: %d %s", code, errb.String())
+	}
+}
+
+func TestRunUploadsReferences(t *testing.T) {
+	f, _ := setup(t, "succeeded")
+	file := filepath.Join(t.TempDir(), "pic.png")
+	if err := os.WriteFile(file, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	args := []string{"run", "echo", "-p", "echo.refs=@" + file + ", t7", "--out", t.TempDir()}
+	if code := helm(args, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("run: %d %s", code, errb.String())
+	}
+	want := `[map[image:map[take_id:t1]] map[image:map[take_id:t7]]]`
+	if !bytes.Equal(f.uploaded, png) || fmt.Sprint(f.inputs["echo.refs"]) != want {
+		t.Fatalf("uploaded %q, refs %v", f.uploaded, f.inputs["echo.refs"])
+	}
+	if !strings.Contains(out.String(), "uploaded "+file+" as take t1\n") {
+		t.Fatalf("out %s", out.String())
+	}
+	if code := helm([]string{"run", "echo", "-p", "echo.refs=", "--out", t.TempDir()}, nil, &out, &errb, nil); code != 0 ||
+		fmt.Sprint(f.inputs["echo.refs"]) != "[]" {
+		t.Fatalf("empty refs: %d %v", code, f.inputs["echo.refs"])
+	}
+}
+
+func TestImageValues(t *testing.T) {
+	var wf workflow
+	_ = json.Unmarshal([]byte(`{"nodes":{"src":{"kind":"image"},"x":{"kind":"two"}},"node_schemas":{
+		"image":{"params":[{"name":"image","type":"image"}]},
+		"two":{"params":[{"name":"pairs","type":"rows","item":{"a":"Image","b":"Image"}},{"name":"words","type":"rows","item":{"w":{"type":"text"}}}]}}}`), &wf)
+	got, err := wf.inputs([]string{"src.image=t3"})
+	if err != nil || fmt.Sprint(got["src.image"]) != "map[take_id:t3]" {
+		t.Fatalf("%v %v", got, err)
+	}
+	for _, p := range []string{"src.image=t1,t2", "src.image=", "x.pairs=t1", "x.words=t1", "src.image=@pic.png"} {
+		if _, err := wf.inputs([]string{p}); err == nil {
+			t.Errorf("%s accepted", p)
+		}
+	}
+}
+
+func TestUse(t *testing.T) {
+	f, _ := setup(t, "")
+	var out, errb bytes.Buffer
+	if code := helm([]string{"use", "--param", "echo.refs", "t1", "echo"}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("use: %d %s", code, errb.String())
+	}
+	if out.String() != "helm run echo -p echo.refs=t1\n" || f.useBody["param"] != "echo.refs" {
+		t.Fatalf("out %q body %v", out.String(), f.useBody)
+	}
+	out.Reset()
+	if code := helm([]string{"use", "t1", "qwen-image"}, nil, &out, &errb, nil); code != 1 ||
+		!strings.Contains(errb.String(), "takes no image input") || f.useBody["param"] != nil {
+		t.Fatalf("no image input: %d %s %v", code, errb.String(), f.useBody)
+	}
+	if code := helm([]string{"use", "t1"}, nil, &out, &errb, nil); code != 1 {
+		t.Fatalf("usage: %d", code)
 	}
 }
 

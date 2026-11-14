@@ -1,6 +1,7 @@
 // Batches (contracts/openapi.yaml `BatchCreate`, `Batch`, `BatchRow`, `BatchEvent`): building the rows in the
 // browser (lines, a CSV table, a grid), the run maths, and folding the batch's events into what the screens show.
 import type { S } from "@/lib/api";
+import { cellRef, imageFieldOf } from "@/lib/refs";
 import { readValue, type Field } from "@/lib/workflow";
 
 type Value = S<"ParamValue">;
@@ -19,9 +20,14 @@ export type RowError = { row: number; text: string };
 
 /** The params a whole row can set: every field but the seed (seeds per row set it). */
 export const rowFields = (fs: Field[]) => fs.filter((f) => f.param.type !== "seed");
-/** The params pasted lines can set: one value of text per line. */
+/** The params pasted lines can set: one value of text per line, or one take id per line for an image param or a
+ * rows param whose item is one Image (gallery "Use in…" with several takes). */
 export const lineFields = (fs: Field[]) =>
-  fs.filter((f) => ["text", "string", "enum"].includes(f.param.type));
+  fs.filter(
+    (f) =>
+      ["text", "string", "enum", "image"].includes(f.param.type) ||
+      (imageFieldOf(f.param) && Object.keys(f.param.item ?? {}).length === 1),
+  );
 
 /** Pasted lines as values: blank lines are dropped (the contract asks clients to). */
 export const lineValues = (text: string) =>
@@ -35,6 +41,7 @@ export const lineValues = (text: string) =>
 export function cellValue(f: Field, cell: string): { value: Value } | { error: string } {
   const t = cell.trim();
   if (t === "") return { value: null };
+  if (f.param.type === "image" || f.param.type === "rows") return cellRef(f, t);
   if (f.param.type === "bool") {
     const b = { true: true, yes: true, "1": true, false: false, no: false, "0": false }[
       t.toLowerCase()
@@ -225,6 +232,8 @@ export function inputSummary(rows: Row[]): (r: Row) => string {
   const shown = (r: Row, k: string) => {
     const v = r.inputs[k];
     if (v == null) return "";
+    const n = Array.isArray(v) ? v.length : 1; // an image, or a list of them
+    if (typeof v === "object") return `${k.split(".").pop()} ×${n}`;
     return typeof v === "string" ? v : `${k.split(".").pop()} ${v}`;
   };
   return (r) => {

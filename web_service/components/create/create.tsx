@@ -6,7 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Cpu, Maximize, Minus, Plus, Star } from "lucide-react";
 import { FullScreen, useFullScreenKey } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
-import { Chips, Inspector, TextFields, canvasOf, idOf } from "@/components/create/form";
+import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
+import { takeDrop, useRefUploads } from "@/components/create/refs";
 import { api, message, ok, okOr, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import {
@@ -25,6 +26,17 @@ import {
 } from "@/lib/runs";
 import { stripItems } from "@/lib/takes";
 import {
+  TAKE_MIME,
+  capacity,
+  carriesImage,
+  editLabel,
+  imageInputs,
+  imageWorkflows,
+  refCount,
+  refIds,
+  targetLabel,
+} from "@/lib/refs";
+import {
   buildInputs,
   fields as fieldsOf,
   nodeTitle,
@@ -33,6 +45,7 @@ import {
   visible,
   type Field,
   type Raw,
+  type Update,
 } from "@/lib/workflow";
 
 type Run = S<"Run">;
@@ -89,14 +102,17 @@ export type CreateInitial = {
 };
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
- * `?reuse=`, `initial` from the server (without it, Create loads everything itself). */
+ * `?reuse=`, `use` (a take to use in a workflow: the gallery's "Use in…") from `?use=&w=`, `initial` from the server
+ * (without it, Create loads everything itself). */
 export function Create({
   initialSession,
   reuse,
+  use,
   initial,
 }: {
   initialSession?: string;
   reuse?: string;
+  use?: { take: string; workflow: string };
   initial?: CreateInitial;
 }) {
   const [sessions, setSessions] = useState<S<"StudioSession">[] | null>(initial?.sessions ?? null);
@@ -204,6 +220,33 @@ export function Create({
       .catch((e) => setError(message(e)));
   }, [reuse, workflows]);
 
+  /** "Use in…": the workflow, with the take as its image input (merged over the form). */
+  const applyUse = useCallback(
+    (takeId: string, workflowId: string) =>
+      ok(
+        api.POST("/v1/studio/takes/{take_id}/use", {
+          params: { path: { take_id: takeId } },
+          body: { workflow_id: workflowId },
+        }),
+      )
+        .then((r) => {
+          const w = workflows?.find((x) => x.id === r.workflow_id);
+          if (!w) return setError(`The workflow ${r.workflow_id} is not available any more.`);
+          setChosen(w.id);
+          setRaws((old) => ({ ...old, ...rawsFrom(fieldsOf(w), r.inputs) }));
+          setErrors({});
+          setOpenKey(null);
+        })
+        .catch((e) => setError(message(e))),
+    [workflows],
+  );
+  const used = useRef(false);
+  useEffect(() => {
+    if (!use || !workflows || used.current) return;
+    used.current = true;
+    void applyUse(use.take, use.workflow);
+  }, [use, workflows, applyUse]);
+
   async function star(t: Take) {
     try {
       const n = await ok(
@@ -251,14 +294,27 @@ export function Create({
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(all, raws);
   const seedField = fields.find((f) => f.param.type === "seed");
-  const change = (key: string, raw: Raw) => {
-    setRaws((r) => ({ ...r, [key]: raw }));
+  const change = (key: string, u: Update) => {
+    setRaws((r) => ({ ...r, [key]: typeof u === "function" ? u(r[key]) : u }));
     setErrors((errs) => {
       const next = { ...errs };
       delete next[key];
       return next;
     });
   };
+  const uploads = useRefUploads(change);
+  // a drop or paste on the stage or the composer goes to the first image input
+  const refField = imageInputs(fields)[0];
+  const intoRefs = (dt: DataTransfer) =>
+    !!refField &&
+    takeDrop(
+      dt,
+      refField,
+      capacity(refField) - refIds(refField, raws[refField.key]).length,
+      change,
+      uploads,
+    );
+  const refs = refCount(fields, raws);
   /** Opens a field's inspector control (or the canvas picker) and moves focus to it. */
   const show = (key: string) => {
     if (key !== "canvas") setOpenKey(key);
@@ -420,7 +476,7 @@ export function Create({
               >
                 {workflows.map((w) => (
                   <option key={w.id} value={w.id}>
-                    {w.title}
+                    {w.id === workflowId ? editLabel(w.title, refs) : w.title}
                   </option>
                 ))}
               </select>
@@ -433,7 +489,7 @@ export function Create({
           ) : (
             workflow && (
               <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
-                {workflow.title}
+                {editLabel(workflow.title, refs)}
               </span>
             )
           )}
@@ -467,6 +523,7 @@ export function Create({
           workflow={shownWorkflow}
           onStar={shownTake && (() => void star(shownTake))}
           onFull={() => setFull(true)}
+          onDrop={refField && intoRefs}
         />
         {full && shownTake && (
           <FullScreen
@@ -515,15 +572,35 @@ export function Create({
                 />
               ),
             )}
+            {shownTake?.kind === "image" && workflows && (
+              <UseIn
+                workflows={imageWorkflows(workflows)}
+                onUse={(w) => void applyUse(shownTake.id, w.id)}
+              />
+            )}
           </div>
         )}
 
         <form
           onSubmit={generate}
+          onPaste={(e) => {
+            if (!e.defaultPrevented && intoRefs(e.clipboardData)) e.preventDefault();
+          }}
           noValidate
           aria-label="Composer"
           className="panel flex shrink-0 flex-col gap-3 bg-s2 px-4 py-3.5 [box-shadow:0_16px_40px_color-mix(in_srgb,var(--shd)_45%,transparent)]"
         >
+          {refField && (
+            <div className="flex flex-wrap items-center gap-2">
+              <RefChips
+                fields={fields}
+                raws={raws}
+                errors={errors}
+                onChange={change}
+                uploads={uploads}
+              />
+            </div>
+          )}
           <TextFields fields={fields} raws={raws} errors={errors} onChange={change} />
           {fields.some((f) => f.param.type !== "text" && errors[f.key]) && (
             <ErrorNote>Some settings are not valid: see the Inspector.</ErrorNote>
@@ -595,6 +672,7 @@ export function Create({
           onChange={change}
           open={openKey}
           setOpen={setOpenKey}
+          uploads={uploads}
         />
       </aside>
     </>
@@ -682,13 +760,17 @@ function Stage({
   workflow,
   onStar,
   onFull,
+  onDrop,
 }: {
   run?: Run;
   take?: Take;
   workflow?: S<"Workflow">;
   onStar?: () => void;
   onFull: () => void;
+  /** takes a drop of images or dragged takes as references; absent: the workflow takes none */
+  onDrop?: (dt: DataTransfer) => boolean;
 }) {
+  const [over, setOver] = useState(false);
   const out = take ?? run?.outputs[0];
   // the prompt the run was made with: its input, else the workflow's (inputs hold only what differs)
   const text = workflow && fieldsOf(workflow).find((f) => f.param.type === "text");
@@ -713,7 +795,26 @@ function Stage({
   // what a screen reader hears: the state and the node, not every step
   const said = node ? `Running ${node}` : label;
   return (
-    <div className="panel relative min-h-[400px] grow bg-inset">
+    <div
+      className={`panel relative min-h-[400px] grow bg-inset ${over ? "outline-2 -outline-offset-4 outline-a1 outline-dashed" : ""}`}
+      onDragOver={(e) => {
+        if (!onDrop || !carriesImage(e.dataTransfer)) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+      }}
+      onDrop={(e) => {
+        setOver(false);
+        if (onDrop?.(e.dataTransfer)) e.preventDefault();
+      }}
+    >
+      {over && (
+        <span className="absolute inset-x-0 bottom-4 z-10 text-center text-[13px] font-medium">
+          Drop to add as a reference
+        </span>
+      )}
       <span className="sr-only" aria-live="polite">
         {said}
       </span>
@@ -910,6 +1011,8 @@ function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onP
       aria-pressed={current}
       title={label}
       onClick={onPick}
+      draggable={take.kind === "image"}
+      onDragStart={(e) => e.dataTransfer.setData(TAKE_MIME, take.id)}
       className={`bevel mono relative grid h-[63px] w-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-s1 text-[11px] text-t2 ${
         current ? "border-2 border-a1" : "border border-s5"
       }`}
@@ -995,5 +1098,60 @@ function RunTile({
         </span>
       )}
     </button>
+  );
+}
+
+/** The strip's "Use in…": a menu of the workflows that take an image; choosing one puts the shown take in it. */
+function UseIn({
+  workflows,
+  onUse,
+}: {
+  workflows: S<"Workflow">[];
+  onUse: (w: S<"Workflow">) => void;
+}) {
+  if (!workflows.length) return null;
+  return (
+    <>
+      <button
+        type="button"
+        popoverTarget="use-in"
+        className="flex h-11 shrink-0 items-center gap-1.5 rounded-[10px] border border-dashed border-dash bg-transparent px-3.5 text-[13px]"
+        style={{ anchorName: "--use-in" } as React.CSSProperties}
+      >
+        <Plus size={16} aria-hidden />
+        Use in…
+      </button>
+      <div
+        id="use-in"
+        popover="auto"
+        role="menu"
+        aria-label="Use in"
+        className="pop w-64"
+        style={
+          {
+            positionAnchor: "--use-in",
+            positionArea: "top span-left",
+            marginBottom: 6,
+          } as React.CSSProperties
+        }
+      >
+        <div className="flex flex-col gap-1">
+          {workflows.map((w) => (
+            <button
+              key={w.id}
+              type="button"
+              role="menuitem"
+              className="rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3"
+              onClick={() => {
+                document.getElementById("use-in")?.hidePopover();
+                onUse(w);
+              }}
+            >
+              {targetLabel(w)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }

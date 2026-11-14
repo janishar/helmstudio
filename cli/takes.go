@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type take struct {
@@ -70,67 +71,130 @@ func takesCmd(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
-// upload sends an image to the gallery: start the upload, PUT the bytes to the signed link, complete it.
+// upload sends an image to the gallery.
 func uploadCmd(args []string, stdout io.Writer) error {
 	if len(args) != 1 {
 		return fmt.Errorf("usage: helm upload <file>")
-	}
-	f, err := os.Open(args[0])
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	st, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	head := make([]byte, 512)
-	n, _ := io.ReadFull(f, head)
-	ct := http.DetectContentType(head[:n])
-	if ct != "image/png" && ct != "image/jpeg" && ct != "image/webp" {
-		return fmt.Errorf("%s is %s: only png, jpeg and webp images can be uploaded", args[0], ct)
-	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return err
 	}
 	c, err := loggedIn()
 	if err != nil {
 		return err
 	}
+	t, err := c.upload(args[0])
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, t.line())
+	return nil
+}
+
+// upload stores a png, jpeg or webp file as a take: start the upload, PUT the bytes to the signed link, complete it.
+func (c *client) upload(file string) (take, error) {
+	var t take
+	f, err := os.Open(file)
+	if err != nil {
+		return t, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return t, err
+	}
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(f, head)
+	ct := http.DetectContentType(head[:n])
+	if ct != "image/png" && ct != "image/jpeg" && ct != "image/webp" {
+		return t, fmt.Errorf("%s is %s: only png, jpeg and webp images can be uploaded", file, ct)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return t, err
+	}
 	var up struct {
 		TakeID    string `json:"take_id"`
 		UploadURL string `json:"upload_url"`
 	}
-	body := map[string]any{"filename": filepath.Base(args[0]), "content_type": ct, "bytes": st.Size()}
+	body := map[string]any{"filename": filepath.Base(file), "content_type": ct, "bytes": st.Size()}
 	if err := c.call(http.MethodPost, "/v1/studio/uploads", body, http.StatusCreated, &up); err != nil {
-		return err
+		return t, err
 	}
 	base, err := url.Parse(c.cfg.URL + "/")
 	if err != nil {
-		return err
+		return t, err
 	}
 	link, err := base.Parse(up.UploadURL)
 	if err != nil {
-		return err
+		return t, err
 	}
 	req, err := http.NewRequest(http.MethodPut, link.String(), f) // the signature is the auth: no key, no token
 	if err != nil {
-		return err
+		return t, err
 	}
 	req.ContentLength = st.Size()
 	req.Header.Set("Content-Type", ct)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return err
+		return t, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("upload: %w", readError(resp))
+		return t, fmt.Errorf("upload: %w", readError(resp))
 	}
-	var t take
-	if err := c.call(http.MethodPost, "/v1/studio/uploads/"+url.PathEscape(up.TakeID)+"/complete", nil, http.StatusOK, &t); err != nil {
+	err = c.call(http.MethodPost, "/v1/studio/uploads/"+url.PathEscape(up.TakeID)+"/complete", nil, http.StatusOK, &t)
+	return t, err
+}
+
+// use prints the helm run command that puts a take into a workflow's image input ("Use in…").
+func useCmd(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("use", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	param := fs.String("param", "", "which image input (node.param), when the workflow has several")
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	fmt.Fprintln(stdout, t.line())
+	if fs.NArg() != 2 {
+		return fmt.Errorf("usage: helm use [--param node.param] <take_id> <workflow_id>")
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	body := map[string]string{"workflow_id": fs.Arg(1)}
+	if *param != "" {
+		body["param"] = *param
+	}
+	var reuse struct {
+		WorkflowID string         `json:"workflow_id"`
+		Inputs     map[string]any `json:"inputs"`
+	}
+	if err := c.call(http.MethodPost, "/v1/studio/takes/"+url.PathEscape(fs.Arg(0))+"/use", body, http.StatusOK, &reuse); err != nil {
+		return err
+	}
+	line := "helm run " + reuse.WorkflowID
+	for key, v := range reuse.Inputs { // one key: the image input
+		line += fmt.Sprintf(" -p %s=%s", key, strings.Join(takeIDs(v), ","))
+	}
+	fmt.Fprintln(stdout, line)
+	return nil
+}
+
+// takeIDs lists the take ids of an image value ({take_id}) or a rows value (items holding one).
+func takeIDs(v any) []string {
+	switch v := v.(type) {
+	case map[string]any:
+		if id, ok := v["take_id"].(string); ok {
+			return []string{id}
+		}
+		var ids []string
+		for _, f := range v {
+			ids = append(ids, takeIDs(f)...)
+		}
+		return ids
+	case []any:
+		var ids []string
+		for _, item := range v {
+			ids = append(ids, takeIDs(item)...)
+		}
+		return ids
+	}
 	return nil
 }

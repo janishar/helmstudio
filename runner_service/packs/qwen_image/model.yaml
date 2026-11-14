@@ -1,9 +1,11 @@
-# Qwen Image 2.1 (base and Turbo) on torch: text-to-image, ported from the qwen-image-2.1 studio's generation path
-# (diffusers QwenImage21Pipeline). Generates exactly the canonical qwen-image node schemas (tests/test_packs.py).
+# Qwen Image 2.1 (base and Turbo) on torch: text-to-image and multi-reference edit, ported from the qwen-image-2.1
+# studio's generation path (diffusers QwenImage21Pipeline). Generates exactly the canonical qwen-image node schemas
+# (tests/test_packs.py).
 # peak_gb: measured on MPS (64 GB, torch 2.15, int8) with tests/test_qwen_golden.py; see the numbers there.
 id: qwen-image-2.1
 family: qwen-image
 title: Qwen Image 2.1
+publish: [image]   # the core Image source, for graphs built on this pack (no workflow uses it yet)
 runtimes:
   torch: {env: torch}
 model:
@@ -31,14 +33,19 @@ components:
 stages:
   encode:
     title: Encode prompt
-    help: Encodes the prompt with the text encoder.
-    uses: [text_encoder]
+    help: Encodes the prompt and up to 10 reference images; with references the run is an edit.
+    uses: [text_encoder, vae]
     inputs: {model: Model, prompt: Text}
     outputs: {cond: Conditioning}
     params:
       transparent: {type: bool, label: Transparent, default: false,
                     help: Ask for an RGBA image with a transparent background.}
-    peak_gb: "1"
+      refs: {type: rows, label: References, default: [], min: 0, max: 10, item: {image: Image},
+             mention: "<image{n}>",
+             help: "Images to edit or combine, in order; the prompt names them <image1>, <image2>, …"}
+    # measured warm (above weights, 20 ms sampling): 2.4 GB text only, 3.5 with one ~1 MP reference, 4.1 with two;
+    # each reference is VAE-encoded whole at ~1 MP, one at a time, + ~1k vision tokens. Slack for missed spikes.
+    peak_gb: "2.5 + 1.5 * images"
   sample:
     title: Sample
     help: Denoises from the seed's noise.
@@ -49,7 +56,9 @@ stages:
       steps: {type: int, label: Steps, default: 40, min: 1, max: 200, step: 1,
               when: "model.variant != 'turbo'",
               help: Turbo uses its own 8-step schedule and ignores this.}
-    peak_gb: "0.9 + 5.1 * mp"
+    # each reference adds ~4k latent tokens (1 MP / 16²) to the sequence: measured at 1024², 1.0 GB text only,
+    # 3.0 with one reference, 5.0 with two (the edit goldens, tests/test_qwen_golden.py)
+    peak_gb: "0.9 + 5.1 * mp + 2 * images"
     stall_s: 600
   decode:
     title: Decode
@@ -61,4 +70,4 @@ stages:
       tiled: {type: enum, label: Tiled decode, default: auto, enum: ["auto", "on", "off"],
               help: "Tiling cuts decode memory (27 GB vs 65 GB at 4 MP) but changes pixels; auto tiles only when needed."}
     # auto tiles above 2.5 MP (torch.py AUTO_TILE_MP); whole decodes grow faster than linear (65 GB at 4 MP)
-    peak_gb: "6 if tiled == 'on' or (tiled == 'auto' and mp > 2.5) else 8.5 * mp"
+    peak_gb: "6 if tiled == 'on' or (tiled == 'auto' and mp > 2.5) else 12 * mp"  # measured 6.1 GB at 0.59 MP, 11.9 at 1 MP

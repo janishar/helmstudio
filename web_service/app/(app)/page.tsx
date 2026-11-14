@@ -5,15 +5,23 @@ import { initial, serverApi } from "@/lib/server-api";
 export const metadata: Metadata = { title: "Create" };
 
 /** Route /: Create, on the session `?s=` names, else the newest; `?reuse=<take id>` fills the form with the
- * settings that made that take. The sessions, workflows and the open session's runs and takes are read here, so the
+ * settings that made that take; `?use=<take id>&w=<workflow id>` opens that workflow with the take as its image
+ * input (the gallery's "Use in…"). The sessions, workflows and the open session's runs and takes are read here, so the
  * first paint is the real screen; if any read fails, Create loads them itself. */
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ s?: string; reuse?: string }>;
+  searchParams: Promise<{ s?: string; reuse?: string; use?: string; w?: string }>;
 }) {
-  const { s, reuse } = await searchParams;
-  return <Create initialSession={s} reuse={reuse} initial={await load(s)} />;
+  const { s, reuse, use, w } = await searchParams;
+  return (
+    <Create
+      initialSession={s}
+      reuse={reuse}
+      use={use && w ? { take: use, workflow: w } : undefined}
+      initial={await load(s)}
+    />
+  );
 }
 
 async function load(wanted?: string): Promise<CreateInitial | undefined> {

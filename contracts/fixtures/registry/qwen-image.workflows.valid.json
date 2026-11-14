@@ -26,6 +26,7 @@
         "canvas": {
           "kind": "canvas",
           "params": {
+            "mode": "auto",
             "width": 1024,
             "height": 1024
           }
@@ -44,7 +45,8 @@
             "prompt": "prompt.text"
           },
           "params": {
-            "transparent": false
+            "transparent": false,
+            "refs": []
           }
         },
         "sample": {

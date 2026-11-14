@@ -98,7 +98,12 @@ export interface paths {
          *     later: it writes `cmd.run.execute` to the outbox for one host when that host is free and the run is next in
          *     the fair order. 422 for an unknown `workflow_id`, an input key that is not a param of the workflow's nodes, or a
          *     value of the wrong type, out of `min`/`max` or not in `enum` (the detail names the key, e.g.
-         *     `echo.steps: must be between 1 and 200`). When no host is eligible (none live with the env and the workflow),
+         *     `echo.steps: must be between 1 and 200`). Image values (`ImageRef`, alone or in `rows` items) are 422 when the
+         *     take is unknown, another user's, deleted or a pending upload (`encode.refs[2].image: take <id> not found`, items
+         *     numbered from 1 as in `<image{n}>`), not an image (`… take <id> is not an image`), without a size (`… take <id>
+         *     has no size`), or its object is missing; a
+         *     rows value outside `min`/`max` (`encode.refs: at most 10 items`), an item field not in `item`, or an image param
+         *     left null (`image.image: an image is required`) is 422 too. When no host is eligible (none live with the env and the workflow),
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
          *     409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
          *     running; wait for some to finish.`
@@ -248,13 +253,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description The take with `children` (what was made from it; only here, not in lists). */
         get: operations["studioGetTake"];
         put?: never;
         post?: never;
         /**
          * Delete a take (soft)
-         * @description The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it); a sweep removes
-         *     the object later. Deleting again is 404.
+         * @description The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it, takes made from
+         *     it leave it out of `parents`); a sweep removes the object later. Deleting again is 404. A run that already
+         *     references it and has not read it yet may fail (`input image <take_id> is gone`).
          */
         delete: operations["studioDeleteTake"];
         options?: never;
@@ -275,9 +282,37 @@ export interface paths {
         /**
          * The settings that made a take, to pre-fill Create
          * @description `workflow_id` and `inputs` = `made_with.inputs` (every param, the seed the runner used instead of random), ready
-         *     to post as a `RunRequest` or to load into the form. Nothing is created. 409 for an upload (it has no settings).
+         *     to post as a `RunRequest` or to load into the form; image values come back as recorded (`{take_id}`), so a
+         *     reference deleted since makes that request 422. Nothing is created. 409 for an upload (it has no settings).
          */
         post: operations["studioReuseTake"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/takes/{take_id}/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "Use in…": inputs that put this take into a workflow's image input, to pre-fill Create
+         * @description Answers `inputs` with exactly one key: `param` (or, when absent, the workflow's only `image` param or `rows`
+         *     param whose `item` has an `Image` field) set to this take: `{take_id}` for an `image` param, a one-item list
+         *     `[{<field>: {take_id}}]` (the take as reference 1) for a rows param. The client merges it over the form; nothing
+         *     is created. 404 for a take that is unknown, another user's, deleted or a pending upload. 422 when the take is
+         *     not an image (`take <id> is not an image`) or has no size (`take <id> has no size`), the workflow is unknown (`unknown workflow <id>`), it has no such
+         *     param (`workflow <id> takes no image input`), several and no `param` (`workflow <id> has several image inputs;
+         *     name one in param`), or `param` is not one of them. The client lists the workflows to offer from
+         *     `GET /v1/studio/workflows` (those with such a param).
+         */
+        post: operations["studioUseTake"];
         delete?: never;
         options?: never;
         head?: never;
@@ -340,10 +375,12 @@ export interface paths {
         /**
          * Check the uploaded object and make the take
          * @description Studio reads the object's size (HEAD) and its first 64 KB (range GET) from the object store: the size must be
-         *     the declared `bytes`, the header must be a real image of the declared type, at most 16384 px a side; it records
-         *     `width` and `height`. The original serves as its own thumbnail in this version (`thumb_url` signs the same
+         *     the declared `bytes`, the header must be a real image of the declared type, at most 16384 px a side and 50 MP;
+         *     it records `width` and `height` upright (a JPEG whose EXIF orientation is 5-8 has them swapped, as browsers and
+         *     the runner show it). The original serves as its own thumbnail in this version (`thumb_url` signs the same
          *     key). 409 "upload not received" when the object is not there yet (PUT it, then call again). 422 when a check
-         *     fails ("size differs from the declared bytes", "not a valid png image", "image is larger than 16384 px"): the
+         *     fails ("size differs from the declared bytes", "not a valid png image", "image is larger than 16384 px",
+         *     "image is larger than 50 MP"): the
          *     upload is discarded and its take_id is 404 from then on. Calling it again after success answers the same take.
          */
         post: operations["studioCompleteUpload"];
@@ -816,18 +853,36 @@ export interface components {
             name: string;
             type: components["schemas"]["PortType"];
         };
-        /** @description null only for a seed (random) */
-        ParamValue: string | number | boolean | null;
+        /** @description null only for a seed (random) or an image param left empty */
+        ScalarValue: string | number | boolean | null;
+        /**
+         * @description An Image value: a take of the caller, by id. The only way a client names an image; never an object key or URL.
+         *     Studio checks it when it creates the run (contracts/README.md, "Image inputs").
+         */
+        ImageRef: {
+            /** Format: uuid */
+            take_id: string;
+        };
+        /** @description one item of a rows value: field (the param's `item`) → value */
+        RowItem: {
+            [key: string]: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"];
+        };
+        /** @description a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items */
+        ParamValue: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["RowItem"][];
         /**
          * @description One form field. `int`/`float`/`seed`: `min`/`max` bound the value, `step` is the increment; `string`/`text`
          *     (multi-line): `min`/`max` bound the length; `enum`: one of `enum`; `bool`: a switch. `seed`: an int where null
          *     or -1 means random: the runner picks one and reports it (`Run.resolved.seed`, `RunOutput.seed`). `when`: a
          *     visibility expression over the graph (`model.variant != 'turbo'`), carried through, not evaluated yet.
+         *     `image`: one take (`ImageRef`), default null; a run needs one. `rows` (the rows editor): an ordered list of
+         *     `RowItem`, default `[]`; `min`/`max` bound the count, `item` names each item's fields (a port type, only `Image`
+         *     in this version, or a param schema), `mention` is how the prompt refers to item n from 1 (`<image{n}>`: the
+         *     rows editor labels item n with it; the prompt is sent as typed).
          */
         ParamSchema: {
             name: string;
             /** @enum {string} */
-            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed";
+            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows";
             /** @description absent = the name */
             label?: string;
             default: components["schemas"]["ParamValue"];
@@ -838,6 +893,15 @@ export interface components {
             help?: string;
             /** @description visibility expression; absent = always shown */
             when?: string;
+            /** @description rows only: field → a port type (`Image`) or a param schema without name */
+            item?: {
+                [key: string]: "Image" | Record<string, never>;
+            };
+            /**
+             * @description rows only: the prompt's name for item n, with `{n}` from 1
+             * @example <image{n}>
+             */
+            mention?: string;
         };
         NodeSchema: {
             /** @example echo/echo */
@@ -1125,8 +1189,10 @@ export interface components {
             run_id: string | null;
             /** @description null for an upload */
             made_with: components["schemas"]["MadeWith"] | null;
-            /** @description lineage: the takes it was made from (empty until workflows take media inputs) */
+            /** @description lineage: the takes it was made from, in input order (every image value of `made_with.inputs`, each once); deleted ones left out; empty for a take made from no image */
             parents: string[];
+            /** @description only in `GET /v1/studio/takes/{take_id}`: the takes made from this one ("Used in"), newest first, at most 50, deleted ones left out */
+            children?: components["schemas"]["TakeRef"][];
             /**
              * Format: uuid
              * @description with source pipeline: the batch that made it (its collection); absent or null otherwise
@@ -1137,7 +1203,7 @@ export interface components {
         MadeWith: {
             workflow_id: string;
             workflow_title: string;
-            /** @description every param of every node (`<node id>.<param>`), resolved, with the seed the runner used in place of null / -1 */
+            /** @description every param of every node (`<node id>.<param>`), resolved, with the seed the runner used in place of null / -1; image values as `{take_id}` (the references, in order), never keys */
             inputs: components["schemas"]["RunInputs"];
             /** @description the text of the workflow's `prompt` node; null without one */
             prompt: string | null;
@@ -1162,6 +1228,21 @@ export interface components {
             /** @description trimmed; blank = 422 */
             title?: string;
             starred?: boolean;
+        };
+        TakeRef: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TakeKind"];
+            title: string;
+            thumb_url: components["schemas"]["SignedUrl"];
+        };
+        TakeUse: {
+            workflow_id: string;
+            /**
+             * @description which image input (`<node id>.<param>`); absent = the only one
+             * @example encode.refs
+             */
+            param?: string;
         };
         TakeReuse: {
             workflow_id: string;
@@ -1278,7 +1359,7 @@ export interface components {
             rows: components["schemas"]["BatchRow"][];
             next_cursor: string | null;
         };
-        /** @description pasted lines: one row per value, set as `param` (a string, text or enum param, else 422); clients drop blank lines */
+        /** @description pasted lines: one row per value, set as `param` (a string, text or enum param; or an image param, or a rows param whose item has one Image field and no other required field: then each value is a take id and becomes `{take_id}`, or the one-item list `[{<field>: {take_id}}]`; else 422); clients drop blank lines. Gallery multi-select "Use in…" makes its batch this way */
         BatchLines: {
             /** @example prompt.text */
             param: string;
@@ -2144,6 +2225,37 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioUseTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeUse"];
+            };
+        };
+        responses: {
+            /** @description the inputs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakeReuse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

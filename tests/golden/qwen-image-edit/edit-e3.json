@@ -1,0 +1,118 @@
+{
+  "variant": "turbo",
+  "precision": "int8",
+  "width": 1024,
+  "height": 1024,
+  "seed": 123,
+  "prompt": "Make <image1> a snowy winter scene: the rice terraces covered in snow, the farmhouse roof white, keep the watercolor style",
+  "steps_arg": 40,
+  "steps_run": 8,
+  "negative_prompt": null,
+  "true_cfg_scale": 1.0,
+  "transparent": false,
+  "tiled": false,
+  "use_kv_cache": true,
+  "output_resolution": 1024,
+  "generator": "torch.Generator('cpu').manual_seed(seed)",
+  "sigmas_arg": [
+    1.0,
+    0.978453,
+    0.95418,
+    0.926626,
+    0.89508,
+    0.845148,
+    0.704534,
+    0.414568
+  ],
+  "sigmas_used": [
+    1.0,
+    0.978453,
+    0.95418,
+    0.926626,
+    0.89508,
+    0.845148,
+    0.704534,
+    0.414568,
+    0.0
+  ],
+  "timesteps_used": [
+    1000.0,
+    978.453,
+    954.18,
+    926.626,
+    895.08,
+    845.148,
+    704.534,
+    414.568
+  ],
+  "scheduler": {
+    "num_train_timesteps": 1000,
+    "shift": 1.0,
+    "use_dynamic_shifting": false,
+    "base_shift": 0.5,
+    "max_shift": 0.9,
+    "base_image_seq_len": 256,
+    "max_image_seq_len": 8192,
+    "invert_sigmas": false,
+    "shift_terminal": null,
+    "use_karras_sigmas": false,
+    "use_exponential_sigmas": false,
+    "use_beta_sigmas": false,
+    "time_shift_type": "exponential",
+    "stochastic_sampling": false,
+    "_class_name": "FlowMatchEulerDiscreteScheduler",
+    "_diffusers_version": "0.41.0.dev0"
+  },
+  "model_dir": "~/GenAI/models/Qwen-Image-2.1-Turbo",
+  "output_mode": "RGBA",
+  "output_size": [
+    1024,
+    1024
+  ],
+  "device": "mps",
+  "refs": [
+    {
+      "file": "qwen-image/turbo-1344x768-s123.png",
+      "mode": "RGBA",
+      "size": [
+        1344,
+        768
+      ],
+      "sha256": "d135f77c45d820c5f609e07c20b6ce22328a15d6a84f1abc79699e68615a4a40",
+      "condition_size": [
+        1344,
+        768
+      ]
+    }
+  ],
+  "noise_seed": 6858276887349823507,
+  "noise_seed_rule": "generate.noise_seed: sha256(str(seed)) updated with f'{mode}{size}' + tobytes() per ref, first 8 bytes big-endian >> 1",
+  "size_rule": "explicit: width and height passed, used as given (floored to a multiple of 32)",
+  "auto_size_would_be": [
+    1344,
+    768
+  ],
+  "ref_preprocess": "each ref -> RGBA, Lanczos resize to condition_size (~1 MP at its own aspect, /32); VAE gets all 4 channels in [-1,1], argmax latents; vision encoder gets the same resize with alpha composited over white",
+  "output_size_actual": [
+    1024,
+    1024
+  ],
+  "versions": {
+    "torch": "2.14.0",
+    "diffusers": "0.42.0.dev0",
+    "transformers": "5.17.0",
+    "python": "3.12.13",
+    "machine": "Darwin 27.2.0 arm64"
+  },
+  "timing_s": {
+    "load": 9.5,
+    "encode_plus_first_step": 6.0,
+    "per_step": 3.76,
+    "decode": 5.3,
+    "total": 47.1
+  },
+  "memory_gb": {
+    "after_load": 18.41,
+    "peak_mps_driver": 25.79
+  }
+}

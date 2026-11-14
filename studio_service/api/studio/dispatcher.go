@@ -210,9 +210,19 @@ func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 	return runMoved(ctx, tx, retried)
 }
 
-// release hands a waiting run to its host: host and released_at set, the command in the outbox. A run cancelled
-// since the look (no longer waiting) is skipped.
+// release hands a waiting run to its host: host and released_at set, the command in the outbox with its Image values
+// resolved (resolveImages). A run cancelled since the look (no longer waiting) is skipped; one whose reference was
+// deleted since it was created fails (input image <take_id> is gone) and is never sent.
 func release(ctx context.Context, tx pgx.Tx, next placed) error {
+	nodes, gone, err := resolveImages(ctx, tx, next.run.OwnerID, next.run.Nodes)
+	if err != nil {
+		return fmt.Errorf("run %s: %w", next.run.ID, err)
+	}
+	if gone != "" {
+		reason := "input image " + gone + " is gone"
+		_, err := finish(ctx, tx, next.run, "failed", &reason)
+		return err
+	}
 	run, err := one[model.Run](ctx, tx, `UPDATE runs SET host = $2, released_at = clock_timestamp(), updated_at = clock_timestamp()
 		WHERE id = $1 AND status = 'queued' AND released_at IS NULL RETURNING `+model.RunCols, next.run.ID, next.host)
 	if errors.Is(err, errNotFound) {
@@ -223,10 +233,6 @@ func release(ctx context.Context, tx pgx.Tx, next placed) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO dispatch_owners (owner_id, last_released_at) VALUES ($1, $2)
 		ON CONFLICT (owner_id) DO UPDATE SET last_released_at = EXCLUDED.last_released_at`, run.OwnerID, run.ReleasedAt); err != nil {
 		return err
-	}
-	var nodes map[string]registry.Node
-	if err := json.Unmarshal(run.Nodes, &nodes); err != nil {
-		return fmt.Errorf("run %s: graph: %w", run.ID, err)
 	}
 	return messaging.Enqueue(ctx, tx, messaging.Command{JobID: run.ID, OwnerID: run.OwnerID, Attempt: run.Attempt,
 		Data: message.Execute{RunID: run.ID, SessionID: run.SessionID, Attempt: run.Attempt,

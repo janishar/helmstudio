@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
@@ -8,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -34,12 +37,34 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 		}
 		value, detail := check(param, inputs[key])
 		if detail != "" {
-			return nil, key + ": " + detail
+			return nil, join(key, detail)
 		}
 		nodeID, _, _ := strings.Cut(key, ".")
 		nodes[nodeID].Params[param.Name] = value
 	}
+	// what a default or the workflow left unfilled: an image param needs an image, a rows param its min items
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		for _, param := range workflow.NodeSchemas[nodes[id].Kind].Params {
+			value := nodes[id].Params[param.Name]
+			switch {
+			case param.Type == "image" && value == nil:
+				return nil, id + "." + param.Name + ": an image is required"
+			case param.Type == "rows" && param.Min != nil:
+				if items, _ := value.([]any); float64(len(items)) < *param.Min {
+					return nil, fmt.Sprintf("%s.%s: at least %s items", id, param.Name, format(*param.Min))
+				}
+			}
+		}
+	}
 	return nodes, ""
+}
+
+// join puts a key before a check's detail: "encode.refs: at most 10 items", "encode.refs[2].image: …".
+func join(key, detail string) string {
+	if strings.HasPrefix(detail, "[") {
+		return key + detail
+	}
+	return key + ": " + detail
 }
 
 // findParam returns the schema of the param "<node id>.<param>" names.
@@ -97,8 +122,140 @@ func check(param registry.Param, value any) (any, string) {
 			return nil, "must be one of " + strings.Join(param.Enum, ", ")
 		}
 		return text, ""
+	case "image":
+		if value == nil {
+			return nil, "" // resolve says it is required
+		}
+		return imageRef(value)
+	case "rows":
+		return checkRows(param, value)
 	}
 	return nil, "has an unknown type " + param.Type
+}
+
+// imageRef returns an Image value as {"take_id": id}, or why it is not one.
+func imageRef(value any) (any, string) {
+	ref, ok := value.(map[string]any)
+	id, isText := ref["take_id"].(string)
+	if !ok || len(ref) != 1 || !isText || !utility.IsUUID(id) {
+		return nil, `must be {"take_id": <uuid>}`
+	}
+	return map[string]any{"take_id": id}, ""
+}
+
+// checkRows returns a rows value with each item's fields checked against param.Item (an Image field required, an item
+// param its default when left out), or why it is not one; an item's detail starts with [n] (from 1).
+func checkRows(param registry.Param, value any) (any, string) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, "must be a list of items"
+	}
+	if param.Max != nil && float64(len(items)) > *param.Max {
+		return nil, fmt.Sprintf("at most %s items", format(*param.Max))
+	}
+	if param.Min != nil && float64(len(items)) < *param.Min {
+		return nil, fmt.Sprintf("at least %s items", format(*param.Min))
+	}
+	out := make([]any, len(items))
+	for i, item := range items {
+		fields, ok := item.(map[string]any)
+		at := fmt.Sprintf("[%d]", i+1)
+		if !ok {
+			return nil, at + ": must be an object"
+		}
+		for _, name := range slices.Sorted(maps.Keys(fields)) {
+			if _, known := param.Item[name]; !known {
+				return nil, at + ": unknown field " + name
+			}
+		}
+		filled := map[string]any{}
+		for _, name := range slices.Sorted(maps.Keys(param.Item)) {
+			raw := param.Item[name]
+			field, given := fields[name]
+			if registry.IsImageField(raw) {
+				if !given || field == nil {
+					return nil, at + "." + name + ": an image is required"
+				}
+				ref, detail := imageRef(field)
+				if detail != "" {
+					return nil, at + "." + name + ": " + detail
+				}
+				filled[name] = ref
+				continue
+			}
+			var itemParam registry.Param
+			if err := json.Unmarshal(raw, &itemParam); err != nil {
+				return nil, at + "." + name + ": has an unknown type"
+			}
+			if !given {
+				filled[name] = itemParam.Default
+				continue
+			}
+			checked, detail := check(itemParam, field)
+			if detail != "" {
+				return nil, at + "." + name + ": " + detail
+			}
+			filled[name] = checked
+		}
+		out[i] = filled
+	}
+	return out, ""
+}
+
+// imageAt is one Image value of a graph: where it is ("encode.refs[2].image", items from 1) and its take.
+type imageAt struct {
+	Path, TakeID string
+}
+
+// eachImage visits every {take_id} value of nodes in input order (node id, param name, item, field name) and puts
+// what fn returns in its place.
+func eachImage(nodes map[string]registry.Node, fn func(at imageAt) any) {
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		params := nodes[id].Params
+		for _, name := range slices.Sorted(maps.Keys(params)) {
+			key := id + "." + name
+			switch value := params[name].(type) {
+			case map[string]any:
+				if takeID, ok := value["take_id"].(string); ok {
+					params[name] = fn(imageAt{Path: key, TakeID: takeID})
+				}
+			case []any:
+				for i, item := range value {
+					fields, _ := item.(map[string]any)
+					for _, field := range slices.Sorted(maps.Keys(fields)) {
+						if ref, ok := fields[field].(map[string]any); ok {
+							if takeID, ok := ref["take_id"].(string); ok {
+								fields[field] = fn(imageAt{Path: fmt.Sprintf("%s[%d].%s", key, i+1, field), TakeID: takeID})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// images lists the Image values of nodes in input order.
+func images(nodes map[string]registry.Node) []imageAt {
+	var out []imageAt
+	eachImage(nodes, func(at imageAt) any {
+		out = append(out, at)
+		return map[string]any{"take_id": at.TakeID}
+	})
+	return out
+}
+
+// parents are the takes of a stored graph's Image values, each once, in input order: a take's lineage.
+func parents(graph []byte) []string {
+	var nodes map[string]registry.Node
+	_ = json.Unmarshal(graph, &nodes)
+	var out []string
+	for _, at := range images(nodes) {
+		if !slices.Contains(out, at.TakeID) {
+			out = append(out, at.TakeID)
+		}
+	}
+	return out
 }
 
 // bounds checks number against the param's min and max; unit follows the numbers in the detail.

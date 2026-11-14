@@ -69,7 +69,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed)",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1)",
       "required": [
         "name",
         "type",
@@ -81,6 +81,350 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]{0,63}$"
         },
+        "type": {
+          "enum": [
+            "int",
+            "float",
+            "bool",
+            "string",
+            "text",
+            "enum",
+            "seed",
+            "image",
+            "rows"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "the field label; absent = the name"
+        },
+        "default": {
+          "$ref": "messages/defs.schema.json#/$defs/paramValue"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "int, float, seed: the field's increment (int: an integer)"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "when": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "visibility expression over the graph, e.g. \"model.variant != 'turbo'\" (<node id>.<param>); absent = always shown. Carried through as is; studio evaluates it in a later stage, the runner ignores it"
+        },
+        "item": {
+          "type": "object",
+          "description": "rows only: field name → a port type (the field holds a value of that type; only Image in this version) or a param schema (without name; not rows)",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "const": "Image"
+              },
+              {
+                "$ref": "#/$defs/itemParam"
+              }
+            ]
+          }
+        },
+        "mention": {
+          "type": "string",
+          "pattern": "\\{n\\}",
+          "maxLength": 40,
+          "description": "rows only: the text by which a prompt refers to item n (from 1), e.g. <image{n}>; the prompt carries it as is, the pack does not rewrite it"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "seed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": -1
+              },
+              "min": {
+                "type": "integer",
+                "minimum": -1
+              },
+              "max": {
+                "type": "integer",
+                "maximum": 9007199254740991
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                },
+                {
+                  "required": [
+                    "step"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "text"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "enum"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "enum"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "enum"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "int",
+                  "float",
+                  "seed"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "step"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "image"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "null"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rows"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "item",
+              "max"
+            ],
+            "properties": {
+              "default": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "item"
+                  ]
+                },
+                {
+                  "required": [
+                    "mention"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "itemParam": {
+      "type": "object",
+      "description": "a rows item field that is a param: a paramSchema without name, not rows or image",
+      "required": [
+        "type",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
         "type": {
           "enum": [
             "int",
@@ -123,12 +467,6 @@
         "help": {
           "type": "string",
           "maxLength": 300
-        },
-        "when": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200,
-          "description": "visibility expression over the graph, e.g. \"model.variant != 'turbo'\" (<node id>.<param>); absent = always shown. Carried through as is; studio evaluates it in a later stage, the runner ignores it"
         }
       },
       "allOf": [

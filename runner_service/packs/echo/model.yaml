@@ -1,6 +1,7 @@
 # The fake model family `echo` (env fake, no GPU, no weights): node echo/echo reports one progress step per
 # `steps` (each after `delay_ms`, a cancel point before each), then draws its text on a gradient, or fails when
-# `fail` is true. Its registry values equal the canonical contract fixtures (tests/test_packs.py).
+# `fail` is true. Its `refs` are read and checked by the core before the first step (contract tests, no GPU).
+# Its registry values equal the canonical contract fixtures (tests/test_packs.py).
 id: echo
 family: echo
 title: Echo (fake)
@@ -17,3 +18,6 @@ stages:
       delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
       fail: {type: bool, label: Fail, default: false,
              help: "Fail after the last step, without an output, to test errors."}
+      refs: {type: rows, label: References, default: [], min: 0, max: 10, item: {image: Image},
+             mention: "<image{n}>",
+             help: "Images the fake runner reads (and checks) before it echoes; the PNG is unchanged."}

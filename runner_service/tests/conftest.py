@@ -18,7 +18,17 @@ GEN = Path(__file__).resolve().parents[1] / "gen"
 def command(**echo_params) -> dict:
     """The canonical cmd.run.execute fixture, with echo params overridden (delay 0 by default)."""
     cmd = json.loads((CONTRACTS / "fixtures/messages/cmd.run.execute.valid.json").read_text())
-    cmd["data"]["workflow"]["nodes"]["echo"]["params"] |= {"delay_ms": 0} | echo_params
+    cmd["data"]["workflow"]["nodes"]["echo"]["params"] |= {"delay_ms": 0, "refs": []} | echo_params
+    return cmd
+
+
+def qwen_command(n: int = 2) -> dict:
+    """cmd.run.execute.valid.<n>.json (a qwen-image run); the text-to-image one (2) predates canvas `mode` and
+    encode `refs`, so they are filled with the registry defaults as studio would."""
+    cmd = json.loads((CONTRACTS / f"fixtures/messages/cmd.run.execute.valid.{n}.json").read_text())
+    nodes = cmd["data"]["workflow"]["nodes"]
+    nodes["canvas"]["params"].setdefault("mode", "auto")
+    nodes["encode"]["params"].setdefault("refs", [])
     return cmd
 
 
@@ -87,9 +97,17 @@ class FakeKV:
 class FakeStore:
     def __init__(self) -> None:
         self.objects: dict[str, tuple[bytes, str]] = {}
+        self.reads: list[str] = []
+        self.etags: dict[str, str] = {}  # key → ETag, for the keys a test replaced
 
     async def put(self, key: str, data: bytes, content_type: str) -> None:
         self.objects[key] = (data, content_type)
+
+    async def get(self, key: str, limit: int, etag: str | None = None) -> bytes | None:
+        self.reads.append(key)
+        if etag and self.etags.get(key, etag) != etag:
+            return None
+        return self.objects[key][0][: limit + 1] if key in self.objects else None
 
 
 class FakeMsg:
@@ -205,7 +223,7 @@ class FakeQwen:
         model = pack.model_schema(self.pack)
         stages = pack._nodes(spec["stages"], self.pack.family, "c0de", self.pack, module)
         every = (
-            {k: core[k] for k in ("prompt", "seed", "canvas")}
+            {k: core[k] for k in ("prompt", "seed", "canvas", "image")}
             | {model["kind"]: (model, pack.Node(pack.model_node(self.pack), code="c0de"))}
             | stages
             | {"output": core["output"]}

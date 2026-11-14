@@ -12,6 +12,7 @@
 
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import mimetypes
@@ -133,6 +134,7 @@ class Consumer:
             device=self.device,
         )
         ctx.seed = resolved.get("seed")
+        ctx.fetch = self.store.get
         beat = asyncio.create_task(self._in_progress(msg, events))
         try:
             if await cancels.requested(self.cancels_kv, run_id):
@@ -145,7 +147,10 @@ class Consumer:
             async def output(index: int, body: bytes, *, ext: str, **meta) -> None:
                 key = f"{data['output_prefix']}{index}.{ext}"
                 await self.store.put(key, body, mimetypes.types_map[f".{ext}"])
-                await events.output(index=index, key=key, bytes=len(body), seed=ctx.seed, **meta)
+                etag = hashlib.md5(body).hexdigest()  # the S3 ETag of this single-part PUT
+                await events.output(
+                    index=index, key=key, bytes=len(body), etag=etag, seed=ctx.seed, **meta
+                )
 
             ctx._output = output
             try:

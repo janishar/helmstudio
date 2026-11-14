@@ -24,6 +24,9 @@ const usage = `usage:
   helm batch-stop <batch_id>
   helm takes [--kind image|video|audio] [--source create|upload] [--starred] [--session <id>] [--q <text>] [--limit n] [--cursor c]
   helm upload <file>                  a png, jpeg or webp image, into the gallery
+  helm use [--param node.param] <take_id> <workflow_id>   print the helm run command with the take as reference 1
+
+An image input takes a comma list of take ids and @files (uploaded first): -p encode.refs=@a.png,<take_id>
   helm workflows
   helm whoami
   helm logout
@@ -59,6 +62,8 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = takesCmd(args[1:], stdout, stderr)
 	case "upload":
 		err = uploadCmd(args[1:], stdout)
+	case "use":
+		err = useCmd(args[1:], stdout, stderr)
 	case "workflows":
 		err = workflows(stdout)
 	case "whoami":

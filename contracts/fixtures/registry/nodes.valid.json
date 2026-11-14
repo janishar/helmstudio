@@ -57,6 +57,19 @@
           "label": "Fail",
           "default": false,
           "help": "Fail after the last step, without an output, to test errors."
+        },
+        {
+          "name": "refs",
+          "type": "rows",
+          "label": "References",
+          "default": [],
+          "min": 0,
+          "max": 10,
+          "item": {
+            "image": "Image"
+          },
+          "mention": "<image{n}>",
+          "help": "Images the fake runner reads (and checks) before it echoes; the PNG is unchanged."
         }
       ],
       "inputs": [

@@ -25,7 +25,8 @@
           "params": {
             "steps": 10,
             "delay_ms": 300,
-            "fail": false
+            "fail": false,
+            "refs": []
           }
         },
         "output": {

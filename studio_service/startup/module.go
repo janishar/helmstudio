@@ -25,7 +25,7 @@ type Module struct {
 	shutdown       <-chan struct{} // closes when the service stops, which ends open SSE streams
 	health         micro.Controller
 	maxBody        int64         // bytes
-	store          storage.Store // read to check uploads
+	store          storage.Store // read to check uploads and reference images
 }
 
 // RootMiddlewares returns the middlewares in load order. The body limit comes before the guard, so 411 and 413 come
@@ -44,7 +44,7 @@ func (m *Module) RootMiddlewares() []network.RootMiddleware {
 func (m *Module) Controllers() []micro.Controller {
 	return []micro.Controller{
 		m.health,
-		studio.NewController(studio.NewService(m.db, m.signer, m.registry, m.cancel), m.recheck, m.shutdown),
-		gallery.NewController(gallery.NewService(m.db, m.signer, m.store)),
+		studio.NewController(studio.NewService(m.db, m.signer, m.registry, m.cancel, m.store), m.recheck, m.shutdown),
+		gallery.NewController(gallery.NewService(m.db, m.signer, m.store, m.registry)),
 	}
 }

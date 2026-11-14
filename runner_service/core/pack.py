@@ -2,7 +2,7 @@
 `torch.py`) and workflows/*.json. The pack API is documented in packs/README.md (repo root); this module turns a
 pack into registry values (node schemas, workflows, the models entry) and node implementations.
 
-The core's own nodes (prompt, seed, canvas, output) are written in the same stage grammar in core/nodes.yaml."""
+The core's own nodes (prompt, seed, canvas, image, output) are written in the same stage grammar in core/nodes.yaml."""
 
 import ast
 import fnmatch
@@ -160,7 +160,8 @@ def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, flo
     return _sizes[(key, files)]
 
 
-# --- peak_gb formulas: a Python expression over `mp` (megapixels of the run's canvas) and the node's params
+# --- peak_gb formulas: a Python expression over `mp` (megapixels of the run's canvas), `images` (Image values in
+# the node's and its upstream nodes' params) and the node's params
 
 _ALLOWED = (
     ast.Expression, ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare, ast.IfExp, ast.Name, ast.Load,
@@ -274,7 +275,7 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
     out = {}
     for name, stage in stages.items():
         schema = stage_schema(name, stage, family)
-        names = {"mp"} | set(stage.get("params") or {})
+        names = {"mp", "images"} | set(stage.get("params") or {})
         peak = compile_formula(stage["peak_gb"], names) if "peak_gb" in stage else None
         fn = getattr(module, name, None)
         if fn is None:

@@ -1,9 +1,11 @@
 """Uploads: POST /uploads, PUT the bytes to the signed /files link, complete; the checks on each step."""
 
+import io
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import parse_qs, urlsplit
 
 from helpers import NO_SUCH_ID, STUDIO, all_takes, ok, png_bytes
+from PIL import Image
 
 
 def start(client, data: bytes, filename: str = "tiny photo.png", ct: str = "image/png") -> dict:
@@ -80,7 +82,7 @@ def test_upload_becomes_a_take(api, anon, user_a):
     assert (
         put(anon, path, q, b"x" * len(data)).status_code == 409
     )  # a checked upload is never replaced
-    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == take
+    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == {**take, "children": []}  # children only on GET
     for link in (take["url"], take["thumb_url"]):  # the original is its own thumbnail in 1.2
         r = anon.get(link)
         assert r.status_code == 200 and r.content == data
@@ -118,6 +120,29 @@ def test_a_text_file_is_not_an_image(api, anon):
     # discarded
     assert api.get(f"{STUDIO}/takes/{up['take_id']}").status_code == 404
     assert api.post(f"{STUDIO}/uploads/{up['take_id']}/complete").status_code == 404
+
+
+def complete(api, anon, data: bytes, ct: str, filename: str = "photo.jpg"):
+    up = start(api, data, filename, ct)
+    path, q = split(up["upload_url"])
+    assert put(anon, path, q, data, ct).status_code == 204
+    return api.post(f"{STUDIO}/uploads/{up['take_id']}/complete")
+
+
+def test_a_turned_jpeg_is_recorded_upright(api, anon):
+    exif = Image.Exif()
+    exif[0x0112] = 6  # stored 40 x 20, shown turned a quarter: 20 x 40
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 20), "red").save(buf, "JPEG", exif=exif)
+    take = ok(complete(api, anon, buf.getvalue(), "image/jpeg"))
+    assert (take["width"], take["height"]) == (20, 40)
+
+
+def test_more_than_50_megapixels_is_refused(api, anon):
+    buf = io.BytesIO()
+    Image.new("1", (8000, 7000)).save(buf, "PNG")  # 56 MP in a few KB
+    r = complete(api, anon, buf.getvalue(), "image/png", "flat.png")
+    assert r.status_code == 422 and "larger than 50 MP" in r.text, r.text
 
 
 def test_put_link_checks(api, anon):

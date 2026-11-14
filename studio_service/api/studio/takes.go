@@ -128,7 +128,7 @@ func (p *Projector) Backfill(ctx context.Context) (int, error) {
 			takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 				Index: o.Index, Key: o.Key, Kind: o.Kind, Width: o.Width, Height: o.Height, Bytes: o.Bytes,
 				MadeWith: madeWith(p.Workflows, run, o.Seed), CreatedAt: cmp.Or(run.FinishedAt, &run.CreatedAt),
-				BatchID: run.BatchID})
+				BatchID: run.BatchID, Parents: parents(run.Nodes)})
 			if err != nil {
 				return err
 			}

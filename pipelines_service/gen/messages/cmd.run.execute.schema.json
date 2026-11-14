@@ -40,7 +40,7 @@
         },
         "workflow": {
           "type": "object",
-          "description": "the resolved graph: the registry workflow with the run's inputs applied and every param of every node filled (defaults included), so the runner reads no defaults of its own",
+          "description": "the resolved graph: the registry workflow with the run's inputs applied and every param of every node filled (defaults included), so the runner reads no defaults of its own. Image values are resolved (defs image: key, content_type, width, height, bytes, etag), never {take_id} alone",
           "required": [
             "id",
             "nodes"
@@ -58,7 +58,14 @@
                   "additionalProperties": {
                     "required": [
                       "params"
-                    ]
+                    ],
+                    "properties": {
+                      "params": {
+                        "additionalProperties": {
+                          "$ref": "defs.schema.json#/$defs/resolvedValue"
+                        }
+                      }
+                    }
                   }
                 }
               ]

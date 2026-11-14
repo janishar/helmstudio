@@ -165,3 +165,25 @@ def png_bytes(width: int, height: int) -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", (width, height), (200, 40, 40)).save(buf, "PNG")
     return buf.getvalue()
+
+
+def upload(
+    client: httpx.Client,
+    anon: httpx.Client,
+    data: bytes,
+    filename: str = "ref.png",
+    complete: bool = True,
+) -> dict:
+    """An uploaded PNG: the completed take, or (complete=False) the pending upload's POST /uploads answer."""
+    body = {"filename": filename, "content_type": "image/png", "bytes": len(data)}
+    up = ok(client.post(f"{STUDIO}/uploads", json=body), 201)
+    if not complete:
+        return up
+    r = anon.put(up["upload_url"], content=data, headers={"Content-Type": "image/png"})
+    assert r.status_code == 204, f"PUT upload: {r.status_code} {r.text}"
+    return ok(client.post(f"{STUDIO}/uploads/{up['take_id']}/complete"))
+
+
+def ref(take_id: str) -> dict:
+    """One references row item: {"image": {"take_id": …}}."""
+    return {"image": {"take_id": take_id}}

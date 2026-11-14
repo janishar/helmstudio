@@ -4,6 +4,9 @@
 import { useEffect, useRef } from "react";
 import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
+import { RowsEditor, type RefUploads } from "@/components/create/refs";
+import { autoSize, imageInputs, mentionOf, refIds } from "@/lib/refs";
+import { useTakes } from "@/lib/take-cache";
 import {
   ASPECTS,
   MEGAPIXELS,
@@ -16,6 +19,7 @@ import {
   toRaw,
   type Field,
   type Raw,
+  type Update,
 } from "@/lib/workflow";
 
 /** Props shared by the form parts: the fields, what the controls hold, and the errors by field key. */
@@ -23,7 +27,7 @@ export type FormProps = {
   fields: Field[];
   raws: Record<string, Raw>;
   errors: Record<string, string>;
-  onChange: (key: string, raw: Raw) => void;
+  onChange: (key: string, u: Update) => void;
 };
 
 /** The control's id for a field key. */
@@ -42,6 +46,7 @@ function FieldError({ k, errors }: { k: string; errors: Record<string, string> }
 
 /** The multi-line text params (the prompt), borderless inside the composer, as in the mock; ⌘/Ctrl+Enter submits the form. */
 export function TextFields({ fields, raws, errors, onChange }: FormProps) {
+  const ref = imageInputs(fields).find((f) => refIds(f, raws[f.key]).length);
   return fields
     .filter((f) => f.param.type === "text")
     .map((f) => (
@@ -54,7 +59,9 @@ export function TextFields({ fields, raws, errors, onChange }: FormProps) {
           maxLength={f.param.max}
           placeholder={
             f.param.name === "text"
-              ? "Describe what you want to see"
+              ? ref
+                ? `Describe the edit; name the references ${mentionOf(ref.param, 1)}, ${mentionOf(ref.param, 2)}…`
+                : "Describe what you want to see"
               : (f.param.label ?? f.param.name)
           }
           rows={2}
@@ -73,16 +80,35 @@ export function TextFields({ fields, raws, errors, onChange }: FormProps) {
     ));
 }
 
-/** The canvas node's width and height params and their values now, when it has both. `auto`: the workflow's own. */
-export function canvasOf(fs: Field[], raws: Record<string, Raw>) {
-  const find = (name: string) =>
-    fs.find((f) => f.canvas && f.param.name === name && f.param.type === "int");
-  const width = find("width");
-  const height = find("height");
+/** The canvas node's width and height params (and `mode`, when it has one) and the size now, when it has both.
+ * `auto`: mode auto, else the workflow's own size. Auto with a reference (`ref`, the last one's size) is about 1 MP
+ * at its aspect, as the runner sizes an edit (contracts/README.md). */
+export function canvasOf(
+  fs: Field[],
+  raws: Record<string, Raw>,
+  ref?: { width: number; height: number } | null,
+) {
+  const find = (name: string, type: string) =>
+    fs.find((f) => f.canvas && f.param.name === name && f.param.type === type);
+  const width = find("width", "int");
+  const height = find("height", "int");
+  const mode = find("mode", "enum");
   if (!width || !height) return null;
   const w = Number(rawOf(width, raws));
   const h = Number(rawOf(height, raws));
-  return { width, height, w, h, auto: w === width.initial && h === height.initial };
+  const auto = mode ? rawOf(mode, raws) === "auto" : w === width.initial && h === height.initial;
+  const fromRef = auto && !!mode && !!ref;
+  const size = fromRef ? autoSize(ref.width, ref.height) : { width: w, height: h };
+  return { width, height, mode, w: size.width, h: size.height, auto, fromRef };
+}
+
+/** The last reference's size (canvas auto follows it), once its take is known. */
+function useLastRef(fs: Field[], raws: Record<string, Raw>) {
+  const last = imageInputs(fs)
+    .flatMap((f) => refIds(f, raws[f.key]))
+    .at(-1);
+  const t = useTakes(last ? [last] : [])(last ?? "");
+  return t?.width && t.height ? { width: t.width, height: t.height } : null;
 }
 
 /** "16:9 · 4 MP", else "1000 × 700 · 0.7 MP". */
@@ -92,7 +118,7 @@ const sizeText = (w: number, h: number) =>
 /** Which inspector editor is open (a field key), and how to open or close one. */
 type OpenProps = { open: string | null; setOpen: (key: string | null) => void };
 
-/** The params other than the prompt: Canvas, Quality (tiles), Options (switches), More. */
+/** The params other than the prompt: References (rows editors), Canvas, Quality (tiles), Options (switches), More. */
 export function Inspector({
   fields,
   raws,
@@ -100,11 +126,12 @@ export function Inspector({
   onChange,
   open,
   setOpen,
-}: FormProps & OpenProps) {
+  uploads,
+}: FormProps & OpenProps & { uploads: RefUploads }) {
   const s = sections(fields);
-  const c = canvasOf(fields, raws);
-  const extra = s.canvas.filter((f) => f !== c?.width && f !== c?.height);
-  if (!s.canvas.length && !s.tiles.length && !s.switches.length && !s.more.length)
+  const c = canvasOf(fields, raws, useLastRef(fields, raws));
+  const extra = s.canvas.filter((f) => f !== c?.width && f !== c?.height && f !== c?.mode);
+  if (!s.refs.length && !s.canvas.length && !s.tiles.length && !s.switches.length && !s.more.length)
     return <p className="text-[13px] text-t2">Nothing to set.</p>;
   const control = (f: Field) => {
     const raw = rawOf(f, raws);
@@ -145,6 +172,21 @@ export function Inspector({
     );
   return (
     <>
+      {s.refs.map((f, i) =>
+        section(
+          `sec-refs-${i}`,
+          f.param.label ?? f.param.name,
+          [],
+          <RowsEditor
+            f={f}
+            raw={raws[f.key]}
+            error={errors[f.key]}
+            onChange={onChange}
+            uploads={uploads}
+          />,
+          f.param.help,
+        ),
+      )}
       {section(
         "sec-canvas",
         "Canvas",
@@ -169,7 +211,7 @@ function CanvasPicker({
   errors: Record<string, string>;
   onChange: (key: string, raw: Raw) => void;
 }) {
-  const { width, height, w, h } = c;
+  const { width, height, mode, w, h } = c;
   const grid = width.param.step ?? 1;
   const fit = (ratio: number, mp: number) =>
     sizeFor(
@@ -179,7 +221,9 @@ function CanvasPicker({
       Math.max(width.param.min ?? 0, height.param.min ?? 0),
       Math.min(width.param.max ?? Infinity, height.param.max ?? Infinity),
     );
+  // a size picked is fixed: in an edit, Auto would follow the last reference instead
   const set = (s: { width: number; height: number }) => {
+    if (mode) onChange(mode.key, "fixed");
     onChange(width.key, String(s.width));
     onChange(height.key, String(s.height));
   };
@@ -194,8 +238,13 @@ function CanvasPicker({
           type="button"
           className="opt bevel"
           aria-pressed={aspect === "Auto"}
-          title="The workflow's own size"
+          title={
+            mode
+              ? "The workflow's own size; with references, about 1 MP at the last one's aspect"
+              : "The workflow's own size"
+          }
           onClick={() => {
+            if (mode) onChange(mode.key, "auto");
             onChange(width.key, toRaw(width.initial, width.param));
             onChange(height.key, toRaw(height.initial, height.param));
           }}
@@ -228,7 +277,8 @@ function CanvasPicker({
         ))}
       </div>
       <span className="mono text-[12px] text-t2">
-        {w} × {h} · {+((w * h) / 1e6).toFixed(1)} MP{grid > 1 && ` · on the ${grid} px grid`}
+        {w} × {h} · {+((w * h) / 1e6).toFixed(1)} MP
+        {c.fromRef ? " · from the last reference" : grid > 1 && ` · on the ${grid} px grid`}
       </span>
       <FieldError k={width.key} errors={errors} />
       <FieldError k={height.key} errors={errors} />
@@ -477,7 +527,7 @@ export function Chips({
   const s = sections(fields);
   const model = s.tiles.filter((f) => f.model && f.param.type === "enum");
   const first = model[0];
-  const c = canvasOf(fields, raws);
+  const c = canvasOf(fields, raws, useLastRef(fields, raws));
   const seed = s.tiles.find((f) => f.param.type === "seed");
   const chip = "chip bevel rounded-[10px] bg-s4";
   const random = seed && rawOf(seed, raws) === "";
@@ -495,7 +545,7 @@ export function Chips({
       )}
       {c && (
         <button type="button" className={chip} onClick={() => show("canvas")}>
-          {sizeText(c.w, c.h)}
+          {c.fromRef ? `Auto · ${sizeText(c.w, c.h)}` : sizeText(c.w, c.h)}
         </button>
       )}
       {seed && (
@@ -525,4 +575,25 @@ export function Chips({
       )}
     </>
   );
+}
+
+/** The composer's first row: each image input's references as chips with "Add from gallery" (the mock's chips row). */
+export function RefChips({
+  fields,
+  raws,
+  errors,
+  onChange,
+  uploads,
+}: FormProps & { uploads: RefUploads }) {
+  return imageInputs(fields).map((f) => (
+    <RowsEditor
+      key={f.key}
+      f={f}
+      raw={raws[f.key]}
+      error={errors[f.key]}
+      onChange={onChange}
+      uploads={uploads}
+      compact
+    />
+  ));
 }

@@ -1,0 +1,13 @@
+{
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "encode.refs": [
+      {
+        "image": {
+          "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51.jpg"
+        }
+      }
+    ]
+  }
+}
