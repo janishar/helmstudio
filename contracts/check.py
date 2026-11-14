@@ -7,34 +7,36 @@ fixtures/{messages,registry}/<name>.{valid,invalid}[.N].json: every valid one mu
 Exit code 1 on any failure."""
 
 import json
+import re
 import sys
 from pathlib import Path
 
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import SchemaError, ValidationError
 from openapi_spec_validator import validate as validate_openapi
 from referencing import Registry, Resource
 
 HERE = Path(__file__).parent
+SCHEMA_FILES = sorted((HERE / "messages").glob("*.schema.json"))
+# Every cmd.*/evt.* schema is an enveloped message; every req.* holds $defs/request and $defs/reply.
 MESSAGE_TYPES = [
-    "cmd.catalog.process",
-    "cmd.catalog.run",
-    "evt.catalog.status",
-    "evt.catalog.log",
-    "evt.catalog.step",
-    "evt.catalog.question",
-    "evt.catalog.skus",
-    "evt.catalog.image",
-    "evt.catalog.run",
-    "evt.auth.revoked",
-]  # docs/ARCHITECTURE.md, section 6
+    n
+    for p in SCHEMA_FILES
+    if (n := p.name.removesuffix(".schema.json")).startswith(("cmd.", "evt."))
+]
 REQ_REPLY = [
-    "req.auth.validate.token",
-    "req.auth.validate.role",
-    "req.catalog.interpret",
-    "req.catalog.poses.suggest",
-]  # fixtures: <type>.{request,reply}.{valid,invalid}
-REGISTRY_KEYS = ["catalog_library", "catalog_prices", "catalog_checks"]
+    n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
+]
+REGISTRY_KEYS = [
+    "nodes",
+    "workflows",
+    "models",
+    "host",
+]  # registry.schema.json $defs; fixtures/registry/<key>.*
+OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
+# Names of the reference product that must not come back.
+FORBIDDEN = re.compile(r"\bcatalog|\bora[._]|\bORA\b|agents_service|\bagents\.", re.IGNORECASE)
 METHODS = {"get", "post", "put", "patch", "delete"}
 
 errors: list[str] = []
@@ -46,15 +48,12 @@ def fail(msg: str) -> None:
 
 
 def load_schemas() -> tuple[dict[str, dict], Registry]:
-    schemas = {
-        p.name.removesuffix(".schema.json"): json.loads(p.read_text())
-        for p in sorted((HERE / "messages").glob("*.schema.json"))
-    }
+    schemas = {p.name.removesuffix(".schema.json"): json.loads(p.read_text()) for p in SCHEMA_FILES}
     schemas["registry"] = json.loads((HERE / "registry.schema.json").read_text())
     for name, s in schemas.items():
         try:
             Draft202012Validator.check_schema(s)
-        except Exception as e:  # SchemaError
+        except SchemaError as e:
             fail(f"schema {name}: {e}")
     registry = Registry().with_resources(
         (s["$id"], Resource.from_contents(s)) for s in schemas.values()
@@ -85,24 +84,72 @@ def foreign_keys(msg: dict) -> list[_Err]:
     return out
 
 
+def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
+    """What the schema can't say about a workflow: known kinds, declared params and ports, wires whose output
+    exists and has the input's type."""
+    out, nodes = [], workflow["nodes"]
+    for nid, node in nodes.items():
+        schema = kinds.get(node["kind"])
+        if not schema:
+            out.append(f"{nid}: unknown kind {node['kind']!r}")
+            continue
+        names = {p["name"] for p in schema["params"]}
+        out += [
+            f"{nid}.{k}: not a param of {node['kind']}"
+            for k in node.get("params", {})
+            if k not in names
+        ]
+        inputs = {p["name"]: p["type"] for p in schema["inputs"]}
+        for port, ref in node.get("in", {}).items():
+            src_id, src_port = ref.split(".")
+            src = kinds.get(nodes.get(src_id, {}).get("kind"))
+            outputs = {p["name"]: p["type"] for p in src["outputs"]} if src else {}
+            if port not in inputs:
+                out.append(f"{nid}.in.{port}: not an input of {node['kind']}")
+            elif outputs.get(src_port) != inputs[port]:
+                out.append(f"{nid}.in.{port}: {ref} is not an output of type {inputs[port]}")
+    return out
+
+
+def check_echo_registry() -> None:
+    """The canonical fixtures (the fake runner publishes them verbatim) must fit together."""
+    reg = HERE / "fixtures" / "registry"
+    nodes = json.loads((reg / "nodes.valid.json").read_text())["nodes"]
+    kinds = {n["kind"]: n for n in nodes}
+    for wf in json.loads((reg / "workflows.valid.json").read_text())["workflows"]:
+        errs = graph_errors(wf, kinds)
+        for e in errs:
+            fail(f"fixtures/registry/workflows.valid.json {wf['id']}: {e}")
+        if not errs:
+            print(f"ok   workflow {wf['id']} fits nodes.valid.json")
+
+
+def check_names() -> None:
+    for p in sorted(HERE.rglob("*")):
+        if p.suffix in (".json", ".yaml", ".md") and not any(
+            x.startswith(".venv") for x in p.parts
+        ):
+            for i, line in enumerate(p.read_text().splitlines(), 1):
+                if FORBIDDEN.search(line):
+                    fail(
+                        f"{p.relative_to(HERE)}:{i}: a reference product name: {line.strip()[:80]}"
+                    )
+
+
 def check_fixtures(schemas: dict[str, dict], registry: Registry) -> None:
     def validator(schema: dict) -> Draft202012Validator:
         return Draft202012Validator(schema, registry=registry, format_checker=FormatChecker())
 
     reg = schemas["registry"]
     targets = {
-        **{t: validator(schemas[t]) for t in MESSAGE_TYPES if t in schemas},
+        **{t: validator(schemas[t]) for t in MESSAGE_TYPES},
         **{k: validator({"$ref": f"{reg['$id']}#/$defs/{k}"}) for k in REGISTRY_KEYS},
         **{
             f"{t}.{d}": validator({"$ref": f"{schemas[t]['$id']}#/$defs/{d}"})
             for t in REQ_REPLY
-            if t in schemas
             for d in ("request", "reply")
         },
     }
-    for t in MESSAGE_TYPES + REQ_REPLY:
-        if t not in schemas:
-            fail(f"missing messages/{t}.schema.json")
     for k in REGISTRY_KEYS:
         if k not in reg["$defs"]:
             fail(f"registry.schema.json has no $defs/{k}")
@@ -140,7 +187,7 @@ def check_openapi() -> None:
     try:
         validate_openapi(spec)
         print("ok   openapi.yaml is a valid OpenAPI", spec["openapi"], "document")
-    except Exception as e:
+    except ValidationError as e:  # OpenAPIValidationError
         fail(f"openapi.yaml: {str(e).splitlines()[0]}")
         return
     for path, item in spec["paths"].items():
@@ -155,6 +202,9 @@ def check_openapi() -> None:
                 fail(
                     f"{where}: auth routes, and only they, are tagged auth with x-status: built|deferred"
                 )
+            prefix = next((v for k, v in OPERATION_PREFIX.items() if path.startswith(k)), None)
+            if not prefix or not op.get("operationId", "").startswith(prefix):
+                fail(f"{where}: operationId must start with {prefix!r}")
             responses = op.get("responses", {})
             ok = [c for c in responses if c.startswith("2")]
             if not ok:
@@ -173,7 +223,9 @@ def check_openapi() -> None:
 def main() -> int:
     schemas, registry = load_schemas()
     check_fixtures(schemas, registry)
+    check_echo_registry()
     check_openapi()
+    check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")
     return 1 if errors else 0
 

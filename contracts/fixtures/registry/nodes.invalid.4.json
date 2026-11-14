@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-14T10:00:00Z",
+  "nodes": [
+    {
+      "kind": "prompt",
+      "title": "Prompt",
+      "family": null,
+      "help": "The text the workflow starts from.",
+      "params": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Prompt",
+          "default": "",
+          "min": 0,
+          "max": 4000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ]
+    },
+    {
+      "kind": "echo/echo",
+      "title": "Echo",
+      "family": "echo",
+      "help": "Fake model: draws its text on a gradient, one progress step at a time.",
+      "params": [
+        {
+          "name": "steps",
+          "type": "int",
+          "label": "Steps",
+          "default": 10,
+          "min": 1,
+          "max": 200,
+          "help": "Progress steps to report."
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        },
+        {
+          "name": "fail",
+          "type": "bool",
+          "label": "Fail",
+          "default": false,
+          "help": "Fail after the last step, without an output, to test errors."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "Image"
+        }
+      ]
+    },
+    {
+      "kind": "output",
+      "title": "Output",
+      "family": null,
+      "help": "Stores its input as a run output.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "media",
+          "type": "Image"
+        }
+      ],
+      "outputs": []
+    }
+  ]
+}

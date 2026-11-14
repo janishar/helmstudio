@@ -1,6 +1,8 @@
 module github.com/helmstudio/kong/apikey_auth_plugin
 
-go 1.27.0
+go 1.27
+
+toolchain go1.27.4
 
 require github.com/Kong/go-pdk v0.11.2
 

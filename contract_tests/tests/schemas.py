@@ -1,6 +1,7 @@
 """Optional response-shape check: with CONTRACT_SCHEMAS=1 every JSON response is validated against the schema that
 contracts/openapi.yaml (OpenAPI 3.1, JSON Schema 2020-12) declares for its path, method and status. A response whose
-operation or status isn't in the spec fails: an undocumented route or status code is a contract break too. Off by default."""
+operation or status isn't in the spec fails: an undocumented route or status code is a contract break too. SSE frames
+are checked one by one with check_value (helpers.sse). Off by default."""
 
 import os
 import re
@@ -17,7 +18,7 @@ ENABLED = os.environ.get("CONTRACT_SCHEMAS") == "1"
 SPEC = Path(
     os.environ.get("OPENAPI_PATH", Path(__file__).parents[2] / "contracts" / "openapi.yaml")
 )
-URI = "urn:ora:openapi"
+URI = "urn:helmstudio:openapi"
 
 
 @cache
@@ -28,7 +29,7 @@ def _spec() -> tuple[dict, Registry, list[tuple[re.Pattern, str]]]:
     registry = Registry().with_resource(
         URI, Resource.from_contents(doc, default_specification=DRAFT202012)
     )
-    # literal paths before templated ones: /v1/catalog/sessions/{session_id} must not swallow a literal sibling
+    # literal paths before templated ones: a templated path must not swallow a literal sibling
     templates = sorted(doc.get("paths", {}), key=lambda p: (p.count("{"), -len(p)))
     # {path} (/files/{path}) is an object key and spans slashes; every other parameter is one segment
     patterns = [
@@ -54,7 +55,7 @@ def _escape(s: str) -> str:
 
 
 def check(response: httpx.Response) -> None:
-    doc, registry, patterns = _spec()
+    doc, _, patterns = _spec()
     template = next((t for p, t in patterns if p.match(response.request.url.path)), None)
     method = response.request.method.lower()
     op = doc["paths"].get(template, {}).get(method) if template else None
@@ -87,13 +88,24 @@ def check(response: httpx.Response) -> None:
         "content", {}
     ):
         return
-    pointer = base + "/content/application~1json/schema"
     response.read()
+    check_value(
+        response.json(),
+        base + "/content/application~1json/schema",
+        f"{method.upper()} {response.request.url.path} {status}: response",
+    )
+
+
+def check_value(value, pointer: str, what: str) -> None:
+    """Validate value against the schema at `pointer` (#/...) in openapi.yaml; a no-op unless ENABLED."""
+    if not ENABLED:
+        return
+    _, registry, _ = _spec()
     validator = Draft202012Validator({"$ref": URI + pointer}, registry=registry)
-    errors = sorted(validator.iter_errors(response.json()), key=lambda e: list(e.path))
+    errors = sorted(validator.iter_errors(value), key=lambda e: list(e.path))
     if errors:
         raise AssertionError(
-            f"{method.upper()} {response.request.url.path} {status}: response breaks the contract: "
+            f"{what} breaks the contract: "
             + "; ".join(
                 f"{'/'.join(map(str, e.path)) or '<root>'}: {e.message}" for e in errors[:5]
             )

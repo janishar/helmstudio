@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/v1/catalog/sessions": {
+    "/v1/studio/sessions": {
         parameters: {
             query?: never;
             header?: never;
@@ -12,43 +12,116 @@ export interface paths {
             cookie?: never;
         };
         /** The caller's sessions, newest first (at most 100, not paginated) */
-        get: operations["catalogListSessions"];
+        get: operations["studioListSessions"];
         put?: never;
-        /** A new, empty session (stage setup, flow at raw) */
-        post: operations["catalogCreateSession"];
+        /** A new, empty session */
+        post: operations["studioCreateSession"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/catalog/sessions/{session_id}": {
+    "/v1/studio/sessions/{session_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Session with its SKUs, questions, runs and images (the server copy wins over the browser's) */
-        get: operations["catalogGetSession"];
+        get: operations["studioGetSession"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a session with its runs and events
+         * @description 409 while one of its runs is queued or running (cancel it first). The run files stay in the object store in M0.
+         */
+        delete: operations["studioDeleteSession"];
+        options?: never;
+        head?: never;
+        patch: operations["studioRenameSession"];
+        trace?: never;
+    };
+    "/v1/studio/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every workflow the runners publish in the registry, by id
+         * @description Read from the KV `registry` keys `<host>.<env>.workflows` and `.nodes`, whether or not a host with that env is
+         *     live now (`GET /v1/studio/hosts` tells). The same id from several hosts is listed once.
+         */
+        get: operations["studioListWorkflows"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /**
-         * Save step inputs, flow position, chat messages or the project name
-         * @description Only the fields sent change; inside `inputs` only the steps sent change, and a step's `items` replaces that
-         *     step's list (send the whole list: × on an item is a PATCH without it). `upload_id`s must be this session's
-         *     uploads or the caller's own from another session (an item reused from memory): those are copied into this
-         *     session under new ids, which the answer shows (422 for any other id). While stage is `setup` and SKUs exist, a
-         *     change to guidelines, output, poses, models, backgrounds or details re-runs the processing checks (`cmd.catalog.process` with no new raw sources);
-         *     `session.processing` shows it. `raw` items can only be removed here (they are added by `POST .../raw`).
-         */
-        patch: operations["catalogPatchSession"];
+        patch?: never;
         trace?: never;
     };
-    "/v1/catalog/sessions/{session_id}/refresh": {
+    "/v1/studio/workflows/{workflow_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["studioGetWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/sessions/{session_id}/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The session's runs, newest first (at most 100, not paginated) */
+        get: operations["studioListRuns"];
+        put?: never;
+        /**
+         * Run a workflow in the session
+         * @description Resolves the graph (node schema defaults, then the workflow's params, then `inputs`), picks the live host that
+         *     has the workflow's env, and queues `cmd.run.execute` on `cmd.run.<host>.<env>` through the outbox, all in one
+         *     transaction. 422 for an unknown `workflow_id`, an input key that is not a param of the workflow's nodes, or a
+         *     value of the wrong type, out of `min`/`max` or not in `enum` (the detail names the key, e.g.
+         *     `echo.steps: must be between 1 and 200`). When no live host has the env, the run is created already
+         *     `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
+         */
+        post: operations["studioCreateRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["studioGetRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/runs/{run_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -58,277 +131,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Clear Input for the next batch; SKUs, runs, images and memory stay
-         * @description Inputs are emptied, flow_position goes back to `raw`, stage stays `ready` when it was. 409 while processing or a run is in progress.
+         * Cancel a queued or running run
+         * @description Writes the run id as a key in the KV `cancels`; the runner checks it before it starts and at every step, and
+         *     reports `cancelled` (outputs already stored are kept). The answer is the run as it is now, usually still
+         *     `queued` or `running`; follow the events for `cancelled`. Calling it again is harmless. 409 when the run
+         *     already ended.
          */
-        post: operations["catalogRefreshSession"];
+        post: operations["studioCancelRun"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/catalog/sessions/{session_id}/reset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start over — clear inputs, messages, SKUs, questions, runs and images; memory stays
-         * @description Stage goes back to `setup`, flow_position to `raw`. The session's uploads go too, except those memory's items name (so they can still be reused). 409 while processing or a run is in progress.
-         */
-        post: operations["catalogResetSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/memory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Last-used value per step (saved by Start processing), with the project it came from
-         * @description Steps never started have no entry. Raw images are never in memory.
-         */
-        get: operations["catalogGetMemory"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The caller's totals for the account page (sessions, SKUs, approved images, credits quoted) */
-        get: operations["catalogGetStats"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The caller's render quality by product for the account page (first-try pass rate, tries, cost per approved image)
-         * @description Computed from the caller's images that finished rendering, grouped by the product their SKU was when they rendered. Another user's session id gives an empty list.
-         */
-        get: operations["catalogGetMetrics"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/jobs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The caller's newest 100 jobs (processing jobs and runs), newest first, for the dev Jobs view
-         * @description Only the caller's own jobs, whatever their role.
-         */
-        get: operations["catalogListJobs"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/jobs/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** One of the caller's jobs and every event it produced, oldest first (its steps, logs, images, progress) */
-        get: operations["catalogGetJob"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/library": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Categories, poses, built-in models and backgrounds, resolutions, ratios, credits and the caller's favorites
-         * @description The registry slice agents_service publishes (registry keys `catalog_library`, `catalog_prices`) plus the caller's favorites. 503 until agents_service has published it.
-         */
-        get: operations["catalogGetLibrary"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/favorites/{kind}/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Mark a library item as a favorite (idempotent) */
-        put: operations["catalogAddFavorite"];
-        post?: never;
-        /** Unmark a favorite (idempotent) */
-        delete: operations["catalogRemoveFavorite"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/estimate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Credits for n images at a resolution (registry prices) */
-        get: operations["catalogGetEstimate"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/raw": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Add raw images (files, CSV, Drive folder or website link) and start processing
-         * @description `multipart/form-data`: `files` (JPEG, PNG or WEBP, at most 25 MiB each, at most 500 per call) stored under
-         *     `u/<owner>/catalog/<session>/raw/`, or one CSV/TSV/TXT `files` part with `kind=csv`. JSON: `{kind: drive|website,
-         *     url}` or `{kind: csv, csv_text}`. A CSV needs the columns SKU, name, category, image_url (header row, any
-         *     order, case-insensitive); its rows give `expected_skus`; a category that matches a product (id or name, e.g.
-         *     `rings`, `Sofa`) picks that product. Optional `families` ("What are we shooting?") limits the products these
-         *     images are sorted into. Adds one `raw` input item and enqueues `cmd.catalog.process` with the new source and
-         *     `families`; 409 while a previous processing job of this session is still
-         *     running, or once the session is started (stage `ready`: use Refresh first).
-         */
-        post: operations["catalogAddRaw"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/guidelines": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Add a guideline or project-brief document or link
-         * @description `multipart/form-data` with one `file` (pdf, txt, csv, md, docx are read; doc, ppt, pptx, key, xls, xlsx are
-         *     stored and flagged unreadable in `item.detail`; at most 25 MiB), or JSON `{url}`. `target: guidelines`
-         *     (default) adds a `guidelines` item, `target: details` a `details` item (project brief). When the session
-         *     has SKUs and stage is `setup`, processing re-reads the documents and re-runs the checks.
-         */
-        post: operations["catalogAddGuideline"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/uploads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Upload the brand's own model, background or pose reference photo into the session
-         * @description One `file` (JPEG, PNG or WEBP, at most 25 MiB). The returned `upload.id` is used as a model or background id
-         *     in input items and briefs, or in `upload_ids` of a pose brief. It is not added to any input by itself.
-         */
-        post: operations["catalogUpload"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/poses/suggest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Turn a brief, links or reference photos per category into suggested pose ids (LLM, req.catalog.poses.suggest)
-         * @description Nothing is saved; the client puts the answer into the `poses` input (poses, custom_poses, and refs as pose_refs). 503 (retryable) when agents_service does not answer in time.
-         */
-        post: operations["catalogSuggestPoses"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/events": {
+    "/v1/studio/sessions/{session_id}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -337,12 +153,13 @@ export interface paths {
         };
         /**
          * Session events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`
-         * @description Every `evt.catalog.<session_id>.*` message the projector stored, oldest first, each numbered by a per-session
-         *     `seq`. JSON: the events with `seq > since` (at most 500) and `last_seq`. SSE: replays `seq > since` (or
-         *     `Last-Event-ID`), then streams live ones; `id:` = seq, `event:` = the event's `type`, `data:` = the
-         *     `SessionEvent` JSON; `: keep-alive` comments every 15 s. The stream does not end by itself.
+         * @description Every event the projector (or studio itself: `queued`, a run failed or cancelled before it was sent) stored for
+         *     the session, oldest first, each numbered by a per-session `seq`. JSON: the events with `seq > since` (at most
+         *     500) and `last_seq`. SSE: replays `seq > since` (or `Last-Event-ID`, which wins), then streams new ones;
+         *     `id:` = seq, `event:` = the event's `type`, `data:` = the `SessionEvent` JSON; `: keep-alive` comments every
+         *     15 s. The stream does not end by itself.
          */
-        get: operations["catalogSessionEvents"];
+        get: operations["studioSessionEvents"];
         put?: never;
         post?: never;
         delete?: never;
@@ -351,288 +168,21 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/catalog/questions/{question_id}/answer": {
+    "/v1/studio/hosts": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Answer a processing question with one of its two options
-         * @description Applies the option's SKU changes (published by agents with the question) and records the answer. 409 when it is already answered.
+         * The runner hosts and their state, redacted
+         * @description One entry per key in the KV `hosts`. `offline` when the key is older than 30 s. A host running anyone's run is
+         *     `busy`; which run and whose is never shown.
          */
-        post: operations["catalogAnswerQuestion"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Start processing — resolve every SKU's brief, save memory, move the session to stage ready
-         * @description Fills each SKU's model, background, poses, resolution and ratio from the inputs, else the defaults (registry
-         *     category defaults, 2K · 1:1); randomized models/backgrounds are spread across SKUs; a models or backgrounds
-         *     step `text` goes on every SKU as its description, and with no pick the SKU's model or background stays null
-         *     (described only). Saves the
-         *     guidelines, output, poses, models, backgrounds and details inputs as the caller's memory under the session's
-         *     project name. 409 when there are no SKUs, processing is running or a blocking question is open. Calling it
-         *     again on a ready session re-resolves the briefs of SKUs not run yet.
-         */
-        post: operations["catalogStart"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/next-step": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The Next step card (spec "Next step rules"), worked out from SKU statuses and group keys */
-        get: operations["catalogNextStep"];
+        get: operations["studioListHosts"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run a SKU set — a sample, the next batch, all of a category, or chosen SKUs
-         * @description `sample`: the first `Not run` SKU of `category`. `batch`: the `Not run` SKUs of `category` with `group_key`.
-         *     `all`: every `Not run` SKU of `category` (or of the session when `category` is absent). `skus`: exactly
-         *     `sku_ids` (reruns allowed). Creates one `generating` image per SKU × brief pose (`missing_only`: only poses
-         *     with no live image) and enqueues `cmd.catalog.run`. 409 when the session is not started, any chosen SKU is
-         *     Queued or Running, or nothing is left to run there.
-         */
-        post: operations["catalogCreateRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/runs/{run_id}/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stop a queued or running run
-         * @description The run becomes `failed` with error `Stopped` and its still-`generating` images are deleted (they have no
-         *     picture yet), so each SKU shows what it showed before the run; images the run already finished stay. A
-         *     `status` event (failed, `Stopped`) follows on the session's events, and agents_service is told to stop the job
-         *     (`agents.cancel`). A render already sent to the image provider still finishes there (and is billed by it);
-         *     its result is discarded. 404 for an unknown run or one of another session; 409 when it already ended.
-         */
-        post: operations["catalogStopRun"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/images/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stop chosen generating images (one tile, or a SKU's); the rest of their runs keep going
-         * @description Each chosen image still `generating` in a queued or running run is deleted (its SKU and shot fall back to the
-         *     previous revision, or Not run), and agents_service is told to skip it in that job (`agents.cancel.image`);
-         *     chosen images already finished are left alone. A run left with nothing generating is stopped whole, as
-         *     `POST .../runs/{run_id}/stop` does (`failed`, `Stopped`). A render already sent to the image provider still
-         *     finishes there (and is billed); its result is discarded. 404 when an id is not in this session; 409 when none of
-         *     them is generating.
-         */
-        post: operations["catalogStopImages"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/regenerate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Regenerate only the chosen images with the feedback; old versions stay as earlier revisions
-         * @description Each image gets a new revision (`generating`) of the same SKU and shot; the old one keeps its status (an
-         *     approved one stays approved until the new one is approved). Enqueues `cmd.catalog.run` with scope
-         *     `regenerate`. 404 when an id is unknown or not in this session, 409 when one is still generating.
-         */
-        post: operations["catalogRegenerate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/images/{image_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Approve or reject one image
-         * @description 409 when the image is not `to_review`, `approved` or `rejected` (generating or failed).
-         */
-        patch: operations["catalogReviewImage"];
-        trace?: never;
-    };
-    "/v1/catalog/images/{image_id}/pick": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Keep another render try of an image as the image (the brand overrides the reviewer's best)
-         * @description The try becomes the image: its url and review are that try's, it is `best` and `picked` (chosen by the brand) in
-         *     `attempts`; the status stays as it is (an approved image stays approved: the brand chose this try). Any revision
-         *     with tries. 409 while the image is generating or failed; 422 for an attempt the image does not have.
-         */
-        post: operations["catalogPickImageTry"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/approve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Approve every `to_review` image among the chosen images, SKUs or category
-         * @description Exactly one of `image_ids`, `sku_ids`, `category`. Approving nothing is not an error (`approved` 0).
-         */
-        post: operations["catalogApproveMany"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/skus/{sku_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Override a SKU's product, model, background or poses (edit drawer, pose editor), or confirm its attributes
-         * @description Brief fields sent replace the SKU's; `apply_to_category` applies the same fields to every SKU of its
-         *     category that is not Approved. `category` moves the SKU (with `apply_to_category`: every SKU of its product)
-         *     to another product: poses, prompt and review goals follow the new product, the code is kept, images already
-         *     run stay; for a product without a model (`uses_model` false) the brief model becomes null. Applies to images
-         *     run from now on (use `POST .../runs` scope `skus` for Save & rerun). 422 for an unknown category, model,
-         *     background or pose id, a pose of another product, or a model for a product that does not use one.
-         */
-        patch: operations["catalogPatchSku"];
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/requests": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * A typed request in Processing — interpreted (req.catalog.interpret) into one action, carried out, with a reply
-         * @description Runs, approvals, pose changes, downloads and feedback go through the same rules as their own endpoints
-         *     (credits quoted, 409 conditions become a `reply` with `action: reply` instead of an error). Text the
-         *     interpreter cannot map is `not_understood` and never spends credits. 409 only when the session is not
-         *     started; 503 (retryable) when agents_service does not answer in time.
-         */
-        post: operations["catalogTypedRequest"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/catalog/sessions/{session_id}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Zip the approved images (`<SKU code>/<shot>.<ext>` + `catalog.csv`) and return a signed link
-         * @description The newest approved revision of each SKU × shot. Deleted after a day. 409 when nothing is approved.
-         */
-        post: operations["catalogDownload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -648,10 +198,10 @@ export interface paths {
         };
         /**
          * A signed file (the signature is the auth; no API key)
-         * @description Only reachable through a `*_url` the API returned. Served with `Content-Security-Policy: sandbox` and
-         *     `X-Content-Type-Options: nosniff`. Replaced by presigned object-store URLs in later phases.
+         * @description Only reachable through a `url` the API returned. Served with `Content-Security-Policy: sandbox` and
+         *     `X-Content-Type-Options: nosniff`.
          */
-        get: operations["getFile"];
+        get: operations["filesGetFile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -718,40 +268,6 @@ export interface paths {
         get?: never;
         put: operations["authChangePassword"];
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/password/forgot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description deferred — not implemented by auth_service (needs an email sender); admins reset passwords instead. */
-        post: operations["authForgotPassword"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/password/reset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** @description deferred — not implemented by auth_service. */
-        post: operations["authResetPassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -902,1054 +418,233 @@ export interface components {
         };
         /**
          * @description signed, time-limited link; opaque
-         * @example /files/u/7d1e.../catalog/0b5c.../images/1a2b....png?exp=1767225600&sig=ab12
+         * @example /files/u/7d1e.../runs/3c9a.../0.png?exp=1767225600&sig=ab12
          */
         SignedUrl: string;
-        /**
-         * @description where the guided chat is (demo FLOW order); `done` = Processing opened
-         * @enum {string}
-         */
-        FlowPosition: "raw" | "guidelines" | "processing" | "output" | "poses" | "models" | "backgrounds" | "details" | "summary" | "done";
-        /**
-         * @description setup: Input; ready: Start processing done, runs allowed
-         * @enum {string}
-         */
-        Stage: "setup" | "ready";
-        /**
-         * @description derived by catalog_service from the SKU's runs and newest images; Redo = a newest image is rejected or failed
-         * @enum {string}
-         */
-        SkuStatus: "Not run" | "Queued" | "Running" | "To review" | "Approved" | "Redo";
-        /** @enum {string} */
-        ImageStatus: "generating" | "to_review" | "approved" | "rejected" | "failed";
-        /** @enum {string} */
-        RunScope: "sample" | "batch" | "all" | "skus" | "regenerate";
-        /** @enum {string} */
-        RunStatus: "queued" | "running" | "succeeded" | "failed";
-        /** @description a library id (category, pose, model, background) published by agents_service */
-        LibraryId: string;
-        /** @description a library model/background id, or the id (UUID) of one of this session's uploads */
-        ChoiceId: string;
-        /** @example 2K */
-        Resolution: string;
-        /** @example 1:1 */
-        Ratio: string;
-        /** @description category id → pose ids, in order */
-        PosesByCategory: {
-            [key: string]: components["schemas"]["LibraryId"][];
-        };
-        /**
-         * @description One thing added to a step, as the chat shows it. `id` is chosen by the client for picks and by the server for
-         *     uploads and links. Fields by step — raw: `option` folder|csv|drive|website, `upload_ids`, `url`,
-         *     `image_count`; guidelines: doc|link, `upload_ids`, `url`; output: `resolution`, `ratio`; poses: pick|brief,
-         *     `poses`, `briefs`, and for a brief `custom_poses` (shots the library lacks, their ids also in `poses`) and
-         *     `pose_refs` (which shot each reference photo illustrates); models / backgrounds: `ids`, `randomize`, `text` (the brand's description of the model or
-         *     background, trimmed, at most 500 characters; an item needs ids or a text, else 422); details: note|brief|brief-link, `text`,
-         *     `upload_ids`, `url`. `reused`: brought back from memory.
-         */
-        InputItem: {
-            id: string;
-            option: string;
-            label: string;
-            detail?: string | null;
-            /** @default false */
-            reused?: boolean;
-            /**
-             * Format: uri
-             * @description a link the user gave (Drive
-             */
-            url?: string;
-            text?: string;
-            upload_ids?: string[];
-            image_count?: number | null;
-            ids?: components["schemas"]["ChoiceId"][];
-            /**
-             * @description spread the picked models/backgrounds across SKUs (needs 2 or more)
-             * @default false
-             */
-            randomize?: boolean;
-            resolution?: components["schemas"]["Resolution"];
-            ratio?: components["schemas"]["Ratio"];
-            poses?: components["schemas"]["PosesByCategory"];
-            /** @description category id → the brief or links written for it; Start puts it (links removed) on that product's SKUs as `shots_brief` */
-            briefs?: {
-                [key: string]: string;
-            };
-            /** @description this item's custom shots; a pose id in `poses` must be a library pose of that category or one of these (else 422) */
-            custom_poses?: components["schemas"]["CustomPose"][];
-            /** @description reference photo (a pose_ref upload of the session, from upload_ids) → the pose id it illustrates (a pose of this item's plan); 422 otherwise. Sent with that shot as a framing reference */
-            pose_refs?: {
-                [key: string]: components["schemas"]["LibraryId"];
-            };
-        };
-        StepInput: {
-            items: components["schemas"]["InputItem"][];
-            skipped: boolean;
-        };
-        StepInputPatch: {
-            items?: components["schemas"]["InputItem"][];
-            skipped?: boolean;
-        };
-        Inputs: {
-            raw: components["schemas"]["StepInput"];
-            guidelines: components["schemas"]["StepInput"];
-            output: components["schemas"]["StepInput"];
-            poses: components["schemas"]["StepInput"];
-            models: components["schemas"]["StepInput"];
-            backgrounds: components["schemas"]["StepInput"];
-            details: components["schemas"]["StepInput"];
-        };
-        /** @description one chat entry as the web client renders it; stored as sent (the server only needs `id` and `kind`) */
-        ChatMessage: {
-            id: string;
-            kind: string;
-        };
-        /** @description what processing read from the guidelines and details (agents_service); null until read */
-        Rules: {
-            background: string | null;
-            styling: string | null;
-            mood: string | null;
-            /** @description a reference image per metal finish */
-            metal_references: {
-                /** @example white gold */
-                finish: string;
-                url: components["schemas"]["SignedUrl"];
-            }[];
-            /** @description how-it's-worn drawings or photos */
-            worn_references: components["schemas"]["SignedUrl"][];
-            /** @description dimension rules in mm */
-            dimensions: string | null;
-            /** @description other do's and don'ts */
-            notes: string[];
-        };
-        /** @description the session's newest processing job */
-        Processing: {
-            /**
-             * @description idle: never started
-             * @enum {string}
-             */
-            status: "idle" | "queued" | "running" | "succeeded" | "failed";
-            /** Format: uuid */
-            process_id: string | null;
-            /** @description shown with a retry (send the input again); inputs stay */
-            error: string | null;
-        };
-        /** @description a file stored for this session (raw image, document, model/background/pose reference photo) */
-        Upload: {
+        StudioSession: {
             /** Format: uuid */
             id: string;
-            /** @enum {string} */
-            kind: "raw" | "guideline" | "brief" | "model" | "background" | "pose_ref";
-            name: string;
-            content_type: string;
-            size: number;
-            /** @description pose_ref only — the category it is for */
-            category: string | null;
-            url: components["schemas"]["SignedUrl"];
-            /** Format: date-time */
-            created_at: string;
-        };
-        CatalogSession: {
-            /** Format: uuid */
-            id: string;
-            /** @description names the memory saved from this session ("for Diwali drop, you used …") */
-            project_name: string;
-            stage: components["schemas"]["Stage"];
-            flow_position: components["schemas"]["FlowPosition"];
-            inputs: components["schemas"]["Inputs"];
-            messages: components["schemas"]["ChatMessage"][];
-            rules: components["schemas"]["Rules"] | null;
-            processing: components["schemas"]["Processing"];
-            /** @description oldest first */
-            uploads: components["schemas"]["Upload"][];
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        SessionCreate: {
-            /** @description default "Untitled project" */
-            project_name?: string;
-        };
-        SessionPatch: {
-            project_name?: string;
-            flow_position?: components["schemas"]["FlowPosition"];
-            /** @description replaces the chat (at most 2 MiB as JSON) */
-            messages?: components["schemas"]["ChatMessage"][];
-            inputs?: {
-                raw?: components["schemas"]["StepInputPatch"];
-                guidelines?: components["schemas"]["StepInputPatch"];
-                output?: components["schemas"]["StepInputPatch"];
-                poses?: components["schemas"]["StepInputPatch"];
-                models?: components["schemas"]["StepInputPatch"];
-                backgrounds?: components["schemas"]["StepInputPatch"];
-                details?: components["schemas"]["StepInputPatch"];
-            };
-        };
-        SessionSummary: {
-            /** Format: uuid */
-            id: string;
-            project_name: string;
-            stage: components["schemas"]["Stage"];
-            sku_count: number;
-            /** @description SKUs by derived status (running = Queued or Running; to_review = To review or Redo) and approved images */
-            counts: {
-                skus: number;
-                not_run: number;
-                running: number;
-                to_review: number;
-                approved: number;
-                images_approved: number;
-            };
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        SessionList: {
-            sessions: components["schemas"]["SessionSummary"][];
-        };
-        SessionDetail: {
-            session: components["schemas"]["CatalogSession"];
-            /** @description by category order */
-            skus: components["schemas"]["Sku"][];
-            /** @description every question, oldest first; answer null = open */
-            questions: components["schemas"]["Question"][];
-            /** @description newest first */
-            runs: components["schemas"]["Run"][];
-            /** @description every revision; the newest per (sku_id, shot) is the live one */
-            images: components["schemas"]["Image"][];
-        };
-        MemoryEntry: {
-            /** @enum {string} */
-            step: "guidelines" | "output" | "poses" | "models" | "backgrounds" | "details";
-            items: components["schemas"]["InputItem"][];
-            project_name: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        Memory: {
-            /** @description at most one per step */
-            memory: components["schemas"]["MemoryEntry"][];
-        };
-        /** @description a product (Ring, Sofa, Tops …) inside a family */
-        Category: {
-            id: components["schemas"]["LibraryId"];
-            /** @description a Library families[].id */
-            family: components["schemas"]["LibraryId"];
-            /** @example Rings */
-            name: string;
-            /** @description SKU codes are <prefix>-<nnn>, e.g. R-001 */
-            code_prefix: string;
-            /** @description false (furniture) = rendered without a model; its SKUs' brief model stays null and the Models step does not apply */
-            uses_model: boolean;
-            subcategories: {
-                id: components["schemas"]["LibraryId"];
-                name: string;
-                /**
-                 * @description what the subcategory is, one plain line (the info tip that tells Kurtis from Kurtas); absent = none
-                 * @example A shorter, casual tunic top, hip to knee length
-                 */
-                about?: string;
-                /** @description how it is styled or worn in the brief (garments' Styling rule, jewellery's Wear line); null = the product's usual */
-                styling?: string | null;
-            }[];
-            /** @description ORA default poses */
-            default_poses: components["schemas"]["LibraryId"][];
-            /** @description null when uses_model is false */
-            default_model: components["schemas"]["LibraryId"] | null;
-            /** @description the built-in model men's wear SKUs (attributes.wearer men) default to; absent or null = default_model */
-            default_men_model?: components["schemas"]["LibraryId"] | null;
-            /**
-             * @description whose wear every SKU of this product is (men's rings, rakhis: men), unless its own words say otherwise; a SKU moved here takes it. Absent or null = per SKU
-             * @enum {unknown}
-             */
-            wearer?: "women" | "men" | null;
-            default_background: components["schemas"]["LibraryId"];
-            /** @description renders per image at most for this product; absent = the Library max_attempts. Its worst-case quote is credits × images × this */
-            max_attempts?: number;
-            /** @description the resolution this product's briefs default to when the output step has none; absent = defaults.resolution */
-            default_resolution?: components["schemas"]["Resolution"];
-            pose_noun: components["schemas"]["PoseNoun"];
-        };
-        /** @description what the UI and chat call a pose for this product (furniture angle/angles, every other family shot/shots) */
-        PoseNoun: {
-            /** @example angle */
-            singular: string;
-            /** @example angles */
-            plural: string;
-        };
-        Family: {
-            /** @example jewellery */
-            id: components["schemas"]["LibraryId"];
-            /** @example Jewellery */
-            name: string;
-        };
-        Pose: {
-            id: components["schemas"]["LibraryId"];
-            category: components["schemas"]["LibraryId"];
-            /** @example Hand close-up */
-            name: string;
-            /** @description static web path of an example picture; null shows "No example yet" */
-            example_url: string | null;
-            /** @description zoom into part of a shared example picture */
-            frame?: {
-                zoom: number;
-                /** @example 62% 38% */
-                origin: string;
-            };
-        };
-        Model: {
-            id: components["schemas"]["LibraryId"];
-            name: string;
-            /** @description static web path of the head shot */
-            image_url: string | null;
-            /** @description static web path of a full-body view (front); absent = none */
-            full_body_url?: string | null;
-            /** @description e.g. no-necklace; checked against SKU categories */
-            category_tags: string[];
-            note?: string;
-            /**
-             * @description whose wear the model shows: a SKU whose attributes.wearer is set gets only models of that wearer (picks and defaults); absent = any
-             * @enum {unknown}
-             */
-            wearer?: "women" | "men";
-        };
-        Background: {
-            id: components["schemas"]["LibraryId"];
-            name: string;
-            /** @description a CSS colour or gradient */
-            swatch: string | null;
-            /** @description static web path of a preview */
-            image_url: string | null;
-            /** @description the family ids it suits; absent = every family */
-            families?: components["schemas"]["LibraryId"][];
-        };
-        ResolutionOption: {
-            id: components["schemas"]["Resolution"];
-            label: string;
-            credits_per_image: number;
-        };
-        RatioOption: {
-            id: components["schemas"]["Ratio"];
-            label: string;
-            /** @example Marketplaces */
-            use: string;
-            w: number;
-            h: number;
-        };
-        Favorites: {
-            models: components["schemas"]["LibraryId"][];
-            backgrounds: components["schemas"]["LibraryId"][];
-            poses: components["schemas"]["LibraryId"][];
-        };
-        Library: {
-            /** @description in run order: Jewellery → Furniture → Garments */
-            families: components["schemas"]["Family"][];
-            /** @description products in run order: family order, then product order (Rings → Earrings → … → Sofas → …) */
-            categories: components["schemas"]["Category"][];
-            poses: components["schemas"]["Pose"][];
-            models: components["schemas"]["Model"][];
-            backgrounds: components["schemas"]["Background"][];
-            resolutions: components["schemas"]["ResolutionOption"][];
-            ratios: components["schemas"]["RatioOption"][];
-            defaults: {
-                resolution: components["schemas"]["Resolution"];
-                ratio: components["schemas"]["Ratio"];
-            };
-            favorites: components["schemas"]["Favorites"];
-            /** @description renders per image at most (first try + regenerations after failed reviews): a quote is credits_per_image × images, the worst case that × max_attempts */
-            max_attempts: number;
-        };
-        Metrics: {
-            /** @description one per product with finished images */
-            products: components["schemas"]["ProductMetrics"][];
-        };
-        ProductMetrics: {
-            /** @description a Library categories[].id */
-            product: components["schemas"]["LibraryId"];
-            /** @description images that finished rendering (to_review, approved, rejected or failed), every revision */
-            images: number;
-            /** @description share of images whose first render passed review; null when none has the data */
-            first_pass_rate: number | null;
-            /** @description renders per image that rendered (one that failed before any render is left out); null when none has the data */
-            avg_tries: number | null;
-            approved: number;
-            /** @description images the brand rejected */
-            rejected: number;
-            /** @description regenerations the brand asked for with feedback */
-            feedback_count: number;
-            /** @description credits per image × renders, summed over every image, over the approved count; null when nothing is approved */
-            credits_per_approved: number | null;
-        };
-        Stats: {
-            sessions: number;
-            skus: number;
-            images_approved: number;
-            /** @description sum of every run's credits_quoted (nothing is charged) */
-            credits_quoted: number;
-        };
-        /** @description a processing job (cmd.catalog.process) or a run (cmd.catalog.run) */
-        Job: {
-            /** Format: uuid */
-            id: string;
-            /** @enum {string} */
-            kind: "process" | "run";
-            /** Format: uuid */
-            session_id: string;
-            project_name: string;
-            /** @description null for a processing job */
-            scope: components["schemas"]["RunScope"] | null;
-            status: components["schemas"]["RunStatus"];
-            error: string | null;
+            title: string;
             /** Format: date-time */
             created_at: string;
             /**
              * Format: date-time
-             * @description the time of its last event
+             * @description last rename or run
              */
             updated_at: string;
         };
-        /** @description the job's model calls (its evt.catalog.usage events, all of them), by model */
-        JobUsage: {
-            models: {
-                /** @enum {string} */
-                kind: "llm" | "image";
-                model: string;
-                calls: number;
-                input_tokens: number;
-                output_tokens: number;
-                cache_read_tokens: number;
-                /** @description null when no call of it is priced */
-                cost_usd: number | null;
-                credits: number | null;
-                /** @description summed over its calls */
-                duration_ms: number;
-            }[];
-            llm_calls: number;
-            image_calls: number;
-            input_tokens: number;
-            output_tokens: number;
-            /** @description known LLM cost in USD; null when none is known */
-            cost_usd: number | null;
-            /** @description image credits (quote units, not charged); null with no image call */
-            credits: number | null;
+        SessionList: {
+            sessions: components["schemas"]["StudioSession"][];
         };
-        JobList: {
-            jobs: components["schemas"]["Job"][];
+        SessionCreate: {
+            /** @description trimmed; empty or missing = "Untitled" */
+            title?: string;
         };
-        JobDetail: {
-            job: components["schemas"]["Job"];
-            usage: components["schemas"]["JobUsage"];
-            /** @description its events (work_id = the job), oldest first, at most 2000; mapped as the session's event page maps them */
-            events: components["schemas"]["SessionEvent"][];
+        SessionPatch: {
+            /** @description trimmed; blank = 422 */
+            title: string;
         };
-        Estimate: {
-            images: number;
-            resolution: components["schemas"]["Resolution"];
-            credits_per_image: number;
-            credits: number;
+        /** @description an input accepts only an output of the same type (M0: Text, Image) */
+        PortType: string;
+        Port: {
+            name: string;
+            type: components["schemas"]["PortType"];
         };
-        RawUpload: {
-            files: string[];
-            /**
-             * @description csv: exactly one CSV/TSV/TXT file
-             * @default files
-             * @enum {string}
-             */
-            kind?: "folder" | "files" | "csv";
-            /** @description the item label, e.g. the folder name */
+        ParamValue: string | number | boolean;
+        /**
+         * @description One form field. `int`/`float`: `min`/`max` bound the value; `string`/`text` (multi-line): `min`/`max` bound
+         *     the length; `enum`: one of `enum`; `bool`: a switch.
+         */
+        ParamSchema: {
+            name: string;
+            /** @enum {string} */
+            type: "int" | "float" | "bool" | "string" | "text" | "enum";
+            /** @description absent = the name */
             label?: string;
-            /** @description "What are we shooting?": family ids to sort these images into (repeat the part per id); absent or empty = let the agent decide. 422 for an unknown id */
-            families?: components["schemas"]["LibraryId"][];
-            /** @description each file's path inside the picked folder (webkitRelativePath, e.g. "Rings/R12/front.jpg"), one part per file in the same order as files; when an upload spans several sub-folders each sub-folder is one product. Optional; a count that differs from files, an absolute path or a ".." segment is 422 */
-            paths?: string[];
+            default: components["schemas"]["ParamValue"];
+            min?: number;
+            max?: number;
+            enum?: string[];
+            help?: string;
         };
-        RawLink: {
-            /** @enum {string} */
-            kind: "drive" | "website" | "csv";
-            /**
-             * Format: uri
-             * @description drive, website: an http(s) link ("That doesn't look like a link." = 422)
-             */
-            url?: string;
-            /** @description csv: the sheet as text */
-            csv_text?: string;
-            /** @description as RawUpload families */
-            families?: components["schemas"]["LibraryId"][];
+        NodeSchema: {
+            /** @example echo/echo */
+            kind: string;
+            title: string;
+            /** @description null for a core node (prompt */
+            family: string | null;
+            help?: string;
+            /** @description in form order */
+            params: components["schemas"]["ParamSchema"][];
+            inputs: components["schemas"]["Port"][];
+            outputs: components["schemas"]["Port"][];
         };
-        RawAccepted: {
-            session: components["schemas"]["CatalogSession"];
-            item: components["schemas"]["InputItem"];
-            /** @description files stored, or CSV rows with an image_url; null for links (known after fetching) */
-            image_count: number | null;
-            /** @description distinct SKUs in the CSV; null otherwise */
-            expected_skus: number | null;
-            /** Format: uuid */
-            process_id: string;
-        };
-        GuidelineUpload: {
-            /** Format: binary */
-            file: string;
-            /**
-             * @default guidelines
-             * @enum {string}
-             */
-            target?: "guidelines" | "details";
-        };
-        GuidelineLink: {
-            /** Format: uri */
-            url: string;
-            /**
-             * @default guidelines
-             * @enum {string}
-             */
-            target?: "guidelines" | "details";
-        };
-        InputAdded: {
-            session: components["schemas"]["CatalogSession"];
-            item: components["schemas"]["InputItem"];
-        };
-        PhotoUpload: {
-            /** Format: binary */
-            file: string;
-            /** @enum {string} */
-            kind: "model" | "background" | "pose_ref";
-            /** @description shown in pickers; default the file name */
-            name?: string;
-            /** @description pose_ref: the category id it is for */
-            category?: string;
-        };
-        PoseSuggestRequest: {
-            briefs: {
-                category: components["schemas"]["LibraryId"];
-                /** @description a brief and/or links */
-                text?: string;
-                /** @description this session's pose_ref uploads */
-                upload_ids?: string[];
-                /**
-                 * @description the text is the brand's shot list ("Describe your shots"): poses are exactly the shots it asks for, in order (a bare count is filled with the category's defaults), library poses where one matches closely, else custom shots
-                 * @default false
-                 */
-                exact?: boolean;
-            }[];
-        };
-        /** @description a session shot the brand's brief asked for that the pose library lacks; never the anchor; no example picture */
-        CustomPose: {
-            /** @example custom-ring-on-a-swing */
-            id: string;
-            category: components["schemas"]["LibraryId"];
-            /** @example On a swing */
-            name: string;
-            prompt: string;
-            on_model: boolean;
-        };
-        PoseSuggestion: {
-            /** @description library pose ids, then the custom shots' ids */
-            poses: components["schemas"]["PosesByCategory"];
-            custom_poses: components["schemas"]["CustomPose"][];
-            /** @description upload id (from the request) → the pose id that reference photo illustrates */
-            refs: {
-                [key: string]: components["schemas"]["LibraryId"];
+        GraphNode: {
+            kind: string;
+            /** @description overrides of the node schema defaults */
+            params?: {
+                [key: string]: components["schemas"]["ParamValue"];
             };
-            /** @example Got it — I'll suggest poses from these. */
-            reply: string;
-        };
-        /** @description what a SKU renders with; null fields are filled by Start processing, except model for a product whose uses_model is false (stays null) and a model or background given only as a description (model_description / background_description) */
-        Brief: {
-            model: components["schemas"]["ChoiceId"] | null;
-            background: components["schemas"]["ChoiceId"] | null;
-            poses: components["schemas"]["LibraryId"][];
-            resolution: components["schemas"]["Resolution"] | null;
-            /** @description the default ratio of every pose without its own in pose_ratios */
-            ratio: components["schemas"]["Ratio"] | null;
-            pose_ratios: components["schemas"]["PoseRatios"];
-            pose_notes: components["schemas"]["PoseNotes"];
-            /** @description the brand's description of the model (the models step text, or set on the SKU); with model null it is the model (no reference photo), with a model it adds only what is not identity. Absent or null = none */
-            model_description?: string | null;
-            /** @description the brand's description of the background (the backgrounds step text, or set on the SKU); with background null it is the background (no reference image), with one it is added and wins where they differ. Absent or null = none */
-            background_description?: string | null;
-            /** @description the definitions of the custom shots this SKU has used (copied at Start and SKU edits), so its shots still render after the poses step changes */
-            custom_poses?: components["schemas"]["CustomPose"][];
-            /** @description the poses step's brief for this product (links removed, one line), set by Start; a library-only poses choice clears it. Absent or null = none */
-            shots_brief?: string | null;
+            /** @description input port → `<node id>.<output>` */
+            in?: {
+                [key: string]: string;
+            };
         };
         /**
-         * @description pose id → that pose's ratio (a Library ratios[].id), overriding the brief ratio; {} = none
+         * @description A runnable graph. A form is derived from it: for every node in `nodes`, the params of
+         *     `node_schemas[node.kind]`, each addressed as `<node id>.<param name>` in `RunRequest.inputs`, its starting value
+         *     `node.params[name]` else the schema `default`.
+         */
+        Workflow: {
+            /** @example echo */
+            id: string;
+            title: string;
+            family: string;
+            /** @description the runner env that executes it */
+            env: string;
+            /** @description node id → node */
+            nodes: {
+                [key: string]: components["schemas"]["GraphNode"];
+            };
+            /** @description kind → schema, for every kind in nodes */
+            node_schemas: {
+                [key: string]: components["schemas"]["NodeSchema"];
+            };
+        };
+        WorkflowList: {
+            workflows: components["schemas"]["Workflow"][];
+        };
+        /** @enum {string} */
+        RunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        /**
+         * @description `<node id>.<param name>` → value; only the params to change
          * @example {
-         *       "hand-closeup": "4:5"
+         *       "prompt.text": "a red fox",
+         *       "echo.steps": 20
          *     }
          */
-        PoseRatios: {
-            [key: string]: components["schemas"]["Ratio"];
+        RunInputs: {
+            [key: string]: components["schemas"]["ParamValue"];
         };
-        /**
-         * @description pose id → the brand's free-text instruction for that pose (not blank), added after the library pose instruction in the render prompt; {} = none
-         * @example {
-         *       "hand-closeup": "left hand, ring on the index finger"
-         *     }
-         */
-        PoseNotes: {
-            [key: string]: string;
+        RunRequest: {
+            workflow_id: string;
+            /** @description missing = {} */
+            inputs?: components["schemas"]["RunInputs"];
         };
-        /**
-         * @description what processing read from the raw images (drawer "details from pre-processing"). Common: description, source
-         *     (+ setting); the rest by the product's family (fields of another family are absent) — jewellery: counts, motifs,
-         *     finish, size_mm, material, kind; garments: pieces, fabric, colour, print, work, details, kind; furniture: material, colour,
-         *     finish, dimensions_cm, style, kind
-         */
-        Attributes: {
-            /** @description jewellery: e.g. {"stones": 4, "charms": 2} */
-            counts?: {
-                [key: string]: number;
-            };
-            /**
-             * @example [
-             *       "horse",
-             *       "star"
-             *     ]
-             */
-            motifs?: string[];
-            /** @description jewellery: structure and finish note (density, texture, metal); furniture: surface finish */
-            finish?: string | null;
-            size_mm?: number | null;
-            /** @description jewellery */
-            material?: string | null;
-            /**
-             * @description garments: the pieces in the set
-             * @example [
-             *       "kurta",
-             *       "pant",
-             *       "dupatta"
-             *     ]
-             */
-            pieces?: string[];
-            /**
-             * @description garments: the key construction details the photos show (neckline or collar, sleeve and hem length, slits, closures, pockets), each checked by the details review goal
-             * @example [
-             *       "mandarin collar",
-             *       "4-button placket",
-             *       "three-quarter sleeves",
-             *       "side slits"
-             *     ]
-             */
-            details?: string[];
-            /** @description garments, jewellery and furniture: what vision read the product as from its photos: subcategory (an id of a product of its family, null = none fits), category (its product, null with it), label (2–4 words, e.g. bomber jacket, diamond ring, sofa cum bed), sure. Kept so a later recheck asks the kind question again; never shown */
-            kind?: {
-                category: string | null;
-                subcategory: string | null;
-                label: string;
-                sure: boolean;
-            };
-            fabric?: string | null;
-            /** @description garments */
-            colour?: string | null;
-            /** @description garments: print or pattern */
-            print?: string | null;
-            /** @description garments: embroidery / embellishment */
-            work?: string | null;
-            /**
-             * @description furniture
-             * @example W 220 × D 90 × H 85
-             */
-            dimensions_cm?: string | null;
-            /** @description furniture */
-            style?: string | null;
-            description: string | null;
-            /** @example Dimension image + A+ text */
-            source: string | null;
-            /**
-             * @description how the raw photos were shot (optional)
-             * @enum {unknown}
-             */
-            setting?: "studio" | "lifestyle" | null;
-            /** @description garments and jewellery (optional): raw photo key → the view it shows; null = unknown */
-            sides?: {
-                [key: string]: "front" | "back" | "side" | "hero" | "angle" | "flat" | "close-up" | "pair" | "hanging" | "model" | "mood" | null;
-            };
-            /**
-             * @description garments and jewellery (optional): whose wear it is, from the product (men's rings, rakhis), the words of its name, CSV category or file names, else vision on garments; null = unknown or unisex. A men's SKU gets men's models; set in the drawer with SkuPatch.wearer
-             * @enum {unknown}
-             */
-            wearer?: "women" | "men" | null;
+        RunProgress: {
+            /** @description the node id that is stepping */
+            node: string;
+            step: number;
+            of: number;
         };
-        Sku: {
-            /** Format: uuid */
-            id: string;
-            /** @example R-001 */
-            code: string;
-            name: string;
-            category: components["schemas"]["LibraryId"];
-            subcategory: string | null;
-            /** @description logical batch inside the category (style */
-            group_key: string | null;
-            /** @example Statement & solitaires */
-            group_label: string | null;
-            /**
-             * Format: uuid
-             * @description the SKU this one is a colour variant of
-             */
-            variant_of: string | null;
-            attributes: components["schemas"]["Attributes"];
-            /** @description the brand confirmed the attributes read (counts */
-            confirmed: boolean;
-            brief: components["schemas"]["Brief"];
-            status: components["schemas"]["SkuStatus"];
-            /** @description the raw photos grouped into this SKU */
-            raw_urls: components["schemas"]["SignedUrl"][];
-            /**
-             * @description the view each raw photo shows, in raw_urls order (attributes.sides); null = untagged
-             * @example [
-             *       "hero",
-             *       "side",
-             *       "model",
-             *       null
-             *     ]
-             */
-            raw_views: (string | null)[];
-            /** Format: date-time */
-            updated_at: string;
-        };
-        SkuList: {
-            skus: components["schemas"]["Sku"][];
-        };
-        SkuPatch: {
-            model?: components["schemas"]["ChoiceId"];
-            /** @description a built-in background must suit the (target) product's family (Library backgrounds[].families), else 422 */
-            background?: components["schemas"]["ChoiceId"];
-            poses?: components["schemas"]["LibraryId"][];
-            /** @description replaces the brief's map; a ratio not in the Library is a 422 */
-            pose_ratios?: components["schemas"]["PoseRatios"];
-            /** @description replaces the brief's map */
-            pose_notes?: components["schemas"]["PoseNotes"];
-            /** @description the SKU's own model description, trimmed (over the models step text); null or blank = none for this SKU */
-            model_description?: string | null;
-            /** @description the SKU's own background description, trimmed (over the backgrounds step text); null or blank = none for this SKU */
-            background_description?: string | null;
-            /** @description move the SKU to this product (a Library categories[].id); its poses become the session's Poses-step choice for that product, else its defaults, unless poses is sent too; its group becomes the product, and a move to another family drops the old family's attributes and unconfirms it */
-            category?: components["schemas"]["LibraryId"];
-            /** @description a subcategory id of the SKU's (target, when category is sent) product (Library categories[].subcategories[].id), else 422; null clears it. A category move without it clears the subcategory. It is set on this SKU only, never with apply_to_category */
-            subcategory?: string | null;
-            /**
-             * @description sets the SKU's attributes.wearer (null clears it); a built-in model of the other wearer on its brief becomes the product's default for the new wearer. Set on this SKU only, never with apply_to_category
-             * @enum {unknown}
-             */
-            wearer?: "women" | "men" | null;
-            confirmed?: boolean;
-            /**
-             * @description apply the same fields to every SKU of the SKU's (current) category that is not Approved
-             * @default false
-             */
-            apply_to_category?: boolean;
-        };
-        /** @description a check id from the registry catalogue (catalog_checks), e.g. guidelines_vs_images */
-        Check: string;
-        Question: {
-            /** Format: uuid */
-            id: string;
-            check: components["schemas"]["Check"];
-            text: string;
-            /**
-             * @example [
-             *       "Follow the brand guidelines",
-             *       "Keep them lifestyle"
-             *     ]
-             */
-            options: string[];
-            /** @description Start processing is refused (409) while a blocking question is open */
-            blocking: boolean;
-            /**
-             * @description the chosen option index; null = open
-             * @enum {integer|null}
-             */
-            answer: 0 | 1 | null;
-            /** Format: date-time */
-            answered_at: string | null;
-            /** @description the SKUs it is about */
-            sku_ids: string[];
-            /** Format: date-time */
-            created_at: string;
-        };
-        AnswerRequest: {
-            /** @enum {integer} */
-            option: 0 | 1;
-        };
-        Answered: {
-            question: components["schemas"]["Question"];
-            /** @description the SKUs the answer changed (may be empty) */
-            skus: components["schemas"]["Sku"][];
-        };
-        Started: {
-            session: components["schemas"]["CatalogSession"];
-            skus: components["schemas"]["Sku"][];
-            summary: {
-                total: number;
-                by_category: {
-                    category: components["schemas"]["LibraryId"];
-                    count: number;
-                    first_code: string;
-                    last_code: string;
-                }[];
-                /**
-                 * Format: uuid
-                 * @description the SKU the first sample runs
-                 */
-                sample_sku_id: string | null;
-            };
-        };
-        /** @description the vision reviewer's verdict on an image */
-        Review: {
-            passed: boolean;
-            summary: string;
-            goals?: {
-                /**
-                 * @description by family: jewellery count, motif, finish, placement, background, identity; garments pieces, colour, print, drape, details, background, identity; furniture shape, material, colour, background, extras
-                 * @enum {string}
-                 */
-                goal: "count" | "motif" | "finish" | "placement" | "background" | "identity" | "pieces" | "colour" | "print" | "drape" | "details" | "shape" | "material" | "extras";
-                passed: boolean;
-                note?: string;
-            }[];
-        };
-        Image: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            sku_id: string;
-            /** Format: uuid */
-            run_id: string;
-            shot: components["schemas"]["LibraryId"];
-            /** @description 1 for the first render of a SKU × shot; +1 per regeneration */
-            revision: number;
-            status: components["schemas"]["ImageStatus"];
-            /** @description null while generating or when failed */
-            url: components["schemas"]["SignedUrl"] | null;
-            /** @description the feedback this revision was regenerated with */
-            feedback: string | null;
-            review: components["schemas"]["Review"] | null;
-            /** @description every render tried for this revision, in order (the best one is also url); empty while generating, when failed before a render, or for images rendered before tries were kept */
-            attempts: components["schemas"]["ImageAttempt"][];
-            error: string | null;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        /** @description one render try of an image */
-        ImageAttempt: {
-            /** @description 1 = the first try */
+        RunOutput: {
             index: number;
+            /** @description object key, u/<owner_id>/runs/<run_id>/<index>.<ext> */
+            key: string;
+            /** @enum {string} */
+            kind: "image" | "video";
             url: components["schemas"]["SignedUrl"];
-            /** @description the reviewer's verdict on this try; null when not reviewed */
-            review: components["schemas"]["Review"] | null;
-            /** @description the try kept as the image (exactly one per image) */
-            best: boolean;
-            /** @description the brand chose this try (POST /images/{image_id}/pick); absent or false = the reviewer's pick */
-            picked?: boolean;
+            width: number | null;
+            height: number | null;
         };
         Run: {
             /** Format: uuid */
             id: string;
-            scope: components["schemas"]["RunScope"];
-            category: string | null;
-            group_key: string | null;
-            sku_ids: string[];
-            /** @description the images this run renders (a stopped run: the ones it finished) */
-            image_ids: string[];
-            /** @description images × credits per image at the resolution; not charged */
-            credits_quoted: number;
-            feedback: string | null;
+            /** Format: uuid */
+            session_id: string;
+            workflow_id: string;
+            /** @description as requested */
+            inputs: components["schemas"]["RunInputs"];
             status: components["schemas"]["RunStatus"];
+            /** @description the last progress event; null before the first */
+            progress: components["schemas"]["RunProgress"] | null;
+            /** @description set when failed */
             error: string | null;
+            /** @description by index */
+            outputs: components["schemas"]["RunOutput"][];
+            /** @description the host it was sent to; null when none was found */
+            host: string | null;
             /** Format: date-time */
             created_at: string;
+            /**
+             * Format: date-time
+             * @description the runner reported running
+             */
+            started_at: string | null;
             /** Format: date-time */
             finished_at: string | null;
         };
-        RunRequest: {
-            /** @enum {string} */
-            scope: "sample" | "batch" | "all" | "skus";
-            /** @description sample and batch: required */
-            category?: components["schemas"]["LibraryId"];
-            /** @description batch: required */
-            group_key?: string;
-            /** @description skus: required */
-            sku_ids?: string[];
-            /**
-             * @description only the brief poses with no live image (after adding poses)
-             * @default false
-             */
-            missing_only?: boolean;
-        };
-        RegenerateRequest: {
-            image_ids: string[];
-            feedback: string;
-            /** @description render the new revisions at this ratio (a Library ratios[].id, else 422); absent = each shot's brief ratio */
-            ratio?: components["schemas"]["Ratio"];
-        };
-        RunAccepted: {
-            run: components["schemas"]["Run"];
-            /** @description the new generating images */
-            images: components["schemas"]["Image"][];
-            /** @description the SKUs of the run */
-            skus: components["schemas"]["Sku"][];
-        };
-        RunStopped: {
-            run: components["schemas"]["Run"];
-            /** @description the SKUs of the run, as they are now */
-            skus: components["schemas"]["Sku"][];
-            /** @description the run's generating images, now deleted */
-            removed_image_ids: string[];
-        };
-        ImagesStop: {
-            image_ids: string[];
-        };
-        ImagesStopped: {
-            /** @description the stopped images' SKUs, as they are now */
-            skus: components["schemas"]["Sku"][];
-            /** @description the runs it changed (failed when stopped whole) */
+        RunList: {
             runs: components["schemas"]["Run"][];
-            /** @description the images it stopped, now deleted */
-            removed_image_ids: string[];
-        };
-        ImagePick: {
-            /** @description an attempts[].index of the image */
-            attempt: number;
-        };
-        ImageReview: {
-            /** @enum {string} */
-            status: "approved" | "rejected";
-        };
-        Reviewed: {
-            image: components["schemas"]["Image"];
-            sku: components["schemas"]["Sku"];
-        };
-        ApproveRequest: {
-            image_ids?: string[];
-            sku_ids?: string[];
-            category?: components["schemas"]["LibraryId"];
-        };
-        Approved: {
-            /** @description images approved by this call */
-            approved: number;
-            images: components["schemas"]["Image"][];
-            skus: components["schemas"]["Sku"][];
-        };
-        /** @description what a Next step button does — `run` is a `POST .../runs` body, `download` a `POST .../download` */
-        NextAction: {
-            /** @enum {string} */
-            type: "run" | "download";
-            /** @enum {string} */
-            scope?: "sample" | "batch" | "all";
-            category?: components["schemas"]["LibraryId"];
-            group_key?: string;
-        };
-        NextOption: {
-            /** @example Run sample · Rings */
-            label: string;
-            action: components["schemas"]["NextAction"];
-            /** @description quote for a run; null for download */
-            credits: number | null;
-            /** @description the worst case of `credits`: each image rendered its product's max_attempts times; null for download */
-            worst_credits: number | null;
-        };
-        NextStep: {
-            /** @example Next step · Rings */
-            heading: string;
-            /**
-             * @description in_progress: something generating; review: everything run, images waiting; done: all approved
-             * @enum {string}
-             */
-            state: "next" | "in_progress" | "review" | "done";
-            /** @description starts with the images waiting for review, e.g. "R-001 is ready on the right — approve, reject or write feedback there." */
-            line: string;
-            /** @description Option 1 then Option 2; never approvals */
-            options: components["schemas"]["NextOption"][];
-        };
-        TypedRequest: {
-            text: string;
-            /** @description images selected as tags in the composer (feedback target) */
-            image_ids?: string[];
-            /**
-             * @description the credits of the quote the client showed (`update.quote.credits`). A request that would queue a run or a
-             *     regeneration only queues it when this matches its quote; otherwise nothing changes and the answer carries
-             *     `update.quote` instead of `update.run` (credits shown before every run and regenerate).
-             */
-            confirm_credits?: number | null;
         };
         /**
-         * @description reply: understood, but nothing to do (the reply says why, e.g. "Nothing in Necklaces is waiting for
-         *     approval."); not_understood: the "What I can do" guide, nothing spent; open_pose_editor: the client opens the
-         *     editor with `update.pose_editor`.
-         * @enum {string}
+         * @description One stored event of the session. `status`: the run's new status (`queued` and studio-decided ones included);
+         *     `progress`: a step; `output`: an output stored, its key turned into a signed `url`. After a terminal status,
+         *     `GET /v1/studio/runs/{run_id}` has the whole run.
          */
-        TypedAction: "run" | "approve" | "add_pose" | "remove_pose" | "set_poses" | "open_pose_editor" | "download" | "feedback" | "reply" | "not_understood";
-        TypedResponse: {
-            action: components["schemas"]["TypedAction"];
-            reply: string;
-            /** @description the slices that changed (absent = unchanged) */
-            update: {
-                run?: components["schemas"]["Run"];
-                images?: components["schemas"]["Image"][];
-                skus?: components["schemas"]["Sku"][];
-                download?: components["schemas"]["Download"];
-                pose_editor?: {
-                    category: components["schemas"]["LibraryId"];
-                    /** @description the current poses */
-                    poses: components["schemas"]["LibraryId"][];
-                };
-                /** @description not done yet: what the action would render and cost; send the request again with `confirm_credits` to go ahead */
-                quote?: {
-                    images: number;
-                    credits: number;
-                    /** @description every review fails: each image rendered its product's max_attempts times */
-                    worst_credits: number;
-                };
-            };
-        };
-        /** @enum {string} */
-        EventType: "status" | "log" | "step" | "question" | "skus" | "image" | "run" | "usage";
-        /**
-         * @description One stored `evt.catalog.<session_id>.<type>` message. `data` is that message's `data`
-         *     (contracts/messages/evt.catalog.<type>.schema.json) except object keys, which catalog_service turns into signed
-         *     `*_url` fields and ids: question → the `Question`, skus → `{skus: [Sku]}`, image → the `Image`, run → the
-         *     `Run` plus `sku_id`/`line`; status, log, step, usage as published.
-         */
-        SessionEvent: {
+        SessionEvent: components["schemas"]["StatusEvent"] | components["schemas"]["ProgressEvent"] | components["schemas"]["OutputEvent"];
+        StatusEvent: {
             /** @description per-session cursor */
             seq: number;
-            type: components["schemas"]["EventType"];
             /**
-             * Format: uuid
-             * @description the process or run id that produced it
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
              */
-            work_id: string | null;
+            type: "status";
+            /** Format: uuid */
+            run_id: string;
             /** Format: date-time */
             ts: string;
-            data: Record<string, never>;
+            data: {
+                status: components["schemas"]["RunStatus"];
+                error: string | null;
+                host: string | null;
+            };
+        };
+        ProgressEvent: {
+            seq: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "progress";
+            /** Format: uuid */
+            run_id: string;
+            /** Format: date-time */
+            ts: string;
+            data: components["schemas"]["RunProgress"];
+        };
+        OutputEvent: {
+            seq: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "output";
+            /** Format: uuid */
+            run_id: string;
+            /** Format: date-time */
+            ts: string;
+            data: components["schemas"]["RunOutput"];
         };
         EventPage: {
             events: components["schemas"]["SessionEvent"][];
             /** @description next `since` (unchanged when the page is empty) */
             last_seq: number;
         };
-        Download: {
-            url: components["schemas"]["SignedUrl"];
-            /** @example catalog_approved.zip */
-            file_name: string;
-            skus: number;
-            images: number;
-        };
-        SignupRequest: {
+        Host: {
+            host: string;
+            env: string;
+            /** @enum {string} */
+            state: "idle" | "busy" | "offline";
             /**
-             * Format: email
-             * @description trimmed and lower-cased; a plain address (no display name)
+             * Format: date-time
+             * @description the runner's last refresh
              */
-            email: string;
-            /** @description common passwords are refused (422 "password is too common") */
-            password: string;
-            /** @description trimmed; must not be blank */
-            name: string;
+            updated_at: string;
+        };
+        HostList: {
+            hosts: components["schemas"]["Host"][];
         };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
@@ -2003,7 +698,7 @@ export interface components {
             }[];
         };
         /**
-         * @description user: Catalog Agent; dev: also the dev Jobs view (web DEV_VIEWS); admin: user management, only the ADMIN_EMAIL account
+         * @description user: the studio; dev: also developer views; admin: user management, only the ADMIN_EMAIL account
          * @enum {string}
          */
         Role: "user" | "dev" | "admin";
@@ -2048,7 +743,7 @@ export interface components {
             /** Format: uuid */
             client_id: string;
             client: string;
-            /** @description first 12 characters of the key ("ora_" + 8), for recognising it */
+            /** @description first 12 characters of the key ("helm_" + 7), for recognising it */
             prefix: string;
             scopes: string[];
             /** Format: date-time */
@@ -2106,34 +801,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description a POST without Content-Length */
-        LengthRequired: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
-        /** @description request body or a file too large */
-        TooLarge: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
-        /** @description unparseable multipart body */
-        BadRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["Error"];
-            };
-        };
-        /** @description auth or agents_service unreachable or too slow, or the registry not published yet; retryable */
+        /** @description auth_service, NATS or the database unreachable or too slow; retryable */
         Unavailable: {
             headers: {
                 [name: string]: unknown;
@@ -2218,18 +886,10 @@ export interface components {
     parameters: {
         /** @description session UUID (malformed = 404) */
         SessionId: string;
-        /** @description question UUID (malformed = 404) */
-        QuestionId: string;
-        /** @description image UUID (malformed = 404) */
-        ImageId: string;
-        /** @description SKU UUID (malformed = 404) */
-        SkuId: string;
         /** @description run UUID (malformed = 404) */
         RunId: string;
-        /** @description unknown kind = 404 */
-        FavoriteKind: "models" | "backgrounds" | "poses";
-        /** @description a library id of that kind */
-        LibraryItemId: string;
+        /** @description workflow id (unknown or malformed = 404) */
+        WorkflowId: string;
         /** @description user UUID (malformed = 404) */
         UserId: string;
     };
@@ -2239,7 +899,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    catalogListSessions: {
+    studioListSessions: {
         parameters: {
             query?: never;
             header?: never;
@@ -2261,7 +921,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogCreateSession: {
+    studioCreateSession: {
         parameters: {
             query?: never;
             header?: never;
@@ -2280,7 +940,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionDetail"];
+                    "application/json": components["schemas"]["StudioSession"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2288,7 +948,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogGetSession: {
+    studioGetSession: {
         parameters: {
             query?: never;
             header?: never;
@@ -2306,7 +966,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionDetail"];
+                    "application/json": components["schemas"]["StudioSession"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2314,7 +974,32 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogPatchSession: {
+    studioDeleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description session UUID (malformed = 404) */
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRenameSession: {
         parameters: {
             query?: never;
             header?: never;
@@ -2330,13 +1015,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description the updated session */
+            /** @description the renamed session */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CatalogSession"];
+                    "application/json": components["schemas"]["StudioSession"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2345,7 +1030,55 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogRefreshSession: {
+    studioListWorkflows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description workflows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description workflow id (unknown or malformed = 404) */
+                workflow_id: components["parameters"]["WorkflowId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the workflow */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListRuns: {
         parameters: {
             query?: never;
             header?: never;
@@ -2357,270 +1090,21 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description the session */
+            /** @description runs */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionDetail"];
+                    "application/json": components["schemas"]["RunList"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogResetSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the session */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionDetail"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogGetMemory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description memory */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Memory"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogGetStats: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description totals */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Stats"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogGetMetrics: {
-        parameters: {
-            query?: {
-                /** @description only this session's images */
-                session_id?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description metrics by product */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Metrics"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            422: components["responses"]["Unprocessable"];
-        };
-    };
-    catalogListJobs: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the jobs */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobList"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    catalogGetJob: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the job */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobDetail"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-        };
-    };
-    catalogGetLibrary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the library */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Library"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogAddFavorite: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description unknown kind = 404 */
-                kind: components["parameters"]["FavoriteKind"];
-                /** @description a library id of that kind */
-                item_id: components["parameters"]["LibraryItemId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the caller's favorites */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Favorites"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            /** @description unknown kind, or no such item in the library */
-            404: components["responses"]["NotFound"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogRemoveFavorite: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description unknown kind = 404 */
-                kind: components["parameters"]["FavoriteKind"];
-                /** @description a library id of that kind */
-                item_id: components["parameters"]["LibraryItemId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the caller's favorites */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Favorites"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            /** @description unknown kind */
-            404: components["responses"]["NotFound"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogGetEstimate: {
-        parameters: {
-            query: {
-                images: number;
-                /** @description a library resolution id */
-                resolution?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the quote */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Estimate"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogAddRaw: {
+    studioCreateRun: {
         parameters: {
             query?: never;
             header?: never;
@@ -2632,137 +1116,88 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["RawUpload"];
-                "application/json": components["schemas"]["RawLink"];
+                "application/json": components["schemas"]["RunRequest"];
             };
         };
         responses: {
-            /** @description stored; processing queued */
+            /** @description the run: queued, or failed at once */
             202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RawAccepted"];
+                    "application/json": components["schemas"]["Run"];
                 };
             };
-            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            411: components["responses"]["LengthRequired"];
-            413: components["responses"]["TooLarge"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogAddGuideline: {
+    studioGetRun: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
+                /** @description run UUID (malformed = 404) */
+                run_id: components["parameters"]["RunId"];
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["GuidelineUpload"];
-                "application/json": components["schemas"]["GuidelineLink"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description stored */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InputAdded"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            411: components["responses"]["LengthRequired"];
-            413: components["responses"]["TooLarge"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogUpload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["PhotoUpload"];
-            };
-        };
-        responses: {
-            /** @description stored */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Upload"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            411: components["responses"]["LengthRequired"];
-            413: components["responses"]["TooLarge"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogSuggestPoses: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PoseSuggestRequest"];
-            };
-        };
-        responses: {
-            /** @description suggestions */
+            /** @description the run */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PoseSuggestion"];
+                    "application/json": components["schemas"]["Run"];
                 };
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
-            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogSessionEvents: {
+    studioCancelRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description run UUID (malformed = 404) */
+                run_id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description cancel requested */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioSessionEvents: {
         parameters: {
             query?: {
                 /** @description cursor — the last seq the client has */
                 since?: number;
             };
-            header?: never;
+            header?: {
+                /** @description SSE resume: the last `id:` received (an integer) */
+                "Last-Event-ID"?: string;
+            };
             path: {
                 /** @description session UUID (malformed = 404) */
                 session_id: components["parameters"]["SessionId"];
@@ -2787,402 +1222,29 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogAnswerQuestion: {
+    studioListHosts: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                /** @description question UUID (malformed = 404) */
-                question_id: components["parameters"]["QuestionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnswerRequest"];
-            };
-        };
-        responses: {
-            /** @description the answered question and the SKUs it changed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Answered"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogStart: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description the started session */
+            /** @description hosts */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Started"];
+                    "application/json": components["schemas"]["HostList"];
                 };
             };
             401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
             503: components["responses"]["Unavailable"];
         };
     };
-    catalogNextStep: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the card */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NextStep"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogCreateRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunRequest"];
-            };
-        };
-        responses: {
-            /** @description queued */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunAccepted"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogStopRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-                /** @description run UUID (malformed = 404) */
-                run_id: components["parameters"]["RunId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description stopped */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunStopped"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogStopImages: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImagesStop"];
-            };
-        };
-        responses: {
-            /** @description stopped */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImagesStopped"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogRegenerate: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegenerateRequest"];
-            };
-        };
-        responses: {
-            /** @description queued */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunAccepted"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogReviewImage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description image UUID (malformed = 404) */
-                image_id: components["parameters"]["ImageId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImageReview"];
-            };
-        };
-        responses: {
-            /** @description the image and its SKU */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Reviewed"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogPickImageTry: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description image UUID (malformed = 404) */
-                image_id: components["parameters"]["ImageId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImagePick"];
-            };
-        };
-        responses: {
-            /** @description the image and its SKU */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Reviewed"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogApproveMany: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApproveRequest"];
-            };
-        };
-        responses: {
-            /** @description what changed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Approved"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogPatchSku: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description SKU UUID (malformed = 404) */
-                sku_id: components["parameters"]["SkuId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SkuPatch"];
-            };
-        };
-        responses: {
-            /** @description the SKUs that changed */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SkuList"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogTypedRequest: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TypedRequest"];
-            };
-        };
-        responses: {
-            /** @description what was done */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TypedResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            422: components["responses"]["Unprocessable"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    catalogDownload: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description session UUID (malformed = 404) */
-                session_id: components["parameters"]["SessionId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description the zip */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Download"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    getFile: {
+    filesGetFile: {
         parameters: {
             query?: {
                 /** @description expiry, unix seconds (missing = 403, not 422) */
@@ -3312,59 +1374,6 @@ export interface operations {
             /** @description bad access token, or wrong current_password ("invalid email or password") */
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["AuthUnprocessable"];
-        };
-    };
-    authForgotPassword: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** Format: email */
-                    email: string;
-                };
-            };
-        };
-        responses: {
-            /** @description a reset email is sent if the address is known (same answer either way) */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-        };
-    };
-    authResetPassword: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    token: string;
-                    password: string;
-                };
-            };
-        };
-        responses: {
-            /** @description reset */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            401: components["responses"]["Unauthorized"];
-            422: components["responses"]["Unprocessable"];
         };
     };
     authJwks: {

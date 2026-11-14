@@ -1,13 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ora.local/contracts/registry.schema.json",
-  "title": "NATS KV `registry` values",
-  "description": "agents_service writes each key at startup (catalog_library, catalog_prices, catalog_checks); catalog_service watches them (library, quotes, validation of ids). Each value carries schema_version (major) and published_at.",
+  "$id": "https://helmstudio.local/contracts/registry.schema.json",
+  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models) and bucket hosts (key <host>.<env>)",
+  "description": "Each runner writes only its own keys: the three registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
   "$defs": {
     "meta": {
       "type": "object",
       "required": [
         "schema_version",
+        "host",
+        "env",
         "published_at",
         "published_by"
       ],
@@ -15,17 +17,310 @@
         "schema_version": {
           "const": 1
         },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName",
+          "description": "= the key's <host>"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName",
+          "description": "= the key's <env>"
+        },
         "published_at": {
           "type": "string",
           "format": "date-time"
         },
         "published_by": {
           "type": "string",
-          "description": "agents_service version / image tag"
+          "minLength": 1,
+          "description": "the runner's version / image tag"
         }
       }
     },
-    "catalog_library": {
+    "portType": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]{0,31}$",
+      "description": "a port's value type; an input accepts only an output of the same type (M0: Text, Image)"
+    },
+    "port": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "type": {
+          "$ref": "#/$defs/portType"
+        }
+      }
+    },
+    "paramSchema": {
+      "type": "object",
+      "description": "one param of a node; the UI derives a form field from it. int and float: min/max bound the value; string and text (multi-line): min/max bound the length; enum: one of `enum`.",
+      "required": [
+        "name",
+        "type",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "type": {
+          "enum": [
+            "int",
+            "float",
+            "bool",
+            "string",
+            "text",
+            "enum"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "the field label; absent = the name"
+        },
+        "default": {
+          "$ref": "messages/defs.schema.json#/$defs/paramValue"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "text"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "enum"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "enum"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "enum"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nodeSchema": {
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "family",
+        "params",
+        "inputs",
+        "outputs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "messages/defs.schema.json#/$defs/nodeKind"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "description": "the model family (the kind's prefix); null for a core node"
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "params": {
+          "type": "array",
+          "description": "in form order",
+          "items": {
+            "$ref": "#/$defs/paramSchema"
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/port"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/port"
+          }
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "family",
+        "env",
+        "nodes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "messages/defs.schema.json#/$defs/workflowId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "family": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName"
+        },
+        "nodes": {
+          "$ref": "messages/defs.schema.json#/$defs/graph",
+          "description": "params here override the node schema's defaults; the run's inputs override both"
+        }
+      }
+    },
+    "nodes": {
+      "description": "registry key <host>.<env>.nodes: every node kind this runner can execute",
       "allOf": [
         {
           "$ref": "#/$defs/meta"
@@ -33,475 +328,75 @@
         {
           "type": "object",
           "required": [
-            "families",
-            "categories",
-            "poses",
-            "models",
-            "backgrounds",
-            "resolutions",
-            "ratios",
-            "defaults"
+            "nodes"
           ],
           "properties": {
-            "families": {
+            "nodes": {
               "type": "array",
-              "minItems": 1,
-              "description": "product families in run order (jewellery → furniture → garments); categories are the products inside them",
               "items": {
-                "type": "object",
-                "required": [
-                  "id",
-                  "name"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                }
+                "$ref": "#/$defs/nodeSchema"
               }
-            },
-            "categories": {
+            }
+          }
+        }
+      ]
+    },
+    "workflows": {
+      "description": "registry key <host>.<env>.workflows: the workflows this runner offers; each workflow's env is the key's env and uses only kinds in its .nodes",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "workflows"
+          ],
+          "properties": {
+            "workflows": {
               "type": "array",
-              "minItems": 1,
-              "description": "products, in run order: family order, then product order inside the family (Rings → Earrings → … → Sofas → …)",
+              "items": {
+                "$ref": "#/$defs/workflow"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "models": {
+      "description": "registry key <host>.<env>.models: the models present on this host for this env",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "models"
+          ],
+          "properties": {
+            "models": {
+              "type": "array",
               "items": {
                 "type": "object",
                 "required": [
                   "id",
                   "family",
-                  "name",
-                  "code_prefix",
-                  "uses_model",
-                  "subcategories",
-                  "default_poses",
-                  "default_model",
-                  "default_background",
-                  "pose_noun"
+                  "title"
                 ],
                 "properties": {
                   "id": {
                     "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                    "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
                   },
                   "family": {
                     "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-                    "description": "a families[].id"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "code_prefix": {
-                    "type": "string",
-                    "pattern": "^[A-Z]{1,3}$"
-                  },
-                  "uses_model": {
-                    "type": "boolean",
-                    "description": "false = rendered without a model (furniture: room or studio scene); its SKUs' brief model is null"
-                  },
-                  "subcategories": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "required": [
-                        "id",
-                        "name"
-                      ],
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                        },
-                        "name": {
-                          "type": "string"
-                        },
-                        "about": {
-                          "type": "string",
-                          "maxLength": 100,
-                          "description": "what the subcategory is, one plain line (the web's info tip: Kurtis vs Kurtas); absent = none"
-                        },
-                        "styling": {
-                          "type": [
-                            "string",
-                            "null"
-                          ],
-                          "description": "how it is styled or worn in the brief (garments' Styling rule, jewellery's Wear line); null = the product's usual"
-                        }
-                      }
-                    }
-                  },
-                  "default_poses": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                    },
-                    "description": "ORA default poses"
-                  },
-                  "default_model": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-                    "description": "null when uses_model is false"
-                  },
-                  "default_men_model": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-                    "description": "the built-in model men's wear SKUs (attributes.wearer men) of this product default to; absent or null = default_model"
-                  },
-                  "wearer": {
-                    "enum": [
-                      "women",
-                      "men",
-                      null
-                    ],
-                    "description": "whose wear every SKU of this product is (men's rings, rakhis: men), unless its own words say otherwise; a SKU moved here takes it. Absent or null = per SKU"
-                  },
-                  "default_background": {
-                    "type": "string",
                     "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                  },
-                  "max_attempts": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "renders per image at most for this product (first try + regenerations); absent = catalog_prices.max_attempts. Quote the worst case with this one"
-                  },
-                  "default_resolution": {
-                    "type": "string",
-                    "pattern": "^[0-9]+K$",
-                    "description": "a resolutions[].id this product's runs default to; absent = defaults.resolution"
-                  },
-                  "pose_noun": {
-                    "type": "object",
-                    "required": [
-                      "singular",
-                      "plural"
-                    ],
-                    "description": "what the UI and chat call a pose for this product: the family's noun (furniture angle/angles, every other family shot/shots) unless the product file overrides it",
-                    "properties": {
-                      "singular": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 32
-                      },
-                      "plural": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 32
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            "poses": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "object",
-                "required": [
-                  "id",
-                  "category",
-                  "name",
-                  "example_url"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                  },
-                  "category": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "example_url": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "description": "static web path (web_service public/catalog/); null = no example yet"
-                  },
-                  "frame": {
-                    "type": "object",
-                    "required": [
-                      "zoom",
-                      "origin"
-                    ],
-                    "properties": {
-                      "zoom": {
-                        "type": "number",
-                        "minimum": 1
-                      },
-                      "origin": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "prompt": {
-                    "type": "string",
-                    "description": "how agents describe this pose to the image model"
-                  }
-                }
-              }
-            },
-            "models": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "object",
-                "required": [
-                  "id",
-                  "name",
-                  "image_url",
-                  "category_tags"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "image_url": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "description": "static web path of the head shot"
-                  },
-                  "full_body_url": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "description": "static web path of a full-body front picture (from the model's turnaround sheet), for the model picker; absent or null = none"
-                  },
-                  "category_tags": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9-]+$"
-                    },
-                    "description": "e.g. no-necklace"
-                  },
-                  "note": {
-                    "type": "string"
-                  },
-                  "wearer": {
-                    "enum": [
-                      "women",
-                      "men"
-                    ],
-                    "description": "whose wear the model shows: a SKU whose attributes.wearer is set gets only models of that wearer (picks and defaults); absent = any"
-                  }
-                }
-              }
-            },
-            "backgrounds": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "object",
-                "required": [
-                  "id",
-                  "name",
-                  "swatch",
-                  "image_url"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "swatch": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "description": "CSS colour or gradient"
-                  },
-                  "image_url": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "prompt": {
-                    "type": "string"
-                  },
-                  "families": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
-                    },
-                    "description": "the family ids it suits; absent = every family"
-                  }
-                }
-              }
-            },
-            "resolutions": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "object",
-                "required": [
-                  "id",
-                  "label"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^[0-9]+K$"
-                  },
-                  "label": {
-                    "type": "string"
-                  }
-                }
-              }
-            },
-            "ratios": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "object",
-                "required": [
-                  "id",
-                  "label",
-                  "use",
-                  "w",
-                  "h"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^[0-9]+:[0-9]+$"
-                  },
-                  "label": {
-                    "type": "string"
-                  },
-                  "use": {
-                    "type": "string"
-                  },
-                  "w": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "h": {
-                    "type": "integer",
-                    "minimum": 1
-                  }
-                }
-              }
-            },
-            "defaults": {
-              "type": "object",
-              "required": [
-                "resolution",
-                "ratio"
-              ],
-              "properties": {
-                "resolution": {
-                  "type": "string"
-                },
-                "ratio": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      ]
-    },
-    "catalog_prices": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/meta"
-        },
-        {
-          "type": "object",
-          "required": [
-            "credits_per_image",
-            "max_attempts"
-          ],
-          "properties": {
-            "max_attempts": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "renders per image at most: the first try plus every regeneration after a failed review (worst-case quote = credits × images × max_attempts)"
-            },
-            "credits_per_image": {
-              "type": "object",
-              "minProperties": 1,
-              "propertyNames": {
-                "pattern": "^[0-9]+K$"
-              },
-              "additionalProperties": {
-                "type": "number",
-                "minimum": 0
-              },
-              "description": "resolution id → credits per image (quotes only; nothing is charged)"
-            }
-          }
-        }
-      ]
-    },
-    "catalog_checks": {
-      "allOf": [
-        {
-          "$ref": "#/$defs/meta"
-        },
-        {
-          "type": "object",
-          "required": [
-            "checks"
-          ],
-          "properties": {
-            "checks": {
-              "type": "array",
-              "minItems": 1,
-              "items": {
-                "type": "object",
-                "required": [
-                  "id",
-                  "title",
-                  "source",
-                  "blocking"
-                ],
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^[a-z][a-z0-9_]{0,63}$"
                   },
                   "title": {
-                    "type": "string"
-                  },
-                  "source": {
-                    "enum": [
-                      "spec",
-                      "trial"
-                    ]
-                  },
-                  "blocking": {
-                    "type": "boolean",
-                    "description": "a hit blocks Start processing until answered (false = warn)"
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
                   }
                 }
               }
@@ -509,6 +404,76 @@
           }
         }
       ]
+    },
+    "host": {
+      "description": "bucket hosts, key <host>.<env>: the runner's live state, rewritten every 10 s. Never shown to users as is: GET /v1/studio/hosts redacts it.",
+      "type": "object",
+      "required": [
+        "schema_version",
+        "host",
+        "env",
+        "state",
+        "run_id",
+        "updated_at",
+        "published_by"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName"
+        },
+        "state": {
+          "enum": [
+            "idle",
+            "busy"
+          ]
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "messages/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the run in progress (busy), else null"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "published_by": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "if": {
+        "properties": {
+          "state": {
+            "const": "busy"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "$ref": "messages/defs.schema.json#/$defs/uuid"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "run_id": {
+            "type": "null"
+          }
+        }
+      }
     }
   }
 }

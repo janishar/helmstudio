@@ -1,54 +1,56 @@
 # contract_tests
 
-Black-box HTTP suite for the Catalog Agent public API: it talks only HTTP to `BASE_URL` (Kong in front of the
-services) and never imports server code. It is the gate for every change that crosses a service boundary.
+Black-box HTTP suite for the helmstudio public API (`contracts/openapi.yaml`): it talks only HTTP to `BASE_URL`
+(Kong in front of the services) and never imports server code. It is the gate for every milestone.
 
-The stack under test must run in **fake mode** (`deploy/compose/fake.yml`) against a project you can throw away: the
-suite signs up two new users on every run and creates sessions, SKUs, runs and zips that it never deletes. Use the
-`ora-catalog-test` project (Kong on 8190), never the live `ora-catalog` one (8100).
+The stack under test runs the **fake runner** (host `fake`, env `fake`, workflow `echo`) and must be one you can
+throw away: every run creates users, sessions and runs that it never deletes.
 
 ## Run
 
 ```sh
-make -C contract_tests venv                 # uv venv .venv + install from pyproject.toml
-make -C contract_tests check-contracts      # ../contracts: schemas, fixtures, openapi.yaml (no stack needed)
+make -C contract_tests venv              # uv sync --frozen into .venv
+make -C contract_tests check-contracts   # ../contracts: schemas, fixtures, openapi.yaml (no stack needed)
+make -C contract_tests collect lint      # no stack needed
 
-# from the repo root: the test project in fake mode (these variables make plain `docker compose` mean it)
-export COMPOSE_PROJECT_NAME=ora-catalog-test COMPOSE_FILE=deploy/docker-compose.yml:deploy/compose/fake.yml \
-  IMAGE_TAG=gate KONG_HTTP_PORT=8190 POSTGRES_HOST_PORT=5444 ORA_NET=172.30.91
-docker compose up -d --build
+# against a running stack (Kong on 127.0.0.1:8300)
 make -C contract_tests test CONTRACT_SCHEMAS=1 API_KEY=$(docker compose run --rm -T auth apikey contract)
-make -C contract_tests test CONTRACT_SCHEMAS=1 API_KEY=... ARGS="-k generation -x"   # any pytest args
+make -C contract_tests test API_KEY=... ARGS="-k runs -x"   # any pytest args
 ```
 
 | env | meaning |
 |---|---|
-| `BASE_URL` | the API root (default `http://localhost:8190`, the `ora-catalog-test` project) |
-| `API_KEY` | sent as `X-API-Key` (a client key: `run --rm auth apikey <client>`) |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | the test stack's admin (`deploy/compose/fake.yml`), which creates users A and B: sign-up is closed |
-| `BEARER_TOKEN`, `BEARER_TOKEN_B` | optional users A and B; empty = the admin creates two new users |
-| `CONTRACT_SCHEMAS=1` | validate every JSON response against `contracts/openapi.yaml` for its path, method and status; a route or status the spec doesn't list fails (`OPENAPI_PATH` overrides the location; see `tests/schemas.py`) |
-| `JOB_TIMEOUT` | seconds to wait for processing or a run (default 120) |
+| `BASE_URL` | the API root (default `http://127.0.0.1:8300`) |
+| `API_KEY` | sent as `X-API-Key`: a client key (`auth apikey <client>`) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | the stack's root admin; it creates users A and B on every run (there is no sign-up) |
+| `CONTRACT_SCHEMAS=1` | validate every JSON response, and every SSE event, against `contracts/openapi.yaml` for its path, method and status; a route or status the spec doesn't list fails (`OPENAPI_PATH` overrides the location; see `tests/schemas.py`) |
+| `JOB_TIMEOUT` | seconds to wait for a run or an event (default 60) |
 
-Signed file links are absolute, so catalog_service's `PUBLIC_BASE_URL` must be the address the tests reach (compose
-sets it from `KONG_HTTP_PORT`).
+## Resilience
+
+`resilience.sh` restarts studio, runner, nats, postgres and kong of the running helmstudio stack one at a time,
+each in the middle of a ~12 s echo run, and requires that the run ends (succeeded, or failed/cancelled with an
+error: never stuck queued or running) and that a new run afterwards succeeds. It takes a few minutes.
+
+```sh
+API_KEY=$(cat ../deploy/secrets/helm_api_key) ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
+```
+
+Kong's sign-in rate limit is 20 a minute per IP; the suite signs in about that often, so a test may pause once for
+`Retry-After`.
 
 ## Layout
 
 | Module | What |
 |---|---|
-| `test_sessions.py` | create, list, get, patch (and its 422s), unknown ids, auth required, library, favorites, estimate, memory |
-| `test_inputs.py` | raw multipart, a folder upload's `paths` (one SKU per sub-folder; bad paths 422), CSV, links; guidelines and uploads; pose suggestions; events polling and SSE (`Last-Event-ID`); questions; Start refused while a blocking question is open, then Start |
-| `test_generation.py` | one started session walked forward: Next step card (sample → batch → all → download), runs, single and bulk approval, regenerate keeping the old revision, typed requests (incl. `not_understood`: no run), SKU overrides, counts and stats, the zip through the signed `/files` link |
-| `test_products.py` | the library's 23 products in 3 families; raw photos named for jewellery, furniture and garments sort into the right products and codes; the `families` filter (and its 422); a furniture SKU has no model and still renders, reviewed with the furniture goals; moving SKUs to another product (`category`, `apply_to_category`: codes kept, model and poses follow, another family's background falls back); per-product `max_attempts` (every product follows `MAX_REGENERATIONS` today) and `default_resolution`; 16 models, a `full_body_url` for each with a turnaround sheet, garment defaults on such a model and pose examples from the turnaround crops; `GET /metrics` after a fake run (counts by product, first-try rate, tries, rejected, feedback, credits per approved; another user's session is empty; bad `session_id` 422) |
-| `test_refresh_reset.py` | Refresh keeps SKUs, runs and memory; Reset keeps only memory |
-| `test_tries_poses.py` | the added ratios (4:3, 3:2, 5:4, 21:9) and `pose_noun` per family; `pose_ratios` / `pose_notes` PATCH round trip and their 422s (unknown ratio, another product's pose, a 501-character note), another user 404; a pose renders at its own ratio (fake renders at the asked ratio, so pixel size shows it); every try in `Image.attempts` signed under `images/<id>/attempt_<n>`, exactly one best (same bytes as the image), a tampered or unsigned try link 403; regenerate at another ratio (bad ratio 422, another user 404), the old revision keeps its tries and the brief ratio is unchanged |
-| `test_views.py` | jewellery raw photos named `<code>_White Side.png`, `<code>_Model.png` … get view tags (`attributes.sides`, `raw_views`); a packshot that fails review (fake mode: a `fake-reject` pose note) fails the SKU's other shots with the gate message (again when one is re-run while that packshot is live) and leads the Next step line; a Mood pose for every jewellery product, outside its defaults |
-| `test_jobs.py` | `GET /jobs` lists a session's run and processing job newest first; `GET /jobs/{id}` gives the processing steps, the run's images with their tries and its usage (fake mode: one image call per try, credits, no LLM call); another user sees none of them (404) |
-| `test_access.py` | closed beta: `/auth/signup` is 404; the admin creates accounts (dev role, name from the email; 409 duplicate; 422 for admin), the new user signs in, a user can't create accounts (403), and the `.env` admin's account is 409 to change |
-| `test_isolation.py` | user B gets 404 on every id route of user A |
+| `test_gateway.py` | missing or invalid API key (401), a key without a user token, a bad bearer token, `/auth/health` and the JWKS without a key |
+| `test_auth.py` | sign-in and `me`, generic sign-in failures, no sign-up (404), refresh rotation (reuse revokes the family), sign-out (auth and studio both refuse the token), password change |
+| `test_admin_users.py` | create (email normalised, name from the email, roles sorted; 409 duplicate; 422 for `admin` and bad input), roles and password reset revoke sessions, disable revokes sessions and blocks sign-in, enable, the root admin is 409 to change, unknown ids 404, a non-admin 403 |
+| `test_sessions.py` | create (`Untitled`), list newest first, get, rename (and its 422s), delete, unknown and malformed ids 404 |
+| `test_workflows.py` | `echo` listed, its graph and node schemas, unknown ids 404; `GET /hosts` shows `fake`/`fake` idle or busy, redacted |
+| `test_runs.py` | the echo run: queued, events in seq order (`queued`, `running`, one progress per step, the output, `succeeded`), the PNG through its signed link, the finished run; `fail=true` fails with an error; cancel mid-run (delete is 409 meanwhile) ends `cancelled` with no output; invalid inputs and an unknown `workflow_id` 422; unknown ids 404 |
+| `test_events.py` | JSON `?since=` paging and `last_seq`, bad `since` 422, SSE replay from `Last-Event-ID` or `?since=` (the header wins) |
+| `test_isolation.py` | user B gets 404 for A's session, runs, events and cancel; A's output file only through its signed link (missing, tampered or re-dated signatures and sibling keys are 403) |
 
-`helpers.py` has the test images, polling and the session steps (processed, started, run); `conftest.py` the clients
-and the shared started session. The raw photos are named so the fake sorter files them: 7 rings in two groups (three
-lifestyle shots, so the guideline txt raises its conflict), 4 necklaces (two share a name: the duplicate question),
-1 anklet.
+`helpers.py` has the polling, the SSE reader and the run steps; `conftest.py` the clients, the users and `echo_done`,
+user A's finished quick echo run that the runs, events and isolation tests share.

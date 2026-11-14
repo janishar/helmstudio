@@ -14,7 +14,7 @@ import (
 // signature with the same secret (FILE_URL_SECRET, the file_url_secret compose secret).
 type Signer struct {
 	secret  []byte
-	baseURL string        // public base URL without a trailing "/", e.g. http://localhost:8100
+	baseURL string        // public base URL without a trailing "/", e.g. http://localhost:8300
 	ttl     time.Duration // how long a link stays valid
 }
 

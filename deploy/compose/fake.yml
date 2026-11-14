@@ -1,18 +1,8 @@
-# Fake mode for test stacks: overrides agents_service/.env (which may hold real models and paid keys), and gives
-# the stack its own test admin instead of auth_service/.env's (contract_tests signs in as it to create users A and B).
-#   IMAGE_TAG=gate KONG_HTTP_PORT=8190 POSTGRES_HOST_PORT=5444 ORA_NET=172.30.91 docker compose -p ora-catalog-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml up -d   # own image tags: the live stack keeps :dev
+# Overlay (-f) for the dev and test stacks: a known test admin instead of auth_service/.env's, so the stack works on
+# first run and contract_tests can sign in as it to create users A and B. In M0 the only runner is the fake one.
+#   docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml up -d --build --wait      # make up
 services:
-  agents:
-    environment:
-      ORCHESTRATOR_MODEL: fake
-      VISION_MODEL: fake
-      IMAGE_PROVIDER: fake
-      ANTHROPIC_API_KEY: ""
-      DEEPSEEK_API_KEY: ""
-      MAGNIFIC_API_KEY: ""
-      OPENAI_API_KEY: ""
-      IMAGEGEN_API_KEY: ""
   auth:
     environment:
-      ADMIN_EMAIL: contract-admin@example.com
-      ADMIN_PASSWORD: ${CONTRACT_ADMIN_PASSWORD:-contract admin pass 1}
+      ADMIN_EMAIL: admin@helm.test
+      ADMIN_PASSWORD: ${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}

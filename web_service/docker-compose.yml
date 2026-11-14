@@ -1,12 +1,12 @@
 # Isolated dev: just the web app, pointed at a Kong (or the Prism mock) running elsewhere.
 #   docker compose -f web_service/docker-compose.yml up --build
-# On the ora-catalog stack use deploy/compose/web.yml instead.
+# On the helmstudio stack use deploy/compose/web.yml instead.
 services:
   web:
     build: .
     env_file: [{ path: .env, required: false }]
     environment:
-      KONG_URL: ${KONG_URL:-http://host.docker.internal:8080}
+      KONG_URL: ${KONG_URL:-http://host.docker.internal:8300}
       COOKIE_SECURE: "false"
     ports: ["127.0.0.1:3000:3000"]
     extra_hosts: ["host.docker.internal:host-gateway"]

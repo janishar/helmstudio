@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/envelope.schema.json",
+  "title": "NATS message envelope",
+  "description": "Every message on CMD / EVT / evt.auth.*. `data` is per type (messages/<type>.schema.json). The envelope is closed: a new envelope field is a breaking change. `data` is open: consumers ignore unknown fields (additive changes keep the version).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "version",
+    "id",
+    "job_id",
+    "owner_id",
+    "occurred_at",
+    "trace",
+    "data"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "pattern": "^(cmd|evt)\\.[a-z0-9]+\\.[a-z_]+$",
+      "description": "message type, e.g. cmd.run.execute; never the routing subject (cmd.run.execute travels on cmd.run.<host>.<env>, evt.run.status on evt.run.<session_id>.status)"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "major version of this type's data schema"
+    },
+    "id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "message id (unique per message; dedupe uses Nats-Msg-Id, see contracts/README.md)"
+    },
+    "job_id": {
+      "oneOf": [
+        {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the command's job: the run id for cmd.run.* and evt.run.* (Nats-Msg-Id <job_id>:<attempt> for commands, <job_id>:<seq> for events); null only for non-job messages (evt.auth.revoked)"
+    },
+    "owner_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the user who owns the session / token; every object key in data is under u/<owner_id>/"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "trace": {
+      "type": "object",
+      "required": [
+        "traceparent"
+      ],
+      "properties": {
+        "traceparent": {
+          "type": "string",
+          "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$"
+        },
+        "tracestate": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "data": {
+      "type": "object"
+    }
+  }
+}

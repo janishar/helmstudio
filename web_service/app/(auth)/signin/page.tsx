@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AuthForm } from "../auth-form";
+import { SigninForm } from "../auth-form";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -9,5 +9,5 @@ export default async function SigninPage({
 }: {
   searchParams: Promise<{ next?: string }>;
 }) {
-  return <AuthForm mode="signin" next={(await searchParams).next} />;
+  return <SigninForm next={(await searchParams).next} />;
 }

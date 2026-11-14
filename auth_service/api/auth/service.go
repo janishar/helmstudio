@@ -1,4 +1,4 @@
-// Package auth: sign-up, sign-in, refresh rotation, sign-out, passwords, token validation, revocation events.
+// Package auth: sign-in, refresh rotation, sign-out, passwords, token validation, revocation events.
 package auth
 
 import (
@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/utility"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/utility"
 
 	"github.com/helmstudio/auth_service/api/auth/dto"
 	"github.com/helmstudio/auth_service/api/auth/model"
@@ -130,15 +130,6 @@ func (s *Service) CreateUser(ctx context.Context, email, name, password string, 
 		return model.User{}, err
 	}
 	return s.GetUser(ctx, id)
-}
-
-// Signup creates a user with the "user" role and starts its first session. body must already be validated.
-func (s *Service) Signup(ctx context.Context, body *dto.SignupRequest) (dto.Session, error) {
-	user, err := s.CreateUser(ctx, body.Email, body.Name, body.Password, []string{"user"})
-	if err != nil {
-		return dto.Session{}, err
-	}
-	return s.issue(ctx, s.DB, user, "")
 }
 
 // Signin checks the password and starts a new session. An unknown email, a disabled user and a wrong password give

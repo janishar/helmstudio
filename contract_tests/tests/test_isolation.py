@@ -1,47 +1,48 @@
-"""Per-user isolation: user B gets a 404 on every id route of user A's objects, and sees none of them in lists."""
+"""Per-user isolation: user B gets a 404 for every id of user A's, sees none of them in lists, and reads A's output
+file only through the signed link A was given."""
 
-from helpers import CATALOG, image, ok, raw_files
+from urllib.parse import parse_qs, urlsplit
+
+from helpers import STUDIO, ok
 
 
-def test_b_cannot_see_a(api, api_b, ready):
-    a = ok(api.get(f"{CATALOG}/sessions/{ready['session']['id']}"))
-    sid = a["session"]["id"]
-    s = f"{CATALOG}/sessions/{sid}"
-    sku_id = a["skus"][0]["id"]
-    q_id = a["questions"][0]["id"]
-    img = a["images"][0]["id"] if a["images"] else "00000000-0000-0000-0000-000000000000"
+def test_b_gets_404_for_a_ids(api, api_b, echo_done):
+    sid, rid = echo_done["session"]["id"], echo_done["run"]["id"]
     calls = [
-        ("GET", s, None),
-        ("PATCH", s, {"json": {"project_name": "mine now"}}),
-        ("POST", f"{s}/refresh", None),
-        ("POST", f"{s}/reset", None),
-        ("POST", f"{s}/raw", {"files": raw_files(["ring-01.png"])}),
-        ("POST", f"{s}/raw", {"json": {"kind": "website", "url": "https://shop.example.com/"}}),
-        ("POST", f"{s}/guidelines", {"json": {"url": "https://brand.example.com/"}}),
-        ("POST", f"{s}/uploads", {"files": {"file": ("m.png", image(), "image/png")}, "data": {"kind": "model"}}),
-        ("POST", f"{s}/poses/suggest", {"json": {"briefs": [{"category": "rings", "text": "hand"}]}}),
-        ("GET", f"{s}/events", None),
-        ("POST", f"{s}/start", None),
-        ("GET", f"{s}/next-step", None),
-        ("POST", f"{s}/runs", {"json": {"scope": "all"}}),
-        ("POST", f"{s}/regenerate", {"json": {"image_ids": [img], "feedback": "darker"}}),
-        ("POST", f"{s}/approve", {"json": {"category": "rings"}}),
-        ("POST", f"{s}/requests", {"json": {"text": "approve the rings"}}),
-        ("POST", f"{s}/download", None),
-        ("POST", f"{CATALOG}/questions/{q_id}/answer", {"json": {"option": 1}}),
-        ("PATCH", f"{CATALOG}/images/{img}", {"json": {"status": "rejected"}}),
-        ("PATCH", f"{CATALOG}/skus/{sku_id}", {"json": {"confirmed": False}}),
+        ("GET", f"{STUDIO}/sessions/{sid}", None),
+        ("PATCH", f"{STUDIO}/sessions/{sid}", {"title": "mine now"}),
+        ("DELETE", f"{STUDIO}/sessions/{sid}", None),
+        ("GET", f"{STUDIO}/sessions/{sid}/runs", None),
+        ("POST", f"{STUDIO}/sessions/{sid}/runs", {"workflow_id": "echo"}),
+        ("GET", f"{STUDIO}/sessions/{sid}/events", None),
+        ("GET", f"{STUDIO}/runs/{rid}", None),
+        ("POST", f"{STUDIO}/runs/{rid}/cancel", None),  # 404, not the 409 of an ended run
     ]
-    for method, path, kw in calls:
-        r = api_b.request(method, path, **(kw or {}))
+    for method, path, body in calls:
+        r = api_b.request(method, path, json=body)
         assert r.status_code == 404, f"{method} {path}: {r.status_code} {r.text}"
-
-    # B's own session can't reach A's objects either
-    b_sid = ok(api_b.post(f"{CATALOG}/sessions"), 201)["session"]["id"]
-    r = api_b.post(f"{CATALOG}/sessions/{b_sid}/regenerate", json={"image_ids": [img], "feedback": "darker"})
+    r = api_b.get(f"{STUDIO}/sessions/{sid}/events", headers={"Accept": "text/event-stream"})
     assert r.status_code == 404
-    r = api_b.post(f"{CATALOG}/sessions/{b_sid}/approve", json={"sku_ids": [sku_id]})
-    assert r.status_code in (200, 404) and (r.status_code == 404 or r.json()["approved"] == 0)
 
-    assert sid not in {x["id"] for x in ok(api_b.get(f"{CATALOG}/sessions"))["sessions"]}
-    assert ok(api.get(s))["session"]["project_name"] == a["session"]["project_name"]  # nothing changed for A
+    assert sid not in {s["id"] for s in ok(api_b.get(f"{STUDIO}/sessions"))["sessions"]}
+    a = ok(api.get(f"{STUDIO}/sessions/{sid}"))
+    assert a == echo_done["session"]  # nothing changed for A
+    assert ok(api.get(f"{STUDIO}/runs/{rid}"))["status"] == "succeeded"
+
+
+def test_output_file_needs_its_signed_link(anon, echo_done):
+    (out,) = [e["data"] for e in echo_done["events"] if e["type"] == "output"]
+    link = urlsplit(out["url"])
+    q = {k: v[0] for k, v in parse_qs(link.query).items()}
+    assert link.path == f"/files/{out['key']}" and {"exp", "sig"} <= set(q)
+    tampered_sig = q["sig"][:-1] + ("0" if q["sig"][-1] != "0" else "1")
+    for params in (
+        {},
+        {"exp": q["exp"]},
+        {"exp": q["exp"], "sig": tampered_sig},
+        {"exp": str(int(q["exp"]) + 60), "sig": q["sig"]},
+    ):
+        assert anon.get(link.path, params=params).status_code == 403, params
+    other = f"/files/{out['key'].rsplit('/', 1)[0]}/1.png"  # a sibling key with A's signature
+    assert anon.get(other, params={"exp": q["exp"], "sig": q["sig"]}).status_code == 403
+    assert anon.get(link.path, params=q).status_code == 200

@@ -1,140 +1,73 @@
 "use client";
-import Link from "next/link";
-import { useActionState, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Field } from "@/components/kit";
-import { signin, signup, type AuthState } from "./actions";
+import { useActionState } from "react";
+import { Info, Logo } from "@/components/kit";
+import { signin, type AuthState } from "./actions";
 
-/** 0-4: length plus character variety. A hint only: auth_service decides. */
-export function strength(pw: string): number {
-  if (pw.length < 10) return pw ? 1 : 0;
-  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(pw)).length;
-  return Math.min(4, 1 + (pw.length >= 14 ? 1 : 0) + (kinds >= 3 ? 2 : kinds >= 2 ? 1 : 0));
-}
-/** Hint text per strength() score. */
-const STRENGTH = ["", "too short", "fair", "good", "strong"];
-
-/** The sign-in or sign-up form; sign-up adds a name, a confirmation and a strength meter. `next` is where sign-in
- * lands. */
-export function AuthForm({ mode, next }: { mode: "signin" | "signup"; next?: string }) {
-  const [state, action, pending] = useActionState<AuthState, FormData>(
-    mode === "signin" ? signin : signup,
-    undefined,
-  );
-  const [pw, setPw] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const s = strength(pw);
-  const mismatch = mode === "signup" && confirm !== "" && confirm !== pw;
+/** The sign-in card. `next` is where to land afterwards. */
+export function SigninForm({ next }: { next?: string }) {
+  const [state, action, pending] = useActionState<AuthState, FormData>(signin, undefined);
   const err = state?.error;
   return (
-    <form action={action} className="grid gap-4" noValidate={false}>
-      <h1 className="text-xl font-semibold">
-        {mode === "signin" ? "Sign in" : "Create your account"}
-      </h1>
+    <form
+      action={action}
+      aria-label="Sign in"
+      className="relative z-[1] flex w-[400px] max-w-full flex-col gap-4 bg-s1 px-8 pt-8 pb-7"
+      style={{
+        borderRadius: "36px 36px 36px 14px",
+        backgroundImage: "linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 40%)",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,.08), 0 40px 70px -24px color-mix(in srgb, var(--shd) 92%, transparent), 0 12px 24px -12px color-mix(in srgb, var(--shd) 70%, transparent)",
+      }}
+    >
+      <div className="mb-2 flex items-center gap-3">
+        <Logo />
+        <h1 className="m-0 font-display text-[26px] leading-8 font-bold tracking-[0.01em]">
+          helmstudio
+        </h1>
+      </div>
       {err && (
-        <p
-          role="alert"
-          id="form-error"
-          className="rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger"
-        >
+        <p role="alert" id="form-error" className="rounded-xl bg-s2 px-3 py-2 text-[13px] text-bad">
           {err}
         </p>
       )}
       <input type="hidden" name="next" value={next ?? ""} />
-      {mode === "signup" && (
-        <Field label="Name" htmlFor="name">
-          <Input
-            id="name"
-            name="name"
-            autoComplete="name"
-            required
-            maxLength={200}
-            defaultValue={state?.name}
-          />
-        </Field>
-      )}
-      <Field label="Email" htmlFor="email">
-        <Input
-          id="email"
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="si-email" className="label">
+          Email
+        </label>
+        <input
+          id="si-email"
           name="email"
+          className="in h-11 text-sm"
           type="email"
-          autoComplete="email"
+          autoComplete="username"
           required
           defaultValue={state?.email}
           aria-describedby={err ? "form-error" : undefined}
         />
-      </Field>
-      <Field
-        label="Password"
-        htmlFor="password"
-        hint={
-          mode === "signup" ? (
-            <span aria-live="polite">
-              At least 10 characters{s ? ` · strength: ${STRENGTH[s]}` : ""}
-            </span>
-          ) : undefined
-        }
-      >
-        <Input
-          id="password"
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="si-pass" className="label">
+          Password
+        </label>
+        <input
+          id="si-pass"
           name="password"
+          className="in h-11 text-sm"
           type="password"
+          autoComplete="current-password"
           required
-          minLength={mode === "signup" ? 10 : undefined}
-          autoComplete={mode === "signin" ? "current-password" : "new-password"}
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          aria-describedby={mode === "signup" ? "password-hint" : undefined}
         />
-      </Field>
-      {mode === "signup" && (
-        <>
-          <div aria-hidden className="-mt-2 grid grid-cols-4 gap-1">
-            {[1, 2, 3, 4].map((i) => (
-              <span
-                key={i}
-                className={`h-1 rounded-full ${i <= s ? (s < 3 ? "bg-warning" : "bg-success") : "bg-muted"}`}
-              />
-            ))}
-          </div>
-          <Field
-            label="Confirm password"
-            htmlFor="confirm"
-            error={mismatch ? "The passwords don't match." : undefined}
-          >
-            <Input
-              id="confirm"
-              name="confirm"
-              type="password"
-              required
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              aria-invalid={mismatch || undefined}
-              aria-describedby={mismatch ? "confirm-error" : undefined}
-            />
-          </Field>
-        </>
-      )}
-      <Button type="submit" size="lg" disabled={pending || mismatch}>
-        {pending ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
-      </Button>
-      <p className="text-center text-sm text-muted-foreground">
-        {mode === "signin" ? (
-          // sign-up is closed for the beta: accounts come from the admin
-          <>Access is by invitation during the beta. Ask your admin for an account.</>
-        ) : (
-          <>
-            Have an account?{" "}
-            <Link
-              className="font-medium text-primary underline-offset-4 hover:underline"
-              href="/signin"
-            >
-              Sign in
-            </Link>
-          </>
-        )}
+      </div>
+      <button type="submit" className="key mt-1 h-[50px] text-[15px]" disabled={pending}>
+        {pending ? "Signing in…" : "Sign in"}
+      </button>
+      <p className="mt-1 flex items-center justify-center text-[13px] text-t2">
+        No account? Ask your admin.
+        <Info>
+          There is no public sign-up. The admin creates every account and resets forgotten
+          passwords.
+        </Info>
       </p>
     </form>
   );

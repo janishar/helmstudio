@@ -1,36 +1,31 @@
-"""Plain helpers (no fixtures): test images, polling, and the session steps most tests build on."""
+"""Plain helpers (no fixtures): responses, polling, sign-in, sessions, runs and the event stream."""
 
-import io
+import json
 import os
 import time
-import uuid
 
 import httpx
-from PIL import Image
+import schemas
 
-JOB_TIMEOUT = float(os.environ.get("JOB_TIMEOUT", "120"))
-CATALOG = "/v1/catalog"
-
-# Raw photos the fake sorter files by name: 7 rings (two logical groups; R-004..R-006 are lifestyle shots, so the
-# guidelines conflict comes up), 4 necklaces (N-003 and N-004 share a name: the duplicate question) and 1 anklet.
-RAW_NAMES = [f"ring-{n:02d}.png" for n in range(1, 8)] + [f"necklace-{n:02d}.png" for n in range(1, 5)] + [
-    "anklet-01.png"
-]
-GUIDELINE = b"Brand guidelines\nPlain studio white backgrounds for every product.\nWarm, natural light.\n"
-
-
-def image(color=(180, 40, 40), size=(48, 64), fmt="PNG") -> bytes:
-    buf = io.BytesIO()
-    Image.new("RGB", size, color).save(buf, fmt)
-    return buf.getvalue()
+JOB_TIMEOUT = float(os.environ.get("JOB_TIMEOUT", "60"))
+STUDIO = "/v1/studio"
+TERMINAL = {"succeeded", "failed", "cancelled"}
+# a quick echo run: three steps of 50 ms
+QUICK = {"prompt.text": "a red fox", "echo.steps": 3, "echo.delay_ms": 50}
+# long enough to cancel mid-run (200 steps of 300 ms)
+SLOW = {"prompt.text": "a slow fox", "echo.steps": 200, "echo.delay_ms": 300}
+NO_SUCH_ID = "00000000-0000-4000-8000-000000000000"
 
 
-def raw_files(names: list[str] = RAW_NAMES) -> list:
-    """The multipart `files` parts of POST .../raw, one distinct PNG per name."""
-    return [("files", (n, image((20 * i % 255, 90, 160)), "image/png")) for i, n in enumerate(names)]
+def ok(r: httpx.Response, status: int = 200) -> dict:
+    """The JSON body of a response that must have `status` (None for an empty body)."""
+    assert r.status_code == status, (
+        f"{r.request.method} {r.request.url.path}: {r.status_code} {r.text}"
+    )
+    return r.json() if r.content else None
 
 
-def wait_for(fn, timeout: float = JOB_TIMEOUT, interval: float = 0.5, what: str = "condition"):
+def wait_for(fn, timeout: float = JOB_TIMEOUT, interval: float = 0.3, what: str = "condition"):
     """fn() until it returns something truthy; AssertionError after `timeout` seconds."""
     deadline = time.monotonic() + timeout
     while True:
@@ -41,81 +36,105 @@ def wait_for(fn, timeout: float = JOB_TIMEOUT, interval: float = 0.5, what: str 
         time.sleep(interval)
 
 
-def ok(r: httpx.Response, status: int = 200) -> dict:
-    """The JSON body of a response that must have `status`."""
-    assert r.status_code == status, f"{r.request.method} {r.request.url.path}: {r.status_code} {r.text}"
-    return r.json()
+def limited(client: httpx.Client, path: str, body: dict) -> httpx.Response:
+    """POST to a rate-limited route (/auth/signin, /auth/refresh), waiting out Kong's per-IP limit (20/min) once:
+    the suite signs in often."""
+    r = client.post(path, json=body)
+    if r.status_code == 429:
+        time.sleep(min(float(r.headers.get("Retry-After", "60")), 61))
+        r = client.post(path, json=body)
+    return r
 
 
-def new_session(client: httpx.Client, name: str = "Contract drop") -> str:
-    return ok(client.post(f"{CATALOG}/sessions", json={"project_name": name}), 201)["session"]["id"]
+def signin(client: httpx.Client, email: str, password: str) -> httpx.Response:
+    """POST /auth/signin (rate-limited)."""
+    return limited(client, "/auth/signin", {"email": email, "password": password})
 
 
-def detail(client: httpx.Client, sid: str) -> dict:
-    return ok(client.get(f"{CATALOG}/sessions/{sid}"))
+def new_session(client: httpx.Client, title: str = "Contract session") -> dict:
+    return ok(client.post(f"{STUDIO}/sessions", json={"title": title}), 201)
 
 
-def wait_processed(client: httpx.Client, sid: str) -> dict:
-    """Poll until the session's processing job finished; it must have succeeded."""
-    d = wait_for(
-        lambda: (d := detail(client, sid))["session"]["processing"]["status"] in ("succeeded", "failed") and d,
-        what=f"processing of {sid}",
+def start_run(client: httpx.Client, sid: str, inputs: dict, workflow_id: str = "echo") -> dict:
+    """POST .../runs: 202 and still queued (a failed run here means no live fake runner)."""
+    run = ok(
+        client.post(
+            f"{STUDIO}/sessions/{sid}/runs", json={"workflow_id": workflow_id, "inputs": inputs}
+        ),
+        202,
     )
-    assert d["session"]["processing"]["status"] == "succeeded", d["session"]["processing"]
-    return d
+    assert run["status"] == "queued", f"run not queued (is the fake runner up?): {run}"
+    return run
 
 
-def processed(client: httpx.Client, names: list[str] = RAW_NAMES, guideline: bool = True,
-              families: list[str] | None = None) -> dict:
-    """A new session with the guideline txt and raw photos (sorted into `families` when given), processing finished:
-    GET /sessions/{id}."""
-    sid = new_session(client)
-    if guideline:
-        files = {"file": ("brand_guidelines.txt", GUIDELINE, "text/plain")}
-        ok(client.post(f"{CATALOG}/sessions/{sid}/guidelines", files=files), 201)
-    ok(client.post(f"{CATALOG}/sessions/{sid}/raw", files=raw_files(names),
-                   data={"kind": "folder"} | ({"families": families} if families else {})), 202)
-    return wait_processed(client, sid)
+def wait_run(client: httpx.Client, run_id: str) -> dict:
+    """Poll GET /runs/{id} until the run ended."""
+    return wait_for(
+        lambda: (r := ok(client.get(f"{STUDIO}/runs/{run_id}")))["status"] in TERMINAL and r,
+        what=f"run {run_id}",
+    )
 
 
-def answer_all(client: httpx.Client, d: dict, option: int = 0) -> None:
-    for q in d["questions"]:
-        if q["answer"] is None:
-            ok(client.post(f"{CATALOG}/questions/{q['id']}/answer", json={"option": option}))
+def sse(
+    client: httpx.Client,
+    sid: str,
+    until,
+    *,
+    last_event_id=None,
+    since=None,
+    timeout: float = JOB_TIMEOUT,
+) -> list[dict]:
+    """Read the session's SSE stream until until(frames) is true. A frame is {"id": int, "event": str, "data": dict};
+    with CONTRACT_SCHEMAS=1 each data is checked against SessionEvent."""
+    headers = {"Accept": "text/event-stream"}
+    if last_event_id is not None:
+        headers["Last-Event-ID"] = str(last_event_id)
+    params = {"since": since} if since is not None else None
+    frames, frame = [], {}
+    deadline = time.monotonic() + timeout
+    with client.stream(
+        "GET",
+        f"{STUDIO}/sessions/{sid}/events",
+        headers=headers,
+        params=params,
+        timeout=httpx.Timeout(timeout),
+    ) as r:
+        assert r.status_code == 200, f"events {sid}: {r.status_code} {r.read()}"
+        assert r.headers["content-type"].startswith("text/event-stream"), r.headers["content-type"]
+        for line in r.iter_lines():
+            if time.monotonic() > deadline:
+                raise AssertionError(f"timed out after {timeout}s on the event stream of {sid}")
+            if line.startswith(":"):
+                continue  # keep-alive
+            if line:
+                field, _, value = line.partition(":")
+                frame[field] = value.removeprefix(" ")
+                continue
+            if "data" in frame:
+                data = json.loads(frame["data"])
+                schemas.check_value(data, "#/components/schemas/SessionEvent", "SSE event")
+                frames.append({"id": int(frame["id"]), "event": frame.get("event"), "data": data})
+                if until(frames):
+                    return frames
+            frame = {}
+    raise AssertionError(f"the event stream of {sid} ended by itself")
 
 
-def started(client: httpx.Client, **kw) -> dict:
-    """A processed session with every question answered and Start done: GET /sessions/{id}."""
-    d = processed(client, **kw)
-    answer_all(client, d)
-    ok(client.post(f"{CATALOG}/sessions/{d['session']['id']}/start"))
-    return detail(client, d["session"]["id"])
+def ended(run_id: str):
+    """An until() for sse(): the run's terminal status arrived."""
+    return lambda frames: any(
+        f["data"]["run_id"] == run_id
+        and f["event"] == "status"
+        and f["data"]["data"]["status"] in TERMINAL
+        for f in frames
+    )
 
 
-def wait_idle(client: httpx.Client, sid: str) -> dict:
-    """Poll until no run of the session is queued or running: GET /sessions/{id}."""
-    def idle():
-        d = detail(client, sid)
-        return all(r["status"] in ("succeeded", "failed") for r in d["runs"]) and d
-
-    return wait_for(idle, what=f"runs of {sid}")
+def run_events(client: httpx.Client, sid: str, run_id: str, since: int = 0) -> list[dict]:
+    """The run's SessionEvents from the stream, through its terminal status."""
+    frames = sse(client, sid, ended(run_id), last_event_id=since)
+    return [f["data"] for f in frames if f["data"]["run_id"] == run_id]
 
 
-def run(client: httpx.Client, sid: str, **body) -> dict:
-    """POST .../runs (202), then wait for it: GET /sessions/{id}."""
-    ok(client.post(f"{CATALOG}/sessions/{sid}/runs", json=body), 202)
-    return wait_idle(client, sid)
-
-
-def live_images(d: dict) -> dict[tuple[str, str], dict]:
-    """(sku_id, shot) → its newest revision."""
-    out: dict[tuple[str, str], dict] = {}
-    for img in d["images"]:
-        key = (img["sku_id"], img["shot"])
-        if key not in out or img["revision"] > out[key]["revision"]:
-            out[key] = img
-    return out
-
-
-def new_id() -> str:
-    return str(uuid.uuid4())
+def statuses(events: list[dict]) -> list[str]:
+    return [e["data"]["status"] for e in events if e["type"] == "status"]

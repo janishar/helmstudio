@@ -11,13 +11,8 @@ import {
   type Session,
 } from "@/lib/session";
 
-/** The library's static pictures (pose samples, home shots, models), cacheable once signed in. Set here and only on a
- * signed-in response: a header in next.config would also make the signed-out redirect to /signin cacheable. */
-const LIBRARY = "/catalog/";
-const LIBRARY_CACHE = "private, max-age=86400, stale-while-revalidate=604800"; // regenerated pictures keep their names
-
 /** Pages that never need a session. */
-const PUBLIC = new Set(["/signin"]); // "/signup" too once sign-up reopens
+const PUBLIC = new Set(["/signin"]);
 
 /** A refresh's result: a new session, "refused" when the token is no good, or "unavailable" when the answer says
  * nothing about the session. */
@@ -78,16 +73,12 @@ export function publicOrigin(req: NextRequest): string {
  * can't answer, the request passes with its cookies kept, so an outage doesn't sign anyone out. */
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  // Kong's X-Forwarded-Host has no port (nginx $host) while the browser's Origin has one (127.0.0.1:8080):
+  // Kong's X-Forwarded-Host has no port (nginx $host) while the browser's Origin has one (127.0.0.1:8300):
   // Next's Server Actions CSRF check compares the two, so hand it the host with the forwarded port.
   if (req.headers.has("x-forwarded-host"))
     req.headers.set("x-forwarded-host", new URL(publicOrigin(req)).host);
   // Carries on with the rewritten headers.
-  const next = () => {
-    const res = NextResponse.next({ request: { headers: req.headers } });
-    if (pathname.startsWith(LIBRARY)) res.headers.set("Cache-Control", LIBRARY_CACHE); // reached only signed in
-    return res;
-  };
+  const next = () => NextResponse.next({ request: { headers: req.headers } });
   if (PUBLIC.has(pathname)) return next();
   const access = req.cookies.get(ACCESS_COOKIE)?.value;
   const refresh = req.cookies.get(REFRESH_COOKIE)?.value;
@@ -116,5 +107,5 @@ export async function proxy(req: NextRequest) {
 
 /** Everything except static assets and /files, whose links carry their own signature. */
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|icon.png|brand/|robots.txt|files/).*)"],
+  matcher: ["/((?!_next/static|_next/image|icon.svg|robots.txt|files/).*)"],
 };

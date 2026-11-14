@@ -1,8 +1,0 @@
-{
-  "action": "run",
-  "reply": "Running the rest of the rings.",
-  "args": {
-    "scope": "all",
-    "category": "rings"
-  }
-}

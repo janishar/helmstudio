@@ -1,0 +1,74 @@
+"""evt.run.<session_id>.{status,progress,output} for one run. `seq` is per run, from 1, over all three kinds; it
+lives in memory because a run command is delivered once (studio, not redelivery, retries a run). Every message
+is checked against the contract before it leaves and is published with Nats-Msg-Id <run_id>:<seq>; the publish
+waits for JetStream's ack."""
+
+import json
+import uuid
+from datetime import UTC, datetime
+
+from config import HOST
+from messaging import schemas
+
+
+def now() -> str:
+    """The current UTC time as RFC 3339 with a Z suffix."""
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+class RunEvents:
+    """Builds and publishes the events of the run named by a cmd.run.execute command."""
+
+    def __init__(self, js, cmd: dict) -> None:
+        self.js, self.cmd, self.seq = js, cmd, 0
+
+    def build(self, kind: str, data: dict) -> dict:
+        """The next evt.run.<kind> message, seq included. ValueError when it is off-contract (the
+        seq is not used up)."""
+        cmd, seq = self.cmd, self.seq + 1
+        trace = {
+            k: v
+            for k, v in cmd["trace"].items()
+            if k in ("traceparent", "tracestate", "correlation_id")
+        }
+        msg = {
+            "type": f"evt.run.{kind}",
+            "version": 1,
+            "id": str(uuid.uuid4()),
+            "job_id": cmd["job_id"],
+            "owner_id": cmd["owner_id"],
+            "occurred_at": now(),
+            "trace": trace,
+            "data": {"seq": seq} | data,
+        }
+        if errs := schemas.message_errors(msg):
+            raise ValueError(f"evt.run.{kind} is off-contract: {'; '.join(errs[:3])}")
+        self.seq = seq
+        return msg
+
+    async def publish(self, kind: str, data: dict) -> dict:
+        """Send evt.run.<kind> and wait for the stream's ack. Returns the message sent."""
+        msg = self.build(kind, data)
+        await self.js.publish(
+            f"evt.run.{self.cmd['data']['session_id']}.{kind}",
+            json.dumps(msg).encode(),
+            headers={"Nats-Msg-Id": f"{msg['job_id']}:{msg['data']['seq']}"},
+        )
+        return msg
+
+    async def status(self, status: str, error: str | None = None) -> dict:
+        """running (with the host), succeeded, failed (with a plain error) or cancelled."""
+        data: dict = {"status": status}
+        if status == "running":
+            data["host"] = HOST
+        if error:
+            data["error"] = error[:2000]
+        return await self.publish("status", data)
+
+    async def progress(self, node: str, step: int, of: int) -> dict:
+        """One step of a stepping node done."""
+        return await self.publish("progress", {"node": node, "step": step, "of": of})
+
+    async def output(self, **data) -> dict:
+        """One output stored: index, key, kind, width, height, bytes."""
+        return await self.publish("output", data)

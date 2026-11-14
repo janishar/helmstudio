@@ -49,12 +49,12 @@ func TestMiddleware(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		router.Engine().GET("/v1/catalog/sessions", NewAuthenticationProvider(service).Middleware(), func(ctx *gin.Context) {
+		router.Engine().GET("/v1/studio/sessions", NewAuthenticationProvider(service).Middleware(), func(ctx *gin.Context) {
 			caller := common.MustCaller(ctx)
 			ctx.String(http.StatusOK, caller.ID+" "+caller.ClientID)
 		})
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", "/v1/catalog/sessions", nil)
+		r := httptest.NewRequest("GET", "/v1/studio/sessions", nil)
 		r.Header.Set("X-Client-Id", "kong")
 		if c.header != "" {
 			r.Header.Set("Authorization", c.header)

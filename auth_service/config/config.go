@@ -20,6 +20,7 @@ type Env struct {
 	KeysDir        string
 	PrivateKeyPEM  string   // JWT_PRIVATE_KEY(_FILE): the signing key itself; KeysDir/private.pem when empty
 	WebAPIKey      string   // WEB_API_KEY(_FILE): added on start as a key of client "web" unless it exists
+	HelmAPIKey     string   // HELM_API_KEY(_FILE): the same for client "helm" (the CLI)
 	TrustedProxies []string // TRUSTED_PROXIES: hops allowed to set X-Forwarded-For (Kong, the web BFF), IPs or CIDRs
 	Issuer         string
 	AccessTTL      time.Duration
@@ -43,8 +44,9 @@ func Load() (Env, error) {
 		KeysDir:        oragoconfig.Get("KEYS_DIR", "keys"),
 		PrivateKeyPEM:  os.Getenv("JWT_PRIVATE_KEY"),
 		WebAPIKey:      os.Getenv("WEB_API_KEY"),
+		HelmAPIKey:     os.Getenv("HELM_API_KEY"),
 		TrustedProxies: oragoconfig.List("TRUSTED_PROXIES"),
-		Issuer:         oragoconfig.Get("JWT_ISSUER", "ora-auth"),
+		Issuer:         oragoconfig.Get("JWT_ISSUER", "helm-auth"),
 		AdminEmail:     os.Getenv("ADMIN_EMAIL"),
 		AdminPassword:  os.Getenv("ADMIN_PASSWORD"),
 	}

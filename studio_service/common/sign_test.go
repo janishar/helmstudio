@@ -14,13 +14,13 @@ const vector = "0c7ad09bc5bf227101a830b6a5f18c6ee3a10c01d759357bf953bf686ce9caae
 
 // Sign makes /files/<escaped key>?exp=&sig= links whose signature is the shared format.
 func TestSign(t *testing.T) {
-	signer := NewSigner("0123456789abcdef", "http://localhost:8100/", time.Hour)
+	signer := NewSigner("0123456789abcdef", "http://localhost:8300/", time.Hour)
 	if got := signer.signature("u/a/archives/z.zip", 2000000000); got != vector {
 		t.Fatalf("signature = %s, want %s", got, vector)
 	}
-	key := "u/a/catalog/s/images/front view.png"
+	key := "u/a/runs/r/front view.png"
 	u, err := url.Parse(signer.Sign(key))
-	if err != nil || !strings.HasPrefix(u.String(), "http://localhost:8100/files/u/a/catalog/s/images/front%20view.png?exp=") {
+	if err != nil || !strings.HasPrefix(u.String(), "http://localhost:8300/files/u/a/runs/r/front%20view.png?exp=") {
 		t.Fatal(u, err)
 	}
 	expiry, err := strconv.ParseInt(u.Query().Get("exp"), 10, 64)

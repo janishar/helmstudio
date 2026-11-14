@@ -395,6 +395,25 @@ func TestNatsJetStreamWatchKVSeesCurrentAndLaterValues(t *testing.T) {
 	}
 }
 
+// A put needs the bucket; once it exists, the value is stored under the key.
+func TestNatsJetStreamPutKV(t *testing.T) {
+	client := startServer(t)
+	ctx := context.Background()
+	if err := NatsJetStreamPutKV(ctx, client, "cancels", "r1", []byte("now")); err == nil {
+		t.Fatal("put without a bucket succeeded")
+	}
+	bucket, err := client.jetStream().CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: "cancels", History: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := NatsJetStreamPutKV(ctx, client, "cancels", "r1", []byte("now")); err != nil {
+		t.Fatal(err)
+	}
+	if entry, err := bucket.Get(ctx, "r1"); err != nil || string(entry.Value()) != "now" {
+		t.Fatalf("get: %v %v", entry, err)
+	}
+}
+
 func TestNewNatsClientMakesAJetStreamContextWhileNatsIsDown(t *testing.T) {
 	if client := newDeadClient(t, time.Second); client.jetStream() == nil {
 		t.Error("no JetStream context")

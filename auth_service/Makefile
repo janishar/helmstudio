@@ -20,4 +20,4 @@ build:
 	CGO_ENABLED=0 go build -tags nomsgpack -o bin/auth ./cmd
 
 image:
-	docker build --build-context orago=../orago -t ora-catalog/auth:dev .
+	docker build --build-context orago=../orago -t helmstudio/auth:dev .

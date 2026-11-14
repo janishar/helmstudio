@@ -1,88 +1,155 @@
-/* ORA Catalog Agent design tokens, matched to the ORA product app (app.oralab.ai): framed navy panels (frame #0e1118,
-   panel #161a24, raised cards #20242f, header bar #262c3d, borders #2f3446), Tailwind gray text, one indigo accent
-   (accent fills a shade darker than the app's #6366f1 so white text passes WCAG AA), /15 accent tints, Nunito, 8 px
-   controls, 12 px cards, 16 px panels, a fuchsia → purple gradient for the main action and the gold → pink → blue brand
-   gradient for highlights. Dark via the .dark class (next-themes: follows prefers-color-scheme until the user picks);
-   light mode keeps the same structure and accent on cool grays. */
-:root {
-  --frame: #eceef3;
-  --background: #ffffff; /* panels */
-  --foreground: #111827;
-  --bar: #f6f7f9;
-  --card: #f9fafb;
-  --card-foreground: #111827;
-  --popover: #ffffff;
-  --popover-foreground: #111827;
-  --field: #ffffff;
-  --primary: #4f46e5;
-  --primary-foreground: #ffffff;
-  --secondary: #f1f2f5;
-  --secondary-foreground: #111827;
-  --muted: #f1f2f5;
-  --muted-foreground: #4b5563;
-  --accent: #6366f126;
-  --accent-foreground: #4338ca;
-  --destructive: #dc2626;
-  --border: #e3e6ec;
-  --input: #d6dae2;
-  --ring: #6366f1;
-
-  --success: #15803d;
-  --warning: #b45309;
-  --danger: #dc2626;
-  --info: #2563eb;
-
-  --sidebar: #ffffff;
-  --sidebar-foreground: #374151;
-  --sidebar-accent: #6366f126;
-  --sidebar-accent-foreground: #312e81;
-  --sidebar-border: #e3e6ec;
-
-  --grad-brand: linear-gradient(90deg, #d99a2b, #c2549f, #2f7fc4);
-  --grad-cta: linear-gradient(to bottom right, #c026d3, #7e22ce, #581c87);
-
-  --radius: 0.5rem; /* 8 px controls; cards --radius-xl (12 px), panels --radius-2xl (16 px) */
-  --shadow-card: 0 1px 2px rgb(17 24 39 / 0.04);
-  --shadow-pop: 0 4px 8px rgb(17 24 39 / 0.06), 0 16px 32px rgb(17 24 39 / 0.1);
-  --duration: 150ms;
+/* The seven themes (docs/plan/05-ui.md 8.5, docs/mock/*.dc.html). next-themes sets data-theme on <html>.
+   g ground · in inset (stage) · p0 floating panel · s1-s5 surface tones · ln line · dash dashed outline ·
+   t1/t2 text · ib/it info button · a1/a2 accents (image, video) with on1/on2 text on them · shd shadow colour. */
+:root,
+[data-theme="forest"] {
+  --g: #0e1512;
+  --in: #090e0c;
+  --p0: #131c17;
+  --s1: #16201b;
+  --s2: #1e2a24;
+  --s3: #26342d;
+  --s4: #2c3b33;
+  --s5: #32433a;
+  --ln: #3d5146;
+  --dash: #5a7265;
+  --t2: #a9b8ab;
+  --t1: #f0f2e8;
+  --ib: #354a3f;
+  --it: #cfdacb;
+  --a1: #b9e37a;
+  --on1: #17200a;
+  --a2: #ff8552;
+  --on2: #2b0c02;
+  --shd: #000000;
+  --bad: #ff8a80;
+  color-scheme: dark;
 }
-
-.dark {
-  --frame: #0e1118;
-  --background: #161a24;
-  --foreground: #f3f4f6;
-  --bar: #262c3d;
-  --card: #20242f;
-  --card-foreground: #f3f4f6;
-  --popover: #20242f;
-  --popover-foreground: #f3f4f6;
-  --field: #161a24;
-  --primary: #5b5ef0;
-  --primary-foreground: #ffffff;
-  --secondary: #262c3d;
-  --secondary-foreground: #f3f4f6;
-  --muted: #262c3d;
-  --muted-foreground: #9ca3af;
-  --accent: #6366f126;
-  --accent-foreground: #a5b4fc;
-  --destructive: #f87171;
-  --border: #2f3446;
-  --input: #2f3446;
-  --ring: #818cf8;
-
-  --success: #34d399;
-  --warning: #fbbf24;
-  --danger: #f87171;
-  --info: #60a5fa;
-
-  --sidebar: #161a24;
-  --sidebar-foreground: #d1d5db;
-  --sidebar-accent: #6366f126;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #2f3446;
-
-  --grad-brand: linear-gradient(90deg, #f3bf6d, #d982ca, #4da2e7);
-
-  --shadow-card: none;
-  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+[data-theme="ocean"] {
+  --g: #0c1320;
+  --in: #080d17;
+  --p0: #101a2a;
+  --s1: #131d2e;
+  --s2: #1c2940;
+  --s3: #24344f;
+  --s4: #2b3d5c;
+  --s5: #33486b;
+  --ln: #40587f;
+  --dash: #5e779e;
+  --t2: #9fb0c6;
+  --t1: #eaf0f7;
+  --ib: #33486b;
+  --it: #cdd8e6;
+  --a1: #ff8a6b;
+  --on1: #2b0d05;
+  --a2: #7cc7f2;
+  --on2: #06202e;
+  --shd: #000000;
+}
+[data-theme="aubergine"] {
+  --g: #15101a;
+  --in: #0f0b13;
+  --p0: #1a1421;
+  --s1: #1f1826;
+  --s2: #2b2135;
+  --s3: #352a41;
+  --s4: #3f324d;
+  --s5: #4a3b5a;
+  --ln: #5c4a6e;
+  --dash: #7a678c;
+  --t2: #b3a6b8;
+  --t1: #f3ecf2;
+  --ib: #4a3b5a;
+  --it: #d9cedc;
+  --a1: #ffb36b;
+  --on1: #2b1500;
+  --a2: #d59bf6;
+  --on2: #230a33;
+  --shd: #000000;
+}
+[data-theme="espresso"] {
+  --g: #17110d;
+  --in: #0f0b08;
+  --p0: #1c1510;
+  --s1: #211914;
+  --s2: #2e231c;
+  --s3: #3a2d24;
+  --s4: #45362b;
+  --s5: #514033;
+  --ln: #655141;
+  --dash: #84705e;
+  --t2: #b8a896;
+  --t1: #f5ece0;
+  --ib: #514033;
+  --it: #dccfbd;
+  --a1: #f2b84b;
+  --on1: #2a1c00;
+  --a2: #ff8552;
+  --on2: #2b0c02;
+  --shd: #000000;
+}
+[data-theme="oxblood"] {
+  --g: #170e10;
+  --in: #0f0809;
+  --p0: #1c1113;
+  --s1: #221517;
+  --s2: #301d20;
+  --s3: #3c2529;
+  --s4: #472d31;
+  --s5: #54363a;
+  --ln: #694549;
+  --dash: #896266;
+  --t2: #bfa8a6;
+  --t1: #f6ecea;
+  --ib: #54363a;
+  --it: #dccccb;
+  --a1: #f6c177;
+  --on1: #2b1a00;
+  --a2: #ff7d96;
+  --on2: #33060f;
+  --shd: #000000;
+}
+[data-theme="indigo"] {
+  --g: #0e0f22;
+  --in: #090a18;
+  --p0: #12142b;
+  --s1: #161832;
+  --s2: #20234a;
+  --s3: #292d5c;
+  --s4: #32376c;
+  --s5: #3c417d;
+  --ln: #4b5194;
+  --dash: #6a70b0;
+  --t2: #a5a9cf;
+  --t1: #eceefc;
+  --ib: #3c417d;
+  --it: #d0d3ee;
+  --a1: #ffc145;
+  --on1: #2b1d00;
+  --a2: #ff7fa8;
+  --on2: #33061a;
+  --shd: #000000;
+}
+[data-theme="parchment"] {
+  --g: #f3ede2;
+  --in: #e9e1d3;
+  --p0: #f8f3ea;
+  --s1: #fbf7ef;
+  --s2: #ffffff;
+  --s3: #efe7d9;
+  --s4: #e6ddcd;
+  --s5: #dcd1be;
+  --ln: #cdbfa8;
+  --dash: #a8987f;
+  --t2: #6e6455;
+  --t1: #1f1a14;
+  --ib: #dcd1be;
+  --it: #3a3228;
+  --a1: #c8553d;
+  --on1: #ffffff;
+  --a2: #2f5d8a;
+  --on2: #ffffff;
+  --shd: #b8a688;
+  --bad: #b3261e;
+  color-scheme: light;
 }

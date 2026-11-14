@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ora.local/contracts/messages/envelope.schema.json",
+  "$id": "https://helmstudio.local/contracts/messages/envelope.schema.json",
   "title": "NATS message envelope",
   "description": "Every message on CMD / EVT / evt.auth.*. `data` is per type (messages/<type>.schema.json). The envelope is closed: a new envelope field is a breaking change. `data` is open: consumers ignore unknown fields (additive changes keep the version).",
   "type": "object",
@@ -19,7 +19,7 @@
     "type": {
       "type": "string",
       "pattern": "^(cmd|evt)\\.[a-z0-9]+\\.[a-z_]+$",
-      "description": "message type, e.g. cmd.catalog.run (= its subject); catalog events publish on evt.catalog.<session_id>.<last part>"
+      "description": "message type, e.g. cmd.run.execute; never the routing subject (cmd.run.execute travels on cmd.run.<host>.<env>, evt.run.status on evt.run.<session_id>.status)"
     },
     "version": {
       "type": "integer",
@@ -28,7 +28,7 @@
     },
     "id": {
       "$ref": "defs.schema.json#/$defs/uuid",
-      "description": "message id (Nats-Msg-Id dedupe uses <job_id>:<attempt> for commands)"
+      "description": "message id (unique per message; dedupe uses Nats-Msg-Id, see contracts/README.md)"
     },
     "job_id": {
       "oneOf": [
@@ -39,11 +39,11 @@
           "type": "null"
         }
       ],
-      "description": "the command's job: a catalog process or run id (Nats-Msg-Id <job_id>:<attempt>; evt seq counts per job); null only for non-job messages (evt.auth.revoked)"
+      "description": "the command's job: the run id for cmd.run.* and evt.run.* (Nats-Msg-Id <job_id>:<attempt> for commands, <job_id>:<seq> for events); null only for non-job messages (evt.auth.revoked)"
     },
     "owner_id": {
       "$ref": "defs.schema.json#/$defs/uuid",
-      "description": "the user who owns the session / token; scopes every object key"
+      "description": "the user who owns the session / token; every object key in data is under u/<owner_id>/"
     },
     "occurred_at": {
       "type": "string",

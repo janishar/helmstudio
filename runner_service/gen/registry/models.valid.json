@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "models": [
+    {
+      "id": "echo",
+      "family": "echo",
+      "title": "Echo (fake)"
+    }
+  ]
+}

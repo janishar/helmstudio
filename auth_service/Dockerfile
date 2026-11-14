@@ -1,4 +1,4 @@
-FROM golang:1.27.3-alpine3.24 AS build
+FROM golang:1.27.4-alpine3.24 AS build
 WORKDIR /src/auth_service
 
 # Dependencies first, so a change to orago's source doesn't download them again.

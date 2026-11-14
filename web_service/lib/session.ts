@@ -3,18 +3,18 @@ import "server-only";
 import { readFileSync } from "node:fs";
 import type { components } from "@/gen/api";
 
-/** What sign-in, sign-up and refresh answer: both tokens and the user. */
+/** What sign-in and refresh answer: both tokens and the user. */
 export type Session = components["schemas"]["Session"];
 
 /** Cookie holding the access token. */
-export const ACCESS_COOKIE = "ora_at";
+export const ACCESS_COOKIE = "helm_at";
 /** Cookie holding the refresh token. */
-export const REFRESH_COOKIE = "ora_rt";
+export const REFRESH_COOKIE = "helm_rt";
 /** Lifetime of both cookies in seconds: 30 days. */
 const REFRESH_TTL = 30 * 24 * 3600;
 
 /** Kong's base URL, without a trailing slash. */
-export const kongUrl = () => (process.env.KONG_URL ?? "http://127.0.0.1:8100").replace(/\/$/, "");
+export const kongUrl = () => (process.env.KONG_URL ?? "http://127.0.0.1:8300").replace(/\/$/, "");
 
 // WEB_API_KEY, or the file WEB_API_KEY_FILE names (a compose secret)
 let apiKey: string | undefined;

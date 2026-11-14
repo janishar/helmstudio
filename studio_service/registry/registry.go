@@ -1,243 +1,235 @@
-// Package registry: the agents' KV `registry` (catalog_library, catalog_prices, catalog_checks), watched and cached.
+// Package registry: what the runners publish, watched and cached. KV `registry` keys <host>.<env>.nodes|workflows|models
+// (contracts/registry.schema.json) and KV `hosts` keys <host>.<env> (each runner's live state).
 package registry
 
 import (
 	"encoding/json"
-	"sync/atomic"
+	"maps"
+	"slices"
+	"strings"
+	"sync"
+	"time"
 )
 
-// Family is a group of products (jewellery, furniture, garments), in run order.
-type Family struct {
-	ID   string `json:"id"`
+// Stale is how old a hosts key may be before its runner counts as offline.
+const Stale = 30 * time.Second
+
+// Param is one param of a node schema.
+type Param struct {
+	Name    string   `json:"name"`
+	Type    string   `json:"type"` // int | float | bool | string | text | enum
+	Label   string   `json:"label,omitempty"`
+	Default any      `json:"default"`
+	Min     *float64 `json:"min,omitempty"`
+	Max     *float64 `json:"max,omitempty"`
+	Enum    []string `json:"enum,omitempty"`
+	Help    string   `json:"help,omitempty"`
+}
+
+// Port is a typed input or output of a node.
+type Port struct {
 	Name string `json:"name"`
+	Type string `json:"type"`
 }
 
-// Category is one product (Ring, Sofa …) in run order, with its family, SKU code prefix and ORA defaults; a product
-// that does not use a model (UsesModel false) has no default model; DefaultMenModel is its men's wear SKUs' (nil: the
-// default model); Wearer is whose wear all its SKUs are ("men" for men's rings; "" = per SKU). MaxAttempts and DefaultResolution override
-// catalog_prices.max_attempts and defaults.resolution for this product (nil: the global one).
-type Category struct {
-	ID                string        `json:"id"`
-	Family            string        `json:"family"`
-	Name              string        `json:"name"`
-	CodePrefix        string        `json:"code_prefix"`
-	UsesModel         bool          `json:"uses_model"`
-	Subcategories     []Subcategory `json:"subcategories"`
-	DefaultPoses      []string      `json:"default_poses"`
-	DefaultModel      *string       `json:"default_model"`
-	DefaultMenModel   *string       `json:"default_men_model,omitempty"`
-	Wearer            string        `json:"wearer,omitempty"`
-	DefaultBackground string        `json:"default_background"`
-	MaxAttempts       *int          `json:"max_attempts,omitempty"`
-	DefaultResolution *string       `json:"default_resolution,omitempty"`
-	PoseNoun          PoseNoun      `json:"pose_noun"`
+// NodeSchema is one node kind a runner can execute.
+type NodeSchema struct {
+	Kind    string  `json:"kind"`
+	Title   string  `json:"title"`
+	Family  *string `json:"family"`
+	Help    string  `json:"help,omitempty"`
+	Params  []Param `json:"params"`
+	Inputs  []Port  `json:"inputs"`
+	Outputs []Port  `json:"outputs"`
 }
 
-// PoseNoun is what the UI and chat call a pose of a product (jewellery pose, furniture angle, garments look).
-type PoseNoun struct {
-	Singular string `json:"singular"`
-	Plural   string `json:"plural"`
+// Node is one node of a workflow graph.
+type Node struct {
+	Kind   string            `json:"kind"`
+	Params map[string]any    `json:"params"` // never nil: a command must carry every node's params
+	In     map[string]string `json:"in,omitempty"`
 }
 
-// Subcategory is a finer group inside a category; About says what it is in one line and Styling how the brief styles
-// or wears it (the web's info tip), both passed through to GET /library.
-type Subcategory struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	About   string  `json:"about,omitempty"`
-	Styling *string `json:"styling,omitempty"`
+// Workflow is a runnable graph as a runner publishes it, with the schemas of its kinds from the same runner.
+type Workflow struct {
+	ID          string                `json:"id"`
+	Title       string                `json:"title"`
+	Family      string                `json:"family"`
+	Env         string                `json:"env"`
+	Nodes       map[string]Node       `json:"nodes"`
+	NodeSchemas map[string]NodeSchema `json:"node_schemas"`
 }
 
-// Frame zooms into part of a shared example picture.
-type Frame struct {
-	Zoom   float64 `json:"zoom"`
-	Origin string  `json:"origin"`
+// Host is one hosts KV value.
+type Host struct {
+	Host      string    `json:"host"`
+	Env       string    `json:"env"`
+	State     string    `json:"state"` // idle | busy
+	RunID     *string   `json:"run_id"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// Pose is one pose of a category's library; ExampleURL is a static web path (nil: no example yet).
-type Pose struct {
-	ID         string  `json:"id"`
-	Category   string  `json:"category"`
-	Name       string  `json:"name"`
-	ExampleURL *string `json:"example_url"`
-	Frame      *Frame  `json:"frame,omitempty"`
+// Live reports whether the runner refreshed its key within Stale of now.
+func (h Host) Live(now time.Time) bool { return now.Sub(h.UpdatedAt) <= Stale }
+
+// Registry holds the latest value of every registry and hosts key. The zero value is empty and ready to use.
+type Registry struct {
+	mu        sync.RWMutex
+	nodes     map[string][]NodeSchema // "<host>.<env>" → its node schemas
+	workflows map[string][]Workflow   // "<host>.<env>" → its workflows (without node schemas)
+	hosts     map[string]Host         // "<host>.<env>" → its state
 }
 
-// Model is a built-in model with category tags such as no-necklace; FullBodyURL is its full-body view (nil: none);
-// Wearer is whose wear it shows ("women", "men"; "" = any).
-type Model struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	ImageURL     *string  `json:"image_url"`
-	FullBodyURL  *string  `json:"full_body_url,omitempty"`
-	CategoryTags []string `json:"category_tags"`
-	Note         string   `json:"note,omitempty"`
-	Wearer       string   `json:"wearer,omitempty"`
-}
-
-// Background is a built-in background with its swatch and preview.
-type Background struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Swatch   *string  `json:"swatch"`
-	ImageURL *string  `json:"image_url"`
-	Families []string `json:"families,omitempty"` // the families it suits; empty = every family
-}
-
-// Resolution is an output resolution (1K, 2K, 4K).
-type Resolution struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-}
-
-// Ratio is an aspect ratio with what it is for.
-type Ratio struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
-	Use   string `json:"use"`
-	W     int    `json:"w"`
-	H     int    `json:"h"`
-}
-
-// Defaults are the output size used when the brand skips resolution & ratio.
-type Defaults struct {
-	Resolution string `json:"resolution"`
-	Ratio      string `json:"ratio"`
-}
-
-// Library is the catalog_library value.
-type Library struct {
-	Families    []Family     `json:"families"`
-	Categories  []Category   `json:"categories"`
-	Poses       []Pose       `json:"poses"`
-	Models      []Model      `json:"models"`
-	Backgrounds []Background `json:"backgrounds"`
-	Resolutions []Resolution `json:"resolutions"`
-	Ratios      []Ratio      `json:"ratios"`
-	Defaults    Defaults     `json:"defaults"`
-}
-
-// Prices is the catalog_prices value: credits per image by resolution id (quotes only) and the renders per image at
-// most (first try + regenerations after failed reviews), for the worst-case quote.
-type Prices struct {
-	CreditsPerImage map[string]float64 `json:"credits_per_image"`
-	MaxAttempts     int                `json:"max_attempts"`
-}
-
-// Snapshot is the current registry; a nil part means agents_service has not published it yet.
-type Snapshot struct {
-	Library *Library
-	Prices  *Prices
-}
-
-// Ready: the library and prices are known (routes that need them answer 503 until then).
-func (s Snapshot) Ready() bool { return s.Library != nil && s.Prices != nil }
-
-// Category finds a category by id; nil when unknown.
-func (l *Library) Category(id string) *Category {
-	for i := range l.Categories {
-		if l.Categories[i].ID == id {
-			return &l.Categories[i]
-		}
-	}
-	return nil
-}
-
-// DefaultModelFor is the built-in model a SKU of the category with this wearer ("men", "women", "" unknown) defaults
-// to: the men's default for men's wear when the category has one, else its default; "" when it has none.
-func (c *Category) DefaultModelFor(wearer string) string {
-	switch {
-	case wearer == "men" && c.DefaultMenModel != nil && *c.DefaultMenModel != "":
-		return *c.DefaultMenModel
-	case c.DefaultModel != nil:
-		return *c.DefaultModel
-	}
-	return ""
-}
-
-// SuitsWearer reports whether a model fits a SKU's wearer: true unless both are known and differ (an upload has no
-// wearer, nor has a SKU whose wear is unknown).
-func (l *Library) SuitsWearer(modelID, wearer string) bool {
-	m := l.Model(modelID)
-	return m == nil || m.Wearer == "" || wearer == "" || m.Wearer == wearer
-}
-
-// Family finds a family by id; nil when unknown.
-func (l *Library) Family(id string) *Family {
-	for i := range l.Families {
-		if l.Families[i].ID == id {
-			return &l.Families[i]
-		}
-	}
-	return nil
-}
-
-// Pose finds a pose by id; nil when unknown.
-func (l *Library) Pose(id string) *Pose {
-	for i := range l.Poses {
-		if l.Poses[i].ID == id {
-			return &l.Poses[i]
-		}
-	}
-	return nil
-}
-
-// Model finds a built-in model by id; nil when unknown.
-func (l *Library) Model(id string) *Model {
-	for i := range l.Models {
-		if l.Models[i].ID == id {
-			return &l.Models[i]
-		}
-	}
-	return nil
-}
-
-// Background finds a built-in background by id; nil when unknown.
-func (l *Library) Background(id string) *Background {
-	for i := range l.Backgrounds {
-		if l.Backgrounds[i].ID == id {
-			return &l.Backgrounds[i]
-		}
-	}
-	return nil
-}
-
-// current is the latest snapshot, replaced whole so readers never lock.
-var current atomic.Pointer[Snapshot]
-
-// Current returns the latest snapshot; empty before the first KV value arrives.
-func Current() Snapshot {
-	if snapshot := current.Load(); snapshot != nil {
-		return *snapshot
-	}
-	return Snapshot{}
-}
-
-// Set applies one KV value (key catalog_library | catalog_prices); other keys (catalog_checks: agents read it) are ignored.
-func Set(key string, value []byte) error {
-	snapshot := Current()
-	var err error
-	switch key {
-	case "catalog_library":
-		var parsed Library
-		if err = json.Unmarshal(value, &parsed); err == nil {
-			for i := range parsed.Categories { // a library published before pose nouns says "pose"
-				if parsed.Categories[i].PoseNoun.Singular == "" || parsed.Categories[i].PoseNoun.Plural == "" {
-					parsed.Categories[i].PoseNoun = PoseNoun{Singular: "pose", Plural: "poses"}
-				}
-			}
-			snapshot.Library = &parsed
-		}
-	case "catalog_prices":
-		var parsed Prices
-		if err = json.Unmarshal(value, &parsed); err == nil {
-			snapshot.Prices = &parsed
-		}
-	default:
+// SetRegistry applies one KV `registry` value; keys of other kinds (models) are ignored.
+func (r *Registry) SetRegistry(key string, value []byte) error {
+	source, kind, ok := cut(key)
+	if !ok {
 		return nil
 	}
-	if err == nil {
-		current.Store(&snapshot)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	switch kind {
+	case "nodes":
+		var parsed struct {
+			Nodes []NodeSchema `json:"nodes"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		set(&r.nodes, source, parsed.Nodes)
+	case "workflows":
+		var parsed struct {
+			Workflows []Workflow `json:"workflows"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		for _, workflow := range parsed.Workflows {
+			for id, node := range workflow.Nodes {
+				if node.Params == nil {
+					node.Params = map[string]any{}
+					workflow.Nodes[id] = node
+				}
+			}
+		}
+		set(&r.workflows, source, parsed.Workflows)
 	}
-	return err
+	return nil
+}
+
+// SetHost applies one KV `hosts` value.
+func (r *Registry) SetHost(key string, value []byte) error {
+	var host Host
+	if err := json.Unmarshal(value, &host); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	set(&r.hosts, key, host)
+	return nil
+}
+
+// Workflows returns every workflow whose kinds all have a schema from the same runner, by id; the same id from several
+// runners is listed once (the first runner by key wins).
+func (r *Registry) Workflows() []Workflow {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := []Workflow{}
+	seen := map[string]bool{}
+	for _, source := range slices.Sorted(maps.Keys(r.workflows)) {
+		schemas := map[string]NodeSchema{}
+		for _, schema := range r.nodes[source] {
+			schemas[schema.Kind] = schema
+		}
+		for _, workflow := range r.workflows[source] {
+			if seen[workflow.ID] {
+				continue
+			}
+			if complete := withSchemas(workflow, schemas); complete != nil {
+				seen[workflow.ID] = true
+				out = append(out, *complete)
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b Workflow) int { return strings.Compare(a.ID, b.ID) })
+	return out
+}
+
+// Workflow returns the workflow with id, or false.
+func (r *Registry) Workflow(id string) (Workflow, bool) {
+	for _, workflow := range r.Workflows() {
+		if workflow.ID == id {
+			return workflow, true
+		}
+	}
+	return Workflow{}, false
+}
+
+// Hosts returns every hosts value, by key.
+func (r *Registry) Hosts() []Host {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := []Host{}
+	for _, key := range slices.Sorted(maps.Keys(r.hosts)) {
+		out = append(out, r.hosts[key])
+	}
+	return out
+}
+
+// Place picks the host a run of env goes to: a live host with that env, idle ones first, then by name. False when
+// none is live. ponytail: M0 placement; the fair dispatcher replaces it.
+func (r *Registry) Place(env string, now time.Time) (string, bool) {
+	best, found := Host{}, false
+	for _, host := range r.Hosts() { // by key, so the first of equals wins
+		if host.Env != env || !host.Live(now) {
+			continue
+		}
+		if !found || (best.State != "idle" && host.State == "idle") {
+			best, found = host, true
+		}
+	}
+	return best.Host, found
+}
+
+// Holds reports whether host's runner for env is live and may still be working on the run: busy with it, or, for a
+// run still queued, busy with another one (the run waits its turn). A live runner that is idle, or busy with another
+// run while this one is running, has lost it (a crash or a lost publish).
+func (r *Registry) Holds(host, env, runID string, queued bool, now time.Time) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	value, ok := r.hosts[host+"."+env]
+	if !ok || !value.Live(now) {
+		return false
+	}
+	return (value.RunID != nil && *value.RunID == runID) || (queued && value.State == "busy")
+}
+
+// withSchemas returns the workflow with the schemas of its kinds, or nil when one is missing.
+func withSchemas(workflow Workflow, schemas map[string]NodeSchema) *Workflow {
+	workflow.NodeSchemas = map[string]NodeSchema{}
+	for _, node := range workflow.Nodes {
+		schema, ok := schemas[node.Kind]
+		if !ok {
+			return nil
+		}
+		workflow.NodeSchemas[node.Kind] = schema
+	}
+	return &workflow
+}
+
+// cut splits a registry key "<host>.<env>.<kind>" into "<host>.<env>" and kind.
+func cut(key string) (string, string, bool) {
+	i := strings.LastIndexByte(key, '.')
+	if i <= 0 || strings.Count(key, ".") != 2 {
+		return "", "", false
+	}
+	return key[:i], key[i+1:], true
+}
+
+// set puts value under key in *m, making the map on first use.
+func set[V any](m *map[string]V, key string, value V) {
+	if *m == nil {
+		*m = map[string]V{}
+	}
+	(*m)[key] = value
 }

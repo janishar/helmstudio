@@ -1,0 +1,29 @@
+[project]
+name = "helmstudio-runner"
+version = "0.1.0"
+description = "helmstudio runner_service: the fake runner (host fake, env fake) that executes echo workflow runs from NATS"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "nats-py>=2.16.0",
+    "jsonschema>=4.26.0",
+    "boto3>=1.44.3",
+    "pillow>=13.0.0",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.2.0", "pytest-asyncio>=1.5.0", "ruff==0.17.5"]
+
+[tool.uv]
+package = false
+required-version = "==0.13.8"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["gen"]

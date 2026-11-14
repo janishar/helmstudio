@@ -10,9 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/helmstudio/orago/micro"
 	"github.com/helmstudio/orago/postgres"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/helmstudio/auth_service/api/apikey"
 	apikeydto "github.com/helmstudio/auth_service/api/apikey/dto"
@@ -29,17 +29,20 @@ import (
 func EnsureAdmin(ctx context.Context, env config.Env, service *auth.Service) error {
 	var id string
 	if env.AdminEmail != "" && env.AdminPassword != "" {
-		body := dto.SignupRequest{Email: env.AdminEmail, Password: env.AdminPassword, Name: "Admin"}
-		if detail := body.Validate(); detail != "" {
-			return fmt.Errorf("ADMIN_EMAIL/ADMIN_PASSWORD: %s", detail)
+		email := dto.NormalizeEmail(env.AdminEmail)
+		if email == "" {
+			return errors.New("ADMIN_EMAIL: invalid email")
 		}
-		user, err := service.CreateUser(ctx, body.Email, body.Name, body.Password, []string{"user", "admin"})
+		if detail := utils.WeakPassword(env.AdminPassword); detail != "" {
+			return fmt.Errorf("ADMIN_PASSWORD: %s", detail)
+		}
+		user, err := service.CreateUser(ctx, email, "Admin", env.AdminPassword, []string{"user", "admin"})
 		switch {
 		case err == nil:
-			log.Printf("created admin %s", body.Email)
+			log.Printf("created admin %s", email)
 			id = user.ID
 		case errors.Is(err, auth.ErrConflict):
-			if id, err = syncAdmin(ctx, service, body.Email, body.Password); err != nil {
+			if id, err = syncAdmin(ctx, service, email, env.AdminPassword); err != nil {
 				return err
 			}
 		default:
@@ -94,7 +97,7 @@ func loadKey(env config.Env) (*rsa.PrivateKey, error) {
 }
 
 // Run starts the service and blocks until SIGINT or SIGTERM. It opens the database, loads the signing key, connects
-// NATS, ensures the admin and web API key, mounts the validators, then serves HTTP. On a signal it waits for requests
+// NATS, ensures the admin and the web and helm API keys, mounts the validators, then serves HTTP. On a signal it waits for requests
 // in flight, then for NATS handlers, and closes the pool last because they use it.
 func Run() error {
 	env, err := config.Load()
@@ -127,9 +130,12 @@ func Run() error {
 	if err := EnsureAdmin(ctx, env, module.Auth); err != nil {
 		return err
 	}
-	if env.WebAPIKey != "" {
-		if err := module.APIKeys.Ensure(ctx, "web", env.WebAPIKey); err != nil {
-			return fmt.Errorf("WEB_API_KEY: %w", err)
+	for client, key := range map[string]string{"web": env.WebAPIKey, "helm": env.HelmAPIKey} {
+		if key == "" {
+			continue
+		}
+		if err := module.APIKeys.Ensure(ctx, client, key); err != nil {
+			return fmt.Errorf("API key of client %s: %w", client, err)
 		}
 	}
 

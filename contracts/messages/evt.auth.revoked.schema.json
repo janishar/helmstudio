@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ora.local/contracts/messages/evt.auth.revoked.schema.json",
+  "$id": "https://helmstudio.local/contracts/messages/evt.auth.revoked.schema.json",
   "title": "a session (refresh-token family) or all of a user's sessions were revoked: drop cached validations",
   "allOf": [
     {

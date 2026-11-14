@@ -1,7 +1,7 @@
-// catalog_service: Catalog Agent, every /v1/catalog route.
+// studio_service: every /v1/studio route.
 //
-//	catalog          run the server
-//	catalog health   exit 0 when GET /health is ok (container health check)
+//	studio          run the server
+//	studio health   exit 0 when GET /health is ok (container health check)
 package main
 
 import (

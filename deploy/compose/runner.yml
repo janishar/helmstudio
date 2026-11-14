@@ -1,0 +1,27 @@
+# The fake runner (host fake, env fake: the echo family) on the helmstudio stack. Paths are relative to deploy/:
+#   docker compose -f deploy/docker-compose.yml up -d --build runner
+# It talks only to NATS and the object store, never to Postgres. Real runners run natively on GPU hosts (M1).
+services:
+  runner:
+    build: ../runner_service
+    image: helmstudio/runner:${IMAGE_TAG:-dev}
+    env_file: [{path: ../runner_service/.env, required: false}]
+    environment:                                      # credentials come from the secrets (<VAR>_FILE)
+      RUNNER_HOST: fake
+      RUNNER_ENV: fake
+      NATS_URL_FILE: /run/secrets/nats_runner_url
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: ${S3_BUCKET:-helmstudio}
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
+    secrets: [nats_runner_url, s3_access_key_id, s3_secret_access_key]
+    volumes: [../contracts:/contracts:ro]             # schemas + the canonical echo registry values
+    healthcheck:                                      # GET /health: NATS connected
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      nats-setup: {condition: service_completed_successfully}
+      storage-setup: {condition: service_completed_successfully, required: false}

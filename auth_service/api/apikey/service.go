@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/helmstudio/orago/network"
 	"github.com/helmstudio/orago/utility"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/auth_service/api/apikey/dto"
 	"github.com/helmstudio/auth_service/api/apikey/model"
@@ -39,7 +39,7 @@ func scan(row pgx.Row) (model.APIKey, error) {
 
 // Create issues a key for a client (created on first use). The raw key is returned once.
 func (s *Service) Create(ctx context.Context, body *dto.Create) (dto.Created, error) {
-	key := "ora_" + utility.RandomToken(32)
+	key := "helm_" + utility.RandomToken(32)
 	var id string
 	err := s.DB.QueryRow(ctx, `WITH c AS (
 			INSERT INTO clients (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id)
@@ -52,8 +52,8 @@ func (s *Service) Create(ctx context.Context, body *dto.Create) (dto.Created, er
 	return dto.Created{APIKey: stored, Key: key}, err
 }
 
-// Ensure makes key an API key of client (compose secret WEB_API_KEY); a key that exists, even revoked, is left
-// alone.
+// Ensure makes key an API key of client (compose secrets WEB_API_KEY, HELM_API_KEY); a key that exists, even
+// revoked, is left alone.
 func (s *Service) Ensure(ctx context.Context, client, key string) error {
 	if len(key) < 20 || len(key) > 200 {
 		return errors.New("use 20 to 200 characters")

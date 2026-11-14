@@ -1,5 +1,5 @@
-drive/
 .venv/
+.venv-*/
 .env
 __pycache__/
 *.egg-info/

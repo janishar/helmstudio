@@ -5,10 +5,10 @@ import (
 	"crypto/rsa"
 	"errors"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/helmstudio/orago/micro"
 	oragomiddleware "github.com/helmstudio/orago/middleware"
 	"github.com/helmstudio/orago/network"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/auth_service/api/apikey"
 	"github.com/helmstudio/auth_service/api/auth"

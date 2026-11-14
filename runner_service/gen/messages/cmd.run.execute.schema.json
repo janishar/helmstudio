@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.run.execute.schema.json",
+  "title": "studio → runner: execute one run",
+  "description": "Published by studio's outbox relay on subject cmd.run.<host>.<env> (stream CMD) with Nats-Msg-Id <run_id>:<attempt>. The runner checks KV cancels before it starts, runs the graph in data.workflow, writes every output under data.output_prefix and reports on evt.run.<session_id>.*.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.run.execute"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "= data.run_id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "session_id",
+        "attempt",
+        "workflow",
+        "output_prefix"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/attempt"
+        },
+        "workflow": {
+          "type": "object",
+          "description": "the resolved graph: the registry workflow with the run's inputs applied and every param of every node filled (defaults included), so the runner reads no defaults of its own",
+          "required": [
+            "id",
+            "nodes"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "defs.schema.json#/$defs/workflowId"
+            },
+            "nodes": {
+              "allOf": [
+                {
+                  "$ref": "defs.schema.json#/$defs/graph"
+                },
+                {
+                  "additionalProperties": {
+                    "required": [
+                      "params"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "output_prefix": {
+          "$ref": "defs.schema.json#/$defs/objectPrefix",
+          "description": "u/<owner_id>/runs/<run_id>/; output n is written to <output_prefix><n>.<ext> (the echo node: 0.png)"
+        }
+      }
+    }
+  }
+}

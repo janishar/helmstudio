@@ -1,5 +1,5 @@
 # Next.js standalone image: node server.js, no node_modules beyond what the build traced.
-FROM node:26.13.0-alpine3.24 AS build
+FROM node:26.13.1-alpine3.24 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund

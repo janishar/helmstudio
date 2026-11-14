@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  "description": "docs/plan/14-dependencies.md section 18.3: weekly; patches merge themselves when the contract suite is green, minors are reviewed, majors wait on the dashboard.",
+  "schedule": ["before 6am on monday"],
+  "timezone": "UTC",
+  "enabledManagers": ["gomod", "pep621", "npm", "dockerfile", "docker-compose"],
+  "postUpdateOptions": ["gomodTidy"],
+  "lockFileMaintenance": {"enabled": true, "schedule": ["before 6am on monday"]},
+  "packageRules": [
+    {"matchUpdateTypes": ["patch"], "automerge": true},
+    {"matchUpdateTypes": ["minor"], "automerge": false},
+    {"matchUpdateTypes": ["major"], "dependencyDashboardApproval": true},
+    {"groupName": "langchain and langgraph", "matchPackageNames": ["langchain-core", "langchain-openai", "langchain-anthropic", "/^langgraph/"]},
+    {"groupName": "torch", "matchPackageNames": ["torch", "torchvision"]},
+    {"groupName": "mlx", "matchPackageNames": ["mlx", "mlx-lm", "mlx-vlm", "transformers"]},
+    {"groupName": "aws-sdk-go-v2", "matchPackageNames": ["/^github.com/aws/aws-sdk-go-v2/"]},
+    {"groupName": "next", "matchPackageNames": ["next", "eslint-config-next"]},
+    {"groupName": "react", "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"]},
+    {"description": "Toolchains and servers are reviewed by hand monthly (18.3)", "matchDatasources": ["docker", "golang-version"], "matchPackageNames": ["golang", "go", "node", "python", "postgres", "nats", "natsio/nats-box", "kong", "chrislusf/seaweedfs"], "schedule": ["on the first day of the month"], "automerge": false},
+    {"description": "Kong 3.9 is the newest open-source line (18.1)", "matchPackageNames": ["kong"], "allowedVersions": "<3.10"},
+    {"description": "TypeScript stays on 6 until the type generator and lint plugins support 7 (18.1)", "matchPackageNames": ["typescript"], "allowedVersions": "<7"}
+  ]
+}

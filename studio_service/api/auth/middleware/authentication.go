@@ -1,4 +1,4 @@
-// Package middleware: bearer-token authentication for catalog_service's /v1/ routes.
+// Package middleware: bearer-token authentication for studio_service's /v1/ routes.
 package middleware
 
 import (

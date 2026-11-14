@@ -1,81 +1,88 @@
 # contracts
 
-The single source for everything that crosses a service boundary ([docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)). This repo ships only
-Catalog Agent. Services never import each other; each generates its own types from here into its `gen/`
-(`make gen`) and commits them.
+The single source for everything that crosses a service boundary ([docs/plan/13-services.md](../docs/plan/13-services.md),
+section 17.8). Change the contract first, then the services. Services never import each other; each generates or
+copies what it needs from here into its `gen/` (`make gen`) and commits it.
 
 | File | What |
 |---|---|
-| `openapi.yaml` | OpenAPI 3.1: the public HTTP API behind Kong — `/v1/catalog/*` (catalog_service), `/files/*` (files_service), `/auth/*` (auth_service, tag `auth`, `x-status: built`; `/auth/password/{forgot,reset}` are `x-status: deferred`). |
-| `messages/envelope.schema.json` | NATS envelope `{type, version, id, job_id, owner_id, occurred_at, trace, data}`; `job_id` = the command's job (a catalog process or run id) |
-| `messages/cmd.catalog.process.schema.json` | catalog → agents: ingest new raw sources (files by key, CSV rows, Drive/website links), sort into SKUs, describe, group, read guidelines + details, run the checks. `ingest: []` = re-read documents and re-run the checks only (sent when guidelines, output, poses, models, backgrounds or details change during setup). Optional `families` limits sorting to those families' products |
-| `messages/cmd.catalog.run.schema.json` | catalog → agents: render SKUs × shots with resolved briefs (model/background `key` null = built-in; `model` null = a product without a model; `model` or `background` null with
-`model_description` / `background_description` = described only, no reference image), review, regenerate up to `MAX_REGENERATIONS`, save every try; scope `regenerate` carries `feedback` and each shot's `regenerate_of`; a shot's optional `ratio` (else `data.ratio`) and `notes` (the brand's pose instruction); per SKU `passed` (live images outside the run that passed review or were approved: the anchor reference when the run has none) and optional `not_passed` (the poses of the other live ones: a gated product's other shots are not rendered while its anchor pose is there) |
-| `messages/evt.catalog.{status,log,step,question,skus,image,run,usage}.schema.json` | agents → catalog on `evt.catalog.<session_id>.<type>`: job lifecycle, chat status lines (same `key` replaces), pipeline steps, check questions (two options, each with the SKU changes to apply), the SKU list + rules, one image's state (with `attempts_detail`: every try's key, review and `best`), per-SKU run progress, one model call's usage (LLM tokens and USD cost, or image credits; the dev Jobs view sums them) |
-| `messages/req.catalog.{interpret,poses.suggest}.schema.json` | NATS request/reply (core NATS, subjects `catalog.interpret`, `catalog.poses.suggest`, queue group `agents`, not enveloped): `$defs/request`, `$defs/reply`; poses.suggest answers custom shots (`defs customPose`) and `refs` (reference key → pose id), and takes `exact` (the brand's shot list) |
-| `messages/req.auth.validate.{token,role}.schema.json` | NATS request/reply with auth_service (not enveloped) |
-| `messages/evt.auth.revoked.schema.json` | auth_service → catalog: drop cached token validations |
-| `agents.cancel` (no schema) | catalog → every agents replica, core NATS broadcast, not enveloped: the body is a run id as plain text; the replica running that job stops it. Sent by `POST …/runs/{run_id}/stop`, and again when a stopped run reports `running` |
-| `agents.cancel.image` (no schema) | catalog → every agents replica, core NATS broadcast, not enveloped: the body is `<run_id> <image_id>`; the replica running that job skips the shot. Sent by `POST …/images/stop` (which also drops those shots from a command still in catalog's outbox), and again (for every id in the run's `stopped_image_ids`) when the run reports `running` |
-| `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, SKU refs, attributes, rules, …) |
-| `registry.schema.json` | KV `registry` values agents_service publishes: `$defs/catalog_library` (families, categories = products with `family`, `uses_model`, `pose_noun` {singular, plural} and optional per-product `max_attempts` / `default_resolution`, poses, built-in models (optional `full_body_url`, `wearer`) and backgrounds, a category's optional `default_men_model`, resolutions, ratios, defaults), `$defs/catalog_prices` (credits per image by resolution, `max_attempts` renders per image at most), `$defs/catalog_checks` (the processing-check catalogue) |
+| `openapi.yaml` | OpenAPI 3.1: the public HTTP API behind Kong — `/v1/studio/*` (studio_service), `/files/*` (files_service), `/auth/*` (auth_service, tag `auth`, `x-status: built`) |
+| `messages/envelope.schema.json` | NATS envelope `{type, version, id, job_id, owner_id, occurred_at, trace, data}`; `job_id` = the run id for every `cmd.run.*` / `evt.run.*` |
+| `messages/cmd.run.execute.schema.json` | studio → runner: run one resolved graph (every param filled), write outputs under `output_prefix` |
+| `messages/evt.run.{status,progress,output}.schema.json` | runner → studio's projector: lifecycle (`running`, then one of `succeeded`, `failed`, `cancelled`), one event per step, one per stored output |
+| `messages/req.auth.validate.{token,role}.schema.json` | NATS request/reply with auth_service (not enveloped): `$defs/request`, `$defs/reply` |
+| `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
+| `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph) |
+| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (bucket `registry`), `$defs/host` (bucket `hosts`) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
-| `check.py` | validates every fixture against its schema and lints `openapi.yaml` |
+| `fixtures/registry/{nodes,workflows,models}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
+| `check.py` | validates every fixture, checks the echo workflow against the echo node schemas, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
 make -C contract_tests check-contracts   # exit 1 on any failure
 ```
 
+## NATS
+
+| Subject | Kind | Body | Producer → consumer |
+|---|---|---|---|
+| `cmd.run.<host>.<env>` | stream `CMD` (work queue) | `cmd.run.execute`, `Nats-Msg-Id <run_id>:<attempt>` | studio outbox relay → the runner of that host and env (durable `runner-<host>-<env>`) |
+| `evt.run.<session_id>.status` | stream `EVT` (7 days) | `evt.run.status`, `Nats-Msg-Id <run_id>:<seq>` | runner → studio projector |
+| `evt.run.<session_id>.progress` | stream `EVT` | `evt.run.progress`, same | runner → studio projector |
+| `evt.run.<session_id>.output` | stream `EVT` | `evt.run.output`, same | runner → studio projector |
+| `dlq.<original subject>` | stream `DLQ` (30 days) | the original command, unchanged | runner, for a command that fails its schema |
+| `auth.validate.token`, `auth.validate.role` | core request/reply, queue group `auth` | bare JSON (see the schemas) | studio → auth |
+| `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
+| KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models` | the runner writes its own keys once at start; studio reads |
+| KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` | the runner rewrites it every 10 s; studio reads (older than 30 s = offline) |
+| KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step |
+
+Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
+env `fake`. The envelope `type` is the kind of message, never the subject.
+
 ## How the pieces meet
 
-- **Ids.** catalog_service owns every id: session, SKU (`sku_id`; agents name SKUs by `code`, catalog upserts on
-  `(session_id, code)`), question (upsert on `(session_id, key)`; an answered key is never re-opened), run, image
-  (catalog creates each image row `generating` before sending `cmd.catalog.run`; agents report by `image_id`).
-- **Questions.** `evt.catalog.question` options carry `apply` (brief, attributes, confirmed or `merge_into` per SKU code);
-  catalog applies the chosen option on `POST /questions/{id}/answer`. HTTP shows only the labels.
-- **Events to the browser.** The projector writes each `evt.catalog.*` into the tables and a per-session event log
-  (`seq`); `GET /sessions/{id}/events` serves it as JSON (`?since=`) or SSE, with object keys turned into signed
-  URLs (see `SessionEvent` in openapi.yaml).
-- **Library.** Pictures in `catalog_library` are static web paths served by web_service (`/catalog/...`); agents keep their
-  own reference assets per id. User uploads (model, background, pose reference) are session uploads whose UUID is
-  used where a library id goes (`choiceId`).
-- **Products.** A `category` is a product (Ring, Sofa, Tops …) inside a `family` (jewellery, furniture,
-  garments); agents_service defines them (`agents_service/catalog/products/`) and publishes them in `catalog_library`
-  in run order (family order, then product order). `uses_model: false` (furniture, jewellery coins) means no model:
-  `default_model` and the SKU brief's `model` are null. SKU `attributes` always carry `description` and `source`; the
-  other fields are the product family's (jewellery `counts, motifs, finish, size_mm, material, kind`; garments
-  `pieces, fabric, colour, print, work, details, kind`; furniture `material, colour, finish, dimensions_cm, style`); garments and jewellery add `sides` (raw
-  key → view: garments front, back, side; jewellery hero, front, side, angle, flat, close-up, pair, hanging, model,
-  mood; null = unknown), which HTTP also shows as `Sku.raw_views` in `raw_urls` order. A background's optional
-  `families` lists the families it suits (absent = all).
-- **Folder uploads.** The raw multipart's optional `paths` (one per file, inside the picked folder) reach agents as
-  the files' `names`; an upload spanning several sub-folders sorts one product per sub-folder.
-- **Tries and feedback.** `Image.attempts[]` signs every try of a revision (`best` = the one in `url`). A SKU × shot's
-  feedback thread is its revisions in order (each `Image.feedback` + its `attempts`); no separate thread resource.
-- **Ratios and pose notes.** A SKU `Brief` has a default `ratio` plus `pose_ratios` and `pose_notes` (pose id → ratio /
-  free text, `{}` = none), set by `PATCH /skus/{id}`; catalog resolves each shot's `ratio` and `notes` into
-  `cmd.catalog.run` from the shot's own SKU brief. `RegenerateRequest.ratio` overrides the ratio of the new revisions.
-  Every ratio must be a library `ratios[].id` (422).
-- **Credits** are quotes from `catalog_prices` (`credits_quoted`); nothing is charged.
+- **Ids.** studio_service owns every id. It creates the run row (`queued`), picks the host and writes the outbox row
+  in one transaction; the runner reports by `job_id` = run id. M0 placement: the one live host (hosts key fresher
+  than 30 s) whose env is the workflow's `env`; with none the run is created `failed` (`no live host for env <env>`)
+  and nothing is sent.
+- **Workflows.** A workflow (registry `workflows`) is `{id, title, family, env, nodes}`; `nodes` maps a node id to
+  `{kind, params, in}`, `in` wires an input port to `<node id>.<output>`. A node schema (registry `nodes`) gives a
+  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum` with `default`, `min`, `max`, `enum`,
+  `help`) and typed `inputs` / `outputs`. `GET /v1/studio/workflows/{id}` serves the workflow with
+  `node_schemas` for its kinds; the UI derives the form from them.
+- **Resolving a run.** Values come from the node schema `default`, then the workflow's `params`, then
+  `RunRequest.inputs` (`"<node id>.<param>": value`, checked against type, `min`/`max`, `enum`: 422). The command
+  carries the whole graph with every param filled, so the runner needs no defaults.
+- **The echo family (fake).** Workflow `echo`: `prompt` (kind `prompt`, param `text`) → `echo` (kind `echo/echo`,
+  params `steps`, `delay_ms`, `fail`; input `text`: Text, output `image`: Image) → `output` (kind `output`, input
+  `media`: Image). Running it: `status running` (seq 1), one `progress` per step (node `echo`, step 1..steps, each
+  after `delay_ms`), the PNG written to `<output_prefix>0.png` and one `output` (index 0), then `succeeded`; when `fail` is true, no PNG and
+  `failed` after the last step. Cancel is checked before each step.
+- **Events to the browser.** The projector applies each `evt.run.*` to the run row and appends it to the
+  session's event log (per-session `seq`); studio appends its own `queued` and the `failed` / `cancelled` it decides
+  itself. `GET /v1/studio/sessions/{id}/events` serves the log as JSON (`?since=`) or SSE (`Last-Event-ID`), with
+  object keys turned into signed URLs (`SessionEvent` in openapi.yaml).
+- **Hosts.** `GET /v1/studio/hosts` shows host, env, `idle` / `busy` / `offline` and `updated_at`; never a run id or
+  an owner.
 
 ## Rules
 
 - **Claim check:** messages carry object keys under `u/<owner_id>/…`, never bytes or signed URLs. Producers only
-  write keys under the envelope's `owner_id` prefix; session files live under `u/<owner>/catalog/<session>/`
-  (`raw/`, `guidelines/`, `uploads/`, `images/<image_id>.<ext>` = the best try, `images/<image_id>/attempt_<n>.<ext>` = every try, kept as long as the image). The only URLs in messages are links the user
-  typed (Drive, website, CSV `image_url`, document links), which agents fetch (never in fake mode).
+  write keys under the envelope's `owner_id` prefix; run outputs live under `u/<owner_id>/runs/<run_id>/`
+  (`<index>.<ext>`). `check.py` fails any message fixture with a `u/…` string outside its owner's prefix.
 - **Envelope** is closed (`additionalProperties: false`); `data` is open: consumers ignore fields they don't know.
 - **Versioning:** a message's `version` is the major version of its `data` schema (`const` in the schema).
   Additive, optional fields keep the version. Removing or renaming a field, changing a type or meaning, or making a
   field required is breaking: add `<type>` version N+1 as a new schema, publish both until every consumer reads
-  N+1, then drop N. Envelope changes are breaking for every type. Registry values carry `schema_version` the same
-  way. (The Catalog Agent rewrite replaced every `cmd.job.*` / `evt.job.*` type at once; nothing reads them any more.)
+  N+1, then drop N. Envelope changes are breaking for every type. KV values carry `schema_version` the same way.
 - **HTTP:** `info.version` follows semver; additive response fields and new optional request fields are minor;
   anything that breaks a generated client is a new major. Errors are always `{"detail": string}`. Long work is 202;
-  a state conflict (blocking question open, processing or run in progress, not started, nothing to do) is 409.
-- **Idempotency:** commands use `Nats-Msg-Id = <job_id>:<attempt>`; every `evt.catalog.*` carries a per-job `seq` and
-  the projector dedupes on `(job_id, seq)`.
+  a state conflict is 409. operationIds start with the service: `studio…`, `files…`, `auth…`.
+- **Idempotency:** commands use `Nats-Msg-Id = <job_id>:<attempt>`; every `evt.run.*` carries a per-run `seq`
+  (from 1, over all three kinds) and publishes with `Nats-Msg-Id = <job_id>:<seq>`; the projector dedupes on
+  `(job_id, seq)`. A runner publishes the terminal status and waits for its ack before it acks the command.
 - **Ownership:** every message has `owner_id`; cross-user reads answer 404 (not 403).
 - **Change process:** edit the schema, add or adjust a valid **and** an invalid fixture, run `check.py`, regenerate
   each service's `gen/`.
@@ -90,6 +97,9 @@ Kong never routes it. Request header `x-api-key: <key>`. Answers:
 - `401 {"detail": "invalid api key"}` — missing, longer than 200 characters, unknown or revoked.
 - `500 {"detail": "internal error"}`.
 
+API keys are `helm_` + 43 URL-safe characters. Clients: `web` (the BFF, registered by auth on every start from
+`WEB_API_KEY_FILE`) and `helm` (the CLI, made with `auth apikey helm`).
+
 **NATS request/reply** (core NATS, queue group `auth`, not JetStream, bare JSON — no envelope):
 
 | Subject | Request | Reply |
@@ -97,6 +107,6 @@ Kong never routes it. Request header `x-api-key: <key>`. Answers:
 | `auth.validate.token` | `{"token"}` | `{user_id, email, roles, jti, family_id, expires_at}` or `{"error"}` |
 | `auth.validate.role` | `{"token", "role"}` | the same + `allowed` (bool), or `{"error"}` |
 
-`roles` is omitted when empty. Errors: `invalid or expired token`, `bad request: …`, `internal error` — treat any
-`error` as unauthenticated. Cache a success until `expires_at` and drop it on `evt.auth.revoked` (`scope: family` →
-matching `family_id`; `scope: user` → every entry of `user_id`).
+`roles` (`user`, `dev`, `admin`) is omitted when empty. Errors: `invalid or expired token`, `bad request: …`,
+`internal error` — treat any `error` as unauthenticated. Cache a success until `expires_at` and drop it on
+`evt.auth.revoked` (`scope: family` → matching `family_id`; `scope: user` → every entry of `user_id`).

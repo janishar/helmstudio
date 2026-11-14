@@ -1,29 +1,38 @@
 import type { Metadata } from "next";
-import { Nunito } from "next/font/google";
+import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { THEMES } from "@/lib/themes";
 import "./globals.css";
 
-/** The app font, exposed as the --font-nunito CSS variable. */
-const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito" });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  variable: "--font-bricolage",
+});
+const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" });
 
-/** Tab title: "ORA Catalog Agent", or "<page> · ORA Catalog Agent" where a page sets its own. */
-export const metadata: Metadata = { title: { default: "ORA Catalog Agent", template: "%s · ORA Catalog Agent" } };
+/** Tab title: "helmstudio", or "<page> · helmstudio" where a page sets its own. */
+export const metadata: Metadata = { title: { default: "helmstudio", template: "%s · helmstudio" } };
 
-/** Root layout of every route: the html shell, Nunito font, theme, tooltips and the toast outlet. */
+/** Root layout: fonts and the theme (data-theme on <html>, kept in localStorage by next-themes). */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={nunito.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${inter.variable} ${bricolage.variable} ${jetbrains.variable}`}
+      suppressHydrationWarning
+    >
       <body>
         <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
+          attribute="data-theme"
+          themes={THEMES.map((t) => t.id)}
+          defaultTheme="forest"
+          enableSystem={false}
+          storageKey="helm-theme"
           disableTransitionOnChange
         >
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster position="bottom-right" />
+          {children}
         </ThemeProvider>
       </body>
     </html>

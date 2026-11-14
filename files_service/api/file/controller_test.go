@@ -18,7 +18,7 @@ import (
 func TestServe(t *testing.T) {
 	signer := NewSigner("0123456789abcdef")
 	expiry := time.Now().Add(time.Hour).Unix()
-	link := func(key string) string { // what catalog_service's Signer.Sign makes, without the base URL
+	link := func(key string) string { // what studio_service's Signer.Sign makes, without the base URL
 		return "/files/" + (&url.URL{Path: key}).EscapedPath() + "?exp=" + strconv.FormatInt(expiry, 10) + "&sig=" + signer.signature(key, expiry)
 	}
 	store := storage.NewMemory()

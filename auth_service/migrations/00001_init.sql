@@ -15,7 +15,7 @@ CREATE TABLE credentials (
 
 CREATE TABLE roles (
     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role    text NOT NULL CHECK (role IN ('user', 'admin')),
+    role    text NOT NULL CHECK (role IN ('user', 'dev', 'admin')),
     PRIMARY KEY (user_id, role)
 );
 

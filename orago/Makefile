@@ -1,6 +1,6 @@
 .PHONY: test lint check
 
-# files that may import Gin: the HTTP edge only (docs/ORAGO.md, "What orago is")
+# files that may import Gin: the HTTP edge only (docs/reference-notes/framework-go.md)
 GIN_ALLOWED := ^orago/(network|middleware|micro)/|_test\.go$$|/tests/|/api/[^/]+/controller\.go$$|^files_service/api/file/|/api/auth/middleware/|/common/payload\.go$$|/startup/
 
 # integration tests need TEST_DATABASE_URL (.test.env); without it they skip
@@ -11,11 +11,11 @@ lint:
 	gofmt -l . | (! grep .) && go vet ./...
 
 # orago stays free of domain words, Gin stays at the HTTP edge, JetStream is reached only through orago/micro
-# (docs/ORAGO.md, "What orago is"), and the services still build on orago
+# (docs/reference-notes/framework-go.md), and the services still build on orago
 check: test lint
 	! grep -rEil 'job|gallery|brand|owner' --include='*.go' --exclude='*_test.go' .
-	cd .. && grep -rl --include='*.go' 'gin-gonic/gin' orago auth_service catalog_service files_service | grep -vE '$(GIN_ALLOWED)' | (! grep .)
-	cd .. && grep -rl --include='*.go' 'nats-io/nats.go/jetstream' orago auth_service catalog_service files_service | grep -v '^orago/micro/' | (! grep .)
+	cd .. && grep -rl --include='*.go' 'gin-gonic/gin' orago auth_service studio_service files_service | grep -vE '$(GIN_ALLOWED)' | (! grep .)
+	cd .. && grep -rl --include='*.go' 'nats-io/nats.go/jetstream' orago auth_service studio_service files_service | grep -v '^orago/micro/' | (! grep .)
 	cd ../auth_service && go build ./... && go vet ./...
-	cd ../catalog_service && go build ./... && go vet ./...
+	cd ../studio_service && go build ./... && go vet ./...
 	cd ../files_service && go build ./... && go vet ./...

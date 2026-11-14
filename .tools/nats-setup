@@ -1,5 +1,5 @@
 #!/bin/sh
-# Creates the JetStream streams and the registry KV bucket; safe to re-run.
+# Creates the JetStream streams and the KV buckets (registry, hosts, cancels); safe to re-run.
 # Runs inside nats-box (compose service `nats-setup`), or from the host:
 #   docker compose -f deploy/docker-compose.yml run --rm nats-setup
 set -eu
@@ -11,10 +11,16 @@ stream() { # name subjects retention max-age
   nats stream add "$1" --subjects "$2" --retention "$3" --max-age "$4" \
     --storage file --replicas 1 --discard old --dupe-window 2m --defaults
 }
+kv() { # bucket [ttl]
+  if nats kv info "$1" >/dev/null 2>&1; then echo "kv $1 exists"; return; fi
+  nats kv add "$1" --history 1 --storage file ${2:+--ttl "$2"}
+}
 
-stream CMD 'cmd.>' work 0     # work queue: a message lives until a consumer acks it
-stream EVT 'evt.>' limits 7d  # catalog + auth events, replayable for 7 days
-stream DLQ 'dlq.>' limits 30d # commands that hit max_deliver
+stream CMD 'cmd.>' work 0     # work queue: a run command lives until its runner acks it
+stream EVT 'evt.>' limits 7d  # run + auth events, replayable for 7 days
+stream DLQ 'dlq.>' limits 30d # commands a runner could not accept
 
-nats kv info registry >/dev/null 2>&1 || nats kv add registry --history 1 --storage file
+kv registry                   # <host>.<env>.{nodes,workflows,models}, written by each runner at start
+kv hosts 60s                  # <host>.<env>, rewritten every 10 s; a dead runner's key expires
+kv cancels 1h                 # <run_id>, written by studio on cancel
 nats stream ls

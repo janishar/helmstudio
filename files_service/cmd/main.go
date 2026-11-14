@@ -1,4 +1,4 @@
-// files_service: serves the signed /files links catalog_service makes, and sweeps expired objects.
+// files_service: serves the signed /files links studio_service makes.
 //
 //	files          run the server
 //	files health   exit 0 when GET /health is ok (container health check)

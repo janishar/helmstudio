@@ -15,7 +15,7 @@ import {
 } from "@/lib/session";
 
 /** A form's result: the error, plus what was typed so the form can keep it. */
-export type AuthState = { error?: string; email?: string; name?: string } | undefined;
+export type AuthState = { error?: string; email?: string } | undefined;
 
 /** Stores a new session's tokens in the cookies. */
 async function startSession(s: Session) {
@@ -35,27 +35,6 @@ export async function signin(_: AuthState, fd: FormData): Promise<AuthState> {
   if (r.status !== 200) return { error: detailOf(r.body, "Sign-in failed."), email };
   await startSession(r.body as Session);
   redirect(safeNext(String(fd.get("next") ?? "")));
-}
-
-/** Sign-up form action: checks the fields, creates the account, sets the cookies and redirects home. */
-export async function signup(_: AuthState, fd: FormData): Promise<AuthState> {
-  const name = String(fd.get("name") ?? "").trim();
-  const email = String(fd.get("email") ?? "").trim();
-  const password = String(fd.get("password") ?? "");
-  const back = { name, email };
-  if (!name || !email) return { error: "Enter your name and email.", ...back };
-  if (password.length < 10)
-    return { error: "Use at least 10 characters for the password.", ...back };
-  if (password !== fd.get("confirm")) return { error: "The passwords don't match.", ...back };
-  const r = await authPost(
-    "/auth/signup",
-    { name, email, password },
-    clientIp(await headers()),
-  ).catch(() => null);
-  if (!r) return { error: "Sign-up is unavailable right now. Try again shortly.", ...back };
-  if (r.status !== 201) return { error: detailOf(r.body, "Sign-up failed."), ...back };
-  await startSession(r.body as Session);
-  redirect("/");
 }
 
 /** Signs out at auth_service (ignoring a failure), clears the cookies and redirects to /signin. */

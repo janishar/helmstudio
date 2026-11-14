@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ora.local/contracts/messages/defs.schema.json",
+  "$id": "https://helmstudio.local/contracts/messages/defs.schema.json",
   "title": "shared definitions",
   "$defs": {
     "uuid": {
@@ -30,574 +30,90 @@
     "seq": {
       "type": "integer",
       "minimum": 1,
-      "description": "per-job sequence over every evt.catalog.* message of one command (a process or run id = envelope job_id); the projector dedupes on (job_id, seq)"
+      "description": "per-job sequence over every evt.run.* message of one run (= envelope job_id), starting at 1; the projector dedupes on (job_id, seq)"
     },
     "attempt": {
       "type": "integer",
       "minimum": 1,
-      "description": "delivery attempt of the command being run"
+      "description": "the run's attempt (1 in M0: a run command is delivered once)"
     },
-    "libraryId": {
+    "hostName": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-      "description": "a library id (category, pose, model, background) from registry catalog_library"
+      "pattern": "^[a-z0-9]{1,32}$",
+      "description": "a GPU host's name: lower-case letters and digits (one NATS subject token)"
     },
-    "choiceId": {
+    "envName": {
       "type": "string",
-      "description": "a library model/background id, or the id (UUID) of one of the session's uploads",
-      "pattern": "^([a-z0-9][a-z0-9_-]{0,63}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+      "pattern": "^[a-z0-9]{1,32}$",
+      "description": "a runner env on a host (mlx, torch, fake)"
     },
-    "skuCode": {
+    "workflowId": {
       "type": "string",
-      "pattern": "^[A-Z]{1,3}-[0-9]{3,}$",
-      "description": "e.g. R-001"
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
     },
-    "resolution": {
+    "nodeId": {
       "type": "string",
-      "pattern": "^[0-9]+K$"
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "description": "a node's id inside one workflow graph"
     },
-    "ratio": {
+    "nodeKind": {
       "type": "string",
-      "pattern": "^[0-9]+:[0-9]+$"
+      "pattern": "^[a-z][a-z0-9_-]{0,63}(/[a-z][a-z0-9_-]{0,63})?$",
+      "description": "a node schema's kind: a core node (prompt, output) or <family>/<node> (echo/echo)"
     },
-    "posesByCategory": {
+    "portRef": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+      "description": "<node id>.<output name> of another node in the same graph"
+    },
+    "paramValue": {
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ],
+      "description": "a param value: int, float, bool, string, text or enum (see registry.schema.json paramSchema)"
+    },
+    "graphNode": {
       "type": "object",
-      "description": "category id → pose ids, in order",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/nodeKind"
+        },
+        "params": {
+          "type": "object",
+          "description": "param name → value; a param left out takes its node schema's default",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/paramValue"
+          }
+        },
+        "in": {
+          "type": "object",
+          "description": "input port name → the output it is wired to",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/portRef"
+          }
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "description": "a workflow's node graph: node id → node",
+      "minProperties": 1,
       "propertyNames": {
-        "$ref": "#/$defs/libraryId"
+        "$ref": "#/$defs/nodeId"
       },
       "additionalProperties": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/libraryId"
-        }
-      }
-    },
-    "attributes": {
-      "type": "object",
-      "description": "what processing read from a SKU's raw images; unsure values become questions, never guesses. Common: description, source (+ setting); the rest by the product's family — jewellery: counts, motifs, finish, size_mm, material, kind; garments: pieces, fabric, colour, print, work, details, kind; furniture: material, colour, finish, dimensions_cm, style, kind. Fields of another family are absent.",
-      "required": [
-        "description",
-        "source"
-      ],
-      "properties": {
-        "counts": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "description": "e.g. {stones: 4, charms: 2}"
-        },
-        "motifs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "finish": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "jewellery: structure and finish note (density, texture, metal); furniture: surface finish"
-        },
-        "size_mm": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "material": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "jewellery, furniture"
-        },
-        "description": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "setting": {
-          "enum": [
-            "studio",
-            "lifestyle",
-            null
-          ],
-          "description": "how the raw photos were shot (lifestyle vs a plain studio packshot); checked against the guidelines' background. Optional; catalog keeps it so a later checks-only process can read it"
-        },
-        "pieces": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "garments: the pieces in the set, e.g. [kurta, pant, dupatta]"
-        },
-        "details": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "garments: the key construction details the photos show (neckline or collar, sleeve and hem length, slits, closures, pockets), e.g. [mandarin collar, three-quarter sleeves]"
-        },
-        "kind": {
-          "type": "object",
-          "required": [
-            "category",
-            "subcategory",
-            "label",
-            "sure"
-          ],
-          "properties": {
-            "category": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "subcategory": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "label": {
-              "type": "string",
-              "maxLength": 80
-            },
-            "sure": {
-              "type": "boolean"
-            }
-          },
-          "description": "garments, jewellery and furniture: what vision read the product as from its photos: subcategory (an id of a product of its family, null = none fits), category (its product, null with it), label (2–4 words, e.g. bomber jacket, diamond ring, sofa cum bed), sure. Kept so a later recheck asks the kind question again; never shown"
-        },
-        "fabric": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "colour": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "garments, furniture"
-        },
-        "print": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "garments: print or pattern"
-        },
-        "work": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "garments: embroidery / embellishment"
-        },
-        "dimensions_cm": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "furniture: e.g. W 220 × D 90 × H 85"
-        },
-        "style": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "furniture"
-        },
-        "sides": {
-          "type": "object",
-          "additionalProperties": {
-            "enum": [
-              "front",
-              "back",
-              "side",
-              "hero",
-              "angle",
-              "flat",
-              "close-up",
-              "pair",
-              "hanging",
-              "model",
-              "mood",
-              null
-            ]
-          },
-          "description": "garments and jewellery: raw photo key → the view of the product it shows (garments: front, back, side; jewellery: hero, front, side, angle, flat, close-up, pair, hanging, model, mood; from the file name, else one vision call at processing; null = looked, unknown). Agents tag a raw key missing here (a merged SKU's photos) at run time"
-        },
-        "wearer": {
-          "enum": [
-            "women",
-            "men",
-            null
-          ],
-          "description": "garments and jewellery: whose wear it is (the product, the words of its name, CSV category or file names, else vision on garments); null = unknown or unisex. Picks the SKU's model (a men's SKU gets a men's model) and the brief's wording"
-        }
-      }
-    },
-    "attributesPatch": {
-      "type": "object",
-      "description": "some attributes fields (a question option's change)",
-      "properties": {
-        "counts": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "motifs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "finish": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "size_mm": {
-          "type": [
-            "number",
-            "null"
-          ]
-        },
-        "material": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "description": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "setting": {
-          "enum": [
-            "studio",
-            "lifestyle",
-            null
-          ]
-        },
-        "pieces": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "garments: the pieces in the set, e.g. [kurta, pant, dupatta]"
-        },
-        "details": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "garments: the key construction details the photos show (neckline or collar, sleeve and hem length, slits, closures, pockets), e.g. [mandarin collar, three-quarter sleeves]"
-        },
-        "kind": {
-          "type": "object",
-          "required": [
-            "category",
-            "subcategory",
-            "label",
-            "sure"
-          ],
-          "properties": {
-            "category": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "subcategory": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "label": {
-              "type": "string",
-              "maxLength": 80
-            },
-            "sure": {
-              "type": "boolean"
-            }
-          },
-          "description": "garments, jewellery and furniture: what vision read the product as from its photos: subcategory (an id of a product of its family, null = none fits), category (its product, null with it), label (2–4 words, e.g. bomber jacket, diamond ring, sofa cum bed), sure. Kept so a later recheck asks the kind question again; never shown"
-        },
-        "fabric": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "colour": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "garments, furniture"
-        },
-        "print": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "garments: print or pattern"
-        },
-        "work": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "garments: embroidery / embellishment"
-        },
-        "dimensions_cm": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "furniture: e.g. W 220 × D 90 × H 85"
-        },
-        "style": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "furniture"
-        },
-        "wearer": {
-          "enum": [
-            "women",
-            "men",
-            null
-          ]
-        }
-      }
-    },
-    "docRef": {
-      "type": "object",
-      "description": "a guideline or brief document: a stored file (key) or a link the user gave (url)",
-      "required": [
-        "name"
-      ],
-      "oneOf": [
-        {
-          "required": [
-            "key"
-          ]
-        },
-        {
-          "required": [
-            "url"
-          ]
-        }
-      ],
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "key": {
-          "$ref": "#/$defs/objectKey"
-        },
-        "url": {
-          "type": "string",
-          "format": "uri",
-          "pattern": "^https?://"
-        }
-      }
-    },
-    "rules": {
-      "type": "object",
-      "description": "structured rules read from the guidelines and details (one LLM call)",
-      "required": [
-        "background",
-        "styling",
-        "mood",
-        "metal_references",
-        "worn_references",
-        "dimensions",
-        "notes"
-      ],
-      "properties": {
-        "background": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "styling": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "mood": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "metal_references": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": [
-              "finish",
-              "key"
-            ],
-            "properties": {
-              "finish": {
-                "type": "string"
-              },
-              "key": {
-                "$ref": "#/$defs/objectKey"
-              }
-            }
-          }
-        },
-        "worn_references": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/objectKey"
-          }
-        },
-        "dimensions": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "notes": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "skuRef": {
-      "type": "object",
-      "description": "a SKU as catalog_service knows it, sent to agents",
-      "required": [
-        "sku_id",
-        "code",
-        "name",
-        "category",
-        "subcategory",
-        "attributes",
-        "raw_keys"
-      ],
-      "properties": {
-        "sku_id": {
-          "$ref": "#/$defs/uuid"
-        },
-        "code": {
-          "$ref": "#/$defs/skuCode"
-        },
-        "name": {
-          "type": "string"
-        },
-        "category": {
-          "$ref": "#/$defs/libraryId"
-        },
-        "subcategory": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "attributes": {
-          "$ref": "#/$defs/attributes"
-        },
-        "raw_keys": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/objectKey"
-          }
-        }
-      }
-    },
-    "choiceRef": {
-      "type": "object",
-      "description": "a resolved model or background: built-in (key null, agents resolve the id) or uploaded (key)",
-      "required": [
-        "id",
-        "name",
-        "key"
-      ],
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/choiceId"
-        },
-        "name": {
-          "type": "string"
-        },
-        "key": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/objectKey"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      }
-    },
-    "customPose": {
-      "type": "object",
-      "description": "a session-scoped shot the brand's shots brief asked for that the pose library lacks (agents suggest it; catalog keeps it on the poses input item); never an anchor",
-      "required": [
-        "id",
-        "category",
-        "name",
-        "prompt",
-        "on_model"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "id": {
-          "type": "string",
-          "pattern": "^custom-[a-z0-9][a-z0-9-]{0,55}$",
-          "description": "custom-<product singular>-<slug of name>, unique in the session"
-        },
-        "category": {
-          "$ref": "#/$defs/libraryId"
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 60
-        },
-        "prompt": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 500,
-          "description": "one sentence in the library's pose-prompt style"
-        },
-        "on_model": {
-          "type": "boolean"
-        }
+        "$ref": "#/$defs/graphNode"
       }
     }
   }

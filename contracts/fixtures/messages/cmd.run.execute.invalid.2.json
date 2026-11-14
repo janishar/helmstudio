@@ -1,0 +1,45 @@
+{
+  "type": "cmd.run.execute",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000001",
+  "job_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-14T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "attempt": 1,
+    "workflow": {
+      "id": "echo",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "a red fox"
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "steps": 10,
+            "delay_ms": 300,
+            "fail": false
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    },
+    "output_prefix": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/"
+  }
+}

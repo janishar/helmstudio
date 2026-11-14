@@ -10,9 +10,9 @@ import (
 
 	"github.com/helmstudio/orago/micro"
 	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/storage"
 
 	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // denyAll is an authentication provider that refuses every request.
@@ -23,18 +23,17 @@ func (denyAll) Middleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) { network.SendError(ctx, http.StatusUnauthorized, "no") }
 }
 
-// Every feature's routes mount on one router without conflicts; /v1 needs auth, unknown paths under it included,
-// and the body limit answers before it. /health needs no token; /files is files_service's.
+// Every route mounts on one router without conflicts; /v1 needs auth, unknown paths under it included, and the body
+// limit answers before it. /health needs no token; /files is files_service's.
 func TestHandlerRoutes(t *testing.T) {
 	module := &Module{
-		store:          storage.NewMemory(),
 		signer:         common.NewSigner("0123456789abcdef", "", 0),
+		registry:       &registry.Registry{},
 		authentication: denyAll{},
 		health: micro.NewHealthController(nil, network.HealthCheck{
 			Name: "database", Ping: func(context.Context) error { return nil },
 		}),
 		maxBody: 1 << 10,
-		maxRaw:  1 << 20,
 	}
 	// The HTTP part of the micro router only: no controller mounts NATS endpoints, so no NATS is needed.
 	router, err := network.NewRouter(nil)
@@ -53,7 +52,8 @@ func TestHandlerRoutes(t *testing.T) {
 		router.Engine().ServeHTTP(recorder, request)
 		return recorder.Code
 	}
-	for path, want := range map[string]int{"/health": 200, "/v1/catalog/sessions": 401, "/v1/catalog/stats": 401, "/v1/nope": 401, "/files/u/x/y.png": 404, "/nope": 404} {
+	for path, want := range map[string]int{"/health": 200, "/v1/studio/sessions": 401, "/v1/studio/hosts": 401,
+		"/v1/nope": 401, "/files/u/x/y.png": 404, "/nope": 404} {
 		if got := send("GET", path, ""); got != want {
 			t.Errorf("GET %s: %d, want %d", path, got, want)
 		}
@@ -62,13 +62,10 @@ func TestHandlerRoutes(t *testing.T) {
 		path, contentLength string
 		want                int
 	}{
-		{"/v1/catalog/sessions", "", 411},
-		{"/v1/catalog/sessions", "2048", 413},
+		{"/v1/studio/sessions", "", 411},
+		{"/v1/studio/sessions", "2048", 413},
 		{"/v1/nope", "2048", 413},
-		{"/v1/catalog/sessions/x/raw", "2048", 401}, // under the raw limit, over the JSON one
-		{"/v1/catalog/sessions/x/raw/", "2048", 401},
-		{"/v1/catalog/sessions/x/raw", "2097152", 413},
-		{"/v1/catalog/sessions/x/guidelines", "2048", 413},
+		{"/v1/studio/sessions", "100", 401},
 	} {
 		if got := send("POST", test.path, test.contentLength); got != test.want {
 			t.Errorf("POST %s, %q bytes: %d, want %d", test.path, test.contentLength, got, test.want)

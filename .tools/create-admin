@@ -1,8 +1,8 @@
 #!/bin/sh
-# Creates (or keeps) an admin account in the running ora-catalog stack.
+# Creates (or syncs) the root admin in the running helmstudio stack.
 #   ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=... .tools/create-admin
 # With no env, auth_service/.env's ADMIN_EMAIL / ADMIN_PASSWORD are used (auth also applies them on every start).
-# Needs auth_service's `create-admin` subcommand (same logic as the first-start admin, then exits).
+# Uses auth_service's `create-admin` subcommand (same logic as the start-up admin sync, then exits).
 set -eu
 cd "$(dirname "$0")/.."
 set -- docker compose -f deploy/docker-compose.yml run --rm -T

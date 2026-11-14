@@ -5,22 +5,22 @@ Users, sessions and client API keys (Go, gomicro layout, Gin through orago). Con
 `go.mod`; image builds need `make image` or compose, which pass `../orago` as a named build context.
 
 ## Run
-- Alone: `cp .env.example .env && docker compose up --build` (own Postgres + NATS, API on `127.0.0.1:8093`; catalog alone is 8091, files 8092).
+- Alone: `cp .env.example .env && docker compose up --build` (own Postgres + NATS, API on `127.0.0.1:8093`; files alone is 8092).
 - Full stack: `deploy/docker-compose.yml` (compose service `auth`, port 8080 on the compose network, behind Kong).
   Secrets (DB password, NATS credentials, the JWT signing key `JWT_PRIVATE_KEY_FILE`, the web app's key
-  `WEB_API_KEY_FILE`, registered as client "web" on every start) come from `deploy/secrets/`. Alone, the JWT pair is
-  `KEYS_DIR/private.pem` from `go run .tools/rsa/keygen.go` (`auth_service/keys/`, git-ignored). NATS account `auth`: replies on
+  `WEB_API_KEY_FILE` and the CLI's key `HELM_API_KEY_FILE`, registered as clients "web" and "helm" on every start) come from `deploy/secrets/`. Alone, the JWT pair is
+  `KEYS_DIR/private.pem`, generated on first start when missing (`auth_service/keys/`, git-ignored). NATS account `auth`: replies on
   `auth.validate.*`, publishes `evt.auth.revoked`, and answers the NATS micro service verbs (`$SRV.>`).
-- The admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` here. On every start (or `.tools/create-admin`) that account is created,
-  or enabled with that password and the admin role; every other account loses admin. Nobody else can be made admin.
+- The root admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` here. On every start (or `.tools/create-admin`) that account is created,
+  or enabled with that password and the admin role; every other account loses admin. Nobody else can be made admin
+  (422), the API refuses any change to that account (409), and there is no public sign-up.
 - Tests: start a scratch Postgres (see `.test.env.example`), `cp .test.env.example .test.env`, `make test`.
   Each run creates and drops its own database; without `TEST_DATABASE_URL` the integration tests skip.
 
 ## HTTP (port 8080)
 | Route | Auth | |
 |---|---|---|
-| ~~`POST /auth/signup`~~ | — | closed for the beta (route commented out in `api/auth/controller.go`): 404 |
-| `POST /auth/signin` `{email,password}` | — | 200 Session; 401 generic; 429 after 5 failures / email or 50 / IP in 15 min (client IP from `X-Forwarded-For` only when the peer is a trusted proxy — Kong/web; Kong also rate-limits `/auth/signin\|signup\|refresh` per real client IP) |
+| `POST /auth/signin` `{email,password}` | — | 200 Session; 401 generic; 429 after 5 failures / email or 50 / IP in 15 min (client IP from `X-Forwarded-For` only when the peer is a trusted proxy — Kong/web; Kong also rate-limits `/auth/signin\|refresh` per real client IP) |
 | `POST /auth/refresh` `{refresh_token}` | — | 200 rotated Session; reuse of a used token → 401 and the family is revoked |
 | `DELETE /auth/signout` | Bearer | 204, revokes the session's family |
 | `PUT /auth/password` `{current_password,new_password}` | Bearer | 204, revokes all sessions |
@@ -38,7 +38,7 @@ Users, sessions and client API keys (Go, gomicro layout, Gin through orago). Con
 | `GET /verify/apikey` (header `x-api-key`) | internal | 200 `{client_id, client, scopes}` / 401 — never routed by Kong |
 | `GET` or `HEAD /health`, `GET /auth/health` | — | DB + NATS |
 
-Access token: RS256 JWT, 15 min, claims `sub`, `email`, `roles`, `jti`, `fid` (session family), `iss=ora-auth`.
+Access token: RS256 JWT, 15 min, claims `sub`, `email`, `roles`, `jti`, `fid` (session family), `iss=helm-auth` (`JWT_ISSUER`).
 
 ## NATS
 - NATS micro service `auth` 1.0.0, mounted by `MountNats` in `api/auth/controller.go`: `validateTokenHandler` and
@@ -51,6 +51,6 @@ Access token: RS256 JWT, 15 min, claims `sub`, `email`, `roles`, `jti`, `fid` (s
   password change/set, disable and role change.
 
 ## CLI
-- `auth apikey <client> [scope…]` issues a key and prints it once (e.g. `docker compose -f deploy/docker-compose.yml run --rm auth apikey contract`).
+- `auth apikey <client> [scope…]` issues a key and prints it once (e.g. `docker compose -f deploy/docker-compose.yml run --rm auth apikey contract`). Keys are `helm_` + 43 URL-safe characters..
 - `auth create-admin` creates the admin from `ADMIN_EMAIL` / `ADMIN_PASSWORD`, then exits (`.tools/create-admin`).
 - `auth health` is the container health check.

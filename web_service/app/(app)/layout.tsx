@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { AppShell } from "@/components/app-shell";
+import { AppShell } from "@/components/shell";
 import { ACCESS_COOKIE, kongHeaders, kongUrl } from "@/lib/session";
 import type { S } from "@/lib/api";
 
@@ -16,9 +16,5 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }).catch(() => null);
   if (r?.status === 401) redirect("/signin");
   const user: S<"User"> | null = r?.ok ? await r.json() : null; // auth unreachable: render, pages show their own errors
-  return (
-    <AppShell user={user} dev={process.env.DEV_VIEWS === "true"}>
-      {children}
-    </AppShell>
-  );
+  return <AppShell user={user}>{children}</AppShell>;
 }

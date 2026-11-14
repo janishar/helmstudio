@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.run.status.schema.json",
+  "title": "runner → studio: a run's lifecycle",
+  "description": "Subject evt.run.<session_id>.status (stream EVT), Nats-Msg-Id <run_id>:<seq>. `running` once when the runner starts the graph (with host), then exactly one terminal status. The runner publishes the terminal status and waits for its ack before it acks the command.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.run.status"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the run id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "status"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000,
+          "description": "a short, user-readable reason; required (non-empty) when failed"
+        },
+        "host": {
+          "$ref": "defs.schema.json#/$defs/hostName",
+          "description": "the host running it (sent with running)"
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

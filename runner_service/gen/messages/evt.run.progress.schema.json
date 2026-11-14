@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.run.progress.schema.json",
+  "title": "runner → studio: a run's step progress",
+  "description": "Subject evt.run.<session_id>.progress (stream EVT), Nats-Msg-Id <run_id>:<seq>. One per step of a stepping node (the echo node: one per step, step 1..of).",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.run.progress"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the run id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "node",
+        "step",
+        "of"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "node": {
+          "$ref": "defs.schema.json#/$defs/nodeId",
+          "description": "the node of the run's graph that is stepping"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "steps done so far, 1..of"
+        },
+        "of": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

@@ -38,7 +38,7 @@ type NatsClient interface {
 	// Disconnect waits for in-flight messages, then closes the connection.
 	Disconnect()
 	// jetStream is the connection's JetStream context. Unexported, so only this package's NatsJetStream helpers reach
-	// JetStream (docs/ORAGO.md, "What orago is", rule 3).
+	// JetStream (orago/Makefile check).
 	jetStream() jetstream.JetStream
 }
 

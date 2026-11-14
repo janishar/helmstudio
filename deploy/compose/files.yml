@@ -1,16 +1,16 @@
-# files_service on the ora-catalog stack: serves the signed /files links catalog_service makes, runs the janitor.
+# files_service on the helmstudio stack: serves the signed /files links studio_service makes.
 # Paths are relative to deploy/ (the project directory):
 #   docker compose -f deploy/docker-compose.yml up -d --build files
 services:
   files:
     build: {context: ../files_service, additional_contexts: {orago: ../orago}}
-    image: ora-catalog/files:${IMAGE_TAG:-dev}
+    image: helmstudio/files:${IMAGE_TAG:-dev}
     env_file: [{path: ../files_service/.env, required: false}]
     environment:                                      # credentials come from the secrets (<VAR>_FILE)
-      FILE_URL_SECRET_FILE: /run/secrets/file_url_secret   # the key catalog_service signs with
+      FILE_URL_SECRET_FILE: /run/secrets/file_url_secret   # the key studio_service signs with
       STORAGE_DRIVER: s3
       S3_ENDPOINT: http://seaweedfs:8333
-      S3_BUCKET: ${S3_BUCKET:-ora}
+      S3_BUCKET: ${S3_BUCKET:-helmstudio}
       S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
       S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
     secrets: [file_url_secret, s3_access_key_id, s3_secret_access_key]

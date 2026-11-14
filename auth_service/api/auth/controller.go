@@ -17,7 +17,7 @@ import (
 // validateTimeout bounds one token check over NATS.
 const validateTimeout = 2 * time.Second
 
-// controller serves sign-up, sign-in, sessions, password change and the JWKS, and the token checks over NATS.
+// controller serves sign-in, sessions, password change and the JWKS, and the token checks over NATS.
 type controller struct {
 	micro.Controller
 	service *Service
@@ -35,10 +35,9 @@ func NewController(
 	}
 }
 
-// MountRoutes registers the routes; signout and password need a signed-in user. Sign-up is closed for the beta
-// (no public accounts): the admin creates them (POST /auth/admin/users). Uncomment the route to reopen it.
+// MountRoutes registers the routes; signout and password need a signed-in user. There is no sign-up: the root admin
+// creates every account (POST /auth/admin/users).
 func (c *controller) MountRoutes(group *gin.RouterGroup) {
-	// group.POST("/signup", c.signupHandler)
 	group.POST("/signin", c.signinHandler)
 	group.POST("/refresh", c.refreshHandler)
 	group.DELETE("/signout", c.Authentication(), c.signoutHandler)
@@ -91,21 +90,6 @@ func (c *controller) validateRoleHandler(req micro.NatsRequest) {
 	}
 
 	micro.RespondNatsMessage(req, message.NewRoleReply(claims, body.Role))
-}
-
-// signupHandler creates a user and answers 201 with a new session. Unrouted while sign-up is closed (MountRoutes).
-func (c *controller) signupHandler(ctx *gin.Context) {
-	body, err := network.ReqBody[dto.SignupRequest](ctx)
-	if err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	session, err := c.service.Signup(ctx.Request.Context(), body)
-	if err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	network.SendJSON(ctx, http.StatusCreated, session)
 }
 
 // signinHandler exchanges an email and password for a session. The client IP feeds the attempt limit.

@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/registry.schema.json",
+  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models) and bucket hosts (key <host>.<env>)",
+  "description": "Each runner writes only its own keys: the three registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "host",
+        "env",
+        "published_at",
+        "published_by"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName",
+          "description": "= the key's <host>"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName",
+          "description": "= the key's <env>"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "published_by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the runner's version / image tag"
+        }
+      }
+    },
+    "portType": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]{0,31}$",
+      "description": "a port's value type; an input accepts only an output of the same type (M0: Text, Image)"
+    },
+    "port": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "type": {
+          "$ref": "#/$defs/portType"
+        }
+      }
+    },
+    "paramSchema": {
+      "type": "object",
+      "description": "one param of a node; the UI derives a form field from it. int and float: min/max bound the value; string and text (multi-line): min/max bound the length; enum: one of `enum`.",
+      "required": [
+        "name",
+        "type",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "type": {
+          "enum": [
+            "int",
+            "float",
+            "bool",
+            "string",
+            "text",
+            "enum"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "the field label; absent = the name"
+        },
+        "default": {
+          "$ref": "messages/defs.schema.json#/$defs/paramValue"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "text"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "enum"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "enum"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "enum"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nodeSchema": {
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "family",
+        "params",
+        "inputs",
+        "outputs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "messages/defs.schema.json#/$defs/nodeKind"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "description": "the model family (the kind's prefix); null for a core node"
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "params": {
+          "type": "array",
+          "description": "in form order",
+          "items": {
+            "$ref": "#/$defs/paramSchema"
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/port"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/port"
+          }
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "family",
+        "env",
+        "nodes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "messages/defs.schema.json#/$defs/workflowId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "family": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName"
+        },
+        "nodes": {
+          "$ref": "messages/defs.schema.json#/$defs/graph",
+          "description": "params here override the node schema's defaults; the run's inputs override both"
+        }
+      }
+    },
+    "nodes": {
+      "description": "registry key <host>.<env>.nodes: every node kind this runner can execute",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "nodes"
+          ],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/nodeSchema"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "workflows": {
+      "description": "registry key <host>.<env>.workflows: the workflows this runner offers; each workflow's env is the key's env and uses only kinds in its .nodes",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "workflows"
+          ],
+          "properties": {
+            "workflows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/workflow"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "models": {
+      "description": "registry key <host>.<env>.models: the models present on this host for this env",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "models"
+          ],
+          "properties": {
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "family",
+                  "title"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+                  },
+                  "family": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "host": {
+      "description": "bucket hosts, key <host>.<env>: the runner's live state, rewritten every 10 s. Never shown to users as is: GET /v1/studio/hosts redacts it.",
+      "type": "object",
+      "required": [
+        "schema_version",
+        "host",
+        "env",
+        "state",
+        "run_id",
+        "updated_at",
+        "published_by"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName"
+        },
+        "state": {
+          "enum": [
+            "idle",
+            "busy"
+          ]
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "messages/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the run in progress (busy), else null"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "published_by": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "if": {
+        "properties": {
+          "state": {
+            "const": "busy"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "$ref": "messages/defs.schema.json#/$defs/uuid"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "run_id": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  }
+}

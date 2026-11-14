@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { CatalogAgent } from "@/components/catalog/agent";
+import { Create } from "@/components/create/create";
 
-export const metadata: Metadata = { title: "Catalog agent" };
+export const metadata: Metadata = { title: "Create" };
 
-/** Route /: the Catalog Agent on the newest session (its URL becomes /sessions/<id>). An old /?s=<id> link goes to
- * /sessions/<id>. */
+/** Route /: Create, on the session `?s=` names, else the newest. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ s?: string }> }) {
-  const { s } = await searchParams;
-  if (s) redirect(`/sessions/${encodeURIComponent(s)}`);
-  return <CatalogAgent />;
+  return <Create initialSession={(await searchParams).s} />;
 }

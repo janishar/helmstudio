@@ -1,4 +1,5 @@
-// Package startup: config → database (migrations) → object store → NATS → router → relay, projector, watcher → serve.
+// Package startup: config → database (migrations) → NATS → router → relay, projector, registry and hosts watches,
+// lease sweep → serve.
 package startup
 
 import (
@@ -16,10 +17,10 @@ import (
 	"github.com/helmstudio/orago/micro"
 	"github.com/helmstudio/orago/network"
 	"github.com/helmstudio/orago/postgres"
-	"github.com/helmstudio/orago/storage"
 
 	"github.com/helmstudio/studio_service/api/auth"
 	authmiddleware "github.com/helmstudio/studio_service/api/auth/middleware"
+	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/config"
 	"github.com/helmstudio/studio_service/messaging"
@@ -27,22 +28,9 @@ import (
 	"github.com/helmstudio/studio_service/registry"
 )
 
-// Store builds the object store STORAGE_DRIVER names.
-func Store(ctx context.Context, env config.Env) (storage.Store, error) {
-	switch env.StorageDriver {
-	case "memory":
-		return storage.NewMemory(), nil
-	case "s3":
-		return storage.NewS3(ctx, storage.S3Config{Bucket: env.S3Bucket, Region: env.S3Region, Endpoint: env.S3Endpoint,
-			AccessKeyID: env.S3AccessKey, SecretAccessKey: env.S3SecretKey,
-			ForcePathStyle: env.S3PathStyle})
-	}
-	return nil, fmt.Errorf("STORAGE_DRIVER %q: use s3 or memory", env.StorageDriver)
-}
-
-// Run wires the service and serves until SIGINT or SIGTERM, then gives requests 10 s to finish. The registry watch,
-// projector and relay run in the background on the same context, and Run waits for them after the server
-// stops, because the deferred NATS disconnect and pool close would otherwise run under them.
+// Run wires the service and serves until SIGINT or SIGTERM, then gives requests 10 s to finish. The background workers
+// run on the same context, and Run waits for them after the server stops, because the deferred NATS disconnect and
+// pool close would otherwise run under them.
 func Run() error {
 	env, err := config.Load()
 	if err != nil {
@@ -56,14 +44,9 @@ func Run() error {
 		return err
 	}
 	defer pool.Close()
-	store, err := Store(ctx, env)
-	if err != nil {
-		return err
-	}
-	signer := common.NewSigner(env.FileURLSecret, env.PublicBaseURL, env.FileURLTTL)
 	client, err := micro.NewNatsClient(micro.Config{
-		URL: env.NatsURL, User: env.NatsUser, Password: env.NatsPassword, Name: "catalog_service",
-		Timeout: 2 * time.Second, // RequestNats's limit on one token check
+		URL: env.NatsURL, User: env.NatsUser, Password: env.NatsPassword, Name: "studio_service",
+		Timeout: 2 * time.Second, // RequestNats's limit on one token check, and on one cancel
 	})
 	if err != nil {
 		return fmt.Errorf("nats: %w", err)
@@ -76,12 +59,13 @@ func Run() error {
 		return err
 	}
 
+	runners := &registry.Registry{}
 	module := &Module{
 		db:             pool,
-		store:          store,
-		signer:         signer,
+		signer:         common.NewSigner(env.FileURLSecret, env.PublicBaseURL, env.FileURLTTL),
+		registry:       runners,
+		cancel:         messaging.NatsCancel(client),
 		authentication: authmiddleware.NewAuthenticationProvider(authService),
-		agents:         client,
 		shutdown:       ctx.Done(),
 		health: micro.NewHealthController(nil,
 			network.HealthCheck{Name: "database", Ping: pool.Ping},
@@ -93,11 +77,9 @@ func Run() error {
 			}},
 		),
 		maxBody: env.MaxBodyMB << 20,
-		maxRaw:  env.RawMaxMB << 20,
 	}
-	// A NATS micro service named catalog, as gomicro's services all are: it has no endpoints, but answers the $SRV
-	// discovery verbs.
-	router, err := micro.NewRouter(nil, client, micro.ServiceConfig{Name: "catalog", Version: "1.0.0", QueueGroup: "catalog"})
+	// A NATS micro service named studio: it has no endpoints, but answers the $SRV discovery verbs.
+	router, err := micro.NewRouter(nil, client, micro.ServiceConfig{Name: "studio", Version: "1.0.0", QueueGroup: "studio"})
 	if err != nil {
 		return err
 	}
@@ -107,13 +89,15 @@ func Run() error {
 	}
 
 	var workers sync.WaitGroup
-	workers.Go(func() { micro.NatsJetStreamWatchKV(ctx, client, "registry", registry.Set) })
+	workers.Go(func() { micro.NatsJetStreamWatchKV(ctx, client, "registry", runners.SetRegistry) })
+	workers.Go(func() { micro.NatsJetStreamWatchKV(ctx, client, "hosts", runners.SetHost) })
 	events := &micro.NatsJetStreamGroup{}
-	module.Projector().MountNatsJetStream(events)
+	studio.NewProjector(pool).MountNatsJetStream(events)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ProjectorConsumer, events) })
 	workers.Go(func() { messaging.Relay(ctx, pool, messaging.NatsJetStreamPublisher(client)) })
+	workers.Go(func() { studio.Sweeper(ctx, pool, runners) })
 
-	log.Printf("catalog_service listening on :%s", env.Port)
+	log.Printf("studio_service listening on :%s", env.Port)
 	err = router.Start(ctx, ":"+env.Port)
 	stop() // Start also returns on a failed listen, and ctx must end for the workers to.
 	// ponytail: no time limit; a worker stuck in a call that ignores ctx holds the exit until Docker's kill

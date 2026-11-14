@@ -2,7 +2,7 @@
 import createClient from "openapi-fetch";
 import type { components, paths } from "@/gen/api";
 
-/** Shorthand for a contract schema: S<"Sku"> is components["schemas"]["Sku"]. */
+/** Shorthand for a contract schema: S<"Run"> is components["schemas"]["Run"]. */
 export type S<K extends keyof components["schemas"]> = components["schemas"][K];
 
 /** The typed client: paths and bodies follow contracts/openapi.yaml. */
@@ -49,28 +49,16 @@ export async function ok<T>(
 }
 
 /** `ok`, but an answer with status `expected` (e.g. 409: already done) is null instead of an error. */
-export async function okOr<T>(p: Promise<{ data?: T; error?: unknown; response: Response }>, expected: number): Promise<T | null> {
+export async function okOr<T>(
+  p: Promise<{ data?: T; error?: unknown; response: Response }>,
+  expected: number,
+): Promise<T | null> {
   try {
     return await ok(p);
   } catch (e) {
     if (e instanceof ApiError && e.status === expected) return null;
     throw e;
   }
-}
-
-/** A POST of multipart (the BFF buffers the upload, then forwards it unchanged) or JSON, for the routes that take
- * either; the data, or an ApiError. */
-export async function postForm<T>(path: string, body: FormData | object): Promise<T> {
-  const json = !(body instanceof FormData);
-  const r = await fetch(`/api${path}`, {
-    method: "POST",
-    body: json ? JSON.stringify(body) : body,
-    headers: json ? { "content-type": "application/json" } : undefined,
-  });
-  const out = await r.json().catch(() => null);
-  if (r.ok) return out as T;
-  signedOut(r.status);
-  throw new ApiError(r.status, errorText(r.status, out));
 }
 
 /** Any caught value as text for a toast or error note. */

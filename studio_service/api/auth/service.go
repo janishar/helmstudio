@@ -30,7 +30,7 @@ type entry struct {
 }
 
 // Service checks Bearer tokens with auth_service and caches the answers, keyed by the token's SHA-256. It keeps the NATS
-// client and asks through micro.RequestNats, as goserve's services do; tests pass a fake client.
+// client and asks through micro.RequestNats; tests pass a fake client.
 type Service struct {
 	natsClient micro.NatsClient
 	mu         sync.Mutex

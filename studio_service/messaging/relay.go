@@ -7,10 +7,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/helmstudio/orago/micro"
 	"github.com/helmstudio/orago/utility"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/gen"
@@ -31,17 +31,17 @@ func NatsJetStreamPublisher(client micro.NatsClient) Publish {
 func RelayOnce(ctx context.Context, pool *pgxpool.Pool, publish Publish) (int, error) {
 	n := 0
 	err := common.System(ctx, pool, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT id, subject, job_id::text, owner_id::text, attempt, data, created_at FROM outbox
+		rows, err := tx.Query(ctx, `SELECT id, type, subject, job_id::text, owner_id::text, attempt, data, created_at FROM outbox
 			ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED`)
 		if err != nil {
 			return err
 		}
 		type row struct {
-			ID                    int64
-			Subject, JobID, Owner string
-			Attempt               int
-			Data                  json.RawMessage
-			CreatedAt             time.Time
+			ID                          int64
+			Type, Subject, JobID, Owner string
+			Attempt                     int
+			Data                        json.RawMessage
+			CreatedAt                   time.Time
 		}
 		list, err := pgx.CollectRows(rows, pgx.RowToStructByPos[row])
 		if err != nil {
@@ -50,7 +50,7 @@ func RelayOnce(ctx context.Context, pool *pgxpool.Pool, publish Publish) (int, e
 		var done []int64
 		for _, r := range list {
 			jobID := r.JobID
-			env := gen.Envelope{Type: r.Subject, Version: 1, ID: utility.NewID(), JobID: &jobID, OwnerID: r.Owner,
+			env := gen.Envelope{Type: r.Type, Version: 1, ID: utility.NewID(), JobID: &jobID, OwnerID: r.Owner,
 				OccurredAt: r.CreatedAt.UTC(), Trace: gen.Trace{Traceparent: utility.Traceparent()}, Data: r.Data}
 			msgID := fmt.Sprintf("%s:%d", r.JobID, r.Attempt)
 			if err := publish(ctx, r.Subject, &env, msgID); err != nil {

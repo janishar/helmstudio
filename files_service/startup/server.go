@@ -1,4 +1,4 @@
-// Package startup: config → object store → router → janitor → serve.
+// Package startup: config → object store → router → serve.
 package startup
 
 import (
@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/helmstudio/orago/network"
@@ -28,8 +27,7 @@ func Store(ctx context.Context, env config.Env) (storage.Store, error) {
 	return nil, fmt.Errorf("STORAGE_DRIVER %q: use s3 or memory", env.StorageDriver)
 }
 
-// Run wires the service and serves until SIGINT or SIGTERM, then gives requests 10 s to finish. The janitor runs in
-// the background on the same context, and Run waits for it after the server stops.
+// Run wires the service and serves until SIGINT or SIGTERM, then gives requests 10 s to finish.
 func Run() error {
 	env, err := config.Load()
 	if err != nil {
@@ -50,12 +48,6 @@ func Run() error {
 	router.LoadRootMiddlewares(module.RootMiddlewares()...)
 	router.LoadControllers(module.Controllers()...)
 
-	var workers sync.WaitGroup
-	workers.Go(func() { Janitor(ctx, store, env.WorkRetention) })
-
 	log.Printf("files_service listening on :%s", env.Port)
-	err = router.Start(ctx, ":"+env.Port)
-	stop() // Start also returns on a failed listen, and ctx must end for the janitor to.
-	workers.Wait()
-	return err
+	return router.Start(ctx, ":"+env.Port)
 }

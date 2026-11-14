@@ -7,12 +7,5 @@ export default defineConfig([
   ...nextTs,
   // signed /files links are opaque and short-lived: plain <img>, no next/image optimisation
   { rules: { "@next/next/no-img-element": "off" } },
-  globalIgnores([
-    "node_modules/**",
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    "gen/**",
-  ]),
+  globalIgnores(["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "gen/**"]),
 ]);

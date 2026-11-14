@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ora.local/contracts/messages/req.auth.validate.token.schema.json",
+  "$id": "https://helmstudio.local/contracts/messages/req.auth.validate.token.schema.json",
   "title": "NATS request/reply auth.validate.token (auth_service api/message/handler.go)",
   "description": "Core NATS request/reply on subject `auth.validate.token` (queue group auth), not JetStream and not enveloped: the request and the reply are the bare JSON objects below. Validation checks signature, issuer, expiry, that the user is enabled and the session not revoked.",
   "$defs": {
@@ -54,6 +54,7 @@
           "items": {
             "enum": [
               "user",
+              "dev",
               "admin"
             ]
           },

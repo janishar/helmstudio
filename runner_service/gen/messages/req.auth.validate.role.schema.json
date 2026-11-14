@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.auth.validate.role.schema.json",
+  "title": "NATS request/reply auth.validate.role (auth_service api/message/handler.go)",
+  "description": "Core NATS request/reply on subject `auth.validate.role` (queue group auth), not JetStream and not enveloped: the request and the reply are the bare JSON objects below. Validation checks signature, issuer, expiry, that the user is enabled and the session not revoked. `allowed` is false when the token is valid but lacks the role.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "token",
+        "role"
+      ],
+      "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the user's access token (JWT)"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "description": "role to check, e.g. admin"
+        }
+      }
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "required": [
+        "user_id",
+        "email",
+        "jti",
+        "family_id",
+        "expires_at",
+        "allowed"
+      ],
+      "not": {
+        "required": [
+          "error"
+        ]
+      },
+      "properties": {
+        "user_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "token sub"
+        },
+        "email": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "user",
+              "dev",
+              "admin"
+            ]
+          },
+          "description": "omitted when the user has no roles"
+        },
+        "jti": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "session (refresh-token family); matches evt.auth.revoked data.family_id"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "token exp: cache the answer at most until then"
+        },
+        "allowed": {
+          "type": "boolean",
+          "description": "the token's roles include the requested role"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "description": "\"invalid or expired token\" (bad signature/issuer, expired, disabled user, revoked session), \"bad request: want {...}\" (unparseable request, empty token or role), or \"internal error\"; treat every error as not authenticated"
+        }
+      }
+    }
+  }
+}

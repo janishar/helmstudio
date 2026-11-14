@@ -4,7 +4,7 @@
 #   docker compose -f deploy/docker-compose.yml run --rm storage-setup
 # On AWS S3 create the bucket with your own tooling instead.
 set -eu
-bucket="${S3_BUCKET:-ora}"
+bucket="${S3_BUCKET:-helmstudio}"
 master="${WEED_MASTER:-seaweedfs:9333}"
 if echo "s3.bucket.list" | weed shell -master="$master" 2>/dev/null | grep -qw "$bucket"; then
   echo "bucket $bucket exists"

@@ -11,7 +11,7 @@ import (
 	"github.com/helmstudio/auth_service/common"
 )
 
-// authentication checks access tokens with the auth service directly, where catalog_service asks over NATS.
+// authentication checks access tokens with the auth service directly, where studio_service asks over NATS.
 type authentication struct {
 	service *auth.Service
 }

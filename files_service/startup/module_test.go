@@ -19,7 +19,7 @@ func TestHandlerRoutes(t *testing.T) {
 	}
 	router.LoadRootMiddlewares(module.RootMiddlewares()...)
 	router.LoadControllers(module.Controllers()...)
-	for path, want := range map[string]int{"/health": 200, "/files/u/x/y.png": 403, "/v1/catalog/sessions": 404, "/nope": 404} {
+	for path, want := range map[string]int{"/health": 200, "/files/u/x/y.png": 403, "/v1/studio/sessions": 404, "/nope": 404} {
 		recorder := httptest.NewRecorder()
 		router.Engine().ServeHTTP(recorder, httptest.NewRequest("GET", path, nil))
 		if recorder.Code != want {

@@ -56,7 +56,7 @@ func (c *controller) serveHandler(ctx *gin.Context) {
 	defer body.Close()
 	// uploaded documents bring arbitrary files (.html, .svg): never run them as active content on this origin
 	ctx.Header("Content-Security-Policy", "sandbox")
-	// a key never changes content (a new revision, try or upload gets a new key) and catalog's links stay the same for
+	// a key never changes content (a new run or upload gets a new key) and studio's links stay the same for
 	// up to a day: the browser keeps it as long as it likes (a year) without asking again; private, so no shared
 	// cache holds it. The URL is the cache key, so a link re-signed the next day is a new entry.
 	ctx.Header("Cache-Control", "private, max-age=31536000, immutable")

@@ -38,25 +38,25 @@ func TestCheck(t *testing.T) {
 			t.Fatalf("bypass %s: %+v", p, r)
 		}
 	}
-	if r := c.check("/v1/catalog/sessions", ""); r.status != 401 || r.body != msgMissing {
+	if r := c.check("/v1/studio/sessions", ""); r.status != 401 || r.body != msgMissing {
 		t.Fatalf("missing: %+v", r)
 	}
-	r := c.check("/v1/catalog/sessions", "good")
+	r := c.check("/v1/studio/sessions", "good")
 	if r.status != 0 || r.clientID != "c1" || len(r.scopes) != 2 {
 		t.Fatalf("good: %+v", r)
 	}
-	c.check("/v1/catalog/sessions", "good") // cached
+	c.check("/v1/studio/sessions", "good") // cached
 	if calls.Load() != 1 {
 		t.Fatalf("positive cache: %d calls", calls.Load())
 	}
-	if r := c.check("/v1/catalog/sessions", "bad"); r.status != 401 || r.body != msgInvalid {
+	if r := c.check("/v1/studio/sessions", "bad"); r.status != 401 || r.body != msgInvalid {
 		t.Fatalf("bad: %+v", r)
 	}
-	c.check("/v1/catalog/sessions", "bad") // negative cache
+	c.check("/v1/studio/sessions", "bad") // negative cache
 	if calls.Load() != 2 {
 		t.Fatalf("negative cache: %d calls", calls.Load())
 	}
-	if r := c.check("/v1/catalog/sessions", "slow"); r.status != 503 {
+	if r := c.check("/v1/studio/sessions", "slow"); r.status != 503 {
 		t.Fatalf("timeout must fail closed: %+v", r)
 	}
 	if _, ok := cache.Load(sha("slow")); ok {
@@ -66,7 +66,7 @@ func TestCheck(t *testing.T) {
 	// cache expiry
 	c.PositiveTTL = 1
 	cache.Clear()
-	c.check("/v1/catalog/sessions", "good")
+	c.check("/v1/studio/sessions", "good")
 	v, _ := cache.Load(sha("good"))
 	if d := time.Until(v.(verdict).until); d > time.Second {
 		t.Fatalf("ttl %v", d)
@@ -76,10 +76,10 @@ func TestCheck(t *testing.T) {
 func TestAuthDown(t *testing.T) {
 	cache.Clear()
 	c := &Config{VerificationUrls: []string{"http://127.0.0.1:1/verify/apikey"}}
-	if r := c.check("/v1/catalog/sessions", "good"); r.status != 503 {
+	if r := c.check("/v1/studio/sessions", "good"); r.status != 503 {
 		t.Fatalf("auth down: %+v", r)
 	}
-	if r := (&Config{}).check("/v1/catalog/sessions", "good"); r.status != 503 {
+	if r := (&Config{}).check("/v1/studio/sessions", "good"); r.status != 503 {
 		t.Fatalf("no urls: %+v", r)
 	}
 }

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.run.output.schema.json",
+  "title": "runner → studio: one output object written",
+  "description": "Subject evt.run.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.run.output"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the run id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "index",
+        "key",
+        "kind",
+        "bytes"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "the output's number in the run, from 0 (key <output_prefix><index>.<ext>)"
+        },
+        "key": {
+          "$ref": "defs.schema.json#/$defs/objectKey"
+        },
+        "kind": {
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "object size"
+        }
+      }
+    }
+  }
+}

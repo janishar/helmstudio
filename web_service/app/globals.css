@@ -1,135 +1,209 @@
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "../styles/shadcn-variants.css";
 @import "../styles/tokens.css";
 
-@custom-variant dark (&:is(.dark *));
-
+/* every colour is a theme variable (styles/tokens.css) */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-nunito), Inter, ui-sans-serif, system-ui, sans-serif;
-  --color-frame: var(--frame);
-  --color-bar: var(--bar);
-  --color-field: var(--field);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  /* Catalog Agent palette (docs/reference/ui/tailwind.config.js): the accent is a variable so a section can
-     recolour everything accented inside it (poses teal, models and backgrounds pink: --catalog-accent on that element). */
-  --color-accent: rgb(var(--catalog-accent));
-  --color-accent-hover: rgb(var(--catalog-accent-hover));
-  --color-accent-muted: #4f46e5;
-  --color-surface: #161a24;
-  --color-surface-raised: #20242f;
-  --color-surface-border: #2f3446;
-  --color-surface-frame: #0e1118;
-  --color-surface-bar: #262c3d;
-  --animate-msg-in: msg-in 0.25s ease-out;
-  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-danger: var(--danger);
-  --color-info: var(--info);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
-  --shadow-card: var(--shadow-card);
-  --shadow-pop: var(--shadow-pop);
-  --default-transition-duration: var(--duration);
-}
-
-@keyframes msg-in {
-  0% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-@keyframes shimmer {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), var(--font-inter), sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --color-ground: var(--g);
+  --color-inset: var(--in);
+  --color-panel: var(--p0);
+  --color-s1: var(--s1);
+  --color-s2: var(--s2);
+  --color-s3: var(--s3);
+  --color-s4: var(--s4);
+  --color-s5: var(--s5);
+  --color-line: var(--ln);
+  --color-dash: var(--dash);
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-a1: var(--a1);
+  --color-on1: var(--on1);
+  --color-a2: var(--a2);
+  --color-bad: var(--bad);
 }
 
 @layer base {
-  :root {
-    --catalog-accent: 99 102 241;
-    --catalog-accent-hover: 129 140 248;
-  }
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground antialiased;
-  }
   html {
     @apply font-sans;
+    font-size: 14px;
+    line-height: 20px;
   }
-  h1,
-  h2 {
-    letter-spacing: -0.025em;
+  body {
+    min-height: 100dvh;
+    background-color: var(--g);
+    color: var(--t1);
+    /* a faint warm light from the top left */
+    background-image:
+      radial-gradient(1100px 620px at 14% -12%, rgba(255, 196, 120, 0.11), transparent 62%),
+      radial-gradient(
+        900px 640px at 108% 112%,
+        color-mix(in srgb, var(--a1) 7%, transparent),
+        transparent 60%
+      ),
+      repeating-linear-gradient(118deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 4px);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
   }
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-ring;
+    outline: 2px solid var(--a1);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+  [popover] {
+    color: inherit;
   }
 }
 
-/* Catalog Agent building blocks (the demo's index.css) */
 @layer components {
-  .card {
-    @apply rounded-xl border border-surface-border bg-surface-raised;
+  /* floating panel: tonal, soft drop shadow, one tighter corner */
+  .panel {
+    border-radius: 28px 28px 28px 12px;
+    background-color: var(--s1);
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0) 46%
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),
+      0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent);
   }
-  .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50;
+  .aside {
+    border-radius: 34px 34px 34px 14px;
+    background: var(--p0);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent);
   }
-  .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-gray-400 transition-colors hover:bg-white/5 hover:text-white;
+  .pop {
+    margin: 0;
+    border: 0;
+    padding: 14px;
+    border-radius: 18px 18px 18px 8px;
+    background: var(--s2);
+    box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent);
   }
-  .catalog-scroll::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  .bevel {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),
+      0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent);
   }
-  .catalog-scroll::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-surface-border;
+  /* the primary action: a raised, glossy key in the accent */
+  .key {
+    border: 0;
+    border-radius: 20px 20px 20px 8px;
+    background-color: var(--a1);
+    color: var(--on1);
+    background-image: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.35),
+      rgba(255, 255, 255, 0) 55%
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent),
+      0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent);
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .key:disabled {
+    opacity: 0.55;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--s3);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .chip:disabled {
+    opacity: 0.55;
+  }
+  .in {
+    width: 100%;
+    height: 38px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--s4);
+    color: var(--t1);
+    font-size: 13px;
+    padding: 0 12px;
+  }
+  .label {
+    font-size: 12px;
+    color: var(--t2);
+  }
+  .heading {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--t2);
+  }
+  .tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--s4);
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .tag-accent {
+    background: var(--a1);
+    color: var(--on1);
+  }
+  .info {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 50%;
+    padding: 0;
+    background: var(--ib);
+    color: var(--it);
+    font:
+      600 11px/18px var(--font-inter),
+      sans-serif;
+    vertical-align: middle;
+  }
+  /* 3D gradient icon tile; each dock item sets --tile */
+  .tile {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    color: #fff;
+    background: var(--tile);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),
+      0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent);
+  }
+  .dock-item:not([aria-current]) .tile {
+    filter: saturate(0.55) brightness(0.8);
+  }
+  .dock-item[aria-current] .tile {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: 2px;
   }
 }
 
-/* the ORA brand gradient as text (highlights) */
-.text-brand {
-  background: var(--grad-brand);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.tabular {
+.mono {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 

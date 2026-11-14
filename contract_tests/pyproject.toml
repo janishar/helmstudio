@@ -1,13 +1,14 @@
 [project]
-name = "ora-contract-tests"
+name = "helmstudio-contract-tests"
 version = "0.1.0"
-description = "Black-box HTTP contract suite for the ORA Catalog Agent API (through Kong)"
+description = "Black-box HTTP contract suite for the helmstudio public API (through Kong)"
 requires-python = ">=3.14,<3.15"
 dependencies = ["pytest>=9.2.0", "httpx>=0.28.1", "pillow>=13.0.0", "jsonschema>=4.26.0", "pyyaml>=6.0.3",
                 "openapi-spec-validator>=0.9.0", "rfc3339-validator>=0.1.4"]  # last two: ../contracts/check.py
 
 [tool.uv]
 package = false
+required-version = "==0.13.8"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

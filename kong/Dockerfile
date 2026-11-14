@@ -1,4 +1,4 @@
-FROM golang:1.27.3-alpine3.24 AS build
+FROM golang:1.27.4-alpine3.24 AS build
 WORKDIR /src
 COPY apikey_auth_plugin/go.mod apikey_auth_plugin/go.sum ./
 RUN go mod download

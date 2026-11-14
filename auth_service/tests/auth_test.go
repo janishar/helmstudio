@@ -21,13 +21,13 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	natsmicro "github.com/nats-io/nats.go/micro"
 	"github.com/helmstudio/orago/micro"
 	"github.com/helmstudio/orago/network"
 	"github.com/helmstudio/orago/postgres"
 	"github.com/helmstudio/orago/utility"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	natsmicro "github.com/nats-io/nats.go/micro"
 
 	"github.com/helmstudio/auth_service/config"
 	"github.com/helmstudio/auth_service/migrations"
@@ -61,7 +61,7 @@ func setup(t *testing.T) *env {
 	}
 	u, _ := url.Parse(admin)
 	u.Path = "/" + name
-	cfg := config.Env{DatabaseURL: u.String(), Issuer: "ora-auth", AccessTTL: 15 * time.Minute, RefreshTTL: time.Hour,
+	cfg := config.Env{DatabaseURL: u.String(), Issuer: "helm-auth", AccessTTL: 15 * time.Minute, RefreshTTL: time.Hour,
 		AdminEmail: "Admin@Example.com ", AdminPassword: "admin password 1"}
 	db, err := postgres.Open(ctx, cfg.DatabaseURL, migrations.FS)
 	if err != nil {
@@ -130,7 +130,7 @@ func (e *env) do(method, path, token string, body any, out any, hdr ...string) i
 	return resp.StatusCode
 }
 
-// signup stands in for the closed sign-up: the admin creates the account (role user), then it signs in; out gets
+// signup stands in for the missing sign-up: the admin creates the account (role user), then it signs in; out gets
 // that session. Returns 201 like sign-up did, else the create's status.
 func (e *env) signup(body map[string]string, out any) int {
 	e.t.Helper()
@@ -359,7 +359,7 @@ func TestAdminAndAPIKeys(t *testing.T) {
 	if c := e.do("GET", "/verify/apikey", "", nil, &v, "x-api-key", k.Key); c != 200 || v["client"] != "web" || v["client_id"] == "" {
 		t.Fatalf("verify %d %v", c, v)
 	}
-	if c := e.do("GET", "/verify/apikey", "", nil, nil, "x-api-key", "ora_nope"); c != 401 {
+	if c := e.do("GET", "/verify/apikey", "", nil, nil, "x-api-key", "helm_nope"); c != 401 {
 		t.Fatalf("bad key %d", c)
 	}
 	var keys struct {
@@ -388,7 +388,7 @@ func TestAdminAndAPIKeys(t *testing.T) {
 	}
 }
 
-// TestErrorDetails pins the error strings and headers the HTTP edge guarantees (docs/ORAGO.md, section 4), which other
+// TestErrorDetails pins the error strings and headers the HTTP edge guarantees (orago/network), which other
 // tests see only as statuses.
 func TestErrorDetails(t *testing.T) {
 	e := setup(t)
@@ -455,6 +455,10 @@ func TestBusinessErrorDetails(t *testing.T) {
 			"admin is only the ADMIN_EMAIL account (auth's .env)"},
 		{"admin account is the .env's", "PUT", "/auth/admin/users/" + admin.User.ID + "/disabled", admin.AccessToken,
 			map[string]bool{"disabled": true}, 409, "the admin account is set by ADMIN_EMAIL / ADMIN_PASSWORD in auth's .env"},
+		{"admin account roles", "PUT", "/auth/admin/users/" + admin.User.ID + "/roles", admin.AccessToken,
+			map[string][]string{"roles": {"user"}}, 409, "the admin account is set by ADMIN_EMAIL / ADMIN_PASSWORD in auth's .env"},
+		{"admin account password", "PUT", "/auth/admin/users/" + admin.User.ID + "/password", admin.AccessToken,
+			map[string]string{"password": "a long passphrase"}, 409, "the admin account is set by ADMIN_EMAIL / ADMIN_PASSWORD in auth's .env"},
 		{"wrong current password", "PUT", "/auth/password", user.AccessToken,
 			map[string]string{"current_password": "not my password", "new_password": "another long passphrase"},
 			401, "current password is incorrect"},
@@ -503,7 +507,7 @@ func TestHealthAndPanicWiring(t *testing.T) {
 	log.SetOutput(io.Discard)
 	t.Cleanup(func() { log.SetOutput(os.Stderr) })
 
-	module := startup.NewModule(config.Env{Issuer: "ora-auth"}, e.db, e.mod.Auth.Key, nil, func() bool { return false })
+	module := startup.NewModule(config.Env{Issuer: "helm-auth"}, e.db, e.mod.Auth.Key, nil, func() bool { return false })
 	router, err := network.NewRouter(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -724,13 +728,13 @@ func (r *recordingRequest) Respond(body []byte, _ ...natsmicro.RespondOpt) error
 	return nil
 }
 
-// TestBetaAccess: sign-up is closed, the admin makes accounts (dev is grantable, the name defaults from the email),
+// TestAccounts: there is no sign-up, the admin makes accounts (dev is grantable, the name defaults from the email),
 // and EnsureAdmin keeps ADMIN_EMAIL the one admin with the .env's password.
-func TestBetaAccess(t *testing.T) {
+func TestAccounts(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
 	if c := e.do("POST", "/auth/signup", "", map[string]string{"email": "pub@example.com", "password": "a long passphrase", "name": "Pub"}, nil); c != 404 {
-		t.Fatalf("sign-up should be closed: %d", c)
+		t.Fatalf("there should be no sign-up: %d", c)
 	}
 	var admin session
 	e.do("POST", "/auth/signin", "", map[string]string{"email": "admin@example.com", "password": "admin password 1"}, &admin)

@@ -1,8 +1,8 @@
 # orago
 
-The Go framework behind `auth_service`, `catalog_service` and `files_service`: the goserve architecture on Gin, owned
+The Go framework behind `auth_service`, `studio_service` and `files_service`: the goserve architecture on Gin, owned
 by this repo. HTTP and NATS plumbing, no domain code. The guide (packages, service layout, handlers, DTOs, errors,
-NATS and JetStream helpers, testing, adding a feature): [docs/ORAGO.md](../docs/ORAGO.md).
+NATS and JetStream helpers, testing, adding a feature): [docs/reference-notes/framework-go.md](../docs/reference-notes/framework-go.md).
 
 Packages: `config`, `network` (the Gin edge), `middleware`, `micro` (NATS client and router, request/reply and
 JetStream helpers), `postgres`, `storage`, `utility`.

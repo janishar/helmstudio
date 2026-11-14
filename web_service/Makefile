@@ -27,4 +27,4 @@ build:
 	npx next build
 
 image:
-	docker build -t ora-catalog/web:dev .
+	docker build -t helmstudio/web:dev .

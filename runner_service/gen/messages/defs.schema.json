@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/defs.schema.json",
+  "title": "shared definitions",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "objectKey": {
+      "description": "claim check: an object-store key under the owner's prefix u/<owner_id>/ (never bytes)",
+      "type": "string",
+      "maxLength": 1024,
+      "pattern": "^u/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^\\u0000-\\u001f\\u007f]+$",
+      "not": {
+        "pattern": "(^|/)\\.\\.(/|$)"
+      }
+    },
+    "objectPrefix": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectKey"
+        },
+        {
+          "pattern": "/$"
+        }
+      ]
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "per-job sequence over every evt.run.* message of one run (= envelope job_id), starting at 1; the projector dedupes on (job_id, seq)"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "the run's attempt (1 in M0: a run command is delivered once)"
+    },
+    "hostName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{1,32}$",
+      "description": "a GPU host's name: lower-case letters and digits (one NATS subject token)"
+    },
+    "envName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{1,32}$",
+      "description": "a runner env on a host (mlx, torch, fake)"
+    },
+    "workflowId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "nodeId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "description": "a node's id inside one workflow graph"
+    },
+    "nodeKind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}(/[a-z][a-z0-9_-]{0,63})?$",
+      "description": "a node schema's kind: a core node (prompt, output) or <family>/<node> (echo/echo)"
+    },
+    "portRef": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+      "description": "<node id>.<output name> of another node in the same graph"
+    },
+    "paramValue": {
+      "type": [
+        "string",
+        "number",
+        "boolean"
+      ],
+      "description": "a param value: int, float, bool, string, text or enum (see registry.schema.json paramSchema)"
+    },
+    "graphNode": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/nodeKind"
+        },
+        "params": {
+          "type": "object",
+          "description": "param name → value; a param left out takes its node schema's default",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/paramValue"
+          }
+        },
+        "in": {
+          "type": "object",
+          "description": "input port name → the output it is wired to",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/portRef"
+          }
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "description": "a workflow's node graph: node id → node",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/nodeId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/graphNode"
+      }
+    }
+  }
+}

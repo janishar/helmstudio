@@ -1,216 +1,145 @@
-// Small presentational pieces of the design system (StatusPill, PageHeader, EmptyState, StatCard, …).
-import type { ReactNode } from "react";
-import { cn } from "cn";
-import { Skeleton } from "@/components/ui/skeleton";
+"use client";
+// Small shared pieces: the logo, the theme select, the info button, error notes and a modal dialog.
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useTheme } from "next-themes";
+import { THEMES } from "@/lib/themes";
 
-/** Text and background classes per tone. */
-const TONES = {
-  success: "text-success bg-success/10",
-  warning: "text-warning bg-warning/10",
-  danger: "text-danger bg-danger/10",
-  info: "text-info bg-info/10",
-  neutral: "text-muted-foreground bg-muted",
-} as const;
-/** A StatusPill colour. */
-export type Tone = keyof typeof TONES;
-
-/** The tone of each known status; any other status is neutral. */
-const STATUS_TONE: Record<string, Tone> = {
-  succeeded: "success",
-  ready: "success",
-  passed: "success",
-  running: "info",
-  queued: "neutral",
-  failed: "danger",
-  cancelled: "neutral",
-  "needs review": "warning",
-};
-
-/** Dot + text, so the colour is never the only signal. */
-export function StatusPill({
-  status,
-  tone,
-  children,
-  className,
-}: {
-  status: string;
-  tone?: Tone;
-  children?: ReactNode;
-  className?: string;
-}) {
-  const t = tone ?? STATUS_TONE[status] ?? "neutral";
+/** The helmstudio mark on its accent gradient. */
+export function Logo({ size = 44 }: { size?: number }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
-        TONES[t],
-        className,
-      )}
+      aria-hidden
+      className="grid shrink-0 place-items-center text-on1"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "14px 14px 14px 6px",
+        background: "linear-gradient(155deg, var(--a1), var(--a2))",
+        boxShadow:
+          "inset 0 1px 0 rgba(255,255,255,.5), inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent), 0 10px 18px -6px color-mix(in srgb, var(--shd) 80%, transparent)",
+      }}
     >
-      <span
-        aria-hidden
-        className={cn("size-1.5 rounded-full bg-current", status === "running" && "animate-pulse")}
-      />
-      {children ?? status}
+      <svg
+        width={size / 2}
+        height={size / 2}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      >
+        <circle cx="12" cy="12" r="7" />
+        <circle cx="12" cy="12" r="2" />
+        <path d="M12 2v5M12 17v5M2 12h5M17 12h5" />
+      </svg>
     </span>
   );
 }
 
-/** The page's title row: h1, optional description, `children` under them and action buttons on the right. */
-export function PageHeader({
-  title,
-  description,
-  actions,
-  children,
-}: {
-  title: ReactNode;
-  description?: ReactNode;
-  actions?: ReactNode;
-  children?: ReactNode;
-}) {
+/** The theme dropdown; next-themes keeps the choice in localStorage. Empty until mounted (the server can't know). */
+export function ThemeSelect({ id, className }: { id: string; className?: string }) {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored theme is only known in the browser
+  useEffect(() => setMounted(true), []);
   return (
-    <div className="mb-6 flex flex-wrap items-start gap-4">
-      <div className="min-w-0 flex-1">
-        <h1 className="text-2xl font-bold tracking-tight break-words">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+    <select
+      id={id}
+      className={className ?? "in"}
+      value={mounted ? theme : "forest"}
+      onChange={(e) => setTheme(e.target.value)}
+    >
+      {THEMES.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** A small "i" button whose popover holds an explanation, so the screen itself stays short. */
+export function Info({
+  children,
+  label = "More information",
+}: {
+  children: ReactNode;
+  label?: string;
+}) {
+  const id = "info" + useId().replace(/[^a-zA-Z0-9]/g, "");
+  return (
+    <>
+      <button
+        type="button"
+        className="info ml-1.5"
+        aria-label={label}
+        popoverTarget={id}
+        style={{ anchorName: `--${id}` } as React.CSSProperties}
+      >
+        i
+      </button>
+      <div
+        id={id}
+        popover="auto"
+        className="pop max-w-72 text-[13px] font-normal tracking-normal text-t1"
+        style={
+          {
+            positionAnchor: `--${id}`,
+            positionArea: "bottom span-right",
+            marginTop: 6,
+          } as React.CSSProperties
+        }
+      >
         {children}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-    </div>
+    </>
   );
 }
 
-/** Dashed placeholder for a list with nothing in it, with an optional icon and action. */
-export function EmptyState({
-  icon,
-  title,
-  children,
-  action,
-}: {
-  icon?: ReactNode;
-  title: string;
-  children?: ReactNode;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-6 py-12 text-center">
-      {icon && (
-        <div className="text-muted-foreground [&_svg]:size-8" aria-hidden>
-          {icon}
-        </div>
-      )}
-      <p className="font-medium">{title}</p>
-      {children && <p className="max-w-md text-sm text-muted-foreground">{children}</p>}
-      {action && <div className="mt-2">{action}</div>}
-    </div>
-  );
-}
-
-/** A labelled number with an optional hint. */
-export function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: ReactNode;
-  hint?: ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border bg-card p-4 shadow-card">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="tabular mt-1 text-xl font-semibold">{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
-/** The "Beta" tag beside the product name: the platform is in a closed beta. */
-export function BetaBadge({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-px text-[10px] font-semibold tracking-wider text-amber-500 uppercase",
-        className,
-      )}
-    >
-      Beta
-    </span>
-  );
-}
-
-/** Error banner (role="alert") with a "Try again" button when `onRetry` is given. */
+/** An error message with an optional retry. */
 export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?: () => void }) {
   return (
-    <div
+    <p
       role="alert"
-      className="flex flex-wrap items-center gap-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger"
+      className="flex flex-wrap items-center gap-3 rounded-xl bg-s2 px-3 py-2 text-[13px] text-bad"
     >
-      <span className="flex-1">{children}</span>
+      {children}
       {onRetry && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="font-medium underline underline-offset-4"
-        >
-          Try again
+        <button type="button" className="chip h-7 text-t1" onClick={onRetry}>
+          Retry
         </button>
       )}
-    </div>
+    </p>
   );
 }
 
-/** Loading placeholder for lists and tables. */
-export function SkeletonRows({ rows = 5 }: { rows?: number }) {
-  return (
-    <div className="space-y-2" aria-busy="true" aria-label="Loading">
-      {Array.from({ length: rows }, (_, i) => (
-        <Skeleton key={i} className="h-14 w-full rounded-lg" />
-      ))}
-    </div>
-  );
-}
-
-/** Form row: label, control and a hint or error. An error hides the hint; their ids are `<htmlFor>-hint` and
- * `<htmlFor>-error`, for aria-describedby. */
-export function Field({
-  label,
-  htmlFor,
-  hint,
-  error,
+/** A modal <dialog>, open while `open`; Escape or the backdrop's close button call `onClose`. */
+export function Modal({
+  open,
+  onClose,
+  title,
   children,
 }: {
-  label: ReactNode;
-  htmlFor?: string;
-  hint?: ReactNode;
-  error?: string;
+  open: boolean;
+  onClose: () => void;
+  title: string;
   children: ReactNode;
 }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (open && !d?.open) d?.showModal();
+    if (!open && d?.open) d.close();
+  }, [open]);
   return (
-    <div className="grid gap-1.5">
-      <label htmlFor={htmlFor} className="text-sm font-medium">
-        {label}
-      </label>
-      {children}
-      {hint && !error && (
-        <p className="text-xs text-muted-foreground" id={htmlFor && `${htmlFor}-hint`}>
-          {hint}
-        </p>
-      )}
-      {error && (
-        <p className="text-xs text-danger" id={htmlFor && `${htmlFor}-error`}>
-          {error}
-        </p>
-      )}
-    </div>
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      aria-label={title}
+      className="pop m-auto w-[min(92vw,380px)] p-5 text-t1 backdrop:bg-black/50"
+    >
+      <h2 className="mb-4 font-display text-base font-bold">{title}</h2>
+      {open && children}
+    </dialog>
   );
 }
-
-/** The standard bordered panel. */
-export const Card = ({ className, children }: { className?: string; children: ReactNode }) => (
-  <section
-    className={cn("rounded-xl border bg-card p-5 text-card-foreground shadow-card", className)}
-  >
-    {children}
-  </section>
-);

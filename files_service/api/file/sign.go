@@ -1,4 +1,4 @@
-// Package file: GET and HEAD /files/{key}?exp=&sig=, HMAC-signed links (made by catalog_service) served from the
+// Package file: GET and HEAD /files/{key}?exp=&sig=, HMAC-signed links (made by studio_service) served from the
 // object store.
 package file
 
@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Signer checks the links catalog_service signs with the same secret (FILE_URL_SECRET, the file_url_secret compose
+// Signer checks the links studio_service signs with the same secret (FILE_URL_SECRET, the file_url_secret compose
 // secret).
 type Signer struct {
 	secret []byte
@@ -21,7 +21,7 @@ func NewSigner(secret string) *Signer {
 	return &Signer{secret: []byte(secret)}
 }
 
-// signature is the hex HMAC-SHA256 of key + "\n" + expiry: the format catalog_service signs.
+// signature is the hex HMAC-SHA256 of key + "\n" + expiry: the format studio_service signs.
 func (s *Signer) signature(key string, expiry int64) string {
 	mac := hmac.New(sha256.New, s.secret)
 	mac.Write([]byte(key + "\n" + strconv.FormatInt(expiry, 10)))

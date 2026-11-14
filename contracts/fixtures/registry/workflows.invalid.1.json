@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "workflows": [
+    {
+      "id": "echo",
+      "title": "Echo",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt"
+          },
+          "params": {
+            "steps": 10,
+            "delay_ms": 300,
+            "fail": false
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    }
+  ]
+}

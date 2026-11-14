@@ -8,12 +8,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Data is the data of one command message; its type names the subject, so Enqueue can't queue it under the wrong one.
+// Data is the data of one command message. It names its own envelope type and subject, so Enqueue can't queue it
+// under the wrong ones.
 type Data interface {
+	Type() string
 	Subject() string
 }
 
-// Command is one cmd.* message. JobID is the work's id (a process or run id); Nats-Msg-Id = <job_id>:<attempt>.
+// Command is one cmd.* message. JobID is the work's id (a run id); Nats-Msg-Id = <job_id>:<attempt>.
 type Command struct {
 	JobID   string
 	OwnerID string
@@ -21,8 +23,7 @@ type Command struct {
 	Data    Data
 }
 
-// Enqueue stores the command in the outbox under its data's subject, inside the caller's transaction; the relay
-// publishes it after commit.
+// Enqueue stores the command in the outbox inside the caller's transaction; the relay publishes it after commit.
 func Enqueue(ctx context.Context, tx pgx.Tx, c Command) error {
 	data, err := json.Marshal(c.Data)
 	if err != nil {
@@ -31,7 +32,7 @@ func Enqueue(ctx context.Context, tx pgx.Tx, c Command) error {
 	if c.Attempt < 1 {
 		c.Attempt = 1
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO outbox (subject, job_id, owner_id, attempt, data) VALUES ($1, $2, $3, $4, $5)`,
-		c.Data.Subject(), c.JobID, c.OwnerID, c.Attempt, data)
+	_, err = tx.Exec(ctx, `INSERT INTO outbox (type, subject, job_id, owner_id, attempt, data) VALUES ($1, $2, $3, $4, $5, $6)`,
+		c.Data.Type(), c.Data.Subject(), c.JobID, c.OwnerID, c.Attempt, data)
 	return err
 }

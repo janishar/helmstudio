@@ -1,18 +1,22 @@
 -include .env
 export
 
-BASE_URL ?= http://localhost:8190
-API_KEY ?= contract-key
+BASE_URL ?= http://127.0.0.1:8300
 ARGS ?=
 
-.PHONY: venv test check-contracts
+.PHONY: venv test collect lint check-contracts
 
 venv:
-	uv venv .venv
-	uv sync --frozen 2>/dev/null || uv pip install --python .venv/bin/python -r pyproject.toml
+	uv sync --frozen
 
 check-contracts:   # validate ../contracts (schemas, fixtures, openapi.yaml)
 	.venv/bin/python ../contracts/check.py
 
 test:
-	@BASE_URL=$(BASE_URL) API_KEY=$(API_KEY) .venv/bin/pytest $(ARGS)
+	.venv/bin/pytest $(ARGS)
+
+collect:           # no stack needed: every test imports and is found
+	.venv/bin/pytest --collect-only -q
+
+lint:
+	uvx ruff@0.17.5 check . && uvx ruff@0.17.5 format --check .

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Postgres for the services' DB tests (.test.env): the ora-catalog-test project's on 5444, never the live one on 5443.
+# Postgres for the services' DB tests (.test.env): the helmstudio-test project's on 5464, never the live one on 5463.
 cd "$(dirname "$0")/.." || exit 1
 # init.sh again on an existing volume adds the databases and roles of services added since (it skips what exists).
-export KONG_HTTP_PORT=8190 POSTGRES_HOST_PORT=5444 ORA_NET=172.30.91
-set -- docker compose -p ora-catalog-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml
+export KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 HELM_NET=172.30.98
+set -- docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml
 "$@" up -d --wait postgres && exec "$@" exec -T postgres sh /docker-entrypoint-initdb.d/init.sh

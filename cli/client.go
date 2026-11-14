@@ -1,0 +1,209 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// config is ~/.config/helm/config.json (0600). The API key itself is never stored: it comes from HELM_API_KEY or
+// the file at APIKeyFile.
+type config struct {
+	URL          string `json:"url"`
+	APIKeyFile   string `json:"api_key_file,omitempty"`
+	Email        string `json:"email,omitempty"`
+	AccessToken  string `json:"access_token,omitempty"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+}
+
+func configPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "helm", "config.json"), nil
+}
+
+func loadConfig() (config, error) {
+	var c config
+	p, err := configPath()
+	if err != nil {
+		return c, err
+	}
+	b, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		return c, errors.New("not logged in: run helm login")
+	}
+	if err != nil {
+		return c, err
+	}
+	return c, json.Unmarshal(b, &c)
+}
+
+func saveConfig(c config) error {
+	p, err := configPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(p, 0o600) // WriteFile keeps the mode of an existing file
+}
+
+// apiKey is HELM_API_KEY, else the contents of the configured key file.
+func apiKey(c config) (string, error) {
+	if k := os.Getenv("HELM_API_KEY"); k != "" {
+		return k, nil
+	}
+	if c.APIKeyFile == "" {
+		return "", errors.New("no API key: set HELM_API_KEY or pass --api-key-file to helm login")
+	}
+	b, err := os.ReadFile(c.APIKeyFile)
+	if err != nil {
+		return "", fmt.Errorf("read API key: %w", err)
+	}
+	return strings.TrimSpace(string(b)), nil
+}
+
+// client calls the API with the client's key and the user's token; a 401 refreshes the tokens once and retries.
+type client struct {
+	cfg  config
+	key  string
+	http *http.Client
+}
+
+func newClient(c config) (*client, error) {
+	key, err := apiKey(c)
+	if err != nil {
+		return nil, err
+	}
+	return &client{cfg: c, key: key, http: &http.Client{}}, nil
+}
+
+// apiError is a non-2xx answer; detail is the server's {"detail"} when it sent one.
+type apiError struct {
+	status int
+	detail string
+}
+
+func (e *apiError) Error() string { return fmt.Sprintf("%d: %s", e.status, e.detail) }
+
+func readError(resp *http.Response) error {
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	var body struct {
+		Detail  string `json:"detail"`
+		Message string `json:"message"`
+	}
+	d := strings.TrimSpace(string(b))
+	if json.Unmarshal(b, &body) == nil && body.Detail+body.Message != "" {
+		d = body.Detail + body.Message
+	}
+	return &apiError{status: resp.StatusCode, detail: d}
+}
+
+func (c *client) send(ctx context.Context, method, path string, body []byte, hdr http.Header) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.cfg.URL, "/")+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range hdr {
+		req.Header[k] = v
+	}
+	req.Header.Set("X-API-Key", c.key)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.cfg.AccessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.cfg.AccessToken)
+	}
+	return c.http.Do(req)
+}
+
+// do sends the request; on a 401 it refreshes the tokens (saving them) and sends it once more.
+func (c *client) do(ctx context.Context, method, path string, in any, hdr http.Header) (*http.Response, error) {
+	var body []byte
+	if in != nil {
+		var err error
+		if body, err = json.Marshal(in); err != nil {
+			return nil, err
+		}
+	}
+	resp, err := c.send(ctx, method, path, body, hdr)
+	if err != nil || resp.StatusCode != http.StatusUnauthorized || c.cfg.RefreshToken == "" {
+		return resp, err
+	}
+	resp.Body.Close()
+	if err := c.refresh(ctx); err != nil {
+		return nil, err
+	}
+	return c.send(ctx, method, path, body, hdr)
+}
+
+func (c *client) refresh(ctx context.Context) error {
+	var s session
+	resp, err := c.send(ctx, http.MethodPost, "/auth/refresh", mustJSON(map[string]string{"refresh_token": c.cfg.RefreshToken}), nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("session expired, run helm login (%w)", readError(resp))
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
+		return err
+	}
+	c.cfg.AccessToken, c.cfg.RefreshToken = s.AccessToken, s.RefreshToken
+	return saveConfig(c.cfg)
+}
+
+// call sends a JSON request and decodes a JSON answer into out (nil = discard); a status other than want is an error.
+func (c *client) call(method, path string, in any, want int, out any) error {
+	resp, err := c.do(context.Background(), method, path, in, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != want {
+		return readError(resp)
+	}
+	if out == nil {
+		return nil
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func mustJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+type user struct {
+	ID    string   `json:"id"`
+	Email string   `json:"email"`
+	Name  string   `json:"name"`
+	Roles []string `json:"roles"`
+}
+
+type session struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	User         user   `json:"user"`
+}
