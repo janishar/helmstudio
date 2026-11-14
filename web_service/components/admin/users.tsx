@@ -65,7 +65,11 @@ export function UsersAdmin() {
             <thead>
               <tr className="text-left text-[11px] tracking-[0.04em] text-t2">
                 {["Name", "Email", "Roles", "Status", "Added", "Actions"].map((h) => (
-                  <th key={h} scope="col" className="border-b border-s3 p-2.5 font-semibold">
+                  <th
+                    key={h}
+                    scope="col"
+                    className="sticky -top-1.5 z-[1] border-b border-s3 bg-s1 p-2.5 font-semibold"
+                  >
                     {h}
                   </th>
                 ))}

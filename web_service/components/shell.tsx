@@ -73,7 +73,7 @@ export function AppShell({
   const items = user?.roles.includes("admin") ? [...ITEMS, ADMIN] : ITEMS;
   return (
     <UserContext value={user}>
-      <div className="flex min-h-dvh flex-col md:flex-row">
+      <div className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden">
         <nav
           aria-label="Sections"
           className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:mb-3.5 md:w-[68px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
@@ -93,7 +93,10 @@ export function AppShell({
           ))}
           <SettingsMenu user={user} />
         </nav>
-        <div className="flex min-w-0 flex-1 flex-wrap content-start">{children}</div>
+        {/* lg+: the window never scrolls; the dock and the side panel stay put and only <main> scrolls */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start lg:flex-nowrap lg:overflow-hidden lg:[&>.aside]:max-h-[calc(100dvh-28px)] lg:[&>.aside]:shrink-0 lg:[&>.aside]:overflow-y-auto lg:[&>main]:min-h-0 lg:[&>main]:overflow-y-auto">
+          {children}
+        </div>
       </div>
     </UserContext>
   );
