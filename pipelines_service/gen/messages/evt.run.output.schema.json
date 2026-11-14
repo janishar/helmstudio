@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.run.output.schema.json",
+  "title": "runner → studio: one output object written",
+  "description": "Subject evt.run.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.run.output"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the run id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "index",
+        "key",
+        "kind",
+        "bytes"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "the output's number in the run, from 0 (key <output_prefix><index>.<ext>)"
+        },
+        "key": {
+          "$ref": "defs.schema.json#/$defs/objectKey"
+        },
+        "kind": {
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "object size"
+        },
+        "seed": {
+          "$ref": "defs.schema.json#/$defs/seed",
+          "description": "the seed this output was made with"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/attempt",
+          "description": "the attempt of cmd.run.execute this event belongs to; absent = 1. seq restarts at 1 for each attempt; the projector dedupes on (job_id, attempt, seq) and drops events of an attempt that is not the run's current one"
+        }
+      }
+    }
+  }
+}

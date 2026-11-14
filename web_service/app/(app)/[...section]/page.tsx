@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-/** Dock sections that arrive after M0, by route segment. */
+/** Dock sections that arrive in a later milestone, by route segment. */
 const LATER: Record<string, string> = {
-  pipelines: "Pipelines",
   timeline: "Timeline",
   models: "Models",
 };

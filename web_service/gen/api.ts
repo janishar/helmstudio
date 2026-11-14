@@ -34,8 +34,9 @@ export interface paths {
         post?: never;
         /**
          * Delete a session with its runs and events
-         * @description 409 while one of its runs is queued or running (cancel it first). Its takes stay in the gallery with
-         *     `session_id` and `run_id` set to null (`made_with` is a snapshot).
+         * @description 409 while one of its runs is queued or running (cancel it first), or while a batch in it is queued, running or
+         *     paused (stop it first). Its takes stay in the gallery with `session_id` and `run_id` set to null (`made_with`
+         *     is a snapshot); its finished batches stay with `session_id` and their rows' `run_id` set to null.
          */
         delete: operations["studioDeleteSession"];
         options?: never;
@@ -346,6 +347,196 @@ export interface paths {
          *     upload is discarded and its take_id is 404 from then on. Calling it again after success answers the same take.
          */
         post: operations["studioCompleteUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's batches, newest first (`created_at`, then `id`), paginated */
+        get: operations["studioListBatches"];
+        put?: never;
+        /**
+         * Run one workflow once per row of inputs, as one unattended job
+         * @description Submit checks everything before anything runs (any failure is 422 and nothing is stored):
+         *     - `workflow_id` is a known workflow (`unknown workflow <id>`).
+         *     - Rows are built from `rows` (lines, table or grid, below), then each is repeated `seeds.count` times; the
+         *       result has 1 to 500 rows (`a batch has 1 to 500 rows; this one has <n>`).
+         *     - Each row's inputs = `inputs` (base), then the row's values, then its seed; checked with the same rules as
+         *       `RunRequest.inputs`. The detail names the input row (a line, a table row or a grid combination, from 1,
+         *       before seed repetition): `row 3: echo.steps: must be between 1 and 200`.
+         *     - A live host has the workflow's env and publishes the workflow (`no live host for env <env>`).
+         *     - The submit message fits NATS: the rows' inputs together at most 768 KB (`batch inputs are too large; use
+         *       fewer or shorter rows`).
+         *     409 when the caller already has 5 batches queued, running or paused (`You have 5 unfinished batches; wait for
+         *     one to finish.`). The interactive cap of 100 open runs does not count batch-lane runs and does not stop a batch.
+         *     404 for a `session_id` that is unknown or another user's.
+         *
+         *     On success studio stores the batch (`queued`, `control: run`) with its snapshot (the workflow as published
+         *     now: the batch never runs a later version), every row (`queued`, attempt 1, seeds drawn), a new session titled
+         *     like the batch when `session_id` is absent, and the outbox row `cmd.pipeline.submit`, in one transaction, and
+         *     answers 202. pipelines_service then runs row 1 alone; once row 1 has succeeded, failed or been cancelled,
+         *     every other row is released into the dispatcher's batch lane (after interactive runs, round-robin between users).
+         */
+        post: operations["studioCreateBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["studioGetBatch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The batch's rows by row number, paginated */
+        get: operations["studioListBatchRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hold the batch's queued work; running runs finish
+         * @description Sets `control: pause` and writes `cmd.pipeline.pause` in one transaction. From then on the dispatcher releases
+         *     none of the batch's queued runs (they stay `queued`, held); runs already running finish and their rows
+         *     complete. pipelines_service starts no new rows and confirms with `status: paused`. The answer is the batch as
+         *     it is now; follow its events. 409 unless `status` is `queued` or `running` and `control` is `run`.
+         */
+        post: operations["studioPauseBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Continue a paused batch (paused by you, by three failures in a row, or by a restart of the engine)
+         * @description Sets `control: run` and writes `cmd.pipeline.resume` in one transaction; held runs become eligible again.
+         *     pipelines_service continues every unfinished row where it stopped (README, "Batches and the pipeline
+         *     engine") and confirms with `status: running`. 409 unless `status` is `paused` or `control` is `pause`, and
+         *     `control` is not `stop`.
+         */
+        post: operations["studioResumeBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel everything the batch has not finished (Cancel remaining)
+         * @description In one transaction: `control: stop`, every queued run of the batch `cancelled` at once (never sent), every
+         *     released one written to the KV `cancels` (the runner stops it; takes already stored are kept), and
+         *     `cmd.pipeline.stop`. Runs pipelines asks for afterwards are created `cancelled`. pipelines_service marks rows
+         *     that never started `cancelled` and ends with `status: stopped`. Finished rows and their takes stay. 409 when
+         *     `status` is `done`, `failed` or `stopped`, or `control` is already `stop`.
+         */
+        post: operations["studioStopBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/rows/{row}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run one failed row again
+         * @description Sets the row `queued` with `attempt` + 1 (error, run and takes cleared from the row; the old run and its takes
+         *     stay) and writes `cmd.pipeline.retry` in one transaction. The row gets a new run (its idempotency key carries
+         *     the attempt). A `done` batch becomes `running` again until the row ends. 409 unless the row is `failed`, the
+         *     batch's `status` is not `failed` or `stopped` and its `control` is not `stop`.
+         */
+        post: operations["studioRetryBatchRow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Batch events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`
+         * @description Like the session events, numbered by a per-batch `seq`: JSON gives the events with `seq > since` (at most
+         *     500) and `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq,
+         *     `event:` = `batch` or `row`, `data:` = the `BatchEvent` JSON, `: keep-alive` every 15 s. Studio appends a
+         *     `row` event (the whole row) whenever a row changes and a `batch` event (the whole batch, counts included)
+         *     whenever the batch's status, control or counts change. Step progress of a row's run is in the session's
+         *     events (`session_id`).
+         */
+        get: operations["studioBatchEvents"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -740,7 +931,7 @@ export interface components {
             take_id?: string;
         };
         /**
-         * @description interactive (Create) is dispatched before batch (pipelines, later); every run is interactive in 1.2
+         * @description interactive (Create, POST …/runs) is dispatched before batch (runs pipelines_service asks for, one per batch row and step)
          * @enum {string}
          */
         RunLane: "interactive" | "batch";
@@ -776,6 +967,13 @@ export interface components {
             started_at: string | null;
             /** Format: date-time */
             finished_at: string | null;
+            /**
+             * Format: uuid
+             * @description the batch it runs a row of (lane batch); absent or null for a Create run
+             */
+            batch_id?: string | null;
+            /** @description the batch row number; with batch_id */
+            batch_row?: number | null;
         };
         /** @description values the runner chose (a random seed), sent with succeeded; absent until then and from M0 runners */
         Resolved: {
@@ -888,10 +1086,10 @@ export interface components {
         /** @enum {string} */
         TakeKind: "image" | "video" | "audio";
         /**
-         * @description create: a run output; upload: a file the user uploaded. pipeline and timeline come later
+         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1). timeline comes later
          * @enum {string}
          */
-        TakeSource: "create" | "upload";
+        TakeSource: "create" | "upload" | "pipeline";
         /**
          * @description One item of the caller's gallery: a run output or an upload, pointing at an immutable object (its key is never
          *     shown). `title` starts as the first line of the prompt (at most 80 characters; the workflow title when the
@@ -929,6 +1127,11 @@ export interface components {
             made_with: components["schemas"]["MadeWith"] | null;
             /** @description lineage: the takes it was made from (empty until workflows take media inputs) */
             parents: string[];
+            /**
+             * Format: uuid
+             * @description with source pipeline: the batch that made it (its collection); absent or null otherwise
+             */
+            batch_id?: string | null;
         };
         /** @description a snapshot taken when the take was stored: it survives the run and the session */
         MadeWith: {
@@ -986,6 +1189,174 @@ export interface components {
             bytes: number;
             /** Format: date-time */
             expires_at: string;
+        };
+        /**
+         * @description queued: stored, the engine has not started it; running; paused (`reason` says why: by you, three rows in a
+         *     row failed with one error, or the engine restarted: press Resume); done: every row ended (some may have
+         *     failed); failed: the engine could not run it at all (`reason`); stopped: by Stop. Set by pipelines_service
+         *     events, except `queued`.
+         * @enum {string}
+         */
+        BatchStatus: "queued" | "running" | "paused" | "done" | "failed" | "stopped";
+        /**
+         * @description what the owner asked for last (Pause, Resume, Stop); `status` follows once the engine confirms. While `pause` or `paused`, the dispatcher holds the batch's queued runs
+         * @enum {string}
+         */
+        BatchControl: "run" | "pause" | "stop";
+        /** @description rows by `BatchRow.status`; the five add up to total */
+        BatchCounts: {
+            total: number;
+            queued: number;
+            running: number;
+            succeeded: number;
+            failed: number;
+            cancelled: number;
+        };
+        Batch: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            workflow_id: string;
+            /** @description the title in the batch's snapshot */
+            workflow_title: string;
+            /**
+             * Format: uuid
+             * @description the session its runs are in; null after that session was deleted
+             */
+            session_id: string | null;
+            status: components["schemas"]["BatchStatus"];
+            control: components["schemas"]["BatchControl"];
+            /** @description why it is paused or failed; null otherwise */
+            reason: string | null;
+            counts: components["schemas"]["BatchCounts"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description the engine first reported running
+             */
+            started_at: string | null;
+            /**
+             * Format: date-time
+             * @description done, failed or stopped
+             */
+            finished_at: string | null;
+        };
+        BatchRow: {
+            row: number;
+            /** @description 1; +1 on every Retry */
+            attempt: number;
+            /** @description what the row runs with: the base inputs, then its own values, then its seed */
+            inputs: components["schemas"]["RunInputs"];
+            /** @description queued until its run starts (also while the run waits in the queue or is held), running while it runs, then the row's end */
+            status: components["schemas"]["RunStatus"];
+            /**
+             * Format: uuid
+             * @description the current attempt's run; null before it has one
+             */
+            run_id: string | null;
+            /** @description the current attempt's takes (deleted ones left out) */
+            take_ids: string[];
+            /** @description the first take's thumbnail; null without one */
+            thumb_url: components["schemas"]["SignedUrl"] | null;
+            /** @description set when failed */
+            error: string | null;
+            /**
+             * Format: date-time
+             * @description its run reported running
+             */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        BatchPage: {
+            batches: components["schemas"]["Batch"][];
+            /** @description pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
+        };
+        BatchRowPage: {
+            rows: components["schemas"]["BatchRow"][];
+            next_cursor: string | null;
+        };
+        /** @description pasted lines: one row per value, set as `param` (a string, text or enum param, else 422); clients drop blank lines */
+        BatchLines: {
+            /** @example prompt.text */
+            param: string;
+            values: string[];
+        };
+        /** @description a CSV parsed by the client or the CLI: each cell typed by its param (clients convert CSV text with node_schemas); a null cell leaves that input unset for the row (a seed: random) */
+        BatchTable: {
+            columns: string[];
+            /** @description each as long as columns (else 422) */
+            rows: components["schemas"]["ParamValue"][][];
+        };
+        /** @description rows = the cartesian product of the axes, the first axis varying slowest */
+        BatchGrid: {
+            axes: {
+                param: string;
+                values: components["schemas"]["ParamValue"][];
+            }[];
+        };
+        /**
+         * @description Repeat each row `count` times with consecutive seeds `start`, `start`+1, … in the workflow's one `seed`-type
+         *     param (422 when it has none or several); these replace any value of it from `inputs` or the rows. Repeats sit
+         *     next to each other (input row 1's repeats are rows 1..count).
+         */
+        BatchSeeds: {
+            count: number;
+            /** @description absent = drawn at random at Submit and stored */
+            start?: number;
+        };
+        BatchCreate: {
+            workflow_id: string;
+            /**
+             * Format: uuid
+             * @description absent = a new session titled like the batch
+             */
+            session_id?: string;
+            /** @description trimmed; empty or missing = "<workflow title> × <row count>" */
+            title?: string;
+            /** @description base inputs for every row; missing = {} */
+            inputs?: components["schemas"]["RunInputs"];
+            /** @description exactly one of lines, table, grid */
+            rows: {
+                lines: components["schemas"]["BatchLines"];
+            } | {
+                table: components["schemas"]["BatchTable"];
+            } | {
+                grid: components["schemas"]["BatchGrid"];
+            };
+            seeds?: components["schemas"]["BatchSeeds"];
+        };
+        /** @description one stored event of the batch: the whole batch, or one whole row */
+        BatchEvent: components["schemas"]["BatchStatusEvent"] | components["schemas"]["BatchRowEvent"];
+        BatchStatusEvent: {
+            /** @description per-batch cursor */
+            seq: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "batch";
+            /** Format: date-time */
+            ts: string;
+            data: components["schemas"]["Batch"];
+        };
+        BatchRowEvent: {
+            seq: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "row";
+            /** Format: date-time */
+            ts: string;
+            data: components["schemas"]["BatchRow"];
+        };
+        BatchEventPage: {
+            events: components["schemas"]["BatchEvent"][];
+            /** @description next `since` (unchanged when the page is empty) */
+            last_seq: number;
         };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
@@ -1251,6 +1622,8 @@ export interface components {
         WorkflowId: string;
         /** @description user UUID (malformed = 404) */
         UserId: string;
+        /** @description batch UUID (malformed = 404) */
+        BatchId: string;
         /** @description take UUID (malformed = 404) */
         TakeId: string;
         /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
@@ -1856,6 +2229,263 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListBatches: {
+        parameters: {
+            query?: {
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description a page of batches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchCreate"];
+            };
+        };
+        responses: {
+            /** @description the batch, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the batch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListBatchRows: {
+        parameters: {
+            query?: {
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description a page of rows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchRowPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPauseBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description pause requested */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioResumeBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description resume requested */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioStopBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description stop requested */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRetryBatchRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+                /** @description row number, from 1 (unknown or malformed = 404) */
+                row: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the row, queued again */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchRow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioBatchEvents: {
+        parameters: {
+            query?: {
+                /** @description cursor — the last seq the client has */
+                since?: number;
+            };
+            header?: {
+                /** @description SSE resume: the last `id:` received (an integer) */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchEventPage"];
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };

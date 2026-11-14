@@ -1,0 +1,21 @@
+{
+  "workflow_id": "echo",
+  "rows": {
+    "lines": {
+      "param": "prompt.text",
+      "values": [
+        "a"
+      ]
+    },
+    "grid": {
+      "axes": [
+        {
+          "param": "echo.steps",
+          "values": [
+            1
+          ]
+        }
+      ]
+    }
+  }
+}

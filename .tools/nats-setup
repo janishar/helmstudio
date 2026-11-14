@@ -1,5 +1,6 @@
 #!/bin/sh
-# Creates the JetStream streams and the KV buckets (registry, hosts, cancels); safe to re-run.
+# Creates the JetStream streams and the KV buckets (registry, hosts, cancels); safe to re-run. cmd.pipeline.> and
+# evt.pipeline.>/evt.studio.> ride CMD and EVT; batch control is a command, not a KV key (no new bucket).
 # Runs inside nats-box (compose service `nats-setup`), or from the host:
 #   docker compose -f deploy/docker-compose.yml run --rm nats-setup
 set -eu

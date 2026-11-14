@@ -1,0 +1,148 @@
+"""pipelines_service: `python main.py`. Runs batches (one workflow per row) as LangGraph threads.
+
+Opens the `pipelines` database (migrations, then LangGraph's checkpoint tables), reports every batch it had
+running as paused (engine.start), then pulls cmd.pipeline.> from CMD (durable `pipelines`, one at a time, in
+order) and evt.studio.> from EVT (durable `pipelines-runs`). SIGINT/SIGTERM stop pulling and exit; threads
+continue from their checkpoints on the next start (after the user's Resume)."""
+
+import asyncio
+import contextlib
+import logging
+import signal
+from pathlib import Path
+
+import nats
+import nats.errors
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
+
+import config
+import consumer
+import events
+import health
+from engine import Engine
+from messaging.publisher import Publisher
+from messaging.studio import Studio
+
+log = logging.getLogger("pipelines")
+
+MIGRATIONS = Path(__file__).resolve().parent / "migrations"
+
+
+async def open_pool(url: str) -> AsyncConnectionPool:
+    """The Postgres pool (dict rows, autocommit, as AsyncPostgresSaver needs), waiting up to 30 s."""
+    pool = AsyncConnectionPool(
+        url,
+        open=False,
+        min_size=1,
+        max_size=config.DRIVE_CONCURRENCY + 4,
+        kwargs={"autocommit": True, "row_factory": dict_row},
+    )
+    await pool.open(wait=True, timeout=30)
+    return pool
+
+
+def saver_for(pool) -> AsyncPostgresSaver:
+    # strict: restore only LangGraph's safe types (state is plain JSON), so a checkpoint row can't make the
+    # service import and call arbitrary code
+    return AsyncPostgresSaver(pool, serde=JsonPlusSerializer(allowed_msgpack_modules=None))
+
+
+async def migrate(pool, saver: AsyncPostgresSaver) -> None:
+    """migrations/*.sql in name order (every file on every start), then LangGraph's setup, under a lock."""
+    async with pool.connection() as conn:
+        await conn.execute("SELECT pg_advisory_lock(hashtext('pipelines_migrate'))")
+        try:
+            for f in sorted(MIGRATIONS.glob("*.sql")):
+                await conn.execute(f.read_text())
+            await saver.setup()
+        finally:
+            await conn.execute("SELECT pg_advisory_unlock(hashtext('pipelines_migrate'))")
+
+
+async def pull(sub, handle, stop: asyncio.Event, batch: int) -> None:
+    """Fetch and handle deliveries one by one until `stop`."""
+    while not stop.is_set():
+        try:
+            msgs = await sub.fetch(batch, timeout=2)
+        except nats.errors.TimeoutError:
+            continue
+        except Exception:
+            log.exception("fetch failed; retrying")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), 2)
+            continue
+        for m in msgs:
+            await handle(m)
+
+
+async def durable(js, stream: str, name: str, subject: str, ack_wait: int, max_ack: int, **kw):
+    """Create or update a durable pull consumer and bind to it."""
+    await js.add_consumer(
+        stream,
+        ConsumerConfig(
+            name=name,
+            durable_name=name,
+            filter_subject=subject,
+            ack_policy=AckPolicy.EXPLICIT,
+            ack_wait=ack_wait,
+            max_ack_pending=max_ack,
+            deliver_policy=DeliverPolicy.ALL,
+            **kw,
+        ),
+    )
+    return await js.pull_subscribe_bind(durable=name, stream=stream)
+
+
+async def main() -> None:
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    pool = await open_pool(config.DATABASE_URL)
+    nc = await nats.connect(
+        config.NATS_URL,
+        name="pipelines",
+        max_reconnect_attempts=-1,
+        inbox_prefix=config.INBOX_PREFIX,
+    )
+    try:
+        saver = saver_for(pool)
+        await migrate(pool, saver)
+        js = nc.jetstream()
+        engine = Engine(pool, saver, Publisher(js), Studio(nc).create_run, config.DRIVE_CONCURRENCY)
+        await engine.start()
+        cmds = await durable(
+            js,
+            "CMD",
+            "pipelines",
+            "cmd.pipeline.>",
+            consumer.ACK_WAIT,
+            1,  # one command at a time, in order
+            max_deliver=-1,  # redelivered until handled (every handler is idempotent)
+        )
+        runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
+        server = await health.serve(nc, pool)
+
+        stop = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop.set)
+        log.info("pipelines_service ready")
+        await asyncio.gather(
+            pull(cmds, consumer.Commands(engine, pool, js).handle, stop, 1),
+            pull(runs, events.RunEvents(engine).handle, stop, 16),
+        )
+        log.info("shutting down")
+        server.close()
+        await engine.close()
+    finally:
+        # close, not drain: every publish was awaited; draining pull subscriptions is slow
+        await nc.close()
+        await pool.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

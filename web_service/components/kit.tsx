@@ -119,11 +119,14 @@ export function Modal({
   open,
   onClose,
   title,
+  width = "w-[min(92vw,380px)]",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** the dialog's width class */
+  width?: string;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -137,7 +140,7 @@ export function Modal({
       ref={ref}
       onClose={onClose}
       aria-label={title}
-      className="pop m-auto w-[min(92vw,380px)] p-5 text-t1 backdrop:bg-black/50"
+      className={`pop m-auto ${width} p-5 text-t1 backdrop:bg-black/50`}
     >
       <h2 className="mb-4 font-display text-base font-bold">{title}</h2>
       {open && children}

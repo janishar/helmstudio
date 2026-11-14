@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/defs.schema.json",
+  "title": "shared definitions",
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "objectKey": {
+      "description": "claim check: an object-store key under the owner's prefix u/<owner_id>/ (never bytes)",
+      "type": "string",
+      "maxLength": 1024,
+      "pattern": "^u/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^\\u0000-\\u001f\\u007f]+$",
+      "not": {
+        "pattern": "(^|/)\\.\\.(/|$)"
+      }
+    },
+    "objectPrefix": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectKey"
+        },
+        {
+          "pattern": "/$"
+        }
+      ]
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "per-job sequence over every evt.run.* message of one run (= envelope job_id), starting at 1; the projector dedupes on (job_id, seq)"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "the run's attempt: 1, or 2 after the dispatcher lost the lease of attempt 1 and queued the run again (a run command is delivered once)",
+      "maximum": 2
+    },
+    "hostName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{1,32}$",
+      "description": "a GPU host's name: lower-case letters and digits (one NATS subject token)"
+    },
+    "envName": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{1,32}$",
+      "description": "a runner env on a host (mlx, torch, fake)"
+    },
+    "workflowId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "nodeId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "description": "a node's id inside one workflow graph"
+    },
+    "nodeKind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}(/[a-z][a-z0-9_-]{0,63})?$",
+      "description": "a node schema's kind: a core node (prompt, output) or <family>/<node> (echo/echo)"
+    },
+    "portRef": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+      "description": "<node id>.<output name> of another node in the same graph"
+    },
+    "paramValue": {
+      "type": [
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ],
+      "description": "a param value: int, float, bool, string, text, enum or seed (see registry.schema.json paramSchema); null only for a seed (random)"
+    },
+    "graphNode": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/nodeKind"
+        },
+        "params": {
+          "type": "object",
+          "description": "param name → value; a param left out takes its node schema's default",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/paramValue"
+          }
+        },
+        "in": {
+          "type": "object",
+          "description": "input port name → the output it is wired to",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/portRef"
+          }
+        }
+      }
+    },
+    "graph": {
+      "type": "object",
+      "description": "a workflow's node graph: node id → node",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/nodeId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/graphNode"
+      }
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "a seed the runner actually used (exact in a JS number)"
+    },
+    "inputs": {
+      "type": "object",
+      "description": "<node id>.<param name> → value (RunRequest.inputs); only the params to change",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/paramValue"
+      }
+    },
+    "workflowSnapshot": {
+      "type": "object",
+      "description": "a registry workflow as it was when the batch was submitted; the batch runs this graph, never the live one",
+      "required": [
+        "id",
+        "title",
+        "family",
+        "env",
+        "nodes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/workflowId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "env": {
+          "$ref": "#/$defs/envName"
+        },
+        "nodes": {
+          "$ref": "#/$defs/graph"
+        }
+      }
+    },
+    "batchRow": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500,
+      "description": "a batch row number, from 1 (after seed repetition)"
+    },
+    "rowAttempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "a batch row's attempt: 1, +1 on every Retry of the row"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$",
+      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key"
+    },
+    "takeIds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/uuid"
+      },
+      "description": "take ids, by output index"
+    },
+    "terminalRunStatus": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "rowStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "description": "pipelines' view of a row: queued = not started; running = its run was requested and has not finished"
+    },
+    "batchStatus": {
+      "enum": [
+        "running",
+        "paused",
+        "done",
+        "failed",
+        "stopped"
+      ],
+      "description": "set by pipelines_service (queued exists only in studio's record, before the first event)"
+    }
+  }
+}

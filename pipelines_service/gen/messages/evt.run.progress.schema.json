@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.run.progress.schema.json",
+  "title": "runner → studio: a run's step progress",
+  "description": "Subject evt.run.<session_id>.progress (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. One per step of a stepping node (the echo node: one per step, step 1..of). A real runner adds phase (what is happening: loading transformer, encoding, sampling, decoding) and eta_s; a phase without steps of its own is sent as step 1 of 1.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.run.progress"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the run id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "node",
+        "step",
+        "of"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "node": {
+          "$ref": "defs.schema.json#/$defs/nodeId",
+          "description": "the node of the run's graph that is stepping"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "steps done so far, 1..of"
+        },
+        "of": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "phase": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "what the node is doing, for the UI"
+        },
+        "eta_s": {
+          "type": "number",
+          "minimum": 0,
+          "description": "estimated seconds until the run finishes"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/attempt",
+          "description": "the attempt of cmd.run.execute this event belongs to; absent = 1. seq restarts at 1 for each attempt; the projector dedupes on (job_id, attempt, seq) and drops events of an attempt that is not the run's current one"
+        }
+      }
+    }
+  }
+}

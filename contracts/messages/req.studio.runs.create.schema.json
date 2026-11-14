@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.studio.runs.create.schema.json",
+  "title": "NATS request/reply studio.runs.create (pipelines → studio)",
+  "description": "Core NATS request/reply on subject `studio.runs.create` (queue group `studio`), bare JSON like auth.validate.*. Creates a batch-lane run for one step of one row, idempotent on idempotency_key: asking again returns the same run (`created: false`) with its current status, so a caller that lost the reply, or restarted, just asks again. Studio takes the owner, session, lane and graph from the batch record (its snapshot), never from the request: owner_id, session_id and workflow_id must match the batch or the reply is `not_found`. The inputs are resolved and checked like RunRequest.inputs against the snapshot graph. No live host: the run is created `failed` (as in Create); a stopped batch: created `cancelled`; a paused batch: created `queued` and held. A timeout (5 s) or `internal` is retried by the caller with backoff under the same key.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "owner_id",
+        "session_id",
+        "workflow_id",
+        "inputs",
+        "lane",
+        "batch_id",
+        "row",
+        "idempotency_key"
+      ],
+      "properties": {
+        "owner_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "workflow_id": {
+          "$ref": "defs.schema.json#/$defs/workflowId",
+          "description": "which workflow of the batch's snapshot"
+        },
+        "inputs": {
+          "$ref": "defs.schema.json#/$defs/inputs",
+          "description": "the row's full inputs (cmd.pipeline.submit rows[].inputs)"
+        },
+        "lane": {
+          "const": "batch"
+        },
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "idempotency_key": {
+          "$ref": "defs.schema.json#/$defs/idempotencyKey"
+        }
+      }
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "status",
+        "created",
+        "take_ids"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "description": "the run's status now; a terminal one means the result is already here (resume the thread with it)"
+        },
+        "created": {
+          "type": "boolean",
+          "description": "false when the key already had a run"
+        },
+        "take_ids": {
+          "$ref": "defs.schema.json#/$defs/takeIds",
+          "description": "the run's takes so far (all of them once succeeded)"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "the run's error when failed"
+        }
+      },
+      "not": {
+        "required": [
+          "code"
+        ]
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error",
+        "code"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "description": "user-readable, e.g. `echo.steps: must be between 1 and 200`"
+        },
+        "code": {
+          "enum": [
+            "invalid",
+            "not_found",
+            "internal"
+          ],
+          "description": "invalid: the inputs fail the snapshot's node schemas (final: the row fails with `error`); not_found: no such batch for this owner and session, or a workflow not in its snapshot (final); internal: retry"
+        }
+      }
+    }
+  }
+}

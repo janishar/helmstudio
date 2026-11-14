@@ -99,7 +99,9 @@ and every route back counts against the cap of the loop it closes.
   preferring loaded models, so judge
   calls for many rows run together rather than swapping models per row. Until
   row 1 reaches its Output, fails, or parks for a human, only row 1's items
-  run; then every row is released.
+  run; then every row is released, a bounded window of rows per batch asked
+  of studio at a time, so one user's batches add a bounded number of runs
+  to the dispatcher's line-up.
 - **Rule for node code**: a node that calls `interrupt()` does nothing else
   (a resumed node re-runs from its first line).
 - **Loop safety**: caps are counted in state and force the exit edge.

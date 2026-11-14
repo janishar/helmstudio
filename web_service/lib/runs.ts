@@ -187,6 +187,22 @@ export function followSession(
   onEvent: (e: S<"SessionEvent">) => void,
   page: (since: number) => Promise<S<"EventPage">> = (since) => eventPage(sessionId, since),
 ): () => void {
+  return followEvents(
+    `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events`,
+    ["status", "progress", "output"],
+    onEvent,
+    page,
+  );
+}
+
+/** followSession for any event log of the API: `url` serves SSE (`?since=`) with the named event types, `page`
+ * its JSON form. */
+export function followEvents<E extends { seq: number }>(
+  url: string,
+  types: string[],
+  onEvent: (e: E) => void,
+  page: (since: number) => Promise<{ events: E[] }>,
+): () => void {
   // ponytail: replays the whole log on open (cheap for M0 sessions); keep a cursor per session if logs grow long
   let last = 0;
   let stop = false;
@@ -197,14 +213,14 @@ export function followSession(
   let delay = POLL_MIN;
   let streamDelay = POLL_MIN;
   let streamAt = 0; // when a new stream may be tried
-  const take = (e: S<"SessionEvent">) => {
+  const take = (e: E) => {
     if (stop || e.seq <= last) return;
     last = e.seq;
     onEvent(e);
   };
   const onMessage = (m: MessageEvent<string>) => {
     try {
-      take(JSON.parse(m.data) as S<"SessionEvent">);
+      take(JSON.parse(m.data) as E);
     } catch {
       /* not an event */
     }
@@ -230,11 +246,8 @@ export function followSession(
   };
   function connect() {
     es?.close();
-    const s = new EventSource(
-      `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events?since=${last}`,
-    );
-    for (const t of ["status", "progress", "output"])
-      s.addEventListener(t, onMessage as EventListener);
+    const s = new EventSource(`${url}?since=${last}`);
+    for (const t of types) s.addEventListener(t, onMessage as EventListener);
     s.onopen = () => {
       if (stop || s !== es) return;
       polling = false;

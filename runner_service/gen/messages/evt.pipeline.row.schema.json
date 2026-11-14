@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.pipeline.row.schema.json",
+  "title": "pipelines → studio's projector: a row's state",
+  "description": "Subject evt.pipeline.<batch_id>.row (stream EVT), Nats-Msg-Id <batch_id>:<seq> (seq as in evt.pipeline.batch). Always the row's whole state, so the latest wins: the projector ignores a row event whose seq is not above the last one it applied to that row, or whose attempt is below the row's current attempt.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.pipeline.row"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "row",
+        "attempt",
+        "status"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/rowAttempt"
+        },
+        "status": {
+          "$ref": "defs.schema.json#/$defs/rowStatus"
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the row's run (from studio.runs.create); absent / null before it has one, or when cancelled before it started"
+        },
+        "take_ids": {
+          "$ref": "defs.schema.json#/$defs/takeIds",
+          "description": "with succeeded: the run's takes"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000,
+          "description": "required (non-empty) when failed: the run's error, or why the row could not get a run"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "running",
+                  "succeeded"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "run_id"
+            ],
+            "properties": {
+              "run_id": {
+                "$ref": "defs.schema.json#/$defs/uuid"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

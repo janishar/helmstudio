@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.stop.schema.json",
+  "title": "studio → pipelines: stop a batch for good",
+  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.stop` (stream CMD) in the transaction that changes the batch; Nats-Msg-Id `<batch_id>:<n>`, n = the batch's command counter (submit = 1, +1 per later command). pipelines_service consumes it (durable `pipelines`, filter `cmd.pipeline.>`, one message at a time, in order). Studio has already cancelled the batch's open runs (their run_finished events follow). Pipelines starts no new rows, publishes every row that never started as `cancelled`, and `stopped` once every row is final.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.pipeline.stop"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "batch_id"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "= envelope job_id"
+        }
+      }
+    }
+  }
+}

@@ -11,6 +11,10 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/cmd.run.execute.schema.json` | studio → runner: run one resolved graph (every param filled), write outputs under `output_prefix` |
 | `messages/evt.run.{status,progress,output}.schema.json` | runner → studio's projector: lifecycle (`running`, then one of `succeeded`, `failed`, `cancelled`), one event per step, one per stored output |
 | `messages/req.auth.validate.{token,role}.schema.json` | NATS request/reply with auth_service (not enveloped): `$defs/request`, `$defs/reply` |
+| `messages/cmd.pipeline.{submit,resume,pause,stop,retry}.schema.json` | studio → pipelines_service: start, continue, pause, stop a batch; retry one row |
+| `messages/evt.pipeline.{batch,row}.schema.json` | pipelines_service → studio's projector: a batch's status, a row's whole state |
+| `messages/evt.studio.run_finished.schema.json` | studio → pipelines_service: a batch run ended (any terminal status) |
+| `messages/req.studio.runs.create.schema.json` | NATS request/reply pipelines → studio (not enveloped): create a batch-lane run, idempotent on its key |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph) |
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (bucket `registry`), `$defs/host` (bucket `hosts`) |
@@ -35,6 +39,10 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `evt.run.<session_id>.output` | stream `EVT` | `evt.run.output`, same | runner → studio projector |
 | `dlq.<original subject>` | stream `DLQ` (30 days) | the original command, unchanged | runner, for a command that fails its schema |
 | `auth.validate.token`, `auth.validate.role` | core request/reply, queue group `auth` | bare JSON (see the schemas) | studio → auth |
+| `cmd.pipeline.submit`, `.resume`, `.pause`, `.stop`, `.retry` | stream `CMD` (work queue) | `cmd.pipeline.<same>`, `Nats-Msg-Id <batch_id>:<n>` (n = the batch's command counter, submit = 1) | studio outbox relay → pipelines (durable `pipelines`, filter `cmd.pipeline.>`, one at a time, in order) |
+| `evt.pipeline.<batch_id>.batch`, `.row` | stream `EVT` | `evt.pipeline.batch`, `evt.pipeline.row`, `Nats-Msg-Id <batch_id>:<seq>` | pipelines → studio projector (durable `studio-pipelines`, filter `evt.pipeline.>`) |
+| `evt.studio.<session_id>.run_finished` | stream `EVT` | `evt.studio.run_finished`, `Nats-Msg-Id <run_id>:finished` | studio outbox relay → pipelines (durable `pipelines-runs`, filter `evt.studio.>`) |
+| `studio.runs.create` | core request/reply, queue group `studio` | bare JSON (`req.studio.runs.create`) | pipelines → studio |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
 | KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models` | the runner writes its own keys once at start; studio reads |
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s; studio reads (older than 30 s = offline) |
@@ -95,7 +103,7 @@ create, terminal status and cancel, and every few seconds.
   the run fails at once with `no live host for env <env>`.
 - **One run at a time per host**, across envs: a host is free when studio has no run dispatched to it (any env) that
   is not yet terminal. Studio's own table decides this, not the runner's `state`.
-- **Order**, when a host is free: `interactive` before `batch` (every run is interactive in API 1.2); within a lane,
+- **Order**, when a host is free: `interactive` before `batch` (batch runs come from `studio.runs.create`); within a lane,
   round-robin between users: the user whose last released run is the oldest goes first (never released = first; a
   tie goes to the older oldest queued run); within one user, the oldest queued run, except that a queued run whose model is
   resident on that host goes first. A run's model is its `<family>/model` node (`variant`, `precision`) with the model
@@ -118,17 +126,20 @@ create, terminal status and cancel, and every few seconds.
   session does not reset an owner's turn.
 - **Starting up**: until studio's watches of KV `hosts` and `registry` have delivered their current values, a pass
   releases, retries and fails nothing, and a new run is never failed for want of a host.
-- **Cap**: at most 100 open (queued or running) runs per user; `POST …/runs` above it is a 409.
+- **Cap**: at most 100 open (queued or running) interactive runs per user; `POST …/runs` above it is a 409. Batch-lane
+  runs are not counted (a batch is bounded by its 500 rows and the 5 unfinished batches a user may have).
+- **Held**: a queued batch run whose batch is `paused` or has `control: pause` is skipped by every pass (no
+  `position`); it becomes eligible again on Resume. The no-live-host check still fails it while held.
 - **Attempts in events**: every `evt.run.*` carries `data.attempt` (absent = 1), `seq` restarts at 1 per attempt and
   `Nats-Msg-Id` is `<run_id>:<attempt>:<seq>`. The projector dedupes on `(job_id, attempt, seq)` and drops events of an
   attempt that is not the run's current one. The runner sets `attempt` in its hosts value while busy.
 - **Cancel** of a run not yet released: `cancelled` at once, never sent. Of a released one: KV `cancels`, as before.
-- Not in API 1.2: evict hand-over between two envs of one host, memory admission, batch lanes.
+- Not in API 1.3: evict hand-over between two envs of one host, memory admission.
 
 ## Takes, the gallery and uploads (plan 9.1, 17.2)
 
 - **Every run output is a take.** The projector, applying `evt.run.output`, inserts the take in the same transaction
-  (owner = the run's owner, `source: create`, `kind`, `bytes`, `width`, `height` from the event, `content_type` from
+  (owner = the run's owner, `source: create`, or `source: pipeline` with `batch_id` for a batch run, `kind`, `bytes`, `width`, `height` from the event, `content_type` from
   the key's extension, `made_with` snapshotted from the run: workflow id and title, the resolved inputs of every node
   with the event's `seed` in place of a random one, the `prompt` node's text, the `<family>/model` node) and puts
   its id in the output (`RunOutput.take_id`). The take keeps the object key; the API shows only signed links.
@@ -146,6 +157,67 @@ create, terminal status and cancel, and every few seconds.
   - `PUT /files/<key>?exp=&bytes=&ct=&sig=`: `sig = HMAC("PUT\n" + key + "\n" + exp + "\n" + bytes + "\n" + ct)`
     (`ct` URL-encoded in the query, raw in the HMAC). A GET signature never verifies as a PUT. Answers: 204 stored,
     403 bad / expired / path, 409 exists, 411 `Content-Length` not the signed bytes, 415 `Content-Type` not `ct`.
+
+## Batches and the pipeline engine (plan 7.2, 16.3)
+
+A batch runs one workflow once per row of inputs. Studio owns the API and the batch record; **pipelines_service**
+(Python, LangGraph; database `pipelines`, NATS user `pipelines`, compose service `pipelines`, health on 8082) runs it.
+
+- **Submit** (`POST /v1/studio/batches`): rows come from pasted `lines`, a `table` (CSV parsed by the client) or a
+  `grid` (cartesian product, at most two axes), each optionally repeated `seeds.count` times with consecutive seeds.
+  A row's inputs = base `inputs`, then its values, then its seed. Every check happens here (workflow, each row's
+  inputs with the run rules, 1–500 rows, at most 5 unfinished batches per user, a live host, at most 768 KB of row
+  inputs); a failure is 422 naming the input row. Studio stores the batch `queued` with its **snapshot** (the
+  registry workflow as published now), every row (`queued`, attempt 1), and the outbox row `cmd.pipeline.submit`
+  carrying the snapshot and every row's full inputs. The batch runs that snapshot, never a later version.
+- **Threads**: one LangGraph thread per row, `thread_id = "<batch_id>:<row>"`, state small plain JSON (row inputs,
+  run ids, take ids, status, counters; never media), `durability="sync"` with `AsyncPostgresSaver` in `pipelines`.
+  A batch of one workflow is the graph `START → step.submit → step.wait → END`.
+- **A step is two nodes.** `submit` asks `studio.runs.create` (lane `batch`) under the **idempotency key**
+  `<batch_id>:<row>:<row attempt>:<node>:<loop>:<branch>` (here `…:<row>:<attempt>:step:0:0`) and records the run id;
+  asking again returns the same run with its current status. `wait` contains only `interrupt()`. When
+  `evt.studio.<session_id>.run_finished` for that run arrives, the thread is resumed with it whatever the outcome
+  (succeeded, failed or cancelled). A reply that already shows a terminal status resumes the thread at once; the
+  event that follows finds no thread waiting on that run and is dropped. Resumes of one thread are serialised.
+- **Row 1 first**: at Submit only row 1 runs. Once row 1 has succeeded, failed or been cancelled, every other row is
+  released. Ordering between rows and users is the dispatcher's job (batch lane after interactive, round-robin
+  between users, loaded models first); pipelines never paces runs itself.
+- **Failures**: a failed row is marked with its error and the batch continues. Three rows in a row (by finish
+  order) failing with the same error pause the batch (`reason: 3 rows in a row failed: <error>`).
+- **Two records.** LangGraph's checkpoints resume threads and nothing else reads them. The batch record the UI reads
+  (batch, rows, counts, batch events) lives in the `studio` database, built by studio's projector from
+  `evt.pipeline.*` (pipelines is the only writer of `status`; studio writes `queued`, `control` and a retried row).
+  `BatchRow.status` is the row's end once pipelines reports one; before that `running` while its run runs, else
+  `queued`. Counts are computed from the rows.
+- **Events**: `seq` per batch over both kinds, committed in pipelines' database before the publish (gaps are normal,
+  never reused). Each event is a whole state, so the projector keeps the newest per row (and for the batch) and
+  ignores older seqs and row events of an older attempt. On start and on Resume, pipelines republishes every
+  unfinished row.
+- **Control** (Pause, Resume, Stop, Retry) travels as `cmd.pipeline.*` commands written by studio's outbox in the
+  transaction that changes the batch record, not as a KV key like `cancels`: the change and the command commit
+  together; they share one ordered, redelivered durable consumer with submit; and pipelines is event-driven (a
+  parked thread never polls, unlike a runner that checks `cancels` at every step). Studio enforces the part that
+  must be immediate itself, through the dispatcher.
+  - **Pause**: `control: pause`; the batch's queued runs are held (not released, no position); running runs finish
+    and their rows complete; pipelines starts no new rows and reports `paused`. Runs asked for while paused are
+    created `queued` and held.
+  - **Resume**: `control: run`; held runs become eligible; pipelines continues every unfinished row and reports
+    `running`.
+  - **Stop**: `control: stop`; studio cancels the batch's queued runs at once and puts released ones in KV
+    `cancels` (takes already stored stay); runs asked for later are created `cancelled`; pipelines marks rows never
+    started `cancelled` and reports `stopped` when every row is final. Stop is final.
+  - **Retry** (failed rows only): studio sets the row `queued`, attempt + 1; pipelines reruns the row's thread from
+    its start; the new attempt in the key makes a new run. A `done` batch reports `running` until the row ends.
+- **Resume after a crash**: when pipelines_service starts, every batch it had running is reported `paused`
+  (`reason: the pipeline service restarted; press Resume`) and waits for the user's Resume (held as above; runs
+  already released keep running). Their `run_finished` events wait in `EVT` and resume their threads when consumed,
+  paused or not. On Resume: threads that were mid-node continue from their last checkpoint; a step whose run id was
+  never recorded asks `studio.runs.create` again under the same key and gets the same run (or the run it created
+  before the crash); a known result resumes its thread. Nothing runs twice: one key, one run. A redelivered
+  `cmd.pipeline.submit` for a batch pipelines already has continues it the same way.
+- **Ending**: `done` when every row has ended (some may have failed), `stopped` after Stop, `failed` when the engine
+  cannot run the batch at all (`reason`). Then its threads are deleted; the snapshot stays in `pipelines` (Retry).
+  Takes made by a batch have `source: pipeline` and the batch's `batch_id` (its collection).
 
 ## Rules
 

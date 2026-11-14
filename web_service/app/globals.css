@@ -249,6 +249,74 @@
       inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),
       0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent);
   }
+  /* a batch's state (docs/mock/Pipelines .st): run, ok, bad, or plain */
+  .st {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--s4);
+    color: var(--t1);
+    white-space: nowrap;
+  }
+  .st-ok {
+    background: var(--a1);
+    color: var(--on1);
+  }
+  .st-run {
+    background: var(--a2);
+    color: var(--on2);
+  }
+  .st-bad {
+    background: var(--s5);
+    color: var(--a2);
+  }
+  /* rows done as a bar (docs/mock/Pipelines .prog) */
+  .prog {
+    display: inline-block;
+    width: 84px;
+    height: 6px;
+    margin-right: 8px;
+    border-radius: 999px;
+    background: var(--s4);
+    vertical-align: middle;
+    overflow: hidden;
+  }
+  .prog > b {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+  }
+  /* the batch tables (docs/mock/Pipelines, PipelineGraph) */
+  .grid-table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 760px;
+  }
+  .grid-table :is(td, th) {
+    padding: 10px;
+    text-align: left;
+    font-size: 13px;
+    border-bottom: 1px solid var(--s3);
+    white-space: nowrap;
+  }
+  .grid-table th {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--t2);
+  }
+  .grid-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .grid-table td.m {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--t2);
+  }
   .dock-item:not([aria-current]) .tile {
     filter: saturate(0.55) brightness(0.8);
   }

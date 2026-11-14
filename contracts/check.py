@@ -40,7 +40,10 @@ REGISTRY_KEYS = [
     "host",
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
 # openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
-HTTP_SCHEMAS = ["Run", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "UploadCreate", "Upload"]
+HTTP_SCHEMAS = [
+    "Run", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "UploadCreate", "Upload",
+    "Batch", "BatchCreate", "BatchRow", "BatchEvent",
+]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
 # Names of the reference product that must not come back.

@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.submit.schema.json",
+  "title": "studio → pipelines: start a batch",
+  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.submit` (stream CMD) in the transaction that changes the batch; Nats-Msg-Id `<batch_id>:<n>`, n = the batch's command counter (submit = 1, +1 per later command). pipelines_service consumes it (durable `pipelines`, filter `cmd.pipeline.>`, one message at a time, in order). Carries the whole snapshot: pipelines stores it and never reads the registry or the live workflow. A second delivery of the same batch is harmless (it continues the batch it already has).",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.pipeline.submit"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "batch_id",
+        "session_id",
+        "snapshot",
+        "inputs",
+        "rows"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "= envelope job_id"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "the session the batch's runs are made in"
+        },
+        "snapshot": {
+          "type": "object",
+          "required": [
+            "workflow_id",
+            "workflow"
+          ],
+          "properties": {
+            "workflow_id": {
+              "$ref": "defs.schema.json#/$defs/workflowId"
+            },
+            "workflow": {
+              "$ref": "defs.schema.json#/$defs/workflowSnapshot"
+            }
+          },
+          "description": "what the batch runs: one workflow (graph node `step`), as it was at Submit"
+        },
+        "inputs": {
+          "$ref": "defs.schema.json#/$defs/inputs",
+          "description": "the base inputs, applied to every row (already merged into each row's inputs)"
+        },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "description": "every row, in order (row 1 first); seeds already drawn",
+          "items": {
+            "type": "object",
+            "required": [
+              "row",
+              "inputs"
+            ],
+            "properties": {
+              "row": {
+                "$ref": "defs.schema.json#/$defs/batchRow"
+              },
+              "inputs": {
+                "$ref": "defs.schema.json#/$defs/inputs",
+                "description": "the row's full inputs: base inputs, then the row's values, then its seed; sent as is to studio.runs.create"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

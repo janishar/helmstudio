@@ -39,7 +39,7 @@
           "type": "null"
         }
       ],
-      "description": "the command's job: the run id for cmd.run.* and evt.run.* (Nats-Msg-Id <job_id>:<attempt> for commands, <job_id>:<seq> for events); null only for non-job messages (evt.auth.revoked)"
+      "description": "the command's job: the run id for cmd.run.*, evt.run.* and evt.studio.run_finished, the batch id for cmd.pipeline.* and evt.pipeline.* (Nats-Msg-Id <job_id>:<attempt> for commands, <job_id>:<seq> for events); null only for non-job messages (evt.auth.revoked)"
     },
     "owner_id": {
       "$ref": "defs.schema.json#/$defs/uuid",

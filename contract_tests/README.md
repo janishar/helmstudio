@@ -32,7 +32,10 @@ make -C contract_tests test API_KEY=... ARGS="-k runs -x"   # any pytest args
 `resilience.sh` restarts studio, runner, nats, postgres and kong of the running helmstudio-test stack one at a time,
 each in the middle of a ~12 s echo run, and requires that the run ends (succeeded, or failed/cancelled with an
 error: never stuck queued or running) and that a new run afterwards succeeds. `studio-queued` restarts studio while a
-second run is still queued behind the first, and requires that run to succeed. It takes a few minutes.
+second run is still queued behind the first, and requires that run to succeed. `batch-pipelines`, `batch-studio`,
+`batch-nats`, `batch-postgres` restart that service in the middle of a 12-row slow echo batch and `batch-kill` SIGKILLs
+the pipelines container and starts it again; the script presses Resume whenever the batch is paused, and the batch
+must end `done` with exactly 12 runs (one per row) and 12 takes. It takes a few minutes.
 
 ```sh
 make resilience   # from the repo root: brings the test stack up, makes a key, runs the script
@@ -58,6 +61,7 @@ Kong's sign-in rate limit is 20 a minute per IP; the suite signs in about that o
 | `test_takes.py` | an echo output is a take (`made_with`, prompt, no seed or model, signed `url`/`thumb_url`), titles, newest first, filters (kind, source, starred, session), `q` search over prompt and title, stable cursor pages, 422s, rename and star, reuse (posts as a run), soft delete, a deleted session keeps its takes |
 | `test_uploads.py` | POST /uploads → PUT the signed link → complete: a PNG becomes a take of its size; pending is hidden and 409; single-use PUT; bad type/size 422; a text file sent as PNG is 422 and discarded; tampered, re-dated, sibling, GET-signed links 403, wrong length 411, wrong type 415 |
 | `test_isolation.py` | user B gets 404 for A's session, runs, events and cancel; A's output file only through its signed link (missing, tampered or re-dated signatures and sibling keys are 403); B gets 404 on A's takes and pending upload (get, patch, delete, reuse, complete), never lists them, and cannot PUT under A's prefix with its own signature |
+| `test_batches.py` | echo batches (pipelines_service): 6 pasted lines end `done` with a run (lane `batch`, `batch_id`/`batch_row`) and a take each; row 1 ends before any other row's run is created; table and grid rows and inputs (first axis slowest); seeds 422 on echo (repeats checked only when a live fake workflow has a seed param); Submit 422s (bad row named, 600 rows, unknown workflow, no live host); pause holds queued rows, resume finishes; stop cancels the rest and ends `stopped`; a `fail=true` row fails alone and Retry reruns just it (attempt 2, new run); an interactive run jumps the waiting batch rows; batch events ordered (JSON, SSE, `since`, `Last-Event-ID`); B gets 404 on A's batch; the batch's takes in `GET /takes` (`source: pipeline`) |
 
 `helpers.py` has the polling, the SSE reader and the run steps; `conftest.py` the clients, the users and `echo_done`,
 user A's finished quick echo run that the runs, events and isolation tests share.

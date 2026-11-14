@@ -15,6 +15,7 @@ import (
 	"github.com/helmstudio/helmgo/network"
 
 	"github.com/helmstudio/studio_service/api/studio/dto"
+	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/common"
 )
 
@@ -52,6 +53,38 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/runs/:id/cancel", c.cancelRunHandler)
 	group.GET("/hosts", c.listHostsHandler)
 	group.GET("/queue", c.queueHandler)
+	group.GET("/batches", c.listBatchesHandler)
+	group.POST("/batches", c.createBatchHandler)
+	group.GET("/batches/:id", c.getBatchHandler)
+	group.GET("/batches/:id/rows", c.listBatchRowsHandler)
+	group.POST("/batches/:id/pause", c.controlBatchHandler(c.service.PauseBatch))
+	group.POST("/batches/:id/resume", c.controlBatchHandler(c.service.ResumeBatch))
+	group.POST("/batches/:id/stop", c.controlBatchHandler(c.service.StopBatch))
+	group.POST("/batches/:id/rows/:row/retry", c.retryBatchRowHandler)
+	group.GET("/batches/:id/events", c.batchEventsHandler)
+}
+
+// MountNats registers studio.runs.create (the service's group is "studio"), pipelines_service's request for a batch
+// run.
+func (c *controller) MountNats(group micro.NatsGroup) error {
+	return group.AddGroup("runs").AddEndpoint("create", micro.NatsHandlerFunc(c.runsCreateHandler))
+}
+
+// runsCreateHandler answers studio.runs.create with the run, or {error, code}.
+func (c *controller) runsCreateHandler(request micro.NatsRequest) {
+	body := new(message.RunsCreate)
+	if err := json.Unmarshal(request.Data(), body); err != nil {
+		micro.RespondNatsMessage(request, &message.RunsCreateError{Error: "bad request: invalid JSON", Code: "invalid"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, refused := c.service.CreateBatchRun(ctx, body)
+	if refused != nil {
+		micro.RespondNatsMessage(request, refused)
+		return
+	}
+	micro.RespondNatsMessage(request, &out)
 }
 
 // reply sends out with status, or the error.
@@ -174,9 +207,30 @@ func (c *controller) cancelRunHandler(ctx *gin.Context) {
 // ------------------------------------------------------------------ events
 
 // eventsHandler: GET /sessions/{id}/events — JSON page after ?since, or SSE with Accept: text/event-stream (replay
-// after since / Last-Event-ID, then new events as they are stored). The stream checks its token again before every
-// poll and ends once it is expired or revoked; the client reconnects with a fresh token and Last-Event-ID.
+// after since / Last-Event-ID, then new events as they are stored).
 func (c *controller) eventsHandler(ctx *gin.Context) {
+	c.serveEvents(ctx, func(requestCtx context.Context, since int64) (any, []sseEvent, int64, error) {
+		page, err := c.service.Events(requestCtx, common.MustCaller(ctx), ctx.Param("id"), since)
+		events := make([]sseEvent, len(page.Events))
+		for i, event := range page.Events {
+			events[i] = sseEvent{event.Seq, event.Type, event}
+		}
+		return page, events, page.LastSeq, err
+	})
+}
+
+// sseEvent is one event as a stream sends it: id, event and data (the whole event as JSON).
+type sseEvent struct {
+	Seq  int64
+	Type string
+	Data any
+}
+
+// serveEvents answers an event log: the JSON page after ?since, or SSE with Accept: text/event-stream (replay after
+// since / Last-Event-ID, then new events as they are stored). The stream checks its token again before every poll and
+// ends once it is expired or revoked; the client reconnects with a fresh token and Last-Event-ID. read returns the
+// page, its events and the next cursor.
+func (c *controller) serveEvents(ctx *gin.Context, read func(ctx context.Context, since int64) (any, []sseEvent, int64, error)) {
 	cursor := ctx.Query("since")
 	if last := ctx.GetHeader("Last-Event-ID"); last != "" {
 		cursor = last
@@ -189,8 +243,8 @@ func (c *controller) eventsHandler(ctx *gin.Context) {
 			return
 		}
 	}
-	requestCtx, caller, id, token := ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), network.BearerToken(ctx)
-	page, err := c.service.Events(requestCtx, caller, id, since) // 404 before any stream starts
+	requestCtx, token := ctx.Request.Context(), network.BearerToken(ctx)
+	page, events, last, err := read(requestCtx, since) // 404 before any stream starts
 	if err != nil || !strings.Contains(ctx.GetHeader("Accept"), "text/event-stream") {
 		reply(ctx, http.StatusOK, page, err)
 		return
@@ -202,19 +256,19 @@ func (c *controller) eventsHandler(ctx *gin.Context) {
 	header.Set("X-Accel-Buffering", "no")
 	writer.WriteHeader(http.StatusOK)
 	flusher := http.NewResponseController(writer)
-	send := func(page dto.EventPage) bool {
-		for _, event := range page.Events {
-			data, _ := json.Marshal(event)
+	send := func(events []sseEvent) bool {
+		for _, event := range events {
+			data, _ := json.Marshal(event.Data)
 			if _, err := fmt.Fprintf(writer, "id: %d\nevent: %s\ndata: %s\n\n", event.Seq, event.Type, data); err != nil {
 				return false
 			}
 		}
 		return flusher.Flush() == nil
 	}
-	if !send(page) {
+	if !send(events) {
 		return
 	}
-	since = page.LastSeq
+	since = last
 	poll, ping := time.NewTicker(PollEvery), time.NewTicker(KeepAlive)
 	defer poll.Stop()
 	defer ping.Stop()
@@ -232,14 +286,82 @@ func (c *controller) eventsHandler(ctx *gin.Context) {
 			if c.recheck(requestCtx, token) != nil {
 				return
 			}
-			page, err := c.service.Events(requestCtx, caller, id, since)
-			if err != nil { // the session is gone or the database is down: the client reconnects with Last-Event-ID
+			_, events, last, err := read(requestCtx, since)
+			if err != nil { // gone, or the database is down: the client reconnects with Last-Event-ID
 				return
 			}
-			if len(page.Events) > 0 && !send(page) {
+			if len(events) > 0 && !send(events) {
 				return
 			}
-			since = page.LastSeq
+			since = last
 		}
 	}
+}
+
+// ------------------------------------------------------------------ batches
+
+// listBatchesHandler: GET /batches.
+func (c *controller) listBatchesHandler(ctx *gin.Context) {
+	page, detail := ParsePage(ctx.Query("cursor"), ctx.Query("limit"))
+	if detail != "" {
+		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
+		return
+	}
+	out, err := c.service.ListBatches(ctx.Request.Context(), common.MustCaller(ctx), page)
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// createBatchHandler: POST /batches — 202 with the batch, queued.
+func (c *controller) createBatchHandler(ctx *gin.Context) {
+	withBody(ctx, http.StatusAccepted, func(caller common.Caller, _ string, body *dto.BatchCreate) (dto.Batch, error) {
+		return c.service.CreateBatch(ctx.Request.Context(), caller, body)
+	})
+}
+
+// getBatchHandler: GET /batches/{id}.
+func (c *controller) getBatchHandler(ctx *gin.Context) {
+	out, err := c.service.GetBatch(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// listBatchRowsHandler: GET /batches/{id}/rows — 404 before any 422.
+func (c *controller) listBatchRowsHandler(ctx *gin.Context) {
+	page, detail := ParsePage(ctx.Query("cursor"), ctx.Query("limit"))
+	caller := common.MustCaller(ctx)
+	if detail != "" {
+		if _, err := c.service.GetBatch(ctx.Request.Context(), caller, ctx.Param("id")); err != nil {
+			network.SendMixedError(ctx, err)
+			return
+		}
+		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
+		return
+	}
+	out, err := c.service.ListBatchRows(ctx.Request.Context(), caller, ctx.Param("id"), page)
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// controlBatchHandler: POST /batches/{id}/pause, /resume, /stop — 202 with the batch as it is now.
+func (c *controller) controlBatchHandler(fn func(context.Context, common.Caller, string) (dto.Batch, error)) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		out, err := fn(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+		reply(ctx, http.StatusAccepted, out, err)
+	}
+}
+
+// retryBatchRowHandler: POST /batches/{id}/rows/{row}/retry — 202 with the row, queued again.
+func (c *controller) retryBatchRowHandler(ctx *gin.Context) {
+	out, err := c.service.RetryBatchRow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("row"))
+	reply(ctx, http.StatusAccepted, out, err)
+}
+
+// batchEventsHandler: GET /batches/{id}/events — like the session events, per-batch seq.
+func (c *controller) batchEventsHandler(ctx *gin.Context) {
+	c.serveEvents(ctx, func(requestCtx context.Context, since int64) (any, []sseEvent, int64, error) {
+		page, err := c.service.BatchEvents(requestCtx, common.MustCaller(ctx), ctx.Param("id"), since)
+		events := make([]sseEvent, len(page.Events))
+		for i, event := range page.Events {
+			events[i] = sseEvent{event.Seq, event.Type, event}
+		}
+		return page, events, page.LastSeq, err
+	})
 }

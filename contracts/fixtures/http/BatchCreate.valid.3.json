@@ -1,0 +1,23 @@
+{
+  "workflow_id": "qwen-image",
+  "rows": {
+    "grid": {
+      "axes": [
+        {
+          "param": "sample.steps",
+          "values": [
+            20,
+            40
+          ]
+        },
+        {
+          "param": "model.variant",
+          "values": [
+            "base",
+            "turbo"
+          ]
+        }
+      ]
+    }
+  }
+}

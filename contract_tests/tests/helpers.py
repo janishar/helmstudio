@@ -85,9 +85,12 @@ def sse(
     last_event_id=None,
     since=None,
     timeout: float = JOB_TIMEOUT,
+    path: str | None = None,
+    schema: str = "SessionEvent",
 ) -> list[dict]:
-    """Read the session's SSE stream until until(frames) is true. A frame is {"id": int, "event": str, "data": dict};
-    with CONTRACT_SCHEMAS=1 each data is checked against SessionEvent."""
+    """Read the session's SSE stream (or the one at `path`) until until(frames) is true. A frame is
+    {"id": int, "event": str, "data": dict}; with CONTRACT_SCHEMAS=1 each data is checked against `schema`."""
+    path = path or f"{STUDIO}/sessions/{sid}/events"
     headers = {"Accept": "text/event-stream"}
     if last_event_id is not None:
         headers["Last-Event-ID"] = str(last_event_id)
@@ -96,7 +99,7 @@ def sse(
     deadline = time.monotonic() + timeout
     with client.stream(
         "GET",
-        f"{STUDIO}/sessions/{sid}/events",
+        path,
         headers=headers,
         params=params,
         timeout=httpx.Timeout(timeout),
@@ -114,7 +117,7 @@ def sse(
                 continue
             if "data" in frame:
                 data = json.loads(frame["data"])
-                schemas.check_value(data, "#/components/schemas/SessionEvent", "SSE event")
+                schemas.check_value(data, f"#/components/schemas/{schema}", "SSE event")
                 frames.append({"id": int(frame["id"]), "event": frame.get("event"), "data": data})
                 if until(frames):
                     return frames

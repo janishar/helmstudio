@@ -108,7 +108,7 @@ func TestParseFilter(t *testing.T) {
 	if filter, _ := ParseFilter(url.Values{"session_id": {"x"}}, false); filter.SessionID != "" || filter.Limit != 60 {
 		t.Fatal("session_id read where it is not a filter", filter)
 	}
-	for _, bad := range []url.Values{{"kind": {"gif"}}, {"source": {"pipeline"}}, {"starred": {"1"}}, {"session_id": {"x"}},
+	for _, bad := range []url.Values{{"kind": {"gif"}}, {"source": {"timeline"}}, {"starred": {"1"}}, {"session_id": {"x"}},
 		{"q": {strings.Repeat("a", 201)}}, {"limit": {"0"}}, {"limit": {"201"}}, {"limit": {"x"}}, {"cursor": {"nope"}},
 		{"cursor": {cursor{time.Now(), "x"}.encode()}}} {
 		if _, detail := ParseFilter(bad, true); detail == "" {

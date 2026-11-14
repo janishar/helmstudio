@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -14,8 +14,9 @@ info:
       malformed id in a path is treated as unknown: 404, never 422. Another user's id is a 404 too.
     - `url` fields are signed, time-limited links (`/files/{path}?exp=&sig=`). Clients treat them as opaque.
     - Every mutating call returns the updated resource.
-    - Long work (a run) answers 202 and is followed through `GET /v1/studio/sessions/{session_id}/events`.
-    - Enum values in responses may grow in a minor version (a take `source` of `pipeline` or `timeline`); clients
+    - Long work (a run) answers 202 and is followed through `GET /v1/studio/sessions/{session_id}/events`; a batch
+      through `GET /v1/studio/batches/{batch_id}/events`.
+    - Enum values in responses may grow in a minor version (a take `source` of `timeline`); clients
       show an unknown value as is.
     - Object keys of takes are never exposed: a take carries signed `url` / `thumb_url` only.
     - 409 means the resource's state forbids the call (a run already finished, a session with a run in progress).
@@ -26,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, runs, the queue, events, hosts, takes (the gallery), uploads'}
+  - {name: studio, description: 'studio_service: sessions, workflows, runs, the queue, events, hosts, takes (the gallery), uploads, batches'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -83,8 +84,9 @@ paths:
       operationId: studioDeleteSession
       summary: Delete a session with its runs and events
       description: |
-        409 while one of its runs is queued or running (cancel it first). Its takes stay in the gallery with
-        `session_id` and `run_id` set to null (`made_with` is a snapshot).
+        409 while one of its runs is queued or running (cancel it first), or while a batch in it is queued, running or
+        paused (stop it first). Its takes stay in the gallery with `session_id` and `run_id` set to null (`made_with`
+        is a snapshot); its finished batches stay with `session_id` and their rows' `run_id` set to null.
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       responses:
         '204': {description: deleted}
@@ -380,6 +382,184 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
+
+  # ------------------------------------------------------------------ studio: batches (pipelines_service runs them)
+  /v1/studio/batches:
+    get:
+      tags: [studio]
+      operationId: studioListBatches
+      summary: The caller's batches, newest first (`created_at`, then `id`), paginated
+      parameters:
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: a page of batches, content: {application/json: {schema: {$ref: '#/components/schemas/BatchPage'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateBatch
+      summary: Run one workflow once per row of inputs, as one unattended job
+      description: |
+        Submit checks everything before anything runs (any failure is 422 and nothing is stored):
+        - `workflow_id` is a known workflow (`unknown workflow <id>`).
+        - Rows are built from `rows` (lines, table or grid, below), then each is repeated `seeds.count` times; the
+          result has 1 to 500 rows (`a batch has 1 to 500 rows; this one has <n>`).
+        - Each row's inputs = `inputs` (base), then the row's values, then its seed; checked with the same rules as
+          `RunRequest.inputs`. The detail names the input row (a line, a table row or a grid combination, from 1,
+          before seed repetition): `row 3: echo.steps: must be between 1 and 200`.
+        - A live host has the workflow's env and publishes the workflow (`no live host for env <env>`).
+        - The submit message fits NATS: the rows' inputs together at most 768 KB (`batch inputs are too large; use
+          fewer or shorter rows`).
+        409 when the caller already has 5 batches queued, running or paused (`You have 5 unfinished batches; wait for
+        one to finish.`). The interactive cap of 100 open runs does not count batch-lane runs and does not stop a batch.
+        404 for a `session_id` that is unknown or another user's.
+
+        On success studio stores the batch (`queued`, `control: run`) with its snapshot (the workflow as published
+        now: the batch never runs a later version), every row (`queued`, attempt 1, seeds drawn), a new session titled
+        like the batch when `session_id` is absent, and the outbox row `cmd.pipeline.submit`, in one transaction, and
+        answers 202. pipelines_service then runs row 1 alone; once row 1 has succeeded, failed or been cancelled,
+        every other row is released into the dispatcher's batch lane (after interactive runs, round-robin between users).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/BatchCreate'}}}
+      responses:
+        '202': {description: 'the batch, queued', content: {application/json: {schema: {$ref: '#/components/schemas/Batch'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetBatch
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      responses:
+        '200': {description: the batch, content: {application/json: {schema: {$ref: '#/components/schemas/Batch'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/rows:
+    get:
+      tags: [studio]
+      operationId: studioListBatchRows
+      summary: The batch's rows by row number, paginated
+      parameters:
+        - {$ref: '#/components/parameters/BatchId'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: a page of rows, content: {application/json: {schema: {$ref: '#/components/schemas/BatchRowPage'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/pause:
+    post:
+      tags: [studio]
+      operationId: studioPauseBatch
+      summary: Hold the batch's queued work; running runs finish
+      description: |
+        Sets `control: pause` and writes `cmd.pipeline.pause` in one transaction. From then on the dispatcher releases
+        none of the batch's queued runs (they stay `queued`, held); runs already running finish and their rows
+        complete. pipelines_service starts no new rows and confirms with `status: paused`. The answer is the batch as
+        it is now; follow its events. 409 unless `status` is `queued` or `running` and `control` is `run`.
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      responses:
+        '202': {description: pause requested, content: {application/json: {schema: {$ref: '#/components/schemas/Batch'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/resume:
+    post:
+      tags: [studio]
+      operationId: studioResumeBatch
+      summary: Continue a paused batch (paused by you, by three failures in a row, or by a restart of the engine)
+      description: |
+        Sets `control: run` and writes `cmd.pipeline.resume` in one transaction; held runs become eligible again.
+        pipelines_service continues every unfinished row where it stopped (README, "Batches and the pipeline
+        engine") and confirms with `status: running`. 409 unless `status` is `paused` or `control` is `pause`, and
+        `control` is not `stop`.
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      responses:
+        '202': {description: resume requested, content: {application/json: {schema: {$ref: '#/components/schemas/Batch'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/stop:
+    post:
+      tags: [studio]
+      operationId: studioStopBatch
+      summary: Cancel everything the batch has not finished (Cancel remaining)
+      description: |
+        In one transaction: `control: stop`, every queued run of the batch `cancelled` at once (never sent), every
+        released one written to the KV `cancels` (the runner stops it; takes already stored are kept), and
+        `cmd.pipeline.stop`. Runs pipelines asks for afterwards are created `cancelled`. pipelines_service marks rows
+        that never started `cancelled` and ends with `status: stopped`. Finished rows and their takes stay. 409 when
+        `status` is `done`, `failed` or `stopped`, or `control` is already `stop`.
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      responses:
+        '202': {description: stop requested, content: {application/json: {schema: {$ref: '#/components/schemas/Batch'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/rows/{row}/retry:
+    post:
+      tags: [studio]
+      operationId: studioRetryBatchRow
+      summary: Run one failed row again
+      description: |
+        Sets the row `queued` with `attempt` + 1 (error, run and takes cleared from the row; the old run and its takes
+        stay) and writes `cmd.pipeline.retry` in one transaction. The row gets a new run (its idempotency key carries
+        the attempt). A `done` batch becomes `running` again until the row ends. 409 unless the row is `failed`, the
+        batch's `status` is not `failed` or `stopped` and its `control` is not `stop`.
+      parameters:
+        - {$ref: '#/components/parameters/BatchId'}
+        - {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
+      responses:
+        '202': {description: 'the row, queued again', content: {application/json: {schema: {$ref: '#/components/schemas/BatchRow'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/events:
+    get:
+      tags: [studio]
+      operationId: studioBatchEvents
+      summary: Batch events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`
+      description: |
+        Like the session events, numbered by a per-batch `seq`: JSON gives the events with `seq > since` (at most
+        500) and `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq,
+        `event:` = `batch` or `row`, `data:` = the `BatchEvent` JSON, `: keep-alive` every 15 s. Studio appends a
+        `row` event (the whole row) whenever a row changes and a `batch` event (the whole batch, counts included)
+        whenever the batch's status, control or counts change. Step progress of a row's run is in the session's
+        events (`session_id`).
+      parameters:
+        - {$ref: '#/components/parameters/BatchId'}
+        - {name: since, in: query, schema: {type: integer, minimum: 0, default: 0}, description: cursor — the last seq the client has}
+        - {name: Last-Event-ID, in: header, required: false, schema: {type: string}, description: 'SSE resume: the last `id:` received (an integer)'}
+      responses:
+        '200':
+          description: events
+          content:
+            application/json: {schema: {$ref: '#/components/schemas/BatchEventPage'}}
+            text/event-stream: {schema: {type: string}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
   # ------------------------------------------------------------------ files
   /files/{path}:
     get:
@@ -657,6 +837,7 @@ components:
     RunId: {name: run_id, in: path, required: true, schema: {type: string}, description: run UUID (malformed = 404)}
     WorkflowId: {name: workflow_id, in: path, required: true, schema: {type: string}, description: workflow id (unknown or malformed = 404)}
     UserId: {name: id, in: path, required: true, schema: {type: string}, description: user UUID (malformed = 404)}
+    BatchId: {name: batch_id, in: path, required: true, schema: {type: string}, description: batch UUID (malformed = 404)}
     TakeId: {name: take_id, in: path, required: true, schema: {type: string}, description: take UUID (malformed = 404)}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
@@ -824,7 +1005,7 @@ components:
     RunLane:
       type: string
       enum: [interactive, batch]
-      description: 'interactive (Create) is dispatched before batch (pipelines, later); every run is interactive in 1.2'
+      description: 'interactive (Create, POST …/runs) is dispatched before batch (runs pipelines_service asks for, one per batch row and step)'
     Run:
       type: object
       required: [id, session_id, workflow_id, inputs, status, progress, error, outputs, host, lane, attempt, created_at, started_at, finished_at]
@@ -845,6 +1026,8 @@ components:
         created_at: {type: string, format: date-time}
         started_at: {type: [string, 'null'], format: date-time, description: 'the runner reported running'}
         finished_at: {type: [string, 'null'], format: date-time}
+        batch_id: {type: [string, 'null'], format: uuid, description: 'the batch it runs a row of (lane batch); absent or null for a Create run'}
+        batch_row: {type: [integer, 'null'], minimum: 1, description: 'the batch row number; with batch_id'}
     Resolved:
       type: object
       description: 'values the runner chose (a random seed), sent with succeeded; absent until then and from M0 runners'
@@ -963,8 +1146,8 @@ components:
     TakeKind: {type: string, enum: [image, video, audio]}
     TakeSource:
       type: string
-      enum: [create, upload]
-      description: 'create: a run output; upload: a file the user uploaded. pipeline and timeline come later'
+      enum: [create, upload, pipeline]
+      description: 'create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1). timeline comes later'
     Take:
       type: object
       description: |
@@ -989,6 +1172,7 @@ components:
         run_id: {type: [string, 'null'], format: uuid, description: 'the run that made it; null for an upload or after its session was deleted'}
         made_with: {oneOf: [{$ref: '#/components/schemas/MadeWith'}, {type: 'null'}], description: null for an upload}
         parents: {type: array, items: {type: string, format: uuid}, description: 'lineage: the takes it was made from (empty until workflows take media inputs)'}
+        batch_id: {type: [string, 'null'], format: uuid, description: 'with source pipeline: the batch that made it (its collection); absent or null otherwise'}
     MadeWith:
       type: object
       description: 'a snapshot taken when the take was stored: it survives the run and the session'
@@ -1045,6 +1229,165 @@ components:
         content_type: {type: string}
         bytes: {type: integer}
         expires_at: {type: string, format: date-time}
+
+    # ---------------------------------------------------------- studio: batches
+    BatchStatus:
+      type: string
+      enum: [queued, running, paused, done, failed, stopped]
+      description: |
+        queued: stored, the engine has not started it; running; paused (`reason` says why: by you, three rows in a
+        row failed with one error, or the engine restarted: press Resume); done: every row ended (some may have
+        failed); failed: the engine could not run it at all (`reason`); stopped: by Stop. Set by pipelines_service
+        events, except `queued`.
+    BatchControl:
+      type: string
+      enum: [run, pause, stop]
+      description: 'what the owner asked for last (Pause, Resume, Stop); `status` follows once the engine confirms. While `pause` or `paused`, the dispatcher holds the batch''s queued runs'
+    BatchCounts:
+      type: object
+      required: [total, queued, running, succeeded, failed, cancelled]
+      description: rows by `BatchRow.status`; the five add up to total
+      properties:
+        total: {type: integer, minimum: 1, maximum: 500}
+        queued: {type: integer, minimum: 0}
+        running: {type: integer, minimum: 0}
+        succeeded: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        cancelled: {type: integer, minimum: 0}
+    Batch:
+      type: object
+      required: [id, title, workflow_id, workflow_title, session_id, status, control, reason, counts, created_at, started_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, minLength: 1, maxLength: 200}
+        workflow_id: {type: string}
+        workflow_title: {type: string, description: the title in the batch's snapshot}
+        session_id: {type: [string, 'null'], format: uuid, description: 'the session its runs are in; null after that session was deleted'}
+        status: {$ref: '#/components/schemas/BatchStatus'}
+        control: {$ref: '#/components/schemas/BatchControl'}
+        reason: {type: [string, 'null'], description: 'why it is paused or failed; null otherwise'}
+        counts: {$ref: '#/components/schemas/BatchCounts'}
+        created_at: {type: string, format: date-time}
+        started_at: {type: [string, 'null'], format: date-time, description: 'the engine first reported running'}
+        finished_at: {type: [string, 'null'], format: date-time, description: 'done, failed or stopped'}
+    BatchRow:
+      type: object
+      required: [row, attempt, inputs, status, run_id, take_ids, thumb_url, error, started_at, finished_at]
+      properties:
+        row: {type: integer, minimum: 1, maximum: 500}
+        attempt: {type: integer, minimum: 1, description: '1; +1 on every Retry'}
+        inputs: {$ref: '#/components/schemas/RunInputs', description: 'what the row runs with: the base inputs, then its own values, then its seed'}
+        status: {$ref: '#/components/schemas/RunStatus', description: 'queued until its run starts (also while the run waits in the queue or is held), running while it runs, then the row''s end'}
+        run_id: {type: [string, 'null'], format: uuid, description: 'the current attempt''s run; null before it has one'}
+        take_ids: {type: array, items: {type: string, format: uuid}, description: 'the current attempt''s takes (deleted ones left out)'}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first take''s thumbnail; null without one'}
+        error: {type: [string, 'null'], description: 'set when failed'}
+        started_at: {type: [string, 'null'], format: date-time, description: 'its run reported running'}
+        finished_at: {type: [string, 'null'], format: date-time}
+    BatchPage:
+      type: object
+      required: [batches, next_cursor]
+      properties:
+        batches: {type: array, items: {$ref: '#/components/schemas/Batch'}}
+        next_cursor: {type: [string, 'null'], description: 'pass as `cursor` for the next page; null on the last page'}
+    BatchRowPage:
+      type: object
+      required: [rows, next_cursor]
+      properties:
+        rows: {type: array, items: {$ref: '#/components/schemas/BatchRow'}}
+        next_cursor: {type: [string, 'null']}
+    BatchLines:
+      type: object
+      required: [param, values]
+      additionalProperties: false
+      description: 'pasted lines: one row per value, set as `param` (a string, text or enum param, else 422); clients drop blank lines'
+      properties:
+        param: {type: string, pattern: '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$', examples: [prompt.text]}
+        values: {type: array, minItems: 1, maxItems: 500, items: {type: string}}
+    BatchTable:
+      type: object
+      required: [columns, rows]
+      additionalProperties: false
+      description: 'a CSV parsed by the client or the CLI: each cell typed by its param (clients convert CSV text with node_schemas); a null cell leaves that input unset for the row (a seed: random)'
+      properties:
+        columns: {type: array, minItems: 1, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'}}
+        rows: {type: array, minItems: 1, maxItems: 500, items: {type: array, items: {$ref: '#/components/schemas/ParamValue'}}, description: 'each as long as columns (else 422)'}
+    BatchGrid:
+      type: object
+      required: [axes]
+      additionalProperties: false
+      description: 'rows = the cartesian product of the axes, the first axis varying slowest'
+      properties:
+        axes:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            type: object
+            required: [param, values]
+            additionalProperties: false
+            properties:
+              param: {type: string, pattern: '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'}
+              values: {type: array, minItems: 1, maxItems: 500, items: {$ref: '#/components/schemas/ParamValue'}}
+    BatchSeeds:
+      type: object
+      required: [count]
+      additionalProperties: false
+      description: |
+        Repeat each row `count` times with consecutive seeds `start`, `start`+1, … in the workflow's one `seed`-type
+        param (422 when it has none or several); these replace any value of it from `inputs` or the rows. Repeats sit
+        next to each other (input row 1's repeats are rows 1..count).
+      properties:
+        count: {type: integer, minimum: 1, maximum: 8}
+        start: {type: integer, minimum: 0, maximum: 9007199254740991, description: 'absent = drawn at random at Submit and stored'}
+    BatchCreate:
+      type: object
+      required: [workflow_id, rows]
+      additionalProperties: false
+      properties:
+        workflow_id: {type: string}
+        session_id: {type: string, format: uuid, description: 'absent = a new session titled like the batch'}
+        title: {type: string, maxLength: 200, description: 'trimmed; empty or missing = "<workflow title> × <row count>"'}
+        inputs: {$ref: '#/components/schemas/RunInputs', description: 'base inputs for every row; missing = {}'}
+        rows:
+          description: exactly one of lines, table, grid
+          oneOf:
+            - {type: object, required: [lines], additionalProperties: false, properties: {lines: {$ref: '#/components/schemas/BatchLines'}}}
+            - {type: object, required: [table], additionalProperties: false, properties: {table: {$ref: '#/components/schemas/BatchTable'}}}
+            - {type: object, required: [grid], additionalProperties: false, properties: {grid: {$ref: '#/components/schemas/BatchGrid'}}}
+        seeds: {$ref: '#/components/schemas/BatchSeeds'}
+    BatchEvent:
+      description: 'one stored event of the batch: the whole batch, or one whole row'
+      oneOf:
+        - {$ref: '#/components/schemas/BatchStatusEvent'}
+        - {$ref: '#/components/schemas/BatchRowEvent'}
+      discriminator:
+        propertyName: type
+        mapping:
+          batch: '#/components/schemas/BatchStatusEvent'
+          row: '#/components/schemas/BatchRowEvent'
+    BatchStatusEvent:
+      type: object
+      required: [seq, type, ts, data]
+      properties:
+        seq: {type: integer, minimum: 1, description: per-batch cursor}
+        type: {type: string, const: batch}
+        ts: {type: string, format: date-time}
+        data: {$ref: '#/components/schemas/Batch'}
+    BatchRowEvent:
+      type: object
+      required: [seq, type, ts, data]
+      properties:
+        seq: {type: integer, minimum: 1}
+        type: {type: string, const: row}
+        ts: {type: string, format: date-time}
+        data: {$ref: '#/components/schemas/BatchRow'}
+    BatchEventPage:
+      type: object
+      required: [events, last_seq]
+      properties:
+        events: {type: array, items: {$ref: '#/components/schemas/BatchEvent'}}
+        last_seq: {type: integer, minimum: 0, description: next `since` (unchanged when the page is empty)}
 
     # ---------------------------------------------------------- auth_service
     SigninRequest:

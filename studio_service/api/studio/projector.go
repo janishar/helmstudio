@@ -132,6 +132,15 @@ func applyStatus(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Messa
 		finished_at = CASE WHEN $2 = 'running' THEN NULL ELSE clock_timestamp() END,
 		resolved = coalesce($5::jsonb, resolved)
 		WHERE id = $1`, run.ID, data.Status, data.Error, host, data.Resolved)
+	if err != nil {
+		return nil, err
+	}
+	run.Status, run.Error = data.Status, data.Error
+	if terminal[data.Status] {
+		err = runEnded(ctx, tx, run)
+	} else {
+		err = runMoved(ctx, tx, run)
+	}
 	stored := statusData(data.Status, data.Error, host, run.Attempt)
 	if data.Resolved != nil {
 		stored["resolved"] = data.Resolved
@@ -169,7 +178,7 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	}
 	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
-		MadeWith: madeWith(p.Workflows, run, data.Seed)})
+		MadeWith: madeWith(p.Workflows, run, data.Seed), BatchID: run.BatchID})
 	if err != nil {
 		return nil, err
 	}

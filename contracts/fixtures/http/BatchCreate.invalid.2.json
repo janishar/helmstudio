@@ -1,0 +1,14 @@
+{
+  "workflow_id": "echo",
+  "rows": {
+    "lines": {
+      "param": "prompt.text",
+      "values": [
+        "a"
+      ]
+    }
+  },
+  "seeds": {
+    "count": 9
+  }
+}

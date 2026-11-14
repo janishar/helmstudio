@@ -18,7 +18,9 @@ import (
 	"github.com/helmstudio/studio_service/common"
 )
 
-// MaxOpenRuns is how many queued or running runs one user may have: it bounds what one account adds to every line-up.
+// MaxOpenRuns is how many queued or running interactive runs one user may have: it bounds what one account adds to
+// every line-up. Batch runs are bounded by MaxOpenBatches and the pipelines engine's WINDOW (rows of one batch asked and
+// not ended) instead.
 const MaxOpenRuns = 100
 
 // terminal holds the statuses that end a run.
@@ -58,7 +60,8 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 			return errNotFound
 		}
 		var open int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM runs WHERE owner_id = $1 AND status IN ('queued', 'running')`,
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM runs WHERE owner_id = $1 AND lane = 'interactive'
+			AND status IN ('queued', 'running')`,
 			caller.ID).Scan(&open); err != nil {
 			return err
 		} else if open >= MaxOpenRuns {
@@ -175,23 +178,7 @@ func (s *Service) CancelRun(ctx context.Context, caller common.Caller, runID str
 		if terminal[run.Status] {
 			return network.NewConflictError("This run has already ended.", nil)
 		}
-		tag, err := tx.Exec(ctx, `DELETE FROM outbox WHERE job_id = $1`, runID)
-		if err != nil {
-			return err
-		}
-		if run.ReleasedAt == nil || tag.RowsAffected() > 0 {
-			run, err = finish(ctx, tx, run, "cancelled", nil)
-		} else {
-			run, err = one[model.Run](ctx, tx, `UPDATE runs SET cancel_requested_at = coalesce(cancel_requested_at, clock_timestamp())
-				WHERE id = $1 RETURNING `+model.RunCols, runID)
-			if err == nil {
-				if err = s.cancel(ctx, runID); err != nil {
-					log.Printf("cancel %s: %v", runID, err)
-					return network.NewServiceUnavailableError("could not reach the runners; try again", err)
-				}
-			}
-		}
-		if err != nil {
+		if run, err = s.cancelRun(ctx, tx, run); err != nil {
 			return err
 		}
 		out, err = s.withOutputs(ctx, tx, run)
@@ -201,6 +188,27 @@ func (s *Service) CancelRun(ctx context.Context, caller common.Caller, runID str
 		err = s.placeQueued(ctx, &out)
 	}
 	return out, err
+}
+
+// cancelRun stops an open run locked in tx: never sent (not released, or its command still in the outbox) is
+// cancelled at once; otherwise it is marked and its id written to the KV cancels before the mark commits.
+func (s *Service) cancelRun(ctx context.Context, tx pgx.Tx, run model.Run) (model.Run, error) {
+	tag, err := tx.Exec(ctx, `DELETE FROM outbox WHERE job_id = $1`, run.ID)
+	if err != nil {
+		return run, err
+	}
+	if run.ReleasedAt == nil || tag.RowsAffected() > 0 {
+		return finish(ctx, tx, run, "cancelled", nil)
+	}
+	run, err = one[model.Run](ctx, tx, `UPDATE runs SET cancel_requested_at = coalesce(cancel_requested_at, clock_timestamp())
+		WHERE id = $1 RETURNING `+model.RunCols, run.ID)
+	if err == nil {
+		if err = s.cancel(ctx, run.ID); err != nil {
+			log.Printf("cancel %s: %v", run.ID, err)
+			return run, network.NewServiceUnavailableError("could not reach the runners; try again", err)
+		}
+	}
+	return run, err
 }
 
 // finish moves an open run to a terminal status (studio decides it: cancelled before sending, no eligible host, or a
@@ -218,7 +226,10 @@ func finish(ctx context.Context, tx pgx.Tx, run model.Run, status string, failur
 	if _, err := tx.Exec(ctx, `DELETE FROM outbox WHERE job_id = $1`, run.ID); err != nil {
 		return run, err
 	}
-	return updated, appendEvent(ctx, tx, updated, "status", time.Now(), statusData(status, failure, updated.Host, updated.Attempt))
+	if err := appendEvent(ctx, tx, updated, "status", time.Now(), statusData(status, failure, updated.Host, updated.Attempt)); err != nil {
+		return run, err
+	}
+	return updated, runEnded(ctx, tx, updated)
 }
 
 // statusData is a stored status event's data, with the attempt it belongs to.
@@ -244,7 +255,8 @@ func (s *Service) withOutputs(ctx context.Context, tx pgx.Tx, run model.Run) (dt
 func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 	out := dto.Run{ID: run.ID, SessionID: run.SessionID, WorkflowID: run.WorkflowID, Inputs: map[string]any{},
 		Status: run.Status, Error: run.Error, Outputs: []dto.RunOutput{}, Host: run.Host, Lane: run.Lane,
-		Attempt: run.Attempt, CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, FinishedAt: run.FinishedAt}
+		Attempt: run.Attempt, CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, FinishedAt: run.FinishedAt,
+		BatchID: run.BatchID, BatchRow: run.BatchRow}
 	_ = json.Unmarshal(run.Inputs, &out.Inputs)
 	_ = json.Unmarshal(run.Resolved, &out.Resolved) // null or absent leaves it nil (omitted)
 	if len(run.Progress) > 0 && string(run.Progress) != "null" {

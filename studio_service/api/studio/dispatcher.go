@@ -204,7 +204,10 @@ func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 	} else if err != nil {
 		return err
 	}
-	return appendEvent(ctx, tx, retried, "status", now, statusData("queued", nil, nil, retried.Attempt))
+	if err := appendEvent(ctx, tx, retried, "status", now, statusData("queued", nil, nil, retried.Attempt)); err != nil {
+		return err
+	}
+	return runMoved(ctx, tx, retried)
 }
 
 // release hands a waiting run to its host: host and released_at set, the command in the outbox. A run cancelled
@@ -280,6 +283,19 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 	if err != nil {
 		return snap, err
 	}
+	// a queued run of a batch asked to pause, or reported paused since its last Resume, is held: no host, no position
+	// (still failed with nowhere to go)
+	rows, _ := tx.Query(ctx, `SELECT r.id::text FROM runs r JOIN batches b ON b.id = r.batch_id
+		WHERE r.status = 'queued' AND r.released_at IS NULL
+		AND (b.control = 'pause' OR (b.status = 'paused' AND b.pipeline_seq > b.resumed_seq))`)
+	heldIDs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return snap, err
+	}
+	held := make(map[string]bool, len(heldIDs))
+	for _, id := range heldIDs {
+		held[id] = true
+	}
 	var owners []string
 	for _, run := range open {
 		if run.ReleasedAt != nil && run.Host != nil {
@@ -289,6 +305,9 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 		slots, resident, reason := eligible(reg, snap.values, run, now)
 		if reason != "" {
 			snap.stuck = append(snap.stuck, stuck{run, reason})
+			continue
+		}
+		if held[run.ID] {
 			continue
 		}
 		snap.queue = append(snap.queue, queued{run, slots, resident})
@@ -461,8 +480,9 @@ func goesFirst(a, b queued, host string, last map[string]time.Time) bool {
 
 // lineupNow lines up every waiting run on the live hosts, all rounds, as the dispatcher would release them (by run
 // id), and says which hosts have a released run not ended. It reads every user's queue as System: callers show only
-// their own runs and counts of others'. ponytail: rebuilt on every read, O(n^2) in the waiting runs (MaxOpenRuns per
-// user bounds n); one line-up per pass shared with readers if users × MaxOpenRuns grows large.
+// their own runs and counts of others'. ponytail: rebuilt on every read, O(n^2) in the waiting runs (per user n is
+// bounded by MaxOpenRuns interactive runs plus MaxOpenBatches × the pipelines engine's WINDOW batch rows); one line-up
+// per pass shared with readers if users grow large.
 func (s *Service) lineupNow(ctx context.Context) (map[string]placed, map[string]bool, error) {
 	at, busy := map[string]placed{}, map[string]bool{}
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {

@@ -54,6 +54,7 @@ type env struct {
 	cancelled []string
 	revoked   atomic.Bool // the token check of open event streams fails
 	unreached bool        // the KV cancels write fails
+	service   *studio.Service
 }
 
 // setup migrates a fresh schema, loads the fake runner's registry values and serves the API. It skips without
@@ -94,6 +95,7 @@ func setup(t *testing.T) *env {
 	}
 	e.host(0)
 	studio.NewProjector(pool).MountNatsJetStream(e.events)
+	studio.NewProjector(pool).MountPipeline(e.events)
 	signer := common.NewSigner("test-secret-0123456789", "http://kong", time.Hour)
 	router, err := network.NewRouter(nil)
 	if err != nil {
@@ -116,7 +118,8 @@ func setup(t *testing.T) *env {
 		}
 		return nil
 	}
-	router.LoadControllers(studio.NewController(studio.NewService(pool, signer, e.registry, cancel), recheck, shutdown))
+	e.service = studio.NewService(pool, signer, e.registry, cancel)
+	router.LoadControllers(studio.NewController(e.service, recheck, shutdown))
 	e.srv = httptest.NewServer(router.Engine())
 	t.Cleanup(e.srv.Close)
 	return e

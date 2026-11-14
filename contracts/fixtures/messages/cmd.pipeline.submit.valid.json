@@ -1,0 +1,68 @@
+{
+  "type": "cmd.pipeline.submit",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000101",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-14T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "snapshot": {
+      "workflow_id": "echo",
+      "workflow": {
+        "id": "echo",
+        "title": "Echo",
+        "family": "echo",
+        "env": "fake",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "echo": {
+            "kind": "echo/echo",
+            "in": {
+              "text": "prompt.text"
+            },
+            "params": {
+              "steps": 10,
+              "delay_ms": 300,
+              "fail": false
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "echo.image"
+            }
+          }
+        }
+      }
+    },
+    "inputs": {
+      "echo.steps": 3
+    },
+    "rows": [
+      {
+        "row": 1,
+        "inputs": {
+          "echo.steps": 3,
+          "prompt.text": "a red fox"
+        }
+      },
+      {
+        "row": 2,
+        "inputs": {
+          "echo.steps": 3,
+          "prompt.text": "a blue heron"
+        }
+      }
+    ]
+  }
+}

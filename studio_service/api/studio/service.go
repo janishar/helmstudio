@@ -117,7 +117,8 @@ func (s *Service) RenameSession(ctx context.Context, caller common.Caller, id st
 	return out, err
 }
 
-// DeleteSession deletes the session with its runs and events; 409 while one of its runs is queued or running.
+// DeleteSession deletes the session with its runs and events; 409 while one of its runs is queued or running, or one
+// of its batches is unfinished. Its finished batches stay (session_id null).
 func (s *Service) DeleteSession(ctx context.Context, caller common.Caller, id string) error {
 	if !utility.IsUUID(id) {
 		return errNotFound
@@ -138,6 +139,12 @@ func (s *Service) DeleteSession(ctx context.Context, caller common.Caller, id st
 			return err
 		case busy:
 			return network.NewConflictError("a run of this session is still queued or running; cancel it first", nil)
+		}
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM batches WHERE session_id = $1
+			AND status IN ('queued', 'running', 'paused'))`, id).Scan(&busy); err != nil {
+			return err
+		} else if busy {
+			return network.NewConflictError("a batch of this session is still queued, running or paused; stop it first", nil)
 		}
 		_, err = tx.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
 		return err

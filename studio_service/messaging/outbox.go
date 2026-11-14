@@ -15,11 +15,13 @@ type Data interface {
 	Subject() string
 }
 
-// Command is one cmd.* message. JobID is the work's id (a run id); Nats-Msg-Id = <job_id>:<attempt>.
+// Command is one message the relay publishes (a cmd.*, or an evt.studio.*). JobID is the work's id (a run or batch
+// id); Nats-Msg-Id = MsgID, or <job_id>:<attempt> when MsgID is empty.
 type Command struct {
 	JobID   string
 	OwnerID string
-	Attempt int // 1 for new work
+	Attempt int // 1 for new work; a batch's command counter for cmd.pipeline.*
+	MsgID   string
 	Data    Data
 }
 
@@ -32,7 +34,7 @@ func Enqueue(ctx context.Context, tx pgx.Tx, c Command) error {
 	if c.Attempt < 1 {
 		c.Attempt = 1
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO outbox (type, subject, job_id, owner_id, attempt, data) VALUES ($1, $2, $3, $4, $5, $6)`,
-		c.Data.Type(), c.Data.Subject(), c.JobID, c.OwnerID, c.Attempt, data)
+	_, err = tx.Exec(ctx, `INSERT INTO outbox (type, subject, job_id, owner_id, attempt, data, msg_id)
+		VALUES ($1, $2, $3, $4, $5, $6, nullif($7, ''))`, c.Data.Type(), c.Data.Subject(), c.JobID, c.OwnerID, c.Attempt, data, c.MsgID)
 	return err
 }

@@ -1,0 +1,19 @@
+{
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "sample.steps": 30
+  },
+  "rows": {
+    "lines": {
+      "param": "prompt.text",
+      "values": [
+        "a red fox",
+        "a blue heron"
+      ]
+    }
+  },
+  "seeds": {
+    "count": 4,
+    "start": 1000
+  }
+}

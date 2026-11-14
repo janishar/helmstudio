@@ -1,0 +1,15 @@
+{
+  "row": 4,
+  "attempt": 2,
+  "inputs": {
+    "prompt.text": "a blue heron",
+    "seed.seed": 1001
+  },
+  "status": "queued",
+  "run_id": null,
+  "take_ids": [],
+  "thumb_url": null,
+  "error": null,
+  "started_at": null,
+  "finished_at": null
+}

@@ -71,38 +71,47 @@ func (w workflow) inputs(ps []string) (map[string]any, error) {
 	out := map[string]any{}
 	for _, p := range ps {
 		key, val, ok := strings.Cut(p, "=")
-		node, name, ok2 := strings.Cut(key, ".")
-		if !ok || !ok2 {
+		if _, _, ok2 := strings.Cut(key, "."); !ok || !ok2 {
 			return nil, fmt.Errorf("-p %q: want node.param=value", p)
 		}
-		typ := ""
-		for _, ps := range w.NodeSchemas[w.Nodes[node].Kind].Params {
-			if ps.Name == name {
-				typ = ps.Type
-			}
-		}
-		var v any = val
-		var err error
-		switch typ {
-		case "int":
-			v, err = strconv.ParseInt(val, 10, 64)
-		case "float":
-			v, err = strconv.ParseFloat(val, 64)
-		case "bool":
-			v, err = strconv.ParseBool(val)
-		case "seed": // a whole number, or random (sent as null); -1 is random too
-			if val == "random" || val == "null" {
-				v = nil
-			} else {
-				v, err = strconv.ParseInt(val, 10, 64)
-			}
-		}
+		v, err := w.value(key, val)
 		if err != nil {
-			return nil, fmt.Errorf("-p %s: not a valid %s", key, typ)
+			return nil, fmt.Errorf("-p %w", err)
 		}
 		out[key] = v
 	}
 	return out, nil
+}
+
+// value types one node.param value by the workflow's node schemas (text when the param is unknown).
+func (w workflow) value(key, val string) (any, error) {
+	node, name, _ := strings.Cut(key, ".")
+	typ := ""
+	for _, ps := range w.NodeSchemas[w.Nodes[node].Kind].Params {
+		if ps.Name == name {
+			typ = ps.Type
+		}
+	}
+	var v any = val
+	var err error
+	switch typ {
+	case "int":
+		v, err = strconv.ParseInt(val, 10, 64)
+	case "float":
+		v, err = strconv.ParseFloat(val, 64)
+	case "bool":
+		v, err = strconv.ParseBool(val)
+	case "seed": // a whole number, or random (sent as null); -1 is random too
+		if val == "random" || val == "null" {
+			v = nil
+		} else {
+			v, err = strconv.ParseInt(val, 10, 64)
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: not a valid %s", key, typ)
+	}
+	return v, nil
 }
 
 func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) error {

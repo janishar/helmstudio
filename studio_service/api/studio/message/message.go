@@ -71,3 +71,124 @@ type Output struct {
 	Bytes  int64  `json:"bytes"`
 	Seed   *int64 `json:"seed"`
 }
+
+// ------------------------------------------------------------------ batches (pipelines_service)
+
+// SnapshotWorkflow is a registry workflow as cmd.pipeline.submit carries it (contracts defs workflowSnapshot).
+type SnapshotWorkflow struct {
+	ID     string                   `json:"id"`
+	Title  string                   `json:"title"`
+	Family string                   `json:"family"`
+	Env    string                   `json:"env"`
+	Nodes  map[string]registry.Node `json:"nodes"`
+}
+
+// Snapshot is what a batch runs: one workflow as it was at Submit.
+type Snapshot struct {
+	WorkflowID string           `json:"workflow_id"`
+	Workflow   SnapshotWorkflow `json:"workflow"`
+}
+
+// SubmitRow is one row of cmd.pipeline.submit: its full inputs.
+type SubmitRow struct {
+	Row    int            `json:"row"`
+	Inputs map[string]any `json:"inputs"`
+}
+
+// Submit is cmd.pipeline.submit's data.
+type Submit struct {
+	BatchID   string         `json:"batch_id"`
+	SessionID string         `json:"session_id"`
+	Snapshot  Snapshot       `json:"snapshot"`
+	Inputs    map[string]any `json:"inputs"`
+	Rows      []SubmitRow    `json:"rows"`
+}
+
+// Type is the envelope type.
+func (Submit) Type() string { return "cmd.pipeline.submit" }
+
+// Subject is cmd.pipeline.submit.
+func (Submit) Subject() string { return "cmd.pipeline.submit" }
+
+// Control is cmd.pipeline.pause, .resume, .stop (Row and Attempt nil) or .retry.
+type Control struct {
+	Kind    string `json:"-"` // pause | resume | stop | retry
+	BatchID string `json:"batch_id"`
+	Row     *int   `json:"row,omitempty"`
+	Attempt *int   `json:"attempt,omitempty"`
+}
+
+// Type is cmd.pipeline.<kind>.
+func (c Control) Type() string { return "cmd.pipeline." + c.Kind }
+
+// Subject is the type.
+func (c Control) Subject() string { return c.Type() }
+
+// RunFinished is evt.studio.run_finished's data: a batch run reached a terminal status.
+type RunFinished struct {
+	RunID          string   `json:"run_id"`
+	BatchID        string   `json:"batch_id"`
+	Row            int      `json:"row"`
+	IdempotencyKey string   `json:"idempotency_key"`
+	Status         string   `json:"status"`
+	TakeIDs        []string `json:"take_ids"`
+	Error          *string  `json:"error"`
+	SessionID      string   `json:"-"`
+}
+
+// Type is the envelope type.
+func (RunFinished) Type() string { return "evt.studio.run_finished" }
+
+// Subject is evt.studio.<session_id>.run_finished.
+func (r RunFinished) Subject() string { return "evt.studio." + r.SessionID + ".run_finished" }
+
+// PipelineBatch is evt.pipeline.batch's data.
+type PipelineBatch struct {
+	Seq    int64   `json:"seq"`
+	Status string  `json:"status"`
+	Reason *string `json:"reason"`
+}
+
+// PipelineRow is evt.pipeline.row's data: the row's whole state.
+type PipelineRow struct {
+	Seq     int64    `json:"seq"`
+	Row     int      `json:"row"`
+	Attempt int      `json:"attempt"`
+	Status  string   `json:"status"`
+	RunID   *string  `json:"run_id"`
+	TakeIDs []string `json:"take_ids"`
+	Error   *string  `json:"error"`
+}
+
+// PipelineSeq is the event's seq (per batch, over both kinds).
+func (b PipelineBatch) PipelineSeq() int64 { return b.Seq }
+
+// PipelineSeq is the event's seq (per batch, over both kinds).
+func (r PipelineRow) PipelineSeq() int64 { return r.Seq }
+
+// RunsCreate is the studio.runs.create request (bare JSON).
+type RunsCreate struct {
+	OwnerID        string         `json:"owner_id"`
+	SessionID      string         `json:"session_id"`
+	WorkflowID     string         `json:"workflow_id"`
+	Inputs         map[string]any `json:"inputs"`
+	Lane           string         `json:"lane"`
+	BatchID        string         `json:"batch_id"`
+	Row            int            `json:"row"`
+	IdempotencyKey string         `json:"idempotency_key"`
+}
+
+// RunsCreated is studio.runs.create's reply for a run, new or already made under the key.
+type RunsCreated struct {
+	RunID   string   `json:"run_id"`
+	Status  string   `json:"status"`
+	Created bool     `json:"created"`
+	TakeIDs []string `json:"take_ids"`
+	Error   *string  `json:"error"`
+}
+
+// RunsCreateError is studio.runs.create's error reply; code is invalid | not_found | internal.
+type RunsCreateError struct {
+	Error string `json:"error"`
+	Code  string `json:"code"`
+}

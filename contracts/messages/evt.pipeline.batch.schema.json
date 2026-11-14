@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.pipeline.batch.schema.json",
+  "title": "pipelines → studio's projector: a batch's status changed",
+  "description": "Subject evt.pipeline.<batch_id>.batch (stream EVT), Nats-Msg-Id <batch_id>:<seq>. pipelines_service is the only writer of a batch's status. `seq` is per batch over both evt.pipeline.* kinds, allocated and committed before publishing (gaps are normal, a seq is never reused); the projector dedupes on (job_id, seq) and ignores a batch event whose seq is not above the last batch event it applied.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.pipeline.batch"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "status"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "$ref": "defs.schema.json#/$defs/batchStatus"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000,
+          "description": "why it is paused or failed, user-readable: `paused by you`, `the pipeline service restarted; press Resume`, `3 rows in a row failed: <error>`; required (non-empty) with paused and failed"
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "paused",
+              "failed"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

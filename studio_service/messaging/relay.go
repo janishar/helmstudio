@@ -3,7 +3,6 @@ package messaging
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"time"
 
@@ -31,7 +30,8 @@ func NatsJetStreamPublisher(client micro.NatsClient) Publish {
 func RelayOnce(ctx context.Context, pool *pgxpool.Pool, publish Publish) (int, error) {
 	n := 0
 	err := common.System(ctx, pool, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT id, type, subject, job_id::text, owner_id::text, attempt, data, created_at FROM outbox
+		rows, err := tx.Query(ctx, `SELECT id, type, subject, job_id::text, owner_id::text,
+			coalesce(msg_id, job_id::text || ':' || attempt), data, created_at FROM outbox
 			ORDER BY id LIMIT 100 FOR UPDATE SKIP LOCKED`)
 		if err != nil {
 			return err
@@ -39,7 +39,7 @@ func RelayOnce(ctx context.Context, pool *pgxpool.Pool, publish Publish) (int, e
 		type row struct {
 			ID                          int64
 			Type, Subject, JobID, Owner string
-			Attempt                     int
+			MsgID                       string
 			Data                        json.RawMessage
 			CreatedAt                   time.Time
 		}
@@ -52,8 +52,7 @@ func RelayOnce(ctx context.Context, pool *pgxpool.Pool, publish Publish) (int, e
 			jobID := r.JobID
 			env := gen.Envelope{Type: r.Type, Version: 1, ID: utility.NewID(), JobID: &jobID, OwnerID: r.Owner,
 				OccurredAt: r.CreatedAt.UTC(), Trace: gen.Trace{Traceparent: utility.Traceparent()}, Data: r.Data}
-			msgID := fmt.Sprintf("%s:%d", r.JobID, r.Attempt)
-			if err := publish(ctx, r.Subject, &env, msgID); err != nil {
+			if err := publish(ctx, r.Subject, &env, r.MsgID); err != nil {
 				if ctx.Err() == nil { // a shutdown is not a failure: the row stays for the next start
 					log.Printf("outbox relay: %s %s: %v", r.Subject, r.JobID, err)
 				}

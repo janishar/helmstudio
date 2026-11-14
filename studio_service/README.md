@@ -47,9 +47,30 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
 5. Cancel: a run not released, or still in the outbox, is cancelled at once and never sent. Otherwise the run is marked and its id written
    to the KV `cancels`; the runner reports `cancelled`.
 
+## Batches (pipelines_service runs them)
+
+- `POST /batches` builds the rows (lines, table or grid, then seed repeats; `batch_rows.go` `expand`), checks each with
+  the run rules (422 `row N: …`), the 500-row and 768 KB caps, a live host, 5 unfinished batches (409), then stores the
+  batch with its snapshot (the registry workflow with `node_schemas`), its rows and `cmd.pipeline.submit` (outbox,
+  `Nats-Msg-Id <batch>:1`) in one transaction.
+- Pause / Resume / Stop / Retry (`batches.go`) change `control` or the row and write `cmd.pipeline.<kind>` under the
+  batch's next command number in the same transaction. The dispatcher holds a batch's queued runs while `control` is
+  `pause` or pipelines reported `paused` since the last Resume; Stop cancels the open runs (as Cancel does).
+- `studio.runs.create` (NATS request/reply, queue group `studio`) creates a lane-`batch` run once per idempotency key,
+  as System, after checking owner, session, workflow and row against the batch record.
+- Every terminal status of a batch run (projector, cancel, no eligible host, lease lost twice, created failed or
+  cancelled) writes `evt.studio.<session>.run_finished` to the outbox (`Nats-Msg-Id <run>:finished`) in that
+  transaction (`batch_record.go`).
+- The batch projector (durable `studio-pipelines` on `evt.pipeline.>`, `batch_projector.go`) dedupes on (batch, seq),
+  keeps the newest state per row and for the batch, drops older attempts, another owner's events, foreign runs and takes.
+- `batch_events` is the per-batch log; an event carries no data: `GET /batches/{id}/events` (JSON or SSE, the session
+  stream's code) sends the batch or row as it is when read, the last event per row and batch in a page.
+- A row's shown status: pipelines' end once reported, else `running` once its run left the queue, else `queued`.
+
 NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack) and
 `$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
-consumes `evt.run.>` (durable `studio-projector`), watches the KV `registry` and `hosts`, requests
+consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable `studio-pipelines`), publishes
+`cmd.pipeline.>` and `evt.studio.>`, serves `studio.runs.create`, watches the KV `registry` and `hosts`, requests
 `auth.validate.token`, subscribes to `evt.auth.revoked`.
 
 ## Layout
@@ -65,4 +86,5 @@ consumes `evt.run.>` (durable `studio-projector`), watches the KV `registry` and
 | `api/auth/` | Bearer token → NATS `auth.validate.token`, cached until expiry, dropped on `evt.auth.revoked`; `middleware/` is the `/v1/` guard |
 | `api/studio/` | `controller.go` (routes, SSE), `service.go` (sessions, workflows, hosts), `runs.go` (create, list, get, cancel, the state machine), `resolve.go` (inputs → filled graph), `projector.go`, `events.go`, `dispatcher.go` (the fair queue, leases, `GET /queue`) |
 | `api/studio/{dto,model,message}/` | HTTP bodies, table rows, NATS bodies (`cmd.run.execute`, `evt.run.*`) |
-| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events |
+| `api/studio/batch*.go` | batches: `batches.go` (Submit, reads, control, events, `studio.runs.create`), `batch_rows.go` (rows from lines/table/grid/seeds), `batch_projector.go` (`evt.pipeline.*`), `batch_record.go` (`run_finished`, the batch log) |
+| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id` |

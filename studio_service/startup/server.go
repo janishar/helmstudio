@@ -109,6 +109,9 @@ func Run() error {
 	projector.Workflows = runners // names a take's workflow and model
 	projector.MountNatsJetStream(events)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ProjectorConsumer, events) })
+	pipelineEvents := &micro.NatsJetStreamGroup{}
+	projector.MountPipeline(pipelineEvents)
+	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.PipelineConsumer, pipelineEvents) })
 	workers.Go(func() {
 		// outputs stored before the gallery become takes; ponytail: a fixed wait for the registry watch to fill (it
 		// names the workflow and model); a take made without it keeps the workflow id as its title

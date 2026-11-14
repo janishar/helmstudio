@@ -13,6 +13,11 @@ import (
 var ProjectorConsumer = micro.NatsJetStreamConsumer{Stream: "EVT", Durable: "studio-projector", Subject: "evt.run.>",
 	AckWait: 30 * time.Second, MaxAckPending: 1, NakDelay: 2 * time.Second}
 
+// PipelineConsumer is the durable consumer the batch projector reads pipelines_service's evt.pipeline.> with, one
+// message at a time.
+var PipelineConsumer = micro.NatsJetStreamConsumer{Stream: "EVT", Durable: "studio-pipelines", Subject: "evt.pipeline.>",
+	AckWait: 30 * time.Second, MaxAckPending: 1, NakDelay: 2 * time.Second}
+
 // FirstSeen records (jobID, attempt, seq) inside the projector's system transaction and reports whether it is new; a
 // false means the event was projected already (a redelivery) and must be skipped. seq restarts at 1 for each attempt.
 func FirstSeen(ctx context.Context, tx pgx.Tx, jobID string, attempt, seq int) (bool, error) {

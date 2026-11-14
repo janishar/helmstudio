@@ -33,11 +33,13 @@ export function appendPage(list: Take[], page: Take[]): Take[] {
   return [...list, ...page.filter((t) => !ids.has(t.id))];
 }
 
-/** The tile's mono line: what made it and where ("Qwen Image · Create", "Upload"). */
+/** The tile's mono line: what made it and where ("Qwen Image · Create", "Qwen Image · Pipeline", "Upload"). */
 export const subLine = (t: Take) =>
   t.source === "upload"
     ? "Upload"
-    : [t.made_with?.workflow_title, "Create"].filter(Boolean).join(" · ");
+    : [t.made_with?.workflow_title, t.source === "pipeline" ? "Pipeline" : "Create"]
+        .filter(Boolean)
+        .join(" · ");
 
 /** "Qwen Image · Base · int8": the workflow and the weights it used. */
 export const templateLine = (m: S<"MadeWith">) =>

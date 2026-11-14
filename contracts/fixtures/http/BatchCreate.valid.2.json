@@ -1,0 +1,23 @@
+{
+  "workflow_id": "echo",
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "title": "steps sweep",
+  "rows": {
+    "table": {
+      "columns": [
+        "prompt.text",
+        "echo.steps"
+      ],
+      "rows": [
+        [
+          "a fox",
+          3
+        ],
+        [
+          "a heron",
+          null
+        ]
+      ]
+    }
+  }
+}

@@ -23,13 +23,14 @@ type Output struct {
 	Bytes                     int64
 	MadeWith                  dto.MadeWith
 	CreatedAt                 *time.Time // when the output was made; nil: now
+	BatchID                   *string    // a batch run's: the take's source is pipeline
 }
 
 // contentTypes maps a run output key's extension to its content type.
 var contentTypes = map[string]string{".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
 	".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".wav": "audio/wav", ".mp3": "audio/mpeg"}
 
-// Record stores the take of a run output in the projector's transaction (as System) and returns its id; the same
+// Record stores the take of a run output (source pipeline for a batch run's, else create) in the projector's transaction (as System) and returns its id; the same
 // (run, index) again returns the take already stored.
 func Record(ctx context.Context, tx pgx.Tx, output Output) (string, error) {
 	contentType := contentTypes[strings.ToLower(path.Ext(output.Key))]
@@ -38,11 +39,13 @@ func Record(ctx context.Context, tx pgx.Tx, output Output) (string, error) {
 	}
 	var id string
 	err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
-		session_id, run_id, output_idx, made_with, ready, created_at)
-		VALUES ($1, $2, $3, 'create', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, coalesce($14, clock_timestamp()))
+		session_id, run_id, output_idx, made_with, ready, created_at, batch_id)
+		VALUES ($1, $2, $3, CASE WHEN $15::uuid IS NULL THEN 'create' ELSE 'pipeline' END, $4, $5, $6, $7, $8, $9, $10, $11,
+		$12, $13, true, coalesce($14, clock_timestamp()), $15)
 		ON CONFLICT (run_id, output_idx) DO UPDATE SET run_id = EXCLUDED.run_id RETURNING id::text`,
 		utility.NewID(), output.OwnerID, output.Kind, Title(output.MadeWith), output.Key, contentType, output.Width,
-		output.Height, output.Bytes, output.SessionID, output.RunID, output.Index, output.MadeWith, output.CreatedAt).Scan(&id)
+		output.Height, output.Bytes, output.SessionID, output.RunID, output.Index, output.MadeWith, output.CreatedAt,
+		output.BatchID).Scan(&id)
 	return id, err
 }
 

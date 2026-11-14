@@ -1,0 +1,14 @@
+{
+  "type": "cmd.pipeline.stop",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000101",
+  "job_id": null,
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-14T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47"
+  }
+}

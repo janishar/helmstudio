@@ -33,7 +33,12 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   cursor, upload (picker or drop: `POST /v1/studio/uploads` → `PUT` of the signed `/files` link with progress →
   `.../complete`), Select several (bulk star / delete), and the selected take's panel: Made with, Reuse settings,
   Star, Rename, Export file, Delete.
-- `/pipelines`, `/timeline`, `/models` — placeholders until their milestone.
+- `/pipelines` (`components/pipelines/`, `lib/batches.ts`): Recent batches (`GET /v1/studio/batches`, live from each
+  unfinished batch's events) and New batch: a workflow, its base settings (Create's inspector), the rows as pasted
+  lines, a CSV file or pasted table mapped to params, or a grid of up to 2 axes, seeds per row, Submit (a 422 that
+  names a row is shown against it). `/pipelines/batches/[id]`: the batch run view, header with Pause / Resume / Stop
+  and one line per row (state, takes opening full screen, Retry), live over `.../events`, rows paged by cursor.
+- `/timeline`, `/models` — placeholders until their milestone.
 - `/admin` (admins only in the dock) — Users: add, roles (`user`, `dev`), reset password, disable/enable; the
   `ADMIN_EMAIL` account is locked.
 

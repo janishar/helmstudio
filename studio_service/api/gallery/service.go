@@ -111,8 +111,8 @@ func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 	if filter.Kind != "" && filter.Kind != "image" && filter.Kind != "video" && filter.Kind != "audio" {
 		return filter, "kind must be image, video or audio"
 	}
-	if filter.Source != "" && filter.Source != "create" && filter.Source != "upload" {
-		return filter, "source must be create or upload"
+	if filter.Source != "" && filter.Source != "create" && filter.Source != "upload" && filter.Source != "pipeline" {
+		return filter, "source must be create, upload or pipeline"
 	}
 	if text := query.Get("starred"); text != "" {
 		if text != "true" && text != "false" {
@@ -304,7 +304,7 @@ func (s *Service) takeDTO(row model.Take) dto.Take {
 	link := s.signer.Sign(row.Key)
 	out := dto.Take{ID: row.ID, Kind: row.Kind, Source: row.Source, Title: row.Title, URL: link, ThumbURL: link,
 		ContentType: row.ContentType, Width: row.Width, Height: row.Height, Bytes: row.Bytes, CreatedAt: row.CreatedAt,
-		Starred: row.Starred, SessionID: row.SessionID, RunID: row.RunID, Parents: row.Parents}
+		Starred: row.Starred, SessionID: row.SessionID, RunID: row.RunID, Parents: row.Parents, BatchID: row.BatchID}
 	_ = json.Unmarshal(row.MadeWith, &out.MadeWith)
 	if out.Parents == nil {
 		out.Parents = []string{}

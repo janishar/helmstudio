@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.pause.schema.json",
+  "title": "studio → pipelines: pause a batch",
+  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.pause` (stream CMD) in the transaction that changes the batch; Nats-Msg-Id `<batch_id>:<n>`, n = the batch's command counter (submit = 1, +1 per later command). pipelines_service consumes it (durable `pipelines`, filter `cmd.pipeline.>`, one message at a time, in order). Pipelines starts no new rows and publishes evt.pipeline.batch `paused`. Studio already holds the batch's queued runs (the dispatcher skips them); running runs finish and their rows complete.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.pipeline.pause"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "batch_id"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "= envelope job_id"
+        }
+      }
+    }
+  }
+}

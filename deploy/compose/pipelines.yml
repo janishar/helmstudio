@@ -1,0 +1,21 @@
+# pipelines_service on the helmstudio stack: runs batches on LangGraph (its own database "pipelines"; NATS only, no
+# HTTP API, no object store). Paths are relative to deploy/ (the project directory):
+#   docker compose -f deploy/docker-compose.yml up -d --build pipelines
+services:
+  pipelines:
+    build: ../pipelines_service
+    image: helmstudio/pipelines:${IMAGE_TAG:-dev}
+    env_file: [{path: ../pipelines_service/.env, required: false}]
+    environment:                                      # credentials come from the secrets (<VAR>_FILE)
+      DATABASE_URL_FILE: /run/secrets/pipelines_database_url
+      NATS_URL_FILE: /run/secrets/nats_pipelines_url
+      HEALTH_PORT: "8082"
+    secrets: [pipelines_database_url, nats_pipelines_url]
+    healthcheck:                                      # GET /health on 8082 (the slim image has no curl)
+      test: [CMD, python, -c, "import urllib.request as u; u.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats-setup: {condition: service_completed_successfully}

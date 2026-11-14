@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.studio.run_finished.schema.json",
+  "title": "studio → pipelines: a batch run reached a terminal status",
+  "description": "Subject evt.studio.<session_id>.run_finished (stream EVT), Nats-Msg-Id <run_id>:finished, written to studio's outbox in the transaction that makes a run with a batch_id terminal: the projector applying the runner's status, and every status studio decides itself (cancelled, created failed for no live host, created cancelled for a stopped batch, lease lost twice). pipelines_service consumes it (durable `pipelines-runs` on EVT, filter `evt.studio.>`) and resumes the waiting thread with it whatever the outcome; one that finds no thread waiting on this run (already resumed from a studio.runs.create reply) is acked and dropped.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.studio.run_finished"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the run id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "run_id",
+        "batch_id",
+        "row",
+        "idempotency_key",
+        "status",
+        "take_ids"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "= envelope job_id"
+        },
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "idempotency_key": {
+          "$ref": "defs.schema.json#/$defs/idempotencyKey",
+          "description": "the key the run was created under: names the thread (batch:row), row attempt, node, loop and branch"
+        },
+        "status": {
+          "$ref": "defs.schema.json#/$defs/terminalRunStatus"
+        },
+        "take_ids": {
+          "$ref": "defs.schema.json#/$defs/takeIds"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000,
+          "description": "required (non-empty) when failed"
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

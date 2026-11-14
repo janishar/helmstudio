@@ -145,7 +145,7 @@ def test_cursor_pages(api, gallery):
 def test_bad_list_params(api):
     for params in (
         {"kind": "picture"},
-        {"source": "pipeline"},
+        {"source": "batch"},
         {"starred": "maybe"},
         {"session_id": "not-a-uuid"},
         {"q": "x" * 201},

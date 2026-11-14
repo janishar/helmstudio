@@ -34,6 +34,7 @@ const KINDS: [S<"TakeKind">, string][] = [
 ];
 const SOURCES: [S<"TakeSource">, string][] = [
   ["create", "From Create"],
+  ["pipeline", "From Pipelines"],
   ["upload", "Uploads"],
 ];
 

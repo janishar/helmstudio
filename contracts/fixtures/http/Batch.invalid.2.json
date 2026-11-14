@@ -1,0 +1,13 @@
+{
+  "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "title": "Qwen Image × 12",
+  "workflow_id": "qwen-image",
+  "workflow_title": "Qwen Image",
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "status": "running",
+  "control": "pause",
+  "reason": null,
+  "created_at": "2026-11-14T10:15:37Z",
+  "started_at": "2026-11-14T10:15:38Z",
+  "finished_at": null
+}

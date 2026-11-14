@@ -38,10 +38,22 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 | `make contracts-check` | validate `contracts/` (no stack needed) |
 | `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test-down` stops it |
 | `make resilience` | restart each service of `helmstudio-test` mid-run and check the stack recovers (`contract_tests/resilience.sh`) |
-| `.tools/test-db` | Postgres for the Go services' DB tests (`helmstudio-test`, port 5464) |
+| `.tools/test-db` | Postgres for the services' DB tests (`helmstudio-test`, port 5464) |
 | `make runners` | the native torch runner on this Mac, in the foreground (`make runners-stop` stops it) |
 
 Each service has its own `Makefile` (at least `test` and `lint`; `dev` and `gen` where they apply).
+
+A stack whose `pgdata` volume predates a service's database (pipelines, added in M1) gets it once from
+`deploy/postgres/init.sh` (idempotent; the first command recreates Postgres with the new secret, the volume stays):
+
+```sh
+.tools/make-secrets
+docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml up -d --wait postgres
+docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml exec -T postgres sh /docker-entrypoint-initdb.d/init.sh
+make up
+```
+
+For `helmstudio-test`, `.tools/test-db` does the same.
 
 ## Native runner
 
@@ -72,9 +84,10 @@ contract_tests/   black-box suite through Kong: the gate for every milestone
 helmgo/            shared Go framework
 kong/             gateway config + the API-key plugin
 auth_service/     Go: sign-in, users, roles, API keys
-studio_service/   Go: /v1/studio (sessions, workflows, runs, events, hosts)
+studio_service/   Go: /v1/studio (sessions, workflows, runs, events, hosts, batches)
 files_service/    Go: signed /files links from the object store
 runner_service/   Python: runs workflows (M0: the fake runner)
+pipelines_service/ Python, LangGraph: runs batches (NATS only, database pipelines, health on 8082)
 web_service/      Next.js app and its BFF
 cli/              Go: the `helm` command (login, run)
 deploy/           compose files, Postgres init, NATS config, secrets (git-ignored)

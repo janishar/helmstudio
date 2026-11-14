@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.auth.revoked.schema.json",
+  "title": "a session (refresh-token family) or all of a user's sessions were revoked: drop cached validations",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.auth.revoked"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "type": "null"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "scope",
+        "user_id",
+        "expires_at",
+        "reason"
+      ],
+      "properties": {
+        "scope": {
+          "enum": [
+            "family",
+            "user"
+          ],
+          "description": "family: one session (signout, refresh_reuse, password_guess); user: every session of user_id (password_change, admin, disabled)"
+        },
+        "user_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "jti": {
+          "type": "string",
+          "description": "the access token that signed out (signout only)"
+        },
+        "family_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "the revoked session (= validate reply family_id)"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "cache entries may be dropped after this"
+        },
+        "reason": {
+          "enum": [
+            "signout",
+            "refresh_reuse",
+            "password_guess",
+            "password_change",
+            "admin",
+            "disabled"
+          ],
+          "description": "admin: roles changed or password set by an admin; password_guess: too many wrong current passwords on PUT /auth/password with this session"
+        }
+      },
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "family"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "family_id"
+        ]
+      }
+    }
+  }
+}

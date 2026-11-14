@@ -29,16 +29,18 @@ const takeJSON = `{"id":"t1","kind":"image","source":"upload","title":"pic","wid
 // fakeAPI is the slice of the public API helm uses. outcome is the run's end: succeeded, failed or cancelled
 // (cancelled waits for POST .../cancel).
 type fakeAPI struct {
-	t         *testing.T
-	outcome   string
-	mu        sync.Mutex
-	access    string // the access token the server accepts
-	refreshes int
-	inputs    map[string]any
-	cancelled chan struct{}
-	positions []int  // queue positions GET /runs/r1 answers before the run starts
-	query     string // the last GET /v1/studio/takes query
-	uploaded  []byte // the body PUT to the upload link
+	t           *testing.T
+	outcome     string
+	mu          sync.Mutex
+	access      string // the access token the server accepts
+	refreshes   int
+	inputs      map[string]any
+	cancelled   chan struct{}
+	positions   []int          // queue positions GET /runs/r1 answers before the run starts
+	query       string         // the last GET /v1/studio/takes query
+	uploaded    []byte         // the body PUT to the upload link
+	batchBody   map[string]any // the last POST /v1/studio/batches body
+	batchEvents []string       // the BatchEvents GET /v1/studio/batches/b1/events serves, seq = index + 1
 }
 
 func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +153,26 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprint(w, takeJSON)
+	case "POST /v1/studio/batches":
+		f.batchBody = nil
+		_ = json.NewDecoder(r.Body).Decode(&f.batchBody)
+		w.WriteHeader(202)
+		fmt.Fprint(w, `{"id":"b1","title":"Echo × 2","status":"queued","counts":{"total":2}}`)
+	case "GET /v1/studio/batches/b1/events":
+		since, _ := strconv.Atoi(r.URL.Query().Get("since"))
+		var page []string
+		for i, e := range f.batchEvents {
+			if i+1 > since {
+				page = append(page, fmt.Sprintf(`{"seq":%d,%s`, i+1, e[1:]))
+			}
+		}
+		fmt.Fprintf(w, `{"events":[%s],"last_seq":%d}`, strings.Join(page, ","), max(since, len(f.batchEvents)))
+	case "GET /v1/studio/batches":
+		f.query = r.URL.RawQuery
+		fmt.Fprint(w, `{"batches":[{"id":"b1","title":"sweep","status":"done","counts":{"total":6,"succeeded":5,"failed":1},"created_at":"2026-11-14T10:00:00Z"}],"next_cursor":null}`)
+	case "POST /v1/studio/batches/b1/stop":
+		w.WriteHeader(202)
+		fmt.Fprint(w, `{"id":"b1","status":"running","control":"stop","counts":{"total":6,"succeeded":2}}`)
 	default:
 		f.t.Errorf("unexpected %s", route)
 		http.Error(w, `{"detail":"not found"}`, 404)
@@ -382,5 +404,104 @@ func TestUpload(t *testing.T) {
 	}
 	if code := helm([]string{"upload", text}, nil, &out, &errb, nil); code != 1 || !strings.Contains(errb.String(), "only png, jpeg and webp") {
 		t.Fatalf("text upload: %d %s", code, errb.String())
+	}
+}
+
+func rowEvent(row, attempt int, status, extra string) string {
+	return fmt.Sprintf(`{"type":"row","data":{"row":%d,"attempt":%d,"status":%q%s}}`, row, attempt, status, extra)
+}
+
+func batchEvent(status, counts string) string {
+	return fmt.Sprintf(`{"type":"batch","data":{"id":"b1","status":%q,"reason":null,"counts":%s}}`, status, counts)
+}
+
+func TestBatchLinesPrintsRowsAndFails(t *testing.T) {
+	f, _ := setup(t, "")
+	f.batchEvents = []string{
+		batchEvent("running", `{"total":2}`),
+		rowEvent(1, 1, "running", ""),
+		rowEvent(1, 1, "succeeded", `,"take_ids":["t1"]`),
+		rowEvent(1, 1, "succeeded", `,"take_ids":["t1"]`), // the whole row again: printed once
+		rowEvent(2, 1, "failed", `,"error":"echo failed on purpose"`),
+		batchEvent("done", `{"total":2,"succeeded":1,"failed":1,"cancelled":0}`),
+	}
+	var out, errb bytes.Buffer
+	args := []string{"batch", "echo", "--lines", "-", "-p", "echo.steps=2", "--seeds", "2", "--title", "foxes"}
+	if code := helm(args, strings.NewReader("a red fox\r\n\n  \na blue heron\n"), &out, &errb, nil); code != 1 {
+		t.Fatalf("code %d: %s", code, errb.String())
+	}
+	want := map[string]any{"workflow_id": "echo", "title": "foxes", "inputs": map[string]any{"echo.steps": 2.0},
+		"rows":  map[string]any{"lines": map[string]any{"param": "prompt.text", "values": []any{"a red fox", "a blue heron"}}},
+		"seeds": map[string]any{"count": 2.0}}
+	if fmt.Sprint(f.batchBody) != fmt.Sprint(want) {
+		t.Fatalf("body %v", f.batchBody)
+	}
+	wantOut := "batch b1: Echo × 2, 2 rows\nrunning\nrow 1 succeeded take t1\nrow 2 failed: echo failed on purpose\n" +
+		"done: 1 succeeded, 1 failed, 0 cancelled of 2\n"
+	if out.String() != wantOut || !strings.Contains(errb.String(), "1 of 2 rows failed") {
+		t.Fatalf("out %q err %q", out.String(), errb.String())
+	}
+}
+
+func TestBatchCSVAndGrid(t *testing.T) {
+	f, _ := setup(t, "")
+	f.batchEvents = []string{batchEvent("done", `{"total":2,"succeeded":2}`)}
+	file := filepath.Join(t.TempDir(), "rows.csv")
+	if err := os.WriteFile(file, []byte("prompt.text,echo.steps,echo.fail\n\"a fox, red\",2,false\nheron,,true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := helm([]string{"batch", "echo", "--csv", file, "--session", "s1"}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("csv: %d %s", code, errb.String())
+	}
+	table := `map[table:map[columns:[prompt.text echo.steps echo.fail] rows:[[a fox, red 2 false] [heron <nil> true]]]]`
+	if fmt.Sprint(f.batchBody["rows"]) != table || f.batchBody["session_id"] != "s1" {
+		t.Fatalf("csv body %v", f.batchBody)
+	}
+	if code := helm([]string{"batch", "echo", "--grid", "prompt.text=a,b", "--grid", "echo.steps=1,3"}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("grid: %d %s", code, errb.String())
+	}
+	grid := `map[grid:map[axes:[map[param:prompt.text values:[a b]] map[param:echo.steps values:[1 3]]]]]`
+	if fmt.Sprint(f.batchBody["rows"]) != grid {
+		t.Fatalf("grid body %v", f.batchBody["rows"])
+	}
+	if steps := f.batchBody["rows"].(map[string]any)["grid"].(map[string]any)["axes"].([]any)[1].(map[string]any)["values"].([]any); steps[0] != 1.0 {
+		t.Fatalf("grid values are typed: %#v", steps)
+	}
+}
+
+func TestBatchRejectsBadArgs(t *testing.T) {
+	setup(t, "")
+	bad := filepath.Join(t.TempDir(), "bad.csv")
+	if err := os.WriteFile(bad, []byte("echo.steps\nten\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for args, want := range map[string]string{
+		"batch echo": "exactly one of",
+		"batch echo --lines - --grid echo.steps=1": "exactly one of",
+		"batch echo --csv " + bad:                  "row 1: echo.steps: not a valid int",
+		"batch echo --grid echo.steps":             "want node.param=a,b,c",
+		"batch echo --grid echo.fail=yes,no":       "echo.fail: not a valid bool",
+		"batch echo --lines - -p echo.steps=x":     "echo.steps: not a valid int",
+	} {
+		var out, errb bytes.Buffer
+		if code := helm(strings.Fields(args), strings.NewReader("x\n"), &out, &errb, nil); code != 1 || !strings.Contains(errb.String(), want) {
+			t.Errorf("%s: %d %q", args, code, errb.String())
+		}
+	}
+}
+
+func TestBatchesAndStop(t *testing.T) {
+	f, _ := setup(t, "")
+	var out, errb bytes.Buffer
+	if code := helm([]string{"batches", "--limit", "5"}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("batches: %d %s", code, errb.String())
+	}
+	if want := "b1 done      5/6   failed 1   2026-11-14T10:00:00Z sweep\n"; out.String() != want || f.query != "limit=5" {
+		t.Fatalf("got %q (query %q) want %q", out.String(), f.query, want)
+	}
+	out.Reset()
+	if code := helm([]string{"batch-stop", "b1"}, nil, &out, &errb, nil); code != 0 || out.String() != "batch b1 stopping: 2 succeeded, 0 failed of 6\n" {
+		t.Fatalf("stop: %d %q %s", code, out.String(), errb.String())
 	}
 }

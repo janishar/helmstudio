@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.retry.schema.json",
+  "title": "studio → pipelines: run one failed row again",
+  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.retry` (stream CMD) in the transaction that changes the batch; Nats-Msg-Id `<batch_id>:<n>`, n = the batch's command counter (submit = 1, +1 per later command). pipelines_service consumes it (durable `pipelines`, filter `cmd.pipeline.>`, one message at a time, in order). Sent on POST /v1/studio/batches/{id}/rows/{n}/retry; studio has set the row `queued` with this attempt. Pipelines runs the row's thread again from its start with `attempt` in its idempotency keys (so a new run).",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.pipeline.retry"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "batch_id",
+        "row",
+        "attempt"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "= envelope job_id"
+        },
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/rowAttempt",
+          "minimum": 2,
+          "description": "the row's new attempt"
+        }
+      }
+    }
+  }
+}

@@ -45,6 +45,7 @@ type Take struct {
 	RunID       *string   `json:"run_id"`
 	MadeWith    *MadeWith `json:"made_with"`
 	Parents     []string  `json:"parents"`
+	BatchID     *string   `json:"batch_id,omitempty"`
 }
 
 // TakePage is a page of takes, newest first.

@@ -67,7 +67,7 @@
         },
         "output_prefix": {
           "$ref": "defs.schema.json#/$defs/objectPrefix",
-          "description": "u/<owner_id>/runs/<run_id>/; output n is written to <output_prefix><n>.<ext> (the echo node: 0.png)"
+          "description": "u/<owner_id>/runs/<run_id>/<attempt>/ (a retried attempt never writes over the keys of the one before); output n is written to <output_prefix><n>.<ext> (the echo node: 0.png)"
         }
       }
     }

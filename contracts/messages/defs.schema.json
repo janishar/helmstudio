@@ -123,6 +123,96 @@
       "minimum": 0,
       "maximum": 9007199254740991,
       "description": "a seed the runner actually used (exact in a JS number)"
+    },
+    "inputs": {
+      "type": "object",
+      "description": "<node id>.<param name> → value (RunRequest.inputs); only the params to change",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/paramValue"
+      }
+    },
+    "workflowSnapshot": {
+      "type": "object",
+      "description": "a registry workflow as it was when the batch was submitted; the batch runs this graph, never the live one",
+      "required": [
+        "id",
+        "title",
+        "family",
+        "env",
+        "nodes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/workflowId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "env": {
+          "$ref": "#/$defs/envName"
+        },
+        "nodes": {
+          "$ref": "#/$defs/graph"
+        }
+      }
+    },
+    "batchRow": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500,
+      "description": "a batch row number, from 1 (after seed repetition)"
+    },
+    "rowAttempt": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "a batch row's attempt: 1, +1 on every Retry of the row"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$",
+      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key"
+    },
+    "takeIds": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/uuid"
+      },
+      "description": "take ids, by output index"
+    },
+    "terminalRunStatus": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "rowStatus": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "description": "pipelines' view of a row: queued = not started; running = its run was requested and has not finished"
+    },
+    "batchStatus": {
+      "enum": [
+        "running",
+        "paused",
+        "done",
+        "failed",
+        "stopped"
+      ],
+      "description": "set by pipelines_service (queued exists only in studio's record, before the first event)"
     }
   }
 }

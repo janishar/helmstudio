@@ -1,0 +1,27 @@
+{
+  "workflow_id": "echo",
+  "rows": {
+    "grid": {
+      "axes": [
+        {
+          "param": "a.b",
+          "values": [
+            1
+          ]
+        },
+        {
+          "param": "c.d",
+          "values": [
+            1
+          ]
+        },
+        {
+          "param": "e.f",
+          "values": [
+            1
+          ]
+        }
+      ]
+    }
+  }
+}

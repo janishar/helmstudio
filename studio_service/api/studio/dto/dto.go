@@ -3,9 +3,12 @@
 package dto
 
 import (
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -118,6 +121,8 @@ type Run struct {
 	CreatedAt  time.Time      `json:"created_at"`
 	StartedAt  *time.Time     `json:"started_at"`
 	FinishedAt *time.Time     `json:"finished_at"`
+	BatchID    *string        `json:"batch_id,omitempty"`
+	BatchRow   *int           `json:"batch_row,omitempty"`
 }
 
 // RunList is a session's runs, newest first.
@@ -166,4 +171,180 @@ type QueueHost struct {
 	Host         string `json:"host"`
 	State        string `json:"state"` // idle | busy | offline
 	OthersQueued int    `json:"others_queued"`
+}
+
+// BatchCounts is a batch's rows by shown status.
+type BatchCounts struct {
+	Total     int `json:"total"`
+	Queued    int `json:"queued"`
+	Running   int `json:"running"`
+	Succeeded int `json:"succeeded"`
+	Failed    int `json:"failed"`
+	Cancelled int `json:"cancelled"`
+}
+
+// Batch is one batch: one workflow run once per row.
+type Batch struct {
+	ID            string      `json:"id"`
+	Title         string      `json:"title"`
+	WorkflowID    string      `json:"workflow_id"`
+	WorkflowTitle string      `json:"workflow_title"`
+	SessionID     *string     `json:"session_id"`
+	Status        string      `json:"status"`
+	Control       string      `json:"control"`
+	Reason        *string     `json:"reason"`
+	Counts        BatchCounts `json:"counts"`
+	CreatedAt     time.Time   `json:"created_at"`
+	StartedAt     *time.Time  `json:"started_at"`
+	FinishedAt    *time.Time  `json:"finished_at"`
+}
+
+// BatchRow is one row of a batch.
+type BatchRow struct {
+	Row        int            `json:"row"`
+	Attempt    int            `json:"attempt"`
+	Inputs     map[string]any `json:"inputs"`
+	Status     string         `json:"status"`
+	RunID      *string        `json:"run_id"`
+	TakeIDs    []string       `json:"take_ids"`
+	ThumbURL   *string        `json:"thumb_url"`
+	Error      *string        `json:"error"`
+	StartedAt  *time.Time     `json:"started_at"`
+	FinishedAt *time.Time     `json:"finished_at"`
+}
+
+// BatchPage is a page of the caller's batches, newest first.
+type BatchPage struct {
+	Batches    []Batch `json:"batches"`
+	NextCursor *string `json:"next_cursor"`
+}
+
+// BatchRowPage is a page of a batch's rows by number.
+type BatchRowPage struct {
+	Rows       []BatchRow `json:"rows"`
+	NextCursor *string    `json:"next_cursor"`
+}
+
+// BatchEvent is one stored batch event: data is the whole Batch (type batch) or BatchRow (type row) as it is now.
+type BatchEvent struct {
+	Seq  int64     `json:"seq"`
+	Type string    `json:"type"`
+	TS   time.Time `json:"ts"`
+	Data any       `json:"data"`
+}
+
+// BatchEventPage is the batch events after a cursor and the next cursor.
+type BatchEventPage struct {
+	Events  []BatchEvent `json:"events"`
+	LastSeq int64        `json:"last_seq"`
+}
+
+// BatchLines is one row per pasted value of one text, string or enum param.
+type BatchLines struct {
+	Param  string   `json:"param"`
+	Values []string `json:"values"`
+}
+
+// BatchTable is a parsed CSV: a typed cell per column; a null cell leaves that input unset.
+type BatchTable struct {
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
+}
+
+// BatchAxis is one axis of a grid.
+type BatchAxis struct {
+	Param  string `json:"param"`
+	Values []any  `json:"values"`
+}
+
+// BatchGrid is the cartesian product of its axes, the first varying slowest.
+type BatchGrid struct {
+	Axes []BatchAxis `json:"axes"`
+}
+
+// BatchRowsIn is exactly one of lines, table, grid.
+type BatchRowsIn struct {
+	Lines *BatchLines `json:"lines"`
+	Table *BatchTable `json:"table"`
+	Grid  *BatchGrid  `json:"grid"`
+}
+
+// BatchSeeds repeats each row count times with consecutive seeds from start (absent: drawn at Submit).
+type BatchSeeds struct {
+	Count int    `json:"count"`
+	Start *int64 `json:"start"`
+}
+
+// BatchCreate is POST /batches.
+type BatchCreate struct {
+	WorkflowID string         `json:"workflow_id"`
+	SessionID  *string        `json:"session_id"`
+	Title      *string        `json:"title"`
+	Inputs     map[string]any `json:"inputs"`
+	Rows       BatchRowsIn    `json:"rows"`
+	Seeds      *BatchSeeds    `json:"seeds"`
+}
+
+// paramKey is "<node id>.<param>".
+var paramKey = regexp.MustCompile(`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`)
+
+// Validate checks the body's shape; the rows against the workflow are checked at Submit.
+func (b *BatchCreate) Validate() string {
+	rows := b.Rows
+	given := 0
+	for _, set := range []bool{rows.Lines != nil, rows.Table != nil, rows.Grid != nil} {
+		if set {
+			given++
+		}
+	}
+	switch {
+	case b.WorkflowID == "":
+		return "workflow_id is required"
+	case b.SessionID != nil && !utility.IsUUID(*b.SessionID):
+		return "session_id must be a uuid"
+	case b.Title != nil && utf8.RuneCountInString(strings.TrimSpace(*b.Title)) > 200:
+		return "title must be at most 200 characters"
+	case given != 1:
+		return "rows needs exactly one of lines, table, grid"
+	case b.Seeds != nil && (b.Seeds.Count < 1 || b.Seeds.Count > 8):
+		return "seeds.count must be 1 to 8"
+	case b.Seeds != nil && b.Seeds.Start != nil && (*b.Seeds.Start < 0 || *b.Seeds.Start > 1<<53-1):
+		return "seeds.start must be from 0 to 9007199254740991"
+	}
+	switch {
+	case rows.Lines != nil:
+		if !paramKey.MatchString(rows.Lines.Param) {
+			return "rows.lines.param must be <node>.<param>"
+		}
+		if n := len(rows.Lines.Values); n < 1 || n > 500 {
+			return "rows.lines.values must have 1 to 500 values"
+		}
+	case rows.Table != nil:
+		seen := map[string]bool{}
+		for _, column := range rows.Table.Columns {
+			if !paramKey.MatchString(column) || seen[column] {
+				return "rows.table.columns must be distinct <node>.<param> names"
+			}
+			seen[column] = true
+		}
+		if len(seen) == 0 {
+			return "rows.table.columns must not be empty"
+		}
+		if n := len(rows.Table.Rows); n < 1 || n > 500 {
+			return "rows.table.rows must have 1 to 500 rows"
+		}
+	default:
+		if n := len(rows.Grid.Axes); n < 1 || n > 2 {
+			return "rows.grid.axes must have 1 or 2 axes"
+		}
+		for _, axis := range rows.Grid.Axes {
+			if !paramKey.MatchString(axis.Param) {
+				return "rows.grid.axes[].param must be <node>.<param>"
+			}
+			if n := len(axis.Values); n < 1 || n > 500 {
+				return "rows.grid.axes[].values must have 1 to 500 values"
+			}
+		}
+	}
+	return ""
 }

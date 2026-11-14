@@ -18,6 +18,10 @@ import (
 const usage = `usage:
   helm login --url <base> --email <email> [--api-key-file <path>]   password: HELM_PASSWORD or a prompt
   helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--out <dir>]
+  helm batch <workflow_id> (--lines <file|-> [--param node.param] | --csv <file> | --grid node.param=a,b,c ...)
+             [-p node.param=value ...] [--seeds N] [--session <id>] [--title <t>]   exit 1 if any row failed
+  helm batches [--limit n] [--cursor c]
+  helm batch-stop <batch_id>
   helm takes [--kind image|video|audio] [--source create|upload] [--starred] [--session <id>] [--q <text>] [--limit n] [--cursor c]
   helm upload <file>                  a png, jpeg or webp image, into the gallery
   helm workflows
@@ -45,6 +49,12 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = login(args[1:], stdin, stdout, stderr)
 	case "run":
 		err = runCmd(args[1:], stdout, stderr, stop)
+	case "batch":
+		err = batchCmd(args[1:], stdin, stdout, stderr, stop)
+	case "batches":
+		err = batchesCmd(args[1:], stdout, stderr)
+	case "batch-stop":
+		err = batchStop(args[1:], stdout)
 	case "takes":
 		err = takesCmd(args[1:], stdout, stderr)
 	case "upload":
