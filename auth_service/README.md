@@ -1,8 +1,8 @@
 # auth_service
 
-Users, sessions and client API keys (Go, gomicro layout, Gin through orago). Contract: `contracts/openapi.yaml` (tag `auth`) and
-`contracts/messages/evt.auth.revoked.schema.json`. Built on [orago](../orago/README.md), through the `replace` in
-`go.mod`; image builds need `make image` or compose, which pass `../orago` as a named build context.
+Users, sessions and client API keys (Go, gomicro layout, Gin through helmgo). Contract: `contracts/openapi.yaml` (tag `auth`) and
+`contracts/messages/evt.auth.revoked.schema.json`. Built on [helmgo](../helmgo/README.md), through the `replace` in
+`go.mod`; image builds need `make image` or compose, which pass `../helmgo` as a named build context.
 
 ## Run
 - Alone: `cp .env.example .env && docker compose up --build` (own Postgres + NATS, API on `127.0.0.1:8093`; files alone is 8092).

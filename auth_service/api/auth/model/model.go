@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/network"
 )
 
 // ErrUnauthorized means an access or refresh token was refused.

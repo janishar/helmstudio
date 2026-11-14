@@ -12,7 +12,7 @@ has its own dependencies, `.env`, Dockerfile, Makefile (`dev`, `test`, `gen`,
 helmstudio-next/
   contracts/          openapi.yaml · messages/*.schema.json · registry.schema.json · fixtures
   contract_tests/     black-box suite through Kong; the gate for every milestone
-  orago/              shared Go framework (from the reference)
+  helmgo/              shared Go framework (from the reference)
   kong/               kong.yml · apikey_auth_plugin
   auth_service/       Go
   studio_service/     Go: api/<feature>/{controller,service,dto,model,message} · messaging · dispatcher · migrations

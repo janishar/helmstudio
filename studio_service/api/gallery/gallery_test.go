@@ -22,9 +22,9 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/storage"
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/storage"
+	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/common"

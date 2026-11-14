@@ -14,9 +14,9 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/helmstudio/orago/micro"
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/postgres"
+	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/postgres"
 
 	"github.com/helmstudio/studio_service/api/auth"
 	authmiddleware "github.com/helmstudio/studio_service/api/auth/middleware"

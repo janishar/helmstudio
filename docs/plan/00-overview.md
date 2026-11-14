@@ -11,7 +11,7 @@
 | Mac runtime | Both MLX and PyTorch MPS; each model config declares which runtimes implement it. MLX is preferred when a model has it. |
 | Weight loading | One read straight into GPU memory, never a CPU model copy, official files unmodified (section 6.3). |
 | Model memory | Per GPU host, set by the admin: after the queue drains, unload everything, keep models warm, or keep only pinned components (section 6.2). |
-| Architecture | Microservices after the `oralab-catalog-agents` reference (section 17): Kong, Go services on orago (auth, studio, files), Python services (LangGraph pipelines, model runners), Next.js web with a BFF, Postgres, NATS JetStream, an S3-compatible object store. |
+| Architecture | Microservices after the `oralab-catalog-agents` reference (section 17): Kong, Go services on helmgo (auth, studio, files), Python services (LangGraph pipelines, model runners), Next.js web with a BFF, Postgres, NATS JetStream, an S3-compatible object store. |
 | Users | Multi-user and self-hosted: accounts, roles, every row and file owned by a user; GPUs shared fairly (section 17.3, 17.5). |
 | Where it runs | Docker Compose for everything except the model runners, which run natively on Apple Silicon. Weights stay on the host's disk, never in an image. |
 | First models | Qwen Image 2.1 (PyTorch MPS/CUDA) and LTX-2.5 (MLX), plus an image→video pipeline joining them. |

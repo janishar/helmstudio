@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/storage"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/storage"
 )
 
 // putVector is HMAC-SHA256("0123456789abcdef", "PUT\nu/a/uploads/t.png\n2000000000\n5\nimage/png"): studio_service's

@@ -10,8 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/helmstudio/orago/micro"
-	"github.com/helmstudio/orago/postgres"
+	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/postgres"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/helmstudio/auth_service/api/apikey"

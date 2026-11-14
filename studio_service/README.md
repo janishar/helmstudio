@@ -2,8 +2,8 @@
 
 The Go service behind Kong for `/v1/studio/*` ([contracts/openapi.yaml](../contracts/openapi.yaml), tag `studio`):
 sessions, workflows read from the runners' registry, runs, the per-session event log and stream, hosts. gomicro layout
-on [orago](../orago/README.md) (through the `replace` in `go.mod`; image builds pass `../orago` as a named build context),
-`pgx` + `goose` on its own `studio` database with row-level security, NATS JetStream through `orago/micro`. Output
+on [helmgo](../helmgo/README.md) (through the `replace` in `go.mod`; image builds pass `../helmgo` as a named build context),
+`pgx` + `goose` on its own `studio` database with row-level security, NATS JetStream through `helmgo/micro`. Output
 links are signed `/files/…` URLs that [files_service](../files_service/README.md) serves (shared `FILE_URL_SECRET`).
 
 ```sh

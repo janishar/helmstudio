@@ -10,7 +10,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/utility"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pressly/goose/v3"
@@ -46,7 +46,7 @@ func scratchDatabase(t *testing.T) string {
 	}
 	t.Cleanup(func() { admin.Close(ctx) })
 
-	name := "orago_test_" + utility.RandomHex(8)
+	name := "helmgo_test_" + utility.RandomHex(8)
 	if _, err := admin.Exec(ctx, "CREATE DATABASE "+name); err != nil {
 		t.Fatal(err)
 	}

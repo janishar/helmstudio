@@ -1,4 +1,4 @@
-module github.com/helmstudio/orago
+module github.com/helmstudio/helmgo
 
 go 1.27
 

@@ -3,7 +3,7 @@
 # pgdata volume; safe to re-run (it skips what exists), so .tools/test-db and an existing stack can add a new service:
 #   docker compose -f deploy/docker-compose.yml exec postgres sh /docker-entrypoint-initdb.d/init.sh
 # Passwords come from the compose secrets <svc>_db_password (.tools/make-secrets); <svc>_database_url holds the same.
-# auth's and orago's DB tests create and drop their own databases as postgres (the maintenance database).
+# auth's and helmgo's DB tests create and drop their own databases as postgres (the maintenance database).
 set -eu
 q() { psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER:-postgres}" -d postgres -tA "$@"; }
 for svc in auth studio; do

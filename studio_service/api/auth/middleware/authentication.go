@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/network"
 
 	"github.com/helmstudio/studio_service/api/auth"
 	"github.com/helmstudio/studio_service/common"

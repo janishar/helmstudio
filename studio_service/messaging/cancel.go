@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/helmgo/micro"
 )
 
 // NatsCancel writes runID as a key in the KV cancels (value: the request time, which runners ignore). A KV put is a

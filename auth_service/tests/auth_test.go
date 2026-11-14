@@ -21,10 +21,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/helmstudio/orago/micro"
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/postgres"
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/postgres"
+	"github.com/helmstudio/helmgo/utility"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	natsmicro "github.com/nats-io/nats.go/micro"
@@ -417,7 +417,7 @@ func TestAdminAndAPIKeys(t *testing.T) {
 	}
 }
 
-// TestErrorDetails pins the error strings and headers the HTTP edge guarantees (orago/network), which other
+// TestErrorDetails pins the error strings and headers the HTTP edge guarantees (helmgo/network), which other
 // tests see only as statuses.
 func TestErrorDetails(t *testing.T) {
 	e := setup(t)

@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/network"
 
 	"github.com/helmstudio/files_service/startup"
 )

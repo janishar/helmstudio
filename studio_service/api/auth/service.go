@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/helmgo/micro"
 
 	"github.com/helmstudio/studio_service/api/auth/message"
 	"github.com/helmstudio/studio_service/common"

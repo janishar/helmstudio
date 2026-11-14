@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	oragoconfig "github.com/helmstudio/orago/config"
-	"github.com/helmstudio/orago/network"
+	helmgoconfig "github.com/helmstudio/helmgo/config"
+	"github.com/helmstudio/helmgo/network"
 )
 
 // Env is the service's settings, read once at startup by Load.
@@ -32,29 +32,29 @@ type Env struct {
 // Load resolves the X_FILE secrets, applies defaults and parses the settings. It fails on an unreadable X_FILE, a bad
 // TTL or TRUSTED_PROXIES entry, or when DATABASE_URL is missing.
 func Load() (Env, error) {
-	if err := oragoconfig.LoadFileSecrets(); err != nil {
+	if err := helmgoconfig.LoadFileSecrets(); err != nil {
 		return Env{}, err
 	}
 	env := Env{
-		Port:           oragoconfig.Get("PORT", "8080"),
+		Port:           helmgoconfig.Get("PORT", "8080"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
-		NatsURL:        oragoconfig.Get("NATS_URL", "nats://nats:4222"),
+		NatsURL:        helmgoconfig.Get("NATS_URL", "nats://nats:4222"),
 		NatsUser:       os.Getenv("NATS_USER"),
 		NatsPassword:   os.Getenv("NATS_PASSWORD"),
-		KeysDir:        oragoconfig.Get("KEYS_DIR", "keys"),
+		KeysDir:        helmgoconfig.Get("KEYS_DIR", "keys"),
 		PrivateKeyPEM:  os.Getenv("JWT_PRIVATE_KEY"),
 		WebAPIKey:      os.Getenv("WEB_API_KEY"),
 		HelmAPIKey:     os.Getenv("HELM_API_KEY"),
-		TrustedProxies: oragoconfig.List("TRUSTED_PROXIES"),
-		Issuer:         oragoconfig.Get("JWT_ISSUER", "helm-auth"),
+		TrustedProxies: helmgoconfig.List("TRUSTED_PROXIES"),
+		Issuer:         helmgoconfig.Get("JWT_ISSUER", "helm-auth"),
 		AdminEmail:     os.Getenv("ADMIN_EMAIL"),
 		AdminPassword:  os.Getenv("ADMIN_PASSWORD"),
 	}
 	var err error
-	if env.AccessTTL, err = time.ParseDuration(oragoconfig.Get("ACCESS_TTL", "15m")); err != nil {
+	if env.AccessTTL, err = time.ParseDuration(helmgoconfig.Get("ACCESS_TTL", "15m")); err != nil {
 		return env, fmt.Errorf("ACCESS_TTL: %w", err)
 	}
-	if env.RefreshTTL, err = time.ParseDuration(oragoconfig.Get("REFRESH_TTL", "720h")); err != nil {
+	if env.RefreshTTL, err = time.ParseDuration(helmgoconfig.Get("REFRESH_TTL", "720h")); err != nil {
 		return env, fmt.Errorf("REFRESH_TTL: %w", err)
 	}
 	// The router is what parses these. Trying it here stops every command, the CLI ones too, before the database.

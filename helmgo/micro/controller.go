@@ -1,6 +1,6 @@
 package micro
 
-import "github.com/helmstudio/orago/network"
+import "github.com/helmstudio/helmgo/network"
 
 // Controller is a network.Controller that can also serve NATS endpoints.
 type Controller interface {

@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/helmstudio/orago/micro"
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/utility"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/helmstudio/orago/micro"
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/network"
 
 	"github.com/helmstudio/auth_service/api/auth/dto"
 	"github.com/helmstudio/auth_service/api/auth/message"

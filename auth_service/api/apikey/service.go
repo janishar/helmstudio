@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/utility"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 

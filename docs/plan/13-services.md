@@ -6,7 +6,7 @@
 
 Decided 2026-11-14: helmstudio-next is a **multi-user, self-hosted** system
 built as microservices, following the reference repository
-`oralab-catalog-agents` (its `docs/ARCHITECTURE.md` and `docs/ORAGO.md`). Go
+`oralab-catalog-agents` (its `docs/ARCHITECTURE.md` and `docs/HELMGO.md`). Go
 owns auth and every API layer; Python owns model execution and LangGraph;
 Postgres holds the data; NATS carries the messages. This section owns the
 service boundaries. What happens inside a runner is section 6; pipelines are
@@ -17,9 +17,9 @@ section 16.
 | Service | Language | Does | Owns |
 |---|---|---|---|
 | **kong** + API-key plugin | Kong, Go plugin | The only entry point: routing, API-key check, rate and size limits, correlation ids | — |
-| **auth_service** | Go on orago | Sign-in, refresh, sign-out, users, roles (`user`, `dev`, `admin`), API keys; RS256 access tokens with rotating refresh tokens; answers `auth.validate.*` over NATS | `auth` DB |
-| **studio_service** | Go on orago | Every `/v1/studio/*` route: sessions, workflows, takes and the gallery, library items, pipelines, batches, sequences, the model catalog, hosts. Owner scoping. The resolver (defaults, presets, library items, `when` / `requires`). Outbox → commands. Projector: events → tables. The event stream (SSE). The **dispatcher** (section 17.5). Signs `/files` links. | `studio` DB |
-| **files_service** | Go on orago | Serves signed `/files/*` links from the object store with range requests; receives uploads; storage janitor | — |
+| **auth_service** | Go on helmgo | Sign-in, refresh, sign-out, users, roles (`user`, `dev`, `admin`), API keys; RS256 access tokens with rotating refresh tokens; answers `auth.validate.*` over NATS | `auth` DB |
+| **studio_service** | Go on helmgo | Every `/v1/studio/*` route: sessions, workflows, takes and the gallery, library items, pipelines, batches, sequences, the model catalog, hosts. Owner scoping. The resolver (defaults, presets, library items, `when` / `requires`). Outbox → commands. Projector: events → tables. The event stream (SSE). The **dispatcher** (section 17.5). Signs `/files` links. | `studio` DB |
+| **files_service** | Go on helmgo | Serves signed `/files/*` links from the object store with range requests; receives uploads; storage janitor | — |
 | **pipelines_service** | Python, LangGraph | Runs pipeline graphs (section 16): consumes `cmd.pipeline.*`, asks studio to create runs, resumes threads when runs finish; calls remote models | `pipelines` DB (inbox, per-job seq, LangGraph checkpoints and store) |
 | **runner_service** | Python, one process per env (`mlx`, `torch`) on each GPU host | Executes workflow runs (section 6): node graph, cache, residency manager, loaders, LoRA. Local LLM calls. ffmpeg jobs (thumbnails, export). Publishes its part of the registry and its host state. | no database |
 | **web_service** | Next.js | The UI (section 8) and a backend-for-frontend that holds the web API key and the user's tokens in httpOnly cookies | nothing persistent |
@@ -27,7 +27,7 @@ section 16.
 | **postgres** | Postgres | One instance, one database and owner role per service | — |
 | **object store** | S3 API (SeaweedFS locally, S3 in the cloud) | Every take, upload, cached result and export, under `u/<owner_id>/` | bucket |
 
-`orago/` is the shared Go framework, copied from the reference, not a
+`helmgo/` is the shared Go framework, copied from the reference, not a
 service. `cli/` is `helm`, an API client.
 
 ```

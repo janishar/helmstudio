@@ -1,4 +1,4 @@
-// Package network is the HTTP edge of orago services: a configured Gin router, the controller shape, request
+// Package network is the HTTP edge of helmgo services: a configured Gin router, the controller shape, request
 // parsing, and the {"detail": string} error responses the API contract fixes.
 package network
 
@@ -27,7 +27,7 @@ type Router struct {
 	engine *gin.Engine
 }
 
-// NewRouter returns a Router with orago's Gin settings. It fails on a malformed trusted proxy.
+// NewRouter returns a Router with helmgo's Gin settings. It fails on a malformed trusted proxy.
 // SetMode changes Gin's global state, so it applies to the whole process.
 func NewRouter(trustedProxies []string) (*Router, error) {
 	gin.SetMode(gin.ReleaseMode)

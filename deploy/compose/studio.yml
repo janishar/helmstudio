@@ -2,7 +2,7 @@
 #   docker compose -f deploy/docker-compose.yml up -d --build studio
 services:
   studio:
-    build: {context: ../studio_service, additional_contexts: {orago: ../orago}}
+    build: {context: ../studio_service, additional_contexts: {helmgo: ../helmgo}}
     image: helmstudio/studio:${IMAGE_TAG:-dev}
     env_file: [{path: ../studio_service/.env, required: false}]
     environment:                                      # credentials come from the secrets (<VAR>_FILE)

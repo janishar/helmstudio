@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/utility"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

@@ -6,7 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/helmstudio/orago v0.0.0
+	github.com/helmstudio/helmgo v0.0.0
 )
 
 require (
@@ -60,4 +60,4 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/helmstudio/orago => ../orago
+replace github.com/helmstudio/helmgo => ../helmgo

@@ -65,7 +65,7 @@ services:
       web: {condition: service_healthy}
 
   auth:
-    build: {context: ../auth_service, additional_contexts: {orago: ../orago}}
+    build: {context: ../auth_service, additional_contexts: {helmgo: ../helmgo}}
     image: helmstudio/auth:${IMAGE_TAG:-dev}
     env_file: [{path: ../auth_service/.env, required: false}]
     environment:

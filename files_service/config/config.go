@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	oragoconfig "github.com/helmstudio/orago/config"
+	helmgoconfig "github.com/helmstudio/helmgo/config"
 )
 
 // Env is the service's validated configuration.
@@ -25,19 +25,19 @@ type Env struct {
 // Load resolves *_FILE secrets, then reads every variable with its default. It fails when FILE_URL_SECRET is under 16
 // characters.
 func Load() (Env, error) {
-	if err := oragoconfig.LoadFileSecrets(); err != nil {
+	if err := helmgoconfig.LoadFileSecrets(); err != nil {
 		return Env{}, err
 	}
 	e := Env{
-		Port:          oragoconfig.Get("PORT", "8080"),
+		Port:          helmgoconfig.Get("PORT", "8080"),
 		FileURLSecret: os.Getenv("FILE_URL_SECRET"),
-		StorageDriver: oragoconfig.Get("STORAGE_DRIVER", "s3"),
-		S3Bucket:      oragoconfig.Get("S3_BUCKET", "helmstudio"),
-		S3Region:      oragoconfig.Get("S3_REGION", "us-east-1"),
+		StorageDriver: helmgoconfig.Get("STORAGE_DRIVER", "s3"),
+		S3Bucket:      helmgoconfig.Get("S3_BUCKET", "helmstudio"),
+		S3Region:      helmgoconfig.Get("S3_REGION", "us-east-1"),
 		S3Endpoint:    os.Getenv("S3_ENDPOINT"),
 		S3AccessKey:   os.Getenv("S3_ACCESS_KEY_ID"),
 		S3SecretKey:   os.Getenv("S3_SECRET_ACCESS_KEY"),
-		S3PathStyle:   oragoconfig.Get("S3_FORCE_PATH_STYLE", "true") == "true",
+		S3PathStyle:   helmgoconfig.Get("S3_FORCE_PATH_STYLE", "true") == "true",
 	}
 	if len(e.FileURLSecret) < 16 {
 		return e, fmt.Errorf("FILE_URL_SECRET must be set to a random string of 16+ characters")

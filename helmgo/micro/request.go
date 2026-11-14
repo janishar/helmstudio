@@ -6,7 +6,7 @@ import (
 	"errors"
 	"log"
 
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/network"
 )
 
 // RequestNats sends data to subject through client and decodes the reply, as goserve's RequestNats does; the client's

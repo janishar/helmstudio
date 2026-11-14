@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/storage"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/storage"
 )
 
 // controller serves signed links. The signature is the auth: no API key, no bearer token.

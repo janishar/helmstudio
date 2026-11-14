@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/helmgo/micro"
 	"github.com/jackc/pgx/v5"
 )
 

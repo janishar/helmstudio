@@ -1,4 +1,4 @@
-// Package middleware holds the root middlewares of orago services. They attach to the engine, not to a group,
+// Package middleware holds the root middlewares of helmgo services. They attach to the engine, not to a group,
 // because Gin runs group middleware only on matched routes and these must also cover unmatched ones.
 package middleware
 
@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/gin-gonic/gin"
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/network"
 )
 
 // errorCatcher is the panic-recovering middleware.

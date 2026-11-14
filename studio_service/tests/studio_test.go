@@ -25,10 +25,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/helmstudio/orago/micro"
-	"github.com/helmstudio/orago/middleware"
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/middleware"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/common"

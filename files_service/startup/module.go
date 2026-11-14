@@ -1,9 +1,9 @@
 package startup
 
 import (
-	"github.com/helmstudio/orago/middleware"
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/storage"
+	"github.com/helmstudio/helmgo/middleware"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/storage"
 
 	"github.com/helmstudio/files_service/api/file"
 )

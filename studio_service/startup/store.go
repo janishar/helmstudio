@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/helmstudio/orago/storage"
+	"github.com/helmstudio/helmgo/storage"
 
 	"github.com/helmstudio/studio_service/config"
 )

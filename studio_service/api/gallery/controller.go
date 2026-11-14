@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/helmstudio/orago/micro"
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/network"
 
 	"github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/common"

@@ -7,7 +7,7 @@ toolchain go1.27.4
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/helmstudio/orago v0.0.0
+	github.com/helmstudio/helmgo v0.0.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/nats-io/nats.go v1.55.0
 	golang.org/x/crypto v0.59.0
@@ -55,4 +55,4 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/helmstudio/orago => ../orago
+replace github.com/helmstudio/helmgo => ../helmgo

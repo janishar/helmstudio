@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/helmstudio/orago/network"
-	"github.com/helmstudio/orago/storage"
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/storage"
 )
 
 // A signed link serves its object on GET and HEAD with the safety headers; a key the signature doesn't cover is a 403.

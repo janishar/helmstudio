@@ -1,4 +1,4 @@
-// Package micro is the NATS side of orago services: a client that survives NATS being down, a router that adds a
+// Package micro is the NATS side of helmgo services: a client that survives NATS being down, a router that adds a
 // NATS micro service to the HTTP router, typed request and respond helpers over flat JSON bodies, and the JetStream
 // helpers (publish, a durable consumer with handlers by subject, a KV watch) that reach JetStream through the client.
 package micro
@@ -41,7 +41,7 @@ type NatsClient interface {
 	// Disconnect waits for in-flight messages, then closes the connection.
 	Disconnect()
 	// jetStream is the connection's JetStream context. Unexported, so only this package's NatsJetStream helpers reach
-	// JetStream (orago/Makefile check).
+	// JetStream (helmgo/Makefile check).
 	jetStream() jetstream.JetStream
 }
 

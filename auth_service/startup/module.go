@@ -5,9 +5,9 @@ import (
 	"crypto/rsa"
 	"errors"
 
-	"github.com/helmstudio/orago/micro"
-	oragomiddleware "github.com/helmstudio/orago/middleware"
-	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/helmgo/micro"
+	helmgomiddleware "github.com/helmstudio/helmgo/middleware"
+	"github.com/helmstudio/helmgo/network"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/auth_service/api/apikey"
@@ -40,7 +40,7 @@ func NewModule(env config.Env, db *pgxpool.Pool, key *rsa.PrivateKey, publish fu
 
 // RootMiddlewares returns the middlewares in load order. The error catcher comes first, so it covers the rest.
 func (m *Module) RootMiddlewares() []network.RootMiddleware {
-	return []network.RootMiddleware{oragomiddleware.NewErrorCatcher(), oragomiddleware.NewNotFound()}
+	return []network.RootMiddleware{helmgomiddleware.NewErrorCatcher(), helmgomiddleware.NewNotFound()}
 }
 
 // AuthenticationProvider returns the provider behind Controller.Authentication.

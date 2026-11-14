@@ -3,8 +3,8 @@
 Serves the HMAC-signed, expiring `/files/{key}?exp=&sig=` links that [studio_service](../studio_service/README.md)
 puts in its answers (`GET` and `HEAD`, [contracts/openapi.yaml](../contracts/openapi.yaml) tag `files`), straight from
 the object store. No database, no NATS, no Bearer token: the signature is the auth.
-Gin through `orago/network`; built on [orago](../orago/README.md) through the `replace` in `go.mod`; image builds need
-`make image` or compose, which pass `../orago` as a named build context.
+Gin through `helmgo/network`; built on [helmgo](../helmgo/README.md) through the `replace` in `go.mod`; image builds need
+`make image` or compose, which pass `../helmgo` as a named build context.
 
 ```sh
 cp .env.example .env    # FILE_URL_SECRET: the same value as studio_service's (on the stack: the file_url_secret secret)

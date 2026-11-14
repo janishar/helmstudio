@@ -19,4 +19,4 @@ build:
 	CGO_ENABLED=0 go build -tags nomsgpack -o bin/files ./cmd
 
 image:
-	docker build --build-context orago=../orago -t helmstudio/files:dev .
+	docker build --build-context helmgo=../helmgo -t helmstudio/files:dev .

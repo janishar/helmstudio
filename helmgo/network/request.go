@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/helmstudio/orago/utility"
+	"github.com/helmstudio/helmgo/utility"
 )
 
 // maxJSONBody caps a JSON request body at 64 KiB.

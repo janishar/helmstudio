@@ -69,7 +69,7 @@ Published on 127.0.0.1, set in `deploy/.env`: Kong on `8300` (`KONG_HTTP_PORT`),
 ```
 contracts/        openapi.yaml, NATS message schemas, registry schema, fixtures, check.py
 contract_tests/   black-box suite through Kong: the gate for every milestone
-orago/            shared Go framework
+helmgo/            shared Go framework
 kong/             gateway config + the API-key plugin
 auth_service/     Go: sign-in, users, roles, API keys
 studio_service/   Go: /v1/studio (sessions, workflows, runs, events, hosts)

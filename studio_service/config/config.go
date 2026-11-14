@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	oragoconfig "github.com/helmstudio/orago/config"
+	helmgoconfig "github.com/helmstudio/helmgo/config"
 )
 
 // Env is the service's validated configuration.
@@ -35,30 +35,30 @@ type Env struct {
 // Load resolves *_FILE secrets, then reads every variable with its default. It fails when DATABASE_URL is missing,
 // FILE_URL_SECRET is under 16 characters, or a number or duration is invalid.
 func Load() (Env, error) {
-	if err := oragoconfig.LoadFileSecrets(); err != nil {
+	if err := helmgoconfig.LoadFileSecrets(); err != nil {
 		return Env{}, err
 	}
 	e := Env{
-		Port:          oragoconfig.Get("PORT", "8080"),
+		Port:          helmgoconfig.Get("PORT", "8080"),
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
-		NatsURL:       oragoconfig.Get("NATS_URL", "nats://nats:4222"),
+		NatsURL:       helmgoconfig.Get("NATS_URL", "nats://nats:4222"),
 		NatsUser:      os.Getenv("NATS_USER"),
 		NatsPassword:  os.Getenv("NATS_PASSWORD"),
-		PublicBaseURL: oragoconfig.Get("PUBLIC_BASE_URL", "http://localhost:8300"),
+		PublicBaseURL: helmgoconfig.Get("PUBLIC_BASE_URL", "http://localhost:8300"),
 		FileURLSecret: os.Getenv("FILE_URL_SECRET"),
-		StorageDriver: oragoconfig.Get("STORAGE_DRIVER", "s3"),
-		S3Bucket:      oragoconfig.Get("S3_BUCKET", "helmstudio"),
-		S3Region:      oragoconfig.Get("S3_REGION", "us-east-1"),
+		StorageDriver: helmgoconfig.Get("STORAGE_DRIVER", "s3"),
+		S3Bucket:      helmgoconfig.Get("S3_BUCKET", "helmstudio"),
+		S3Region:      helmgoconfig.Get("S3_REGION", "us-east-1"),
 		S3Endpoint:    os.Getenv("S3_ENDPOINT"),
 		S3AccessKey:   os.Getenv("S3_ACCESS_KEY_ID"),
 		S3SecretKey:   os.Getenv("S3_SECRET_ACCESS_KEY"),
-		S3PathStyle:   oragoconfig.Get("S3_FORCE_PATH_STYLE", "true") == "true",
+		S3PathStyle:   helmgoconfig.Get("S3_FORCE_PATH_STYLE", "true") == "true",
 	}
 	var err error
-	if e.FileURLTTL, err = time.ParseDuration(oragoconfig.Get("FILE_URL_TTL", "1h")); err != nil {
+	if e.FileURLTTL, err = time.ParseDuration(helmgoconfig.Get("FILE_URL_TTL", "1h")); err != nil {
 		return e, fmt.Errorf("FILE_URL_TTL: %w", err)
 	}
-	if e.MaxBodyMB, err = strconv.ParseInt(oragoconfig.Get("MAX_BODY_MB", "1"), 10, 64); err != nil {
+	if e.MaxBodyMB, err = strconv.ParseInt(helmgoconfig.Get("MAX_BODY_MB", "1"), 10, 64); err != nil {
 		return e, fmt.Errorf("MAX_BODY_MB: %w", err)
 	}
 	if e.DatabaseURL == "" {
