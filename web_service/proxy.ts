@@ -4,31 +4,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { needsRefresh } from "@/lib/jwt";
 import {
   ACCESS_COOKIE,
+  PATH_HEADER,
   REFRESH_COOKIE,
   authPost,
   clientIp,
+  publicOrigin,
+  refreshResult,
   sessionCookies,
-  type Session,
+  type RefreshResult,
 } from "@/lib/session";
 
 /** Pages that never need a session (/signin/expired clears a dead session's cookies). */
 const PUBLIC = new Set(["/signin", "/signin/expired"]);
-/** The request header that tells server components the page's path and query (Next doesn't expose the URL). */
-export const PATH_HEADER = "x-helm-path";
-
-/** A refresh's result: a new session, "refused" when the token is no good, or "unavailable" when the answer says
- * nothing about the session. */
-export type RefreshResult = Session | "refused" | "unavailable";
-
-/** Reads auth_service's answer. Only a 401 means signed out. A 5xx, a rate limit or a broken 200 body doesn't. */
-export function refreshResult(status: number, body: unknown): RefreshResult {
-  if (status === 200) {
-    const session = body as Session | null;
-    return session?.access_token && session.refresh_token ? session : "unavailable";
-  }
-  return status === 401 ? "refused" : "unavailable";
-}
-
 // Refresh tokens are single use (reuse revokes the family), so parallel requests share one refresh.
 // ponytail: per-process dedupe; with several web replicas, pin sessions or move this into a shared store.
 const inflight = new Map<string, Promise<RefreshResult>>();
@@ -52,22 +39,6 @@ function refreshOnce(token: string, ip?: string): Promise<RefreshResult> {
     }, 30_000);
   }
   return p;
-}
-
-/** The origin the browser used: behind Kong, X-Forwarded-*; Next would otherwise answer with its own localhost:port. */
-export function publicOrigin(req: NextRequest): string {
-  const h = req.headers;
-  const proto =
-    h.get("x-forwarded-proto")?.split(",")[0].trim() || req.nextUrl.protocol.replace(":", "");
-  let host = h.get("x-forwarded-host")?.split(",")[0].trim() || h.get("host") || req.nextUrl.host;
-  const port = h.get("x-forwarded-port")?.split(",")[0].trim();
-  if (
-    port &&
-    !host.includes(":") &&
-    !((proto === "http" && port === "80") || (proto === "https" && port === "443"))
-  )
-    host += `:${port}`;
-  return `${proto}://${host}`;
 }
 
 /** Next.js proxy, run before every matched request: public pages and valid tokens pass, an expiring token is

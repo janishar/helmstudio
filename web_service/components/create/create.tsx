@@ -54,37 +54,60 @@ function useSessionEvents(sessionId: string | null, onEvent: (e: SessionEvent) =
   );
 }
 
-/** The runner hosts, refreshed every 10 s (they rewrite their state that often); null until the first answer. */
+/** The runner hosts, refreshed every 10 s while the tab is visible (they rewrite their state that often) and at once
+ * when it shows again; null until the first answer. */
 function useHosts() {
   const [hosts, setHosts] = useState<S<"Host">[] | null>(null);
   useEffect(() => {
     let stop = false;
-    const tick = () =>
+    const tick = () => {
+      if (document.hidden) return;
       ok(api.GET("/v1/studio/hosts"))
         .then((h) => !stop && setHosts(h.hosts))
         .catch(() => undefined);
-    void tick();
+    };
+    tick();
     const t = setInterval(tick, 10_000);
+    document.addEventListener("visibilitychange", tick);
     return () => {
       stop = true;
       clearInterval(t);
+      document.removeEventListener("visibilitychange", tick);
     };
   }, []);
   return hosts;
 }
 
+/** What the page read on the server: the sessions and workflows, the open session (null: none yet) and its runs and
+ * takes, as Create's own first load would leave them. */
+export type CreateInitial = {
+  sessions: S<"StudioSession">[];
+  workflows: S<"Workflow">[];
+  sessionId: string | null;
+  runs: Run[];
+  takes: Take[];
+};
+
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
- * `?reuse=`. */
-export function Create({ initialSession, reuse }: { initialSession?: string; reuse?: string }) {
-  const [sessions, setSessions] = useState<S<"StudioSession">[] | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [workflows, setWorkflows] = useState<S<"Workflow">[] | null>(null);
+ * `?reuse=`, `initial` from the server (without it, Create loads everything itself). */
+export function Create({
+  initialSession,
+  reuse,
+  initial,
+}: {
+  initialSession?: string;
+  reuse?: string;
+  initial?: CreateInitial;
+}) {
+  const [sessions, setSessions] = useState<S<"StudioSession">[] | null>(initial?.sessions ?? null);
+  const [sessionId, setSessionId] = useState<string | null>(initial?.sessionId ?? null);
+  const [workflows, setWorkflows] = useState<S<"Workflow">[] | null>(initial?.workflows ?? null);
   // the workflow picked here or by a reuse; "" follows the session's newest run
   const [chosen, setChosen] = useState("");
   const [raws, setRaws] = useState<Record<string, Raw>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [runs, setRuns] = useState<Run[] | null>(null);
-  const [takes, setTakes] = useState<Take[]>([]);
+  const [runs, setRuns] = useState<Run[] | null>(initial?.runs ?? null);
+  const [takes, setTakes] = useState<Take[]>(initial?.takes ?? []);
   const [tracks, setTracks] = useState<Record<string, RunTrack>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [full, setFull] = useState(false);
@@ -95,8 +118,10 @@ export function Create({ initialSession, reuse }: { initialSession?: string; reu
   const hosts = useHosts();
   // the run list as the event handler last left it, so an event and a fetch never fold onto a stale copy, and the
   // open session, so a late answer about another one is dropped
-  const runsRef = useRef<Run[]>([]);
-  const sessionRef = useRef<string | null>(null);
+  const runsRef = useRef<Run[]>(initial?.runs ?? []);
+  const sessionRef = useRef<string | null>(initial?.sessionId ?? null);
+  // the session whose runs and takes came from the server: not fetched again until another one is opened
+  const seeded = useRef(initial?.sessionId ?? null);
   const put = useCallback((next: Run[]) => {
     runsRef.current = next;
     setRuns(next);
@@ -104,6 +129,7 @@ export function Create({ initialSession, reuse }: { initialSession?: string; reu
   /** Opens a session (null: none yet); its runs and takes load in the effect below. The workflow follows the
    * session's newest run unless `keep` (a new session keeps the one picked). */
   const open = useCallback((id: string | null, keep = false) => {
+    seeded.current = null;
     sessionRef.current = id;
     setSessionId(id);
     setSelected(null);
@@ -124,7 +150,11 @@ export function Create({ initialSession, reuse }: { initialSession?: string; reu
       })
       .catch((e) => setError(message(e)));
   }, [initialSession, open]);
-  useEffect(load, [load]);
+  // the server's read stands for the first load; a later `?s=` (a new `load`) loads again
+  const serverLoad = useRef(initial ? load : null);
+  useEffect(() => {
+    if (load !== serverLoad.current) load();
+  }, [load]);
 
   // the open session is in the URL, without a server round trip
   useEffect(() => {
@@ -151,7 +181,7 @@ export function Create({ initialSession, reuse }: { initialSession?: string; reu
     [],
   );
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && sessionId !== seeded.current) {
       void loadRuns(sessionId);
       void loadTakes(sessionId);
     }
@@ -477,6 +507,7 @@ export function Create({ initialSession, reuse }: { initialSession?: string; reu
                 <RunTile
                   key={it.run.id}
                   run={it.run}
+                  thumb={takes.find((t) => t.id === it.run.outputs[0]?.take_id)?.thumb_url}
                   n={items.length - i}
                   seedKey={seedKeyOf(workflows?.find((w) => w.id === it.run.workflow_id))}
                   current={it === picked}
@@ -742,6 +773,7 @@ function Stage({
             alt={take?.title || (prompt ? String(prompt) : "The take")}
             width={out.width ?? undefined}
             height={out.height ?? undefined}
+            fetchPriority="high"
             className="rounded-[10px] object-cover"
             // as large as fits the stage, keeping its aspect, so the corners round the picture itself
             style={
@@ -887,6 +919,7 @@ function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onP
           src={safeUrl(take.thumb_url)}
           alt=""
           loading="lazy"
+          decoding="async"
           className="size-full object-cover"
         />
       ) : (
@@ -905,12 +938,15 @@ function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onP
 /** A run in the strip that has no take to show: its picture labelled by seed, else its state. */
 function RunTile({
   run,
+  thumb,
   n,
   seedKey,
   current,
   onPick,
 }: {
   run: Run;
+  /** its output's take thumbnail, once that take is loaded; else the output itself */
+  thumb?: string;
   n: number;
   seedKey?: string;
   current: boolean;
@@ -943,7 +979,13 @@ function RunTile({
     >
       {out?.kind === "image" ? (
         <>
-          <img src={safeUrl(out.url)} alt="" loading="lazy" className="size-full object-cover" />
+          <img
+            src={safeUrl(thumb ?? out.url)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="size-full object-cover"
+          />
           <span className="absolute bottom-1 left-1 rounded bg-s2/90 px-1 text-t1">{label}</span>
         </>
       ) : (

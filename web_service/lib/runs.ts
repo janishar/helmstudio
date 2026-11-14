@@ -172,8 +172,16 @@ const eventPage = (sessionId: string, since: number) =>
     }),
   ) as Promise<S<"EventPage">>;
 
+/** Polling's pace: every 2 s while pages come, doubling to 30 s while they fail. */
+const POLL_MIN = 2_000;
+const POLL_MAX = 30_000;
+const hidden = () => typeof document !== "undefined" && document.hidden;
+
 /** Calls `onEvent` for each new event of the session (by seq), from the start of its log: SSE, else ?since= polling
- * every 2 s once the stream closes. Returns the unsubscribe; nothing is delivered after it, not even a page in flight. */
+ * once the stream closes (a refused reconnect, e.g. a 502 while studio restarts). Polling backs off while pages fail,
+ * pauses in a hidden tab (one page as soon as it shows again) and, after a page comes, tries a stream from ?since= the
+ * last event again (backing off likewise), stopping once one opens. Returns the unsubscribe; nothing is delivered
+ * after it, not even a page in flight. */
 export function followSession(
   sessionId: string,
   onEvent: (e: S<"SessionEvent">) => void,
@@ -182,15 +190,18 @@ export function followSession(
   // ponytail: replays the whole log on open (cheap for M0 sessions); keep a cursor per session if logs grow long
   let last = 0;
   let stop = false;
+  let es: EventSource | undefined;
+  let polling = false; // the stream closed: pages until a new one opens
+  let busy = false; // a page is in flight
   let poll: ReturnType<typeof setTimeout> | undefined;
+  let delay = POLL_MIN;
+  let streamDelay = POLL_MIN;
+  let streamAt = 0; // when a new stream may be tried
   const take = (e: S<"SessionEvent">) => {
     if (stop || e.seq <= last) return;
     last = e.seq;
     onEvent(e);
   };
-  const es = new EventSource(
-    `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events?since=0`,
-  );
   const onMessage = (m: MessageEvent<string>) => {
     try {
       take(JSON.parse(m.data) as S<"SessionEvent">);
@@ -198,18 +209,54 @@ export function followSession(
       /* not an event */
     }
   };
-  for (const t of ["status", "progress", "output"])
-    es.addEventListener(t, onMessage as EventListener);
   const tick = async () => {
-    (await page(last).catch(() => null))?.events.forEach(take);
-    if (!stop) poll = setTimeout(() => void tick(), 2000);
+    poll = undefined;
+    if (stop || !polling || busy || hidden()) return; // a hidden tab waits for visibilitychange
+    busy = true;
+    const p = await page(last).catch(() => null);
+    busy = false;
+    if (stop || !polling) return;
+    p?.events.forEach(take);
+    delay = p ? POLL_MIN : Math.min(delay * 2, POLL_MAX);
+    if (p && Date.now() >= streamAt) {
+      streamAt = Date.now() + streamDelay;
+      streamDelay = Math.min(streamDelay * 2, POLL_MAX);
+      connect();
+    }
+    if (polling) poll = setTimeout(() => void tick(), delay);
   };
-  es.onerror = () => {
-    if (es.readyState === EventSource.CLOSED && !stop && !poll) void tick();
+  const onVisible = () => {
+    if (!hidden() && polling && !poll) void tick();
   };
+  function connect() {
+    es?.close();
+    const s = new EventSource(
+      `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events?since=${last}`,
+    );
+    for (const t of ["status", "progress", "output"])
+      s.addEventListener(t, onMessage as EventListener);
+    s.onopen = () => {
+      if (stop || s !== es) return;
+      polling = false;
+      streamDelay = POLL_MIN;
+      clearTimeout(poll);
+      poll = undefined;
+    };
+    s.onerror = () => {
+      if (s.readyState !== EventSource.CLOSED || stop || s !== es || polling) return;
+      polling = true;
+      delay = POLL_MIN;
+      void tick();
+    };
+    es = s;
+  }
+  connect();
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisible);
   return () => {
     stop = true;
-    es.close();
+    es?.close();
     clearTimeout(poll);
+    if (typeof document !== "undefined")
+      document.removeEventListener("visibilitychange", onVisible);
   };
 }

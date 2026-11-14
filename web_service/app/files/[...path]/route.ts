@@ -2,9 +2,6 @@
 import type { NextRequest } from "next/server";
 import { proxy } from "@/lib/proxy";
 
-/** Never cached by Next: every request goes to Kong. */
-export const dynamic = "force-dynamic";
-
 /** Passes a signed file link (GET, or an upload's PUT) on without the app's key or a token; dot segments are refused
  * with a 403. */
 async function handle(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {

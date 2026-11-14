@@ -8,15 +8,18 @@ const LATER: Record<string, string> = {
   models: "Models",
 };
 
-type Props = { params: Promise<{ section: string }> };
+type Props = { params: Promise<{ section: string[] }> };
+
+/** Only a single known segment is a later section; anything deeper is a 404 inside the dock. */
+const later = (s: string[]) => (s.length === 1 ? LATER[s[0]] : undefined);
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  return { title: LATER[(await params).section] ?? "Not found" };
+  return { title: later((await params).section) ?? "Not found" };
 }
 
 /** A quiet placeholder for a section that is not built yet; any other segment is a 404. */
 export default async function LaterPage({ params }: Props) {
-  const title = LATER[(await params).section];
+  const title = later((await params).section);
   if (!title) notFound();
   return (
     <main

@@ -11,6 +11,7 @@ import {
   kongHeaders,
   kongUrl,
   sessionCookies,
+  UPSTREAM_TIMEOUT_MS,
   type Session,
 } from "@/lib/session";
 
@@ -46,6 +47,7 @@ export async function signout() {
       method: "DELETE",
       headers: kongHeaders(access, undefined, clientIp(await headers())),
       cache: "no-store",
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     }).catch(() => null);
   }
   jar.delete(ACCESS_COOKIE);

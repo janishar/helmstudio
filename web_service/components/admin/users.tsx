@@ -1,7 +1,7 @@
 "use client";
 // Admin > Users: every account, add one, set roles, reset a password, disable or enable. The root admin's row is
 // locked: its roles, password and state come from ADMIN_EMAIL / ADMIN_PASSWORD in auth_service's .env.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -26,10 +26,19 @@ function randomPassword(): string {
 /** The path parameter of a user route. */
 const uid = (id: string) => ({ params: { path: { id } } });
 
-/** The Admin screen with its Users table and the Add a user panel. */
-export function UsersAdmin() {
+/** False in the server render and while hydrating, true after: the viewer's locale and time zone aren't the server's. */
+const noSubscribe = () => () => {};
+const useHydrated = () =>
+  useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
+
+/** The Admin screen with its Users table and the Add a user panel; `initialUsers` is the list read on the server. */
+export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
   const me = useUser();
-  const [users, setUsers] = useState<User[] | null>(null);
+  const [users, setUsers] = useState<User[] | null>(initialUsers ?? null);
   const [error, setError] = useState("");
   const load = useCallback(() => {
     ok(api.GET("/auth/admin/users"))
@@ -39,7 +48,9 @@ export function UsersAdmin() {
       })
       .catch((e) => setError(message(e)));
   }, []);
-  useEffect(load, [load]);
+  useEffect(() => {
+    if (!initialUsers) load();
+  }, [initialUsers, load]);
   const replace = (u: User) =>
     setUsers((list) => list?.map((x) => (x.id === u.id ? u : x)) ?? null);
 
@@ -118,6 +129,7 @@ function UserRow({
   onError: (e: string) => void;
 }) {
   const [dialog, setDialog] = useState<"roles" | "password" | null>(null);
+  const hydrated = useHydrated();
   const root = u.roles.includes("admin");
   const cell = "border-b border-s3 p-2.5 whitespace-nowrap";
   async function toggle() {
@@ -154,7 +166,7 @@ function UserRow({
       </td>
       <td className={`${cell} mono text-[12px] text-t2`}>
         {/* the mock's "Last sign-in" column: the API has only created_at, so this is the date added */}
-        {new Date(u.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}
+        {hydrated && new Date(u.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}
       </td>
       <td className={cell}>
         {root ? (
@@ -229,12 +241,16 @@ function RolesForm({
 }) {
   const [roles, setRoles] = useState<Role[]>(u.roles.filter((r): r is Role => r !== "admin"));
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false); // a second Save while the PUT is out does nothing
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    setBusy(true);
     try {
       onDone(await ok(api.PUT("/auth/admin/users/{id}/roles", { ...uid(u.id), body: { roles } })));
     } catch (err) {
       setError(message(err));
+    } finally {
+      setBusy(false);
     }
   }
   return (
@@ -245,7 +261,11 @@ function RolesForm({
         <button type="button" className="chip" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="key h-10 px-5 text-[13px]" disabled={!roles.length}>
+        <button
+          type="submit"
+          className="key h-10 px-5 text-[13px]"
+          disabled={busy || !roles.length}
+        >
           Save
         </button>
       </div>
@@ -298,13 +318,17 @@ function PasswordField({
 function PasswordForm({ u, onDone }: { u: User; onDone: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    setBusy(true);
     try {
       await ok(api.PUT("/auth/admin/users/{id}/password", { ...uid(u.id), body: { password } }));
       onDone();
     } catch (err) {
       setError(message(err));
+    } finally {
+      setBusy(false);
     }
   }
   return (
@@ -315,7 +339,7 @@ function PasswordForm({ u, onDone }: { u: User; onDone: () => void }) {
         <button type="button" className="chip" onClick={onDone}>
           Cancel
         </button>
-        <button type="submit" className="key h-10 px-5 text-[13px]">
+        <button type="submit" className="key h-10 px-5 text-[13px]" disabled={busy}>
           Set password
         </button>
       </div>

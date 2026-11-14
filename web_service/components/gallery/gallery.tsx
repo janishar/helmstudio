@@ -25,7 +25,7 @@ type Take = S<"Take">;
 type Upload = { id: number; name: string; progress: number; error?: string };
 
 /** A page of the grid. */
-const PAGE = 60;
+export const PAGE = 60;
 
 const KINDS: [S<"TakeKind">, string][] = [
   ["image", "Images"],
@@ -64,13 +64,13 @@ const del = (id: string) =>
 const patch = (id: string, body: S<"TakePatch">) =>
   ok(api.PATCH("/v1/studio/takes/{take_id}", { params: { path: { take_id: id } }, body }));
 
-/** The Gallery screen. */
-export function Gallery() {
+/** The Gallery screen; `initial` is the unfiltered first page, read on the server. */
+export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
   const [filter, setFilter] = useState<Filter>({});
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
-  const [takes, setTakes] = useState<Take[] | null>(null);
-  const [next, setNext] = useState<string | null>(null);
+  const [takes, setTakes] = useState<Take[] | null>(initial?.takes ?? null);
+  const [next, setNext] = useState<string | null>(initial?.next_cursor ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -114,8 +114,11 @@ export function Gallery() {
     [filter, query],
   );
   // a new filter or search: the first page replaces the list (the old one stays until it comes)
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- the list is fetched: loading is set as it starts
-  useEffect(() => fetchPage(null), [fetchPage]);
+  // the server's first page stands for the unfiltered list (the first fetchPage) until the filter or search changes
+  const serverPage = useRef(initial ? fetchPage : null);
+  useEffect(() => {
+    if (fetchPage !== serverPage.current) fetchPage(null);
+  }, [fetchPage]);
 
   // the next page once the end of the grid comes near; again after each page while the end is still in view
   useEffect(() => {
@@ -380,6 +383,7 @@ export function Gallery() {
                         src={safeUrl(t.thumb_url)}
                         alt=""
                         loading="lazy"
+                        decoding="async"
                         className={`block aspect-[16/10] w-full rounded-[10px] bg-s1 object-cover ${on ? "outline-2 -outline-offset-2 outline-a1" : ""}`}
                       />
                     ) : (

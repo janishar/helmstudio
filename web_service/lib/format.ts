@@ -15,6 +15,10 @@ export function safeUrl(u: string | null | undefined): string | undefined {
   if (!/^https?:\/\//i.test(u)) return undefined;
   // the API signs /files/… links with its PUBLIC_BASE_URL (localhost:8300), which may not be the host this page is on
   // (127.0.0.1, a LAN name): same-origin path instead, so fetch() of a link isn't blocked as CORS
-  const url = new URL(u);
-  return url.pathname.startsWith("/files/") ? url.pathname + url.search : u;
+  try {
+    const url = new URL(u);
+    return url.pathname.startsWith("/files/") ? url.pathname + url.search : u;
+  } catch {
+    return undefined; // "http://" and the like: no link rather than a render error
+  }
 }

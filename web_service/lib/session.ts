@@ -1,6 +1,7 @@
 // Server-only: cookies holding the user's tokens, and calls to Kong with the web app's own API key.
 import "server-only";
 import { readFileSync } from "node:fs";
+import type { NextRequest } from "next/server";
 import type { components } from "@/gen/api";
 
 /** What sign-in and refresh answer: both tokens and the user. */
@@ -54,6 +55,13 @@ export function sessionCookies(s: Pick<Session, "access_token" | "refresh_token"
   ] as const;
 }
 
+/** How long a server-side read from Kong may take before it counts as failed: a hung upstream must not hang the page
+ * (the callers' existing fallbacks take over). */
+export const UPSTREAM_TIMEOUT_MS = 5_000;
+/** authPost's limit, longer: a refresh aborted after auth_service rotated the token would leave the browser holding a
+ * spent one, and resending it revokes the whole family. */
+const AUTH_POST_TIMEOUT_MS = 15_000;
+
 /** POST a JSON body to an /auth route on behalf of the browser at `ip`; answers {status, body}. */
 export async function authPost(path: string, body: unknown, ip?: string) {
   const r = await fetch(`${kongUrl()}${path}`, {
@@ -61,6 +69,7 @@ export async function authPost(path: string, body: unknown, ip?: string) {
     headers: kongHeaders(undefined, { "content-type": "application/json" }, ip),
     body: JSON.stringify(body),
     cache: "no-store",
+    signal: AbortSignal.timeout(AUTH_POST_TIMEOUT_MS),
   });
   const text = await r.text();
   let json: unknown = null;
@@ -78,4 +87,36 @@ export function detailOf(body: unknown, fallback: string): string {
   if (typeof b?.detail === "string") return b.detail;
   if (typeof b?.message === "string") return b.message;
   return fallback;
+}
+
+/** The request header that tells server components the page's path and query (Next doesn't expose the URL). */
+export const PATH_HEADER = "x-helm-path";
+
+/** A refresh's result: a new session, "refused" when the token is no good, or "unavailable" when the answer says
+ * nothing about the session. */
+export type RefreshResult = Session | "refused" | "unavailable";
+
+/** Reads auth_service's answer. Only a 401 means signed out. A 5xx, a rate limit or a broken 200 body doesn't. */
+export function refreshResult(status: number, body: unknown): RefreshResult {
+  if (status === 200) {
+    const session = body as Session | null;
+    return session?.access_token && session.refresh_token ? session : "unavailable";
+  }
+  return status === 401 ? "refused" : "unavailable";
+}
+
+/** The origin the browser used: behind Kong, X-Forwarded-*; Next would otherwise answer with its own localhost:port. */
+export function publicOrigin(req: NextRequest): string {
+  const h = req.headers;
+  const proto =
+    h.get("x-forwarded-proto")?.split(",")[0].trim() || req.nextUrl.protocol.replace(":", "");
+  let host = h.get("x-forwarded-host")?.split(",")[0].trim() || h.get("host") || req.nextUrl.host;
+  const port = h.get("x-forwarded-port")?.split(",")[0].trim();
+  if (
+    port &&
+    !host.includes(":") &&
+    !((proto === "http" && port === "80") || (proto === "https" && port === "443"))
+  )
+    host += `:${port}`;
+  return `${proto}://${host}`;
 }

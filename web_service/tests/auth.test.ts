@@ -1,11 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { jwtExp, needsRefresh, safeNext } from "@/lib/jwt";
-import { allowed } from "@/lib/proxy";
-import { ACCESS_COOKIE, REFRESH_COOKIE, clientIp, kongHeaders } from "@/lib/session";
+import { allowed, proxy as bff } from "@/lib/proxy";
+import {
+  ACCESS_COOKIE,
+  PATH_HEADER,
+  REFRESH_COOKIE,
+  clientIp,
+  kongHeaders,
+  publicOrigin,
+  refreshResult,
+} from "@/lib/session";
 import { errorText, okOr } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
-import { PATH_HEADER, proxy, publicOrigin, refreshResult } from "@/proxy";
+import { proxy } from "@/proxy";
 import { GET as expiredGET } from "@/app/(auth)/signin/expired/route";
 
 const b64 = (o: object) =>
@@ -70,10 +78,47 @@ describe("BFF allow-list", () => {
       "/auth/admin/users/x/roles",
       "/files/x",
       "/v1/../auth/signin",
+      "/v1/x",
+      "/v1/other/sessions",
+      "/v1/studio/x%2F..%2F..%2Fauth%2Fme",
+      "/v1/studio/%2E%2E/x",
+      "/v1/studio/a%25b",
       "/v1/./x",
       "/internal",
     ])
       expect(allowed(p)).toBe(false);
+  });
+});
+
+describe("BFF responses", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const upstream = (headers: Record<string, string>) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { headers })),
+    );
+  const call = (withAuth: boolean) =>
+    bff(new NextRequest("http://web/api/v1/studio/sessions"), "/v1/studio/sessions", withAuth);
+
+  it("drops Kong's own headers and keeps per-user answers out of caches", async () => {
+    upstream({
+      server: "kong/3.9.4",
+      via: "1.1 kong/3.9.4",
+      "x-kong-proxy-latency": "1",
+      "x-correlation-id": "c",
+      "content-type": "application/json",
+    });
+    const res = await call(true);
+    for (const h of ["server", "via", "x-kong-proxy-latency"])
+      expect(res.headers.has(h)).toBe(false);
+    expect(res.headers.get("x-correlation-id")).toBe("c");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+  it("keeps the upstream's own cache-control, and adds none to signed links", async () => {
+    upstream({ "cache-control": "private, max-age=60" });
+    expect((await call(true)).headers.get("cache-control")).toBe("private, max-age=60");
+    upstream({});
+    expect((await call(false)).headers.get("cache-control")).toBeNull();
   });
 });
 
@@ -117,6 +162,7 @@ describe("api helpers", () => {
     );
     expect(safeUrl("javascript:alert(1)")).toBeUndefined();
     expect(safeUrl("//evil.com/x")).toBeUndefined();
+    expect(safeUrl("http://")).toBeUndefined(); // malformed: no throw during render
   });
 });
 

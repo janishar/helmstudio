@@ -289,6 +289,69 @@ describe("following a session's events", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  /** A stand-in EventSource whose tests decide when it opens or closes. */
+  class Source {
+    static CLOSED = 2;
+    static all: Source[] = [];
+    readyState = 0;
+    onerror: (() => void) | null = null;
+    onopen: (() => void) | null = null;
+    constructor(public url: string) {
+      Source.all.push(this);
+    }
+    addEventListener() {}
+    close() {
+      this.readyState = 2;
+    }
+    fail() {
+      this.readyState = 2;
+      this.onerror?.();
+    }
+  }
+  const flush = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  it("polls with backoff while pages fail, then goes back to a stream from the last event", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("EventSource", Source);
+    Source.all = [];
+    try {
+      const calls: number[] = [];
+      let up = false;
+      const seen: number[] = [];
+      const stop = followSession(
+        "s1",
+        (e) => seen.push(e.seq),
+        async (since) => {
+          calls.push(Date.now());
+          if (!up) throw new Error("502");
+          return { events: [status(since + 1, "running")] } as S<"EventPage">;
+        },
+      );
+      const t0 = Date.now();
+      Source.all[0].fail(); // a refused reconnect: polling starts at once
+      await flush();
+      await vi.advanceTimersByTimeAsync(4_000); // failed pages: the next waits 4 s, then 8 s
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(calls.map((t) => t - t0)).toEqual([0, 4_000, 12_000]);
+      up = true;
+      await vi.advanceTimersByTimeAsync(16_000);
+      expect(seen).toEqual([1]);
+      // a page came: a new stream from ?since=1; once it opens, polling stops
+      expect(Source.all).toHaveLength(2);
+      expect(Source.all[1].url).toContain("since=1");
+      Source.all[1].onopen?.();
+      const n = calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(calls).toHaveLength(n);
+      stop();
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("the inspector and the canvas", () => {

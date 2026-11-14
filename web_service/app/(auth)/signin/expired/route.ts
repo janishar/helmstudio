@@ -2,8 +2,7 @@
 // go and the browser lands on /signin with the same `next`.
 import { NextResponse, type NextRequest } from "next/server";
 import { safeNext } from "@/lib/jwt";
-import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/session";
-import { publicOrigin } from "@/proxy";
+import { ACCESS_COOKIE, REFRESH_COOKIE, publicOrigin } from "@/lib/session";
 
 export function GET(req: NextRequest) {
   const next = safeNext(req.nextUrl.searchParams.get("next"));
