@@ -120,7 +120,7 @@ class Consumer:
         run_id, data = cmd["job_id"], cmd["data"]
         events = RunEvents(self.js, cmd)
         self.cancel_requested = False
-        self.host.run_id = run_id
+        self.host.run_id, self.host.attempt = run_id, data["attempt"]
         await self.host.put()
         stop_watch = None
         nodes, resolved = graph.resolve(data["workflow"]["nodes"], self.node_schemas)

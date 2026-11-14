@@ -1,5 +1,5 @@
 // Package studio: every /v1/studio route — sessions, workflows (from the registry), runs (outbox → cmd.run.execute,
-// cancel through the KV cancels), the event projector and stream, hosts — plus the lease sweep.
+// cancel through the KV cancels), the event projector and stream, hosts, the queue — plus the dispatcher.
 package studio
 
 import (

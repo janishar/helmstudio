@@ -14,7 +14,7 @@ Everything goes through **Kong** (`KONG_URL`), always with this app's own client
 | sign-in / sign-out | server actions (`app/(auth)/actions.ts`) set/clear httpOnly cookies `helm_at` (access) + `helm_rt` (refresh); the browser's IP goes on as `X-Forwarded-For` | `/auth/signin`, `/auth/signout` |
 | any page or `/api/*` call | `proxy.ts`: no session → `/signin?next=…`; access token expiring → one shared `/auth/refresh` (only a 401 signs out) | `/auth/refresh` |
 | `/api/v1/*`, `/api/auth/{me,password}`, `/api/auth/admin/users…` | `app/api/[...path]/route.ts`: allow-listed paths only, adds key + bearer, streams the answer (SSE) | `/v1/*`, `/auth/*` |
-| `/files/*` (signed links) | `app/files/[...path]/route.ts` when the app is reached directly; behind Kong `/files` goes to files_service | `/files/*` |
+| `/files/*` (signed links, an upload's signed `PUT`) | `app/files/[...path]/route.ts` when the app is reached directly; behind Kong `/files` goes to files_service | `/files/*` |
 
 Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committed) + `openapi-fetch` (`lib/api.ts`).
 
@@ -26,7 +26,14 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   the rest in the inspector, only changed values sent as `inputs`), Generate, live progress and Cancel. The session's
   events come over SSE (`/api/v1/studio/sessions/{id}/events`, `?since=` polling when the stream can't be held) and
   are folded into the runs (`lib/runs.ts`); a run that ends is fetched again. Past runs are the takes strip.
-- `/pipelines`, `/gallery`, `/timeline`, `/models` — placeholders until their milestone.
+  The takes strip is the session's takes (`GET /v1/studio/sessions/{id}/takes`) plus runs still working or failed;
+  a take can be starred on the stage. `?reuse=<take id>` fills the form from `POST /v1/studio/takes/{id}/reuse`;
+  without it the workflow is the session's newest run's.
+- `/gallery` (`components/gallery/`, `lib/takes.ts`): every take, search and filter chips, infinite scroll by
+  cursor, upload (picker or drop: `POST /v1/studio/uploads` → `PUT` of the signed `/files` link with progress →
+  `.../complete`), Select several (bulk star / delete), and the selected take's panel: Made with, Reuse settings,
+  Star, Rename, Export file, Delete.
+- `/pipelines`, `/timeline`, `/models` — placeholders until their milestone.
 - `/admin` (admins only in the dock) — Users: add, roles (`user`, `dev`), reset password, disable/enable; the
   `ADMIN_EMAIL` account is locked.
 

@@ -16,7 +16,7 @@ Each ends with something usable. Order matters more than dates.
 | M4b | Agent nodes | The `llm` pack and agent nodes (section 16): Judge in suggest mode, Write, Decide, Memory, capped retry — shown as best-of-4 Qwen stills → LTX over ten rows with no extra model load. Then the director Agent with chat, local-server and remote models, and custom nodes. |
 | M5a | Models and admin | Model and LoRA management per host, downloads as jobs, the admin's Hosts screen (pins, the after-run setting), import from `~/.helmstudio`. |
 | M5b | Timeline | Editor, export, sequence defaults and New shot (section 15). Needs M3 and M4. |
-| M6 | CUDA | Runners in NVIDIA containers on Linux, a second GPU host joining one stack, validated for Qwen Image. |
+| M6 | CUDA | Runners in NVIDIA containers on Linux, a second GPU host joining one stack, validated for Qwen Image. Verified on the owner's existing spot GPU VM in GCP (spot only; decided 2026-11-14), which joins the Mac's stack over TLS. |
 | M7 | More packs | FLUX.3 Klein, MiniMax H3 Image, Wan 2.2 (MLX), LTX retake / extend / audio-to-video (which also light up as take actions on timeline clips), then MiniMax H3 video. |
 
 This table is the only place milestones are assigned.

@@ -43,6 +43,16 @@ func (s *Signer) Sign(key string) string {
 	return s.baseURL + "/files/" + (&url.URL{Path: key}).EscapedPath() + "?exp=" + strconv.FormatInt(expiry, 10) + "&sig=" + s.signature(key, expiry)
 }
 
+// SignPut returns a link to PUT exactly size bytes of contentType to key until expiry, in the format files_service
+// verifies: sig = HMAC("PUT\n" + key + "\n" + exp + "\n" + bytes + "\n" + ct), so a GET signature never passes.
+func (s *Signer) SignPut(key string, size int64, contentType string, expiry time.Time) string {
+	exp, bytes := strconv.FormatInt(expiry.Unix(), 10), strconv.FormatInt(size, 10)
+	mac := hmac.New(sha256.New, s.secret)
+	mac.Write([]byte("PUT\n" + key + "\n" + exp + "\n" + bytes + "\n" + contentType))
+	return s.baseURL + "/files/" + (&url.URL{Path: key}).EscapedPath() + "?exp=" + exp + "&bytes=" + bytes +
+		"&ct=" + url.QueryEscape(contentType) + "&sig=" + hex.EncodeToString(mac.Sum(nil))
+}
+
 // SignPtr signs a key that may be absent (nil/empty → nil).
 func (s *Signer) SignPtr(key *string) *string {
 	if key == nil || *key == "" {

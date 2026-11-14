@@ -3,7 +3,8 @@
 // schemas; progress comes live from the session's event stream (SSE through the BFF, ?since= polling when the stream
 // can't be held).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Cpu, Minus, Plus } from "lucide-react";
+import { Check, ChevronDown, Cpu, Maximize, Minus, Plus, Star } from "lucide-react";
+import { FullScreen, useFullScreenKey } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { Chips, Inspector, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { api, message, ok, okOr, type S } from "@/lib/api";
@@ -22,17 +23,20 @@ import {
   track,
   type RunTrack,
 } from "@/lib/runs";
+import { stripItems } from "@/lib/takes";
 import {
   buildInputs,
   fields as fieldsOf,
   nodeTitle,
   queueInputs,
+  rawsFrom,
   visible,
   type Field,
   type Raw,
 } from "@/lib/workflow";
 
 type Run = S<"Run">;
+type Take = S<"Take">;
 type SessionEvent = S<"SessionEvent">;
 
 /** The most runs one Generate queues (consecutive seeds). */
@@ -69,17 +73,21 @@ function useHosts() {
   return hosts;
 }
 
-/** The Create screen; `initialSession` comes from `?s=`. */
-export function Create({ initialSession }: { initialSession?: string }) {
+/** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
+ * `?reuse=`. */
+export function Create({ initialSession, reuse }: { initialSession?: string; reuse?: string }) {
   const [sessions, setSessions] = useState<S<"StudioSession">[] | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [workflows, setWorkflows] = useState<S<"Workflow">[] | null>(null);
-  const [workflowId, setWorkflowId] = useState<string>("");
+  // the workflow picked here or by a reuse; "" follows the session's newest run
+  const [chosen, setChosen] = useState("");
   const [raws, setRaws] = useState<Record<string, Raw>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<Run[] | null>(null);
+  const [takes, setTakes] = useState<Take[]>([]);
   const [tracks, setTracks] = useState<Record<string, RunTrack>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [full, setFull] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(1);
@@ -93,12 +101,15 @@ export function Create({ initialSession }: { initialSession?: string }) {
     runsRef.current = next;
     setRuns(next);
   }, []);
-  /** Opens a session (null: none yet); its runs load in the effect below. */
-  const open = useCallback((id: string | null) => {
+  /** Opens a session (null: none yet); its runs and takes load in the effect below. The workflow follows the
+   * session's newest run unless `keep` (a new session keeps the one picked). */
+  const open = useCallback((id: string | null, keep = false) => {
     sessionRef.current = id;
     setSessionId(id);
     setSelected(null);
     setTracks({});
+    setTakes([]);
+    if (!keep) setChosen("");
     runsRef.current = [];
     setRuns(id ? null : []);
   }, []);
@@ -110,7 +121,6 @@ export function Create({ initialSession }: { initialSession?: string }) {
         setSessions(s.sessions);
         open(s.sessions.find((x) => x.id === initialSession)?.id ?? s.sessions[0]?.id ?? null);
         setWorkflows(w.workflows);
-        setWorkflowId((id) => id || w.workflows[0]?.id || "");
       })
       .catch((e) => setError(message(e)));
   }, [initialSession, open]);
@@ -128,9 +138,55 @@ export function Create({ initialSession }: { initialSession?: string }) {
         .catch((e) => setError(message(e))),
     [put],
   );
+  const loadTakes = useCallback(
+    (id: string) =>
+      ok(
+        api.GET("/v1/studio/sessions/{session_id}/takes", {
+          // ponytail: the newest 200; page with next_cursor if a session's strip ever needs more
+          params: { path: { session_id: id }, query: { limit: 200 } },
+        }),
+      )
+        .then((p) => id === sessionRef.current && setTakes(p.takes))
+        .catch((e) => setError(message(e))),
+    [],
+  );
   useEffect(() => {
-    if (sessionId) void loadRuns(sessionId);
-  }, [sessionId, loadRuns]);
+    if (sessionId) {
+      void loadRuns(sessionId);
+      void loadTakes(sessionId);
+    }
+  }, [sessionId, loadRuns, loadTakes]);
+
+  // a reused take's settings, once the workflows are known
+  const reused = useRef(false);
+  useEffect(() => {
+    if (!reuse || !workflows || reused.current) return;
+    reused.current = true;
+    ok(api.POST("/v1/studio/takes/{take_id}/reuse", { params: { path: { take_id: reuse } } }))
+      .then((r) => {
+        const w = workflows.find((x) => x.id === r.workflow_id);
+        if (!w) return setError(`The workflow ${r.workflow_id} is not available any more.`);
+        setChosen(w.id);
+        setRaws(rawsFrom(fieldsOf(w), r.inputs));
+        setErrors({});
+        setOpenKey(null);
+      })
+      .catch((e) => setError(message(e)));
+  }, [reuse, workflows]);
+
+  async function star(t: Take) {
+    try {
+      const n = await ok(
+        api.PATCH("/v1/studio/takes/{take_id}", {
+          params: { path: { take_id: t.id } },
+          body: { starred: !t.starred },
+        }),
+      );
+      setTakes((list) => list.map((x) => (x.id === n.id ? n : x)));
+    } catch (err) {
+      setError(message(err));
+    }
+  }
 
   const refetchRun = useCallback(
     (id: string) =>
@@ -145,13 +201,21 @@ export function Create({ initialSession }: { initialSession?: string }) {
     setTracks((t) => track(t, e));
     const r = applyEvent(runsRef.current, e);
     put(r.runs);
-    if (r.ended) void refetchRun(e.run_id);
+    if (r.ended && sessionId) {
+      void refetchRun(e.run_id);
+      void loadTakes(sessionId);
+    }
     if (!r.known && sessionId) {
       clearTimeout(listTimer.current);
       listTimer.current = setTimeout(() => void loadRuns(sessionId), 300);
     }
   });
 
+  const known = (id?: string) => (workflows?.some((w) => w.id === id) ? id : undefined);
+  // until the session's runs are in, its workflow isn't known: no form rather than a flash of the first one
+  const workflowId =
+    known(chosen) ??
+    (runs === null && sessionId ? "" : (known(runs?.[0]?.workflow_id) ?? workflows?.[0]?.id ?? ""));
   const workflow = workflows?.find((w) => w.id === workflowId);
   const all = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
   // the params whose `when` holds now: the others are neither shown nor sent
@@ -183,7 +247,7 @@ export function Create({ initialSession }: { initialSession?: string }) {
   async function newSession(title?: string) {
     const s = await ok(api.POST("/v1/studio/sessions", { body: title ? { title } : {} }));
     setSessions((list) => [s, ...(list ?? [])]);
-    open(s.id);
+    open(s.id, true);
     return s.id;
   }
 
@@ -241,8 +305,18 @@ export function Create({ initialSession }: { initialSession?: string }) {
     }
   }
 
-  const shown = runs?.find((r) => r.id === selected) ?? runs?.[0];
-  const shownWorkflow = workflows?.find((w) => w.id === shown?.workflow_id) ?? workflow;
+  // the strip: takes, and the runs without one; a selected run that finished shows its take
+  const items = runs ? stripItems(runs, takes) : [];
+  const picked =
+    items.find((i) => (i.take ?? i.run).id === selected) ??
+    items.find((i) => i.take?.run_id === selected) ??
+    items[0];
+  const shownTake = picked?.take;
+  useFullScreenKey(!!shownTake && !full, () => setFull(true));
+  const shown = picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id);
+  const shownWorkflow =
+    workflows?.find((w) => w.id === (shown?.workflow_id ?? shownTake?.made_with?.workflow_id)) ??
+    workflow;
   const anyActive = !!runs?.some((r) => isActive(r.status));
   const took = workflow && runs ? lastDuration(runs, workflow.id) : null;
   const host = hosts?.find((h) => h.env === workflow?.env && h.state !== "offline" && h.memory);
@@ -310,7 +384,7 @@ export function Create({ initialSession }: { initialSession?: string }) {
                 className="appearance-none rounded-full border-0 bg-s2 py-1 pr-7 pl-2.5 text-[12px] font-medium text-t2"
                 value={workflowId}
                 onChange={(e) => {
-                  setWorkflowId(e.target.value);
+                  setChosen(e.target.value);
                   setOpenKey(null);
                 }}
               >
@@ -357,7 +431,24 @@ export function Create({ initialSession }: { initialSession?: string }) {
           <ErrorNote onRetry={load}>No workflows yet: no runner has published any.</ErrorNote>
         )}
 
-        <Stage run={shown} workflow={shownWorkflow} />
+        <Stage
+          run={shown}
+          take={shownTake}
+          workflow={shownWorkflow}
+          onStar={shownTake && (() => void star(shownTake))}
+          onFull={() => setFull(true)}
+        />
+        {full && shownTake && (
+          <FullScreen
+            take={shownTake}
+            onClose={() => setFull(false)}
+            onStep={(d) => {
+              const list = items.flatMap((i) => (i.take ? [i.take] : []));
+              const next = list[list.findIndex((t) => t.id === shownTake.id) + d];
+              if (next) setSelected(next.id);
+            }}
+          />
+        )}
 
         {shown && shownWorkflow && (
           <RunStrip
@@ -368,22 +459,31 @@ export function Create({ initialSession }: { initialSession?: string }) {
           />
         )}
 
-        {!!runs?.length && (
+        {!!items.length && (
           <div
             role="group"
             aria-label="Takes"
             className="flex shrink-0 items-center gap-2.5 overflow-x-auto p-0.5"
           >
-            {runs.map((r, i) => (
-              <Take
-                key={r.id}
-                run={r}
-                n={runs.length - i}
-                seedKey={seedKeyOf(workflows?.find((w) => w.id === r.workflow_id))}
-                current={r.id === shown?.id}
-                onPick={() => setSelected(r.id)}
-              />
-            ))}
+            {items.map((it, i) =>
+              it.take ? (
+                <TakeTile
+                  key={it.take.id}
+                  take={it.take}
+                  current={it === picked}
+                  onPick={() => setSelected(it.take.id)}
+                />
+              ) : (
+                <RunTile
+                  key={it.run.id}
+                  run={it.run}
+                  n={items.length - i}
+                  seedKey={seedKeyOf(workflows?.find((w) => w.id === it.run.workflow_id))}
+                  current={it === picked}
+                  onPick={() => setSelected(it.run.id)}
+                />
+              ),
+            )}
           </div>
         )}
 
@@ -544,17 +644,32 @@ function sizeOf(run: Run, workflow?: S<"Workflow">) {
   return { w: v(c.width, c.w), h: v(c.height, c.h) };
 }
 
-/** The stage: the take as large as fits, the run's state, or the empty-state headline. */
-function Stage({ run, workflow }: { run?: Run; workflow?: S<"Workflow"> }) {
-  const out = run?.outputs[0];
+/** The stage: the take as large as fits (with its star), the run's state, or the empty-state headline. */
+function Stage({
+  run,
+  take,
+  workflow,
+  onStar,
+  onFull,
+}: {
+  run?: Run;
+  take?: Take;
+  workflow?: S<"Workflow">;
+  onStar?: () => void;
+  onFull: () => void;
+}) {
+  const out = take ?? run?.outputs[0];
   // the prompt the run was made with: its input, else the workflow's (inputs hold only what differs)
   const text = workflow && fieldsOf(workflow).find((f) => f.param.type === "text");
-  const prompt = text && (run?.inputs[text.key] ?? text.initial);
-  const size = run && sizeOf(run, workflow);
+  const prompt = take?.made_with?.prompt ?? (text && (run?.inputs[text.key] ?? text.initial));
+  const size =
+    take?.width && take.height ? { w: take.width, h: take.height } : run && sizeOf(run, workflow);
   const p = run?.progress;
   const node = run?.status === "running" && p ? nodeTitle(workflow, p.node) : "";
   const label = !run
-    ? ""
+    ? take
+      ? "Take"
+      : ""
     : node && p
       ? [`${node} · step ${p.step} of ${p.of}`, p.phase].filter(Boolean).join(" · ")
       : {
@@ -571,32 +686,60 @@ function Stage({ run, workflow }: { run?: Run; workflow?: S<"Workflow"> }) {
       <span className="sr-only" aria-live="polite">
         {said}
       </span>
-      {run && (
+      {(run || take) && (
         <div className="absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-2">
           <span
-            className={`mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] ${run.status === "failed" ? "text-bad" : ""}`}
+            className={`mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] ${run?.status === "failed" ? "text-bad" : ""}`}
           >
             {label}
           </span>
-          {size && (
-            <span className="mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] text-t2">
-              {size.w} × {size.h}
-            </span>
-          )}
+          <span className="flex items-center gap-2">
+            {take && (
+              <button
+                type="button"
+                aria-label="Full screen"
+                title="Full screen (F)"
+                onClick={onFull}
+                className="bevel grid size-9 place-items-center rounded-lg border border-s5 bg-s2/90"
+              >
+                <Maximize size={16} strokeWidth={1.75} aria-hidden />
+              </button>
+            )}
+            {size && (
+              <span className="mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] text-t2">
+                {size.w} × {size.h}
+              </span>
+            )}
+            {take && onStar && (
+              <button
+                type="button"
+                aria-pressed={take.starred}
+                onClick={onStar}
+                className="bevel flex h-9 items-center gap-1.5 rounded-lg border border-s5 bg-s2/90 px-3 text-[13px]"
+              >
+                <Star
+                  size={14}
+                  aria-hidden
+                  className={take.starred ? "fill-a1 text-a1" : undefined}
+                />
+                {take.starred ? "Starred" : "Star"}
+              </button>
+            )}
+          </span>
         </div>
       )}
       <div
         className="absolute inset-x-6 top-[68px] bottom-6 flex items-center justify-center"
         style={{ containerType: "size" }}
       >
-        {!run ? (
+        {!run && !take ? (
           <h1 className="text-center font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
             What will you <span className="text-a1">make?</span>
           </h1>
         ) : out?.kind === "image" ? (
           <img
             src={safeUrl(out.url)}
-            alt={prompt ? String(prompt) : "The take"}
+            alt={take?.title || (prompt ? String(prompt) : "The take")}
             width={out.width ?? undefined}
             height={out.height ?? undefined}
             className="rounded-[10px] object-cover"
@@ -610,6 +753,8 @@ function Stage({ run, workflow }: { run?: Run; workflow?: S<"Workflow"> }) {
                 : { maxWidth: "100%", maxHeight: "100%" }
             }
           />
+        ) : !run ? (
+          <span className="text-t2">{take?.kind}</span>
         ) : (
           <div
             className="flex max-h-full w-full max-w-[760px] flex-col items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-dash p-4 text-center text-t2"
@@ -711,8 +856,54 @@ function RunStrip({
   );
 }
 
-/** One take in the strip: its picture labelled by seed, else its state. */
-function Take({
+/** The strip's label for a seed: a random seed is 16 digits, so the middle goes (the title keeps the whole). */
+const seedLabel = (seed: number) => {
+  const digits = String(seed);
+  return `seed ${digits.length > 8 ? `${digits.slice(0, 4)}…${digits.slice(-3)}` : digits}`;
+};
+
+/** One take in the strip: its picture labelled by seed (or title), a star when starred. */
+function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onPick: () => void }) {
+  const seed = take.made_with?.seed;
+  const label = seed != null ? seedLabel(seed) : take.title;
+  return (
+    <button
+      type="button"
+      aria-label={[
+        seed != null ? `Take, seed ${seed}` : `Take, ${take.title}`,
+        take.starred && "starred",
+      ]
+        .filter(Boolean)
+        .join(", ")}
+      aria-pressed={current}
+      title={label}
+      onClick={onPick}
+      className={`bevel mono relative grid h-[63px] w-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-s1 text-[11px] text-t2 ${
+        current ? "border-2 border-a1" : "border border-s5"
+      }`}
+    >
+      {take.kind === "image" ? (
+        <img
+          src={safeUrl(take.thumb_url)}
+          alt=""
+          loading="lazy"
+          className="size-full object-cover"
+        />
+      ) : (
+        <span>{take.kind}</span>
+      )}
+      <span className="absolute bottom-1 left-1 max-w-[calc(100%-8px)] truncate rounded bg-s2/90 px-1 text-t1">
+        {label}
+      </span>
+      {take.starred && (
+        <Star size={12} aria-hidden className="absolute top-1 right-1 fill-a1 text-a1" />
+      )}
+    </button>
+  );
+}
+
+/** A run in the strip that has no take to show: its picture labelled by seed, else its state. */
+function RunTile({
   run,
   n,
   seedKey,
@@ -728,12 +919,7 @@ function Take({
   const out = run.outputs[0];
   const asked = seedKey ? run.inputs[seedKey] : undefined;
   const seed = seedOf(run) ?? (typeof asked === "number" && asked >= 0 ? asked : undefined);
-  // a random seed is 16 digits: the middle goes, the label keeps the whole
-  const digits = String(seed);
-  const label =
-    seed == null
-      ? `take ${n}`
-      : `seed ${digits.length > 8 ? `${digits.slice(0, 4)}…${digits.slice(-3)}` : digits}`;
+  const label = seed == null ? `take ${n}` : seedLabel(seed);
   const state =
     run.status === "running"
       ? `${Math.round(fraction(run) * 100)}%`

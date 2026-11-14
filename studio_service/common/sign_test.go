@@ -37,3 +37,14 @@ func TestSign(t *testing.T) {
 		t.Fatal("SignPtr of no key")
 	}
 }
+
+// SignPut makes the upload link files_service verifies: its putVector is the same HMAC.
+func TestSignPut(t *testing.T) {
+	signer := NewSigner("0123456789abcdef", "http://localhost:8300", time.Hour)
+	link := signer.SignPut("u/a/uploads/t.png", 5, "image/png", time.Unix(2000000000, 0))
+	want := "http://localhost:8300/files/u/a/uploads/t.png?exp=2000000000&bytes=5&ct=image%2Fpng" +
+		"&sig=7e14c889185306277d7776b382be108a9458d8bc542f4640ebebe48a833223c1"
+	if link != want {
+		t.Fatalf("%s\nwant %s", link, want)
+	}
+}

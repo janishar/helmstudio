@@ -376,7 +376,7 @@ func TestNatsJetStreamWatchKVSeesCurrentAndLaterValues(t *testing.T) {
 			seen[key] = "<nil>"
 		}
 		return nil
-	})
+	}, func() { mu.Lock(); defer mu.Unlock(); seen["<loaded>"] = "" })
 	// The first try finds no bucket and says it will retry; only then does the bucket appear.
 	eventually(t, 5*time.Second, func() bool { return strings.Contains(logged.String(), "watch registry: ") })
 	bucket, err := client.jetStream().CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: "registry", History: 1})
@@ -385,6 +385,7 @@ func TestNatsJetStreamWatchKVSeesCurrentAndLaterValues(t *testing.T) {
 	}
 	_, _ = bucket.Put(ctx, "workflows", []byte("w"))
 	eventually(t, 2*retryDelay+2*time.Second, saw("workflows"))
+	eventually(t, 5*time.Second, saw("<loaded>")) // the end of the current values was signalled
 	_, _ = bucket.Put(ctx, "prices", []byte("p"))
 	eventually(t, 5*time.Second, saw("prices"))
 	_ = bucket.Delete(ctx, "workflows") // a delete comes as a nil value

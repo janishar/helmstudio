@@ -55,6 +55,8 @@ const run = (over: Partial<S<"Run">> = {}): S<"Run"> => ({
   error: null,
   outputs: [],
   host: "fake",
+  lane: "interactive",
+  attempt: 1,
   created_at: "2026-11-14T10:00:00Z",
   started_at: null,
   finished_at: null,
@@ -214,6 +216,27 @@ describe("folding session events into runs", () => {
       expect(r.runs).toBe(failed.runs);
       expect(r.ended).toBe(false);
     }
+  });
+
+  it("puts a run back in the queue when it is retried, and has it fetched", () => {
+    let runs = [run({ status: "running", host: "mac" })];
+    runs = applyEvent(runs, progress(2, 5)).runs;
+    runs = applyEvent(runs, output).runs;
+    const retried = applyEvent(runs, {
+      ...status(4, "queued"),
+      data: { status: "queued", error: null, host: null, attempt: 2 },
+    } as S<"SessionEvent">);
+    expect(retried.ended).toBe(true);
+    expect(retried.runs[0]).toMatchObject({
+      status: "queued",
+      attempt: 2,
+      host: null,
+      progress: null,
+      outputs: [],
+    });
+    expect(applyEvent(retried.runs, status(5, "queued")).runs).toBe(retried.runs); // attempt 1's own queued: nothing
+    const stale = [run({ status: "running" })];
+    expect(mergeRuns(stale, [run({ status: "queued", attempt: 2 })])[0].attempt).toBe(2);
   });
 
   it("flags a run it doesn't know, so the list is fetched", () => {

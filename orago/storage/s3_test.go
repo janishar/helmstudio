@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -108,5 +109,19 @@ func TestCopyFallbackCopies(t *testing.T) {
 	}
 	if written.Load() != "content" || contentType.Load() != "text/plain" {
 		t.Fatalf("wrote %q as %q", written.Load(), contentType.Load())
+	}
+}
+
+// Create sends If-None-Match: * and reports the store's 412 as ErrExists.
+func TestCreateIsConditional(t *testing.T) {
+	var header atomic.Value
+	store := newTestS3(t, func(w http.ResponseWriter, r *http.Request) {
+		header.Store(r.Header.Get("If-None-Match"))
+		w.WriteHeader(http.StatusPreconditionFailed)
+		fmt.Fprint(w, `<Error><Code>PreconditionFailed</Code><Message>exists</Message></Error>`)
+	})
+	err := store.Create(context.Background(), "k", strings.NewReader("x"), 1, "text/plain")
+	if !errors.Is(err, ErrExists) || header.Load() != "*" {
+		t.Fatal(err, header.Load())
 	}
 }

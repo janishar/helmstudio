@@ -34,11 +34,15 @@ type Run struct {
 	StartedAt  *time.Time
 	FinishedAt *time.Time
 	Resolved   json.RawMessage // null until succeeded brings one
+	Lane       string          // interactive | batch
+	Attempt    int             // 1, or 2 after a lost lease
+	Nodes      json.RawMessage // the graph resolved at create, sent at release
+	ReleasedAt *time.Time      // when the dispatcher wrote this attempt's command; nil while waiting
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
-	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved`
+	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at`
 
 // Output is a run_outputs row.
 type Output struct {
@@ -49,10 +53,11 @@ type Output struct {
 	Width  *int
 	Height *int
 	Seed   *int64
+	TakeID *string // the take it became; nil only for outputs stored before the gallery
 }
 
 // OutputCols are the columns Output scans, in order.
-const OutputCols = `run_id::text, idx, key, kind, width, height, seed`
+const OutputCols = `run_id::text, idx, key, kind, width, height, seed, take_id::text`
 
 // Event is a run_events row.
 type Event struct {

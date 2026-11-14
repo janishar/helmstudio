@@ -18,6 +18,8 @@ import (
 const usage = `usage:
   helm login --url <base> --email <email> [--api-key-file <path>]   password: HELM_PASSWORD or a prompt
   helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--out <dir>]
+  helm takes [--kind image|video|audio] [--source create|upload] [--starred] [--session <id>] [--q <text>] [--limit n] [--cursor c]
+  helm upload <file>                  a png, jpeg or webp image, into the gallery
   helm workflows
   helm whoami
   helm logout
@@ -43,6 +45,10 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = login(args[1:], stdin, stdout, stderr)
 	case "run":
 		err = runCmd(args[1:], stdout, stderr, stop)
+	case "takes":
+		err = takesCmd(args[1:], stdout, stderr)
+	case "upload":
+		err = uploadCmd(args[1:], stdout)
 	case "workflows":
 		err = workflows(stdout)
 	case "whoami":

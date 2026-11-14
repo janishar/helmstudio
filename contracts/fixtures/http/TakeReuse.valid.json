@@ -1,0 +1,14 @@
+{
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "prompt.text": "Fox at dusk, soft backlight",
+    "seed.seed": 43,
+    "canvas.width": 2752,
+    "canvas.height": 1536,
+    "model.variant": "base",
+    "model.precision": "int8",
+    "encode.transparent": false,
+    "sample.steps": 40,
+    "decode.tiled": "auto"
+  }
+}

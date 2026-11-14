@@ -1,5 +1,5 @@
 // Package startup: config → database (migrations) → NATS → router → relay, projector, registry and hosts watches,
-// lease sweep → serve.
+// dispatcher → serve.
 package startup
 
 import (
@@ -20,6 +20,7 @@ import (
 
 	"github.com/helmstudio/studio_service/api/auth"
 	authmiddleware "github.com/helmstudio/studio_service/api/auth/middleware"
+	"github.com/helmstudio/studio_service/api/gallery"
 	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/config"
@@ -82,6 +83,9 @@ func Run() error {
 		),
 		maxBody: env.MaxBodyMB << 20,
 	}
+	if module.store, err = objectStore(ctx, env); err != nil {
+		return err
+	}
 	// A NATS micro service named studio: it has no endpoints, but answers the $SRV discovery verbs.
 	router, err := micro.NewRouter(nil, client, micro.ServiceConfig{Name: "studio", Version: "1.0.0", QueueGroup: "studio"})
 	if err != nil {
@@ -93,16 +97,38 @@ func Run() error {
 	}
 
 	var workers sync.WaitGroup
-	workers.Go(func() { micro.NatsJetStreamWatchKV(ctx, client, "registry", runners.SetRegistry) })
-	workers.Go(func() { micro.NatsJetStreamWatchKV(ctx, client, "hosts", runners.SetHost) })
+	runners.Await("registry", "hosts") // the dispatcher fails no run on a view not loaded yet
+	workers.Go(func() {
+		micro.NatsJetStreamWatchKV(ctx, client, "registry", runners.SetRegistry, func() { runners.Loaded("registry") })
+	})
+	workers.Go(func() {
+		micro.NatsJetStreamWatchKV(ctx, client, "hosts", runners.SetHost, func() { runners.Loaded("hosts") })
+	})
 	events := &micro.NatsJetStreamGroup{}
-	studio.NewProjector(pool).MountNatsJetStream(events)
+	projector := studio.NewProjector(pool)
+	projector.Workflows = runners // names a take's workflow and model
+	projector.MountNatsJetStream(events)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ProjectorConsumer, events) })
+	workers.Go(func() {
+		// outputs stored before the gallery become takes; ponytail: a fixed wait for the registry watch to fill (it
+		// names the workflow and model); a take made without it keeps the workflow id as its title
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(10 * time.Second):
+		}
+		if made, err := projector.Backfill(ctx); err != nil {
+			log.Printf("take backfill: %v", err)
+		} else if made > 0 {
+			log.Printf("take backfill: %d run outputs became takes", made)
+		}
+	})
 	workers.Go(func() { messaging.Relay(ctx, pool, messaging.NatsJetStreamPublisher(client)) })
-	sweeper := studio.NewSweeper(pool, runners, func(ctx context.Context) (int, error) {
+	dispatcher := studio.NewDispatcher(pool, runners, messaging.NatsPurge(client), func(ctx context.Context) (int, error) {
 		return micro.NatsJetStreamBacklog(ctx, client, messaging.ProjectorConsumer)
 	})
-	workers.Go(func() { sweeper.Run(ctx) })
+	workers.Go(func() { dispatcher.Run(ctx) })
+	workers.Go(func() { gallery.NewSweeper(pool, module.store).Run(ctx) })
 
 	log.Printf("studio_service listening on :%s", env.Port)
 	err = router.Start(ctx, ":"+env.Port)

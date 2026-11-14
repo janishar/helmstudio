@@ -20,13 +20,14 @@ func NatsJetStreamPutKV(ctx context.Context, client NatsClient, bucket, key stri
 }
 
 // NatsJetStreamWatchKV hands every value put in a JetStream KV bucket to handler, the current ones first, until ctx
-// ends; a deleted or purged key comes with a nil value. It retries while NATS or the bucket is missing, and starts over if the watch ends on its own. A handler error
+// ends; a deleted or purged key comes with a nil value. loaded (nil: none) is called once the current values have all
+// been handed over, again after each restart of the watch. It retries while NATS or the bucket is missing, and starts over if the watch ends on its own. A handler error
 // is logged and the watch goes on: the next put replaces the value.
 func NatsJetStreamWatchKV(
-	ctx context.Context, client NatsClient, bucket string, handler func(key string, value []byte) error,
+	ctx context.Context, client NatsClient, bucket string, handler func(key string, value []byte) error, loaded func(),
 ) {
 	keepRunning(ctx, "watch "+bucket, func() error {
-		return watchUntilStopped(ctx, client.jetStream(), bucket, handler)
+		return watchUntilStopped(ctx, client.jetStream(), bucket, handler, loaded)
 	})
 }
 
@@ -34,6 +35,7 @@ func NatsJetStreamWatchKV(
 // watch ends on its own.
 func watchUntilStopped(
 	ctx context.Context, jetStream jetstream.JetStream, bucket string, handler func(key string, value []byte) error,
+	loaded func(),
 ) error {
 	store, err := jetStream.KeyValue(ctx, bucket)
 	if err != nil {
@@ -52,8 +54,11 @@ func watchUntilStopped(
 			if !open {
 				return errors.New("watch ended")
 			}
-			if entry == nil {
-				continue // the end of the current values
+			if entry == nil { // the end of the current values
+				if loaded != nil {
+					loaded()
+				}
+				continue
 			}
 			value := entry.Value()
 			if entry.Operation() != jetstream.KeyValuePut {

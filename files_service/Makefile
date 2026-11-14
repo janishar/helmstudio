@@ -8,7 +8,7 @@ dev:
 test:
 	go test -count=1 ./...
 
-# no NATS messages and no generated types: HTTP is GET/HEAD /files/* only
+# no NATS messages and no generated types: HTTP is GET/HEAD/PUT /files/* only
 gen:
 	@echo "files_service: nothing to generate"
 

@@ -1,0 +1,10 @@
+{
+  "runs": [],
+  "hosts": [
+    {
+      "host": "mac",
+      "state": "busy",
+      "others_queued": -1
+    }
+  ]
+}

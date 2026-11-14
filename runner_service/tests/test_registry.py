@@ -37,10 +37,10 @@ async def test_host_value_is_on_contract_idle_busy_and_offline():
     host = Host(FakeKV())
     await host.put()
     assert json.loads(host.kv.data[KEY])["state"] == "idle"
-    host.run_id = "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35"
+    host.run_id, host.attempt = "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35", 2
     await host.put()
     value = json.loads(host.kv.data[KEY])
-    assert value["state"] == "busy" and value["run_id"] == host.run_id
+    assert value["state"] == "busy" and value["run_id"] == host.run_id and value["attempt"] == 2
     assert "memory" not in value  # the fake runner has no residency manager
     assert schemas.registry_errors("host", value) == []
     await host.offline()
@@ -69,3 +69,17 @@ def test_off_contract_event_is_refused_without_using_a_seq():
     with pytest.raises(ValueError, match="off-contract"):
         events.build("status", {"status": "failed"})  # failed needs an error
     assert events.build("status", {"status": "running"})["data"]["seq"] == 1
+
+
+async def test_attempt_2_events_carry_it_and_restart_seq():
+    cmd = json.loads((CONTRACTS / "fixtures/messages/cmd.run.execute.valid.json").read_text())
+    cmd["data"]["attempt"] = 2
+    sent = []
+
+    class JS:
+        async def publish(self, subject, body, headers):
+            sent.append(headers["Nats-Msg-Id"])
+
+    msg = await RunEvents(JS(), cmd).status("running")
+    assert msg["data"]["attempt"] == 2 and msg["data"]["seq"] == 1
+    assert sent == [f"{cmd['job_id']}:2:1"]

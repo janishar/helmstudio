@@ -46,44 +46,30 @@ func TestWorkflows(t *testing.T) {
 	}
 }
 
-// Place picks a live host of the env, idle first; a stale key is offline.
-func TestPlace(t *testing.T) {
+// Publishes and Model answer per runner; a model's variant counts only when present, and a model without variants
+// always has it.
+func TestPublishesAndModels(t *testing.T) {
 	var r Registry
-	now := time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
-	put := func(key, state string, age time.Duration) {
-		_ = r.SetHost(key, []byte(`{"host": "`+key[:len(key)-5]+`", "env": "fake", "state": "`+state+`", "updated_at": "`+
-			now.Add(-age).Format(time.RFC3339)+`"}`))
+	_ = r.SetRegistry("mac.torch.workflows", fixture(t, "qwen-image.workflows"))
+	_ = r.SetRegistry("mac.torch.models", []byte(`{"models": [{"id": "qwen-image-2.1", "family": "qwen-image", "variants": [
+		{"id": "base", "presence": "present", "precisions": ["bf16"]}, {"id": "turbo", "presence": "missing", "precisions": ["bf16"]}]}]}`))
+	_ = r.SetRegistry("fake.fake.models", fixture(t, "models"))
+	if !r.Publishes("mac.torch", "qwen-image") || r.Publishes("mac.torch", "echo") || r.Publishes("gpu.torch", "qwen-image") {
+		t.Fatal("Publishes")
 	}
-	if _, ok := r.Place("fake", now); ok {
-		t.Fatal("no hosts")
+	qwen, ok := r.Model("mac.torch", "qwen-image")
+	if !ok || qwen.ID != "qwen-image-2.1" || !qwen.Has("base") || qwen.Has("turbo") || qwen.Has("nope") {
+		t.Fatalf("%+v", qwen)
 	}
-	put("aaaa.fake", "busy", 5*time.Second)
-	put("bbbb.fake", "idle", 31*time.Second)
-	if host, ok := r.Place("fake", now); !ok || host != "aaaa" {
-		t.Fatalf("the live one: %s %v", host, ok)
+	if echo, ok := r.Model("fake.fake", "echo"); !ok || !echo.Has("anything") {
+		t.Fatalf("%+v", echo)
 	}
-	put("cccc.fake", "idle", 0)
-	if host, _ := r.Place("fake", now); host != "cccc" {
-		t.Fatalf("idle first: %s", host)
+	if _, ok := r.Model("mac.torch", "echo"); ok {
+		t.Fatal("no echo on mac")
 	}
-	if _, ok := r.Place("mlx", now); ok {
-		t.Fatal("no host has mlx")
-	}
-	_ = r.SetHost("dddd.fake", []byte(`{"host": "dddd", "env": "fake", "state": "busy", "run_id": "r1", "updated_at": "`+
-		now.Format(time.RFC3339)+`"}`))
-	switch {
-	case !r.Holds("dddd", "fake", "r1", false, now):
-		t.Fatal("busy with the run")
-	case !r.Holds("dddd", "fake", "r2", true, now):
-		t.Fatal("a queued run waits behind another")
-	case r.Holds("dddd", "fake", "r2", false, now):
-		t.Fatal("a running run the runner is not on is lost")
-	case r.Holds("cccc", "fake", "r1", true, now):
-		t.Fatal("an idle runner holds no run")
-	case r.Holds("aaaa", "fake", "r1", true, now) == false:
-		t.Fatal("aaaa is busy: a queued run waits")
-	case r.Holds("bbbb", "fake", "r1", true, now) || r.Holds("zzzz", "fake", "r1", true, now):
-		t.Fatal("stale or unknown hosts hold nothing")
+	_ = r.SetRegistry("mac.torch.models", nil)
+	if _, ok := r.Model("mac.torch", "qwen-image"); ok {
+		t.Fatal("a deleted models key is gone")
 	}
 }
 
@@ -97,11 +83,11 @@ func TestValuesAreTiedToTheirKeys(t *testing.T) {
 		t.Fatal("a hosts value for another host was taken")
 	}
 	_ = r.SetHost("fake.fake", []byte(`{"host": "fake", "env": "fake", "state": "idle", "updated_at": "`+now.Format(time.RFC3339)+`"}`))
-	if _, ok := r.Place("fake", now); !ok {
-		t.Fatal("its own value")
+	if hosts := r.Hosts(); len(hosts) != 1 || !hosts[0].Live(now) || hosts[0].Live(now.Add(Stale+time.Second)) {
+		t.Fatal("its own value, live until Stale")
 	}
 	_ = r.SetHost("fake.fake", nil)
-	if _, ok := r.Place("fake", now); ok || len(r.Hosts()) != 0 {
+	if len(r.Hosts()) != 0 {
 		t.Fatal("a deleted hosts key is offline at once")
 	}
 
@@ -137,8 +123,7 @@ func TestQwenAndHostMemory(t *testing.T) {
 		host.Resident[0].Precision != "int8" {
 		t.Fatalf("%+v", host)
 	}
-	// Busy with the run on a live key holds it however long a model load takes.
-	if !r.Holds("mac", "torch", *host.RunID, false, host.UpdatedAt.Add(Stale)) {
-		t.Fatal("a live runner busy with the run holds it")
+	if host.RunID == nil || host.Attempt != nil {
+		t.Fatalf("busy with a run, attempt absent: %+v", host)
 	}
 }

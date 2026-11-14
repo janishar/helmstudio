@@ -53,6 +53,7 @@ func TestHandlerRoutes(t *testing.T) {
 		return recorder.Code
 	}
 	for path, want := range map[string]int{"/health": 200, "/v1/studio/sessions": 401, "/v1/studio/hosts": 401,
+		"/v1/studio/takes": 401, "/v1/studio/sessions/x/takes": 401,
 		"/v1/nope": 401, "/files/u/x/y.png": 404, "/nope": 404} {
 		if got := send("GET", path, ""); got != want {
 			t.Errorf("GET %s: %d, want %d", path, got, want)

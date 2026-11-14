@@ -3,8 +3,9 @@
     python contracts/check.py
 
 Needs jsonschema (+ rfc3339-validator for date-time), PyYAML, openapi-spec-validator. Fixtures are
-fixtures/{messages,registry}/<name>.{valid,invalid}[.N].json: every valid one must pass, every invalid one must fail.
-Registry fixtures may carry a family prefix (qwen-image.nodes.valid.json): <family>.<key>.
+fixtures/{messages,registry,http}/<name>.{valid,invalid}[.N].json: every valid one must pass, every invalid one must fail.
+Registry fixtures may carry a family prefix (qwen-image.nodes.valid.json): <family>.<key>. HTTP fixtures are bodies
+checked against openapi.yaml components/schemas/<name>.
 Exit code 1 on any failure."""
 
 import json
@@ -17,6 +18,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import SchemaError, ValidationError
 from openapi_spec_validator import validate as validate_openapi
 from referencing import Registry, Resource
+from referencing.jsonschema import DRAFT202012
 
 HERE = Path(__file__).parent
 SCHEMA_FILES = sorted((HERE / "messages").glob("*.schema.json"))
@@ -37,6 +39,9 @@ REGISTRY_KEYS = [
     "models",
     "host",
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
+# openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
+HTTP_SCHEMAS = ["Run", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "UploadCreate", "Upload"]
+OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
 # Names of the reference product that must not come back.
 FORBIDDEN = re.compile(r"\bcatalog|\bora[._]|\bORA\b|agents_service|\bagents\.", re.IGNORECASE)
@@ -58,8 +63,10 @@ def load_schemas() -> tuple[dict[str, dict], Registry]:
             Draft202012Validator.check_schema(s)
         except SchemaError as e:
             fail(f"schema {name}: {e}")
+    spec = yaml.safe_load((HERE / "openapi.yaml").read_text())
     registry = Registry().with_resources(
-        (s["$id"], Resource.from_contents(s)) for s in schemas.values()
+        [(s["$id"], Resource.from_contents(s)) for s in schemas.values()]
+        + [(OPENAPI, Resource(contents=spec, specification=DRAFT202012))]
     )
     return schemas, registry
 
@@ -180,13 +187,14 @@ def check_fixtures(schemas: dict[str, dict], registry: Registry) -> None:
             for t in REQ_REPLY
             for d in ("request", "reply")
         },
+        **{n: validator({"$ref": f"{OPENAPI}#/components/schemas/{n}"}) for n in HTTP_SCHEMAS},
     }
     for k in REGISTRY_KEYS:
         if k not in reg["$defs"]:
             fail(f"registry.schema.json has no $defs/{k}")
 
     seen: dict[tuple[str, str], int] = {}
-    for sub in ("messages", "registry"):
+    for sub in ("messages", "registry", "http"):
         for p in sorted((HERE / "fixtures" / sub).glob("*.json")):
             parts = p.name.removesuffix(".json").split(".")
             kind_at = next((i for i, x in enumerate(parts) if x in ("valid", "invalid")), None)

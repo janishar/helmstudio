@@ -13,9 +13,10 @@ import (
 var ProjectorConsumer = micro.NatsJetStreamConsumer{Stream: "EVT", Durable: "studio-projector", Subject: "evt.run.>",
 	AckWait: 30 * time.Second, MaxAckPending: 1, NakDelay: 2 * time.Second}
 
-// FirstSeen records (jobID, seq) inside the projector's system transaction and reports whether it is new; a false
-// means the event was projected already (a redelivery) and must be skipped.
-func FirstSeen(ctx context.Context, tx pgx.Tx, jobID string, seq int) (bool, error) {
-	tag, err := tx.Exec(ctx, `INSERT INTO projector_seen (job_id, seq) VALUES ($1, $2) ON CONFLICT DO NOTHING`, jobID, seq)
+// FirstSeen records (jobID, attempt, seq) inside the projector's system transaction and reports whether it is new; a
+// false means the event was projected already (a redelivery) and must be skipped. seq restarts at 1 for each attempt.
+func FirstSeen(ctx context.Context, tx pgx.Tx, jobID string, attempt, seq int) (bool, error) {
+	tag, err := tx.Exec(ctx, `INSERT INTO projector_seen (job_id, attempt, seq) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+		jobID, attempt, seq)
 	return err == nil && tag.RowsAffected() == 1, err
 }

@@ -62,7 +62,11 @@ def test_events_in_order(echo_done):
 def test_output_png(echo_done, anon):
     run_id, owner = echo_done["run"]["id"], echo_done["owner_id"]
     (out,) = [e["data"] for e in echo_done["events"] if e["type"] == "output"]
-    assert (out["index"], out["kind"], out["key"]) == (0, "image", f"u/{owner}/runs/{run_id}/0.png")
+    assert (out["index"], out["kind"], out["key"]) == (
+        0,
+        "image",
+        f"u/{owner}/runs/{run_id}/1/0.png",
+    )
     r = anon.get(out["url"])  # a signed link: no API key, no token
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert (
@@ -85,7 +89,7 @@ def test_finished_run(api, echo_done):
     }
     assert run["started_at"] and run["finished_at"]
     assert [(o["index"], o["key"], o["kind"]) for o in run["outputs"]] == [
-        (0, f"u/{echo_done['owner_id']}/runs/{run_id}/0.png", "image")
+        (0, f"u/{echo_done['owner_id']}/runs/{run_id}/1/0.png", "image")
     ]
     assert ok(api.get(f"{STUDIO}/sessions/{sid}/runs"))["runs"][0]["id"] == run_id
     assert api.post(f"{STUDIO}/runs/{run_id}/cancel").status_code == 409  # already ended

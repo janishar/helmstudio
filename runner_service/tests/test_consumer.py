@@ -43,7 +43,7 @@ def check_events(js: FakeJS) -> None:
         assert schemas.message_errors(msg) == []
         assert msg["job_id"] == RUN and msg["data"]["seq"] == n
         assert subject == f"evt.run.{SESSION}.{msg['type'].removeprefix('evt.run.')}"
-        assert headers == {"Nats-Msg-Id": f"{RUN}:{n}"}
+        assert headers == {"Nats-Msg-Id": f"{RUN}:1:{n}"}
 
 
 async def test_echo_run_succeeds_with_progress_and_a_png():
@@ -64,6 +64,7 @@ async def test_echo_run_succeeds_with_progress_and_a_png():
     assert image.format == "PNG"
     assert out == {
         "seq": 5,
+        "attempt": 1,
         "index": 0,
         "key": PREFIX + "0.png",
         "kind": "image",
@@ -188,7 +189,7 @@ async def test_a_publish_that_fails_once_is_retried_with_the_same_msg_id(monkeyp
     js, _, _ = await run(command(steps=2), js)
     assert kinds(js) == ["running", "progress", "progress", "output", "succeeded"]
     check_events(js)
-    assert failed == [{"Nats-Msg-Id": f"{RUN}:2"}]
+    assert failed == [{"Nats-Msg-Id": f"{RUN}:1:2"}]
 
 
 def qwen_command(seed=None) -> dict:

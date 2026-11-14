@@ -23,6 +23,7 @@ This section owns version numbers; other sections name libraries without them.
 | nats-server/v2 (tests) | v2.15.3 |
 | aws-sdk-go-v2 | core v1.48.0, s3 v1.114.10, config v1.33.18, credentials v1.21.0 (bump together) |
 | golang.org/x/crypto | v0.59.0 |
+| golang.org/x/image | v0.47.0 (studio: webp header check of uploads) |
 | golang-jwt/jwt/v5 | v5.3.1 |
 
 **Infrastructure** (exact image tags, by digest in production)

@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -29,6 +30,67 @@ func NewController(store storage.Store, signer *Signer) network.Controller {
 func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/*path", c.serveHandler)
 	group.HEAD("/*path", c.serveHandler)
+	group.PUT("/*path", c.uploadHandler)
+}
+
+// MaxUpload is the largest body an upload link may carry (50 MB); studio_service signs nothing larger.
+const MaxUpload = 52428800
+
+// uploadTypes are the content types an upload may have.
+var uploadTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/webp": true}
+
+// uploadHandler stores the body of a signed upload link (PUT /files/<key>?exp=&bytes=&ct=&sig=) under its key, never
+// over an existing object. The request must carry exactly the signed Content-Length (the server then never reads
+// past it, so a larger body is never buffered) and Content-Type; the body streams to the object store.
+func (c *controller) uploadHandler(ctx *gin.Context) {
+	key := strings.TrimPrefix(ctx.Param("path"), "/")
+	query := ctx.Request.URL.Query()
+	size, err := strconv.ParseInt(query.Get("bytes"), 10, 64)
+	if err != nil || size < 1 || size > MaxUpload || strings.Contains(key, "..") || !strings.HasPrefix(key, "u/") ||
+		!c.signer.VerifyPut(key, query.Get("exp"), query.Get("bytes"), query.Get("ct"), query.Get("sig")) {
+		network.SendError(ctx, http.StatusForbidden, "invalid or expired link")
+		return
+	}
+	if ctx.Request.ContentLength != size {
+		network.SendError(ctx, http.StatusLengthRequired, "Content-Length must be the signed bytes")
+		return
+	}
+	contentType := query.Get("ct")
+	if !uploadTypes[contentType] || ctx.GetHeader("Content-Type") != contentType {
+		network.SendError(ctx, http.StatusUnsupportedMediaType, "Content-Type must be the signed type")
+		return
+	}
+	// Create, not Put: of two PUTs of one link at most one stores, and an upload studio has checked is never replaced
+	body := &counter{reader: http.MaxBytesReader(ctx.Writer, ctx.Request.Body, size)}
+	err = c.store.Create(ctx.Request.Context(), key, body, size, contentType)
+	switch {
+	case errors.Is(err, storage.ErrExists):
+		network.SendError(ctx, http.StatusConflict, "already uploaded")
+		return
+	case body.n != size:
+		if err == nil {
+			_ = c.store.Delete(context.WithoutCancel(ctx.Request.Context()), key) // never keep a partial object
+		}
+		network.SendError(ctx, http.StatusBadRequest, "the body ended before Content-Length bytes")
+		return
+	case err != nil:
+		network.SendMixedError(ctx, err)
+		return
+	}
+	network.SendNoContent(ctx)
+}
+
+// counter counts the bytes read through it.
+type counter struct {
+	reader io.Reader
+	n      int64
+}
+
+// Read reads and counts.
+func (c *counter) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+	c.n += int64(n)
+	return n, err
 }
 
 // serveHandler streams one object. A bad link, a key outside u/ or a missing object is 403; a Stat that fails for any

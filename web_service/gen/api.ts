@@ -34,7 +34,8 @@ export interface paths {
         post?: never;
         /**
          * Delete a session with its runs and events
-         * @description 409 while one of its runs is queued or running (cancel it first). The run files stay in the object store in M0.
+         * @description 409 while one of its runs is queued or running (cancel it first). Its takes stay in the gallery with
+         *     `session_id` and `run_id` set to null (`made_with` is a snapshot).
          */
         delete: operations["studioDeleteSession"];
         options?: never;
@@ -91,12 +92,15 @@ export interface paths {
         put?: never;
         /**
          * Run a workflow in the session
-         * @description Resolves the graph (node schema defaults, then the workflow's params, then `inputs`), picks the live host that
-         *     has the workflow's env, and queues `cmd.run.execute` on `cmd.run.<host>.<env>` through the outbox, all in one
-         *     transaction. 422 for an unknown `workflow_id`, an input key that is not a param of the workflow's nodes, or a
+         * @description Resolves the graph (node schema defaults, then the workflow's params, then `inputs`) and stores the run
+         *     `queued` in lane `interactive`, attempt 1. The dispatcher (contracts/README.md, "The dispatcher") releases it
+         *     later: it writes `cmd.run.execute` to the outbox for one host when that host is free and the run is next in
+         *     the fair order. 422 for an unknown `workflow_id`, an input key that is not a param of the workflow's nodes, or a
          *     value of the wrong type, out of `min`/`max` or not in `enum` (the detail names the key, e.g.
-         *     `echo.steps: must be between 1 and 200`). When no live host has the env, the run is created already
-         *     `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
+         *     `echo.steps: must be between 1 and 200`). When no host is eligible (none live with the env and the workflow),
+         *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
+         *     409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
+         *     running; wait for some to finish.`
          */
         post: operations["studioCreateRun"];
         delete?: never;
@@ -132,12 +136,35 @@ export interface paths {
         put?: never;
         /**
          * Cancel a queued or running run
-         * @description Writes the run id as a key in the KV `cancels`; the runner checks it before it starts and at every step, and
-         *     reports `cancelled` (outputs already stored are kept). The answer is the run as it is now, usually still
-         *     `queued` or `running`; follow the events for `cancelled`. Calling it again is harmless. 409 when the run
-         *     already ended.
+         * @description A run the dispatcher has not sent yet becomes `cancelled` at once (the answer shows it) and is never sent.
+         *     Otherwise writes the run id as a key in the KV `cancels`; the runner checks it before it starts and at every
+         *     step, and reports `cancelled` (outputs and their takes already stored are kept). The answer is then the run as
+         *     it is now, usually still `queued` or `running`; follow the events for `cancelled`. Calling it again is
+         *     harmless. 409 when the run already ended.
          */
         post: operations["studioCancelRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's queued and running runs across sessions, and per host how many runs of others wait
+         * @description `runs`: the caller's own runs that are `queued` or `running`, every session: running first, then queued by
+         *     host and `position`. `hosts`: one entry per host name in the KV `hosts` (its envs merged), with the number of
+         *     other users' queued runs lined up for it, never whose or which (plan 17.3).
+         */
+        get: operations["studioGetQueue"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -157,7 +184,8 @@ export interface paths {
          *     the session, oldest first, each numbered by a per-session `seq`. JSON: the events with `seq > since` (at most
          *     500) and `last_seq`. SSE: replays `seq > since` (or `Last-Event-ID`, which wins), then streams new ones;
          *     `id:` = seq, `event:` = the event's `type`, `data:` = the `SessionEvent` JSON; `: keep-alive` comments every
-         *     15 s. The stream does not end by itself.
+         *     15 s. The stream does not end by itself. An `output` event whose output is gone (its take deleted, or the
+         *     attempt that made it retried) is left out, so seqs may skip; `last_seq` still moves past it.
          */
         get: operations["studioSessionEvents"];
         put?: never;
@@ -189,6 +217,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/takes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's gallery, newest first, filtered and paginated
+         * @description Every take of the caller that is not deleted and (for an upload) completed, newest first (`created_at`, then
+         *     `id`). Filters combine with AND. `q`: every whitespace-separated word must occur, case-insensitively, in the
+         *     title or the prompt (`made_with.prompt`). A `session_id` that is unknown or another user's just matches
+         *     nothing. A malformed filter value or cursor is 422.
+         */
+        get: operations["studioListTakes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/takes/{take_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["studioGetTake"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a take (soft)
+         * @description The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it); a sweep removes
+         *     the object later. Deleting again is 404.
+         */
+        delete: operations["studioDeleteTake"];
+        options?: never;
+        head?: never;
+        /** Rename or star a take */
+        patch: operations["studioUpdateTake"];
+        trace?: never;
+    };
+    "/v1/studio/takes/{take_id}/reuse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The settings that made a take, to pre-fill Create
+         * @description `workflow_id` and `inputs` = `made_with.inputs` (every param, the seed the runner used instead of random), ready
+         *     to post as a `RunRequest` or to load into the form. Nothing is created. 409 for an upload (it has no settings).
+         */
+        post: operations["studioReuseTake"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/sessions/{session_id}/takes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The session's takes, newest first (the Create filmstrip)
+         * @description Like `GET /v1/studio/takes?session_id=`, but 404 for an unknown session.
+         */
+        get: operations["studioListSessionTakes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an upload; answers a signed files_service URL to PUT the bytes to
+         * @description Stores a pending take (source `upload`, invisible until completed) and signs a single-use `PUT` link for the
+         *     key `u/<caller>/uploads/<take_id>.<png|jpg|webp>`, valid 15 minutes (`PUT /files/{path}`). Images only in this
+         *     version: `image/png`, `image/jpeg`, `image/webp`, at most 50 MB (52428800 bytes). 422 for any other type or
+         *     size ("only png, jpeg and webp images can be uploaded", "file is larger than 50 MB"). A pending upload not
+         *     completed within an hour is discarded.
+         */
+        post: operations["studioCreateUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/uploads/{take_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the uploaded object and make the take
+         * @description Studio reads the object's size (HEAD) and its first 64 KB (range GET) from the object store: the size must be
+         *     the declared `bytes`, the header must be a real image of the declared type, at most 16384 px a side; it records
+         *     `width` and `height`. The original serves as its own thumbnail in this version (`thumb_url` signs the same
+         *     key). 409 "upload not received" when the object is not there yet (PUT it, then call again). 422 when a check
+         *     fails ("size differs from the declared bytes", "not a valid png image", "image is larger than 16384 px"): the
+         *     upload is discarded and its take_id is 404 from then on. Calling it again after success answers the same take.
+         */
+        post: operations["studioCompleteUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{path}": {
         parameters: {
             query?: never;
@@ -202,7 +365,15 @@ export interface paths {
          *     `X-Content-Type-Options: nosniff`.
          */
         get: operations["filesGetFile"];
-        put?: never;
+        /**
+         * Upload the bytes of a signed upload link (the signature is the auth; no API key)
+         * @description Only reachable through an `upload_url` from `POST /v1/studio/uploads`. The signature is the lower-case hex
+         *     HMAC-SHA256 (the `/files` secret) of `"PUT\n" + path + "\n" + exp + "\n" + bytes + "\n" + ct`; a GET link
+         *     (`path + "\n" + exp`) never verifies as a PUT. The request must carry `Content-Type` equal to `ct` and
+         *     `Content-Length` equal to `bytes` (no chunked body); the body is streamed to the object store under `path`
+         *     with that content type. Single use: an existing object is never overwritten (409).
+         */
+        put: operations["filesPutFile"];
         post?: never;
         delete?: never;
         options?: never;
@@ -553,7 +724,7 @@ export interface components {
         };
         RunOutput: {
             index: number;
-            /** @description object key, u/<owner_id>/runs/<run_id>/<index>.<ext> */
+            /** @description object key, u/<owner_id>/runs/<run_id>/<attempt>/<index>.<ext> */
             key: string;
             /** @enum {string} */
             kind: "image" | "video";
@@ -562,7 +733,17 @@ export interface components {
             height: number | null;
             /** @description the seed it was made with; absent when the workflow has none */
             seed?: number;
+            /**
+             * Format: uuid
+             * @description the take this output became (every output is a take); absent only on events stored before API 1.2
+             */
+            take_id?: string;
         };
+        /**
+         * @description interactive (Create) is dispatched before batch (pipelines, later); every run is interactive in 1.2
+         * @enum {string}
+         */
+        RunLane: "interactive" | "batch";
         Run: {
             /** Format: uuid */
             id: string;
@@ -576,10 +757,15 @@ export interface components {
             progress: components["schemas"]["RunProgress"] | null;
             /** @description set when failed */
             error: string | null;
-            /** @description by index */
+            /** @description by index; outputs whose take was deleted are left out */
             outputs: components["schemas"]["RunOutput"][];
-            /** @description the host it was sent to; null when none was found */
+            /** @description the host it was sent to; while queued, the host it is lined up for (the one the dispatcher would choose now, may change); null when none was eligible */
             host: string | null;
+            lane: components["schemas"]["RunLane"];
+            /** @description 1; 2 after its runner was lost once and it was queued again */
+            attempt: number;
+            /** @description only while queued: 1 + the number of queued runs (anyone's) the dispatcher would release on `host` before it, recomputed on every read; absent otherwise */
+            position?: number;
             resolved?: components["schemas"]["Resolved"];
             /** Format: date-time */
             created_at: string;
@@ -597,6 +783,21 @@ export interface components {
         };
         RunList: {
             runs: components["schemas"]["Run"][];
+        };
+        Queue: {
+            /** @description the caller's queued and running runs, every session: running first, then queued by host and position */
+            runs: components["schemas"]["Run"][];
+            hosts: components["schemas"]["QueueHost"][];
+        };
+        QueueHost: {
+            host: string;
+            /**
+             * @description busy while anyone's run is running on it (which and whose is never shown)
+             * @enum {string}
+             */
+            state: "idle" | "busy" | "offline";
+            /** @description other users' queued runs lined up for this host; a count only */
+            others_queued: number;
         };
         /**
          * @description One stored event of the session. `status`: the run's new status (`queued` and studio-decided ones included);
@@ -621,6 +822,8 @@ export interface components {
                 error: string | null;
                 host: string | null;
                 resolved?: components["schemas"]["Resolved"];
+                /** @description the attempt this status belongs to; a `queued` with attempt 2 means the run is retried after its runner was lost; absent = 1 */
+                attempt?: number;
             };
         };
         ProgressEvent: {
@@ -681,6 +884,108 @@ export interface components {
         };
         HostList: {
             hosts: components["schemas"]["Host"][];
+        };
+        /** @enum {string} */
+        TakeKind: "image" | "video" | "audio";
+        /**
+         * @description create: a run output; upload: a file the user uploaded. pipeline and timeline come later
+         * @enum {string}
+         */
+        TakeSource: "create" | "upload";
+        /**
+         * @description One item of the caller's gallery: a run output or an upload, pointing at an immutable object (its key is never
+         *     shown). `title` starts as the first line of the prompt (at most 80 characters; the workflow title when the
+         *     prompt is empty) for a run output, the file name without its extension for an upload.
+         */
+        Take: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TakeKind"];
+            source: components["schemas"]["TakeSource"];
+            title: string;
+            url: components["schemas"]["SignedUrl"];
+            /** @description a small preview; in 1.2 the original itself */
+            thumb_url: components["schemas"]["SignedUrl"];
+            /** @example image/png */
+            content_type: string;
+            /** @description null for audio */
+            width: number | null;
+            height: number | null;
+            bytes: number;
+            /** Format: date-time */
+            created_at: string;
+            starred: boolean;
+            /**
+             * Format: uuid
+             * @description the session it was made in; null for an upload or after the session was deleted
+             */
+            session_id: string | null;
+            /**
+             * Format: uuid
+             * @description the run that made it; null for an upload or after its session was deleted
+             */
+            run_id: string | null;
+            /** @description null for an upload */
+            made_with: components["schemas"]["MadeWith"] | null;
+            /** @description lineage: the takes it was made from (empty until workflows take media inputs) */
+            parents: string[];
+        };
+        /** @description a snapshot taken when the take was stored: it survives the run and the session */
+        MadeWith: {
+            workflow_id: string;
+            workflow_title: string;
+            /** @description every param of every node (`<node id>.<param>`), resolved, with the seed the runner used in place of null / -1 */
+            inputs: components["schemas"]["RunInputs"];
+            /** @description the text of the workflow's `prompt` node; null without one */
+            prompt: string | null;
+            /** @description the seed it was made with; null without one */
+            seed: number | null;
+            /** @description from the workflow's `<family>/model` node; null without one (echo) */
+            model: {
+                /** @description the model id of the registry models key for the family; null when unknown */
+                id: string | null;
+                /** @example base */
+                variant: string | null;
+                /** @example int8 */
+                precision: string | null;
+            } | null;
+        };
+        TakePage: {
+            takes: components["schemas"]["Take"][];
+            /** @description pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
+        };
+        TakePatch: {
+            /** @description trimmed; blank = 422 */
+            title?: string;
+            starred?: boolean;
+        };
+        TakeReuse: {
+            workflow_id: string;
+            inputs: components["schemas"]["RunInputs"];
+        };
+        UploadCreate: {
+            /** @description the file's name; only its base name (without extension) is kept, as the title */
+            filename: string;
+            /** @enum {string} */
+            content_type: "image/png" | "image/jpeg" | "image/webp";
+            bytes: number;
+        };
+        Upload: {
+            /**
+             * Format: uuid
+             * @description pass to /v1/studio/uploads/{take_id}/complete; becomes the take's id
+             */
+            take_id: string;
+            /**
+             * @description signed single-use link: PUT the bytes here with exactly this Content-Type and Content-Length
+             * @example /files/u/7d1e.../uploads/9b2f....png?exp=1767225600&bytes=48213&ct=image%2Fpng&sig=ab12
+             */
+            upload_url: string;
+            content_type: string;
+            bytes: number;
+            /** Format: date-time */
+            expires_at: string;
         };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
@@ -909,6 +1214,24 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description "Content-Length must be the signed bytes": missing, chunked, or another size */
+        LengthRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description "Content-Type must be the signed type" */
+        WrongContentType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description invalid input */
         Unprocessable: {
             headers: {
@@ -928,6 +1251,11 @@ export interface components {
         WorkflowId: string;
         /** @description user UUID (malformed = 404) */
         UserId: string;
+        /** @description take UUID (malformed = 404) */
+        TakeId: string;
+        /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+        Cursor: string;
+        Limit: number;
     };
     requestBodies: never;
     headers: never;
@@ -1167,6 +1495,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
@@ -1221,6 +1550,28 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Queue"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -1280,6 +1631,235 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioListTakes: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["TakeKind"];
+                source?: components["schemas"]["TakeSource"];
+                /** @description true = only starred, false = only unstarred */
+                starred?: boolean;
+                /** @description only takes of this session */
+                session_id?: string;
+                /** @description text search over title and prompt; blank = no filter */
+                q?: string;
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description a page of takes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakePage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the take */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Take"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioUpdateTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakePatch"];
+            };
+        };
+        responses: {
+            /** @description the updated take */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Take"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioReuseTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakeReuse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListSessionTakes: {
+        parameters: {
+            query?: {
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                /** @description session UUID (malformed = 404) */
+                session_id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description a page of takes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakePage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UploadCreate"];
+            };
+        };
+        responses: {
+            /** @description the upload */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Upload"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCompleteUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the take */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Take"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     filesGetFile: {
         parameters: {
             query?: {
@@ -1311,6 +1891,47 @@ export interface operations {
             400: components["responses"]["GatewayBadPath"];
             /** @description bad or missing signature, expired link, a path that escapes the store, or no such file (never 404) */
             403: components["responses"]["Forbidden"];
+        };
+    };
+    filesPutFile: {
+        parameters: {
+            query?: {
+                /** @description expiry, unix seconds (missing = 403) */
+                exp?: number;
+                /** @description the exact body size (missing = 403) */
+                bytes?: number;
+                /** @description the content type, URL-encoded (missing = 403) */
+                ct?: string;
+                /** @description HMAC signature (missing = 403) */
+                sig?: string;
+            };
+            header?: never;
+            path: {
+                /** @description the object key, u/<owner>/uploads/<take_id>.<ext> */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description stored */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["GatewayBadPath"];
+            /** @description bad or missing signature, expired link, or a path outside `u/` or with `..` */
+            403: components["responses"]["Forbidden"];
+            /** @description "already uploaded": the object exists */
+            409: components["responses"]["Conflict"];
+            411: components["responses"]["LengthRequired"];
+            415: components["responses"]["WrongContentType"];
         };
     };
     authSignin: {

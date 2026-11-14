@@ -26,6 +26,7 @@ class Host:
             extra,
         )  # extra() → more fields (the residency manager's memory, resident)
         self.run_id: str | None = None
+        self.attempt = 1  # of run_id; written next to it while busy (the dispatcher's lease check)
 
     def value(self) -> dict:
         """The key's value now. ValueError when off-contract."""
@@ -38,6 +39,8 @@ class Host:
             "updated_at": now(),
             "published_by": PUBLISHED_BY,
         }
+        if self.run_id:
+            value["attempt"] = self.attempt
         if self.extra:
             value |= self.extra()
         if errs := schemas.registry_errors("host", value):

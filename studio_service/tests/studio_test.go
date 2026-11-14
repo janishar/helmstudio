@@ -166,13 +166,16 @@ func (e *env) call(user, method, path string, body any, want int) map[string]any
 	return decoded
 }
 
-// relay drains the outbox like the relay does and returns the subjects and commands.
+// relay runs one dispatcher pass, then drains the outbox like the relay does and returns the subjects and commands.
 func (e *env) relay() ([]string, []gen.Envelope) {
 	e.t.Helper()
+	if err := studio.NewDispatcher(e.pool, e.registry, nil, nil).Pass(context.Background(), time.Now()); err != nil {
+		e.t.Fatal(err)
+	}
 	var subjects []string
 	var sent []gen.Envelope
 	_, err := messaging.RelayOnce(context.Background(), e.pool, func(_ context.Context, subject string, envelope *gen.Envelope, msgID string) error {
-		if msgID != *envelope.JobID+":1" {
+		if !strings.HasPrefix(msgID, *envelope.JobID+":") {
 			e.t.Fatalf("Nats-Msg-Id %s", msgID)
 		}
 		subjects = append(subjects, subject)
@@ -265,7 +268,7 @@ func TestRunFlow(t *testing.T) {
 	_ = json.Unmarshal(sent[0].Data, &command)
 	if command.Workflow.ID != "echo" || command.Workflow.Nodes["echo"].Params["steps"] != float64(2) ||
 		command.Workflow.Nodes["echo"].Params["delay_ms"] != float64(300) || command.Workflow.Nodes["output"].Params == nil ||
-		command.OutputPrefix != "u/"+userA+"/runs/"+runID+"/" {
+		command.OutputPrefix != "u/"+userA+"/runs/"+runID+"/1/" {
 		t.Fatalf("%s", sent[0].Data)
 	}
 
@@ -301,6 +304,43 @@ func TestRunFlow(t *testing.T) {
 	e.call(userA, "POST", "/v1/studio/runs/"+runID+"/cancel", nil, 409)
 	if list := e.call(userA, "GET", runs, nil, 200); len(list["runs"].([]any)) != 1 {
 		t.Fatal(list)
+	}
+	// an output stored before the gallery (no take) becomes a take on Backfill, once
+	ctx := context.Background()
+	if err := common.System(ctx, e.pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE run_outputs SET take_id = NULL; DELETE FROM takes`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	projector := studio.NewProjector(e.pool)
+	projector.Workflows = e.registry
+	if made, err := projector.Backfill(ctx); err != nil || made != 1 {
+		t.Fatal(made, err)
+	}
+	if made, err := projector.Backfill(ctx); err != nil || made != 0 {
+		t.Fatal("again:", made, err)
+	}
+	var title string
+	var seed float64
+	if err := common.System(ctx, e.pool, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT t.title, (t.made_with->>'seed')::float8 FROM takes t
+			JOIN run_outputs o ON o.take_id = t.id WHERE t.run_id = $1 AND t.session_id = $2`, runID, sessionID).Scan(&title, &seed)
+	}); err != nil || title != "a red fox" || seed != 42 {
+		t.Fatal(title, seed, err)
+	}
+	if n := e.count(`SELECT count(*) FROM takes t JOIN runs r ON r.id = t.run_id WHERE t.created_at = r.finished_at`); n != 1 {
+		t.Fatal("a backfilled take is dated when its run finished:", n)
+	}
+	// a deleted take's run output row goes (gallery.Delete): its output event is left out, the seq still moves on
+	e.sql(`DELETE FROM run_outputs WHERE run_id = $1`, runID)
+	want = []string{"status:queued", "status:running", "progress", "progress", "status:succeeded"}
+	if got := e.eventTypes(userA, sessionID); !slices.Equal(got, want) {
+		t.Fatalf("events %v, want %v", got, want)
+	}
+	if page := e.call(userA, "GET", "/v1/studio/sessions/"+sessionID+"/events?since=4", nil, 200); page["last_seq"] != float64(6) ||
+		len(page["events"].([]any)) != 1 {
+		t.Fatal(page)
 	}
 	e.call(userB, "DELETE", "/v1/studio/sessions/"+sessionID, nil, 404)
 	e.call(userA, "DELETE", "/v1/studio/sessions/"+sessionID, nil, 204)
@@ -350,50 +390,6 @@ func TestCancel(t *testing.T) {
 	e.call(userA, "DELETE", "/v1/studio/sessions/"+sessionID, nil, 204)
 }
 
-// With no live host the run is failed at once and nothing is sent; the lease sweep ends a run whose host went offline.
-func TestNoHostAndSweep(t *testing.T) {
-	e := setup(t)
-	sessionID := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
-	runs := "/v1/studio/sessions/" + sessionID + "/runs"
-
-	live := e.call(userA, "POST", runs, map[string]any{"workflow_id": "echo"}, 202)["id"].(string)
-	e.relay()
-	e.host(time.Minute)
-	failed := e.call(userA, "POST", runs, map[string]any{"workflow_id": "echo"}, 202)
-	if failed["status"] != "failed" || failed["error"] != "no live host for env fake" || failed["host"] != nil {
-		t.Fatal(failed)
-	}
-	if _, sent := e.relay(); len(sent) != 0 {
-		t.Fatal(sent)
-	}
-
-	sweeper, now := studio.NewSweeper(e.pool, e.registry, nil), time.Now()
-	ended, err := sweeper.Sweep(context.Background(), now)
-	if err != nil || ended != 0 {
-		t.Fatal("a run inside its lease stays", ended, err)
-	}
-	if err := common.System(context.Background(), e.pool, func(tx pgx.Tx) error {
-		_, err := tx.Exec(context.Background(), `UPDATE runs SET updated_at = updated_at - interval '1 minute'`)
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if ended, err := sweeper.Sweep(context.Background(), now); err != nil || ended != 0 {
-		t.Fatal("one look at a lost run is not enough", ended, err)
-	}
-	if ended, err := sweeper.Sweep(context.Background(), now.Add(studio.Confirm)); err != nil || ended != 1 {
-		t.Fatal(ended, err)
-	}
-	run := e.call(userA, "GET", "/v1/studio/runs/"+live, nil, 200)
-	if run["status"] != "failed" || run["error"] != "the runner lost the run before it started it" {
-		t.Fatal(run)
-	}
-	want := []string{"status:queued", "status:failed", "status:failed"}
-	if got := e.eventTypes(userA, sessionID); !slices.Equal(got, want) {
-		t.Fatalf("events %v, want %v", got, want)
-	}
-}
-
 // The SSE stream replays after Last-Event-ID with id, event and data lines.
 func TestEventStream(t *testing.T) {
 	e := setup(t)
@@ -436,59 +432,5 @@ func TestEventStreamEndsWhenTheTokenIsRevoked(t *testing.T) {
 	e.revoked.Store(true)
 	if _, err := io.ReadAll(response.Body); err != nil { // EOF before the 5 s deadline: the server closed it
 		t.Fatal("the stream outlived its token:", err)
-	}
-}
-
-// The sweep leaves a queue on a busy host alone, needs a run to look lost for Confirm (not one look in the gap
-// between two runs), waits while the projector has a backlog, and gives a cancel Lease from its request.
-func TestSweepWaitsForALostRunToStayLost(t *testing.T) {
-	e := setup(t)
-	sessionID := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
-	runID := e.call(userA, "POST", "/v1/studio/sessions/"+sessionID+"/runs", map[string]any{"workflow_id": "echo"}, 202)["id"].(string)
-	e.relay()
-	busy := func(on string) {
-		value, _ := json.Marshal(map[string]any{"host": "fake", "env": "fake", "state": "busy", "run_id": on,
-			"updated_at": time.Now().UTC()})
-		if err := e.registry.SetHost("fake.fake", value); err != nil {
-			t.Fatal(err)
-		}
-	}
-	age := func(column string) {
-		if err := common.System(context.Background(), e.pool, func(tx pgx.Tx) error {
-			_, err := tx.Exec(context.Background(), `UPDATE runs SET `+column+` = `+column+` - interval '1 minute'`)
-			return err
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	sweep := func(sweeper *studio.Sweeper, at time.Time, want int) {
-		t.Helper()
-		if ended, err := sweeper.Sweep(context.Background(), at); err != nil || ended != want {
-			t.Fatalf("ended %d (%v), want %d", ended, err, want)
-		}
-	}
-	age("updated_at")
-	sweeper, now := studio.NewSweeper(e.pool, e.registry, nil), time.Now()
-
-	busy("another-run")
-	sweep(sweeper, now, 0) // queued behind another run
-	e.host(0)              // the runner is between two runs
-	sweep(sweeper, now, 0)
-	busy(runID) // and took this one
-	sweep(sweeper, now.Add(studio.Confirm), 0)
-	e.host(0)
-	sweep(sweeper, now.Add(studio.Confirm), 0) // lost again: Confirm starts over
-
-	lagging := studio.NewSweeper(e.pool, e.registry, func(context.Context) (int, error) { return 1, nil })
-	sweep(lagging, now, 0)
-	sweep(lagging, now.Add(2*studio.Confirm), 0) // the projector has events to apply first
-
-	e.call(userA, "POST", "/v1/studio/runs/"+runID+"/cancel", nil, 202)
-	sweep(sweeper, now.Add(3*studio.Confirm), 0) // a cancel gets Lease from its request
-	age("cancel_requested_at")
-	sweep(sweeper, now.Add(3*studio.Confirm), 0)
-	sweep(sweeper, now.Add(4*studio.Confirm), 1)
-	if run := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200); run["status"] != "cancelled" {
-		t.Fatal(run)
 	}
 }

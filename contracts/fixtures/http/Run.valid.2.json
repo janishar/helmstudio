@@ -1,0 +1,32 @@
+{
+  "id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "prompt.text": "Fox at dusk"
+  },
+  "status": "succeeded",
+  "progress": null,
+  "error": null,
+  "outputs": [
+    {
+      "index": 0,
+      "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png",
+      "kind": "image",
+      "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png?exp=1767225600&sig=ab12",
+      "width": 2752,
+      "height": 1536,
+      "seed": 43,
+      "take_id": "5a7e0c11-2b3d-4e5f-8a9b-0c1d2e3f4a5b"
+    }
+  ],
+  "host": "mac",
+  "lane": "interactive",
+  "attempt": 2,
+  "created_at": "2026-11-14T10:15:37Z",
+  "started_at": "2026-11-14T10:16:00Z",
+  "finished_at": "2026-11-14T10:16:20Z",
+  "resolved": {
+    "seed": 43
+  }
+}

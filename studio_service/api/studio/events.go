@@ -23,7 +23,7 @@ var (
 )
 
 // Events returns the session's stored events with seq > since (at most 500), oldest first; an output event's key
-// gets its signed url. With nothing new it reads only the session's event_seq, so an idle stream's poll stays cheap.
+// gets its signed url, and one whose output is gone is left out. With nothing new it reads only the session's event_seq, so an idle stream's poll stays cheap.
 func (s *Service) Events(ctx context.Context, caller common.Caller, sessionID string, since int64) (dto.EventPage, error) {
 	out := dto.EventPage{Events: []dto.SessionEvent{}, LastSeq: since}
 	if !utility.IsUUID(sessionID) {
@@ -38,21 +38,54 @@ func (s *Service) Events(ctx context.Context, caller common.Caller, sessionID st
 		}
 		events, err := collect[model.Event](ctx, tx, `SELECT seq, type, run_id::text, ts, data FROM run_events
 			WHERE session_id = $1 AND seq > $2 ORDER BY seq LIMIT 500`, sessionID, since)
+		if err != nil {
+			return err
+		}
+		live, err := liveKeys(ctx, tx, events)
 		for _, event := range events {
-			out.Events = append(out.Events, s.eventDTO(event))
 			out.LastSeq = event.Seq
+			if mapped, ok := s.eventDTO(event, live); ok {
+				out.Events = append(out.Events, mapped)
+			}
 		}
 		return err
 	})
 	return out, err
 }
 
-// eventDTO maps one stored event; an output's key is signed now, so the link is fresh.
-func (s *Service) eventDTO(event model.Event) dto.SessionEvent {
+// liveKeys returns the keys of the output events' outputs that still have a run output row: a deleted take or a
+// retried attempt has none.
+func liveKeys(ctx context.Context, tx pgx.Tx, events []model.Event) (map[string]bool, error) {
+	var runs, keys []string
+	for _, event := range events {
+		var data struct{ Key string }
+		if event.Type == "output" && json.Unmarshal(event.Data, &data) == nil {
+			runs, keys = append(runs, event.RunID), append(keys, data.Key)
+		}
+	}
+	live := map[string]bool{}
+	if len(keys) == 0 {
+		return live, nil
+	}
+	found, err := collect[struct{ Key string }](ctx, tx, `SELECT key FROM run_outputs WHERE run_id = ANY($1::uuid[]) AND key = ANY($2)`,
+		runs, keys)
+	for _, row := range found {
+		live[row.Key] = true
+	}
+	return live, err
+}
+
+// eventDTO maps one stored event; an output's key is signed now, so the link is fresh. An output that is gone (not in
+// live) is left out: false.
+func (s *Service) eventDTO(event model.Event, live map[string]bool) (dto.SessionEvent, bool) {
 	var data map[string]any
 	_ = json.Unmarshal(event.Data, &data)
-	if key, ok := data["key"].(string); ok && event.Type == "output" {
+	if event.Type == "output" {
+		key, _ := data["key"].(string)
+		if !live[key] {
+			return dto.SessionEvent{}, false
+		}
 		data["url"] = s.signer.Sign(key)
 	}
-	return dto.SessionEvent{Seq: event.Seq, Type: event.Type, RunID: event.RunID, TS: event.TS, Data: data}
+	return dto.SessionEvent{Seq: event.Seq, Type: event.Type, RunID: event.RunID, TS: event.TS, Data: data}, true
 }

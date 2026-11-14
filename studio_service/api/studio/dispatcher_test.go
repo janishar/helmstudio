@@ -1,0 +1,180 @@
+package studio
+
+import (
+	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/helmstudio/studio_service/api/studio/model"
+	"github.com/helmstudio/studio_service/registry"
+)
+
+var t0 = time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
+
+// waiting builds a queued run id of owner, created at minute n, eligible on hosts (name → env), resident on those
+// named with a leading "*".
+func waiting(id, owner string, n int, hosts ...string) queued {
+	q := queued{run: model.Run{ID: id, OwnerID: owner, Lane: "interactive", CreatedAt: t0.Add(time.Duration(n) * time.Minute)},
+		slots: map[string]string{}, resident: map[string]bool{}}
+	for _, host := range hosts {
+		name, resident := strings.CutPrefix(host, "*")
+		q.slots[name] = "env"
+		q.resident[name] = resident
+	}
+	return q
+}
+
+// order renders a line-up as "id@host#position" strings.
+func order(lined []placed) []string {
+	var out []string
+	for _, p := range lined {
+		out = append(out, fmt.Sprintf("%s@%s#%d", p.run.ID, p.host, p.position))
+	}
+	return out
+}
+
+// wantLineup fails unless got equals want.
+func wantLineup(t *testing.T, got []placed, want ...string) {
+	t.Helper()
+	if !slices.Equal(order(got), want) {
+		t.Fatalf("got %v, want %v", order(got), want)
+	}
+}
+
+// Round-robin between users on one host: each user's oldest run in turn, never-released users first in the order of
+// their oldest run, then the user released least recently; positions count the whole line.
+func TestLineupRoundRobin(t *testing.T) {
+	queue := []queued{waiting("a1", "A", 1, "h"), waiting("a2", "A", 2, "h"), waiting("b1", "B", 3, "h"),
+		waiting("a3", "A", 4, "h"), waiting("c1", "C", 5, "h"), waiting("b2", "B", 6, "h")}
+	wantLineup(t, lineup([]string{"h"}, queue, nil, nil, 0), "a1@h#1", "b1@h#2", "c1@h#3", "a2@h#4", "b2@h#5", "a3@h#6")
+
+	last := map[string]time.Time{"A": t0.Add(time.Hour), "B": t0} // C never released: first; then B, served longer ago
+	wantLineup(t, lineup([]string{"h"}, queue, last, nil, 0), "c1@h#1", "b1@h#2", "a1@h#3", "b2@h#4", "a2@h#5", "a3@h#6")
+
+	// One dispatch round releases one run per free host; ahead shifts the positions behind a sent run.
+	wantLineup(t, lineup([]string{"h"}, queue, last, nil, 1), "c1@h#1")
+	wantLineup(t, lineup([]string{"h"}, queue[:2], nil, map[string]int{"h": 1}, 0), "a1@h#2", "a2@h#3")
+}
+
+// Interactive runs go before batch runs whatever their owner's turn or age.
+func TestLineupLane(t *testing.T) {
+	batch := waiting("b1", "B", 1, "h")
+	batch.run.Lane = "batch"
+	wantLineup(t, lineup([]string{"h"}, []queued{batch, waiting("a1", "A", 2, "h")}, map[string]time.Time{"A": t0}, nil, 0),
+		"a1@h#1", "b1@h#2")
+}
+
+// Within one user, a run whose model is resident on the host goes before an older one; another user's turn is kept.
+func TestLineupPrefersResident(t *testing.T) {
+	queue := []queued{waiting("a1", "A", 1, "h"), waiting("b1", "B", 2, "h"), waiting("a2", "A", 3, "*h")}
+	wantLineup(t, lineup([]string{"h"}, queue, nil, nil, 0), "a2@h#1", "b1@h#2", "a1@h#3")
+}
+
+// Placement: hosts take turns idle longest first, a run goes only where it is eligible, and a run resident on another
+// free host goes there while the first host picks again.
+func TestLineupPlacement(t *testing.T) {
+	wantLineup(t, lineup([]string{"h1", "h2"}, []queued{waiting("a1", "A", 1, "h2"), waiting("b1", "B", 2, "h1", "h2")}, nil, nil, 1),
+		"b1@h1#1", "a1@h2#1")
+	wantLineup(t, lineup([]string{"h1", "h2"}, []queued{waiting("a1", "A", 1, "h1", "*h2"), waiting("b1", "B", 2, "h1", "h2")}, nil, nil, 1),
+		"a1@h2#1", "b1@h1#1")
+	wantLineup(t, lineup([]string{"h1", "h2"}, []queued{waiting("a1", "A", 1, "h1", "h2"), waiting("a2", "A", 2, "h1", "h2"),
+		waiting("a3", "A", 3, "h1", "h2")}, nil, nil, 0), "a1@h1#1", "a2@h2#1", "a3@h1#2")
+	if got := lineup(nil, []queued{waiting("a1", "A", 1, "h")}, nil, nil, 0); len(got) != 0 {
+		t.Fatal("no host, no line", order(got))
+	}
+}
+
+// hostValue is a hosts KV value of host.env refreshed at.
+func hostValue(host, env string, at time.Time, extra string) []byte {
+	return []byte(fmt.Sprintf(`{"host": %q, "env": %q, "state": "idle", "updated_at": %q%s}`, host, env, at.Format(time.RFC3339), extra))
+}
+
+// A host is eligible when live, of the run's env, publishing its workflow and (when listed) holding its variant;
+// resident needs the model, variant and precision loaded. With none, the reason says which is missing.
+func TestEligible(t *testing.T) {
+	reg := &registry.Registry{}
+	workflows := func(id, env string) []byte {
+		return []byte(`{"workflows": [{"id": "` + id + `", "env": "` + env + `", "nodes": {}}]}`)
+	}
+	models := `{"models": [{"id": "qwen-2", "family": "qwen-image", "variants": [{"id": "base", "presence": "present",
+		"precisions": ["bf16"]}, {"id": "turbo", "presence": "missing", "precisions": ["bf16"]}]}]}`
+	_ = reg.SetRegistry("mac.torch.workflows", workflows("qwen-image", "torch"))
+	_ = reg.SetRegistry("mac.torch.models", []byte(models))
+	_ = reg.SetRegistry("gpu.torch.workflows", workflows("qwen-image", "torch"))
+	_ = reg.SetRegistry("old.torch.workflows", workflows("qwen-image", "torch"))
+	_ = reg.SetRegistry("fake.fake.workflows", workflows("echo", "fake"))
+	_ = reg.SetHost("mac.torch", hostValue("mac", "torch", t0, `, "resident": [{"component": "transformer", "model": "qwen-2",
+		"variant": "base", "precision": "bf16", "gb": 1, "pinned": false}]`))
+	_ = reg.SetHost("gpu.torch", hostValue("gpu", "torch", t0, ""))
+	_ = reg.SetHost("old.torch", hostValue("old", "torch", t0.Add(-time.Minute), ""))
+	_ = reg.SetHost("fake.fake", hostValue("fake", "fake", t0, ""))
+	run := func(workflow, env, variant, precision string) model.Run {
+		graph, _ := json.Marshal(map[string]registry.Node{"prompt": {Kind: "prompt"},
+			"model": {Kind: "qwen-image/model", Params: map[string]any{"variant": variant, "precision": precision}}})
+		return model.Run{WorkflowID: workflow, Env: env, Nodes: graph}
+	}
+
+	slots, resident, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "bf16"), t0)
+	if reason != "" || len(slots) != 2 || slots["mac"] != "torch" || slots["gpu"] != "torch" || !resident["mac"] || resident["gpu"] {
+		t.Fatal(slots, resident, reason) // old is stale; gpu lists no models: eligible, nothing resident
+	}
+	if _, resident, _ := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "int8"), t0); resident["mac"] {
+		t.Fatal("another precision is not resident")
+	}
+	if slots, _, _ := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "turbo", "bf16"), t0); len(slots) != 1 || slots["gpu"] == "" {
+		t.Fatal("mac lacks turbo", slots)
+	}
+	_ = reg.SetHost("gpu.torch", nil)
+	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "turbo", "bf16"), t0); reason !=
+		"model qwen-image variant turbo is not present on any live host for env torch" {
+		t.Fatal(reason)
+	}
+	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "bf16"), t0.Add(time.Minute)); reason !=
+		"no live host for env torch" {
+		t.Fatal(reason)
+	}
+	if _, _, reason := eligible(reg, reg.Hosts(), run("other", "torch", "base", "bf16"), t0); reason != "no live host for env torch" {
+		t.Fatal("a host that does not publish the workflow is not eligible:", reason)
+	}
+	echo := model.Run{WorkflowID: "echo", Env: "fake", Nodes: json.RawMessage(`{"echo": {"kind": "echo/echo", "params": {}}}`)}
+	if slots, _, reason := eligible(reg, reg.Hosts(), echo, t0); reason != "" || slots["fake"] != "fake" {
+		t.Fatal(slots, reason)
+	}
+}
+
+// A released run holds its host while the key is fresh: for Lease after the release whatever it says, then only
+// while it names the run and its attempt (absent = 1).
+func TestHolds(t *testing.T) {
+	released := t0
+	host := "mac"
+	run := model.Run{ID: "r1", Env: "torch", Host: &host, Attempt: 1, ReleasedAt: &released}
+	value := func(at time.Time, extra string) []registry.Host {
+		reg := &registry.Registry{}
+		if err := reg.SetHost("mac.torch", hostValue("mac", "torch", at, extra)); err != nil {
+			t.Fatal(err)
+		}
+		return reg.Hosts()
+	}
+	later := t0.Add(Lease + time.Second)
+	switch {
+	case !holds(value(t0, ""), run, t0.Add(time.Second)):
+		t.Fatal("inside Lease an idle key holds")
+	case holds(value(t0, ""), run, later):
+		t.Fatal("after Lease the key must name the run")
+	case !holds(value(later, `, "run_id": "r1"`), run, later):
+		t.Fatal("busy with it, attempt absent = 1")
+	case holds(value(later, `, "run_id": "r1", "attempt": 2`), run, later):
+		t.Fatal("another attempt")
+	case holds(value(t0, `, "run_id": "r1"`), run, t0.Add(time.Minute)):
+		t.Fatal("a stale key holds nothing")
+	case holds(nil, run, t0):
+		t.Fatal("no key holds nothing")
+	}
+	run.Attempt = 2
+	if !holds(value(later, `, "run_id": "r1", "attempt": 2`), run, later) {
+		t.Fatal("attempt 2 on its key")
+	}
+}

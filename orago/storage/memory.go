@@ -39,6 +39,21 @@ func (m *Memory) Put(_ context.Context, key string, body io.Reader, _ int64, con
 	return nil
 }
 
+// Create is Put, or ErrExists when key is there.
+func (m *Memory) Create(_ context.Context, key string, body io.Reader, size int64, contentType string) error {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.objects[key]; ok {
+		return ErrExists
+	}
+	m.objects[key] = memoryObject{data, Info{Key: key, Size: int64(len(data)), ContentType: contentType, LastModified: time.Now()}}
+	return nil
+}
+
 // Get returns the object's bytes, or ErrNotFound.
 func (m *Memory) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	m.mu.Lock()

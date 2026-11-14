@@ -1,11 +1,13 @@
 """Plain helpers (no fixtures): responses, polling, sign-in, sessions, runs and the event stream."""
 
+import io
 import json
 import os
 import time
 
 import httpx
 import schemas
+from PIL import Image
 
 JOB_TIMEOUT = float(os.environ.get("JOB_TIMEOUT", "60"))
 STUDIO = "/v1/studio"
@@ -138,3 +140,25 @@ def run_events(client: httpx.Client, sid: str, run_id: str, since: int = 0) -> l
 
 def statuses(events: list[dict]) -> list[str]:
     return [e["data"]["status"] for e in events if e["type"] == "status"]
+
+
+def take_of_run(client: httpx.Client, run_id: str) -> dict:
+    """The take of a finished run's only output."""
+    (out,) = ok(client.get(f"{STUDIO}/runs/{run_id}"))["outputs"]
+    return ok(client.get(f"{STUDIO}/takes/{out['take_id']}"))
+
+
+def all_takes(client: httpx.Client, path: str = f"{STUDIO}/takes", **params) -> list[dict]:
+    """Every take of a list route, following next_cursor."""
+    takes, cursor = [], None
+    while True:
+        page = ok(client.get(path, params=params | ({"cursor": cursor} if cursor else {})))
+        takes += page["takes"]
+        if not (cursor := page["next_cursor"]):
+            return takes
+
+
+def png_bytes(width: int, height: int) -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (width, height), (200, 40, 40)).save(buf, "PNG")
+    return buf.getvalue()

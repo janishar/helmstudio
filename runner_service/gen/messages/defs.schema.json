@@ -35,7 +35,8 @@
     "attempt": {
       "type": "integer",
       "minimum": 1,
-      "description": "the run's attempt (1 in M0: a run command is delivered once)"
+      "description": "the run's attempt: 1, or 2 after the dispatcher lost the lease of attempt 1 and queued the run again (a run command is delivered once)",
+      "maximum": 2
     },
     "hostName": {
       "type": "string",

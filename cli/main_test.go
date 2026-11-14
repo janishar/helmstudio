@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,6 +24,8 @@ const echoWorkflow = `{"id":"echo","title":"Echo","family":"echo","env":"fake",
 
 var png = []byte("\x89PNG\r\n\x1a\nfake")
 
+const takeJSON = `{"id":"t1","kind":"image","source":"upload","title":"pic","width":3,"height":2,"created_at":"2026-11-14T10:00:00Z","starred":true}`
+
 // fakeAPI is the slice of the public API helm uses. outcome is the run's end: succeeded, failed or cancelled
 // (cancelled waits for POST .../cancel).
 type fakeAPI struct {
@@ -33,10 +36,13 @@ type fakeAPI struct {
 	refreshes int
 	inputs    map[string]any
 	cancelled chan struct{}
+	positions []int  // queue positions GET /runs/r1 answers before the run starts
+	query     string // the last GET /v1/studio/takes query
+	uploaded  []byte // the body PUT to the upload link
 }
 
 func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/files/u/o1/runs/r1/0.png" && r.Header.Get("X-API-Key") != "helm_test" {
+	if !strings.HasPrefix(r.URL.Path, "/files/") && r.Header.Get("X-API-Key") != "helm_test" {
 		http.Error(w, `{"detail":"invalid api key"}`, 401)
 		return
 	}
@@ -69,6 +75,19 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write(png)
 		return
+	case "PUT /files/u/o1/uploads/t1.png":
+		q := r.URL.Query()
+		if q.Get("sig") != "ok" || r.Header.Get("X-API-Key")+r.Header.Get("Authorization") != "" {
+			http.Error(w, `{"detail":"invalid link"}`, 403)
+			return
+		}
+		if r.Header.Get("Content-Type") != q.Get("ct") || strconv.FormatInt(r.ContentLength, 10) != q.Get("bytes") {
+			http.Error(w, `{"detail":"Content-Type and Content-Length must be the signed ones"}`, 415)
+			return
+		}
+		f.uploaded, _ = io.ReadAll(r.Body)
+		w.WriteHeader(204)
+		return
 	}
 	if !authed {
 		http.Error(w, `{"detail":"invalid or expired token"}`, 401)
@@ -91,6 +110,10 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&b)
 		f.inputs = b.Inputs
 		w.WriteHeader(202)
+		if len(f.positions) > 0 {
+			fmt.Fprintf(w, `{"id":"r1","status":"queued","position":%d,"outputs":[]}`, f.positions[0])
+			return
+		}
 		fmt.Fprint(w, `{"id":"r1","status":"queued","outputs":[]}`)
 	case "GET /v1/studio/sessions/s1/events":
 		f.events(w, r)
@@ -99,7 +122,35 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(202)
 		fmt.Fprint(w, `{"id":"r1","status":"running","outputs":[]}`)
 	case "GET /v1/studio/runs/r1":
-		fmt.Fprint(w, `{"id":"r1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.png","kind":"image","url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok"}]}`)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if len(f.positions) > 0 {
+			fmt.Fprintf(w, `{"id":"r1","status":"queued","position":%d,"outputs":[]}`, f.positions[0])
+			f.positions = f.positions[1:]
+			return
+		}
+		fmt.Fprint(w, `{"id":"r1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.png","kind":"image","url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok","take_id":"t9"}]}`)
+	case "GET /v1/studio/takes":
+		f.query = r.URL.RawQuery
+		fmt.Fprint(w, `{"takes":[`+takeJSON+`],"next_cursor":"c2"}`)
+	case "POST /v1/studio/uploads":
+		var b struct {
+			Filename    string `json:"filename"`
+			ContentType string `json:"content_type"`
+			Bytes       int    `json:"bytes"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b.Filename != "pic.png" || b.ContentType != "image/png" || b.Bytes != len(png) {
+			f.t.Errorf("upload create %+v", b)
+		}
+		w.WriteHeader(201)
+		fmt.Fprintf(w, `{"take_id":"t1","upload_url":"/files/u/o1/uploads/t1.png?exp=1&bytes=%d&ct=image%%2Fpng&sig=ok","content_type":"image/png","bytes":%[1]d,"expires_at":"2026-01-01T00:00:00Z"}`, b.Bytes)
+	case "POST /v1/studio/uploads/t1/complete":
+		if f.uploaded == nil {
+			http.Error(w, `{"detail":"upload not received"}`, 409)
+			return
+		}
+		fmt.Fprint(w, takeJSON)
 	default:
 		f.t.Errorf("unexpected %s", route)
 		http.Error(w, `{"detail":"not found"}`, 404)
@@ -148,6 +199,7 @@ func setup(t *testing.T, outcome string) (*fakeAPI, string) {
 	t.Setenv("HELM_API_KEY", "helm_test")
 	t.Setenv("HELM_PASSWORD", "secret pass 1")
 	f := &fakeAPI{t: t, outcome: outcome, access: "at1", cancelled: make(chan struct{})}
+	pollEvery = 10 * time.Millisecond
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	var out, errb bytes.Buffer
@@ -198,7 +250,7 @@ func TestRunSucceedsAndRefreshes(t *testing.T) {
 	if fmt.Sprint(f.inputs) != fmt.Sprint(want) {
 		t.Fatalf("inputs %v", f.inputs)
 	}
-	for _, line := range []string{"session s1", "run r1", "queued", "running on fake", "echo 1/2", "echo 2/2 sampling (~1s left)", "output 0 image", "succeeded (seed 7)"} {
+	for _, line := range []string{"session s1", "run r1", "queued", "running on fake", "echo 1/2", "echo 2/2 sampling (~1s left)", "output 0 image", "succeeded (seed 7)", "take t9"} {
 		if !strings.Contains(out.String(), line+"\n") {
 			t.Errorf("missing %q in\n%s", line, out.String())
 		}
@@ -280,5 +332,55 @@ func TestWhoamiLogout(t *testing.T) {
 	}
 	if code := helm([]string{"whoami"}, nil, &out, &errb, nil); code != 1 || !strings.Contains(errb.String(), "not logged in") {
 		t.Fatalf("whoami after logout: %d %s", code, errb.String())
+	}
+}
+
+func TestRunPrintsQueuePosition(t *testing.T) {
+	f, _ := setup(t, "succeeded")
+	f.positions = []int{3, 3, 2, 1}
+	var out, errb bytes.Buffer
+	if code := helm([]string{"run", "echo", "--out", t.TempDir()}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("run: %d %s", code, errb.String())
+	}
+	if got := out.String(); !strings.Contains(got, "queued, position 3\nqueued, position 2\nqueued, position 1\nqueued\nrunning") {
+		t.Fatalf("positions once each, then the stream:\n%s", got)
+	}
+}
+
+func TestTakesFilters(t *testing.T) {
+	f, _ := setup(t, "")
+	var out, errb bytes.Buffer
+	args := []string{"takes", "--kind", "image", "--source", "upload", "--starred", "--session", "s1", "--q", "red fox", "--limit", "2"}
+	if code := helm(args, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("takes: %d %s", code, errb.String())
+	}
+	if f.query != "kind=image&limit=2&q=red+fox&session_id=s1&source=upload&starred=true" {
+		t.Fatalf("query %q", f.query)
+	}
+	if want := "t1 * image upload 3x2       2026-11-14T10:00:00Z pic\nmore: --cursor c2\n"; out.String() != want {
+		t.Fatalf("got %q want %q", out.String(), want)
+	}
+}
+
+func TestUpload(t *testing.T) {
+	f, _ := setup(t, "")
+	dir := t.TempDir()
+	file := filepath.Join(dir, "pic.png")
+	if err := os.WriteFile(file, png, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := helm([]string{"upload", file}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("upload: %d %s", code, errb.String())
+	}
+	if !bytes.Equal(f.uploaded, png) || !strings.HasPrefix(out.String(), "t1 ") {
+		t.Fatalf("uploaded %q, out %q", f.uploaded, out.String())
+	}
+	text := filepath.Join(dir, "notes.png")
+	if err := os.WriteFile(text, []byte("just text"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code := helm([]string{"upload", text}, nil, &out, &errb, nil); code != 1 || !strings.Contains(errb.String(), "only png, jpeg and webp") {
+		t.Fatalf("text upload: %d %s", code, errb.String())
 	}
 }

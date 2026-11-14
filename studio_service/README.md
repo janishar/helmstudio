@@ -20,23 +20,35 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
 
 1. `POST /sessions/{id}/runs` resolves the workflow (registry) with the inputs: node schema default, then the
    workflow's value, then `"<node>.<param>"` from the request, each checked against the param's type, `min`/`max` and
-   `enum` (422 names the key; a `seed` takes null or -1 for random, and `step` / `when` are carried, not checked). It places the run on a live host (hosts key fresher than 30 s) with the workflow's env,
-   idle first. In one transaction: the run row (`queued`), the outbox row for `cmd.run.execute` on
-   `cmd.run.<host>.<env>` (output prefix `u/<owner>/runs/<run>/`) and a `status queued` event. No live host: the run is
-   stored `failed` (`no live host for env <env>`) and nothing is sent. 202 either way.
-2. The relay publishes the outbox (`Nats-Msg-Id <run>:<attempt>`).
+   `enum` (422 names the key; a `seed` takes null or -1 for random, and `step` / `when` are carried, not checked). It stores the run `queued` (lane
+   `interactive`, attempt 1, no host) with the resolved graph, and a `status queued` event. No eligible host (below):
+   the run is stored `failed` (`no live host for env <env>`, or the model variant missing on every live host) and
+   nothing is sent. 202 either way; the answer has the host it is lined up for and its `position`.
+2. The dispatcher (`api/studio/dispatcher.go`, every 500 ms, one pass at a time across replicas by a Postgres
+   advisory lock) releases at most one run per host (across envs) while no released run on it has ended. Eligible
+   host: hosts key fresher than 30 s, the run's env, its runner publishes the workflow, and the run's model variant is
+   present when its `models` key lists variants. Order: interactive before batch; round-robin between users (oldest
+   last release first); within a user the oldest run, but one whose model (`<family>/model` variant and precision)
+   is resident on that host first; a run resident on another free host goes there, else hosts idle longest go first.
+   Release: `runs.host`, `released_at`, the owner's `dispatch_owners` row (its last release: deleting a session
+   never resets a turn) and the outbox row for `cmd.run.execute` on `cmd.run.<host>.<env>` (output prefix
+   `u/<owner>/runs/<run>/<attempt>/`) in one transaction. No pass decides anything until the `hosts` and `registry`
+   watches have delivered their current values (create answers 503 meanwhile); at most 100 open runs per user (409). `position` and `GET /queue` replay the same order on read.
+   Lease: from 30 s after release the host's key must name the run and attempt, and it must stay fresh; a loss seen
+   for 10 s (and not while the projector has a backlog) purges `cmd.run.<host>.<env>` and queues attempt 2 (a
+   `status queued` event with `attempt: 2`; attempt 1's outputs and their takes are dropped); a second loss fails the run. A lost run asked to cancel ends `cancelled`.
+   The relay publishes the outbox (`Nats-Msg-Id <run>:<attempt>`).
 3. The projector (durable `studio-projector` on `EVT`, `evt.run.>`, one message at a time) checks the run's owner and
-   session against the envelope and subject, dedupes on `(job_id, seq)`, applies `status` (queued → running → one of
+   session against the envelope and subject, drops events of an attempt that is not the run's current one, dedupes on `(job_id, attempt, seq)`, applies `status` (queued → running → one of
    succeeded, failed, cancelled; nothing after the end), `progress` (with `phase`, `eta_s`) and `output` (keys under the run's prefix only, its `seed`), keeps a
    `succeeded`'s `resolved` (the seed the runner picked) on the run, and appends each to `run_events` under the session's next `seq`.
 4. `GET /sessions/{id}/events` serves the log as JSON (`?since=`) or SSE (`Last-Event-ID`, polls every second,
    keep-alive every 15 s); output keys are signed when read.
-5. Cancel: a run still in the outbox is cancelled at once and never sent. Otherwise the run is marked and its id written
+5. Cancel: a run not released, or still in the outbox, is cancelled at once and never sent. Otherwise the run is marked and its id written
    to the KV `cancels`; the runner reports `cancelled`.
-6. The lease sweep (every 5 s, after a 30 s start-up grace) ends an open run with no event for 30 s whose host is
-   offline or live but not on it (a runner whose hosts key names the run holds it through a long model load), or that was asked to cancel and did not answer: `cancelled` if asked, else `failed`.
 
-NATS user `studio`: publishes `cmd.run.>` and `$KV.cancels.>` (a KV put, sent as a request for the stream's ack),
+NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack) and
+`$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
 consumes `evt.run.>` (durable `studio-projector`), watches the KV `registry` and `hosts`, requests
 `auth.validate.token`, subscribes to `evt.auth.revoked`.
 
@@ -45,12 +57,12 @@ consumes `evt.run.>` (durable `studio-projector`), watches the KV `registry` and
 | Path | What |
 |---|---|
 | `cmd/main.go` | `studio` (server), `studio health` (container check) |
-| `startup/` | config → DB (migrations) → NATS → module → relay, projector, registry and hosts watches, lease sweep → serve |
+| `startup/` | config → DB (migrations) → NATS → module → relay, projector, registry and hosts watches, dispatcher → serve |
 | `config/` | env (see `.env.example`) |
 | `common/` | `Caller`, `OwnerPrefix`, `Owns`, `WithUser` (RLS per transaction), `System`, `Signer` (`/files/{key}?exp=&sig=`) |
-| `messaging/` | `Enqueue` (outbox), relay (`NatsJetStreamPublisher`), `ProjectorConsumer`, `FirstSeen`, `NatsCancel` (KV cancels) |
-| `registry/` | the runners' KV values: `SetRegistry` / `SetHost` (fed by `micro.NatsJetStreamWatchKV`), `Workflows`, `Place`, `Live` |
+| `messaging/` | `Enqueue` (outbox), relay (`NatsJetStreamPublisher`), `ProjectorConsumer`, `FirstSeen`, `NatsCancel` (KV cancels), `NatsPurge` (CMD subject) |
+| `registry/` | the runners' KV values: `SetRegistry` / `SetHost` (fed by `micro.NatsJetStreamWatchKV`), `Workflows`, `Publishes`, `Model`, `Live` |
 | `api/auth/` | Bearer token → NATS `auth.validate.token`, cached until expiry, dropped on `evt.auth.revoked`; `middleware/` is the `/v1/` guard |
-| `api/studio/` | `controller.go` (routes, SSE), `service.go` (sessions, workflows, hosts), `runs.go` (create, list, get, cancel, the state machine), `resolve.go` (inputs → filled graph), `projector.go`, `events.go`, `sweep.go` |
+| `api/studio/` | `controller.go` (routes, SSE), `service.go` (sessions, workflows, hosts), `runs.go` (create, list, get, cancel, the state machine), `resolve.go` (inputs → filled graph), `projector.go`, `events.go`, `dispatcher.go` (the fair queue, leases, `GET /queue`) |
 | `api/studio/{dto,model,message}/` | HTTP bodies, table rows, NATS bodies (`cmd.run.execute`, `evt.run.*`) |
 | `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events |

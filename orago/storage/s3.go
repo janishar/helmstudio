@@ -79,6 +79,24 @@ func notFound(err error) error {
 
 // Put uploads body. A non-seekable body of unknown size (size < 0) is spooled to a temp file first.
 func (s *S3) Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error {
+	return s.put(ctx, key, body, size, contentType, false)
+}
+
+// Create uploads body only when key is not there (If-None-Match: *); ErrExists when it is.
+func (s *S3) Create(ctx context.Context, key string, body io.Reader, size int64, contentType string) error {
+	err := s.put(ctx, key, body, size, contentType, true)
+	var apiError smithy.APIError
+	if errors.As(err, &apiError) {
+		switch apiError.ErrorCode() {
+		case "PreconditionFailed", "ConditionalRequestConflict":
+			return ErrExists
+		}
+	}
+	return err
+}
+
+// put uploads body, with If-None-Match: * when createOnly.
+func (s *S3) put(ctx context.Context, key string, body io.Reader, size int64, contentType string, createOnly bool) error {
 	var options []func(*s3.Options)
 	if _, seekable := body.(io.ReadSeeker); !seekable {
 		if size < 0 { // unknown length: spool to a temp file (seekable, sized)
@@ -102,6 +120,9 @@ func (s *S3) Put(ctx context.Context, key string, body io.Reader, size int64, co
 	input := &s3.PutObjectInput{Bucket: &s.bucket, Key: &key, Body: body, ContentType: aws.String(contentType)}
 	if size >= 0 {
 		input.ContentLength = aws.Int64(size)
+	}
+	if createOnly {
+		input.IfNoneMatch = aws.String("*")
 	}
 	_, err := s.client.PutObject(ctx, input, options...)
 	return err

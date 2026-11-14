@@ -90,13 +90,14 @@ type RunProgress struct {
 
 // RunOutput is one stored output with its signed link.
 type RunOutput struct {
-	Index  int    `json:"index"`
-	Key    string `json:"key"`
-	Kind   string `json:"kind"`
-	URL    string `json:"url"`
-	Width  *int   `json:"width"`
-	Height *int   `json:"height"`
-	Seed   *int64 `json:"seed,omitempty"`
+	Index  int     `json:"index"`
+	Key    string  `json:"key"`
+	Kind   string  `json:"kind"`
+	URL    string  `json:"url"`
+	Width  *int    `json:"width"`
+	Height *int    `json:"height"`
+	Seed   *int64  `json:"seed,omitempty"`
+	TakeID *string `json:"take_id,omitempty"`
 }
 
 // Run is one run of a workflow.
@@ -109,7 +110,10 @@ type Run struct {
 	Progress   *RunProgress   `json:"progress"`
 	Error      *string        `json:"error"`
 	Outputs    []RunOutput    `json:"outputs"`
-	Host       *string        `json:"host"`
+	Host       *string        `json:"host"` // while queued: the host it is lined up for
+	Lane       string         `json:"lane"`
+	Attempt    int            `json:"attempt"`
+	Position   *int           `json:"position,omitempty"` // only while queued
 	Resolved   map[string]any `json:"resolved,omitempty"` // values the runner chose (a random seed), from succeeded
 	CreatedAt  time.Time      `json:"created_at"`
 	StartedAt  *time.Time     `json:"started_at"`
@@ -149,4 +153,17 @@ type Host struct {
 // HostList is every runner, by key.
 type HostList struct {
 	Hosts []Host `json:"hosts"`
+}
+
+// Queue is the caller's queued and running runs, and per host how many runs of others wait.
+type Queue struct {
+	Runs  []Run       `json:"runs"`
+	Hosts []QueueHost `json:"hosts"`
+}
+
+// QueueHost is one host name (its envs merged), redacted: a count of other users' queued runs, never whose.
+type QueueHost struct {
+	Host         string `json:"host"`
+	State        string `json:"state"` // idle | busy | offline
+	OthersQueued int    `json:"others_queued"`
 }

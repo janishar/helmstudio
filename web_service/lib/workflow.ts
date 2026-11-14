@@ -145,6 +145,14 @@ export function visible(fs: Field[], raws: Record<string, Raw>): Field[] {
 export const toRaw = (v: Value, p: Param): Raw =>
   typeof v === "boolean" ? v : v == null || (p.type === "seed" && v === -1) ? "" : String(v);
 
+/** The form's controls filled from a run's inputs (a reused take's settings): only the workflow's params, each as
+ * its control holds it. */
+export function rawsFrom(fs: Field[], inputs: Record<string, Value>): Record<string, Raw> {
+  return Object.fromEntries(
+    fs.filter((f) => f.key in inputs).map((f) => [f.key, toRaw(inputs[f.key], f.param)]),
+  );
+}
+
 /** The form control's content as a value, or why it is not one (worded like studio_service's 422). */
 export function readValue(p: Param, raw: Raw): { value: Value } | { error: string } {
   if (p.type === "bool") return { value: raw === true };

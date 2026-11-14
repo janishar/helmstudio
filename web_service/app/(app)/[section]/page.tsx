@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 /** Dock sections that arrive after M0, by route segment. */
 const LATER: Record<string, string> = {
   pipelines: "Pipelines",
-  gallery: "Gallery",
   timeline: "Timeline",
   models: "Models",
 };

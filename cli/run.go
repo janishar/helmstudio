@@ -34,19 +34,24 @@ type workflow struct {
 }
 
 type runOutput struct {
-	Index int    `json:"index"`
-	Key   string `json:"key"`
-	Kind  string `json:"kind"`
-	URL   string `json:"url"`
+	Index  int    `json:"index"`
+	Key    string `json:"key"`
+	Kind   string `json:"kind"`
+	URL    string `json:"url"`
+	TakeID string `json:"take_id"`
 }
 
 type run struct {
-	ID      string      `json:"id"`
-	Status  string      `json:"status"`
-	Error   *string     `json:"error"`
-	Host    *string     `json:"host"`
-	Outputs []runOutput `json:"outputs"`
+	ID       string      `json:"id"`
+	Status   string      `json:"status"`
+	Error    *string     `json:"error"`
+	Host     *string     `json:"host"`
+	Position int         `json:"position"`
+	Outputs  []runOutput `json:"outputs"`
 }
+
+// pollEvery is how often helm run asks for the queue position while the run waits.
+var pollEvery = time.Second
 
 type event struct {
 	Seq   int             `json:"seq"`
@@ -154,6 +159,9 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	if r.Status == "failed" {
 		return fmt.Errorf("run failed: %s", deref(r.Error))
 	}
+	if err := c.waitQueued(r, stdout, stop); err != nil {
+		return err
+	}
 
 	status, err := c.follow(sid, r.ID, since, stdout, stop)
 	if err != nil {
@@ -166,6 +174,31 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 		return err
 	}
 	return c.download(r, *out, stdout)
+}
+
+// waitQueued prints the run's queue position while it waits for a host. An interrupt cancels it (a run not yet
+// sent ends cancelled at once); the event stream then shows how it ended.
+func (c *client) waitQueued(r run, stdout io.Writer, stop <-chan os.Signal) error {
+	last := 0
+	for r.Status == "queued" {
+		if r.Position > 0 && r.Position != last {
+			fmt.Fprintf(stdout, "queued, position %d\n", r.Position)
+			last = r.Position
+		}
+		select {
+		case <-stop:
+			fmt.Fprintln(stdout, "cancelling")
+			if err := c.call(http.MethodPost, "/v1/studio/runs/"+url.PathEscape(r.ID)+"/cancel", nil, http.StatusAccepted, nil); err != nil {
+				fmt.Fprintln(stdout, "cancel:", err) // 409: it already ended, and the stream shows how
+			}
+			return nil
+		case <-time.After(pollEvery):
+		}
+		if err := c.call(http.MethodGet, "/v1/studio/runs/"+url.PathEscape(r.ID), nil, http.StatusOK, &r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // lastSeq is the session's newest event seq, so following starts after it.
@@ -276,6 +309,7 @@ func printEvent(e event, stdout io.Writer) string {
 	case "status":
 		var d struct {
 			Status   string  `json:"status"`
+			Attempt  int     `json:"attempt"`
 			Error    *string `json:"error"`
 			Host     *string `json:"host"`
 			Resolved struct {
@@ -284,6 +318,8 @@ func printEvent(e event, stdout io.Writer) string {
 		}
 		_ = json.Unmarshal(e.Data, &d)
 		switch {
+		case d.Status == "queued" && d.Attempt > 1:
+			fmt.Fprintf(stdout, "queued again (attempt %d): the runner stopped responding\n", d.Attempt)
 		case d.Status == "running":
 			fmt.Fprintf(stdout, "running on %s\n", deref(d.Host))
 		case d.Status == "failed":
@@ -338,6 +374,9 @@ func (c *client) download(r run, dir string, stdout io.Writer) error {
 		dest := filepath.Join(dir, r.ID+"_"+path.Base(o.Key))
 		if err := fetch(c.http, link.String(), dest); err != nil {
 			return fmt.Errorf("output %d: %w", o.Index, err)
+		}
+		if o.TakeID != "" {
+			fmt.Fprintf(stdout, "take %s\n", o.TakeID)
 		}
 		fmt.Fprintln(stdout, dest)
 	}

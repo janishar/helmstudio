@@ -21,6 +21,9 @@ type Info struct {
 type Store interface {
 	// Put writes an object; size < 0 means the length is unknown.
 	Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error
+	// Create is Put that never replaces an object: ErrExists when key is already there, decided by the store at
+	// once (S3 If-None-Match: *), so of two creates of one key at most one succeeds.
+	Create(ctx context.Context, key string, body io.Reader, size int64, contentType string) error
 	// Get opens an object; the caller closes it. ErrNotFound when missing.
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 	// Stat returns an object's Info. ErrNotFound when missing.
@@ -37,3 +40,6 @@ type Store interface {
 
 // ErrNotFound means the key does not exist.
 var ErrNotFound = errors.New("object not found")
+
+// ErrExists means Create found the key already there.
+var ErrExists = errors.New("object already exists")

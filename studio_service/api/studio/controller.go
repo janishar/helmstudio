@@ -51,6 +51,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/runs/:id", c.getRunHandler)
 	group.POST("/runs/:id/cancel", c.cancelRunHandler)
 	group.GET("/hosts", c.listHostsHandler)
+	group.GET("/queue", c.queueHandler)
 }
 
 // reply sends out with status, or the error.
@@ -129,6 +130,12 @@ func (c *controller) listWorkflowsHandler(ctx *gin.Context) {
 // getWorkflowHandler: GET /workflows/{id}.
 func (c *controller) getWorkflowHandler(ctx *gin.Context) {
 	out, err := c.service.Workflow(ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// queueHandler: GET /queue — the caller's open runs and, per host, a count of others' queued runs.
+func (c *controller) queueHandler(ctx *gin.Context) {
+	out, err := c.service.Queue(ctx.Request.Context(), common.MustCaller(ctx))
 	reply(ctx, http.StatusOK, out, err)
 }
 

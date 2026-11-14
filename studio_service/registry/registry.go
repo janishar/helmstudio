@@ -70,6 +70,7 @@ type Host struct {
 	Env       string     `json:"env"`
 	State     string     `json:"state"` // idle | busy
 	RunID     *string    `json:"run_id"`
+	Attempt   *int       `json:"attempt,omitempty"` // of run_id while busy; absent = 1
 	UpdatedAt time.Time  `json:"updated_at"`
 	Memory    *Memory    `json:"memory,omitempty"`
 	Resident  []Resident `json:"resident,omitempty"`
@@ -91,6 +92,24 @@ type Resident struct {
 	Pinned    bool    `json:"pinned"`
 }
 
+// Model is one model of a registry models value: the models present on a host for an env.
+type Model struct {
+	ID       string    `json:"id"`
+	Family   string    `json:"family"`
+	Variants []Variant `json:"variants"` // absent for a model without variants (echo)
+}
+
+// Variant is one variant of a model on a host.
+type Variant struct {
+	ID       string `json:"id"`
+	Presence string `json:"presence"` // present | missing
+}
+
+// Has reports whether the variant's files are on the host: always for a model without variants.
+func (m Model) Has(variant string) bool {
+	return len(m.Variants) == 0 || slices.Contains(m.Variants, Variant{ID: variant, Presence: "present"})
+}
+
 // Live reports whether the runner refreshed its key within Stale of now.
 func (h Host) Live(now time.Time) bool { return now.Sub(h.UpdatedAt) <= Stale }
 
@@ -99,10 +118,36 @@ type Registry struct {
 	mu        sync.RWMutex
 	nodes     map[string][]NodeSchema // "<host>.<env>" → its node schemas
 	workflows map[string][]Workflow   // "<host>.<env>" → its workflows (without node schemas)
+	models    map[string][]Model      // "<host>.<env>" → the models present there
 	hosts     map[string]Host         // "<host>.<env>" → its state
+	awaiting  map[string]bool         // watched buckets whose current values have not all arrived yet
 }
 
-// SetRegistry applies one KV `registry` value (nil: the key was deleted); keys of other kinds (models) are ignored.
+// Await marks buckets as not loaded yet: Ready is false until Loaded was called for each.
+func (r *Registry) Await(buckets ...string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, bucket := range buckets {
+		set(&r.awaiting, bucket, true)
+	}
+}
+
+// Loaded says the watch of bucket has handed over its current values.
+func (r *Registry) Loaded(bucket string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.awaiting, bucket)
+}
+
+// Ready reports whether every awaited bucket is loaded: until then an empty or partial view must not be read as
+// "no live host". The zero value is ready.
+func (r *Registry) Ready() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.awaiting) == 0
+}
+
+// SetRegistry applies one KV `registry` value (nil: the key was deleted); keys of other kinds are ignored.
 // A value speaks only for the runner its key names: a workflow of another env is refused, and so is a workflow id a
 // runner of another env already publishes.
 func (r *Registry) SetRegistry(key string, value []byte) error {
@@ -155,6 +200,18 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			kept = append(kept, workflow)
 		}
 		set(&r.workflows, source, kept)
+	case "models":
+		if value == nil {
+			delete(r.models, source)
+			return nil
+		}
+		var parsed struct {
+			Models []Model `json:"models"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		set(&r.models, source, parsed.Models)
 	}
 	return nil
 }
@@ -238,32 +295,23 @@ func (r *Registry) Hosts() []Host {
 	return out
 }
 
-// Place picks the host a run of env goes to: a live host with that env, idle ones first, then by name. False when
-// none is live. ponytail: M0 placement; the fair dispatcher replaces it.
-func (r *Registry) Place(env string, now time.Time) (string, bool) {
-	best, found := Host{}, false
-	for _, host := range r.Hosts() { // by key, so the first of equals wins
-		if host.Env != env || !host.Live(now) {
-			continue
-		}
-		if !found || (best.State != "idle" && host.State == "idle") {
-			best, found = host, true
-		}
-	}
-	return best.Host, found
-}
-
-// Holds reports whether host's runner for env is live and may still be working on the run: busy with it, or, for a
-// run still queued, busy with another one (the run waits its turn). A live runner that is idle, or busy with another
-// run while this one is running, has lost it (a crash or a lost publish).
-func (r *Registry) Holds(host, env, runID string, queued bool, now time.Time) bool {
+// Publishes reports whether the runner at source ("<host>.<env>") publishes the workflow id.
+func (r *Registry) Publishes(source, id string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	value, ok := r.hosts[host+"."+env]
-	if !ok || !value.Live(now) {
-		return false
+	return slices.ContainsFunc(r.workflows[source], func(w Workflow) bool { return w.ID == id })
+}
+
+// Model returns the model of family that the runner at source ("<host>.<env>") has, or false.
+func (r *Registry) Model(source, family string) (Model, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, model := range r.models[source] {
+		if model.Family == family {
+			return model, true
+		}
 	}
-	return (value.RunID != nil && *value.RunID == runID) || (queued && value.State == "busy")
+	return Model{}, false
 }
 
 // withSchemas returns the workflow with the schemas of its kinds, or nil when one is missing.

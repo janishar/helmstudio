@@ -1,6 +1,7 @@
 """evt.run.<session_id>.{status,progress,output} for one run. `seq` is per run, from 1, over all three kinds; it
 lives in memory because a run command is delivered once (studio, not redelivery, retries a run). Every message
-is checked against the contract before it leaves and is published with Nats-Msg-Id <run_id>:<seq>; the publish
+is checked against the contract before it leaves and is published with Nats-Msg-Id <run_id>:<attempt>:<seq>
+(seq restarts at 1 for each attempt; data.attempt is the command's attempt); the publish
 waits for JetStream's ack, and is retried for up to RETRY_FOR seconds (JetStream drops a duplicate by its id), so a
 broker hiccup does not fail the run."""
 
@@ -44,7 +45,7 @@ class RunEvents:
             "owner_id": cmd["owner_id"],
             "occurred_at": now(),
             "trace": trace,
-            "data": {"seq": seq} | data,
+            "data": {"seq": seq, "attempt": cmd["data"].get("attempt", 1)} | data,
         }
         if errs := schemas.message_errors(msg):
             raise ValueError(f"evt.run.{kind} is off-contract: {'; '.join(errs[:3])}")
@@ -57,7 +58,7 @@ class RunEvents:
         subject = f"evt.run.{self.cmd['data']['session_id']}.{kind}"
         body, headers = (
             json.dumps(msg).encode(),
-            {"Nats-Msg-Id": f"{msg['job_id']}:{msg['data']['seq']}"},
+            {"Nats-Msg-Id": f"{msg['job_id']}:{msg['data']['attempt']}:{msg['data']['seq']}"},
         )
         loop = asyncio.get_running_loop()
         deadline = loop.time() + RETRY_FOR

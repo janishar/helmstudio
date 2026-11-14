@@ -31,7 +31,8 @@ make -C contract_tests test API_KEY=... ARGS="-k runs -x"   # any pytest args
 
 `resilience.sh` restarts studio, runner, nats, postgres and kong of the running helmstudio-test stack one at a time,
 each in the middle of a ~12 s echo run, and requires that the run ends (succeeded, or failed/cancelled with an
-error: never stuck queued or running) and that a new run afterwards succeeds. It takes a few minutes.
+error: never stuck queued or running) and that a new run afterwards succeeds. `studio-queued` restarts studio while a
+second run is still queued behind the first, and requires that run to succeed. It takes a few minutes.
 
 ```sh
 make resilience   # from the repo root: brings the test stack up, makes a key, runs the script
@@ -53,7 +54,10 @@ Kong's sign-in rate limit is 20 a minute per IP; the suite signs in about that o
 | `test_runs.py` | the echo run: queued, events in seq order (`queued`, `running`, one progress per step, the output, `succeeded`), the PNG through its signed link, the finished run; `fail=true` fails with an error; cancel mid-run (delete is 409 meanwhile) ends `cancelled` with no output; invalid inputs (null for a non-seed param included) and an unknown `workflow_id` 422; unknown ids 404 |
 | `test_qwen.py` | opt-in (`QWEN=1`, skipped otherwise): `qwen-image` on the Mac torch runner (`make runners`, joined to the stack `BASE_URL` points at), turbo int8 768², a fixed and a random seed, up to 15 min each: phases on every progress event, one PNG of the size, `resolved.seed` = the output's seed |
 | `test_events.py` | JSON `?since=` paging and `last_seq`, bad `since` 422, SSE replay from `Last-Event-ID` or `?since=` (the header wins) |
-| `test_isolation.py` | user B gets 404 for A's session, runs, events and cancel; A's output file only through its signed link (missing, tampered or re-dated signatures and sibling keys are 403) |
+| `test_queue.py` | the dispatcher on the one fake host: three users' runs start round-robin (fresh users Y and Z), positions 1..n that only go down, `lane`/`attempt`, `GET /queue` (own runs only, others as a count), cancel of a queued run ends it at once without running, no live host fails at once (skipped when every workflow has one) |
+| `test_takes.py` | an echo output is a take (`made_with`, prompt, no seed or model, signed `url`/`thumb_url`), titles, newest first, filters (kind, source, starred, session), `q` search over prompt and title, stable cursor pages, 422s, rename and star, reuse (posts as a run), soft delete, a deleted session keeps its takes |
+| `test_uploads.py` | POST /uploads → PUT the signed link → complete: a PNG becomes a take of its size; pending is hidden and 409; single-use PUT; bad type/size 422; a text file sent as PNG is 422 and discarded; tampered, re-dated, sibling, GET-signed links 403, wrong length 411, wrong type 415 |
+| `test_isolation.py` | user B gets 404 for A's session, runs, events and cancel; A's output file only through its signed link (missing, tampered or re-dated signatures and sibling keys are 403); B gets 404 on A's takes and pending upload (get, patch, delete, reuse, complete), never lists them, and cannot PUT under A's prefix with its own signature |
 
 `helpers.py` has the polling, the SSE reader and the run steps; `conftest.py` the clients, the users and `echo_done`,
 user A's finished quick echo run that the runs, events and isolation tests share.

@@ -18,7 +18,8 @@ const RANK: Record<Status, number> = {
 export const isActive = (s: Status) => s === "queued" || s === "running";
 
 /** The runs after one event. `known` is false for a run not in the list (made elsewhere: fetch the list); `ended`
- * is true when this event ended a run the list had as active (fetch that run for its final state). */
+ * is true when this event ended a run the list had as active, or put it back in the queue for a new attempt (fetch
+ * that run for its final state or its place in line). */
 export function applyEvent(
   runs: Run[],
   e: S<"SessionEvent">,
@@ -29,7 +30,19 @@ export function applyEvent(
   let next = run;
   let ended = false;
   if (e.type === "status") {
-    if (RANK[e.data.status] > RANK[run.status]) {
+    if ((e.data.attempt ?? 1) > run.attempt) {
+      // the runner was lost and the run queued again: attempt 1's progress and outputs are gone
+      next = {
+        ...run,
+        status: e.data.status,
+        attempt: e.data.attempt ?? 1,
+        error: e.data.error,
+        host: null,
+        progress: null,
+        outputs: [],
+      };
+      ended = true;
+    } else if (RANK[e.data.status] > RANK[run.status]) {
       next = {
         ...run,
         status: e.data.status,
@@ -50,7 +63,8 @@ export function applyEvent(
   return { runs: out, known: true, ended };
 }
 
-/** A fetched list merged with the local one: a run the events already moved further keeps its local state, and a
+/** A fetched list merged with the local one: a run the events already moved further (in the same or a later attempt)
+ * keeps its local state, and a
  * run only the local list has (just created) stays in front. */
 export function mergeRuns(local: Run[], fetched: Run[]): Run[] {
   const byId = new Map(local.map((r) => [r.id, r]));
@@ -59,7 +73,7 @@ export function mergeRuns(local: Run[], fetched: Run[]): Run[] {
     ...local.filter((r) => !ids.has(r.id)),
     ...fetched.map((f) => {
       const l = byId.get(f.id);
-      return l && RANK[l.status] > RANK[f.status] ? l : f;
+      return l && l.attempt >= f.attempt && RANK[l.status] > RANK[f.status] ? l : f;
     }),
   ];
 }

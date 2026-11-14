@@ -13,17 +13,21 @@ import (
 	"github.com/helmstudio/orago/micro"
 	"github.com/helmstudio/orago/utility"
 
+	"github.com/helmstudio/studio_service/api/gallery"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/gen"
 	"github.com/helmstudio/studio_service/messaging"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // Projector applies evt.run.<session_id>.<kind> to the runs and run_outputs tables and appends each applied event to
 // the session's log, as System.
 type Projector struct {
 	pool *pgxpool.Pool
+	// Workflows names a take's workflow and model (made_with); nil leaves them as the run's ids.
+	Workflows *registry.Registry
 }
 
 // NewProjector returns the projector writing through pool.
@@ -35,7 +39,7 @@ func NewProjector(pool *pgxpool.Pool) *Projector {
 func (p *Projector) MountNatsJetStream(group *micro.NatsJetStreamGroup) {
 	group.AddHandler("evt.run.*.status", handler(p, "status", applyStatus))
 	group.AddHandler("evt.run.*.progress", handler(p, "progress", applyProgress))
-	group.AddHandler("evt.run.*.output", handler(p, "output", applyOutput))
+	group.AddHandler("evt.run.*.output", handler(p, "output", p.applyOutput))
 }
 
 // based is an event's data: every one has a seq.
@@ -70,8 +74,9 @@ func sessionOf(subject string) string {
 	return parts[2]
 }
 
-// project applies the event once per (job_id, seq) when its run belongs to the envelope's owner and the subject's
-// session, then appends it to the session's log. Anything else is logged and skipped (acked).
+// project applies the event once per (job_id, attempt, seq) when its run belongs to the envelope's owner and the
+// subject's session and the event is of the run's current attempt, then appends it to the session's log. Anything
+// else is logged and skipped (acked). A terminal status frees the run's host for the dispatcher's next pass.
 func project[D based](ctx context.Context, pool *pgxpool.Pool, typ, sessionID string, event *gen.Message[D], apply applyFunc[D]) error {
 	seq := event.Data.Common().Seq
 	if event.JobID == nil || !utility.IsUUID(*event.JobID) || seq < 1 {
@@ -86,7 +91,12 @@ func project[D based](ctx context.Context, pool *pgxpool.Pool, typ, sessionID st
 		} else if err != nil {
 			return err
 		}
-		if first, err := messaging.FirstSeen(ctx, tx, run.ID, seq); err != nil || !first {
+		attempt := event.Data.Common().Try()
+		if attempt != run.Attempt { // a lost attempt's runner still talking: the run has moved on
+			log.Printf("projector: dropping %s of run %s attempt %d (now %d)", event.Type, run.ID, attempt, run.Attempt)
+			return nil
+		}
+		if first, err := messaging.FirstSeen(ctx, tx, run.ID, attempt, seq); err != nil || !first {
 			return err
 		}
 		stored, err := apply(ctx, tx, run, event)
@@ -122,7 +132,7 @@ func applyStatus(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Messa
 		finished_at = CASE WHEN $2 = 'running' THEN NULL ELSE clock_timestamp() END,
 		resolved = coalesce($5::jsonb, resolved)
 		WHERE id = $1`, run.ID, data.Status, data.Error, host, data.Resolved)
-	stored := statusData(data.Status, data.Error, host)
+	stored := statusData(data.Status, data.Error, host, run.Attempt)
 	if data.Resolved != nil {
 		stored["resolved"] = data.Resolved
 	}
@@ -147,8 +157,9 @@ func applyProgress(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Mes
 }
 
 // applyOutput records an output stored under the run's own prefix; a key outside it, or a run already ended, is
-// dropped. The stored event keeps the key: it is signed when read.
-func applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Message[message.Output]) (any, error) {
+// dropped. Every output is a take, stored in the same transaction (gallery.Record). The stored event keeps the key: it
+// is signed when read.
+func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Message[message.Output]) (any, error) {
 	data := event.Data
 	prefix := common.OwnerPrefix(run.OwnerID) + "runs/" + run.ID + "/"
 	if terminal[run.Status] || !common.Owns(run.OwnerID, data.Key) || !strings.HasPrefix(data.Key, prefix) ||
@@ -156,16 +167,23 @@ func applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Messa
 		log.Printf("projector: dropping output %d of run %s (%s)", data.Index, run.ID, data.Key)
 		return nil, nil
 	}
-	_, err := tx.Exec(ctx, `INSERT INTO run_outputs (run_id, owner_id, idx, key, kind, width, height, bytes, seed)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (run_id, idx) DO NOTHING`,
-		run.ID, run.OwnerID, data.Index, data.Key, data.Kind, data.Width, data.Height, data.Bytes, data.Seed)
+	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
+		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
+		MadeWith: madeWith(p.Workflows, run, data.Seed)})
+	if err != nil {
+		return nil, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO run_outputs (run_id, owner_id, idx, key, kind, width, height, bytes, seed, take_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (run_id, idx) DO NOTHING`,
+		run.ID, run.OwnerID, data.Index, data.Key, data.Kind, data.Width, data.Height, data.Bytes, data.Seed, takeID)
 	if err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE runs SET updated_at = clock_timestamp() WHERE id = $1`, run.ID); err != nil {
 		return nil, err
 	}
-	stored := map[string]any{"index": data.Index, "key": data.Key, "kind": data.Kind, "width": data.Width, "height": data.Height}
+	stored := map[string]any{"index": data.Index, "key": data.Key, "kind": data.Kind, "width": data.Width, "height": data.Height,
+		"take_id": takeID}
 	if data.Seed != nil {
 		stored["seed"] = *data.Seed
 	}

@@ -29,10 +29,14 @@ func (Execute) Type() string { return TypeExecute }
 // Subject is cmd.run.<host>.<env>.
 func (e Execute) Subject() string { return "cmd.run." + e.Host + "." + e.Env }
 
-// Base is what every evt.run.* data has.
+// Base is what every evt.run.* data has: seq restarts at 1 for each attempt; attempt absent is 1.
 type Base struct {
-	Seq int `json:"seq"`
+	Seq     int `json:"seq"`
+	Attempt int `json:"attempt"`
 }
+
+// Try is the event's attempt: 1 when absent.
+func (b Base) Try() int { return max(b.Attempt, 1) }
 
 // Common returns the base.
 func (b Base) Common() Base { return b }

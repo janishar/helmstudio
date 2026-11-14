@@ -641,6 +641,10 @@
               }
             }
           }
+        },
+        "attempt": {
+          "$ref": "messages/defs.schema.json#/$defs/attempt",
+          "description": "the attempt of run_id in progress (busy); absent when idle. The dispatcher's lease check compares (run_id, attempt)"
         }
       },
       "if": {
