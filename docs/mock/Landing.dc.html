@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>helmstudio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#5f5647;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#a8402b;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:inherit;text-decoration:none}
+.pg{background:var(--g);color:var(--t1);font-family:Inter,system-ui,sans-serif;font-size:15px;line-height:24px;background-image:radial-gradient(1200px 700px at 12% -8%,rgba(255,196,120,.13),transparent 62%),radial-gradient(900px 700px at 104% 22%,color-mix(in srgb,var(--a1) 10%,transparent),transparent 60%),radial-gradient(1000px 700px at -6% 70%,color-mix(in srgb,var(--a2) 7%,transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px);overflow:hidden}
+.wrap{max-width:1296px;margin:0 auto;padding:0 72px}
+.d{font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:700;margin:0}
+.m{font-family:'JetBrains Mono',monospace}
+.eb{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:var(--t1b)}
+.h2{font-size:44px;line-height:48px;letter-spacing:-.01em;text-wrap:balance}
+.p{margin:0;color:var(--t2);max-width:52ch}
+.top{display:flex;align-items:center;gap:28px;margin:20px auto 0;max-width:1152px;padding:10px 12px 10px 20px;border-radius:26px 26px 26px 10px;background:color-mix(in srgb,var(--s1) 88%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 24px 40px -20px color-mix(in srgb,var(--shd) 80%,transparent)}
+.top a.l{font-size:14px;font-weight:500;color:var(--t2)}
+.top a.l:hover{color:var(--t1)}
+.b1,.b2{display:inline-flex;align-items:center;justify-content:center;height:52px;padding:0 26px;border:0;border-radius:20px 20px 20px 8px;font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:700;font-size:16px;letter-spacing:.02em}
+.b1{background:var(--a1);color:var(--on1);background-image:linear-gradient(180deg,rgba(255,255,255,.38),rgba(255,255,255,0) 55%);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -3px 0 color-mix(in srgb,var(--shd) 22%,transparent),0 16px 28px -10px color-mix(in srgb,var(--a1) 55%,transparent)}
+.b2{background:var(--s3);color:var(--t1);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -3px 0 color-mix(in srgb,var(--shd) 28%,transparent),0 10px 18px -10px color-mix(in srgb,var(--shd) 70%,transparent)}
+.sm{height:40px;padding:0 18px;font-size:14px;border-radius:14px 14px 14px 6px}
+.ic{flex:0 0 auto;width:52px;height:52px;padding:13px;border-radius:17px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -5px 8px color-mix(in srgb,var(--shd) 35%,transparent),0 14px 22px -8px color-mix(in srgb,var(--shd) 75%,transparent)}
+.ic.s{width:34px;height:34px;padding:8px;border-radius:11px}
+.c1{background:linear-gradient(155deg,#a393ff,#4a2fe0)}.c2{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}.c3{background:linear-gradient(155deg,#ffb07a,#e0457a)}.c4{background:linear-gradient(155deg,#ffe07a,#f08a1c)}.c5{background:linear-gradient(155deg,#7af5d6,#12967f)}.c6{background:linear-gradient(155deg,#c9ced9,#5b6478)}
+.card{position:relative;padding:28px;border-radius:32px 32px 32px 12px;background:var(--s1);background-image:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,0) 46%);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 34px 56px -24px color-mix(in srgb,var(--shd) 85%,transparent),0 12px 20px -12px color-mix(in srgb,var(--shd) 60%,transparent);display:flex;flex-direction:column;gap:14px}
+.card h3{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:24px;line-height:28px;font-weight:700}
+.card p{margin:0;color:var(--t2);font-size:14px;line-height:22px}
+.pill{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:999px;background:var(--s2);font-size:13px;font-weight:500;color:var(--t1b);white-space:nowrap}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--a1);box-shadow:0 0 10px var(--a1)}
+.nd{position:absolute;width:104px;height:56px;padding:9px 12px;border-radius:16px 16px 16px 6px;background:linear-gradient(180deg,var(--s4),var(--s2));box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 16px 24px -10px color-mix(in srgb,var(--shd) 85%,transparent);font-size:12px;font-weight:600;line-height:16px}
+.nd small{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:400;color:var(--t2)}
+.tk{aspect-ratio:16/10;border-radius:12px 12px 12px 5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 10px 16px -8px color-mix(in srgb,var(--shd) 80%,transparent)}
+.t1{background:radial-gradient(60% 80% at 30% 75%,#ffb07a,transparent 70%),linear-gradient(170deg,#2b2a5c,#7a3d6b 60%,#f08a1c)}
+.t2{background:radial-gradient(50% 70% at 70% 30%,#ffe9b0,transparent 70%),linear-gradient(190deg,#1d4a5c,#3a7d6b 55%,#d9c27a)}
+.t3{background:radial-gradient(60% 80% at 50% 90%,#ff8552,transparent 70%),linear-gradient(160deg,#141a3a,#4a2f7a 60%,#e0457a)}
+.t4{background:radial-gradient(50% 60% at 25% 25%,#c9f0ff,transparent 70%),linear-gradient(200deg,#23405c,#5c6f8a 55%,#e6d6c2)}
+.st{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:86px;padding:14px 8px;border-radius:20px 20px 20px 8px;background:linear-gradient(180deg,var(--s4),var(--s2));box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 18px 28px -12px color-mix(in srgb,var(--shd) 85%,transparent);font-size:13px;font-weight:600;text-align:center}
+.st small{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:400;color:var(--t2)}
+.ar{flex:0 0 14px;height:2px;background:var(--ln);position:relative}
+.ar::after{content:"";position:absolute;right:-1px;top:-4px;border-left:7px solid var(--ln);border-top:5px solid transparent;border-bottom:5px solid transparent}
+.code{margin:0;padding:22px 24px;border-radius:22px 22px 22px 8px;background:var(--in);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:22px;color:var(--t1b);white-space:pre;overflow-x:auto;box-shadow:inset 0 2px 8px color-mix(in srgb,var(--shd) 60%,transparent)}
+.code b{font-weight:500;color:var(--a1)}.code u{text-decoration:none;color:var(--t2)}
+.ck{display:flex;gap:12px;align-items:flex-start;font-size:14px;line-height:22px;color:var(--t1b)}
+.ck::before{content:"";flex:0 0 auto;width:18px;height:18px;margin-top:2px;border-radius:6px;background:var(--a1);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 8px -2px color-mix(in srgb,var(--a1) 60%,transparent);border-radius:0;box-shadow:none;clip-path:polygon(14% 52%,0 66%,38% 100%,100% 22%,86% 8%,38% 72%)}
+</style>
+</helmet>
+<div class="pg" data-theme="{{theme}}">
+
+<header class="wrap" style="padding-top: 0">
+<nav aria-label="Site" class="top">
+<a href="#top" style="display: flex; align-items: center; gap: 10px"><svg aria-hidden="true" class="ic c5 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="1.5"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.8 2.8M16.2 16.2 19 19M19 5l-2.8 2.8M7.8 16.2 5 19"></path></svg><span class="d" style="font-size: 19px">helmstudio</span></a>
+<div style="flex-grow: 1"></div>
+<a class="l" href="#rooms">Studio</a>
+<a class="l" href="#pipelines">Pipelines</a>
+<a class="l" href="#machines">Your machines</a>
+<a class="l" href="#models">Models</a>
+<a class="b1 sm" href="/sign-in">Sign in</a>
+</nav>
+</header>
+
+<main>
+<section id="top" class="wrap" style="display: flex; flex-wrap: wrap; align-items: center; gap: 52px; padding-top: 88px; padding-bottom: 104px">
+<div style="flex: 1 1 500px; display: flex; flex-direction: column; gap: 26px">
+<span class="pill" style="align-self: flex-start"><i></i>Self-hosted</span>
+<h1 class="d" style="font-size: 64px; line-height: 66px; letter-spacing: -.025em">Wire the models.<br><span style="color: var(--a1)">Direct</span> the film.</h1>
+<p class="p" style="font-size: 18px; line-height: 28px">Image and video generation for your team, on your own GPUs. Build a workflow once, then shoot takes from it.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 14px">
+<a class="b1" href="/sign-in">Sign in</a>
+<a class="b2" href="#selfhost">Host it yourself</a>
+</div>
+</div>
+
+<div aria-label="A workflow graph that becomes a studio" role="img" style="flex: 0 1 560px; position: relative; height: 580px; min-width: 320px">
+<div style="position: absolute; left: 0; top: 0; width: 410px; height: 250px; border-radius: 30px 30px 30px 12px; background: var(--p0); transform: rotate(-4deg); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 40px 60px -24px color-mix(in srgb, var(--shd) 90%, transparent)">
+<svg aria-hidden="true" width="410" height="250" viewBox="0 0 410 250" fill="none" stroke="var(--a1)" stroke-width="2" stroke-linecap="round" style="position: absolute; inset: 0; opacity: .8"><path d="M124 74h28M256 74h28M204 152v-50M336 102v50"></path><path d="M256 180c40 0 4-92 28-98" stroke="var(--a2)"></path></svg>
+<div class="nd" style="left: 20px; top: 46px">Prompt<small>Text</small></div>
+<div class="nd" style="left: 152px; top: 46px">Encode<small>Conditioning</small></div>
+<div class="nd" style="left: 284px; top: 46px">Sample<small>Latent</small></div>
+<div class="nd" style="left: 152px; top: 152px">Model<small>qwen-image</small></div>
+<div class="nd" style="left: 284px; top: 152px">Decode<small>Image</small></div>
+</div>
+<div style="position: absolute; right: 0; top: 312px; width: 440px; padding: 20px; border-radius: 34px 34px 34px 14px; background: var(--s1); background-image: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 46%); transform: rotate(2.5deg); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 48px 70px -26px color-mix(in srgb, var(--shd) 95%, transparent); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 10px"><svg aria-hidden="true" class="ic c1 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg><span style="font-weight: 600">Create</span><span class="m" style="font-size: 11px; color: var(--t2)">Qwen Image</span></div>
+<div style="padding: 12px 14px; border-radius: 16px 16px 16px 6px; background: var(--in); font-size: 13px; line-height: 20px; color: var(--t1b)">A fox crossing a snowfield at dusk, <span style="color: var(--a1)">@fox</span>, long lens</div>
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px">
+<div class="tk t1"></div><div class="tk t2" style="outline: 2px solid var(--a1); outline-offset: 2px"></div><div class="tk t3"></div><div class="tk t4"></div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span class="pill" style="height: 30px; font-size: 12px">16:9</span><span class="pill" style="height: 30px; font-size: 12px">4 takes</span>
+<div style="flex-grow: 1"></div>
+<span class="b1 sm" style="height: 36px">Generate</span>
+</div>
+</div>
+<span class="pill" style="position: absolute; right: 8px; top: 262px; background: var(--s3); transform: rotate(3deg); box-shadow: 0 16px 24px -10px color-mix(in srgb, var(--shd) 85%, transparent)"><i></i>Same workflow, two views</span>
+</div>
+</section>
+
+<section id="rooms" class="wrap" style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 112px">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<span class="eb"><svg aria-hidden="true" class="ic c1 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg>The studio</span>
+<h2 class="d h2">Four rooms. One gallery between them.</h2>
+</div>
+<div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px">
+<article class="card" style="grid-column: span 7; min-width: 0">
+<svg aria-hidden="true" class="ic c1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg>
+<h3>Create</h3>
+<p>Pick a model, write a prompt, shoot takes. Call your characters and places by name with @, and set a look once.</p>
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding-top: 6px"><div class="tk t3"></div><div class="tk t1"></div><div class="tk t4"></div><div class="tk t2"></div></div>
+</article>
+<article class="card" style="grid-column: span 5; min-width: 0; border-radius: 32px 32px 12px 32px">
+<svg aria-hidden="true" class="ic c3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg>
+<h3>Gallery</h3>
+<p>Every take lands here with how it was made. Send any of them to Create, a pipeline or the timeline.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px"><span class="pill">Use in…</span><span class="pill">Add to timeline</span><span class="pill">Save as look</span></div>
+</article>
+<article class="card" style="grid-column: span 5; min-width: 0">
+<svg aria-hidden="true" class="ic c2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg>
+<h3>Pipelines</h3>
+<p>Chain workflows and run them over a list while you are away. Agent nodes pick, rewrite and retry.</p>
+</article>
+<article class="card" style="grid-column: span 7; min-width: 0; border-radius: 12px 32px 32px 32px">
+<svg aria-hidden="true" class="ic c4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg>
+<h3>Timeline</h3>
+<p>Direct shot by shot with a shared cast and look, cut the takes together, and export.</p>
+<div aria-hidden="true" style="display: flex; gap: 8px; padding-top: 6px"><div class="tk t1" style="flex: 3; aspect-ratio: auto; height: 46px"></div><div class="tk t4" style="flex: 2; aspect-ratio: auto; height: 46px"></div><div class="tk t3" style="flex: 4; aspect-ratio: auto; height: 46px"></div><div class="tk t2" style="flex: 2; aspect-ratio: auto; height: 46px"></div></div>
+</article>
+</div>
+</section>
+
+<section id="pipelines" class="wrap" style="display: flex; flex-wrap: wrap; align-items: center; gap: 56px; padding-bottom: 112px">
+<div style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 20px">
+<span class="eb"><svg aria-hidden="true" class="ic c2 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg>Pipelines</span>
+<h2 class="d h2">Batches that check their own work.</h2>
+<p class="p">A judge checks each take against your checklist, keeps the best and sends the rest back.</p>
+<div style="display: flex; flex-direction: column; gap: 12px; padding-top: 4px">
+<div class="ck">Suggests first. Switch to auto when you trust it.</div>
+<div class="ck">Learns from the takes you keep and reject.</div>
+<div class="ck">Every retry is capped and logged.</div>
+</div>
+</div>
+<div class="card" style="flex: 1 1 560px; min-width: 0; gap: 22px; padding: 32px">
+<div style="display: flex; align-items: center; gap: 10px"><span class="m" style="font-size: 12px; color: var(--t2)">still-to-clip</span><div style="flex-grow: 1"></div><span class="pill" style="height: 28px; font-size: 12px"><i></i>row 7 of 10</span></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; row-gap: 14px">
+<div class="st">Inputs<small>10 rows</small></div><span class="ar"></span>
+<div class="st">Step<small>4 stills</small></div><span class="ar"></span>
+<div class="st" style="outline: 2px solid var(--a1); outline-offset: 3px">Judge<small>keep 1</small></div><span class="ar"></span>
+<div class="st">Step<small>video</small></div><span class="ar"></span>
+<div class="st">Output<small>collection</small></div>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<span class="pill" style="background: color-mix(in srgb, var(--a2) 22%, var(--s2))">fail → Write → retry, 2 at most</span>
+<span class="pill">Memory · your past picks</span>
+</div>
+<div style="display: flex; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 18px 18px 18px 8px; background: var(--in)">
+<div class="tk t2" style="flex: 0 0 96px"></div>
+<p style="font-size: 13px; line-height: 20px; color: var(--t1b)">Kept take 2. Fox is in frame, no extra limbs, horizon level.</p>
+</div>
+</div>
+</section>
+
+<section id="machines" class="wrap" style="display: flex; flex-direction: column; gap: 40px; padding-bottom: 112px">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<span class="eb"><svg aria-hidden="true" class="ic c5 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"></path></svg>Your machines</span>
+<h2 class="d h2">Runs where your GPUs are.</h2>
+</div>
+<div style="display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px">
+<article class="card" style="grid-column: span 4; min-width: 0"><svg aria-hidden="true" class="ic c5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"></path></svg><h3>Apple Silicon</h3><p>MLX or PyTorch MPS, per model. Weights load straight into GPU memory.</p></article>
+<article class="card" style="grid-column: span 5; min-width: 0; border-radius: 32px 12px 32px 32px"><svg aria-hidden="true" class="ic c2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="7" rx="2"></rect><rect x="3" y="13" width="18" height="7" rx="2"></rect><path d="M7 7.5h.01M7 16.5h.01"></path></svg><h3>NVIDIA, one server or many</h3><p>Add CUDA servers. Each job goes to one with the model and the room. In v1, CUDA runs Qwen Image; LTX video runs on Apple Silicon.</p></article>
+<article class="card" style="grid-column: span 3; min-width: 0; border-radius: 32px 32px 12px 32px"><svg aria-hidden="true" class="ic c6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><h3>Private per person</h3><p>Your gallery, pipelines and memory are yours alone. Accounts come from the admin.</p></article>
+</div>
+</section>
+
+<section id="models" class="wrap" style="display: flex; flex-wrap: wrap; align-items: center; gap: 56px; padding-bottom: 112px">
+<pre class="code" style="flex: 1 1 520px; min-width: 0"><u># packs/qwen_image/model.yaml</u>
+<b>id</b>: qwen-image-2.1
+<b>family</b>: qwen-image
+<b>runtimes</b>:
+  torch: {env: torch, devices: [mps, cuda]}
+<b>variants</b>:
+  base:  {dir: Qwen-Image-2.1}
+  turbo: {dir: Qwen-Image-2.1-Turbo, shares: [text_encoder, vae]}
+<b>components</b>:
+  transformer: {precision: [bf16, int8]}
+<b>lora</b>: {component: transformer}</pre>
+<div style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 20px">
+<span class="eb"><svg aria-hidden="true" class="ic c5 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg>Models</span>
+<h2 class="d h2">A model is one pack.</h2>
+<p class="p">A YAML file and a small module per runtime. Its nodes and studio controls follow. Stack LoRAs and change their strength without reloading.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 10px">
+<span class="pill">Qwen Image 2.1</span><span class="pill">LTX-2.5</span>
+</div>
+</div>
+</section>
+
+<section id="selfhost" class="wrap" style="padding-bottom: 96px">
+<div class="card" style="flex-direction: row; flex-wrap: wrap; align-items: center; gap: 48px; padding: 56px; border-radius: 44px 44px 44px 16px; background: var(--s2); background-image: radial-gradient(700px 380px at 100% 0%, color-mix(in srgb, var(--a1) 16%, transparent), transparent 65%), linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 46%)">
+<div style="flex: 1 1 380px; display: flex; flex-direction: column; gap: 20px">
+<h2 class="d" style="font-size: 52px; line-height: 54px; letter-spacing: -.015em; text-wrap: balance">Two commands, then sign in.</h2>
+<p class="p">Got an account from your admin? Sign in. Hosting for a team? Set the admin account in .env, then start the stack.</p>
+<div style="display: flex; flex-wrap: wrap; gap: 14px"><a class="b1" href="/sign-in">Sign in</a></div>
+</div>
+<pre class="code" style="flex: 1 1 380px; min-width: 0"><u># services, in containers</u>
+<b>$</b> docker compose up -d
+<u># GPU runners, native on each Mac</u>
+<b>$</b> make runners</pre>
+</div>
+</section>
+</main>
+
+<footer class="wrap" style="display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding-bottom: 48px; font-size: 13px; color: var(--t2)">
+<span style="display: flex; align-items: center; gap: 10px"><svg aria-hidden="true" class="ic c5 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="1.5"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.8 2.8M16.2 16.2 19 19M19 5l-2.8 2.8M7.8 16.2 5 19"></path></svg><span class="d" style="font-size: 16px; color: var(--t1)">helmstudio</span></span>
+<span>Self-hosted image and video studio</span>
+<div style="flex-grow: 1"></div>
+<label for="theme">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--t2); background: var(--s3); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option><option value="ocean">Deep ocean</option><option value="aubergine">Aubergine dusk</option><option value="espresso">Espresso</option><option value="oxblood">Oxblood</option><option value="indigo">Indigo night</option><option value="parchment">Parchment (light)</option>
+</select>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3610}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>

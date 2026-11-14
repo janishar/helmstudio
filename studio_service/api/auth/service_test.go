@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ora/orago/micro"
+	"github.com/helmstudio/orago/micro"
 )
 
 // fakeNats answers auth.validate.token without NATS: it embeds micro.NatsClient for what it doesn't use and overrides

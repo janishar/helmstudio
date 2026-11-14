@@ -9,11 +9,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/common"
-	"github.com/ora/catalog_service/gen"
+	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/gen"
 )
 
 // Publish sends one envelope to JetStream with a dedupe id; tests pass a fake.

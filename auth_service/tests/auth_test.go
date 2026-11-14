@@ -24,14 +24,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	natsmicro "github.com/nats-io/nats.go/micro"
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/postgres"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/postgres"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/auth_service/config"
-	"github.com/ora/auth_service/migrations"
-	"github.com/ora/auth_service/startup"
+	"github.com/helmstudio/auth_service/config"
+	"github.com/helmstudio/auth_service/migrations"
+	"github.com/helmstudio/auth_service/startup"
 )
 
 // env is one test's running service: a scratch database, a real HTTP server, and the events it published.

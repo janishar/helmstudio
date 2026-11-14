@@ -4,8 +4,8 @@ package dto
 import (
 	"strings"
 
-	authdto "github.com/ora/auth_service/api/auth/dto"
-	"github.com/ora/auth_service/utils"
+	authdto "github.com/helmstudio/auth_service/api/auth/dto"
+	"github.com/helmstudio/auth_service/utils"
 )
 
 // grantable reports whether the admin may give the role: admin belongs to the ADMIN_EMAIL account alone.

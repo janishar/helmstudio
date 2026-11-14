@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/api/auth/dto"
-	"github.com/ora/auth_service/api/auth/message"
-	"github.com/ora/auth_service/common"
+	"github.com/helmstudio/auth_service/api/auth/dto"
+	"github.com/helmstudio/auth_service/api/auth/message"
+	"github.com/helmstudio/auth_service/common"
 )
 
 // validateTimeout bounds one token check over NATS.

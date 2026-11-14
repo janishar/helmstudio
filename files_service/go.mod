@@ -1,10 +1,10 @@
-module github.com/ora/files_service
+module github.com/helmstudio/files_service
 
 go 1.27.3
 
 require (
 	github.com/gin-gonic/gin v1.12.0
-	github.com/ora/orago v0.0.0
+	github.com/helmstudio/orago v0.0.0
 )
 
 require (
@@ -58,4 +58,4 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/ora/orago => ../orago
+replace github.com/helmstudio/orago => ../orago

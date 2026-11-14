@@ -8,11 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
 
-	"github.com/ora/catalog_service/common"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // denyAll is an authentication provider that refuses every request.

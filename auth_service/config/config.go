@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
-	oragoconfig "github.com/ora/orago/config"
-	"github.com/ora/orago/network"
+	oragoconfig "github.com/helmstudio/orago/config"
+	"github.com/helmstudio/orago/network"
 )
 
 // Env is the service's settings, read once at startup by Load.

@@ -7,10 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/catalog_service/api/auth"
-	"github.com/ora/catalog_service/common"
+	"github.com/helmstudio/studio_service/api/auth"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // authentication checks access tokens through auth.Service, which asks auth_service over NATS.

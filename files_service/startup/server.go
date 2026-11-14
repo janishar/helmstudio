@@ -9,11 +9,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
 
-	"github.com/ora/files_service/api/file"
-	"github.com/ora/files_service/config"
+	"github.com/helmstudio/files_service/api/file"
+	"github.com/helmstudio/files_service/config"
 )
 
 // Store builds the object store STORAGE_DRIVER names.

@@ -15,13 +15,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/auth_service/api/auth/dto"
-	"github.com/ora/auth_service/api/auth/model"
-	"github.com/ora/auth_service/config"
-	"github.com/ora/auth_service/utils"
+	"github.com/helmstudio/auth_service/api/auth/dto"
+	"github.com/helmstudio/auth_service/api/auth/model"
+	"github.com/helmstudio/auth_service/config"
+	"github.com/helmstudio/auth_service/utils"
 )
 
 // Errors the service returns, each with the status and detail a client sees.

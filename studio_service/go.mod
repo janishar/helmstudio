@@ -1,4 +1,4 @@
-module github.com/ora/catalog_service
+module github.com/helmstudio/studio_service
 
 go 1.27.3
 
@@ -6,7 +6,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/nats-io/nats.go v1.55.0
-	github.com/ora/orago v0.0.0
+	github.com/helmstudio/orago v0.0.0
 	github.com/pressly/goose/v3 v3.29.0
 	golang.org/x/image v0.47.0
 )
@@ -71,4 +71,4 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/ora/orago => ../orago
+replace github.com/helmstudio/orago => ../orago

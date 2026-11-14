@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	oragoconfig "github.com/ora/orago/config"
+	oragoconfig "github.com/helmstudio/orago/config"
 )
 
 // Env is the service's validated configuration.

@@ -4,10 +4,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
 
-	"github.com/ora/files_service/api/file"
+	"github.com/helmstudio/files_service/api/file"
 )
 
 // The routes mount on one router; /health answers, an unsigned /files link is 403 and anything else 404.

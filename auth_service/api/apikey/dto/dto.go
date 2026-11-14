@@ -4,7 +4,7 @@ package dto
 import (
 	"regexp"
 
-	"github.com/ora/auth_service/api/apikey/model"
+	"github.com/helmstudio/auth_service/api/apikey/model"
 )
 
 // Create is the body that issues a key.

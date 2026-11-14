@@ -11,10 +11,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/api/catalog/model"
-	"github.com/ora/catalog_service/registry"
+	"github.com/helmstudio/studio_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // Patterns of the contract's ids and values.

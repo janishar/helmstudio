@@ -11,15 +11,15 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/api/catalog/dto"
-	"github.com/ora/catalog_service/api/catalog/message"
-	"github.com/ora/catalog_service/api/catalog/model"
-	"github.com/ora/catalog_service/common"
-	"github.com/ora/catalog_service/messaging"
-	"github.com/ora/catalog_service/registry"
+	"github.com/helmstudio/studio_service/api/catalog/dto"
+	"github.com/helmstudio/studio_service/api/catalog/message"
+	"github.com/helmstudio/studio_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/messaging"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // GetNextStep returns the Next step card of the session.

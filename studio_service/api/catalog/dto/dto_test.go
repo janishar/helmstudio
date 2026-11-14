@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ora/catalog_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/api/catalog/model"
 )
 
 // An item's label and detail are capped in characters, as the contract's maxLength counts, not bytes: a 200-character

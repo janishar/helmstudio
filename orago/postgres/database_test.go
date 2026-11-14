@@ -12,7 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/utility"
 	"github.com/pressly/goose/v3"
 )
 

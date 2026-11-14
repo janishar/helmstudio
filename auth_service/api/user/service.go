@@ -5,11 +5,11 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/api/auth"
-	"github.com/ora/auth_service/api/auth/model"
-	"github.com/ora/auth_service/api/user/dto"
+	"github.com/helmstudio/auth_service/api/auth"
+	"github.com/helmstudio/auth_service/api/auth/model"
+	"github.com/helmstudio/auth_service/api/user/dto"
 )
 
 // ErrAdminAccount refuses changes to the ADMIN_EMAIL account: its roles, password and state come from auth's .env

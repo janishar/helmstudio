@@ -1,11 +1,11 @@
 package startup
 
 import (
-	"github.com/ora/orago/middleware"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/middleware"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
 
-	"github.com/ora/files_service/api/file"
+	"github.com/helmstudio/files_service/api/file"
 )
 
 // Module is what the router is built from: Run fills it for production, tests pass their own parts.

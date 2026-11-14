@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/common"
+	"github.com/helmstudio/auth_service/common"
 )
 
 // authorization checks the roles in the claims that authentication stored.

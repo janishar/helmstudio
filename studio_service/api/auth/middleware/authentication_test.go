@@ -10,11 +10,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/catalog_service/api/auth"
-	"github.com/ora/catalog_service/common"
+	"github.com/helmstudio/studio_service/api/auth"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // fakeNats answers every request with reply or err, without NATS: it embeds micro.NatsClient for what it doesn't use.

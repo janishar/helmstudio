@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/storage"
 )
 
 // Entry is one file of a download zip: an object (Key) or bytes (Data), stored as Name.

@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ora/orago/micro"
+	"github.com/helmstudio/orago/micro"
 
-	"github.com/ora/catalog_service/api/auth/message"
-	"github.com/ora/catalog_service/common"
+	"github.com/helmstudio/studio_service/api/auth/message"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // ErrInvalid means a bad or expired token (401); ErrUnavailable means auth_service could not be reached (503).

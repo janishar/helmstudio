@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ora/catalog_service/api/catalog/model"
-	"github.com/ora/catalog_service/registry"
+	"github.com/helmstudio/studio_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // The Next step card walks the spec's rules: sample first, then the next category's sample, the next batch, run all,

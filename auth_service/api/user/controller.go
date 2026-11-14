@@ -4,11 +4,11 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/api/user/dto"
-	"github.com/ora/auth_service/common"
+	"github.com/helmstudio/auth_service/api/user/dto"
+	"github.com/helmstudio/auth_service/common"
 )
 
 // controller serves the current user's profile and the admin user routes.

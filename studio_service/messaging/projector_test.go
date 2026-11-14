@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ora/orago/micro"
+	"github.com/helmstudio/orago/micro"
 )
 
 // NatsJetStreamConsume updates a consumer to match its config: a change here changes the live consumer. Change it

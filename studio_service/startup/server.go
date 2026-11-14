@@ -13,18 +13,18 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/postgres"
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/postgres"
+	"github.com/helmstudio/orago/storage"
 
-	"github.com/ora/catalog_service/api/auth"
-	authmiddleware "github.com/ora/catalog_service/api/auth/middleware"
-	"github.com/ora/catalog_service/common"
-	"github.com/ora/catalog_service/config"
-	"github.com/ora/catalog_service/messaging"
-	"github.com/ora/catalog_service/migrations"
-	"github.com/ora/catalog_service/registry"
+	"github.com/helmstudio/studio_service/api/auth"
+	authmiddleware "github.com/helmstudio/studio_service/api/auth/middleware"
+	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/config"
+	"github.com/helmstudio/studio_service/messaging"
+	"github.com/helmstudio/studio_service/migrations"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // Store builds the object store STORAGE_DRIVER names.

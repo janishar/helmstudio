@@ -8,7 +8,7 @@ Packages: `config`, `network` (the Gin edge), `middleware`, `micro` (NATS client
 JetStream helpers), `postgres`, `storage`, `utility`.
 
 ## Use
-Services import it as `github.com/ora/orago/...` through `replace github.com/ora/orago => ../orago` in their
+Services import it as `github.com/helmstudio/orago/...` through `replace github.com/helmstudio/orago => ../orago` in their
 `go.mod`; image builds get this folder as the `orago` named build context.
 
 ## Develop

@@ -1,4 +1,4 @@
-module github.com/ora/auth_service
+module github.com/helmstudio/auth_service
 
 go 1.27.3
 
@@ -7,7 +7,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/nats-io/nats.go v1.55.0
-	github.com/ora/orago v0.0.0
+	github.com/helmstudio/orago v0.0.0
 	golang.org/x/crypto v0.58.0
 )
 
@@ -53,4 +53,4 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/ora/orago => ../orago
+replace github.com/helmstudio/orago => ../orago

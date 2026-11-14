@@ -7,11 +7,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/api/catalog/dto"
-	"github.com/ora/catalog_service/api/catalog/model"
-	"github.com/ora/catalog_service/common"
+	"github.com/helmstudio/studio_service/api/catalog/dto"
+	"github.com/helmstudio/studio_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // Events returns the session's stored events with seq > since (at most 500), oldest first, each mapped to the

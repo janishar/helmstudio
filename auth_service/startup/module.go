@@ -6,15 +6,15 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/ora/orago/micro"
-	oragomiddleware "github.com/ora/orago/middleware"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/micro"
+	oragomiddleware "github.com/helmstudio/orago/middleware"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/api/apikey"
-	"github.com/ora/auth_service/api/auth"
-	"github.com/ora/auth_service/api/auth/middleware"
-	"github.com/ora/auth_service/api/user"
-	"github.com/ora/auth_service/config"
+	"github.com/helmstudio/auth_service/api/apikey"
+	"github.com/helmstudio/auth_service/api/auth"
+	"github.com/helmstudio/auth_service/api/auth/middleware"
+	"github.com/helmstudio/auth_service/api/user"
+	"github.com/helmstudio/auth_service/config"
 )
 
 // Module holds the wired services and builds what the router loads.

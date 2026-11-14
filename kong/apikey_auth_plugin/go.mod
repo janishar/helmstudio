@@ -1,4 +1,4 @@
-module github.com/ora/kong/apikey_auth_plugin
+module github.com/helmstudio/kong/apikey_auth_plugin
 
 go 1.27.0
 

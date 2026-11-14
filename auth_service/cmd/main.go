@@ -11,9 +11,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/startup"
+	"github.com/helmstudio/auth_service/startup"
 )
 
 // usage is printed for arguments that match no command.

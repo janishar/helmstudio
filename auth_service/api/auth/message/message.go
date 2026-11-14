@@ -5,7 +5,7 @@ package message
 import (
 	"time"
 
-	"github.com/ora/auth_service/api/auth/model"
+	"github.com/helmstudio/auth_service/api/auth/model"
 )
 
 // NATS subjects this service answers.

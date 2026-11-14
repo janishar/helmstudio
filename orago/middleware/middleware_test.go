@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 )
 
 const (

@@ -24,18 +24,18 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/api/catalog/dto"
-	"github.com/ora/catalog_service/api/catalog/message"
-	"github.com/ora/catalog_service/api/catalog/model"
-	"github.com/ora/catalog_service/common"
-	"github.com/ora/catalog_service/messaging"
-	"github.com/ora/catalog_service/registry"
-	"github.com/ora/catalog_service/utils"
+	"github.com/helmstudio/studio_service/api/catalog/dto"
+	"github.com/helmstudio/studio_service/api/catalog/message"
+	"github.com/helmstudio/studio_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/messaging"
+	"github.com/helmstudio/studio_service/registry"
+	"github.com/helmstudio/studio_service/utils"
 )
 
 // maxFile caps one uploaded file (raw image, document, photo).

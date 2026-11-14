@@ -3,7 +3,7 @@ package catalog
 import (
 	"testing"
 
-	"github.com/ora/catalog_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/api/catalog/model"
 )
 
 // The shots brief comes from the item that gives a product its poses: links removed, one line; a later library-only

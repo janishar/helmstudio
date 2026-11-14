@@ -9,8 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
 )
 
 // controller serves signed links. The signature is the auth: no API key, no bearer token.

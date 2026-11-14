@@ -31,18 +31,18 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/middleware"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/middleware"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/api/catalog"
-	"github.com/ora/catalog_service/common"
-	"github.com/ora/catalog_service/gen"
-	"github.com/ora/catalog_service/messaging"
-	"github.com/ora/catalog_service/migrations"
-	"github.com/ora/catalog_service/registry"
+	"github.com/helmstudio/studio_service/api/catalog"
+	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/gen"
+	"github.com/helmstudio/studio_service/messaging"
+	"github.com/helmstudio/studio_service/migrations"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 const (

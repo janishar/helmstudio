@@ -5,7 +5,7 @@ import (
 
 	natsmicro "github.com/nats-io/nats.go/micro"
 
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 )
 
 // ServiceConfig names the NATS micro service. Replicas in one QueueGroup share its requests.

@@ -7,11 +7,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/auth_service/api/apikey/dto"
-	"github.com/ora/auth_service/api/apikey/model"
+	"github.com/helmstudio/auth_service/api/apikey/dto"
+	"github.com/helmstudio/auth_service/api/apikey/model"
 )
 
 // Errors the service returns, each with the status and detail a client sees.

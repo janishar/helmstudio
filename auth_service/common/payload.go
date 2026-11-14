@@ -4,7 +4,7 @@ package common
 import (
 	"github.com/gin-gonic/gin"
 
-	"github.com/ora/auth_service/api/auth/model"
+	"github.com/helmstudio/auth_service/api/auth/model"
 )
 
 // claimsKey is the gin.Context key of the verified claims.

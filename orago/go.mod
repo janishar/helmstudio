@@ -1,4 +1,4 @@
-module github.com/ora/orago
+module github.com/helmstudio/orago
 
 go 1.27.3
 

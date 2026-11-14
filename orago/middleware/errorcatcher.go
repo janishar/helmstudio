@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 )
 
 // errorCatcher is the panic-recovering middleware.

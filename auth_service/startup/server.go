@@ -11,16 +11,16 @@ import (
 	"syscall"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/postgres"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/postgres"
 
-	"github.com/ora/auth_service/api/apikey"
-	apikeydto "github.com/ora/auth_service/api/apikey/dto"
-	"github.com/ora/auth_service/api/auth"
-	"github.com/ora/auth_service/api/auth/dto"
-	"github.com/ora/auth_service/config"
-	"github.com/ora/auth_service/migrations"
-	"github.com/ora/auth_service/utils"
+	"github.com/helmstudio/auth_service/api/apikey"
+	apikeydto "github.com/helmstudio/auth_service/api/apikey/dto"
+	"github.com/helmstudio/auth_service/api/auth"
+	"github.com/helmstudio/auth_service/api/auth/dto"
+	"github.com/helmstudio/auth_service/config"
+	"github.com/helmstudio/auth_service/migrations"
+	"github.com/helmstudio/auth_service/utils"
 )
 
 // EnsureAdmin makes ADMIN_EMAIL the one admin, on every start: the account is created when missing, else enabled,

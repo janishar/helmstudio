@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/storage"
 )
 
 // The key patterns the janitor may delete.

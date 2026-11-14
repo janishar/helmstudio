@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/api/auth"
-	"github.com/ora/auth_service/common"
+	"github.com/helmstudio/auth_service/api/auth"
+	"github.com/helmstudio/auth_service/common"
 )
 
 // authentication checks access tokens with the auth service directly, where catalog_service asks over NATS.

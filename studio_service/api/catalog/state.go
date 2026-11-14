@@ -9,12 +9,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/api/catalog/dto"
-	"github.com/ora/catalog_service/api/catalog/model"
-	"github.com/ora/catalog_service/registry"
+	"github.com/helmstudio/studio_service/api/catalog/dto"
+	"github.com/helmstudio/studio_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // errNotFound is the 404 of an unknown id, a malformed one and another user's.

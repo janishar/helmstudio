@@ -14,7 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	natsmicro "github.com/nats-io/nats.go/micro"
 
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 )
 
 const quickly = 2 * time.Second

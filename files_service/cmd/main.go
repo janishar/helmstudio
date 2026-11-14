@@ -8,9 +8,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/files_service/startup"
+	"github.com/helmstudio/files_service/startup"
 )
 
 // main runs the server, or the health check when given the `health` argument.

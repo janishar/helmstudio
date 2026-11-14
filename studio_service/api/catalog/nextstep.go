@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ora/catalog_service/api/catalog/dto"
-	"github.com/ora/catalog_service/api/catalog/model"
-	"github.com/ora/catalog_service/registry"
+	"github.com/helmstudio/studio_service/api/catalog/dto"
+	"github.com/helmstudio/studio_service/api/catalog/model"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // group is one logical batch of a category's Not-run SKUs.

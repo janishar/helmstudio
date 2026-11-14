@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/ora/orago/micro"
+	"github.com/helmstudio/orago/micro"
 )
 
 // ProjectorConsumer is the durable consumer the projector reads EVT with: one message at a time, so the events of a

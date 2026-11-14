@@ -5,8 +5,8 @@ import (
 	"net/mail"
 	"strings"
 
-	"github.com/ora/auth_service/api/auth/model"
-	"github.com/ora/auth_service/utils"
+	"github.com/helmstudio/auth_service/api/auth/model"
+	"github.com/helmstudio/auth_service/utils"
 )
 
 // SignupRequest is the sign-up body.

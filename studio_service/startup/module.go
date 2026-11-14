@@ -5,13 +5,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/middleware"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/storage"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/middleware"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/storage"
 
-	"github.com/ora/catalog_service/api/catalog"
-	"github.com/ora/catalog_service/common"
+	"github.com/helmstudio/studio_service/api/catalog"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // rawPath is the raw image upload route, the one route with the larger body limit.

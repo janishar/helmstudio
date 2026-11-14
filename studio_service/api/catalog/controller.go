@@ -12,12 +12,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
-	"github.com/ora/orago/utility"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
+	"github.com/helmstudio/orago/utility"
 
-	"github.com/ora/catalog_service/api/catalog/dto"
-	"github.com/ora/catalog_service/common"
+	"github.com/helmstudio/studio_service/api/catalog/dto"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // controller serves /v1/catalog. shutdown closes when the service stops, so an open event stream doesn't hold up

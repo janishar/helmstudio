@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ora/orago/micro"
-	"github.com/ora/orago/network"
+	"github.com/helmstudio/orago/micro"
+	"github.com/helmstudio/orago/network"
 
-	"github.com/ora/auth_service/api/apikey/dto"
+	"github.com/helmstudio/auth_service/api/apikey/dto"
 )
 
 // controller serves the admin API key routes and the internal key check.
