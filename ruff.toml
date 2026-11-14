@@ -1,0 +1,2 @@
+# Python files outside a service (contracts/check.py): same width as the services (pyproject [tool.ruff])
+line-length = 100

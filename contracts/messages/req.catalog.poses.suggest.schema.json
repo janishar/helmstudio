@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ora.local/contracts/messages/req.catalog.poses.suggest.schema.json",
+  "title": "NATS request/reply catalog.poses.suggest: a brief, links or reference photos per category → pose ids from the library, custom shots the library lacks and which shot each reference photo shows",
+  "description": "Core NATS request/reply on subject `catalog.poses.suggest` (queue group agents), bare JSON, no envelope. Links are read from `text`; fake mode never fetches them.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "owner_id",
+        "session_id",
+        "briefs"
+      ],
+      "properties": {
+        "owner_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "briefs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "category",
+              "text",
+              "reference_keys"
+            ],
+            "properties": {
+              "category": {
+                "$ref": "defs.schema.json#/$defs/libraryId"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 5000
+              },
+              "reference_keys": {
+                "type": "array",
+                "items": {
+                  "$ref": "defs.schema.json#/$defs/objectKey"
+                }
+              },
+              "exact": {
+                "type": "boolean",
+                "default": false,
+                "description": "the text is the brand's shot list (Describe your shots): the reply's poses are exactly the shots it asks for, in order (its count; a bare count is filled with the category's defaults), library poses where one matches closely, else custom shots; nothing else is added"
+              }
+            }
+          }
+        }
+      }
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "required": [
+        "poses",
+        "reply"
+      ],
+      "properties": {
+        "poses": {
+          "$ref": "defs.schema.json#/$defs/posesByCategory"
+        },
+        "reply": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "custom_poses": {
+          "type": "array",
+          "maxItems": 40,
+          "items": {
+            "$ref": "defs.schema.json#/$defs/customPose"
+          },
+          "description": "at most 4 per category, never a library pose; their ids are also in poses"
+        },
+        "refs": {
+          "type": "object",
+          "description": "reference object key → the pose id (library or custom) the photo illustrates; a photo that fits none is left out",
+          "propertyNames": {
+            "$ref": "defs.schema.json#/$defs/objectKey"
+          },
+          "additionalProperties": {
+            "$ref": "defs.schema.json#/$defs/libraryId"
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ora.local/contracts/messages/evt.catalog.skus.schema.json",
+  "title": "processing result: SKUs (upserted by code), counts found/expected, and the rules read from documents",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.catalog.skus"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "attempt",
+        "session_id",
+        "skus",
+        "found",
+        "expected",
+        "rules"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/attempt"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "skus": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "code",
+              "name",
+              "category",
+              "subcategory",
+              "group_key",
+              "group_label",
+              "variant_of",
+              "attributes",
+              "confirmed",
+              "raw_keys"
+            ],
+            "properties": {
+              "code": {
+                "$ref": "defs.schema.json#/$defs/skuCode"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "category": {
+                "$ref": "defs.schema.json#/$defs/libraryId"
+              },
+              "subcategory": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "group_key": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64
+              },
+              "group_label": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "variant_of": {
+                "oneOf": [
+                  {
+                    "$ref": "defs.schema.json#/$defs/skuCode"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "attributes": {
+                "$ref": "defs.schema.json#/$defs/attributes"
+              },
+              "confirmed": {
+                "type": "boolean"
+              },
+              "raw_keys": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "defs.schema.json#/$defs/objectKey"
+                }
+              }
+            }
+          }
+        },
+        "found": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expected": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rules": {
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/rules"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

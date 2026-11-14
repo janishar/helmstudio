@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "published_at": "2026-11-04T10:00:00Z",
+  "published_by": "agents_service:0.2.0",
+  "families": [
+    {
+      "id": "jewellery",
+      "name": "Jewellery"
+    },
+    {
+      "id": "furniture",
+      "name": "Furniture"
+    },
+    {
+      "id": "garments",
+      "name": "Garments"
+    }
+  ],
+  "categories": [
+    {
+      "id": "rings",
+      "family": "jewellery",
+      "name": "Rings",
+      "code_prefix": "R",
+      "uses_model": true,
+      "subcategories": [
+        {
+          "id": "solitaire",
+          "name": "Solitaire"
+        },
+        {
+          "id": "band",
+          "name": "Band"
+        }
+      ],
+      "default_poses": [
+        "ring-hand-close-up",
+        "ring-packshot"
+      ],
+      "default_model": "m001",
+      "default_background": "white",
+      "pose_noun": {
+        "singular": "pose",
+        "plural": "poses"
+      }
+    }
+  ],
+  "models": [
+    {
+      "id": "m001",
+      "name": "Aisha",
+      "image_url": "/catalog/ora-models/m001.jpg",
+      "category_tags": [
+        "no-necklace"
+      ],
+      "note": "Default · Rings"
+    }
+  ],
+  "backgrounds": [
+    {
+      "id": "white",
+      "name": "Studio white",
+      "swatch": "#f5f5f4",
+      "image_url": null
+    }
+  ],
+  "resolutions": [
+    {
+      "id": "1K",
+      "label": "1K"
+    },
+    {
+      "id": "2K",
+      "label": "2K"
+    },
+    {
+      "id": "4K",
+      "label": "4K"
+    }
+  ],
+  "ratios": [
+    {
+      "id": "1:1",
+      "label": "1:1",
+      "use": "Marketplaces",
+      "w": 1,
+      "h": 1
+    }
+  ],
+  "defaults": {
+    "resolution": "2K",
+    "ratio": "1:1"
+  }
+}

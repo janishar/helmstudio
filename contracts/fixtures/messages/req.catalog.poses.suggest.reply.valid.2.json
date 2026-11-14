@@ -1,0 +1,22 @@
+{
+  "poses": {
+    "rings": [
+      "ring-hand-close-up",
+      "ring-stacked-on-fingers",
+      "custom-ring-on-a-swing"
+    ]
+  },
+  "reply": "Got it — I'll suggest poses from these.",
+  "custom_poses": [
+    {
+      "id": "custom-ring-on-a-swing",
+      "category": "rings",
+      "name": "On a swing",
+      "prompt": "The model sitting on a wooden garden swing, the ring hand resting on the rope, soft daylight",
+      "on_model": true
+    }
+  ],
+  "refs": {
+    "u/3f0c6c55-1c39-4d8e-9a37-1f6a2b1c9d10/catalog/5b6f1c2e-8a0d-4c3e-9f5a-2d7c6b8e1a40/uploads/ref.jpg": "custom-ring-on-a-swing"
+  }
+}

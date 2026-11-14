@@ -1,0 +1,55 @@
+package file
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/ora/orago/network"
+	"github.com/ora/orago/storage"
+)
+
+// A signed link serves its object on GET and HEAD with the safety headers; a key the signature doesn't cover is a 403.
+func TestServe(t *testing.T) {
+	signer := NewSigner("0123456789abcdef")
+	expiry := time.Now().Add(time.Hour).Unix()
+	link := func(key string) string { // what catalog_service's Signer.Sign makes, without the base URL
+		return "/files/" + (&url.URL{Path: key}).EscapedPath() + "?exp=" + strconv.FormatInt(expiry, 10) + "&sig=" + signer.signature(key, expiry)
+	}
+	store := storage.NewMemory()
+	key := "u/a/front view.txt"
+	if err := store.Put(context.Background(), key, strings.NewReader("hello"), 5, "text/plain"); err != nil {
+		t.Fatal(err)
+	}
+	router, err := network.NewRouter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router.LoadControllers(NewController(store, signer))
+	serve := func(method, target string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		router.Engine().ServeHTTP(w, httptest.NewRequest(method, target, nil))
+		return w
+	}
+
+	w := serve(http.MethodGet, link(key))
+	if w.Code != 200 || w.Body.String() != "hello" || w.Header().Get("Content-Length") != "5" ||
+		w.Header().Get("Content-Type") != "text/plain" || w.Header().Get("Content-Security-Policy") != "sandbox" ||
+		w.Header().Get("Cache-Control") != "private, max-age=31536000, immutable" {
+		t.Fatalf("GET: %d %q %v", w.Code, w.Body, w.Header())
+	}
+	if w := serve(http.MethodHead, link(key)); w.Code != 200 {
+		t.Fatalf("HEAD: %d", w.Code)
+	}
+	if w := serve(http.MethodGet, strings.Replace(link(key), "front", "back", 1)); w.Code != 403 || w.Header().Get("Cache-Control") != "" {
+		t.Fatalf("tampered: %d %v", w.Code, w.Header()) // a refusal is never cached
+	}
+	if w := serve(http.MethodPost, link(key)); w.Code != 404 {
+		t.Fatalf("POST: %d", w.Code)
+	}
+}

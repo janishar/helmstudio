@@ -1,0 +1,33 @@
+{
+  "type": "evt.catalog.image",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000007",
+  "job_id": "5e2b8c14-1f7a-4d3e-9c6b-2a8f0d4e7b91",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-04T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 1,
+    "attempt": 1,
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "image_id": "c1d2e3f4-a5b6-4c7d-8e9f-0a1b2c3d4e5f",
+    "sku_id": "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
+    "status": "to_review",
+    "key": null,
+    "review": {
+      "passed": true,
+      "summary": "4 stones, halo intact, white background.",
+      "goals": [
+        {
+          "goal": "count",
+          "passed": true
+        }
+      ]
+    },
+    "attempts": 1,
+    "first_pass": true,
+    "error": null
+  }
+}

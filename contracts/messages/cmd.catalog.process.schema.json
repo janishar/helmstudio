@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ora.local/contracts/messages/cmd.catalog.process.schema.json",
+  "title": "process a session's inputs: ingest new raw sources, sort into SKUs, describe, group, read guidelines and details, run the checks",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.catalog.process"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "data": {
+      "type": "object",
+      "description": "job_id = the process id. `ingest` empty = re-read documents and re-run the checks on `skus` only. Checks read `choices` against the registry library (model category tags, pose vs product, ratio vs guidelines).",
+      "required": [
+        "session_id",
+        "ingest",
+        "guidelines",
+        "details",
+        "choices",
+        "skus",
+        "expected_skus"
+      ],
+      "properties": {
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "ingest": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "one raw source to ingest: stored files (keys), CSV rows (catalog parsed), or a link (agents fetch it)",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "files",
+                  "csv",
+                  "drive",
+                  "website"
+                ]
+              },
+              "keys": {
+                "type": "array",
+                "items": {
+                  "$ref": "defs.schema.json#/$defs/objectKey"
+                }
+              },
+              "names": {
+                "type": "array",
+                "description": "files: each upload's name, one per key: its path inside the picked folder when the browser sent one (e.g. Rings/R12/front.jpg; photos spanning several sub-folders group one product per sub-folder), else the file name (grouping hints: product codes, views, product names)",
+                "items": {
+                  "type": "string",
+                  "maxLength": 512
+                }
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "name",
+                    "category",
+                    "image_url"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "category": {
+                      "type": "string"
+                    },
+                    "image_url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  }
+                }
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "files"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "keys"
+                  ],
+                  "properties": {
+                    "keys": {
+                      "minItems": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "csv"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "rows"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "drive",
+                        "website"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "url"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "guidelines": {
+          "type": "array",
+          "items": {
+            "$ref": "defs.schema.json#/$defs/docRef"
+          }
+        },
+        "details": {
+          "type": "object",
+          "required": [
+            "text",
+            "docs"
+          ],
+          "properties": {
+            "text": {
+              "type": "string",
+              "maxLength": 20000
+            },
+            "docs": {
+              "type": "array",
+              "items": {
+                "$ref": "defs.schema.json#/$defs/docRef"
+              }
+            }
+          }
+        },
+        "choices": {
+          "type": "object",
+          "required": [
+            "resolution",
+            "ratio",
+            "poses",
+            "models",
+            "backgrounds"
+          ],
+          "properties": {
+            "resolution": {
+              "oneOf": [
+                {
+                  "$ref": "defs.schema.json#/$defs/resolution"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "ratio": {
+              "oneOf": [
+                {
+                  "$ref": "defs.schema.json#/$defs/ratio"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "poses": {
+              "$ref": "defs.schema.json#/$defs/posesByCategory"
+            },
+            "models": {
+              "type": "array",
+              "items": {
+                "$ref": "defs.schema.json#/$defs/choiceId"
+              }
+            },
+            "backgrounds": {
+              "type": "array",
+              "items": {
+                "$ref": "defs.schema.json#/$defs/choiceId"
+              }
+            }
+          }
+        },
+        "skus": {
+          "type": "array",
+          "items": {
+            "$ref": "defs.schema.json#/$defs/skuRef"
+          },
+          "description": "the SKUs found so far; new codes continue their numbering"
+        },
+        "expected_skus": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "from a CSV, or null"
+        },
+        "started_skus": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0,
+          "description": "the first started_skus of `skus` belong to batches already started (before a Refresh); `found` and the expected-count check count only the others"
+        },
+        "families": {
+          "type": "array",
+          "items": {
+            "$ref": "defs.schema.json#/$defs/libraryId"
+          },
+          "description": "the family ids (registry catalog_library families) the brand said it is shooting: new SKUs are sorted into products of these families only; absent or empty = the agent decides among every product"
+        }
+      }
+    }
+  }
+}

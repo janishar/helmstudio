@@ -1,0 +1,17 @@
+drive/
+.venv/
+.env
+__pycache__/
+*.egg-info/
+build/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+node_modules/
+.next/
+deploy/secrets/
+.test.env
+*.log
+tsconfig.tsbuildinfo
+*.pem
+*.key

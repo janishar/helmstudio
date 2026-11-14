@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ora.local/contracts/messages/evt.catalog.usage.schema.json",
+  "title": "one model call of the job: an LLM call (tokens, USD cost) or an image render (credits), for the dev Jobs view",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.catalog.usage"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "attempt",
+        "session_id",
+        "kind",
+        "model",
+        "purpose",
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cost_usd",
+        "credits",
+        "duration_ms"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/attempt"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "llm",
+            "image"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "maxLength": 200,
+          "examples": [
+            "deepseek:deepseek-flash",
+            "Nano Banana 2.1"
+          ],
+          "description": "llm: the provider:model string; image: the endpoint's name"
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 64,
+          "examples": [
+            "ImageReview",
+            "render"
+          ],
+          "description": "llm: the answer's schema name; image: render"
+        },
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "llm: every input token, cached ones included; image: 0"
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_read_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "llm: from LLM_PRICES; null for an unpriced model or an image"
+        },
+        "credits": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "image: the library's credits per image at the resolution (a quote unit, not charged); null for an llm call"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

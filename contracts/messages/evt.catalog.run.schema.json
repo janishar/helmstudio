@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ora.local/contracts/messages/evt.catalog.run.schema.json",
+  "title": "per-SKU progress of a run, for the update lines and the status bar",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.catalog.run"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "attempt",
+        "session_id",
+        "sku_id",
+        "sku_status",
+        "images_done",
+        "images_total",
+        "line"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/attempt"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "sku_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "sku_status": {
+          "enum": [
+            "Running",
+            "To review"
+          ]
+        },
+        "images_done": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "images_total": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "line": {
+          "type": "string",
+          "maxLength": 500,
+          "examples": [
+            "R-001 done — 4 images to review."
+          ]
+        }
+      }
+    }
+  }
+}

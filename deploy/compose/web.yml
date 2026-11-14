@@ -1,0 +1,17 @@
+# web_service on the ora-catalog stack. Paths are relative to deploy/ (the project directory):
+#   docker compose -f deploy/docker-compose.yml up -d --build web
+# Kong routes / and /_next here; the web app calls Kong back for /auth and /v1 with its own API key (the
+# web_api_key secret, which auth_service registers on start) and the browser's IP as X-Forwarded-For.
+services:
+  web:
+    build: ../web_service
+    image: ora-catalog/web:${IMAGE_TAG:-dev}
+    env_file: [{path: ../web_service/.env, required: false}]
+    environment:
+      KONG_URL: http://kong:8000
+      WEB_API_KEY_FILE: /run/secrets/web_api_key
+      # the local stack is plain http on 127.0.0.1 (browsers accept Secure cookies there, others don't): set true behind TLS
+      COOKIE_SECURE: ${WEB_COOKIE_SECURE:-false}
+    secrets: [web_api_key]
+    networks: {default: {ipv4_address: "${ORA_NET:-172.30.90}.11"}}   # Kong and auth trust its X-Forwarded-For
+    healthcheck: {test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/signin').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"], interval: 5s, timeout: 3s, retries: 20}

@@ -1,0 +1,6 @@
+# compose secrets made by .tools/make-secrets
+secrets/
+
+# AWS box settings and the last released tag (deploy/aws/aws.env.example)
+aws/aws.env
+aws/tag

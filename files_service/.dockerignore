@@ -1,0 +1,10 @@
+.env
+.env.*
+.test.env
+.test.env.*
+keys/
+bin/
+tests/
+*_test.go
+Dockerfile
+docker-compose.yml

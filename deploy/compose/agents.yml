@@ -1,0 +1,43 @@
+# agents_service on the ora-catalog stack. Paths are relative to deploy/ (the project directory):
+#   docker compose -f deploy/docker-compose.yml up -d agents
+#   make -C agents_service test-messages   # agents-test, on the ora-catalog-test project (never the live stack)
+x-agents-env: &agents-env                             # credentials come from the secrets (<VAR>_FILE)
+  DATABASE_URL_FILE: /run/secrets/agents_database_url
+  NATS_URL_FILE: /run/secrets/nats_agents_url
+  STORAGE_DRIVER: s3
+  S3_ENDPOINT: http://seaweedfs:8333
+  S3_BUCKET: ${S3_BUCKET:-ora}
+  S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
+  S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
+
+services:
+  agents:
+    build: {context: ../agents_service, target: runtime}
+    image: ora-catalog/agents:${IMAGE_TAG:-dev}
+    env_file: [{path: ../agents_service/.env, required: false}]
+    environment: *agents-env
+    secrets: [agents_database_url, nats_agents_url, s3_access_key_id, s3_secret_access_key]
+    extra_hosts: ["host.docker.internal:host-gateway"]  # IMAGE_PROVIDER=imagegen: the server on the host (Linux needs it)
+    healthcheck:                                      # GET /health: NATS connected and the database answers
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats-setup: {condition: service_completed_successfully}
+      storage-setup: {condition: service_completed_successfully, required: false}
+
+  agents-test:                                        # message contract test (profile test): cmd.catalog.* in, evt.catalog.* out
+    profiles: [test]
+    build: {context: ../agents_service, target: test}
+    image: ora-catalog/agents:test
+    environment:
+      <<: *agents-env
+      NATS_URL_FILE: /run/secrets/nats_admin_url      # plays catalog_service and reads every event
+      MESSAGE_TEST: "1"
+    secrets: [agents_database_url, nats_admin_url, s3_access_key_id, s3_secret_access_key]
+    volumes: [../agents_service/tests:/app/tests:ro, ../contracts:/contracts:ro]
+    command: [python, -m, pytest, -q, -p, no:cacheprovider, tests/test_messages.py]
+    depends_on:
+      agents: {condition: service_healthy}

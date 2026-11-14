@@ -1,0 +1,20 @@
+#!/bin/sh
+# Creates the JetStream streams and the registry KV bucket; safe to re-run.
+# Runs inside nats-box (compose service `nats-setup`), or from the host:
+#   docker compose -f deploy/docker-compose.yml run --rm nats-setup
+set -eu
+[ -n "${NATS_URL_FILE:-}" ] && NATS_URL=$(cat "$NATS_URL_FILE")   # the admin user (compose secret nats_admin_url)
+export NATS_URL="${NATS_URL:-nats://nats:4222}"
+
+stream() { # name subjects retention max-age
+  if nats stream info "$1" >/dev/null 2>&1; then echo "stream $1 exists"; return; fi
+  nats stream add "$1" --subjects "$2" --retention "$3" --max-age "$4" \
+    --storage file --replicas 1 --discard old --dupe-window 2m --defaults
+}
+
+stream CMD 'cmd.>' work 0     # work queue: a message lives until a consumer acks it
+stream EVT 'evt.>' limits 7d  # catalog + auth events, replayable for 7 days
+stream DLQ 'dlq.>' limits 30d # commands that hit max_deliver
+
+nats kv info registry >/dev/null 2>&1 || nats kv add registry --history 1 --storage file
+nats stream ls

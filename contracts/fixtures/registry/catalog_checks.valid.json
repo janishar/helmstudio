@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "published_at": "2026-11-04T10:00:00Z",
+  "published_by": "agents_service:0.2.0",
+  "checks": [
+    {
+      "id": "guidelines_vs_images",
+      "title": "Guidelines vs instructions or images (background, styling, mood)",
+      "source": "spec",
+      "blocking": true
+    },
+    {
+      "id": "dull_metal",
+      "title": "Dull or grey metal unsuitable for a white cutout",
+      "source": "trial",
+      "blocking": false
+    }
+  ]
+}

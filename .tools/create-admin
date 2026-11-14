@@ -1,0 +1,11 @@
+#!/bin/sh
+# Creates (or keeps) an admin account in the running ora-catalog stack.
+#   ADMIN_EMAIL=you@example.com ADMIN_PASSWORD=... .tools/create-admin
+# With no env, auth_service/.env's ADMIN_EMAIL / ADMIN_PASSWORD are used (auth also applies them on every start).
+# Needs auth_service's `create-admin` subcommand (same logic as the first-start admin, then exits).
+set -eu
+cd "$(dirname "$0")/.."
+set -- docker compose -f deploy/docker-compose.yml run --rm -T
+[ -n "${ADMIN_EMAIL:-}" ] && set -- "$@" -e ADMIN_EMAIL
+[ -n "${ADMIN_PASSWORD:-}" ] && set -- "$@" -e ADMIN_PASSWORD
+exec "$@" auth create-admin

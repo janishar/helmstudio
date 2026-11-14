@@ -1,0 +1,70 @@
+_format_version: "3.0"
+_transform: true
+
+plugins:
+  - name: apikey-auth-plugin
+    config:
+      verification_urls: [http://auth:8080/verify/apikey]
+      timeout_ms: 2000
+  - name: correlation-id
+    config: {header_name: X-Correlation-ID, generator: uuid, echo_downstream: true}
+  - name: request-size-limiting
+    config: {allowed_payload_size: 256, size_unit: megabytes}
+
+services:
+  - name: auth
+    url: http://auth:8080
+    routes:
+      - name: auth-session
+        paths: [/auth/signin, /auth/signup, /auth/refresh]
+        strip_path: false
+        plugins:
+          - name: rate-limiting                # per browser: the web BFF forwards its IP (X-Forwarded-For), which
+            config: {minute: 20, hour: 200, limit_by: ip, policy: local}   # Kong trusts from web only (KONG_TRUSTED_IPS)
+      - name: auth
+        paths: [/auth]
+        strip_path: false
+
+  - name: catalog
+    url: http://catalog:8080
+    read_timeout: 3600000                     # SSE: /v1/catalog/sessions/{id}/events stays open
+    routes:
+      - name: catalog
+        paths: [/v1/catalog]
+        strip_path: false
+      - name: catalog-raw                     # raw image uploads: up to 500 files of 25 MiB per call
+        paths: ['~/v1/catalog/sessions/[^/]+/raw$']
+        strip_path: false
+        plugins:
+          - name: request-size-limiting
+            config: {allowed_payload_size: 512, size_unit: megabytes}
+
+  - name: files
+    url: http://files:8080
+    routes:
+      - name: files                           # HMAC-signed, expiring links: the signature is the auth (no key)
+        paths: [/files/]
+        strip_path: false
+        plugins:
+          - name: apikey-auth-plugin
+            config:
+              verification_urls: [http://auth:8080/verify/apikey]
+              timeout_ms: 2000
+              bypass_paths: ['^/files/']
+
+  # the web app (pages, /_next, its /api BFF): browsers send no API key, the BFF adds the web app's own key server-side
+  - name: web
+    url: http://web:3000
+    read_timeout: 3600000                     # the BFF proxies the SSE stream
+    routes:
+      - name: web
+        paths: [/]
+        strip_path: false
+        plugins:
+          - name: apikey-auth-plugin
+            config:
+              verification_urls: [http://auth:8080/verify/apikey]
+              timeout_ms: 2000
+              bypass_paths: ['^/']
+          - name: request-size-limiting        # raw image uploads go through the BFF too
+            config: {allowed_payload_size: 512, size_unit: megabytes}

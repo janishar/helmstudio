@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ora.local/contracts/messages/cmd.catalog.run.schema.json",
+  "title": "render a SKU set × poses, review each image, regenerate up to MAX_REGENERATIONS, save the best attempt",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.catalog.run"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "data": {
+      "type": "object",
+      "description": "job_id = the run id. Every shot's image row exists already (catalog_service made it `generating`); agents write every try to u/<owner>/catalog/<session>/images/<image_id>/attempt_<n>.<ext> and the best one also to images/<image_id>.<ext>. A shot with `regenerate_of` is a regeneration with `feedback`: the old image is the reference to fix.",
+      "required": [
+        "session_id",
+        "scope",
+        "resolution",
+        "ratio",
+        "rules",
+        "details",
+        "feedback",
+        "skus"
+      ],
+      "properties": {
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "scope": {
+          "enum": [
+            "sample",
+            "batch",
+            "all",
+            "skus",
+            "regenerate"
+          ]
+        },
+        "resolution": {
+          "$ref": "defs.schema.json#/$defs/resolution"
+        },
+        "ratio": {
+          "$ref": "defs.schema.json#/$defs/ratio",
+          "description": "the default ratio: a shot without its own `ratio` renders at this"
+        },
+        "rules": {
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/rules"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "details": {
+          "type": "string",
+          "maxLength": 20000,
+          "description": "additional details text"
+        },
+        "feedback": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "skus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "defs.schema.json#/$defs/skuRef"
+              }
+            ],
+            "type": "object",
+            "required": [
+              "model",
+              "background",
+              "shots"
+            ],
+            "properties": {
+              "model": {
+                "oneOf": [
+                  {
+                    "$ref": "defs.schema.json#/$defs/choiceRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "null for a product that does not use a model (registry uses_model false), or for one whose model is only described (model_description)"
+              },
+              "background": {
+                "oneOf": [
+                  {
+                    "$ref": "defs.schema.json#/$defs/choiceRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "null when the background is only described (background_description)"
+              },
+              "model_description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "the brand's description of the model (session models step text, or the SKU's own): with a model it adds only what is not identity (hair styling, expression, makeup, attitude), the photo keeps face and skin tone; without one it is the model. Absent = none"
+              },
+              "background_description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "the brand's description of the background (session backgrounds step text, or the SKU's own): with a background it is added and wins where they differ (lighting, props, mood); without one it is the background (no reference image). Absent = none"
+              },
+              "shots_brief": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1000,
+                "description": "the brand's shots brief for this SKU's product (links removed, one line), brand text in the prompt; absent = none"
+              },
+              "shots": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "image_id",
+                    "pose_id",
+                    "pose_name",
+                    "revision",
+                    "regenerate_of"
+                  ],
+                  "properties": {
+                    "image_id": {
+                      "$ref": "defs.schema.json#/$defs/uuid"
+                    },
+                    "pose_id": {
+                      "$ref": "defs.schema.json#/$defs/libraryId"
+                    },
+                    "pose_name": {
+                      "type": "string"
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "regenerate_of": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "image_id",
+                            "key"
+                          ],
+                          "properties": {
+                            "image_id": {
+                              "$ref": "defs.schema.json#/$defs/uuid"
+                            },
+                            "key": {
+                              "$ref": "defs.schema.json#/$defs/objectKey"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "ratio": {
+                      "$ref": "defs.schema.json#/$defs/ratio",
+                      "description": "this shot's ratio (the SKU brief's pose ratio, else its brief ratio, or the regenerate request's ratio); absent = data.ratio"
+                    },
+                    "notes": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "description": "the brand's free-text instruction for this pose (brief pose_notes), added after the library pose instruction; absent = none"
+                    },
+                    "prompt": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "description": "a custom shot's pose instruction (with on_model); absent for a library pose, which agents resolve by pose_id"
+                    },
+                    "on_model": {
+                      "type": "boolean",
+                      "description": "a custom shot: whether a person wears the product in it"
+                    },
+                    "references": {
+                      "type": "array",
+                      "maxItems": 4,
+                      "items": {
+                        "$ref": "defs.schema.json#/$defs/objectKey"
+                      },
+                      "description": "the brand's reference photos for this shot (pose_ref uploads): framing only (camera angle, crop, pose), never the product or the person"
+                    }
+                  }
+                }
+              },
+              "resolution": {
+                "$ref": "defs.schema.json#/$defs/resolution",
+                "description": "this SKU's render resolution (its brief, else its product's default); absent = data.resolution"
+              },
+              "passed": {
+                "type": "array",
+                "description": "the SKU's live images (newest revision per pose) outside this run that passed review or were approved: when the run has no anchor shot, agents use the one of the product's anchor pose as the anchor reference",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "pose_id",
+                    "key"
+                  ],
+                  "properties": {
+                    "pose_id": {
+                      "$ref": "defs.schema.json#/$defs/libraryId"
+                    },
+                    "key": {
+                      "$ref": "defs.schema.json#/$defs/objectKey"
+                    }
+                  }
+                }
+              },
+              "not_passed": {
+                "type": "array",
+                "description": "pose ids of the SKU's live images outside this run that neither passed review nor were approved (failed, rejected, unreviewed): a gated product's (jewellery) other shots are not rendered while its main pose is here; absent = none",
+                "items": {
+                  "$ref": "defs.schema.json#/$defs/libraryId"
+                }
+              }
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "regenerate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "feedback": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "type": "evt.catalog.question",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000017",
+  "job_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-04T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 1,
+    "attempt": 1,
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "key": "kind:tp-002",
+    "check": "kind",
+    "text": "TP-002 “Rose Kurta” is filed as Tops › Kurtas, but its photos look like Sets › Kurta Sets. Which is it?",
+    "options": [
+      {
+        "label": "Tops › Kurtas",
+        "apply": [
+          {
+            "sku_code": "TP-002",
+            "confirmed": true
+          }
+        ]
+      },
+      {
+        "label": "Sets › Kurta Sets",
+        "apply": [
+          {
+            "sku_code": "TP-002",
+            "category": "sets",
+            "subcategory": "kurta-sets",
+            "confirmed": true
+          }
+        ]
+      }
+    ],
+    "blocking": true,
+    "sku_codes": [
+      "TP-002"
+    ]
+  }
+}

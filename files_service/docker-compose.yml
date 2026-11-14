@@ -1,0 +1,16 @@
+# Isolated dev: files_service + its own SeaweedFS (the full stack is deploy/docker-compose.yml).
+# Bucket: S3 `ora` (SeaweedFS creates it on first put via weed shell).
+name: ora-files-dev
+services:
+  files:
+    build: {context: ., additional_contexts: {orago: ../orago}}
+    env_file: .env
+    environment:
+      S3_ENDPOINT: http://seaweedfs:8333
+    ports: ["127.0.0.1:8092:8080"]
+    depends_on:
+      seaweedfs: {condition: service_started}
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.51
+    command: [server, -dir=/data, -s3, -s3.port=8333]
+    environment: {AWS_ACCESS_KEY_ID: ora-local, AWS_SECRET_ACCESS_KEY: ora-local-secret}

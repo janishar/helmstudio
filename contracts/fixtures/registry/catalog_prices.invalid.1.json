@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "published_at": "2026-11-04T10:00:00Z",
+  "published_by": "agents_service:0.2.0",
+  "max_attempts": 4,
+  "credits_per_image": {
+    "2k": 75
+  }
+}

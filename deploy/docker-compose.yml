@@ -1,0 +1,136 @@
+# The ORA platform: compose project ora-catalog (Kong on 127.0.0.1:${KONG_HTTP_PORT}, the services, NATS, Postgres, SeaweedFS).
+#   .tools/copy-envs && .tools/make-secrets          # per-service .env files + deploy/secrets/ (git-ignored)
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#   docker compose -f deploy/docker-compose.yml run --rm auth apikey <client> [scope…]   # issue an API key
+name: ora-catalog
+
+# The services: one fragment each (paths in them are relative to deploy/).
+include:
+  - {path: compose/agents.yml, project_directory: .}
+  - {path: compose/catalog.yml, project_directory: .}
+  - {path: compose/files.yml, project_directory: .}
+  - {path: compose/web.yml, project_directory: .}
+
+# Secrets (DB passwords and URLs, NATS users, S3 keys, the JWT key, the web app's API key, the /files signing key) are
+# files made by .tools/make-secrets; services read them through <VAR>_FILE (mounted at /run/secrets/<name>).
+secrets:
+  postgres_password: {file: secrets/postgres_password}
+  auth_db_password: {file: secrets/auth_db_password}
+  catalog_db_password: {file: secrets/catalog_db_password}
+  agents_db_password: {file: secrets/agents_db_password}
+  auth_database_url: {file: secrets/auth_database_url}
+  catalog_database_url: {file: secrets/catalog_database_url}
+  agents_database_url: {file: secrets/agents_database_url}
+  nats_admin_password: {file: secrets/nats_admin_password}
+  nats_auth_password: {file: secrets/nats_auth_password}
+  nats_catalog_password: {file: secrets/nats_catalog_password}
+  nats_agents_password: {file: secrets/nats_agents_password}
+  nats_admin_url: {file: secrets/nats_admin_url}
+  nats_auth_url: {file: secrets/nats_auth_url}
+  nats_catalog_url: {file: secrets/nats_catalog_url}
+  nats_agents_url: {file: secrets/nats_agents_url}
+  s3_access_key_id: {file: secrets/s3_access_key_id}
+  s3_secret_access_key: {file: secrets/s3_secret_access_key}
+  jwt_private_key: {file: secrets/jwt_private_key}
+  web_api_key: {file: secrets/web_api_key}
+  file_url_secret: {file: secrets/file_url_secret}  # catalog signs /files links with it, files verifies them
+
+# Fixed addresses for the two hops allowed to set X-Forwarded-For: Kong (trusted by auth) and the web BFF (trusted
+# by Kong and auth), so sign-in rate limits key on the browser's IP and a header sent from outside is ignored.
+networks:
+  default:
+    ipam: {config: [{subnet: "${ORA_NET:-172.30.90}.0/24"}]}
+
+services:
+  kong:
+    build: ../kong
+    image: ora-catalog/kong:${IMAGE_TAG:-dev}
+    env_file: [{path: ../kong/.env, required: false}]
+    environment:
+      KONG_PORT_MAPS: "${KONG_HTTP_PORT:-8100}:8000"   # X-Forwarded-Port = the host port (web's redirects)
+      KONG_TRUSTED_IPS: ${ORA_NET:-172.30.90}.11       # only the web BFF may name the client (X-Forwarded-For)
+      KONG_REAL_IP_HEADER: X-Forwarded-For
+      KONG_REAL_IP_RECURSIVE: "on"
+      # a recreated service (deploy) gets a new IP and is briefly unresolvable: re-resolve in seconds, never cache the
+      # "no such host" answer (the defaults kept /v1 at 503 for ~3 min after `up -d catalog`)
+      KONG_DNS_VALID_TTL: "5"
+      KONG_DNS_NOT_FOUND_TTL: "1"
+      KONG_DNS_STALE_TTL: "1"
+    networks: {default: {ipv4_address: "${ORA_NET:-172.30.90}.10"}}
+    ports: ["127.0.0.1:${KONG_HTTP_PORT:-8100}:8000"]   # the only published service port
+    healthcheck: {test: [CMD, kong, health], interval: 5s, timeout: 5s, retries: 20}
+    depends_on:
+      auth: {condition: service_healthy}
+      catalog: {condition: service_healthy}
+      files: {condition: service_healthy}
+      web: {condition: service_healthy}
+
+  auth:
+    build: {context: ../auth_service, additional_contexts: {orago: ../orago}}
+    image: ora-catalog/auth:${IMAGE_TAG:-dev}
+    env_file: [{path: ../auth_service/.env, required: false}]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/auth_database_url
+      NATS_URL_FILE: /run/secrets/nats_auth_url
+      NATS_USER: ""                                   # the user is in the URL
+      JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key
+      WEB_API_KEY_FILE: /run/secrets/web_api_key      # ensured as the web client's key on every start
+      TRUSTED_PROXIES: ${ORA_NET:-172.30.90}.10,${ORA_NET:-172.30.90}.11   # Kong, the web BFF
+    secrets: [auth_database_url, nats_auth_url, jwt_private_key, web_api_key]
+    healthcheck: {test: [CMD, /app/auth, health], interval: 5s, timeout: 3s, retries: 20}
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats-setup: {condition: service_completed_successfully}
+
+  nats:
+    image: nats:2.15.2-alpine3.22
+    # nats.conf reads the users' passwords from the environment; they come from the secrets here
+    entrypoint: [sh, -c, 'for u in admin auth catalog agents; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/nats.conf']
+    secrets: [nats_admin_password, nats_auth_password, nats_catalog_password, nats_agents_password]
+    volumes: [./nats/nats.conf:/etc/nats/nats.conf:ro, natsdata:/data]
+    healthcheck:
+      test: [CMD, wget, -qO-, "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  nats-setup:                                         # one-shot: streams CMD/EVT/DLQ + KV registry, idempotent
+    image: natsio/nats-box:0.20.1
+    entrypoint: [sh, /tools/nats-setup]
+    environment: {NATS_URL_FILE: /run/secrets/nats_admin_url}
+    secrets: [nats_admin_url]
+    volumes: [../.tools/nats-setup:/tools/nats-setup:ro]
+    depends_on:
+      nats: {condition: service_healthy}
+
+  postgres:
+    image: postgres:18.6
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password   # init.sh reads <svc>_db_password the same way
+    secrets: [postgres_password, auth_db_password, catalog_db_password, agents_db_password]
+    ports: ["127.0.0.1:${POSTGRES_HOST_PORT:-5443}:5432"]
+    volumes: [pgdata:/var/lib/postgresql, ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro]
+    healthcheck: {test: [CMD-SHELL, "pg_isready -U postgres -d auth"], interval: 2s, timeout: 3s, retries: 30}
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.51
+    profiles: [s3local]
+    # with no -s3.config, AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (from the secrets) become the S3 admin identity
+    entrypoint: [sh, -c, 'export AWS_ACCESS_KEY_ID="$$(cat /run/secrets/s3_access_key_id)" AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/s3_secret_access_key)"; exec /entrypoint.sh server -dir=/data -s3 -s3.port=8333 -ip=seaweedfs -ip.bind=0.0.0.0']
+    secrets: [s3_access_key_id, s3_secret_access_key]
+    volumes: [seaweeddata:/data]
+    healthcheck: {test: [CMD, wget, -qO-, http://localhost:8333/healthz], interval: 3s, timeout: 3s, retries: 30}
+
+  storage-setup:                                      # one-shot: creates the bucket, idempotent
+    image: chrislusf/seaweedfs:4.51
+    profiles: [s3local]
+    entrypoint: [sh, /tools/storage-setup]
+    environment: {S3_BUCKET: "${S3_BUCKET:-ora}", WEED_MASTER: "seaweedfs:9333"}
+    volumes: [../.tools/storage-setup:/tools/storage-setup:ro]
+    depends_on:
+      seaweedfs: {condition: service_healthy}
+
+volumes:
+  pgdata:
+  natsdata:
+  seaweeddata:

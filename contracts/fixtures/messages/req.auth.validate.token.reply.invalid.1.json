@@ -1,0 +1,9 @@
+{
+  "user_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "email": "ana@example.com",
+  "roles": [
+    "user"
+  ],
+  "jti": "9f86d081884c7d659a2feaa0c55ad015",
+  "expires_at": "2026-10-29T10:30:00Z"
+}

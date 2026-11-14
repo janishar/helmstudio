@@ -1,0 +1,3 @@
+apikey_auth_plugin/bin
+.env
+.env.*

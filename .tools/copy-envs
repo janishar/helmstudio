@@ -1,0 +1,10 @@
+#!/bin/sh
+# Creates every missing .env / .test.env from its example (never overwrites an existing file).
+# Run from anywhere: .tools/copy-envs
+set -eu
+cd "$(dirname "$0")/.."
+for ex in */.env.example */.test.env.example; do
+  [ -f "$ex" ] || continue
+  dst="${ex%.example}"
+  if [ -f "$dst" ]; then echo "keep   $dst"; else cp "$ex" "$dst"; echo "create $dst"; fi
+done

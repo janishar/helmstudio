@@ -1,0 +1,24 @@
+# catalog_service on the ora-catalog stack. Paths are relative to deploy/ (the project directory):
+#   docker compose -f deploy/docker-compose.yml up -d --build catalog
+services:
+  catalog:
+    build: {context: ../catalog_service, additional_contexts: {orago: ../orago}}
+    image: ora-catalog/catalog:${IMAGE_TAG:-dev}
+    env_file: [{path: ../catalog_service/.env, required: false}]
+    environment:                                      # credentials come from the secrets (<VAR>_FILE)
+      DATABASE_URL_FILE: /run/secrets/catalog_database_url
+      NATS_URL_FILE: /run/secrets/nats_catalog_url
+      NATS_USER: ""                                   # the user is in the URL
+      FILE_URL_SECRET_FILE: /run/secrets/file_url_secret   # signs the /files links files_service verifies
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: ${S3_BUCKET:-ora}
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:${KONG_HTTP_PORT:-8100}}
+    secrets: [catalog_database_url, nats_catalog_url, file_url_secret, s3_access_key_id, s3_secret_access_key]
+    healthcheck: {test: [CMD, /app/catalog, health], interval: 5s, timeout: 3s, retries: 20}
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats-setup: {condition: service_completed_successfully}
+      storage-setup: {condition: service_completed_successfully, required: false}

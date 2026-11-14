@@ -1,0 +1,8 @@
+{
+  "action": "make_video",
+  "reply": "Running the rest of the rings.",
+  "args": {
+    "scope": "all",
+    "category": "rings"
+  }
+}
