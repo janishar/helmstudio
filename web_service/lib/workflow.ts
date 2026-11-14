@@ -15,6 +15,8 @@ export type Field = {
   initial: Value;
   /** the node outputs a Canvas (its params set the output size) */
   canvas: boolean;
+  /** the node outputs a Model handle (its params pick the weights) */
+  model: boolean;
 };
 
 /** What a form control holds: a switch's boolean, or the text typed ("" in a seed field is random). */
@@ -22,7 +24,8 @@ export type Raw = string | boolean;
 
 /** Every param of every node in the workflow, nodes in graph order, params in schema order. */
 export function fields(w: S<"Workflow">): Field[] {
-  return Object.entries(w.nodes).flatMap(([node, n]) => {
+  return graphOrder(w).flatMap((node) => {
+    const n = w.nodes[node];
     const schema = w.node_schemas[n.kind];
     if (!schema) return [];
     return schema.params.map((param) => ({
@@ -33,7 +36,108 @@ export function fields(w: S<"Workflow">): Field[] {
       param,
       initial: n.params?.[param.name] ?? param.default,
       canvas: schema.outputs.some((o) => o.type === "Canvas"),
+      model: schema.outputs.some((o) => o.type === "Model"),
     }));
+  });
+}
+
+/** An enum value as shown: a plain lowercase word title-cased ("base" → "Base"); ids like "int8" stay as they are. */
+export const pretty = (v: string) => (/^[a-z]+$/.test(v) ? v[0].toUpperCase() + v.slice(1) : v);
+
+/** A tile's label and value as shown. The model node's variant is "Model"; a label ending in its node's title
+ * ("Tiled decode" on Decode) becomes that title, its first words leading the value ("Tiled · auto"); other enum
+ * values are prettified. */
+export function display(f: Field, raw: Raw): { label: string; value: string } {
+  const label = f.param.label ?? f.param.name;
+  const v = String(raw);
+  if (f.model && f.param.name === "variant") return { label: "Model", value: pretty(v) };
+  const t = f.nodeTitle.toLowerCase();
+  const l = label.toLowerCase();
+  if (l.endsWith(" " + t) && f.param.type === "enum")
+    return { label: f.nodeTitle, value: `${pretty(label.slice(0, -t.length - 1))} · ${v}` };
+  return { label, value: f.param.type === "enum" ? pretty(v) : v };
+}
+
+type ExprValue = string | number | boolean | null | undefined;
+
+/** Evaluates a `when` / `requires` expression (contracts/README.md): `node.param` references, 'string' / "string",
+ * number, true / false / null literals, ==, !=, &&, ||, ! and parentheses. `get` reads a reference. Throws on a
+ * syntax error. */
+export function evaluate(expr: string, get: (ref: string) => ExprValue): ExprValue {
+  const tokens: string[] = [];
+  const re =
+    /\s*(?:(-?\d+(?:\.\d+)?|'[^']*'|"[^"]*"|==|!=|&&|\|\||[!()]|[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)?))/y;
+  while (re.lastIndex < expr.length) {
+    const at = re.lastIndex;
+    const m = re.exec(expr);
+    if (!m || m[1] === undefined) {
+      if (expr.slice(at).trim() === "") break;
+      throw new Error(`unexpected "${expr.slice(at).trim()}"`);
+    }
+    tokens.push(m[1]);
+  }
+  let i = 0;
+  const peek = () => tokens[i];
+  const take = (t: string) => (tokens[i] === t ? (i++, true) : false);
+  const atom = (): ExprValue => {
+    const t = tokens[i++];
+    if (t === undefined) throw new Error("unexpected end");
+    if (t === "(") {
+      const v = or();
+      if (!take(")")) throw new Error('missing ")"');
+      return v;
+    }
+    if (/^['"]/.test(t)) return t.slice(1, -1);
+    if (/^-?\d/.test(t)) return Number(t);
+    if (t === "true" || t === "false") return t === "true";
+    if (t === "null") return null;
+    if (/^[A-Za-z_][\w-]*\.[A-Za-z_][\w-]*$/.test(t)) return get(t);
+    throw new Error(`unexpected "${t}"`);
+  };
+  const not = (): ExprValue => (take("!") ? !not() : atom());
+  const cmp = (): ExprValue => {
+    const a = not();
+    if (take("==")) return a === not();
+    if (take("!=")) return a !== not();
+    return a;
+  };
+  const and = (): ExprValue => {
+    let v = cmp();
+    while (take("&&")) {
+      const r = cmp();
+      v = v && r;
+    }
+    return v;
+  };
+  const or = (): ExprValue => {
+    let v = and();
+    while (take("||")) {
+      const r = and();
+      v = v || r;
+    }
+    return v;
+  };
+  const v = or();
+  if (peek() !== undefined) throw new Error(`unexpected "${peek()}"`);
+  return v;
+}
+
+/** The fields whose `when` holds for the values in the controls now (an expression that does not parse shows its
+ * field). Hidden fields are neither shown nor sent. */
+export function visible(fs: Field[], raws: Record<string, Raw>): Field[] {
+  const get = (ref: string) => {
+    const f = fs.find((x) => x.key === ref);
+    if (!f) return undefined;
+    const r = readValue(f.param, raws[f.key] ?? toRaw(f.initial, f.param));
+    return "value" in r ? (r.value as ExprValue) : String(raws[f.key]);
+  };
+  return fs.filter((f) => {
+    if (!f.param.when) return true;
+    try {
+      return !!evaluate(f.param.when, get);
+    } catch {
+      return true;
+    }
   });
 }
 
@@ -108,13 +212,18 @@ export function graphOrder(w: S<"Workflow">): string[] {
   return out;
 }
 
+const rank = (f: Field) => (f.model ? 0 : f.param.type === "seed" ? 2 : 1);
+
 /** The inspector's sections: the canvas node's params, label-over-value tiles, switches, and the rest. */
 export function sections(fs: Field[]) {
   const rest = fs.filter((f) => f.param.type !== "text");
   const other = rest.filter((f) => !f.canvas);
   return {
     canvas: rest.filter((f) => f.canvas),
-    tiles: other.filter((f) => ["enum", "int", "float", "seed"].includes(f.param.type)),
+    // the model node's first, then graph order, the seed last (its home is the composer's chip), as in the mock
+    tiles: other
+      .filter((f) => ["enum", "int", "float", "seed"].includes(f.param.type))
+      .sort((a, b) => rank(a) - rank(b)),
     switches: other.filter((f) => f.param.type === "bool"),
     more: other.filter((f) => f.param.type === "string"),
   };

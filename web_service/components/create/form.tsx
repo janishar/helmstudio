@@ -8,7 +8,9 @@ import {
   ASPECTS,
   MEGAPIXELS,
   aspectOf,
+  display,
   megapixelsOf,
+  pretty,
   sections,
   sizeFor,
   toRaw,
@@ -150,18 +152,7 @@ export function Inspector({
         c && <CanvasPicker c={c} errors={errors} onChange={onChange} />,
         s.canvas[0]?.nodeHelp,
       )}
-      {section(
-        "sec-quality",
-        "Quality",
-        // the seed last: the grid opens on the model, as in the mock (the composer's chip is the seed's home)
-        [
-          ...s.tiles.filter((f) => f.param.type !== "seed"),
-          ...s.tiles.filter((f) => f.param.type === "seed"),
-        ],
-        undefined,
-        undefined,
-        "gap-3",
-      )}
+      {section("sec-quality", "Quality", s.tiles, undefined, undefined, "gap-3")}
       {section("sec-options", "Options", s.switches)}
       {section("sec-more", "More", s.more)}
     </>
@@ -262,7 +253,8 @@ function Tile({
   onChange: (key: string, raw: Raw) => void;
 }) {
   const id = idOf(f.key);
-  const shown = f.param.type === "seed" && raw === "" ? "Random" : String(raw) || "—";
+  const d = display(f, raw);
+  const shown = f.param.type === "seed" && raw === "" ? "Random" : d.value || "—";
   return (
     <>
       <div className="flex min-w-0 flex-col gap-1">
@@ -276,7 +268,7 @@ function Tile({
           className={`set bevel flex items-center justify-between gap-2 ${error ? "outline-2 outline-bad" : ""}`}
         >
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[12px] text-t2">{f.param.label ?? f.param.name}</span>
+            <span className="text-[12px] text-t2">{d.label}</span>
             <span className="truncate font-semibold">{shown}</span>
           </span>
           <ChevronRight
@@ -369,7 +361,7 @@ function Editor({
               aria-pressed={raw === o}
               onClick={() => onChange(f.key, o)}
             >
-              {o}
+              {pretty(o)}
             </button>
           ))}
         </div>
@@ -474,7 +466,7 @@ function Line({
   );
 }
 
-/** The composer's quick chips: the first model-like node's choices, the canvas, the seed (with Random). Each opens
+/** The composer's quick chips: the model node's choices (the node that outputs a Model), the canvas, the seed (with Random). Each opens
  * its inspector control through `show` (a field key, or "canvas"). */
 export function Chips({
   fields,
@@ -483,8 +475,8 @@ export function Chips({
   show,
 }: Omit<FormProps, "errors"> & { show: (key: string) => void }) {
   const s = sections(fields);
-  const first = s.tiles.find((f) => f.param.type === "enum");
-  const model = s.tiles.filter((f) => f.param.type === "enum" && f.node === first?.node);
+  const model = s.tiles.filter((f) => f.model && f.param.type === "enum");
+  const first = model[0];
   const c = canvasOf(fields, raws);
   const seed = s.tiles.find((f) => f.param.type === "seed");
   const chip = "chip bevel rounded-[10px] bg-s4";
@@ -498,7 +490,7 @@ export function Chips({
           title={model.map((f) => f.param.label ?? f.param.name).join(" · ")}
           onClick={() => show(first.key)}
         >
-          {model.map((f) => String(rawOf(f, raws))).join(" · ")}
+          {model.map((f) => pretty(String(rawOf(f, raws)))).join(" · ")}
         </button>
       )}
       {c && (

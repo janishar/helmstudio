@@ -27,6 +27,7 @@ import {
   fields as fieldsOf,
   nodeTitle,
   queueInputs,
+  visible,
   type Field,
   type Raw,
 } from "@/lib/workflow";
@@ -152,7 +153,9 @@ export function Create({ initialSession }: { initialSession?: string }) {
   });
 
   const workflow = workflows?.find((w) => w.id === workflowId);
-  const fields = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  const all = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  // the params whose `when` holds now: the others are neither shown nor sent
+  const fields = visible(all, raws);
   const seedField = fields.find((f) => f.param.type === "seed");
   const change = (key: string, raw: Raw) => {
     setRaws((r) => ({ ...r, [key]: raw }));
@@ -582,7 +585,10 @@ function Stage({ run, workflow }: { run?: Run; workflow?: S<"Workflow"> }) {
           )}
         </div>
       )}
-      <div className="absolute inset-x-6 top-[68px] bottom-6 flex items-center justify-center">
+      <div
+        className="absolute inset-x-6 top-[68px] bottom-6 flex items-center justify-center"
+        style={{ containerType: "size" }}
+      >
         {!run ? (
           <h1 className="text-center font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
             What will you <span className="text-a1">make?</span>
@@ -593,7 +599,16 @@ function Stage({ run, workflow }: { run?: Run; workflow?: S<"Workflow"> }) {
             alt={prompt ? String(prompt) : "The take"}
             width={out.width ?? undefined}
             height={out.height ?? undefined}
-            className="size-full rounded-[10px] object-contain"
+            className="rounded-[10px] object-cover"
+            // as large as fits the stage, keeping its aspect, so the corners round the picture itself
+            style={
+              size
+                ? {
+                    width: `min(100cqw, 100cqh * ${size.w / size.h})`,
+                    aspectRatio: `${size.w} / ${size.h}`,
+                  }
+                : { maxWidth: "100%", maxHeight: "100%" }
+            }
           />
         ) : (
           <div
@@ -713,7 +728,12 @@ function Take({
   const out = run.outputs[0];
   const asked = seedKey ? run.inputs[seedKey] : undefined;
   const seed = seedOf(run) ?? (typeof asked === "number" && asked >= 0 ? asked : undefined);
-  const label = seed != null ? `seed ${seed}` : `take ${n}`;
+  // a random seed is 16 digits: the middle goes, the label keeps the whole
+  const digits = String(seed);
+  const label =
+    seed == null
+      ? `take ${n}`
+      : `seed ${digits.length > 8 ? `${digits.slice(0, 4)}…${digits.slice(-3)}` : digits}`;
   const state =
     run.status === "running"
       ? `${Math.round(fraction(run) * 100)}%`
@@ -729,6 +749,7 @@ function Take({
         .filter(Boolean)
         .join(", ")}
       aria-pressed={current}
+      title={seed != null ? `seed ${seed}` : undefined}
       onClick={onPick}
       className={`bevel mono relative grid h-[63px] w-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-s1 text-[11px] ${
         current ? "border-2 border-a1" : "border border-s5"

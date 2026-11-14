@@ -9,7 +9,7 @@ const TAKES: [number, number, number, number, number, string, string][] = [
     150,
     -8,
     "radial-gradient(120px 90px at 30% 30%, color-mix(in srgb, var(--a1) 85%, transparent), transparent 70%), linear-gradient(150deg, var(--a2), var(--s4))",
-    "image",
+    "Qwen Image 2.1",
   ],
   [
     17,
@@ -18,7 +18,7 @@ const TAKES: [number, number, number, number, number, string, string][] = [
     220,
     6,
     "radial-gradient(110px 140px at 70% 25%, color-mix(in srgb, var(--a2) 80%, transparent), transparent 70%), linear-gradient(200deg, var(--s5), var(--a1))",
-    "▶ clip",
+    "▶ LTX-2.5",
   ],
   [
     5,
@@ -36,7 +36,7 @@ const TAKES: [number, number, number, number, number, string, string][] = [
     230,
     7,
     "radial-gradient(120px 120px at 30% 70%, color-mix(in srgb, var(--a1) 75%, transparent), transparent 70%), linear-gradient(160deg, var(--s4), var(--a2))",
-    "image",
+    "Qwen Image 2.1",
   ],
   [
     71,
@@ -45,7 +45,7 @@ const TAKES: [number, number, number, number, number, string, string][] = [
     150,
     -6,
     "radial-gradient(140px 90px at 75% 35%, color-mix(in srgb, var(--a2) 75%, transparent), transparent 70%), linear-gradient(140deg, var(--a1), var(--s5))",
-    "▶ clip",
+    "▶ LTX-2.5",
   ],
   [
     85,
@@ -61,7 +61,7 @@ const TAKES: [number, number, number, number, number, string, string][] = [
 /** The page before an account is known: floating takes, the theme select and the card. */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden p-6">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden p-6 [&_form_button]:shadow-[inset_0_1px_0_rgba(255,255,255,.1),inset_0_-2px_0_color-mix(in_srgb,var(--shd)_28%,transparent),0_3px_6px_color-mix(in_srgb,var(--shd)_35%,transparent)]">
       <div className="absolute top-5 right-6 z-[2] flex items-center gap-2 rounded-full bg-s1 py-1.5 pr-1.5 pl-3.5">
         <label htmlFor="theme" className="label">
           Theme
@@ -81,6 +81,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               top: `${t}%`,
               width: w,
               height: h,
+              boxSizing: "content-box", // the mock's sizes exclude the 12px padding
               transform: `rotate(${r}deg)`,
               background: bg,
               borderRadius: "28px 28px 28px 12px",
@@ -89,7 +90,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             }}
           >
             <span
-              className="mono rounded-full px-2 py-0.5 text-[10px] text-white"
+              className="mono rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
               style={{ background: "color-mix(in srgb, var(--shd) 45%, transparent)" }}
             >
               {tag}

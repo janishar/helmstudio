@@ -21,6 +21,8 @@ import {
   MEGAPIXELS,
   aspectOf,
   buildInputs,
+  display,
+  evaluate,
   fields,
   graphOrder,
   megapixelsOf,
@@ -28,6 +30,7 @@ import {
   readValue,
   sections,
   sizeFor,
+  visible,
 } from "@/lib/workflow";
 
 /** The echo workflow as GET /v1/studio/workflows/echo serves it: the registry's, with its node schemas. */
@@ -270,11 +273,11 @@ describe("the inspector and the canvas", () => {
     const s = sections(fields(qwen));
     expect(s.canvas.map((f) => f.key)).toEqual(["canvas.width", "canvas.height"]);
     expect(s.tiles.map((f) => f.key)).toEqual([
-      "seed.seed",
       "model.variant",
       "model.precision",
       "sample.steps",
       "decode.tiled",
+      "seed.seed",
     ]);
     expect(s.switches.map((f) => f.key)).toEqual(["encode.transparent"]);
     const e = sections(fields(echo));
@@ -306,6 +309,44 @@ describe("the inspector and the canvas", () => {
           ]);
           expect((s.width % grid) + (s.height % grid)).toBe(0);
         }
+  });
+});
+
+describe("when expressions and tile labels", () => {
+  const vals: Record<string, string | number | boolean> = {
+    "model.variant": "turbo",
+    "sample.steps": 40,
+    "x.on": true,
+  };
+  const get = (r: string) => vals[r];
+
+  it("evaluates references, literals, comparisons, logic and parentheses", () => {
+    expect(evaluate("model.variant != 'turbo'", get)).toBe(false);
+    expect(evaluate('model.variant == "turbo"', get)).toBe(true);
+    expect(evaluate("sample.steps == 40 && !x.on", get)).toBe(false);
+    expect(evaluate("sample.steps == 41 || x.on", get)).toBe(true);
+    expect(evaluate("!(model.variant == 'base') && (x.on == true)", get)).toBe(true);
+    expect(evaluate("a.b == null", get)).toBe(false);
+    for (const bad of ["model.variant ==", "(x.on", "variant == 'a'", "x.on = 1", "x.on x.on"])
+      expect(() => evaluate(bad, get)).toThrow();
+  });
+
+  it("hides steps for turbo and does not send them", () => {
+    const fs = fields(qwen);
+    expect(visible(fs, {}).some((f) => f.key === "sample.steps")).toBe(true);
+    const turbo = visible(fs, { "model.variant": "turbo", "sample.steps": "12" });
+    expect(turbo.some((f) => f.key === "sample.steps")).toBe(false);
+    expect(buildInputs(turbo, { "model.variant": "turbo", "sample.steps": "12" }).inputs).toEqual({
+      "model.variant": "turbo",
+    });
+  });
+
+  it("labels tiles as the mock does, from the schema", () => {
+    const f = (k: string) => fields(qwen).find((x) => x.key === k)!;
+    expect(display(f("model.variant"), "base")).toEqual({ label: "Model", value: "Base" });
+    expect(display(f("model.precision"), "int8")).toEqual({ label: "Precision", value: "int8" });
+    expect(display(f("decode.tiled"), "auto")).toEqual({ label: "Decode", value: "Tiled · auto" });
+    expect(display(f("sample.steps"), "40")).toEqual({ label: "Steps", value: "40" });
   });
 });
 

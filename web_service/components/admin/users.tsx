@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
-import { when } from "@/lib/format";
 
 type User = S<"User">;
 type Role = S<"GrantableRole">;
@@ -58,10 +57,20 @@ export function UsersAdmin() {
           <div className="grow" />
           <span className="tag tag-accent">Signed in as root admin</span>
         </div>
-        <h2 className="heading">Users</h2>
+        {/* the mock's Hosts and API keys tabs are left out until their backends exist */}
+        <div role="tablist" aria-label="Admin sections" className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            role="tab"
+            aria-selected="true"
+            className="chip bg-t1 font-semibold text-panel"
+          >
+            Users
+          </button>
+        </div>
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
-        <div className="panel overflow-x-auto px-2 py-1.5" aria-busy={!users && !error}>
-          <table className="w-full min-w-[720px] border-collapse text-[13px]">
+        <div className="panel min-h-0 overflow-auto px-2 py-1.5" aria-busy={!users && !error}>
+          <table className="w-full min-w-[760px] border-collapse text-[13px]">
             <thead>
               <tr className="text-left text-[11px] tracking-[0.04em] text-t2">
                 {["Name", "Email", "Roles", "Status", "Added", "Actions"].map((h) => (
@@ -76,9 +85,12 @@ export function UsersAdmin() {
               </tr>
             </thead>
             <tbody>
-              {users?.map((u) => (
-                <UserRow key={u.id} u={u} onChange={replace} onError={setError} />
-              ))}
+              {/* the root admin first, as in the mock; the rest keep the API's order */}
+              {users
+                ?.toSorted((a, b) => +b.roles.includes("admin") - +a.roles.includes("admin"))
+                .map((u) => (
+                  <UserRow key={u.id} u={u} onChange={replace} onError={setError} />
+                ))}
               {users?.length === 0 && (
                 <tr>
                   <td colSpan={6} className="p-2.5 text-t2">
@@ -107,7 +119,7 @@ function UserRow({
 }) {
   const [dialog, setDialog] = useState<"roles" | "password" | null>(null);
   const root = u.roles.includes("admin");
-  const cell = "border-b border-s3 p-2.5";
+  const cell = "border-b border-s3 p-2.5 whitespace-nowrap";
   async function toggle() {
     try {
       onChange(
@@ -125,9 +137,11 @@ function UserRow({
   return (
     <tr className="[&:last-child>td]:border-b-0">
       <td className={`${cell} font-semibold`}>{u.name}</td>
-      <td className={`${cell} mono text-[12px] break-all text-t2`}>{u.email}</td>
+      <td className={`${cell} mono max-w-[220px] truncate text-[12px] text-t2`} title={u.email}>
+        {u.email}
+      </td>
       <td className={cell}>
-        <span className="flex flex-wrap gap-1">
+        <span className="flex gap-1 leading-[13px]">
           {u.roles.map((r) => (
             <span key={r} className={`tag ${r === "admin" ? "tag-accent" : ""}`}>
               {r}
@@ -135,15 +149,18 @@ function UserRow({
           ))}
         </span>
       </td>
-      <td className={`${cell} whitespace-nowrap ${u.disabled ? "text-t2" : ""}`}>
+      <td className={`${cell} ${u.disabled ? "text-t2" : ""}`}>
         {u.disabled ? "Disabled" : "Active"}
       </td>
-      <td className={`${cell} mono text-[12px] whitespace-nowrap text-t2`}>{when(u.created_at)}</td>
+      <td className={`${cell} mono text-[12px] text-t2`}>
+        {/* the mock's "Last sign-in" column: the API has only created_at, so this is the date added */}
+        {new Date(u.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}
+      </td>
       <td className={cell}>
         {root ? (
           <span className="text-[12px] text-t2">Locked · set in the server&apos;s .env</span>
         ) : (
-          <span className="flex flex-wrap gap-1.5">
+          <span className="flex gap-1.5">
             <button type="button" className="chip h-[30px]" onClick={() => setDialog("roles")}>
               Roles
             </button>
@@ -254,7 +271,7 @@ function PasswordField({
       <div className="flex gap-2">
         <input
           id={id}
-          className="in mono"
+          className="in"
           type="text"
           autoComplete="off"
           spellCheck={false}
@@ -333,10 +350,10 @@ function AddUser({ onAdded }: { onAdded: (u: User) => void }) {
   return (
     <aside
       aria-label="Add a user"
-      className="aside m-3.5 flex flex-[1_1_320px] flex-col self-start px-[18px] pt-4 pb-6 md:ml-0"
+      className="aside m-3.5 flex flex-[1_1_340px] flex-col px-[18px] pt-4 pb-6 md:ml-0"
     >
       <form onSubmit={submit} className="flex flex-col gap-3.5">
-        <h2 className="flex items-center font-display text-base font-bold">
+        <h2 className="flex items-center font-display text-base leading-5 font-bold">
           Add a user
           <Info>
             There is no public sign-up. Only the root admin creates accounts. The admin role belongs

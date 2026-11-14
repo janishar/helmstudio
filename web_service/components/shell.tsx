@@ -76,7 +76,7 @@ export function AppShell({
       <div className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden">
         <nav
           aria-label="Sections"
-          className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:mb-3.5 md:w-[68px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
+          className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:mr-0 md:mb-3.5 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
         >
           {items.map(({ href, label, Icon, tile }) => (
             <Link
