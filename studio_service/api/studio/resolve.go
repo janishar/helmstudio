@@ -57,18 +57,26 @@ func findParam(workflow registry.Workflow, key string) (registry.Param, bool) {
 	return registry.Param{}, false
 }
 
+// maxSafe is the largest integer a JSON number carries exactly (2^53-1): the ceiling of int and seed values.
+const maxSafe = 1<<53 - 1
+
 // check returns value as the param's type, or the reason it is not one.
 func check(param registry.Param, value any) (any, string) {
 	switch param.Type {
-	case "int", "float":
+	case "int", "float", "seed":
+		if value == nil && param.Type == "seed" {
+			return nil, "" // random: the runner picks one and reports it
+		}
 		number, ok := value.(float64)
-		if !ok || (param.Type == "int" && number != math.Trunc(number)) {
-			return nil, map[string]string{"int": "must be a whole number", "float": "must be a number"}[param.Type]
+		whole := number == math.Trunc(number) && math.Abs(number) <= maxSafe && (param.Type != "seed" || number >= -1)
+		if !ok || (param.Type != "float" && !whole) {
+			return nil, map[string]string{"int": "must be a whole number", "seed": "must be null, -1 or a whole number from 0 to 9007199254740991",
+				"float": "must be a number"}[param.Type]
 		}
 		if detail := bounds(param, number, ""); detail != "" {
 			return nil, detail
 		}
-		if param.Type == "int" {
+		if param.Type != "float" {
 			return int64(number), ""
 		}
 		return number, ""

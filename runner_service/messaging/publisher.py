@@ -70,19 +70,31 @@ class RunEvents:
                     raise
                 await asyncio.sleep(RETRY_EVERY)
 
-    async def status(self, status: str, error: str | None = None) -> dict:
-        """running (with the host), succeeded, failed (with a plain error) or cancelled."""
+    async def status(
+        self, status: str, error: str | None = None, resolved: dict | None = None
+    ) -> dict:
+        """running (with the host), succeeded (with the resolved values), failed (with a plain error) or
+        cancelled."""
         data: dict = {"status": status}
         if status == "running":
             data["host"] = HOST
         if error:
             data["error"] = error[:2000]
+        if resolved:
+            data["resolved"] = resolved
         return await self.publish("status", data)
 
-    async def progress(self, node: str, step: int, of: int) -> dict:
-        """One step of a stepping node done."""
-        return await self.publish("progress", {"node": node, "step": step, "of": of})
+    async def progress(
+        self, node: str, step: int, of: int, phase: str | None = None, eta_s: float | None = None
+    ) -> dict:
+        """One step of a stepping node done; phase says what it is doing (loading transformer, sampling)."""
+        data = {"node": node, "step": step, "of": of}
+        if phase:
+            data["phase"] = phase[:80]
+        if eta_s is not None:
+            data["eta_s"] = eta_s
+        return await self.publish("progress", data)
 
     async def output(self, **data) -> dict:
-        """One output stored: index, key, kind, width, height, bytes."""
-        return await self.publish("output", data)
+        """One output stored: index, key, kind, width, height, bytes, seed."""
+        return await self.publish("output", {k: v for k, v in data.items() if v is not None})

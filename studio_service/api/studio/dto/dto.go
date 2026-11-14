@@ -81,9 +81,11 @@ func (b *RunRequest) Validate() string {
 
 // RunProgress is the last step a run reported.
 type RunProgress struct {
-	Node string `json:"node"`
-	Step int    `json:"step"`
-	Of   int    `json:"of"`
+	Node  string   `json:"node"`
+	Step  int      `json:"step"`
+	Of    int      `json:"of"`
+	Phase *string  `json:"phase,omitempty"`
+	EtaS  *float64 `json:"eta_s,omitempty"`
 }
 
 // RunOutput is one stored output with its signed link.
@@ -94,6 +96,7 @@ type RunOutput struct {
 	URL    string `json:"url"`
 	Width  *int   `json:"width"`
 	Height *int   `json:"height"`
+	Seed   *int64 `json:"seed,omitempty"`
 }
 
 // Run is one run of a workflow.
@@ -107,6 +110,7 @@ type Run struct {
 	Error      *string        `json:"error"`
 	Outputs    []RunOutput    `json:"outputs"`
 	Host       *string        `json:"host"`
+	Resolved   map[string]any `json:"resolved,omitempty"` // values the runner chose (a random seed), from succeeded
 	CreatedAt  time.Time      `json:"created_at"`
 	StartedAt  *time.Time     `json:"started_at"`
 	FinishedAt *time.Time     `json:"finished_at"`
@@ -134,10 +138,12 @@ type EventPage struct {
 
 // Host is one runner as users see it: no run id, no owner.
 type Host struct {
-	Host      string    `json:"host"`
-	Env       string    `json:"env"`
-	State     string    `json:"state"` // idle | busy | offline
-	UpdatedAt time.Time `json:"updated_at"`
+	Host      string              `json:"host"`
+	Env       string              `json:"env"`
+	State     string              `json:"state"` // idle | busy | offline
+	UpdatedAt time.Time           `json:"updated_at"`
+	Memory    *registry.Memory    `json:"memory,omitempty"`
+	Resident  []registry.Resident `json:"resident,omitempty"`
 }
 
 // HostList is every runner, by key.

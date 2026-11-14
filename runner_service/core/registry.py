@@ -1,35 +1,52 @@
 """This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows and .models, written once at start.
-The values come from the pack with this runner's published_at and published_by; each is checked against
-registry.schema.json, and every node kind it lists must have an implementation, so a bad value stops the runner
-instead of reaching studio."""
+
+The values are built from the packs whose runtime env is RUNNER_ENV (core.pack) plus the core nodes their
+workflows use, with this runner's published_at and published_by. Each is checked against registry.schema.json,
+and every workflow against the node schemas, so a bad pack stops the runner instead of reaching studio."""
 
 import json
 import logging
 
 from config import ENV, HOST, PUBLISHED_BY
-from core import nodes
-from core.graph import Node
+from core import graph
+from core import pack as packs
 from messaging import schemas
 from messaging.publisher import now
-from packs import echo
 
 log = logging.getLogger(__name__)
 
 KINDS = ("nodes", "workflows", "models")
-IMPLS: dict[str, Node] = nodes.NODES | echo.NODES
 
 
-def values() -> dict[str, dict]:
-    """kind → registry value. ValueError for one that is off-contract or lists a node kind with no
-    implementation."""
-    meta = {"host": HOST, "env": ENV, "published_at": now(), "published_by": PUBLISHED_BY}
-    out = {kind: echo.registry_value(kind) | meta for kind in KINDS}
-    for kind, value in out.items():
+def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
+    """(kind → registry value, node kind → core.pack.Node, the packs). ValueError when anything is
+    off-contract or inconsistent."""
+    loaded = packs.for_env(env)
+    core = packs.core_nodes()
+    pack_nodes = {kind: n for _, nodes in loaded for kind, n in nodes.items()}
+    workflows = [w for p, _ in loaded for w in p.workflows]
+    used = {n["kind"] for w in workflows for n in w["nodes"].values()}
+    sources = [k for k, (s, _) in core.items() if k in used and s["outputs"]]
+    sinks = [k for k, (s, _) in core.items() if k in used and not s["outputs"]]
+    every = {k: core[k] for k in sources} | pack_nodes | {k: core[k] for k in sinks}
+    meta = {"host": HOST, "env": env, "published_at": now(), "published_by": PUBLISHED_BY}
+    values = {
+        "nodes": {"schema_version": 1} | meta | {"nodes": [s for s, _ in every.values()]},
+        "workflows": {"schema_version": 1} | meta | {"workflows": workflows},
+        "models": {"schema_version": 1}
+        | meta
+        | {"models": [packs.models_entry(p) for p, _ in loaded]},
+    }
+    for kind, value in values.items():
         if errs := schemas.registry_errors(kind, value):
             raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
-    if missing := {n["kind"] for n in out["nodes"]["nodes"]} - IMPLS.keys():
-        raise ValueError(f"node kinds with no implementation: {sorted(missing)}")
-    return out
+    node_schemas = {k: s for k, (s, _) in every.items()}
+    for w in workflows:
+        if w["env"] != env:
+            raise ValueError(f"workflow {w['id']}: env {w['env']}, this runner is {env}")
+        if errs := graph.validate(w["nodes"], node_schemas):
+            raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
+    return values, {k: n for k, (_, n) in every.items()}, [p for p, _ in loaded]
 
 
 def node_schemas(values: dict[str, dict]) -> dict[str, dict]:

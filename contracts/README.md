@@ -16,7 +16,8 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (bucket `registry`), `$defs/host` (bucket `hosts`) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/registry/{nodes,workflows,models}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
-| `check.py` | validates every fixture, checks the echo workflow against the echo node schemas, lints `openapi.yaml` and the house rules |
+| `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured) |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -39,7 +40,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step |
 
 Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
-env `fake`. The envelope `type` is the kind of message, never the subject.
+env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`). The envelope `type` is the kind of message, never the subject.
 
 ## How the pieces meet
 
@@ -49,8 +50,11 @@ env `fake`. The envelope `type` is the kind of message, never the subject.
   and nothing is sent.
 - **Workflows.** A workflow (registry `workflows`) is `{id, title, family, env, nodes}`; `nodes` maps a node id to
   `{kind, params, in}`, `in` wires an input port to `<node id>.<output>`. A node schema (registry `nodes`) gives a
-  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum` with `default`, `min`, `max`, `enum`,
-  `help`) and typed `inputs` / `outputs`. `GET /v1/studio/workflows/{id}` serves the workflow with
+  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed` with `default`, `min`, `max`,
+  `step`, `enum`, `help`, `when`) and typed `inputs` / `outputs`. Port types: `Text`, `Image`, `Int`, `Float`, `Seed`,
+  `Canvas`, and the family-scoped handles `Model`, `Conditioning`, `Latent` (they wire nodes of one family inside one
+  workflow and never cross a process). `when` is a visibility expression (`model.variant != 'turbo'`), carried
+  through as is: studio evaluates it in a later stage, the runner ignores it. `GET /v1/studio/workflows/{id}` serves the workflow with
   `node_schemas` for its kinds; the UI derives the form from them.
 - **Resolving a run.** Values come from the node schema `default`, then the workflow's `params`, then
   `RunRequest.inputs` (`"<node id>.<param>": value`, checked against type, `min`/`max`, `enum`: 422). The command
@@ -60,12 +64,26 @@ env `fake`. The envelope `type` is the kind of message, never the subject.
   `media`: Image). Running it: `status running` (seq 1), one `progress` per step (node `echo`, step 1..steps, each
   after `delay_ms`), the PNG written to `<output_prefix>0.png` and one `output` (index 0), then `succeeded`; when `fail` is true, no PNG and
   `failed` after the last step. Cancel is checked before each step.
+- **Seeds.** A `seed` param is an integer (≤ 2^53−1); `null` or `-1` means random: the runner picks one and reports it
+  in `evt.run.status` `succeeded` `data.resolved.seed` and in each `evt.run.output` `data.seed` (both ≥ 0).
+- **The qwen-image family (torch).** Workflow `qwen-image` (env `torch`), text-to-image:
+  `prompt` (kind `prompt`, `text`) · `seed` (kind `seed`, `seed` default -1) · `canvas` (kind `canvas`, `width`,
+  `height` 256–4096 step 32, default 1024) · `model` (`qwen-image/model`, `variant` base|turbo, `precision` bf16|int8
+  default int8) → `encode` (`qwen-image/encode`, in `model`, `prompt`; `transparent`) → `sample`
+  (`qwen-image/sample`, in `model`, `cond`, `canvas`, `seed`; `steps` 1–200 default 40, hidden for turbo) → `decode`
+  (`qwen-image/decode`, in `model`, `latent`; `tiled` auto|on|off) → `output`. Progress events add `phase`
+  (`loading transformer`, `encoding`, `sampling`, `decoding`; a phase without steps is step 1 of 1) and `eta_s`.
+  Reference images (multi-reference edit) are not in the graph yet.
+- **Models and memory.** The registry `models` value lists, per model id, `variants` with `presence`
+  (`present` | `missing`), `bytes` on disk and the `precisions` it can load as: a full-precision variant offers
+  load-time quantization (`[bf16, int8]`), an already-quantized one only its own (`[int8]`). The hosts value adds
+  `memory {budget_gb, used_gb}` and `resident` components (`component, model, variant, precision, gb, pinned`).
 - **Events to the browser.** The projector applies each `evt.run.*` to the run row and appends it to the
   session's event log (per-session `seq`); studio appends its own `queued` and the `failed` / `cancelled` it decides
   itself. `GET /v1/studio/sessions/{id}/events` serves the log as JSON (`?since=`) or SSE (`Last-Event-ID`), with
   object keys turned into signed URLs (`SessionEvent` in openapi.yaml).
-- **Hosts.** `GET /v1/studio/hosts` shows host, env, `idle` / `busy` / `offline` and `updated_at`; never a run id or
-  an owner.
+- **Hosts.** `GET /v1/studio/hosts` shows host, env, `idle` / `busy` / `offline`, `updated_at` and, when the runner
+  reports them, `memory` and `resident`; never a run id or an owner.
 
 ## Rules
 

@@ -226,13 +226,14 @@ func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 		Status: run.Status, Error: run.Error, Outputs: []dto.RunOutput{}, Host: run.Host, CreatedAt: run.CreatedAt,
 		StartedAt: run.StartedAt, FinishedAt: run.FinishedAt}
 	_ = json.Unmarshal(run.Inputs, &out.Inputs)
+	_ = json.Unmarshal(run.Resolved, &out.Resolved) // null or absent leaves it nil (omitted)
 	if len(run.Progress) > 0 && string(run.Progress) != "null" {
 		out.Progress = &dto.RunProgress{}
 		_ = json.Unmarshal(run.Progress, out.Progress)
 	}
 	for _, output := range outputs {
 		out.Outputs = append(out.Outputs, dto.RunOutput{Index: output.Index, Key: output.Key, Kind: output.Kind,
-			URL: s.signer.Sign(output.Key), Width: output.Width, Height: output.Height})
+			URL: s.signer.Sign(output.Key), Width: output.Width, Height: output.Height, Seed: output.Seed})
 	}
 	return out
 }

@@ -174,7 +174,8 @@ func (s *Service) Hosts() dto.HostList {
 		if !host.Live(now) {
 			state = "offline"
 		}
-		out.Hosts = append(out.Hosts, dto.Host{Host: host.Host, Env: host.Env, State: state, UpdatedAt: host.UpdatedAt})
+		out.Hosts = append(out.Hosts, dto.Host{Host: host.Host, Env: host.Env, State: state, UpdatedAt: host.UpdatedAt,
+			Memory: host.Memory, Resident: host.Resident})
 	}
 	return out
 }

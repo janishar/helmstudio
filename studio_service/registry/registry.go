@@ -19,13 +19,15 @@ const Stale = 30 * time.Second
 // Param is one param of a node schema.
 type Param struct {
 	Name    string   `json:"name"`
-	Type    string   `json:"type"` // int | float | bool | string | text | enum
+	Type    string   `json:"type"` // int | float | bool | string | text | enum | seed
 	Label   string   `json:"label,omitempty"`
 	Default any      `json:"default"`
 	Min     *float64 `json:"min,omitempty"`
 	Max     *float64 `json:"max,omitempty"`
+	Step    *float64 `json:"step,omitempty"`
 	Enum    []string `json:"enum,omitempty"`
 	Help    string   `json:"help,omitempty"`
+	When    string   `json:"when,omitempty"` // a visibility expression, carried through, not evaluated
 }
 
 // Port is a typed input or output of a node.
@@ -64,11 +66,29 @@ type Workflow struct {
 
 // Host is one hosts KV value.
 type Host struct {
-	Host      string    `json:"host"`
-	Env       string    `json:"env"`
-	State     string    `json:"state"` // idle | busy
-	RunID     *string   `json:"run_id"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Host      string     `json:"host"`
+	Env       string     `json:"env"`
+	State     string     `json:"state"` // idle | busy
+	RunID     *string    `json:"run_id"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	Memory    *Memory    `json:"memory,omitempty"`
+	Resident  []Resident `json:"resident,omitempty"`
+}
+
+// Memory is a runner's model memory: what it may use and uses now.
+type Memory struct {
+	BudgetGB float64 `json:"budget_gb"`
+	UsedGB   float64 `json:"used_gb"`
+}
+
+// Resident is one model component a runner holds loaded; it names no run or owner.
+type Resident struct {
+	Component string  `json:"component"`
+	Model     string  `json:"model"`
+	Variant   string  `json:"variant"`
+	Precision string  `json:"precision"`
+	GB        float64 `json:"gb"`
+	Pinned    bool    `json:"pinned"`
 }
 
 // Live reports whether the runner refreshed its key within Stale of now.

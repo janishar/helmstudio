@@ -1,0 +1,64 @@
+# Qwen Image 2.1 (base and Turbo) on torch: text-to-image, ported from the qwen-image-2.1 studio's generation path
+# (diffusers QwenImage21Pipeline). Generates exactly the canonical qwen-image node schemas (tests/test_packs.py).
+# peak_gb: measured on MPS (64 GB, torch 2.15, int8) with tests/test_qwen_golden.py; see the numbers there.
+id: qwen-image-2.1
+family: qwen-image
+title: Qwen Image 2.1
+runtimes:
+  torch: {env: torch}
+model:
+  help: Which weights to load and at what precision.
+  variant: {label: Variant, help: "Turbo: 8 fixed steps, much faster."}
+  precision:
+    label: Precision
+    default: int8
+    help: "int8 quantizes the transformer and text encoder at load: about half the memory."
+variants:
+  base: {dir: Qwen-Image-2.1}
+  turbo: {dir: Qwen-Image-2.1-Turbo, shares: [text_encoder, vae]}
+components:
+  transformer:
+    files: "transformer/*.safetensors"
+    dtype: bf16
+    precision: [bf16, int8]
+    quantize: ["transformer_blocks.*"]
+  text_encoder:
+    files: "text_encoder/*.safetensors"
+    dtype: bf16
+    precision: [bf16, int8]
+    quantize: ["*.language_model.layers.*", "lm_head"]
+  vae: {files: "vae/*.safetensors", dtype: bf16, precision: [bf16]}
+stages:
+  encode:
+    title: Encode prompt
+    help: Encodes the prompt with the text encoder.
+    uses: [text_encoder]
+    inputs: {model: Model, prompt: Text}
+    outputs: {cond: Conditioning}
+    params:
+      transparent: {type: bool, label: Transparent, default: false,
+                    help: Ask for an RGBA image with a transparent background.}
+    peak_gb: "1"
+  sample:
+    title: Sample
+    help: Denoises from the seed's noise.
+    uses: [transformer]
+    inputs: {model: Model, cond: Conditioning, canvas: Canvas, seed: Seed}
+    outputs: {latent: Latent}
+    params:
+      steps: {type: int, label: Steps, default: 40, min: 1, max: 200, step: 1,
+              when: "model.variant != 'turbo'",
+              help: Turbo uses its own 8-step schedule and ignores this.}
+    peak_gb: "0.9 + 5.1 * mp"
+    stall_s: 600
+  decode:
+    title: Decode
+    help: Turns the latent into an RGBA image with the VAE.
+    uses: [vae]
+    inputs: {model: Model, latent: Latent}
+    outputs: {image: Image}
+    params:
+      tiled: {type: enum, label: Tiled decode, default: auto, enum: ["auto", "on", "off"],
+              help: "Tiling cuts decode memory (27 GB vs 65 GB at 4 MP) but changes pixels; auto tiles only when needed."}
+    # auto tiles above 2.5 MP (torch.py AUTO_TILE_MP); whole decodes grow faster than linear (65 GB at 4 MP)
+    peak_gb: "6 if tiled == 'on' or (tiled == 'auto' and mp > 2.5) else 8.5 * mp"

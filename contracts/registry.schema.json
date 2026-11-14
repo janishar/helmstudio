@@ -37,9 +37,18 @@
       }
     },
     "portType": {
-      "type": "string",
-      "pattern": "^[A-Z][A-Za-z0-9]{0,31}$",
-      "description": "a port's value type; an input accepts only an output of the same type (M0: Text, Image)"
+      "enum": [
+        "Text",
+        "Image",
+        "Int",
+        "Float",
+        "Seed",
+        "Canvas",
+        "Model",
+        "Conditioning",
+        "Latent"
+      ],
+      "description": "a port's value type; an input accepts only an output of the same type. Text, Image, Int, Float, Seed, Canvas are plain values; Model, Conditioning, Latent are family-scoped handles: they only wire nodes of one family inside one workflow and never cross a process"
     },
     "port": {
       "type": "object",
@@ -60,7 +69,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int and float: min/max bound the value; string and text (multi-line): min/max bound the length; enum: one of `enum`.",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed)",
       "required": [
         "name",
         "type",
@@ -79,7 +88,8 @@
             "bool",
             "string",
             "text",
-            "enum"
+            "enum",
+            "seed"
           ]
         },
         "label": {
@@ -97,6 +107,11 @@
         "max": {
           "type": "number"
         },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "int, float, seed: the field's increment (int: an integer)"
+        },
         "enum": {
           "type": "array",
           "minItems": 1,
@@ -108,6 +123,12 @@
         "help": {
           "type": "string",
           "maxLength": 300
+        },
+        "when": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "visibility expression over the graph, e.g. \"model.variant != 'turbo'\" (<node id>.<param>); absent = always shown. Carried through as is; studio evaluates it in a later stage, the runner ignores it"
         }
       },
       "allOf": [
@@ -129,6 +150,9 @@
               },
               "max": {
                 "type": "integer"
+              },
+              "step": {
+                "type": "integer"
               }
             }
           }
@@ -145,6 +169,37 @@
             "properties": {
               "default": {
                 "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "seed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": -1
+              },
+              "min": {
+                "type": "integer",
+                "minimum": -1
+              },
+              "max": {
+                "type": "integer",
+                "maximum": 9007199254740991
+              },
+              "step": {
+                "type": "integer"
               }
             }
           }
@@ -173,6 +228,11 @@
                 {
                   "required": [
                     "max"
+                  ]
+                },
+                {
+                  "required": [
+                    "step"
                   ]
                 }
               ]
@@ -228,6 +288,26 @@
             "not": {
               "required": [
                 "enum"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "int",
+                  "float",
+                  "seed"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "step"
               ]
             }
           }
@@ -397,6 +477,50 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 80
+                  },
+                  "variants": {
+                    "type": "array",
+                    "description": "the model's variants on this host (section 9.2 of docs/plan/06-platform.md); absent for a model without variants (echo)",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "presence",
+                        "precisions"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                          "description": "the value of the family's model node variant param"
+                        },
+                        "presence": {
+                          "enum": [
+                            "present",
+                            "missing"
+                          ]
+                        },
+                        "bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "size on disk of the variant's own files (shared files counted once, in the variant that owns them); absent when missing"
+                        },
+                        "precisions": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "items": {
+                            "enum": [
+                              "bf16",
+                              "fp16",
+                              "int8"
+                            ]
+                          },
+                          "description": "what it can load as, first = native. A full-precision variant lists its dtype then the load-time quantizations (bf16, int8); an already-quantized one lists only its own (int8): no choice, nothing quantized at load"
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -451,6 +575,72 @@
         "published_by": {
           "type": "string",
           "minLength": 1
+        },
+        "memory": {
+          "type": "object",
+          "required": [
+            "budget_gb",
+            "used_gb"
+          ],
+          "additionalProperties": false,
+          "description": "GPU / unified memory the runner may use and uses now",
+          "properties": {
+            "budget_gb": {
+              "type": "number",
+              "minimum": 0
+            },
+            "used_gb": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "resident": {
+          "type": "array",
+          "description": "model components loaded now (the residency manager's view)",
+          "items": {
+            "type": "object",
+            "required": [
+              "component",
+              "model",
+              "variant",
+              "precision",
+              "gb",
+              "pinned"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "component": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "description": "transformer, text_encoder, vae, ..."
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+                "description": "a model id of the models key"
+              },
+              "variant": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+              },
+              "precision": {
+                "enum": [
+                  "bf16",
+                  "fp16",
+                  "int8"
+                ]
+              },
+              "gb": {
+                "type": "number",
+                "minimum": 0
+              },
+              "pinned": {
+                "type": "boolean",
+                "description": "in use by the running run: not evictable"
+              }
+            }
+          }
         }
       },
       "if": {

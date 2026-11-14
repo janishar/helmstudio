@@ -273,11 +273,11 @@ func TestRunFlow(t *testing.T) {
 	e.emit(userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "fake"})
 	e.emit(userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "fake"}) // redelivery
 	e.emit(userA, sessionID, runID, "progress", 2, map[string]any{"node": "echo", "step": 1, "of": 2})
-	e.emit(userA, sessionID, runID, "progress", 3, map[string]any{"node": "echo", "step": 2, "of": 2})
+	e.emit(userA, sessionID, runID, "progress", 3, map[string]any{"node": "echo", "step": 2, "of": 2, "phase": "sampling", "eta_s": 1.5})
 	e.emit(userA, sessionID, runID, "output", 4, map[string]any{"index": 1, "key": "u/" + userB + "/runs/x/0.png", "kind": "image", "bytes": 5})
 	e.emit(userA, sessionID, runID, "output", 5, map[string]any{"index": 0, "key": "u/" + userA + "/runs/" + runID + "/0.png",
-		"kind": "image", "width": 512, "height": 512, "bytes": 1234})
-	e.emit(userA, sessionID, runID, "status", 6, map[string]any{"status": "succeeded"})
+		"kind": "image", "width": 512, "height": 512, "bytes": 1234, "seed": 42})
+	e.emit(userA, sessionID, runID, "status", 6, map[string]any{"status": "succeeded", "resolved": map[string]any{"seed": 42}})
 	e.emit(userA, sessionID, runID, "status", 7, map[string]any{"status": "failed", "error": "late"}) // after the end
 	e.emit(userA, sessionID, runID, "progress", 8, map[string]any{"node": "echo", "step": 2, "of": 2})
 
@@ -289,10 +289,12 @@ func TestRunFlow(t *testing.T) {
 	done := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200)
 	outputs := done["outputs"].([]any)
 	if done["status"] != "succeeded" || done["error"] != nil || done["started_at"] == nil || done["finished_at"] == nil ||
-		len(outputs) != 1 || done["progress"].(map[string]any)["step"] != float64(2) {
+		len(outputs) != 1 || done["progress"].(map[string]any)["step"] != float64(2) ||
+		done["progress"].(map[string]any)["phase"] != "sampling" || done["resolved"].(map[string]any)["seed"] != float64(42) {
 		t.Fatal(done)
 	}
-	if output := outputs[0].(map[string]any); output["width"] != float64(512) || !strings.Contains(output["url"].(string), "sig=") {
+	if output := outputs[0].(map[string]any); output["width"] != float64(512) || output["seed"] != float64(42) ||
+		!strings.Contains(output["url"].(string), "sig=") {
 		t.Fatal(output)
 	}
 	e.call(userB, "GET", "/v1/studio/runs/"+runID, nil, 404)

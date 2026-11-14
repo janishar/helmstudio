@@ -4,6 +4,7 @@
 
 Needs jsonschema (+ rfc3339-validator for date-time), PyYAML, openapi-spec-validator. Fixtures are
 fixtures/{messages,registry}/<name>.{valid,invalid}[.N].json: every valid one must pass, every invalid one must fail.
+Registry fixtures may carry a family prefix (qwen-image.nodes.valid.json): <family>.<key>.
 Exit code 1 on any failure."""
 
 import json
@@ -28,6 +29,8 @@ MESSAGE_TYPES = [
 REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
+# Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
+CANONICAL = ["", "qwen-image."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",
@@ -93,12 +96,12 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
         if not schema:
             out.append(f"{nid}: unknown kind {node['kind']!r}")
             continue
-        names = {p["name"] for p in schema["params"]}
-        out += [
-            f"{nid}.{k}: not a param of {node['kind']}"
-            for k in node.get("params", {})
-            if k not in names
-        ]
+        params = {p["name"]: p for p in schema["params"]}
+        for k, v in node.get("params", {}).items():
+            if k not in params:
+                out.append(f"{nid}.{k}: not a param of {node['kind']}")
+            elif err := value_error(params[k], v):
+                out.append(f"{nid}.{k}: {err}")
         inputs = {p["name"]: p["type"] for p in schema["inputs"]}
         for port, ref in node.get("in", {}).items():
             src_id, src_port = ref.split(".")
@@ -111,17 +114,45 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
     return out
 
 
-def check_echo_registry() -> None:
-    """The canonical fixtures (the fake runner publishes them verbatim) must fit together."""
+def value_error(param: dict, v) -> str | None:
+    """What studio checks when it resolves a run (type, min/max, enum); also applied to every default."""
+    t = param["type"]
+    if t == "seed" and v is None:
+        return None
+    if t in ("int", "seed") and (not isinstance(v, int) or isinstance(v, bool)):
+        return f"{v!r} is not an integer"
+    if t == "float" and (not isinstance(v, (int, float)) or isinstance(v, bool)):
+        return f"{v!r} is not a number"
+    if t == "bool" and not isinstance(v, bool):
+        return f"{v!r} is not a bool"
+    if t in ("string", "text", "enum") and not isinstance(v, str):
+        return f"{v!r} is not a string"
+    if t == "enum" and v not in param["enum"]:
+        return f"{v!r} is not one of {param['enum']}"
+    n = len(v) if t in ("string", "text") else v
+    if t != "enum" and t != "bool" and not param.get("min", n) <= n <= param.get("max", n):
+        return f"{v!r} is outside {param.get('min')}..{param.get('max')}"
+    return None
+
+
+def check_canonical_registries() -> None:
+    """The canonical fixtures (a runner publishes them verbatim) must fit together."""
     reg = HERE / "fixtures" / "registry"
-    nodes = json.loads((reg / "nodes.valid.json").read_text())["nodes"]
-    kinds = {n["kind"]: n for n in nodes}
-    for wf in json.loads((reg / "workflows.valid.json").read_text())["workflows"]:
-        errs = graph_errors(wf, kinds)
-        for e in errs:
-            fail(f"fixtures/registry/workflows.valid.json {wf['id']}: {e}")
-        if not errs:
-            print(f"ok   workflow {wf['id']} fits nodes.valid.json")
+    for prefix in CANONICAL:
+        nodes = json.loads((reg / f"{prefix}nodes.valid.json").read_text())["nodes"]
+        kinds = {n["kind"]: n for n in nodes}
+        for n in nodes:
+            for p in n["params"]:
+                if err := value_error(p, p["default"]):
+                    fail(
+                        f"fixtures/registry/{prefix}nodes.valid.json {n['kind']}.{p['name']} default: {err}"
+                    )
+        for wf in json.loads((reg / f"{prefix}workflows.valid.json").read_text())["workflows"]:
+            errs = graph_errors(wf, kinds)
+            for e in errs:
+                fail(f"fixtures/registry/{prefix}workflows.valid.json {wf['id']}: {e}")
+            if not errs:
+                print(f"ok   workflow {wf['id']} fits {prefix}nodes.valid.json")
 
 
 def check_names() -> None:
@@ -160,6 +191,8 @@ def check_fixtures(schemas: dict[str, dict], registry: Registry) -> None:
             parts = p.name.removesuffix(".json").split(".")
             kind_at = next((i for i, x in enumerate(parts) if x in ("valid", "invalid")), None)
             name = ".".join(parts[:kind_at]) if kind_at else None
+            if sub == "registry" and name:
+                name = name.rsplit(".", 1)[-1]  # drop a family prefix
             if name not in targets:
                 fail(f"{p.relative_to(HERE)}: no schema for {name!r}")
                 continue
@@ -223,7 +256,7 @@ def check_openapi() -> None:
 def main() -> int:
     schemas, registry = load_schemas()
     check_fixtures(schemas, registry)
-    check_echo_registry()
+    check_canonical_registries()
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

@@ -1,0 +1,19 @@
+# The fake model family `echo` (env fake, no GPU, no weights): node echo/echo reports one progress step per
+# `steps` (each after `delay_ms`, a cancel point before each), then draws its text on a gradient, or fails when
+# `fail` is true. Its registry values equal the canonical contract fixtures (tests/test_packs.py).
+id: echo
+family: echo
+title: Echo (fake)
+runtimes:
+  fake: {env: fake}
+stages:
+  echo:
+    title: Echo
+    help: "Fake model: draws its text on a gradient, one progress step at a time."
+    inputs: {text: Text}
+    outputs: {image: Image}
+    params:
+      steps: {type: int, label: Steps, default: 10, min: 1, max: 200, help: Progress steps to report.}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
+      fail: {type: bool, label: Fail, default: false,
+             help: "Fail after the last step, without an output, to test errors."}

@@ -2,12 +2,16 @@
 
 import io
 import json
+import threading
 
-from conftest import FakeJS, FakeMsg, command, consumer
+from conftest import CONTRACTS, IMPLS, FakeJS, FakeKV, FakeMsg, FakeQwen, command, consumer
 from PIL import Image
 
-from consumer import SHUTDOWN
+from consumer import SHUTDOWN, STALLED
+from core.pack import Node
+from core.residency import Residency
 from messaging import schemas
+from messaging.hosts import Host
 
 RUN = "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35"
 SESSION = "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10"
@@ -185,3 +189,85 @@ async def test_a_publish_that_fails_once_is_retried_with_the_same_msg_id(monkeyp
     assert kinds(js) == ["running", "progress", "progress", "output", "succeeded"]
     check_events(js)
     assert failed == [{"Nats-Msg-Id": f"{RUN}:2"}]
+
+
+def qwen_command(seed=None) -> dict:
+    cmd = json.loads((CONTRACTS / "fixtures/messages/cmd.run.execute.valid.2.json").read_text())
+    cmd["data"]["workflow"]["nodes"]["seed"]["params"]["seed"] = seed
+    return cmd
+
+
+def qwen_consumer(q: FakeQwen, js: FakeJS, **kw):
+    res = kw.pop("residency", None) or Residency(52)
+    host = Host(FakeKV(), extra=res.state)
+    return consumer(js, impls=q.impls, node_schemas=q.schemas, residency=res, **kw), host
+
+
+async def test_qwen_graph_reports_phases_and_the_resolved_seed(tmp_path, monkeypatch):
+    q, js = FakeQwen(tmp_path, monkeypatch), FakeJS()
+    c, host = qwen_consumer(q, js)
+    c.host = host
+    await c.handle(FakeMsg(qwen_command(), js))
+    assert kinds(js) == ["running", "progress", "progress", "progress", "output", "succeeded"]
+    check_events(js)
+    evts = js.events()
+    assert [(e["data"]["node"], e["data"]["phase"]) for e in evts[1:4]] == [
+        ("encode", "encode"),
+        ("sample", "sample"),
+        ("decode", "decode"),
+    ]
+    seed = evts[-1]["data"]["resolved"]["seed"]
+    assert 0 <= seed <= 2**53 - 1 and evts[4]["data"]["seed"] == seed
+    assert q.ran() == ["encode", "sample", "decode"]
+    value = json.loads(host.kv.data["fake.fake"])
+    assert schemas.registry_errors("host", value) == [] and value["state"] == "idle"
+    assert {r["component"] for r in value["resident"]} == {"text_encoder", "transformer", "vae"}
+    assert not any(r["pinned"] for r in value["resident"])  # nothing in use after the run
+
+    js2 = FakeJS()
+    c.js = js2
+    await c.handle(FakeMsg(qwen_command(seed=seed + 1), js2))
+    assert q.ran() == ["sample", "decode"]  # a new seed: the prompt is not encoded again
+    assert js2.events()[-1]["data"]["resolved"] == {"seed": seed + 1}
+
+
+async def test_after_run_unload_empties_the_residency(tmp_path, monkeypatch):
+    q, js = FakeQwen(tmp_path, monkeypatch), FakeJS()
+    c, _ = qwen_consumer(q, js, after_run="unload")
+    await c.handle(FakeMsg(qwen_command(seed=3), js))
+    assert kinds(js)[-1] == "succeeded" and not c.residency.entries
+
+
+async def test_a_run_that_does_not_fit_fails_with_numbers(tmp_path, monkeypatch):
+    q, js = FakeQwen(tmp_path, monkeypatch), FakeJS()
+    c, _ = qwen_consumer(q, js, residency=Residency(1))
+    await c.handle(FakeMsg(qwen_command(seed=3), js))
+    assert kinds(js) == ["running", "failed"]
+    assert "does not fit in memory" in js.events()[-1]["data"]["error"]
+
+
+async def test_a_stalled_node_fails_the_run_acks_and_exits(monkeypatch):
+    monkeypatch.setattr("consumer.HEARTBEAT", 0.01)
+    release, exits = threading.Event(), []
+
+    def stuck(ctx, params, inputs):
+        release.wait(5)  # never passes a cancel point
+        return {"image": None}
+
+    impls = dict(IMPLS)
+    impls["echo/echo"] = Node(stuck, stall_s=0.05)
+    js = FakeJS()
+    c = consumer(js, impls=impls)
+
+    def exit(code):
+        exits.append(code)
+        release.set()
+
+    c.exit = exit
+    msg = FakeMsg(command(), js)
+    await c.handle(msg)
+    assert exits == [STALLED]
+    assert kinds(js) == ["running", "failed"]
+    assert "echo: stalled" in js.events()[-1]["data"]["error"]
+    assert msg.log == [("ack", 2)]  # acked once, by the watchdog
+    assert "fake.fake" not in c.host.kv.data  # offline

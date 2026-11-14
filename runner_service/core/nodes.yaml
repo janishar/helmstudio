@@ -1,0 +1,27 @@
+# The core nodes, in every runner, in the stage grammar of packs/README.md (no family: the kind is the name).
+# Functions of the same names are in core/nodes.py. A runner publishes the ones its workflows use: the sources
+# first, then the packs' nodes, then the sinks (nodes without outputs).
+stages:
+  prompt:
+    title: Prompt
+    help: The text the workflow starts from.
+    params:
+      text: {type: text, label: Prompt, default: "", min: 0, max: 4000}
+    outputs: {text: Text}
+  seed:
+    title: Seed
+    help: The noise seed; -1 picks a random one, reported with the result.
+    params:
+      seed: {type: seed, label: Seed, default: -1, min: -1, max: 9007199254740991, step: 1}
+    outputs: {seed: Seed}
+  canvas:
+    title: Canvas
+    help: The output size in pixels.
+    params:
+      width: {type: int, label: Width, default: 1024, min: 256, max: 4096, step: 32}
+      height: {type: int, label: Height, default: 1024, min: 256, max: 4096, step: 32}
+    outputs: {canvas: Canvas}
+  output:
+    title: Output
+    help: Stores its input as a run output.
+    inputs: {media: Image}

@@ -40,17 +40,20 @@ func (b Base) Common() Base { return b }
 // Status is evt.run.status's data.
 type Status struct {
 	Base
-	Status string  `json:"status"` // running | succeeded | failed | cancelled
-	Error  *string `json:"error"`
-	Host   *string `json:"host"`
+	Status   string         `json:"status"` // running | succeeded | failed | cancelled
+	Error    *string        `json:"error"`
+	Host     *string        `json:"host"`
+	Resolved map[string]any `json:"resolved"` // with succeeded: values the runner chose (a random seed)
 }
 
 // Progress is evt.run.progress's data.
 type Progress struct {
 	Base
-	Node string `json:"node"`
-	Step int    `json:"step"`
-	Of   int    `json:"of"`
+	Node  string   `json:"node"`
+	Step  int      `json:"step"`
+	Of    int      `json:"of"`
+	Phase *string  `json:"phase"`
+	EtaS  *float64 `json:"eta_s"`
 }
 
 // Output is evt.run.output's data.
@@ -62,4 +65,5 @@ type Output struct {
 	Width  *int   `json:"width"`
 	Height *int   `json:"height"`
 	Bytes  int64  `json:"bytes"`
+	Seed   *int64 `json:"seed"`
 }

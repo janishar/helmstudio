@@ -31,6 +31,9 @@ def test_echo_with_node_schemas(api):
     ) == ("int", 10, 1, 200)
     assert (params["delay_ms"]["type"], params["delay_ms"]["default"]) == ("int", 300)
     assert (params["fail"]["type"], params["fail"]["default"]) == ("bool", False)
+    assert not any(
+        "step" in p or "when" in p for p in echo["params"]
+    )  # carried only when published
     assert echo["inputs"] == [{"name": "text", "type": "Text"}]
     assert echo["outputs"] == [{"name": "image", "type": "Image"}]
     assert [p["name"] for p in schemas["prompt"]["params"]] == ["text"]
@@ -46,5 +49,10 @@ def test_fake_host_is_live(api):
     hosts = ok(api.get(f"{STUDIO}/hosts"))["hosts"]
     fake = [h for h in hosts if (h["host"], h["env"]) == ("fake", "fake")]
     assert len(fake) == 1 and fake[0]["state"] in ("idle", "busy"), hosts
-    # never a run id or an owner
-    assert all(set(h) <= {"host", "env", "state", "updated_at"} for h in hosts)
+    # never a run id or an owner; a real runner adds its memory and resident components
+    assert all(
+        set(h) <= {"host", "env", "state", "updated_at", "memory", "resident"} for h in hosts
+    )
+    for h in hosts:
+        for r in h.get("resident", []):
+            assert set(r) == {"component", "model", "variant", "precision", "gb", "pinned"}, r

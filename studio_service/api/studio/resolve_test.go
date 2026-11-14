@@ -9,24 +9,31 @@ import (
 	"github.com/helmstudio/studio_service/registry"
 )
 
-// echo is the canonical echo workflow from contracts/fixtures/registry.
-func echo(t *testing.T) registry.Workflow {
+// canonical is a canonical workflow from contracts/fixtures/registry: prefix "" (echo, fake.fake) or "qwen-image."
+// (mac.torch).
+func canonical(t *testing.T, prefix, source, id string) registry.Workflow {
 	t.Helper()
 	var r registry.Registry
 	for _, kind := range []string{"nodes", "workflows"} {
-		data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", kind+".valid.json"))
+		data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", prefix+kind+".valid.json"))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := r.SetRegistry("fake.fake."+kind, data); err != nil {
+		if err := r.SetRegistry(source+"."+kind, data); err != nil {
 			t.Fatal(err)
 		}
 	}
-	workflow, ok := r.Workflow("echo")
+	workflow, ok := r.Workflow(id)
 	if !ok {
-		t.Fatal("no echo workflow")
+		t.Fatal("no workflow " + id)
 	}
 	return workflow
+}
+
+func echo(t *testing.T) registry.Workflow { return canonical(t, "", "fake.fake", "echo") }
+
+func qwen(t *testing.T) registry.Workflow {
+	return canonical(t, "qwen-image.", "mac.torch", "qwen-image")
 }
 
 // inputs decodes JSON as a request body would be.
@@ -96,6 +103,10 @@ func TestCheck(t *testing.T) {
 		{registry.Param{Type: "string", Max: &long}, "äöü", ""},
 		{registry.Param{Type: "enum", Enum: []string{"a", "b"}}, "c", "must be one of a, b"},
 		{registry.Param{Type: "enum", Enum: []string{"a", "b"}}, "b", ""},
+		{registry.Param{Type: "text", Max: &long}, "ab\ncd", "must be at most 3 characters long"},
+		{registry.Param{Type: "int"}, 1e300, "must be a whole number"},
+		{registry.Param{Type: "seed"}, -1.0, ""},
+		{registry.Param{Type: "seed"}, nil, ""},
 	} {
 		if _, detail := check(test.param, test.value); detail != test.want {
 			t.Errorf("%+v %v: %q, want %q", test.param, test.value, detail, test.want)
@@ -103,5 +114,44 @@ func TestCheck(t *testing.T) {
 	}
 	if value, _ := check(registry.Param{Type: "int"}, float64(7)); value != int64(7) {
 		t.Fatalf("an int is sent as an integer: %#v", value)
+	}
+}
+
+// The qwen-image graph: seed, enum, int with step and bool params; when and step are carried, null seed stays null.
+func TestResolveQwen(t *testing.T) {
+	workflow := qwen(t)
+	if param, _ := findParam(workflow, "sample.steps"); param.When != "model.variant != 'turbo'" || *param.Step != 1 {
+		t.Fatalf("when and step are carried: %+v", param)
+	}
+	nodes, detail := resolve(workflow, inputs(t, `{"prompt.text": "a fox", "seed.seed": null, "model.variant": "turbo",
+		"canvas.width": 768, "decode.tiled": "on", "encode.transparent": true}`))
+	if detail != "" {
+		t.Fatal(detail)
+	}
+	if v, ok := nodes["seed"].Params["seed"]; !ok || v != nil {
+		t.Fatalf("a null seed is sent as null: %#v", nodes["seed"].Params)
+	}
+	if nodes["canvas"].Params["width"] != int64(768) || nodes["canvas"].Params["height"] != float64(1024) ||
+		nodes["model"].Params["precision"] != "int8" || nodes["sample"].Params["steps"] != float64(40) {
+		t.Fatalf("%+v", nodes)
+	}
+	nodes, _ = resolve(workflow, inputs(t, `{"seed.seed": 9007199254740991}`))
+	if nodes["seed"].Params["seed"] != int64(9007199254740991) {
+		t.Fatalf("the largest seed is exact: %#v", nodes["seed"].Params["seed"])
+	}
+	for body, want := range map[string]string{
+		`{"seed.seed": -2}`:               "seed.seed: must be null, -1 or a whole number from 0 to 9007199254740991",
+		`{"seed.seed": 1.5}`:              "seed.seed: must be null, -1 or a whole number from 0 to 9007199254740991",
+		`{"seed.seed": "7"}`:              "seed.seed: must be null, -1 or a whole number from 0 to 9007199254740991",
+		`{"seed.seed": 9007199254740992}`: "seed.seed: must be null, -1 or a whole number from 0 to 9007199254740991",
+		`{"model.variant": "large"}`:      "model.variant: must be one of base, turbo",
+		`{"canvas.width": 100}`:           "canvas.width: must be between 256 and 4096",
+		`{"canvas.width": null}`:          "canvas.width: must be a whole number",
+		`{"encode.transparent": 1}`:       "encode.transparent: must be true or false",
+		`{"decode.tiled": null}`:          "decode.tiled: must be one of auto, on, off",
+	} {
+		if _, detail := resolve(workflow, inputs(t, body)); detail != want {
+			t.Errorf("%s: %q, want %q", body, detail, want)
+		}
 	}
 }

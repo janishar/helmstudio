@@ -85,6 +85,12 @@ func (w workflow) inputs(ps []string) (map[string]any, error) {
 			v, err = strconv.ParseFloat(val, 64)
 		case "bool":
 			v, err = strconv.ParseBool(val)
+		case "seed": // a whole number, or random (sent as null); -1 is random too
+			if val == "random" || val == "null" {
+				v = nil
+			} else {
+				v, err = strconv.ParseInt(val, 10, 64)
+			}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("-p %s: not a valid %s", key, typ)
@@ -100,7 +106,7 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	sessionID := fs.String("session", "new", "session id, or new")
 	out := fs.String("out", ".", "directory for the outputs")
 	var ps params
-	fs.Var(&ps, "p", "node.param=value (repeatable)")
+	fs.Var(&ps, "p", "node.param=value (repeatable; a seed takes a number or random)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -269,16 +275,21 @@ func printEvent(e event, stdout io.Writer) string {
 	switch e.Type {
 	case "status":
 		var d struct {
-			Status string  `json:"status"`
-			Error  *string `json:"error"`
-			Host   *string `json:"host"`
+			Status   string  `json:"status"`
+			Error    *string `json:"error"`
+			Host     *string `json:"host"`
+			Resolved struct {
+				Seed *int64 `json:"seed"`
+			} `json:"resolved"`
 		}
 		_ = json.Unmarshal(e.Data, &d)
-		switch d.Status {
-		case "running":
+		switch {
+		case d.Status == "running":
 			fmt.Fprintf(stdout, "running on %s\n", deref(d.Host))
-		case "failed":
+		case d.Status == "failed":
 			fmt.Fprintf(stdout, "failed: %s\n", deref(d.Error))
+		case d.Resolved.Seed != nil:
+			fmt.Fprintf(stdout, "%s (seed %d)\n", d.Status, *d.Resolved.Seed)
 		default:
 			fmt.Fprintln(stdout, d.Status)
 		}
@@ -287,12 +298,21 @@ func printEvent(e event, stdout io.Writer) string {
 		}
 	case "progress":
 		var d struct {
-			Node string `json:"node"`
-			Step int    `json:"step"`
-			Of   int    `json:"of"`
+			Node  string   `json:"node"`
+			Step  int      `json:"step"`
+			Of    int      `json:"of"`
+			Phase string   `json:"phase"`
+			EtaS  *float64 `json:"eta_s"`
 		}
 		_ = json.Unmarshal(e.Data, &d)
-		fmt.Fprintf(stdout, "%s %d/%d\n", d.Node, d.Step, d.Of)
+		line := fmt.Sprintf("%s %d/%d", d.Node, d.Step, d.Of)
+		if d.Phase != "" {
+			line += " " + d.Phase
+		}
+		if d.EtaS != nil {
+			line += fmt.Sprintf(" (~%.0fs left)", *d.EtaS)
+		}
+		fmt.Fprintln(stdout, line)
 	case "output":
 		var d runOutput
 		_ = json.Unmarshal(e.Data, &d)

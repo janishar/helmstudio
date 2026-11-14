@@ -1,13 +1,26 @@
 [project]
 name = "helmstudio-runner"
-version = "0.1.0"
-description = "helmstudio runner_service: the fake runner (host fake, env fake) that executes echo workflow runs from NATS"
+version = "0.2.0"
+description = "helmstudio runner_service: executes workflow runs from NATS (env fake: the echo pack; env torch: torch packs)"
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "nats-py>=2.16.0",
     "jsonschema>=4.26.0",
     "boto3>=1.44.3",
     "pillow>=13.0.0",
+    "pyyaml>=6.0.3",
+]
+
+[project.optional-dependencies]
+# the native torch runner (`make runners`); never installed in the Docker image
+torch = [
+    "torch==2.15.*",
+    "torchvision==0.29.*",
+    "safetensors>=0.8.0",
+    "diffusers>=0.43.0",
+    "transformers>=5.23.0,<6",
+    "accelerate>=1.15.0",
+    "numpy>=2.5.4",
 ]
 
 [dependency-groups]
@@ -22,6 +35,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["gpu: loads real weights on the GPU (run with -m gpu)"]
+addopts = "-m 'not gpu'"
 
 [tool.ruff]
 line-length = 100

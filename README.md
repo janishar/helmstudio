@@ -39,14 +39,30 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 | `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test-down` stops it |
 | `make resilience` | restart each service of `helmstudio-test` mid-run and check the stack recovers (`contract_tests/resilience.sh`) |
 | `.tools/test-db` | Postgres for the Go services' DB tests (`helmstudio-test`, port 5464) |
-| `make runners` | native GPU runners (M1) |
+| `make runners` | the native torch runner on this Mac, in the foreground (`make runners-stop` stops it) |
 
 Each service has its own `Makefile` (at least `test` and `lint`; `dev` and `gen` where they apply).
 
+## Native runner
+
+Real models run outside Docker, natively on the GPU host. On Apple Silicon (PyTorch MPS):
+
+```sh
+make up        # the stack (the fake runner stays in it for the contract suite)
+make runners   # runner_service as host mac, env torch, in the foreground; Ctrl-C or `make runners-stop`
+```
+
+It joins the stack through the loopback ports compose publishes for it: NATS on `4322` as user `runner_mac`
+(`deploy/secrets/nats_runner_mac_url`; it may only consume `cmd.run.mac.torch` and write the `mac.torch` registry and
+hosts keys) and the SeaweedFS S3 API on `8433`. Weights are read from `HELMSTUDIO_MODELS` (default `~/GenAI/models`)
+and never downloaded, built into an image or put in the object store. Its pid file is
+`runner_service/.run/runner-mac-torch.pid`.
+
 ## Ports
 
-Only two ports are published, both on 127.0.0.1: Kong on `8300` (`KONG_HTTP_PORT`) and Postgres on `5463`
-(`POSTGRES_HOST_PORT`), set in `deploy/.env`.
+Published on 127.0.0.1, set in `deploy/.env`: Kong on `8300` (`KONG_HTTP_PORT`), Postgres on `5463`
+(`POSTGRES_HOST_PORT`), and for native runners NATS on `4322` (`NATS_HOST_PORT`) and the S3 API on `8433`
+(`S3_HOST_PORT`). `helmstudio-test` uses 8390, 5464, 4323 and 8434.
 
 ## Layout
 

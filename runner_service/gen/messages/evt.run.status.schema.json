@@ -48,6 +48,15 @@
         "host": {
           "$ref": "defs.schema.json#/$defs/hostName",
           "description": "the host running it (sent with running)"
+        },
+        "resolved": {
+          "type": "object",
+          "description": "sent with succeeded: values the runner chose for the run (a random seed), so the UI shows what was actually used; open for more fields",
+          "properties": {
+            "seed": {
+              "$ref": "defs.schema.json#/$defs/seed"
+            }
+          }
         }
       },
       "if": {

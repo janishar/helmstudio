@@ -1,30 +1,27 @@
-"""The core nodes, in every runner: `prompt` (a Text source) and `output` (stores an Image as a run output)."""
+"""The core nodes (schemas in core/nodes.yaml): `prompt` (Text), `seed` (Seed: an int, already resolved by
+graph.resolve), `canvas` (Canvas: {"width", "height"}) and `output` (stores an Image as a run output)."""
 
-import asyncio
 import io
 
 from PIL import Image
 
-from core.graph import Ctx
 
-
-async def prompt(ctx: Ctx, params: dict, inputs: dict) -> dict:
-    """The workflow's text."""
+def prompt(ctx, params: dict, inputs: dict) -> dict:
     return {"text": params["text"]}
 
 
-def _png(image: Image.Image) -> bytes:
-    buf = io.BytesIO()
-    image.save(buf, "PNG")
-    return buf.getvalue()
+def seed(ctx, params: dict, inputs: dict) -> dict:
+    return {"seed": params["seed"]}
 
 
-async def output(ctx: Ctx, params: dict, inputs: dict) -> dict:
+def canvas(ctx, params: dict, inputs: dict) -> dict:
+    return {"canvas": {"width": params["width"], "height": params["height"]}}
+
+
+def output(ctx, params: dict, inputs: dict) -> dict:
     """Store the input image as a PNG output of the run."""
     image: Image.Image = inputs["media"]
-    data = await asyncio.to_thread(_png, image)
-    await ctx.output(data, ext="png", kind="image", width=image.width, height=image.height)
+    buf = io.BytesIO()
+    image.save(buf, "PNG")
+    ctx.output(buf.getvalue(), ext="png", kind="image", width=image.width, height=image.height)
     return {}
-
-
-NODES = {"prompt": prompt, "output": output}

@@ -1,17 +1,17 @@
 import json
 
 import pytest
-from conftest import CONTRACTS, GEN, FakeKV
+from conftest import CONTRACTS, GEN, IMPLS, VALUES, FakeKV
 
 from core import registry
+from core.residency import Residency
 from messaging import schemas
 from messaging.hosts import KEY, Host
 from messaging.publisher import RunEvents
 
 
-def test_registry_values_are_on_contract_and_the_canonical_fixtures():
-    values = registry.values()
-    for kind, value in values.items():
+def test_fake_registry_values_are_on_contract_and_the_canonical_fixtures():
+    for kind, value in VALUES.items():
         assert schemas.registry_errors(kind, value) == []
         fixture = json.loads((CONTRACTS / f"fixtures/registry/{kind}.valid.json").read_text())
         strip = {"published_at", "published_by"}
@@ -21,7 +21,7 @@ def test_registry_values_are_on_contract_and_the_canonical_fixtures():
 
 
 def test_every_published_node_kind_has_an_implementation():
-    assert registry.node_schemas(registry.values()).keys() == registry.IMPLS.keys()
+    assert registry.node_schemas(VALUES).keys() == IMPLS.keys()
 
 
 @pytest.mark.skipif(not CONTRACTS.is_dir(), reason="contracts/ is not next to the service")
@@ -29,10 +29,6 @@ def test_gen_matches_contracts():
     """`make gen` was run after the last contract change."""
     pairs = [(p, GEN / "messages" / p.name) for p in CONTRACTS.glob("messages/*.schema.json")]
     pairs.append((CONTRACTS / "registry.schema.json", GEN / "registry.schema.json"))
-    pairs += [
-        (CONTRACTS / f"fixtures/registry/{k}.valid.json", GEN / f"registry/{k}.valid.json")
-        for k in registry.KINDS
-    ]
     for src, copy in pairs:
         assert copy.read_bytes() == src.read_bytes(), f"{copy} is stale: run make gen"
 
@@ -45,9 +41,26 @@ async def test_host_value_is_on_contract_idle_busy_and_offline():
     await host.put()
     value = json.loads(host.kv.data[KEY])
     assert value["state"] == "busy" and value["run_id"] == host.run_id
+    assert "memory" not in value  # the fake runner has no residency manager
     assert schemas.registry_errors("host", value) == []
     await host.offline()
     assert KEY not in host.kv.data
+
+
+async def test_host_value_carries_memory_and_resident():
+    res = Residency(52, pins={"vae"})
+    res.get(("qwen-image-2.1", "turbo", "transformer", "int8"), 7.4, 0, object)
+    res.get(("qwen-image-2.1", "base", "vae", "bf16"), 1.3, 0, object)
+    res.done()
+    host = Host(FakeKV(), extra=res.state)
+    await host.put()
+    value = json.loads(host.kv.data[KEY])
+    assert schemas.registry_errors("host", value) == []
+    assert value["memory"] == {"budget_gb": 52, "used_gb": 8.7}
+    assert [(r["component"], r["variant"], r["pinned"]) for r in value["resident"]] == [
+        ("transformer", "turbo", False),
+        ("vae", "base", True),
+    ]
 
 
 def test_off_contract_event_is_refused_without_using_a_seq():

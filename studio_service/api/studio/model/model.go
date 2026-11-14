@@ -33,11 +33,12 @@ type Run struct {
 	CreatedAt  time.Time
 	StartedAt  *time.Time
 	FinishedAt *time.Time
+	Resolved   json.RawMessage // null until succeeded brings one
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
-	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at`
+	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved`
 
 // Output is a run_outputs row.
 type Output struct {
@@ -47,10 +48,11 @@ type Output struct {
 	Kind   string
 	Width  *int
 	Height *int
+	Seed   *int64
 }
 
 // OutputCols are the columns Output scans, in order.
-const OutputCols = `run_id::text, idx, key, kind, width, height`
+const OutputCols = `run_id::text, idx, key, kind, width, height, seed`
 
 // Event is a run_events row.
 type Event struct {

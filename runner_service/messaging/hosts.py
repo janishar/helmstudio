@@ -1,6 +1,6 @@
-"""KV `hosts`, key <host>.<env>: this runner's live state (idle, or busy with a run id). Rewritten every
-HEARTBEAT seconds and on every change; studio treats a key older than 30 s as offline. Deleted on shutdown,
-so the host goes offline at once."""
+"""KV `hosts`, key <host>.<env>: this runner's live state (idle, or busy with a run id; with a residency manager
+also its memory and resident components). Rewritten every HEARTBEAT seconds and on every change; studio treats a
+key older than 30 s as offline. Deleted on shutdown, so the host goes offline at once."""
 
 import asyncio
 import contextlib
@@ -20,8 +20,11 @@ KEY = f"{HOST}.{ENV}"
 class Host:
     """This runner's hosts key."""
 
-    def __init__(self, kv) -> None:
-        self.kv = kv
+    def __init__(self, kv, extra=None) -> None:
+        self.kv, self.extra = (
+            kv,
+            extra,
+        )  # extra() → more fields (the residency manager's memory, resident)
         self.run_id: str | None = None
 
     def value(self) -> dict:
@@ -35,6 +38,8 @@ class Host:
             "updated_at": now(),
             "published_by": PUBLISHED_BY,
         }
+        if self.extra:
+            value |= self.extra()
         if errs := schemas.registry_errors("host", value):
             raise ValueError(f"hosts value is off-contract: {'; '.join(errs[:3])}")
         return value

@@ -24,6 +24,7 @@ secrets:
   nats_auth_password: {file: secrets/nats_auth_password}
   nats_studio_password: {file: secrets/nats_studio_password}
   nats_runner_password: {file: secrets/nats_runner_password}
+  nats_runner_mac_password: {file: secrets/nats_runner_mac_password}   # the native Mac runner (make runners)
   nats_admin_url: {file: secrets/nats_admin_url}
   nats_auth_url: {file: secrets/nats_auth_url}
   nats_studio_url: {file: secrets/nats_studio_url}
@@ -84,8 +85,9 @@ services:
   nats:
     image: nats:2.15.3-alpine3.22
     # nats.conf reads the users' passwords from the environment; they come from the secrets here
-    entrypoint: [sh, -c, 'for u in admin auth studio runner; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/nats.conf']
-    secrets: [nats_admin_password, nats_auth_password, nats_studio_password, nats_runner_password]
+    entrypoint: [sh, -c, 'for u in admin auth studio runner runner_mac; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/nats.conf']
+    secrets: [nats_admin_password, nats_auth_password, nats_studio_password, nats_runner_password, nats_runner_mac_password]
+    ports: ["127.0.0.1:${NATS_HOST_PORT:-4322}:4222"]   # for native runners (make runners)
     volumes: [./nats/nats.conf:/etc/nats/nats.conf:ro, natsdata:/data]
     healthcheck:
       test: [CMD, wget, -qO-, "http://localhost:8222/healthz?js-enabled-only=true"]
@@ -117,6 +119,7 @@ services:
     # with no -s3.config, AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (from the secrets) become the S3 admin identity
     entrypoint: [sh, -c, 'export AWS_ACCESS_KEY_ID="$$(cat /run/secrets/s3_access_key_id)" AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/s3_secret_access_key)"; exec /entrypoint.sh server -dir=/data -s3 -s3.port=8333 -ip=seaweedfs -ip.bind=0.0.0.0']
     secrets: [s3_access_key_id, s3_secret_access_key]
+    ports: ["127.0.0.1:${S3_HOST_PORT:-8433}:8333"]   # the S3 API, for native runners (make runners)
     volumes: [seaweeddata:/data]
     healthcheck: {test: [CMD, wget, -qO-, http://localhost:8333/healthz], interval: 3s, timeout: 3s, retries: 30}
 

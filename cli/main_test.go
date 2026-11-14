@@ -127,9 +127,9 @@ func (f *fakeAPI) events(w http.ResponseWriter, r *http.Request) {
 	send("r1", "progress", `{"node":"echo","step":1,"of":2}`)
 	switch f.outcome {
 	case "succeeded":
-		send("r1", "progress", `{"node":"echo","step":2,"of":2}`)
+		send("r1", "progress", `{"node":"echo","step":2,"of":2,"phase":"sampling","eta_s":1.2}`)
 		send("r1", "output", `{"index":0,"key":"u/o1/runs/r1/0.png","kind":"image","url":"/x"}`)
-		send("r1", "status", `{"status":"succeeded","error":null,"host":"fake"}`)
+		send("r1", "status", `{"status":"succeeded","error":null,"host":"fake","resolved":{"seed":7}}`)
 	case "failed":
 		send("r1", "status", `{"status":"failed","error":"echo failed on purpose","host":"fake"}`)
 	case "cancelled":
@@ -198,7 +198,7 @@ func TestRunSucceedsAndRefreshes(t *testing.T) {
 	if fmt.Sprint(f.inputs) != fmt.Sprint(want) {
 		t.Fatalf("inputs %v", f.inputs)
 	}
-	for _, line := range []string{"session s1", "run r1", "queued", "running on fake", "echo 1/2", "echo 2/2", "output 0 image", "succeeded"} {
+	for _, line := range []string{"session s1", "run r1", "queued", "running on fake", "echo 1/2", "echo 2/2 sampling (~1s left)", "output 0 image", "succeeded (seed 7)"} {
 		if !strings.Contains(out.String(), line+"\n") {
 			t.Errorf("missing %q in\n%s", line, out.String())
 		}
@@ -244,6 +244,21 @@ func TestInputsRejectsBadValues(t *testing.T) {
 		if _, err := wf.inputs([]string{p}); err == nil {
 			t.Errorf("%s accepted", p)
 		}
+	}
+	qwen := workflow{Nodes: map[string]struct {
+		Kind string `json:"kind"`
+	}{"seed": {Kind: "seed"}, "model": {Kind: "qwen-image/model"}}}
+	_ = json.Unmarshal([]byte(`{"node_schemas": {"seed": {"params": [{"name": "seed", "type": "seed"}]},
+		"qwen-image/model": {"params": [{"name": "variant", "type": "enum"}]}}}`), &qwen)
+	seeds, err := qwen.inputs([]string{"seed.seed=random", "model.variant=turbo"})
+	if v, ok := seeds["seed.seed"]; err != nil || !ok || v != nil || seeds["model.variant"] != "turbo" {
+		t.Fatalf("random is null, an enum is text: %v %v", seeds, err)
+	}
+	if seeds, _ := qwen.inputs([]string{"seed.seed=42"}); seeds["seed.seed"] != int64(42) {
+		t.Fatalf("%v", seeds)
+	}
+	if _, err := qwen.inputs([]string{"seed.seed=4.5"}); err == nil {
+		t.Error("seed 4.5 accepted")
 	}
 	got, err := wf.inputs([]string{"echo.unknown=1", "prompt.text=2"})
 	if err != nil || got["echo.unknown"] != "1" || got["prompt.text"] != "2" {

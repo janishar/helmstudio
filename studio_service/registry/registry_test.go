@@ -118,3 +118,27 @@ func TestValuesAreTiedToTheirKeys(t *testing.T) {
 		t.Fatal("a deleted registry key is gone")
 	}
 }
+
+// The torch runner's canonical values give the qwen-image workflow; its hosts value carries memory and resident.
+func TestQwenAndHostMemory(t *testing.T) {
+	var r Registry
+	_ = r.SetRegistry("mac.torch.nodes", fixture(t, "qwen-image.nodes"))
+	_ = r.SetRegistry("mac.torch.workflows", fixture(t, "qwen-image.workflows"))
+	workflow, ok := r.Workflow("qwen-image")
+	if !ok || len(workflow.NodeSchemas) != 8 || workflow.Env != "torch" {
+		t.Fatalf("%+v", workflow)
+	}
+	host3, _ := os.ReadFile(filepath.Join("..", "..", "contracts", "fixtures", "registry", "host.valid.3.json"))
+	if err := r.SetHost("mac.torch", host3); err != nil {
+		t.Fatal(err)
+	}
+	host := r.Hosts()[0]
+	if host.Memory == nil || host.Memory.BudgetGB != 52 || len(host.Resident) != 2 || !host.Resident[0].Pinned ||
+		host.Resident[0].Precision != "int8" {
+		t.Fatalf("%+v", host)
+	}
+	// Busy with the run on a live key holds it however long a model load takes.
+	if !r.Holds("mac", "torch", *host.RunID, false, host.UpdatedAt.Add(Stale)) {
+		t.Fatal("a live runner busy with the run holds it")
+	}
+}

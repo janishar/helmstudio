@@ -1,0 +1,31 @@
+{
+  "id": "echo",
+  "title": "Echo",
+  "family": "echo",
+  "env": "fake",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "echo": {
+      "kind": "echo/echo",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "steps": 10,
+        "delay_ms": 300,
+        "fail": false
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "echo.image"
+      }
+    }
+  }
+}

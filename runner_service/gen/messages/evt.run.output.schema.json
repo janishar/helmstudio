@@ -58,6 +58,10 @@
           "type": "integer",
           "minimum": 0,
           "description": "object size"
+        },
+        "seed": {
+          "$ref": "defs.schema.json#/$defs/seed",
+          "description": "the seed this output was made with"
         }
       }
     }

@@ -444,28 +444,38 @@ export interface components {
             /** @description trimmed; blank = 422 */
             title: string;
         };
-        /** @description an input accepts only an output of the same type (M0: Text, Image) */
-        PortType: string;
+        /**
+         * @description An input accepts only an output of the same type. Model, Conditioning and Latent are family-scoped handles: they
+         *     wire nodes of one family inside one workflow and never cross a process.
+         * @enum {string}
+         */
+        PortType: "Text" | "Image" | "Int" | "Float" | "Seed" | "Canvas" | "Model" | "Conditioning" | "Latent";
         Port: {
             name: string;
             type: components["schemas"]["PortType"];
         };
-        ParamValue: string | number | boolean;
+        /** @description null only for a seed (random) */
+        ParamValue: string | number | boolean | null;
         /**
-         * @description One form field. `int`/`float`: `min`/`max` bound the value; `string`/`text` (multi-line): `min`/`max` bound
-         *     the length; `enum`: one of `enum`; `bool`: a switch.
+         * @description One form field. `int`/`float`/`seed`: `min`/`max` bound the value, `step` is the increment; `string`/`text`
+         *     (multi-line): `min`/`max` bound the length; `enum`: one of `enum`; `bool`: a switch. `seed`: an int where null
+         *     or -1 means random: the runner picks one and reports it (`Run.resolved.seed`, `RunOutput.seed`). `when`: a
+         *     visibility expression over the graph (`model.variant != 'turbo'`), carried through, not evaluated yet.
          */
         ParamSchema: {
             name: string;
             /** @enum {string} */
-            type: "int" | "float" | "bool" | "string" | "text" | "enum";
+            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed";
             /** @description absent = the name */
             label?: string;
             default: components["schemas"]["ParamValue"];
             min?: number;
             max?: number;
+            step?: number;
             enum?: string[];
             help?: string;
+            /** @description visibility expression; absent = always shown */
+            when?: string;
         };
         NodeSchema: {
             /** @example echo/echo */
@@ -536,6 +546,10 @@ export interface components {
             node: string;
             step: number;
             of: number;
+            /** @description what the node is doing (loading transformer, sampling, decoding); absent from M0 runners */
+            phase?: string;
+            /** @description estimated seconds until the run finishes */
+            eta_s?: number;
         };
         RunOutput: {
             index: number;
@@ -546,6 +560,8 @@ export interface components {
             url: components["schemas"]["SignedUrl"];
             width: number | null;
             height: number | null;
+            /** @description the seed it was made with; absent when the workflow has none */
+            seed?: number;
         };
         Run: {
             /** Format: uuid */
@@ -564,6 +580,7 @@ export interface components {
             outputs: components["schemas"]["RunOutput"][];
             /** @description the host it was sent to; null when none was found */
             host: string | null;
+            resolved?: components["schemas"]["Resolved"];
             /** Format: date-time */
             created_at: string;
             /**
@@ -573,6 +590,10 @@ export interface components {
             started_at: string | null;
             /** Format: date-time */
             finished_at: string | null;
+        };
+        /** @description values the runner chose (a random seed), sent with succeeded; absent until then and from M0 runners */
+        Resolved: {
+            seed?: number;
         };
         RunList: {
             runs: components["schemas"]["Run"][];
@@ -599,6 +620,7 @@ export interface components {
                 status: components["schemas"]["RunStatus"];
                 error: string | null;
                 host: string | null;
+                resolved?: components["schemas"]["Resolved"];
             };
         };
         ProgressEvent: {
@@ -642,6 +664,20 @@ export interface components {
              * @description the runner's last refresh
              */
             updated_at: string;
+            memory?: {
+                budget_gb: number;
+                used_gb: number;
+            };
+            /** @description model components loaded now; no run or owner */
+            resident?: {
+                component: string;
+                model: string;
+                variant: string;
+                /** @enum {string} */
+                precision: "bf16" | "fp16" | "int8";
+                gb: number;
+                pinned: boolean;
+            }[];
         };
         HostList: {
             hosts: components["schemas"]["Host"][];

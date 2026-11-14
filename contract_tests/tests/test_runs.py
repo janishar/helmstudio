@@ -51,7 +51,10 @@ def test_events_in_order(echo_done):
         "status",
     ]
     progress = [e["data"] for e in events if e["type"] == "progress"]
-    assert progress == [{"node": "echo", "step": n, "of": 3} for n in (1, 2, 3)]
+    # phase and eta_s are optional extras a runner may add
+    assert [{k: p[k] for k in ("node", "step", "of")} for p in progress] == [
+        {"node": "echo", "step": n, "of": 3} for n in (1, 2, 3)
+    ]
     running = events[1]["data"]
     assert (running["host"], running["error"]) == ("fake", None)
 
@@ -75,7 +78,11 @@ def test_finished_run(api, echo_done):
     run_id, sid = echo_done["run"]["id"], echo_done["session"]["id"]
     run = ok(api.get(f"{STUDIO}/runs/{run_id}"))
     assert (run["status"], run["error"], run["host"]) == ("succeeded", None, "fake")
-    assert run["progress"] == {"node": "echo", "step": 3, "of": 3}
+    assert {k: run["progress"][k] for k in ("node", "step", "of")} == {
+        "node": "echo",
+        "step": 3,
+        "of": 3,
+    }
     assert run["started_at"] and run["finished_at"]
     assert [(o["index"], o["key"], o["kind"]) for o in run["outputs"]] == [
         (0, f"u/{echo_done['owner_id']}/runs/{run_id}/0.png", "image")
@@ -144,6 +151,11 @@ def test_invalid_inputs(api):
         ("echo.nope", 1),
         ("nowhere.steps", 1),
         ("prompt.text", "x" * 4001),
+        # null is only a seed's (random); echo has no seed param
+        ("echo.steps", None),
+        ("echo.fail", None),
+        ("prompt.text", None),
+        ("echo.steps", 1e300),  # no int beyond 2^53-1
     ]
     for key, value in bad:
         r = api.post(url, json={"workflow_id": "echo", "inputs": {key: value}})

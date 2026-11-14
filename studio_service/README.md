@@ -20,21 +20,21 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
 
 1. `POST /sessions/{id}/runs` resolves the workflow (registry) with the inputs: node schema default, then the
    workflow's value, then `"<node>.<param>"` from the request, each checked against the param's type, `min`/`max` and
-   `enum` (422 names the key). It places the run on a live host (hosts key fresher than 30 s) with the workflow's env,
+   `enum` (422 names the key; a `seed` takes null or -1 for random, and `step` / `when` are carried, not checked). It places the run on a live host (hosts key fresher than 30 s) with the workflow's env,
    idle first. In one transaction: the run row (`queued`), the outbox row for `cmd.run.execute` on
    `cmd.run.<host>.<env>` (output prefix `u/<owner>/runs/<run>/`) and a `status queued` event. No live host: the run is
    stored `failed` (`no live host for env <env>`) and nothing is sent. 202 either way.
 2. The relay publishes the outbox (`Nats-Msg-Id <run>:<attempt>`).
 3. The projector (durable `studio-projector` on `EVT`, `evt.run.>`, one message at a time) checks the run's owner and
    session against the envelope and subject, dedupes on `(job_id, seq)`, applies `status` (queued → running → one of
-   succeeded, failed, cancelled; nothing after the end), `progress` and `output` (keys under the run's prefix only), and
-   appends each to `run_events` under the session's next `seq`.
+   succeeded, failed, cancelled; nothing after the end), `progress` (with `phase`, `eta_s`) and `output` (keys under the run's prefix only, its `seed`), keeps a
+   `succeeded`'s `resolved` (the seed the runner picked) on the run, and appends each to `run_events` under the session's next `seq`.
 4. `GET /sessions/{id}/events` serves the log as JSON (`?since=`) or SSE (`Last-Event-ID`, polls every second,
    keep-alive every 15 s); output keys are signed when read.
 5. Cancel: a run still in the outbox is cancelled at once and never sent. Otherwise the run is marked and its id written
    to the KV `cancels`; the runner reports `cancelled`.
 6. The lease sweep (every 5 s, after a 30 s start-up grace) ends an open run with no event for 30 s whose host is
-   offline, or that was asked to cancel and did not answer: `cancelled` if asked, else `failed`.
+   offline or live but not on it (a runner whose hosts key names the run holds it through a long model load), or that was asked to cancel and did not answer: `cancelled` if asked, else `failed`.
 
 NATS user `studio`: publishes `cmd.run.>` and `$KV.cancels.>` (a KV put, sent as a request for the stream's ack),
 consumes `evt.run.>` (durable `studio-projector`), watches the KV `registry` and `hosts`, requests

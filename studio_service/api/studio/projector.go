@@ -114,11 +114,19 @@ func applyStatus(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Messa
 	if data.Host != nil {
 		host = data.Host
 	}
+	if data.Status != "succeeded" || len(data.Resolved) == 0 {
+		data.Resolved = nil
+	}
 	_, err := tx.Exec(ctx, `UPDATE runs SET status = $2, error = $3, host = $4, updated_at = clock_timestamp(),
 		started_at = CASE WHEN $2 = 'running' THEN clock_timestamp() ELSE started_at END,
-		finished_at = CASE WHEN $2 = 'running' THEN NULL ELSE clock_timestamp() END
-		WHERE id = $1`, run.ID, data.Status, data.Error, host)
-	return statusData(data.Status, data.Error, host), err
+		finished_at = CASE WHEN $2 = 'running' THEN NULL ELSE clock_timestamp() END,
+		resolved = coalesce($5::jsonb, resolved)
+		WHERE id = $1`, run.ID, data.Status, data.Error, host, data.Resolved)
+	stored := statusData(data.Status, data.Error, host)
+	if data.Resolved != nil {
+		stored["resolved"] = data.Resolved
+	}
+	return stored, err
 }
 
 // applyProgress stores the run's last step; a run already ended takes none.
@@ -128,6 +136,12 @@ func applyProgress(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Mes
 	}
 	data := event.Data
 	progress := map[string]any{"node": data.Node, "step": data.Step, "of": data.Of}
+	if data.Phase != nil {
+		progress["phase"] = *data.Phase
+	}
+	if data.EtaS != nil {
+		progress["eta_s"] = *data.EtaS
+	}
 	_, err := tx.Exec(ctx, `UPDATE runs SET progress = $2, updated_at = clock_timestamp() WHERE id = $1`, run.ID, progress)
 	return progress, err
 }
@@ -142,16 +156,20 @@ func applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Messa
 		log.Printf("projector: dropping output %d of run %s (%s)", data.Index, run.ID, data.Key)
 		return nil, nil
 	}
-	_, err := tx.Exec(ctx, `INSERT INTO run_outputs (run_id, owner_id, idx, key, kind, width, height, bytes)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (run_id, idx) DO NOTHING`,
-		run.ID, run.OwnerID, data.Index, data.Key, data.Kind, data.Width, data.Height, data.Bytes)
+	_, err := tx.Exec(ctx, `INSERT INTO run_outputs (run_id, owner_id, idx, key, kind, width, height, bytes, seed)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (run_id, idx) DO NOTHING`,
+		run.ID, run.OwnerID, data.Index, data.Key, data.Kind, data.Width, data.Height, data.Bytes, data.Seed)
 	if err != nil {
 		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `UPDATE runs SET updated_at = clock_timestamp() WHERE id = $1`, run.ID); err != nil {
 		return nil, err
 	}
-	return map[string]any{"index": data.Index, "key": data.Key, "kind": data.Kind, "width": data.Width, "height": data.Height}, nil
+	stored := map[string]any{"index": data.Index, "key": data.Key, "kind": data.Kind, "width": data.Width, "height": data.Height}
+	if data.Seed != nil {
+		stored["seed"] = *data.Seed
+	}
+	return stored, nil
 }
 
 // eventTime is when a stored event happened; the zero time (a malformed envelope) is now.

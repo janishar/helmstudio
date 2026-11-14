@@ -70,9 +70,10 @@
       "type": [
         "string",
         "number",
-        "boolean"
+        "boolean",
+        "null"
       ],
-      "description": "a param value: int, float, bool, string, text or enum (see registry.schema.json paramSchema)"
+      "description": "a param value: int, float, bool, string, text, enum or seed (see registry.schema.json paramSchema); null only for a seed (random)"
     },
     "graphNode": {
       "type": "object",
@@ -115,6 +116,12 @@
       "additionalProperties": {
         "$ref": "#/$defs/graphNode"
       }
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "description": "a seed the runner actually used (exact in a JS number)"
     }
   }
 }

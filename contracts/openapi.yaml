@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -513,29 +513,38 @@ components:
 
     # ---------------------------------------------------------- studio: workflows
     # The registry shapes (contracts/registry.schema.json nodeSchema, workflow), served as published.
-    PortType: {type: string, pattern: '^[A-Z][A-Za-z0-9]{0,31}$', description: 'an input accepts only an output of the same type (M0: Text, Image)'}
+    PortType:
+      type: string
+      enum: [Text, Image, Int, Float, Seed, Canvas, Model, Conditioning, Latent]
+      description: |
+        An input accepts only an output of the same type. Model, Conditioning and Latent are family-scoped handles: they
+        wire nodes of one family inside one workflow and never cross a process.
     Port:
       type: object
       required: [name, type]
       properties:
         name: {type: string}
         type: {$ref: '#/components/schemas/PortType'}
-    ParamValue: {type: [string, number, boolean]}
+    ParamValue: {type: [string, number, boolean, 'null'], description: null only for a seed (random)}
     ParamSchema:
       type: object
       description: |
-        One form field. `int`/`float`: `min`/`max` bound the value; `string`/`text` (multi-line): `min`/`max` bound
-        the length; `enum`: one of `enum`; `bool`: a switch.
+        One form field. `int`/`float`/`seed`: `min`/`max` bound the value, `step` is the increment; `string`/`text`
+        (multi-line): `min`/`max` bound the length; `enum`: one of `enum`; `bool`: a switch. `seed`: an int where null
+        or -1 means random: the runner picks one and reports it (`Run.resolved.seed`, `RunOutput.seed`). `when`: a
+        visibility expression over the graph (`model.variant != 'turbo'`), carried through, not evaluated yet.
       required: [name, type, default]
       properties:
         name: {type: string}
-        type: {type: string, enum: [int, float, bool, string, text, enum]}
+        type: {type: string, enum: [int, float, bool, string, text, enum, seed]}
         label: {type: string, description: absent = the name}
         default: {$ref: '#/components/schemas/ParamValue'}
         min: {type: number}
         max: {type: number}
+        step: {type: number, exclusiveMinimum: 0}
         enum: {type: array, items: {type: string}}
         help: {type: string}
+        when: {type: string, description: visibility expression; absent = always shown}
     NodeSchema:
       type: object
       required: [kind, title, family, params, inputs, outputs]
@@ -595,6 +604,8 @@ components:
         node: {type: string, description: the node id that is stepping}
         step: {type: integer, minimum: 1}
         of: {type: integer, minimum: 1}
+        phase: {type: string, description: 'what the node is doing (loading transformer, sampling, decoding); absent from M0 runners'}
+        eta_s: {type: number, minimum: 0, description: estimated seconds until the run finishes}
     RunOutput:
       type: object
       required: [index, key, kind, url, width, height]
@@ -605,6 +616,7 @@ components:
         url: {$ref: '#/components/schemas/SignedUrl'}
         width: {type: [integer, 'null']}
         height: {type: [integer, 'null']}
+        seed: {type: integer, minimum: 0, description: 'the seed it was made with; absent when the workflow has none'}
     Run:
       type: object
       required: [id, session_id, workflow_id, inputs, status, progress, error, outputs, host, created_at, started_at, finished_at]
@@ -618,9 +630,15 @@ components:
         error: {type: [string, 'null'], description: 'set when failed'}
         outputs: {type: array, items: {$ref: '#/components/schemas/RunOutput'}, description: by index}
         host: {type: [string, 'null'], description: 'the host it was sent to; null when none was found'}
+        resolved: {$ref: '#/components/schemas/Resolved'}
         created_at: {type: string, format: date-time}
         started_at: {type: [string, 'null'], format: date-time, description: 'the runner reported running'}
         finished_at: {type: [string, 'null'], format: date-time}
+    Resolved:
+      type: object
+      description: 'values the runner chose (a random seed), sent with succeeded; absent until then and from M0 runners'
+      properties:
+        seed: {type: integer, minimum: 0}
     RunList:
       type: object
       required: [runs]
@@ -657,6 +675,7 @@ components:
             status: {$ref: '#/components/schemas/RunStatus'}
             error: {type: [string, 'null']}
             host: {type: [string, 'null']}
+            resolved: {$ref: '#/components/schemas/Resolved'}
     ProgressEvent:
       type: object
       required: [seq, type, run_id, ts, data]
@@ -691,6 +710,23 @@ components:
         env: {type: string}
         state: {type: string, enum: [idle, busy, offline]}
         updated_at: {type: string, format: date-time, description: the runner's last refresh}
+        memory:
+          type: object
+          required: [budget_gb, used_gb]
+          properties: {budget_gb: {type: number}, used_gb: {type: number}}
+        resident:
+          type: array
+          description: model components loaded now; no run or owner
+          items:
+            type: object
+            required: [component, model, variant, precision, gb, pinned]
+            properties:
+              component: {type: string}
+              model: {type: string}
+              variant: {type: string}
+              precision: {type: string, enum: [bf16, fp16, int8]}
+              gb: {type: number}
+              pinned: {type: boolean}
     HostList:
       type: object
       required: [hosts]
