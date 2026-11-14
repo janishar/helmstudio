@@ -20,7 +20,7 @@ func NatsJetStreamPutKV(ctx context.Context, client NatsClient, bucket, key stri
 }
 
 // NatsJetStreamWatchKV hands every value put in a JetStream KV bucket to handler, the current ones first, until ctx
-// ends. It retries while NATS or the bucket is missing, and starts over if the watch ends on its own. A handler error
+// ends; a deleted or purged key comes with a nil value. It retries while NATS or the bucket is missing, and starts over if the watch ends on its own. A handler error
 // is logged and the watch goes on: the next put replaces the value.
 func NatsJetStreamWatchKV(
 	ctx context.Context, client NatsClient, bucket string, handler func(key string, value []byte) error,
@@ -52,10 +52,14 @@ func watchUntilStopped(
 			if !open {
 				return errors.New("watch ended")
 			}
-			if entry == nil || entry.Operation() != jetstream.KeyValuePut {
-				continue // nil marks the end of the current values
+			if entry == nil {
+				continue // the end of the current values
 			}
-			if err := handler(entry.Key(), entry.Value()); err != nil {
+			value := entry.Value()
+			if entry.Operation() != jetstream.KeyValuePut {
+				value = nil // a delete or purge
+			}
+			if err := handler(entry.Key(), value); err != nil {
 				log.Printf("watch %s: %s: %v", bucket, entry.Key(), err)
 			}
 		}

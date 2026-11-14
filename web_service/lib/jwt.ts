@@ -24,9 +24,11 @@ export function needsRefresh(
   return exp !== null && exp - skew <= now; // an opaque token is used as-is; a 401 sends the user to sign in
 }
 
-/** Only same-site relative paths are allowed as a post-sign-in target (no open redirects). */
+/** Only same-site relative paths are allowed as a post-sign-in target (no open redirects). A control character or
+ * backslash anywhere is refused (URL parsers drop or rewrite them, so "/\t/evil.com" means //evil.com); the rest must
+ * resolve on our own origin. */
 export function safeNext(next: string | null | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")
-    ? next
-    : "/";
+  if (!next || !next.startsWith("/") || /[\u0000-\u001f\u007f\\]/.test(next)) return "/";
+  const url = new URL(next, "http://x");
+  return url.origin === "http://x" ? url.pathname + url.search + url.hash : "/";
 }

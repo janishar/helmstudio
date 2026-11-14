@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 )
 
-// LoadKey reads <dir>/private.pem (PKCS#1 or PKCS#8). When it is missing, a 2048-bit pair is generated and written
-// there (private.pem + public.pem), so a fresh checkout starts; .tools/rsa/keygen.go makes the same files.
+// LoadKey reads <dir>/private.pem (PKCS#1 or PKCS#8). When it is missing, a 2048-bit key is generated and written
+// there, so a fresh checkout starts (the JWKS is built from it).
 func LoadKey(dir string) (*rsa.PrivateKey, error) {
 	path := filepath.Join(dir, "private.pem")
 	data, err := os.ReadFile(path)
@@ -48,7 +48,7 @@ func ParseKey(data []byte, path string) (*rsa.PrivateKey, error) {
 	return rk, nil
 }
 
-// generateKey creates a 2048-bit pair and writes private.pem and public.pem into dir.
+// generateKey creates a 2048-bit key and writes it to dir/private.pem.
 func generateKey(dir string) (*rsa.PrivateKey, error) {
 	k, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -58,15 +58,10 @@ func generateKey(dir string) (*rsa.PrivateKey, error) {
 		return nil, err
 	}
 	priv := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})
-	pubDer, _ := x509.MarshalPKIXPublicKey(&k.PublicKey)
-	pub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubDer})
 	if err := os.WriteFile(filepath.Join(dir, "private.pem"), priv, 0o600); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "public.pem"), pub, 0o644); err != nil {
-		return nil, err
-	}
-	log.Printf("generated a new RSA key pair in %s", dir)
+	log.Printf("generated a new RSA key in %s", dir)
 	return k, nil
 }
 

@@ -7,60 +7,22 @@ import { ErrorNote, Info } from "@/components/kit";
 import { Inspector, TextFields } from "@/components/create/form";
 import { api, message, ok, okOr, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
-import { applyEvent, fraction, isActive, mergeRuns } from "@/lib/runs";
+import { applyEvent, followSession, fraction, isActive, mergeRuns } from "@/lib/runs";
 import { buildInputs, fields as fieldsOf, type Raw } from "@/lib/workflow";
 
 type Run = S<"Run">;
 type SessionEvent = S<"SessionEvent">;
 
-/** Calls `onEvent` for each new event of the session (by seq), from the start of its log. */
+/** Calls `onEvent` for each new event of the session (see followSession). */
 function useSessionEvents(sessionId: string | null, onEvent: (e: SessionEvent) => void) {
   const handler = useRef(onEvent);
   useEffect(() => {
     handler.current = onEvent;
   });
-  useEffect(() => {
-    if (!sessionId) return;
-    // ponytail: replays the whole log on open (cheap for M0 sessions); keep a cursor per session if logs grow long
-    let last = 0;
-    let stop = false;
-    let poll: ReturnType<typeof setTimeout> | undefined;
-    const take = (e: SessionEvent) => {
-      if (e.seq <= last) return;
-      last = e.seq;
-      handler.current(e);
-    };
-    const path = { params: { path: { session_id: sessionId } } };
-    const es = new EventSource(
-      `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events?since=0`,
-    );
-    const onMessage = (m: MessageEvent<string>) => {
-      try {
-        take(JSON.parse(m.data) as SessionEvent);
-      } catch {
-        /* not an event */
-      }
-    };
-    for (const t of ["status", "progress", "output"])
-      es.addEventListener(t, onMessage as EventListener);
-    const tick = async () => {
-      const page = await ok(
-        api.GET("/v1/studio/sessions/{session_id}/events", {
-          params: { ...path.params, query: { since: last } },
-        }),
-      ).catch(() => null);
-      (page as S<"EventPage"> | null)?.events.forEach(take); // the JSON form (no Accept: text/event-stream)
-      if (!stop) poll = setTimeout(() => void tick(), 2000);
-    };
-    es.onerror = () => {
-      if (es.readyState === EventSource.CLOSED && !stop && !poll) void tick();
-    };
-    return () => {
-      stop = true;
-      es.close();
-      clearTimeout(poll);
-    };
-  }, [sessionId]);
+  useEffect(
+    () => (sessionId ? followSession(sessionId, (e) => handler.current(e)) : undefined),
+    [sessionId],
+  );
 }
 
 /** The Create screen; `initialSession` comes from `?s=`. */
@@ -129,6 +91,7 @@ export function Create({ initialSession }: { initialSession?: string }) {
     [put],
   );
   const listTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(listTimer.current), []);
   useSessionEvents(runs === null ? null : sessionId, (e) => {
     const r = applyEvent(runsRef.current, e);
     put(r.runs);
@@ -256,7 +219,22 @@ export function Create({ initialSession }: { initialSession?: string }) {
           )}
         </div>
 
-        {error && <ErrorNote onRetry={sessions ? undefined : load}>{error}</ErrorNote>}
+        {error && (
+          <ErrorNote
+            onRetry={
+              !sessions
+                ? load
+                : runs === null && sessionId
+                  ? () => {
+                      setError("");
+                      void loadRuns(sessionId);
+                    }
+                  : undefined
+            }
+          >
+            {error}
+          </ErrorNote>
+        )}
         {workflows?.length === 0 && (
           <ErrorNote onRetry={load}>No workflows yet: no runner has published any.</ErrorNote>
         )}
@@ -291,6 +269,9 @@ export function Create({ initialSession }: { initialSession?: string }) {
           className="panel flex flex-col gap-3 bg-s2 px-4 py-3.5"
         >
           <TextFields fields={fields} raws={raws} errors={errors} onChange={change} />
+          {fields.some((f) => f.param.type !== "text" && errors[f.key]) && (
+            <ErrorNote>Some settings are not valid: see the Inspector.</ErrorNote>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <div className="grow" />
             <button
@@ -306,7 +287,7 @@ export function Create({ initialSession }: { initialSession?: string }) {
 
       <aside
         aria-label="Inspector"
-        className="aside m-3.5 ml-0 hidden flex-[1_1_300px] flex-col gap-5 self-start px-[18px] pt-4 pb-6 lg:flex"
+        className="aside m-3.5 flex flex-[1_1_300px] flex-col gap-5 self-start px-[18px] pt-4 pb-6 md:ml-0"
       >
         <Inspector fields={fields} raws={raws} errors={errors} onChange={change} />
       </aside>
@@ -380,7 +361,11 @@ function RunStrip({
 }) {
   const active = isActive(run.status);
   return (
-    <div aria-label="Run progress" className="flex flex-wrap items-center gap-2 text-[13px]">
+    <div
+      role="group"
+      aria-label="Run progress"
+      className="flex flex-wrap items-center gap-2 text-[13px]"
+    >
       {run.progress ? (
         <span className="flex items-center gap-2.5 rounded-lg bg-s2 px-2.5 py-1.5 font-medium">
           {nodeTitle(workflow, run.progress.node)}

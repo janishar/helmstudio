@@ -23,6 +23,9 @@ type Config struct {
 	Password string
 	Name     string
 	Timeout  time.Duration
+	// InboxPrefix replaces _INBOX for this client's replies (requests and JetStream), so nats.conf can let each user
+	// subscribe to its own inboxes only; empty keeps _INBOX.
+	InboxPrefix string
 }
 
 // NatsClient is a connection to NATS, as goserve's micro.NatsClient is: RequestNats asks through it, NewRouter adds
@@ -64,6 +67,9 @@ func NewNatsClient(config Config) (NatsClient, error) {
 	}
 	if config.User != "" {
 		options = append(options, nats.UserInfo(config.User, config.Password))
+	}
+	if config.InboxPrefix != "" {
+		options = append(options, nats.CustomInboxPrefix(config.InboxPrefix))
 	}
 
 	conn, err := nats.Connect(config.URL, options...)

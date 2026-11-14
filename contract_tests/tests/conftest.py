@@ -12,7 +12,7 @@ import pytest
 import schemas
 from helpers import QUICK, STUDIO, new_session, ok, run_events, signin, start_run
 
-BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8300").rstrip("/")
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8390").rstrip("/")
 API_KEY = os.environ.get("API_KEY", "")
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "contract-admin@example.com")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "contract admin pass 1")

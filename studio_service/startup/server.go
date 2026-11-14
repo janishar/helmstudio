@@ -45,7 +45,7 @@ func Run() error {
 	}
 	defer pool.Close()
 	client, err := micro.NewNatsClient(micro.Config{
-		URL: env.NatsURL, User: env.NatsUser, Password: env.NatsPassword, Name: "studio_service",
+		URL: env.NatsURL, User: env.NatsUser, Password: env.NatsPassword, Name: "studio_service", InboxPrefix: "_INBOX_studio",
 		Timeout: 2 * time.Second, // RequestNats's limit on one token check, and on one cancel
 	})
 	if err != nil {
@@ -66,7 +66,11 @@ func Run() error {
 		registry:       runners,
 		cancel:         messaging.NatsCancel(client),
 		authentication: authmiddleware.NewAuthenticationProvider(authService),
-		shutdown:       ctx.Done(),
+		recheck: func(ctx context.Context, token string) error {
+			_, err := authService.Validate(ctx, token)
+			return err
+		},
+		shutdown: ctx.Done(),
 		health: micro.NewHealthController(nil,
 			network.HealthCheck{Name: "database", Ping: pool.Ping},
 			network.HealthCheck{Name: "nats", Ping: func(context.Context) error {
@@ -95,7 +99,10 @@ func Run() error {
 	studio.NewProjector(pool).MountNatsJetStream(events)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ProjectorConsumer, events) })
 	workers.Go(func() { messaging.Relay(ctx, pool, messaging.NatsJetStreamPublisher(client)) })
-	workers.Go(func() { studio.Sweeper(ctx, pool, runners) })
+	sweeper := studio.NewSweeper(pool, runners, func(ctx context.Context) (int, error) {
+		return micro.NatsJetStreamBacklog(ctx, client, messaging.ProjectorConsumer)
+	})
+	workers.Go(func() { sweeper.Run(ctx) })
 
 	log.Printf("studio_service listening on :%s", env.Port)
 	err = router.Start(ctx, ":"+env.Port)

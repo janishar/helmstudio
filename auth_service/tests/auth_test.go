@@ -29,6 +29,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	natsmicro "github.com/nats-io/nats.go/micro"
 
+	"github.com/helmstudio/auth_service/api/auth/dto"
 	"github.com/helmstudio/auth_service/config"
 	"github.com/helmstudio/auth_service/migrations"
 	"github.com/helmstudio/auth_service/startup"
@@ -276,6 +277,34 @@ func TestSigninLimit(t *testing.T) {
 	}
 	if body["detail"] != "too many attempts, try again later" {
 		t.Fatalf("detail %q", body["detail"])
+	}
+	// the count is per email and IP: the owner on another client still signs in
+	if _, err := e.mod.Auth.Signin(context.Background(), &dto.SigninRequest{Email: "bob@example.com", Password: "a long passphrase"},
+		"198.51.100.7"); err != nil {
+		t.Fatalf("signin from another IP: %v", err)
+	}
+}
+
+// TestPasswordGuessLimit: the 5th wrong current password of a session revokes that session.
+func TestPasswordGuessLimit(t *testing.T) {
+	e := setup(t)
+	var s session
+	e.signup(map[string]string{"email": "dee@example.com", "password": "a long passphrase", "name": "Dee"}, &s)
+	wrong := map[string]string{"current_password": "nope nope nope", "new_password": "another passphrase"}
+	for i := range 5 {
+		if c := e.do("PUT", "/auth/password", s.AccessToken, wrong, nil); c != 401 {
+			t.Fatalf("wrong current #%d: %d", i+1, c)
+		}
+	}
+	if ev := e.lastEvent(); ev == nil || ev["data"].(map[string]any)["reason"] != "password_guess" {
+		t.Fatalf("event %v", ev)
+	}
+	right := map[string]string{"current_password": "a long passphrase", "new_password": "another passphrase"}
+	if c := e.do("PUT", "/auth/password", s.AccessToken, right, nil); c != 401 {
+		t.Fatalf("the session lives on after 5 guesses: %d", c)
+	}
+	if c := e.do("POST", "/auth/refresh", "", map[string]string{"refresh_token": s.RefreshToken}, nil); c != 401 {
+		t.Fatalf("refresh after 5 guesses %d", c)
 	}
 }
 

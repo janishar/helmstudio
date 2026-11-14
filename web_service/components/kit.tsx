@@ -78,7 +78,8 @@ export function Info({
       >
         i
       </button>
-      <div
+      {/* a span, not a div: callers put Info inside <p> and headings, where a div breaks the parse (hydration #418) */}
+      <span
         id={id}
         popover="auto"
         className="pop max-w-72 text-[13px] font-normal tracking-normal text-t1"
@@ -91,7 +92,7 @@ export function Info({
         }
       >
         {children}
-      </div>
+      </span>
     </>
   );
 }

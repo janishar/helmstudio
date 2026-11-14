@@ -10,15 +10,13 @@ services:
       RUNNER_HOST: fake
       RUNNER_ENV: fake
       NATS_URL_FILE: /run/secrets/nats_runner_url
-      STORAGE_DRIVER: s3
       S3_ENDPOINT: http://seaweedfs:8333
       S3_BUCKET: ${S3_BUCKET:-helmstudio}
       S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
       S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
     secrets: [nats_runner_url, s3_access_key_id, s3_secret_access_key]
-    volumes: [../contracts:/contracts:ro]             # schemas + the canonical echo registry values
-    healthcheck:                                      # GET /health: NATS connected
-      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/health', timeout=3)"]
+    healthcheck:                                      # health.py asks GET /health: NATS connected
+      test: [CMD, python, health.py]
       interval: 5s
       timeout: 5s
       retries: 20

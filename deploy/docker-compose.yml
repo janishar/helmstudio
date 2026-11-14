@@ -45,7 +45,6 @@ services:
   kong:
     build: ../kong
     image: helmstudio/kong:${IMAGE_TAG:-dev}
-    env_file: [{path: ../kong/.env, required: false}]
     environment:
       KONG_PORT_MAPS: "${KONG_HTTP_PORT:-8300}:8000"   # X-Forwarded-Port = the host port (web's redirects)
       KONG_TRUSTED_IPS: ${HELM_NET:-172.30.97}.11      # only the web BFF may name the client (X-Forwarded-For)

@@ -1,14 +1,19 @@
 """evt.run.<session_id>.{status,progress,output} for one run. `seq` is per run, from 1, over all three kinds; it
 lives in memory because a run command is delivered once (studio, not redelivery, retries a run). Every message
 is checked against the contract before it leaves and is published with Nats-Msg-Id <run_id>:<seq>; the publish
-waits for JetStream's ack."""
+waits for JetStream's ack, and is retried for up to RETRY_FOR seconds (JetStream drops a duplicate by its id), so a
+broker hiccup does not fail the run."""
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime
 
 from config import HOST
 from messaging import schemas
+
+RETRY_FOR = 10.0  # seconds a publish is retried
+RETRY_EVERY = 0.5  # seconds between tries
 
 
 def now() -> str:
@@ -49,12 +54,21 @@ class RunEvents:
     async def publish(self, kind: str, data: dict) -> dict:
         """Send evt.run.<kind> and wait for the stream's ack. Returns the message sent."""
         msg = self.build(kind, data)
-        await self.js.publish(
-            f"evt.run.{self.cmd['data']['session_id']}.{kind}",
+        subject = f"evt.run.{self.cmd['data']['session_id']}.{kind}"
+        body, headers = (
             json.dumps(msg).encode(),
-            headers={"Nats-Msg-Id": f"{msg['job_id']}:{msg['data']['seq']}"},
+            {"Nats-Msg-Id": f"{msg['job_id']}:{msg['data']['seq']}"},
         )
-        return msg
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + RETRY_FOR
+        while True:
+            try:
+                await self.js.publish(subject, body, headers=headers)
+                return msg
+            except Exception:
+                if loop.time() + RETRY_EVERY > deadline:
+                    raise
+                await asyncio.sleep(RETRY_EVERY)
 
     async def status(self, status: str, error: str | None = None) -> dict:
         """running (with the host), succeeded, failed (with a plain error) or cancelled."""

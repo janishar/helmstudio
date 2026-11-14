@@ -1371,7 +1371,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description bad access token, or wrong current_password ("invalid email or password") */
+            /** @description bad access token, or wrong current_password ("current password is incorrect"); the 5th wrong one within 15 minutes also revokes the session (evt.auth.revoked scope family, reason password_guess) */
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["AuthUnprocessable"];
         };

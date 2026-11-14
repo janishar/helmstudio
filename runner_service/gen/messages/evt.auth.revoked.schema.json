@@ -31,7 +31,7 @@
             "family",
             "user"
           ],
-          "description": "family: one session (signout, refresh_reuse); user: every session of user_id (password_change, admin, disabled)"
+          "description": "family: one session (signout, refresh_reuse, password_guess); user: every session of user_id (password_change, admin, disabled)"
         },
         "user_id": {
           "$ref": "defs.schema.json#/$defs/uuid"
@@ -53,11 +53,12 @@
           "enum": [
             "signout",
             "refresh_reuse",
+            "password_guess",
             "password_change",
             "admin",
             "disabled"
           ],
-          "description": "admin: roles changed or password set by an admin"
+          "description": "admin: roles changed or password set by an admin; password_guess: too many wrong current passwords on PUT /auth/password with this session"
         }
       },
       "if": {

@@ -85,7 +85,10 @@ class Consumer:
                 log.warning(
                     "could not report rejected run %s failed", cmd.get("job_id"), exc_info=True
                 )
-        await msg.term()
+        try:
+            await msg.term()
+        except Exception:  # NATS away: the command is not redelivered anyway (max_deliver 1)
+            log.warning("could not term a %s message", msg.subject, exc_info=True)
 
     async def run(self, msg, cmd: dict) -> None:
         """Execute one valid command and publish its events, terminal status included."""

@@ -300,7 +300,7 @@ paths:
         '204': {description: 'changed; every session of the user is revoked (evt.auth.revoked scope user, reason password_change)'}
         '401':
           $ref: '#/components/responses/Unauthorized'
-          description: 'bad access token, or wrong current_password ("invalid email or password")'
+          description: 'bad access token, or wrong current_password ("current password is incorrect"); the 5th wrong one within 15 minutes also revokes the session (evt.auth.revoked scope family, reason password_guess)'
         '422': {$ref: '#/components/responses/AuthUnprocessable'}
   /auth/.well-known/jwks.json:
     get:

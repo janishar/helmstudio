@@ -47,11 +47,12 @@ type Service struct {
 	AccessTTL  time.Duration
 	RefreshTTL time.Duration
 	Publish    func(subject string, data []byte) error
-	EmailLimit *utils.Limiter // failed sign-ins per email
+	EmailLimit *utils.Limiter // failed sign-ins per email and client IP, and wrong current passwords per session
 	IPLimit    *utils.Limiter // failed sign-ins per client IP
 }
 
-// NewService returns the service. Failed sign-ins are limited to 5 per email and 50 per IP in 15 minutes.
+// NewService returns the service. Failed sign-ins are limited to 5 per email from one IP and 50 per IP in 15 minutes;
+// the 5th wrong current password of a session in 15 minutes revokes that session.
 func NewService(db *pgxpool.Pool, env config.Env, key *rsa.PrivateKey, publish func(string, []byte) error) *Service {
 	return &Service{
 		DB: db, Key: key, Kid: utils.KeyID(&key.PublicKey), Issuer: env.Issuer,
@@ -133,10 +134,12 @@ func (s *Service) CreateUser(ctx context.Context, email, name, password string, 
 }
 
 // Signin checks the password and starts a new session. An unknown email, a disabled user and a wrong password give
-// the same ErrInvalidLogin and count against both limits. Success clears only the email's count.
+// the same ErrInvalidLogin and count against both limits. The email's count is per IP, so failures from elsewhere
+// can't lock the owner out. Success clears only the email's count.
 func (s *Service) Signin(ctx context.Context, body *dto.SigninRequest, ip string) (dto.Session, error) {
 	email := dto.NormalizeEmail(body.Email)
-	if s.EmailLimit.Blocked(email) || s.IPLimit.Blocked(ip) {
+	emailKey := email + "\x00" + ip
+	if s.EmailLimit.Blocked(emailKey) || s.IPLimit.Blocked(ip) {
 		return dto.Session{}, ErrTooMany
 	}
 	var id, hash string
@@ -150,11 +153,11 @@ func (s *Service) Signin(ctx context.Context, body *dto.SigninRequest, ip string
 	}
 	// The password check runs for a disabled account too, so it takes as long to refuse as a wrong password.
 	if err != nil || !utils.VerifyPassword(body.Password, hash) || disabled {
-		s.EmailLimit.Fail(email)
+		s.EmailLimit.Fail(emailKey)
 		s.IPLimit.Fail(ip)
 		return dto.Session{}, ErrInvalidLogin
 	}
-	s.EmailLimit.Reset(email)
+	s.EmailLimit.Reset(emailKey)
 	user, err := s.GetUser(ctx, id)
 	if err != nil {
 		return dto.Session{}, err
@@ -258,12 +261,21 @@ func (s *Service) Signout(ctx context.Context, claims *model.Claims) error {
 }
 
 // ChangePassword replaces the caller's password after checking the current one, which is ErrWrongPassword if wrong.
+// Wrong ones count per session: the one that uses up EmailLimit revokes the session, so a stolen access token can't
+// guess on.
 func (s *Service) ChangePassword(ctx context.Context, claims *model.Claims, current, next string) error {
 	var hash string
 	if err := s.DB.QueryRow(ctx, `SELECT password_hash FROM credentials WHERE user_id = $1`, claims.Subject).Scan(&hash); err != nil {
 		return err
 	}
 	if !utils.VerifyPassword(current, hash) {
+		key := "session\x00" + claims.FamilyID
+		if s.EmailLimit.Fail(key); s.EmailLimit.Blocked(key) {
+			s.EmailLimit.Reset(key)
+			if err := s.revokeFamily(ctx, claims.Subject, claims.FamilyID, "", "password_guess"); err != nil {
+				return err
+			}
+		}
 		return ErrWrongPassword
 	}
 	return s.SetPassword(ctx, claims.Subject, next, "password_change")

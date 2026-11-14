@@ -5,7 +5,8 @@ import { allowed } from "@/lib/proxy";
 import { ACCESS_COOKIE, REFRESH_COOKIE, clientIp, kongHeaders } from "@/lib/session";
 import { errorText, okOr } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
-import { proxy, publicOrigin, refreshResult } from "@/proxy";
+import { PATH_HEADER, proxy, publicOrigin, refreshResult } from "@/proxy";
+import { GET as expiredGET } from "@/app/(auth)/signin/expired/route";
 
 const b64 = (o: object) =>
   btoa(JSON.stringify(o)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -26,7 +27,19 @@ describe("tokens", () => {
   });
   it("only redirects to same-site paths", () => {
     expect(safeNext("/admin?x=1")).toBe("/admin?x=1");
-    for (const bad of ["//evil.com", "https://evil.com", "/\\evil.com", "", null, undefined])
+    expect(safeNext("/s/1#run")).toBe("/s/1#run");
+    for (const bad of [
+      "//evil.com",
+      "https://evil.com",
+      "/\\evil.com",
+      "/\t/evil.com",
+      "/\n/evil.com",
+      "/\r\n/evil.com",
+      "/x\\..\\/evil.com",
+      "",
+      null,
+      undefined,
+    ])
       expect(safeNext(bad)).toBe("/");
   });
   it("names the cookies helm_at and helm_rt", () => {
@@ -246,5 +259,23 @@ describe("proxy on an expiring session", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("a session the API refused", () => {
+  it("clears both cookies and keeps a safe next", () => {
+    const res = expiredGET(new NextRequest("http://web/signin/expired?next=%2Fadmin%3Fx%3D1"));
+    expect(res.headers.get("location")).toBe("http://web/signin?next=%2Fadmin%3Fx%3D1");
+    expect(res.cookies.get(ACCESS_COOKIE)?.value).toBe("");
+    expect(res.cookies.get(REFRESH_COOKIE)?.value).toBe("");
+    const evil = expiredGET(new NextRequest("http://web/signin/expired?next=%2F%2Fevil.com"));
+    expect(evil.headers.get("location")).toBe("http://web/signin?next=%2F");
+  });
+
+  it("tells the layout the page's path, whatever the browser sent", async () => {
+    const res = await proxy(
+      new NextRequest("http://web/signin?next=%2F", { headers: { [PATH_HEADER]: "//evil.com" } }),
+    );
+    expect(res.headers.get(`x-middleware-request-${PATH_HEADER}`)).toBe("/signin?next=%2F");
   });
 });

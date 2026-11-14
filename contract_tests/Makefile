@@ -1,7 +1,7 @@
 -include .env
 export
 
-BASE_URL ?= http://127.0.0.1:8300
+BASE_URL ?= http://127.0.0.1:8390
 ARGS ?=
 
 .PHONY: venv test collect lint check-contracts

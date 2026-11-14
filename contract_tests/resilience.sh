@@ -1,15 +1,19 @@
 #!/bin/sh
-# Resilience check on the running helmstudio stack (compose project helmstudio): for each service, start a long echo
-# run, restart the service mid-run, and require that the run ends (succeeded, or failed/cancelled with an error,
-# never stuck queued/running) and that a new run afterwards succeeds.
-#   API_KEY=$(cat ../deploy/secrets/helm_api_key) ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
+# Resilience check on the running test stack (compose project helmstudio-test, Kong on 8390; never the dev stack): for
+# each service, start a long echo run, restart the service mid-run, and require that the run ends (succeeded, or
+# failed/cancelled with an error, never stuck queued/running) and that a new run afterwards succeeds.
+#   make resilience                (from the repo root: brings the test stack up and runs this)
+#   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio runner nats postgres kong. Needs curl and python3. Exit 1 when any service fails.
 set -eu
 cd "$(dirname "$0")"
-BASE_URL="${BASE_URL:-http://127.0.0.1:8300}"
+BASE_URL="${BASE_URL:-http://127.0.0.1:8390}"
 : "${API_KEY:?}" "${ADMIN_EMAIL:?}" "${ADMIN_PASSWORD:?}"
 END_TIMEOUT="${END_TIMEOUT:-180}"   # seconds a run may take to end after the restart (the lease sweep needs ~60 s)
-dc() { docker compose -p helmstudio -f ../deploy/docker-compose.yml -f ../deploy/compose/fake.yml "$@"; }
+dc() {
+  KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 HELM_NET=172.30.98 IMAGE_TAG=gate \
+    docker compose -p helmstudio-test -f ../deploy/docker-compose.yml -f ../deploy/compose/fake.yml "$@"
+}
 field() { python3 -c 'import json,sys; v=json.load(sys.stdin); [v:=v[k] for k in sys.argv[1:]]; print("" if v is None else v)' "$@" 2>/dev/null; }
 
 # api METHOD PATH [JSON]: the body on 2xx, else empty and a non-zero status (curl fails while a service is down)

@@ -4,6 +4,8 @@ package registry
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"maps"
 	"slices"
 	"strings"
@@ -80,7 +82,9 @@ type Registry struct {
 	hosts     map[string]Host         // "<host>.<env>" → its state
 }
 
-// SetRegistry applies one KV `registry` value; keys of other kinds (models) are ignored.
+// SetRegistry applies one KV `registry` value (nil: the key was deleted); keys of other kinds (models) are ignored.
+// A value speaks only for the runner its key names: a workflow of another env is refused, and so is a workflow id a
+// runner of another env already publishes.
 func (r *Registry) SetRegistry(key string, value []byte) error {
 	source, kind, ok := cut(key)
 	if !ok {
@@ -90,6 +94,10 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 	defer r.mu.Unlock()
 	switch kind {
 	case "nodes":
+		if value == nil {
+			delete(r.nodes, source)
+			return nil
+		}
 		var parsed struct {
 			Nodes []NodeSchema `json:"nodes"`
 		}
@@ -98,33 +106,67 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 		}
 		set(&r.nodes, source, parsed.Nodes)
 	case "workflows":
+		if value == nil {
+			delete(r.workflows, source)
+			return nil
+		}
 		var parsed struct {
 			Workflows []Workflow `json:"workflows"`
 		}
 		if err := json.Unmarshal(value, &parsed); err != nil {
 			return err
 		}
+		env := source[strings.IndexByte(source, '.')+1:]
+		kept := []Workflow{}
 		for _, workflow := range parsed.Workflows {
+			if workflow.Env != env {
+				return fmt.Errorf("workflow %s: env %q is not the key's %q", workflow.ID, workflow.Env, env)
+			}
+			if owner := r.ownerOf(workflow.ID, env); owner != "" {
+				log.Printf("registry %s: workflow %s refused: %s publishes it", key, workflow.ID, owner)
+				continue
+			}
 			for id, node := range workflow.Nodes {
 				if node.Params == nil {
 					node.Params = map[string]any{}
 					workflow.Nodes[id] = node
 				}
 			}
+			kept = append(kept, workflow)
 		}
-		set(&r.workflows, source, parsed.Workflows)
+		set(&r.workflows, source, kept)
 	}
 	return nil
 }
 
-// SetHost applies one KV `hosts` value.
+// ownerOf returns the source of another env that publishes workflow id, or "". Callers hold r.mu.
+func (r *Registry) ownerOf(id, env string) string {
+	for _, source := range slices.Sorted(maps.Keys(r.workflows)) {
+		for _, workflow := range r.workflows[source] {
+			if workflow.ID == id && workflow.Env != env {
+				return source
+			}
+		}
+	}
+	return ""
+}
+
+// SetHost applies one KV `hosts` value (nil: the key was deleted, the host is offline). The value's host and env
+// must be the key's <host>.<env>.
 func (r *Registry) SetHost(key string, value []byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if value == nil {
+		delete(r.hosts, key)
+		return nil
+	}
 	var host Host
 	if err := json.Unmarshal(value, &host); err != nil {
 		return err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	if host.Host+"."+host.Env != key || strings.Count(key, ".") != 1 {
+		return fmt.Errorf("hosts value %s.%s is not its key's", host.Host, host.Env)
+	}
 	set(&r.hosts, key, host)
 	return nil
 }

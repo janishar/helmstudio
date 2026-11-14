@@ -123,9 +123,14 @@ func (s *Service) DeleteSession(ctx context.Context, caller common.Caller, id st
 		return errNotFound
 	}
 	return s.tx(ctx, caller, func(tx pgx.Tx) error {
+		// Lock the session first, then look at its runs in a new statement: its snapshot then sees a run that
+		// CreateRun committed while this waited for the lock (a subquery of the locking statement would not).
 		var busy bool
-		err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE session_id = s.id AND status IN ('queued', 'running'))
-			FROM sessions s WHERE id = $1 FOR UPDATE`, id).Scan(&busy)
+		err := tx.QueryRow(ctx, `SELECT 1 FROM sessions WHERE id = $1 FOR UPDATE`, id).Scan(new(int))
+		if err == nil {
+			err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE session_id = $1 AND status IN ('queued', 'running'))`,
+				id).Scan(&busy)
+		}
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return errNotFound

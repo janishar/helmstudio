@@ -157,3 +157,31 @@ async def test_graph_that_does_not_fit_the_node_schemas_is_rejected_and_reported
     status = js.events()[0]["data"]
     assert status["status"] == "failed" and "unknown node kind" in status["error"]
     assert msg.log == [("term", 2)]
+
+
+async def test_a_failed_term_does_not_take_the_runner_down():
+    msg = FakeMsg(b"not json", FakeJS())
+
+    async def term():
+        raise TimeoutError
+
+    msg.term = term
+    await consumer(msg.js).handle(msg)  # no exception: main's loop goes on
+
+
+async def test_a_publish_that_fails_once_is_retried_with_the_same_msg_id(monkeypatch):
+    monkeypatch.setattr("messaging.publisher.RETRY_EVERY", 0)
+    js, failed = FakeJS(), []
+    publish = js.publish
+
+    async def flaky(subject, data, headers=None):
+        if subject.endswith(".progress") and not failed:
+            failed.append(headers)
+            raise TimeoutError
+        await publish(subject, data, headers)
+
+    js.publish = flaky
+    js, _, _ = await run(command(steps=2), js)
+    assert kinds(js) == ["running", "progress", "progress", "output", "succeeded"]
+    check_events(js)
+    assert failed == [{"Nats-Msg-Id": f"{RUN}:2"}]

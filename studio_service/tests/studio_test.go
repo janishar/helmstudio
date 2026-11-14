@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,6 +52,8 @@ type env struct {
 	events    *micro.NatsJetStreamGroup
 	srv       *httptest.Server
 	cancelled []string
+	revoked   atomic.Bool // the token check of open event streams fails
+	unreached bool        // the KV cancels write fails
 }
 
 // setup migrates a fresh schema, loads the fake runner's registry values and serves the API. It skips without
@@ -100,10 +104,19 @@ func setup(t *testing.T) *env {
 	shutdown := make(chan struct{})
 	t.Cleanup(func() { close(shutdown) })
 	cancel := func(_ context.Context, runID string) error {
+		if e.unreached {
+			return errors.New("no responders")
+		}
 		e.cancelled = append(e.cancelled, runID)
 		return nil
 	}
-	router.LoadControllers(studio.NewController(studio.NewService(pool, signer, e.registry, cancel), shutdown))
+	recheck := func(context.Context, string) error {
+		if e.revoked.Load() {
+			return errors.New("revoked")
+		}
+		return nil
+	}
+	router.LoadControllers(studio.NewController(studio.NewService(pool, signer, e.registry, cancel), recheck, shutdown))
 	e.srv = httptest.NewServer(router.Engine())
 	t.Cleanup(e.srv.Close)
 	return e
@@ -311,6 +324,15 @@ func TestCancel(t *testing.T) {
 	sentID := e.call(userA, "POST", runs, map[string]any{"workflow_id": "echo"}, 202)["id"].(string)
 	e.relay()
 	e.call(userA, "DELETE", "/v1/studio/sessions/"+sessionID, nil, 409)
+	e.unreached = true // the KV write fails: 503, and no cancel is marked that the runner never saw
+	e.call(userA, "POST", "/v1/studio/runs/"+sentID+"/cancel", nil, 503)
+	var marked bool
+	if err := common.System(context.Background(), e.pool, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT cancel_requested_at IS NOT NULL FROM runs WHERE id = $1`, sentID).Scan(&marked)
+	}); err != nil || marked {
+		t.Fatal("cancel marked after a failed KV write", marked, err)
+	}
+	e.unreached = false
 	if run := e.call(userA, "POST", "/v1/studio/runs/"+sentID+"/cancel", nil, 202); run["status"] != "queued" {
 		t.Fatal(run)
 	}
@@ -343,7 +365,8 @@ func TestNoHostAndSweep(t *testing.T) {
 		t.Fatal(sent)
 	}
 
-	ended, err := studio.Sweep(context.Background(), e.pool, e.registry)
+	sweeper, now := studio.NewSweeper(e.pool, e.registry, nil), time.Now()
+	ended, err := sweeper.Sweep(context.Background(), now)
 	if err != nil || ended != 0 {
 		t.Fatal("a run inside its lease stays", ended, err)
 	}
@@ -353,7 +376,10 @@ func TestNoHostAndSweep(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if ended, err := studio.Sweep(context.Background(), e.pool, e.registry); err != nil || ended != 1 {
+	if ended, err := sweeper.Sweep(context.Background(), now); err != nil || ended != 0 {
+		t.Fatal("one look at a lost run is not enough", ended, err)
+	}
+	if ended, err := sweeper.Sweep(context.Background(), now.Add(studio.Confirm)); err != nil || ended != 1 {
 		t.Fatal(ended, err)
 	}
 	run := e.call(userA, "GET", "/v1/studio/runs/"+live, nil, 200)
@@ -388,5 +414,79 @@ func TestEventStream(t *testing.T) {
 	frame := string(buf[:n])
 	if response.Header.Get("Content-Type") != "text/event-stream" || !strings.HasPrefix(frame, "id: 2\nevent: status\ndata: {") {
 		t.Fatalf("%q", frame)
+	}
+}
+
+// An open event stream ends once its token is no longer valid (expired, signed out, disabled).
+func TestEventStreamEndsWhenTheTokenIsRevoked(t *testing.T) {
+	e := setup(t)
+	sessionID := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	request, _ := http.NewRequestWithContext(ctx, "GET", e.srv.URL+"/v1/studio/sessions/"+sessionID+"/events", nil)
+	request.Header.Set("X-Test-User", userA)
+	request.Header.Set("Accept", "text/event-stream")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	e.revoked.Store(true)
+	if _, err := io.ReadAll(response.Body); err != nil { // EOF before the 5 s deadline: the server closed it
+		t.Fatal("the stream outlived its token:", err)
+	}
+}
+
+// The sweep leaves a queue on a busy host alone, needs a run to look lost for Confirm (not one look in the gap
+// between two runs), waits while the projector has a backlog, and gives a cancel Lease from its request.
+func TestSweepWaitsForALostRunToStayLost(t *testing.T) {
+	e := setup(t)
+	sessionID := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
+	runID := e.call(userA, "POST", "/v1/studio/sessions/"+sessionID+"/runs", map[string]any{"workflow_id": "echo"}, 202)["id"].(string)
+	e.relay()
+	busy := func(on string) {
+		value, _ := json.Marshal(map[string]any{"host": "fake", "env": "fake", "state": "busy", "run_id": on,
+			"updated_at": time.Now().UTC()})
+		if err := e.registry.SetHost("fake.fake", value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	age := func(column string) {
+		if err := common.System(context.Background(), e.pool, func(tx pgx.Tx) error {
+			_, err := tx.Exec(context.Background(), `UPDATE runs SET `+column+` = `+column+` - interval '1 minute'`)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sweep := func(sweeper *studio.Sweeper, at time.Time, want int) {
+		t.Helper()
+		if ended, err := sweeper.Sweep(context.Background(), at); err != nil || ended != want {
+			t.Fatalf("ended %d (%v), want %d", ended, err, want)
+		}
+	}
+	age("updated_at")
+	sweeper, now := studio.NewSweeper(e.pool, e.registry, nil), time.Now()
+
+	busy("another-run")
+	sweep(sweeper, now, 0) // queued behind another run
+	e.host(0)              // the runner is between two runs
+	sweep(sweeper, now, 0)
+	busy(runID) // and took this one
+	sweep(sweeper, now.Add(studio.Confirm), 0)
+	e.host(0)
+	sweep(sweeper, now.Add(studio.Confirm), 0) // lost again: Confirm starts over
+
+	lagging := studio.NewSweeper(e.pool, e.registry, func(context.Context) (int, error) { return 1, nil })
+	sweep(lagging, now, 0)
+	sweep(lagging, now.Add(2*studio.Confirm), 0) // the projector has events to apply first
+
+	e.call(userA, "POST", "/v1/studio/runs/"+runID+"/cancel", nil, 202)
+	sweep(sweeper, now.Add(3*studio.Confirm), 0) // a cancel gets Lease from its request
+	age("cancel_requested_at")
+	sweep(sweeper, now.Add(3*studio.Confirm), 0)
+	sweep(sweeper, now.Add(4*studio.Confirm), 1)
+	if run := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200); run["status"] != "cancelled" {
+		t.Fatal(run)
 	}
 }

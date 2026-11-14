@@ -86,3 +86,35 @@ func TestPlace(t *testing.T) {
 		t.Fatal("stale or unknown hosts hold nothing")
 	}
 }
+
+// A value speaks only for its key's runner: a hosts value naming another host or env, and a workflow of another env
+// or one whose id a runner of another env publishes, are refused. A deleted key is gone at once.
+func TestValuesAreTiedToTheirKeys(t *testing.T) {
+	var r Registry
+	now := time.Now()
+	if err := r.SetHost("fake.fake", []byte(`{"host": "gpu1", "env": "qwen", "state": "idle", "updated_at": "`+
+		now.Format(time.RFC3339)+`"}`)); err == nil || len(r.Hosts()) != 0 {
+		t.Fatal("a hosts value for another host was taken")
+	}
+	_ = r.SetHost("fake.fake", []byte(`{"host": "fake", "env": "fake", "state": "idle", "updated_at": "`+now.Format(time.RFC3339)+`"}`))
+	if _, ok := r.Place("fake", now); !ok {
+		t.Fatal("its own value")
+	}
+	_ = r.SetHost("fake.fake", nil)
+	if _, ok := r.Place("fake", now); ok || len(r.Hosts()) != 0 {
+		t.Fatal("a deleted hosts key is offline at once")
+	}
+
+	if err := r.SetRegistry("fake.fake.workflows", []byte(`{"workflows": [{"id": "qwen.edit", "env": "qwen", "nodes": {}}]}`)); err == nil {
+		t.Fatal("a workflow of another env was taken")
+	}
+	_ = r.SetRegistry("gpu1.qwen.workflows", []byte(`{"workflows": [{"id": "qwen.edit", "env": "qwen", "nodes": {}}]}`))
+	_ = r.SetRegistry("aaaa.fake.workflows", []byte(`{"workflows": [{"id": "qwen.edit", "env": "fake", "nodes": {}}]}`))
+	if workflow, ok := r.Workflow("qwen.edit"); !ok || workflow.Env != "qwen" {
+		t.Fatalf("another env took the id: %+v", workflow)
+	}
+	_ = r.SetRegistry("gpu1.qwen.workflows", nil)
+	if _, ok := r.Workflow("qwen.edit"); ok {
+		t.Fatal("a deleted registry key is gone")
+	}
+}

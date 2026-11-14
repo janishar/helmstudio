@@ -27,8 +27,6 @@ cli/bin/helm login --url http://localhost:8300 --email you@example.com --api-key
 cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 ```
 
-`contract_tests/resilience.sh` restarts each service in the middle of a run and checks the stack recovers.
-
 ## Daily commands
 
 | Command | What |
@@ -39,10 +37,11 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 | `make ps` | what is running |
 | `make contracts-check` | validate `contracts/` (no stack needed) |
 | `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test-down` stops it |
+| `make resilience` | restart each service of `helmstudio-test` mid-run and check the stack recovers (`contract_tests/resilience.sh`) |
 | `.tools/test-db` | Postgres for the Go services' DB tests (`helmstudio-test`, port 5464) |
 | `make runners` | native GPU runners (M1) |
 
-Each service has its own `Makefile` with `dev`, `test`, `gen` and `lint`.
+Each service has its own `Makefile` (at least `test` and `lint`; `dev` and `gen` where they apply).
 
 ## Ports
 

@@ -34,6 +34,19 @@ func NatsJetStreamConsume(
 	})
 }
 
+// NatsJetStreamBacklog returns how many messages the durable consumer has yet to deliver or is waiting to have acked.
+func NatsJetStreamBacklog(ctx context.Context, client NatsClient, consumer NatsJetStreamConsumer) (int, error) {
+	durable, err := client.jetStream().Consumer(ctx, consumer.Stream, consumer.Durable)
+	if err != nil {
+		return 0, err
+	}
+	info, err := durable.Info(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return int(info.NumPending) + info.NumAckPending, nil
+}
+
 // consumeUntilStopped runs one consumption. It returns nil when ctx ends, and an error when the consumer can't be
 // created or the server stopped it.
 func consumeUntilStopped(

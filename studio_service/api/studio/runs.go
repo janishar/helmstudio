@@ -144,13 +144,13 @@ func (s *Service) ListRuns(ctx context.Context, caller common.Caller, sessionID 
 
 // CancelRun asks for the run to stop: 409 when it has ended. A run whose command is still in the outbox was never
 // sent: the command is dropped and the run is cancelled at once. Otherwise the run is marked and its id written to
-// the KV cancels after commit; the runner reports cancelled, or the lease sweep ends it.
+// the KV cancels before the mark commits, so a failed write (503) leaves no mark the runner never saw; the runner
+// reports cancelled, or the lease sweep ends it.
 func (s *Service) CancelRun(ctx context.Context, caller common.Caller, runID string) (dto.Run, error) {
 	if !utility.IsUUID(runID) {
 		return dto.Run{}, errNotFound
 	}
 	var out dto.Run
-	sent := false
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE id = $1 FOR UPDATE`, runID)
 		if err != nil {
@@ -166,9 +166,14 @@ func (s *Service) CancelRun(ctx context.Context, caller common.Caller, runID str
 		if tag.RowsAffected() > 0 {
 			run, err = finish(ctx, tx, run, "cancelled", nil)
 		} else {
-			sent = true
 			run, err = one[model.Run](ctx, tx, `UPDATE runs SET cancel_requested_at = coalesce(cancel_requested_at, clock_timestamp())
 				WHERE id = $1 RETURNING `+model.RunCols, runID)
+			if err == nil {
+				if err = s.cancel(ctx, runID); err != nil {
+					log.Printf("cancel %s: %v", runID, err)
+					return network.NewServiceUnavailableError("could not reach the runners; try again", err)
+				}
+			}
 		}
 		if err != nil {
 			return err
@@ -176,14 +181,7 @@ func (s *Service) CancelRun(ctx context.Context, caller common.Caller, runID str
 		out, err = s.withOutputs(ctx, tx, run)
 		return err
 	})
-	if err != nil || !sent {
-		return out, err
-	}
-	if err := s.cancel(ctx, runID); err != nil {
-		log.Printf("cancel %s: %v", runID, err)
-		return out, network.NewServiceUnavailableError("could not reach the runners; try again", err)
-	}
-	return out, nil
+	return out, err
 }
 
 // finish moves an open run to a terminal status (studio decides it: cancelled before sending, or a lost lease) and

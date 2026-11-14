@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,17 +18,22 @@ import (
 	"github.com/helmstudio/studio_service/common"
 )
 
+// Recheck checks a request's bearer token again: nil while it is still valid (not expired, signed out or disabled).
+type Recheck func(ctx context.Context, token string) error
+
 // controller serves /v1/studio. shutdown closes when the service stops, so an open event stream doesn't hold up the
-// server's shutdown.
+// server's shutdown; recheck ends an open event stream once its token is no longer valid.
 type controller struct {
 	micro.Controller
 	service  *Service
+	recheck  Recheck
 	shutdown <-chan struct{}
 }
 
 // NewController returns the controller. It takes no providers: the module's prefix guard authenticates all of /v1/.
-func NewController(service *Service, shutdown <-chan struct{}) micro.Controller {
-	return &controller{Controller: micro.NewController("/v1/studio", nil, nil), service: service, shutdown: shutdown}
+func NewController(service *Service, recheck Recheck, shutdown <-chan struct{}) micro.Controller {
+	return &controller{Controller: micro.NewController("/v1/studio", nil, nil), service: service, recheck: recheck,
+		shutdown: shutdown}
 }
 
 // MountRoutes registers the routes of contracts/openapi.yaml's studio tag.
@@ -161,7 +167,8 @@ func (c *controller) cancelRunHandler(ctx *gin.Context) {
 // ------------------------------------------------------------------ events
 
 // eventsHandler: GET /sessions/{id}/events — JSON page after ?since, or SSE with Accept: text/event-stream (replay
-// after since / Last-Event-ID, then new events as they are stored).
+// after since / Last-Event-ID, then new events as they are stored). The stream checks its token again before every
+// poll and ends once it is expired or revoked; the client reconnects with a fresh token and Last-Event-ID.
 func (c *controller) eventsHandler(ctx *gin.Context) {
 	cursor := ctx.Query("since")
 	if last := ctx.GetHeader("Last-Event-ID"); last != "" {
@@ -175,7 +182,7 @@ func (c *controller) eventsHandler(ctx *gin.Context) {
 			return
 		}
 	}
-	requestCtx, caller, id := ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")
+	requestCtx, caller, id, token := ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), network.BearerToken(ctx)
 	page, err := c.service.Events(requestCtx, caller, id, since) // 404 before any stream starts
 	if err != nil || !strings.Contains(ctx.GetHeader("Accept"), "text/event-stream") {
 		reply(ctx, http.StatusOK, page, err)
@@ -215,6 +222,9 @@ func (c *controller) eventsHandler(ctx *gin.Context) {
 				return
 			}
 		case <-poll.C:
+			if c.recheck(requestCtx, token) != nil {
+				return
+			}
 			page, err := c.service.Events(requestCtx, caller, id, since)
 			if err != nil { // the session is gone or the database is down: the client reconnects with Last-Event-ID
 				return

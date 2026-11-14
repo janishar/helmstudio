@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import nodesFixture from "../../contracts/fixtures/registry/nodes.valid.json";
 import workflowsFixture from "../../contracts/fixtures/registry/workflows.valid.json";
 import type { S } from "@/lib/api";
-import { applyEvent, fraction, mergeRuns } from "@/lib/runs";
+import { applyEvent, followSession, fraction, mergeRuns } from "@/lib/runs";
 import { buildInputs, fields, readValue } from "@/lib/workflow";
 
 /** The echo workflow as GET /v1/studio/workflows/echo serves it: the registry's, with its node schemas. */
@@ -139,5 +139,41 @@ describe("folding session events into runs", () => {
       ["r1", "running"],
       ["old", "succeeded"],
     ]);
+  });
+});
+
+describe("following a session's events", () => {
+  /** A stand-in EventSource that is already closed, so followSession falls back to polling. */
+  class ClosedSource {
+    static CLOSED = 2;
+    static last: ClosedSource;
+    readyState = 2;
+    onerror: (() => void) | null = null;
+    constructor() {
+      ClosedSource.last = this;
+    }
+    addEventListener() {}
+    close() {}
+  }
+
+  it("drops a poll answer that arrives after unsubscribing", async () => {
+    vi.stubGlobal("EventSource", ClosedSource);
+    try {
+      let answer: (p: S<"EventPage">) => void = () => {};
+      const seen: number[] = [];
+      const stop = followSession(
+        "s1",
+        (e) => seen.push(e.seq),
+        () => new Promise((r) => (answer = r)),
+      );
+      ClosedSource.last.onerror?.(); // the stream can't be held: the first poll goes out
+      stop(); // the session is closed while it is in flight
+      answer({ events: [status(1, "running")] } as S<"EventPage">);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(seen).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

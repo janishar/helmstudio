@@ -13,14 +13,15 @@ make -C contract_tests venv              # uv sync --frozen into .venv
 make -C contract_tests check-contracts   # ../contracts: schemas, fixtures, openapi.yaml (no stack needed)
 make -C contract_tests collect lint      # no stack needed
 
-# against a running stack (Kong on 127.0.0.1:8300)
-make -C contract_tests test CONTRACT_SCHEMAS=1 API_KEY=$(docker compose run --rm -T auth apikey contract)
+# against the test stack (helmstudio-test, Kong on 127.0.0.1:8390); `make test` from the repo root brings it up
+# and runs this with a fresh key and the test admin
+make -C contract_tests test CONTRACT_SCHEMAS=1 API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=...
 make -C contract_tests test API_KEY=... ARGS="-k runs -x"   # any pytest args
 ```
 
 | env | meaning |
 |---|---|
-| `BASE_URL` | the API root (default `http://127.0.0.1:8300`) |
+| `BASE_URL` | the API root (default `http://127.0.0.1:8390`, the test stack; never the dev stack on 8300) |
 | `API_KEY` | sent as `X-API-Key`: a client key (`auth apikey <client>`) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | the stack's root admin; it creates users A and B on every run (there is no sign-up) |
 | `CONTRACT_SCHEMAS=1` | validate every JSON response, and every SSE event, against `contracts/openapi.yaml` for its path, method and status; a route or status the spec doesn't list fails (`OPENAPI_PATH` overrides the location; see `tests/schemas.py`) |
@@ -28,12 +29,13 @@ make -C contract_tests test API_KEY=... ARGS="-k runs -x"   # any pytest args
 
 ## Resilience
 
-`resilience.sh` restarts studio, runner, nats, postgres and kong of the running helmstudio stack one at a time,
+`resilience.sh` restarts studio, runner, nats, postgres and kong of the running helmstudio-test stack one at a time,
 each in the middle of a ~12 s echo run, and requires that the run ends (succeeded, or failed/cancelled with an
 error: never stuck queued or running) and that a new run afterwards succeeds. It takes a few minutes.
 
 ```sh
-API_KEY=$(cat ../deploy/secrets/helm_api_key) ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
+make resilience   # from the repo root: brings the test stack up, makes a key, runs the script
+API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... contract_tests/resilience.sh [svc ...]   # test stack already up
 ```
 
 Kong's sign-in rate limit is 20 a minute per IP; the suite signs in about that often, so a test may pause once for

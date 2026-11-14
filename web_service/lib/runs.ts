@@ -1,5 +1,5 @@
 // Folding a session's events (SSE or ?since= pages) into its runs. Events are hints: a run that ends is fetched again.
-import type { S } from "@/lib/api";
+import { api, ok, type S } from "@/lib/api";
 
 type Run = S<"Run">;
 type Status = S<"RunStatus">;
@@ -59,3 +59,53 @@ export function mergeRuns(local: Run[], fetched: Run[]): Run[] {
 
 /** The share of the work done, 0..1, from the last progress event. */
 export const fraction = (r: Run) => (r.progress ? Math.min(1, r.progress.step / r.progress.of) : 0);
+
+/** Fetches the session's events after `since` (the JSON form of the events route, no Accept: text/event-stream). */
+const eventPage = (sessionId: string, since: number) =>
+  ok(
+    api.GET("/v1/studio/sessions/{session_id}/events", {
+      params: { path: { session_id: sessionId }, query: { since } },
+    }),
+  ) as Promise<S<"EventPage">>;
+
+/** Calls `onEvent` for each new event of the session (by seq), from the start of its log: SSE, else ?since= polling
+ * every 2 s once the stream closes. Returns the unsubscribe; nothing is delivered after it, not even a page in flight. */
+export function followSession(
+  sessionId: string,
+  onEvent: (e: S<"SessionEvent">) => void,
+  page: (since: number) => Promise<S<"EventPage">> = (since) => eventPage(sessionId, since),
+): () => void {
+  // ponytail: replays the whole log on open (cheap for M0 sessions); keep a cursor per session if logs grow long
+  let last = 0;
+  let stop = false;
+  let poll: ReturnType<typeof setTimeout> | undefined;
+  const take = (e: S<"SessionEvent">) => {
+    if (stop || e.seq <= last) return;
+    last = e.seq;
+    onEvent(e);
+  };
+  const es = new EventSource(
+    `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events?since=0`,
+  );
+  const onMessage = (m: MessageEvent<string>) => {
+    try {
+      take(JSON.parse(m.data) as S<"SessionEvent">);
+    } catch {
+      /* not an event */
+    }
+  };
+  for (const t of ["status", "progress", "output"])
+    es.addEventListener(t, onMessage as EventListener);
+  const tick = async () => {
+    (await page(last).catch(() => null))?.events.forEach(take);
+    if (!stop) poll = setTimeout(() => void tick(), 2000);
+  };
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED && !stop && !poll) void tick();
+  };
+  return () => {
+    stop = true;
+    es.close();
+    clearTimeout(poll);
+  };
+}

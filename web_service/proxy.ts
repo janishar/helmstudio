@@ -11,8 +11,10 @@ import {
   type Session,
 } from "@/lib/session";
 
-/** Pages that never need a session. */
-const PUBLIC = new Set(["/signin"]);
+/** Pages that never need a session (/signin/expired clears a dead session's cookies). */
+const PUBLIC = new Set(["/signin", "/signin/expired"]);
+/** The request header that tells server components the page's path and query (Next doesn't expose the URL). */
+export const PATH_HEADER = "x-helm-path";
 
 /** A refresh's result: a new session, "refused" when the token is no good, or "unavailable" when the answer says
  * nothing about the session. */
@@ -77,6 +79,7 @@ export async function proxy(req: NextRequest) {
   // Next's Server Actions CSRF check compares the two, so hand it the host with the forwarded port.
   if (req.headers.has("x-forwarded-host"))
     req.headers.set("x-forwarded-host", new URL(publicOrigin(req)).host);
+  req.headers.set(PATH_HEADER, pathname + search); // set, never passed through: the browser can't choose it
   // Carries on with the rewritten headers.
   const next = () => NextResponse.next({ request: { headers: req.headers } });
   if (PUBLIC.has(pathname)) return next();

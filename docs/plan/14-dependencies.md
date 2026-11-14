@@ -24,7 +24,6 @@ This section owns version numbers; other sections name libraries without them.
 | aws-sdk-go-v2 | core v1.48.0, s3 v1.114.10, config v1.33.18, credentials v1.21.0 (bump together) |
 | golang.org/x/crypto | v0.59.0 |
 | golang-jwt/jwt/v5 | v5.3.1 |
-| golangci-lint | v2.15.0 (exact; the reference uses only `gofmt` and `go vet`) |
 
 **Infrastructure** (exact image tags, by digest in production)
 
@@ -35,6 +34,8 @@ This section owns version numbers; other sections name libraries without them.
 | PostgreSQL | 18.7 |
 | NATS server | 2.15.3 |
 | SeaweedFS | 4.53 |
+| nats-box (stream and KV setup) | 0.20.2 |
+| Alpine (Go and web runtime images) | 3.24.3 |
 | Docker Compose | 2.20 or later (current v5.7.1); no `version:` key |
 
 **Python** (`pyproject` floors plus a committed `uv.lock`)
@@ -76,6 +77,8 @@ This section owns version numbers; other sections name libraries without them.
 | @xyflow/react, elkjs | ^12.12.1, ^0.12.1 |
 | openapi-typescript, openapi-fetch | 7.13.0, 0.17.0 (exact) |
 | vitest, Playwright, eslint | ^5.1.0, 1.65.1 (exact), ^10.15.0 |
+| prettier | 3.10.1 (exact) |
+| next-themes, server-only | ^0.4.6, ^0.0.1 |
 
 ### 18.2 Things that must move together
 

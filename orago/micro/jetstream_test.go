@@ -98,12 +98,8 @@ func captureLog(t *testing.T) *logBuffer {
 
 // settled reports whether the consumer has nothing left to deliver and nothing awaiting an ack.
 func settled(client NatsClient, stream, durable string) bool {
-	consumer, err := client.jetStream().Consumer(context.Background(), stream, durable)
-	if err != nil {
-		return false
-	}
-	info, err := consumer.Info(context.Background())
-	return err == nil && info.NumPending == 0 && info.NumAckPending == 0
+	backlog, err := NatsJetStreamBacklog(context.Background(), client, NatsJetStreamConsumer{Stream: stream, Durable: durable})
+	return err == nil && backlog == 0
 }
 
 // projector is today's api-projector consumer, the one the tests consume with.
@@ -376,6 +372,9 @@ func TestNatsJetStreamWatchKVSeesCurrentAndLaterValues(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		seen[key] = string(value)
+		if value == nil {
+			seen[key] = "<nil>"
+		}
 		return nil
 	})
 	// The first try finds no bucket and says it will retry; only then does the bucket appear.
@@ -388,9 +387,11 @@ func TestNatsJetStreamWatchKVSeesCurrentAndLaterValues(t *testing.T) {
 	eventually(t, 2*retryDelay+2*time.Second, saw("workflows"))
 	_, _ = bucket.Put(ctx, "prices", []byte("p"))
 	eventually(t, 5*time.Second, saw("prices"))
+	_ = bucket.Delete(ctx, "workflows") // a delete comes as a nil value
+	eventually(t, 5*time.Second, func() bool { mu.Lock(); defer mu.Unlock(); return seen["workflows"] == "<nil>" })
 	mu.Lock()
 	defer mu.Unlock()
-	if seen["workflows"] != "w" || seen["prices"] != "p" {
+	if seen["prices"] != "p" {
 		t.Errorf("seen = %v", seen)
 	}
 }

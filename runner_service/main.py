@@ -24,6 +24,7 @@ log = logging.getLogger("runner")
 
 DURABLE = f"runner-{HOST}-{ENV}"
 SUBJECT = f"cmd.run.{HOST}.{ENV}"
+INBOX_PREFIX = "_INBOX_runner"  # nats.conf lets the runner user subscribe to these inboxes only
 
 
 async def main() -> None:
@@ -31,7 +32,9 @@ async def main() -> None:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     values = registry.values()  # off-contract values stop the runner before it connects
-    nc = await nats.connect(NATS_URL, name=DURABLE, max_reconnect_attempts=-1)
+    nc = await nats.connect(
+        NATS_URL, name=DURABLE, max_reconnect_attempts=-1, inbox_prefix=INBOX_PREFIX
+    )
     js = nc.jetstream()
     await registry.publish(js, values)
     host = Host(await js.key_value("hosts"))

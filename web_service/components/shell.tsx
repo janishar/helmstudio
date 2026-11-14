@@ -93,7 +93,7 @@ export function AppShell({
           ))}
           <SettingsMenu user={user} />
         </nav>
-        <div className="flex min-w-0 flex-1">{children}</div>
+        <div className="flex min-w-0 flex-1 flex-wrap content-start">{children}</div>
       </div>
     </UserContext>
   );
@@ -120,6 +120,7 @@ function SettingsMenu({ user }: { user: S<"User"> | null }) {
       <div
         id="settings"
         popover="auto"
+        role="dialog"
         aria-label="Settings"
         className="pop w-[240px]"
         style={

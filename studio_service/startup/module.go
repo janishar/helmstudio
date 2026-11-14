@@ -19,6 +19,7 @@ type Module struct {
 	registry       *registry.Registry
 	cancel         studio.Cancel
 	authentication network.AuthenticationProvider
+	recheck        studio.Recheck  // the token check an open event stream repeats
 	shutdown       <-chan struct{} // closes when the service stops, which ends open SSE streams
 	health         micro.Controller
 	maxBody        int64 // bytes
@@ -40,6 +41,6 @@ func (m *Module) RootMiddlewares() []network.RootMiddleware {
 func (m *Module) Controllers() []micro.Controller {
 	return []micro.Controller{
 		m.health,
-		studio.NewController(studio.NewService(m.db, m.signer, m.registry, m.cancel), m.shutdown),
+		studio.NewController(studio.NewService(m.db, m.signer, m.registry, m.cancel), m.recheck, m.shutdown),
 	}
 }
