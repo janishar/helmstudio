@@ -1,0 +1,24 @@
+{
+  "description": "optional inputs (mix.b) are never auto-wired; a selected node without a candidate falls back to the whole graph",
+  "workflow": {
+    "title": "Auto",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "noise": {
+        "kind": "test/noise"
+      },
+      "count": {
+        "kind": "test/count"
+      }
+    }
+  },
+  "selected": "count",
+  "add": {
+    "id": "mix",
+    "kind": "test/mix"
+  },
+  "expect_in": {
+    "a": "noise.image"
+  }
+}

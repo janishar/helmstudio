@@ -1,0 +1,108 @@
+{
+  "description": "duplicate placements, unknown paths, a label for an unknown param, invalid preset values",
+  "workflow": {
+    "title": "Bad studio",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      }
+    },
+    "studio": {
+      "composer": [
+        "prompt.text"
+      ],
+      "quick": [
+        "prompt.text",
+        "echo.steps"
+      ],
+      "inspector": [
+        {
+          "title": "More",
+          "items": [
+            "echo.nope",
+            "ghost.steps",
+            "echo.steps"
+          ]
+        }
+      ],
+      "labels": {
+        "echo.colour": "Colour"
+      },
+      "presets": {
+        "Bad": {
+          "echo.steps": 0,
+          "echo.fail": true,
+          "ghost.x": 1
+        },
+        "Bad 2": {
+          "echo.bypass": true
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "studio_duplicate",
+      "node": "prompt",
+      "param": "text"
+    },
+    {
+      "code": "studio_duplicate",
+      "node": "echo",
+      "param": "steps"
+    },
+    {
+      "code": "studio_unknown_path",
+      "node": "echo",
+      "param": "nope"
+    },
+    {
+      "code": "studio_unknown_path",
+      "node": "ghost",
+      "param": "steps"
+    },
+    {
+      "code": "studio_unknown_path",
+      "node": "echo",
+      "param": "colour"
+    },
+    {
+      "code": "preset_invalid",
+      "node": "echo",
+      "param": "steps"
+    },
+    {
+      "code": "preset_invalid",
+      "node": "ghost",
+      "param": "x"
+    },
+    {
+      "code": "preset_invalid",
+      "node": "echo",
+      "param": "bypass"
+    }
+  ]
+}

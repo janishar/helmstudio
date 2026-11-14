@@ -1,0 +1,63 @@
+{
+  "description": "out of range, unknown, a take inside a workflow, wrong type",
+  "workflow": {
+    "title": "Bad params",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": 5
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 0,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": [
+            {
+              "image": {
+                "take_id": "7d1e2f3a-4b5c-4d6e-8f70-819a2b3c4d5e"
+              }
+            }
+          ],
+          "colour": "red"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "param_invalid",
+      "node": "echo",
+      "param": "steps"
+    },
+    {
+      "code": "unknown_param",
+      "node": "echo",
+      "param": "colour"
+    },
+    {
+      "code": "param_invalid",
+      "node": "echo",
+      "param": "refs"
+    },
+    {
+      "code": "param_invalid",
+      "node": "prompt",
+      "param": "text"
+    }
+  ]
+}

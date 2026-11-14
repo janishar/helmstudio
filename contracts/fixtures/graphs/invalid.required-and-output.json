@@ -1,0 +1,35 @@
+{
+  "description": "a required input left unwired and no output node (both only block running)",
+  "workflow": {
+    "title": "Half wired",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "required_input",
+      "node": "echo",
+      "port": "text"
+    },
+    {
+      "code": "no_output"
+    }
+  ]
+}

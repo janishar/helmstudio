@@ -1,0 +1,43 @@
+{
+  "description": "from a Text output in an echo workflow: the family's kinds first, then core ones (prompt takes Text into its text param)",
+  "workflow": {
+    "title": "Echo",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      }
+    }
+  },
+  "from": {
+    "node": "prompt",
+    "port": "text",
+    "side": "output"
+  },
+  "expect": [
+    "echo/echo",
+    "prompt"
+  ]
+}

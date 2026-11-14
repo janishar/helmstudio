@@ -118,7 +118,8 @@ const sizeText = (w: number, h: number) =>
 /** Which inspector editor is open (a field key), and how to open or close one. */
 type OpenProps = { open: string | null; setOpen: (key: string | null) => void };
 
-/** The params other than the prompt: References (rows editors), Canvas, Quality (tiles), Options (switches), More. */
+/** The params other than the prompt: References (rows editors), Canvas, Quality (tiles), Options (switches), More.
+ * With `groups` (a workflow's Studio block), its sections instead, in its order. */
 export function Inspector({
   fields,
   raws,
@@ -127,7 +128,8 @@ export function Inspector({
   open,
   setOpen,
   uploads,
-}: FormProps & OpenProps & { uploads: RefUploads }) {
+  groups,
+}: FormProps & OpenProps & { uploads: RefUploads; groups?: { title: string; fields: Field[] }[] }) {
   const s = sections(fields);
   const c = canvasOf(fields, raws, useLastRef(fields, raws));
   const extra = s.canvas.filter((f) => f !== c?.width && f !== c?.height && f !== c?.mode);
@@ -136,7 +138,7 @@ export function Inspector({
   const control = (f: Field) => {
     const raw = rawOf(f, raws);
     if (f.param.type === "bool") return <Switch key={f.key} f={f} raw={raw} onChange={onChange} />;
-    if (f.param.type === "string")
+    if (f.param.type === "string" || f.param.type === "text")
       return <Line key={f.key} f={f} raw={raw} errors={errors} onChange={onChange} />;
     return (
       <Tile
@@ -170,6 +172,34 @@ export function Inspector({
         )}
       </section>
     );
+  if (groups)
+    return groups.map((g, i) => {
+      const refs = g.fields.filter((f) => s.refs.includes(f));
+      const canvas = c && g.fields.includes(c.width) && g.fields.includes(c.height);
+      const rest = g.fields.filter(
+        (f) => !refs.includes(f) && !(canvas && (f === c.width || f === c.height || f === c.mode)),
+      );
+      return section(
+        `sec-g${i}`,
+        g.title,
+        rest,
+        (refs.length > 0 || canvas) && (
+          <>
+            {refs.map((f) => (
+              <RowsEditor
+                key={f.key}
+                f={f}
+                raw={raws[f.key]}
+                error={errors[f.key]}
+                onChange={onChange}
+                uploads={uploads}
+              />
+            ))}
+            {canvas && <CanvasPicker c={c} errors={errors} onChange={onChange} />}
+          </>
+        ),
+      );
+    });
   return (
     <>
       {s.refs.map((f, i) =>
@@ -449,7 +479,7 @@ function Editor({
 }
 
 /** A bool param: its label and a switch. */
-function Switch({
+export function Switch({
   f,
   raw,
   onChange,

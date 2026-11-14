@@ -67,9 +67,9 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		} else if open >= MaxOpenRuns {
 			return network.NewConflictError(fmt.Sprintf("You have %d runs queued or running; wait for some to finish.", MaxOpenRuns), nil)
 		}
-		workflow, ok := s.registry.Workflow(body.WorkflowID)
-		if !ok {
-			return network.NewUnprocessableError("unknown workflow "+body.WorkflowID, nil)
+		workflow, version, err := s.runnable(ctx, tx, body.WorkflowID)
+		if err != nil {
+			return err
 		}
 		nodes, detail := resolve(workflow, body.Inputs)
 		if detail != "" {
@@ -82,14 +82,16 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		}
 		graph, _ := json.Marshal(nodes)
 		status, failure := "queued", (*string)(nil)
-		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph}
+		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			status, failure = "failed", &reason
 		}
 		inputs, _ := json.Marshal(body.Inputs)
 		run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-			nodes, finished_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7 = 'failed' THEN clock_timestamp() END)
-			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure, graph)
+			nodes, finished_at, workflow_version, workflow_title) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11)
+			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure,
+			graph, version, workflow.Title)
 		if err != nil {
 			return err
 		}
@@ -261,7 +263,7 @@ func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 	out := dto.Run{ID: run.ID, SessionID: run.SessionID, WorkflowID: run.WorkflowID, Inputs: map[string]any{},
 		Status: run.Status, Error: run.Error, Outputs: []dto.RunOutput{}, Host: run.Host, Lane: run.Lane,
 		Attempt: run.Attempt, CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, FinishedAt: run.FinishedAt,
-		BatchID: run.BatchID, BatchRow: run.BatchRow}
+		BatchID: run.BatchID, BatchRow: run.BatchRow, WorkflowVersion: run.WorkflowVersion}
 	_ = json.Unmarshal(run.Inputs, &out.Inputs)
 	_ = json.Unmarshal(run.Resolved, &out.Resolved) // null or absent leaves it nil (omitted)
 	if len(run.Progress) > 0 && string(run.Progress) != "null" {

@@ -1,0 +1,28 @@
+{
+  "description": "two Text outputs and nothing selected: left unwired",
+  "workflow": {
+    "title": "Two prompts",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "output": {
+        "kind": "output"
+      },
+      "prompt_2": {
+        "kind": "prompt"
+      }
+    }
+  },
+  "selected": null,
+  "add": {
+    "id": "echo",
+    "kind": "echo/echo"
+  },
+  "expect_in": {}
+}

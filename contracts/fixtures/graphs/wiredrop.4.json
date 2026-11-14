@@ -1,0 +1,22 @@
+{
+  "description": "from an Image output in a fake test workflow: test/upscale is torch only, image/qwen kinds are another env or family; ties of family rank sort by title",
+  "workflow": {
+    "title": "Drop",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "noise": {
+        "kind": "test/noise"
+      }
+    }
+  },
+  "from": {
+    "node": "noise",
+    "port": "image",
+    "side": "output"
+  },
+  "expect": [
+    "test/mix",
+    "output"
+  ]
+}

@@ -26,22 +26,28 @@ export type Raw = string | boolean | S<"RowItem">[];
  * and picks finish late, so they add to the list as it is then. */
 export type Update = Raw | ((old: Raw | undefined) => Raw);
 
-/** Every param of every node in the workflow, nodes in graph order, params in schema order. */
-export function fields(w: S<"Workflow">): Field[] {
+/** Every param of every node in the workflow, nodes in graph order, params in schema order; a param fed by a wire
+ * is not settable (contracts/README.md, User workflows) and left out. */
+export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[] {
+  const kinds = Object.values(w.nodes).map((n) => n.kind);
   return graphOrder(w).flatMap((node) => {
     const n = w.nodes[node];
     const schema = w.node_schemas[n.kind];
     if (!schema) return [];
-    return schema.params.map((param) => ({
-      key: `${node}.${param.name}`,
-      node,
-      nodeTitle: schema.title,
-      nodeHelp: schema.help,
-      param,
-      initial: n.params?.[param.name] ?? param.default,
-      canvas: schema.outputs.some((o) => o.type === "Canvas"),
-      model: schema.outputs.some((o) => o.type === "Model"),
-    }));
+    // two nodes of one kind: each field names its node ("Steps (sample_2)"), or the form shows two "Steps"
+    const twin = kinds.filter((k) => k === n.kind).length > 1;
+    return schema.params
+      .filter((param) => !(param.name in (n.in ?? {})))
+      .map((param) => ({
+        key: `${node}.${param.name}`,
+        node,
+        nodeTitle: schema.title,
+        nodeHelp: schema.help,
+        param: twin ? { ...param, label: `${param.label ?? param.name} (${node})` } : param,
+        initial: n.params?.[param.name] ?? param.default,
+        canvas: schema.outputs.some((o) => o.type === "Canvas"),
+        model: schema.outputs.some((o) => o.type === "Model"),
+      }));
   });
 }
 
@@ -235,7 +241,7 @@ export function nodeTitle(w: S<"Workflow"> | undefined, node: string) {
 }
 
 /** Node ids in graph order: every node after the nodes its inputs come from, else in declaration order. */
-export function graphOrder(w: S<"Workflow">): string[] {
+export function graphOrder(w: Pick<S<"Workflow">, "nodes">): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   const visit = (id: string) => {

@@ -1,0 +1,108 @@
+{
+  "description": "the qwen-image template with the plan's studio layout and presets",
+  "workflow": {
+    "title": "Qwen draft",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "canvas": {
+        "kind": "canvas",
+        "params": {
+          "mode": "auto",
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "model": {
+        "kind": "qwen-image/model",
+        "params": {
+          "variant": "base",
+          "precision": "int8"
+        }
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "transparent": false,
+          "refs": []
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        },
+        "params": {
+          "steps": 40
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        },
+        "params": {
+          "tiled": "auto"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    },
+    "studio": {
+      "composer": [
+        "prompt.text",
+        "encode.refs"
+      ],
+      "quick": [
+        "model.variant",
+        "canvas.mode",
+        "seed.seed"
+      ],
+      "inspector": [
+        {
+          "title": "Quality",
+          "items": [
+            "model.precision",
+            "sample.steps",
+            "decode.tiled"
+          ]
+        }
+      ],
+      "presets": {
+        "Draft": {
+          "model.variant": "turbo",
+          "model.precision": "int8"
+        },
+        "Final": {
+          "model.variant": "base",
+          "model.precision": "bf16"
+        }
+      }
+    }
+  },
+  "problems": []
+}

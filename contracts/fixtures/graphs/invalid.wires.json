@@ -1,0 +1,43 @@
+{
+  "description": "a wire from a missing node, from a missing output, into a missing input",
+  "workflow": {
+    "title": "Bad wires",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "noise": {
+        "kind": "test/noise"
+      },
+      "mix": {
+        "kind": "test/mix",
+        "in": {
+          "a": "noise.picture",
+          "c": "noise.image"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "ghost.image"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "unknown_source",
+      "node": "mix",
+      "port": "a"
+    },
+    {
+      "code": "unknown_input",
+      "node": "mix",
+      "port": "c"
+    },
+    {
+      "code": "unknown_source",
+      "node": "output",
+      "port": "media"
+    }
+  ]
+}

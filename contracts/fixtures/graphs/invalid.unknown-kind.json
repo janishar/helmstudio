@@ -1,0 +1,50 @@
+{
+  "description": "a kind no live runner publishes: only unknown_kind (blocks running); its params and wires, and wires from it, are not checked",
+  "workflow": {
+    "title": "Unknown kind",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "up.image"
+        }
+      },
+      "up": {
+        "kind": "echo/upscale",
+        "params": {
+          "factor": 99
+        },
+        "in": {
+          "image": "echo.image",
+          "x": "nowhere.y"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "unknown_kind",
+      "node": "up"
+    }
+  ]
+}

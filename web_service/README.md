@@ -29,6 +29,15 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   The takes strip is the session's takes (`GET /v1/studio/sessions/{id}/takes`) plus runs still working or failed;
   a take can be starred on the stage. `?reuse=<take id>` fills the form from `POST /v1/studio/takes/{id}/reuse`;
   without it the workflow is the session's newest run's.
+- **Graph** (Create's Studio | Graph switch, ⌘\\; `components/graph/`, loaded by `next/dynamic` with `@xyflow/react`
+  and elkjs only when opened): the workflow as typed cards and wires (laid out by elkjs when it has no positions),
+  add nodes from `GET /v1/studio/nodes` (Add node, A, double- or right-click; auto-wiring), connect by drag (invalid
+  ports dim) or the inspector's Inputs, wire-drop search, params, Bypass, "Show in Studio" (writes the `studio`
+  block, `lib/studio.ts`), undo/redo. The rules, auto-wiring and wire-drop are `lib/graph.ts` (tested on
+  `contracts/fixtures/graphs`); edits, history and layout `lib/graph-edit.ts`. Edits are checked with
+  `POST /workflows/validate` and saved with debounce by `PUT` with the version (409 reloads); a template's first edit
+  copies it as "<title> (mine)". The workflow picker lists templates and one's own (Rename, Duplicate, Delete).
+  A workflow with a `studio` block shows exactly what it places in Studio; one's own with problems cannot Generate.
 - Image inputs (`lib/refs.ts`, `components/create/refs.tsx`): a workflow's `image` / Image-rows param is the
   references row above the prompt and the inspector's References (the rows editor: gallery picker
   `components/gallery/picker.tsx`, upload / drop / paste, drag or Alt + arrows to reorder, `<image{n}>` labels); a drop on

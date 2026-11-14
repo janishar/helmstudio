@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- M2 stage B (built): the badge opens the workflow picker; Generate in the toolbar; an Inputs section (connect by keyboard); Hide per param in Shown in Studio; the first edit of a template shows a one-line notice above the canvas ("Saved as your own workflow, …", OK dismisses it); a problem on a param or Studio path a runner update removed has a Remove button (the inspector shows no other control for it); two nodes of one kind name their node in Studio labels ("Steps (sample_2)"). Left out until their backends exist: Re-runs when, Planned peak, Run to here. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -93,7 +94,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
 <button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
-<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">Qwen Image · 10 nodes · valid</span>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">Qwen Image · 10 nodes · valid<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px; vertical-align: -1px"><path d="m6 9 6 6 6-6"></path></svg></span>
 <div style="flex-grow: 1"></div>
 <div role="group" aria-label="View" style="display: flex; padding: 3px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
 <button aria-pressed="false" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Studio</button>
@@ -171,6 +172,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--ln); background: var(--s2); display: flex; align-items: center; gap: 6px; font-size: 13px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Add node</button>
 <button style="height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--ln); background: var(--s2); font-size: 13px">Tidy layout</button>
+<button title="Generate (⌘ or Ctrl + Enter)" style="height: 40px; padding: 0 16px; border-radius: 20px 20px 20px 8px; border: 0; background: var(--a1); color: var(--on1); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.04em">Generate</button>
 <span style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 6px; font-size: 12px; color: var(--t2)">
 <span style="display: flex; align-items: center; gap: 5px"><i style="width: 8px; height: 8px; border-radius: 50%; background: var(--t1b); display: block"></i>Text</span>
 <span style="display: flex; align-items: center; gap: 5px"><i style="width: 8px; height: 8px; border-radius: 50%; background: #86cdea; display: block"></i>Value</span>
@@ -208,18 +210,21 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Inputs</h3>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><label for="g-in-cond">cond <span style="font-size: 12px; color: var(--t2)">Conditioning</span></label><select id="g-in-cond" style="height: 34px; border-radius: 8px; border: 1px solid var(--ln); background: var(--s1); color: var(--t1); font: inherit; font-size: 13px; padding: 0 8px"><option>Encode · cond</option><option>Not connected (needed)</option></select></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><label for="g-in-seed">seed <span style="font-size: 12px; color: var(--t2)">Seed</span></label><select id="g-in-seed" style="height: 34px; border-radius: 8px; border: 1px solid var(--ln); background: var(--s1); color: var(--t1); font: inherit; font-size: 13px; padding: 0 8px"><option>Seed · seed</option><option>Not connected (needed)</option></select></div>
+</div>
+
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Shown in Studio</h3>
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><span>Steps</span><span style="font-size: 12px; color: var(--t2)">Inspector › Quality</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><span>Steps</span><span style="font-size: 12px; color: var(--t2)">Inspector › Quality <button style="border: 0; background: transparent; color: var(--t2); font-size: 12px; box-shadow: none">Hide</button></span></div>
 <button style="height: 40px; border-radius: 10px; border: 1px dashed var(--dash); background: transparent; font-size: 13px">Show another parameter in Studio</button>
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">This run</h3>
-<div style="display: flex; justify-content: space-between; gap: 12px"><span>Re-runs when</span><span style="font-size: 12px; color: var(--t2); text-align: right">seed, canvas, steps, prompt or LoRA change</span></div>
-<div style="display: flex; justify-content: space-between; gap: 12px"><span>Planned peak</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">22 GB</span></div>
 <div style="display: flex; gap: 8px">
-<button style="flex: 1 1 0; height: 40px; border-radius: 10px; border: 1px solid var(--ln); background: transparent; font-size: 13px">Run to here</button>
 <button style="flex: 1 1 0; height: 40px; border-radius: 10px; border: 1px solid var(--ln); background: transparent; font-size: 13px">Bypass</button>
 </div>
 </div>

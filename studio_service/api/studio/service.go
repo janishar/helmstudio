@@ -158,21 +158,7 @@ func sessionDTO(row model.Session) dto.Session {
 	return dto.Session{ID: row.ID, Title: row.Title, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 }
 
-// ------------------------------------------------------------------ workflows and hosts
-
-// Workflows returns every runnable workflow the runners published.
-func (s *Service) Workflows() dto.WorkflowList {
-	return dto.WorkflowList{Workflows: s.registry.Workflows()}
-}
-
-// Workflow returns one workflow with its node schemas.
-func (s *Service) Workflow(id string) (registry.Workflow, error) {
-	workflow, ok := s.registry.Workflow(id)
-	if !ok {
-		return workflow, errNotFound
-	}
-	return workflow, nil
-}
+// ------------------------------------------------------------------ hosts
 
 // Hosts returns every runner's state, redacted: never the run or its owner.
 func (s *Service) Hosts() dto.HostList {

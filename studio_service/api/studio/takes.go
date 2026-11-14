@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 
@@ -16,13 +17,16 @@ import (
 	"github.com/helmstudio/studio_service/registry"
 )
 
-// madeWith snapshots what made an output of run (Take.made_with): the workflow, every param of every node of the graph
-// the run was sent with (resolved again from the registry for a run stored before it kept its graph) with seed in place
-// of a random seed, the prompt node's text and the <family>/model node. With no graph it keeps the inputs as requested.
+// madeWith snapshots what made an output of run (Take.made_with): the workflow (a user workflow's title and version as
+// the run stored them), every settable param of every node of the graph the run was sent with (resolved again from
+// the registry for a run stored before it kept its graph; a wired param is not settable) with seed in place of a
+// random seed, the bypass switches the run asked for, the prompt node's text and the <family>/model node. With no
+// graph it keeps the inputs as requested.
 func madeWith(workflows *registry.Registry, run model.Run, seed *int64) gallerydto.MadeWith {
 	inputs := map[string]any{}
 	_ = json.Unmarshal(run.Inputs, &inputs)
-	out := gallerydto.MadeWith{WorkflowID: run.WorkflowID, WorkflowTitle: run.WorkflowID, Inputs: inputs, Seed: seed}
+	out := gallerydto.MadeWith{WorkflowID: run.WorkflowID, WorkflowTitle: run.WorkflowID, Inputs: inputs, Seed: seed,
+		WorkflowVersion: run.WorkflowVersion}
 	if text, ok := inputs["prompt.text"].(string); ok {
 		out.Prompt = &text
 	}
@@ -34,6 +38,13 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 	if found {
 		out.WorkflowTitle = workflow.Title
 	}
+	if run.WorkflowTitle != nil {
+		out.WorkflowTitle = *run.WorkflowTitle
+	}
+	schemas := workflow.NodeSchemas
+	if !found && workflows != nil {
+		schemas = workflows.Schemas()
+	}
 	nodes := map[string]registry.Node{}
 	_ = json.Unmarshal(run.Nodes, &nodes)
 	if len(nodes) == 0 && found {
@@ -43,19 +54,30 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 		return out
 	}
 	out.Inputs, out.Prompt = map[string]any{}, nil
-	for id, node := range nodes {
+	for key, value := range inputs {
+		if strings.HasSuffix(key, ".bypass") {
+			out.Inputs[key] = value
+		}
+	}
+	prompted := false
+	for _, id := range slices.Sorted(maps.Keys(nodes)) { // the first prompt and model node by id: stable made_with
+		node := nodes[id]
 		for name, value := range node.Params {
-			if seed != nil && isSeed(workflow, found, node.Kind, name) && randomSeed(value) {
+			if _, wired := node.In[name]; wired {
+				continue
+			}
+			if seed != nil && isSeed(schemas, node.Kind, name) && randomSeed(value) {
 				value = *seed
 			}
 			out.Inputs[id+"."+name] = value
 		}
 		switch {
-		case node.Kind == "prompt":
+		case node.Kind == "prompt" && !prompted:
+			prompted = true
 			if text, ok := node.Params["text"].(string); ok {
 				out.Prompt = &text
 			}
-		case strings.HasSuffix(node.Kind, "/model"):
+		case strings.HasSuffix(node.Kind, "/model") && out.Model == nil:
 			out.Model = &gallerydto.Model{Variant: stringParam(node.Params["variant"]), Precision: stringParam(node.Params["precision"])}
 			if workflows != nil && run.Host != nil {
 				if model, ok := workflows.Model(*run.Host+"."+run.Env, strings.TrimSuffix(node.Kind, "/model")); ok {
@@ -67,13 +89,14 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 	return out
 }
 
-// isSeed reports whether param name of a node of kind is a seed: its schema says so, or, without the workflow, it is
+// isSeed reports whether param name of a node of kind is a seed: its schema says so, or, without a schema, it is
 // named seed.
-func isSeed(workflow registry.Workflow, found bool, kind, name string) bool {
-	if !found {
+func isSeed(schemas map[string]registry.NodeSchema, kind, name string) bool {
+	schema, ok := schemas[kind]
+	if !ok {
 		return name == "seed"
 	}
-	params := workflow.NodeSchemas[kind].Params
+	params := schema.Params
 	index := slices.IndexFunc(params, func(param registry.Param) bool { return param.Name == name })
 	return index >= 0 && params[index].Type == "seed"
 }

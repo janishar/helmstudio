@@ -63,9 +63,9 @@ func (b *SessionPatch) Validate() string {
 	return ""
 }
 
-// WorkflowList is every runnable workflow, by id.
+// WorkflowList is the templates by title, then the caller's own workflows, newest first.
 type WorkflowList struct {
-	Workflows []registry.Workflow `json:"workflows"`
+	Workflows []Workflow `json:"workflows"`
 }
 
 // RunRequest is POST /sessions/{id}/runs; inputs are checked against the workflow's node schemas.
@@ -123,6 +123,8 @@ type Run struct {
 	FinishedAt *time.Time     `json:"finished_at"`
 	BatchID    *string        `json:"batch_id,omitempty"`
 	BatchRow   *int           `json:"batch_row,omitempty"`
+	// a user workflow: the version it ran
+	WorkflowVersion *int `json:"workflow_version,omitempty"`
 }
 
 // RunList is a session's runs, newest first.

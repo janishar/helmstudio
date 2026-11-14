@@ -1,0 +1,74 @@
+{
+  "description": "bypass (enhance, a chain of two LoRAs), an optional input left unwired (mix.b), an Int output wired into an int param (count.value -> mix.strength), a bypass switch in the studio, an unused output (enhance.text)",
+  "workflow": {
+    "title": "Bypass, optional, wired param",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt"
+      },
+      "enhance": {
+        "kind": "test/enhance",
+        "bypass": true,
+        "in": {
+          "prompt": "prompt.text"
+        }
+      },
+      "model": {
+        "kind": "test/model"
+      },
+      "lora": {
+        "kind": "test/lora",
+        "bypass": true,
+        "in": {
+          "model": "model.model"
+        }
+      },
+      "lora_2": {
+        "kind": "test/lora",
+        "bypass": true,
+        "in": {
+          "model": "lora.model"
+        }
+      },
+      "count": {
+        "kind": "test/count",
+        "params": {
+          "value": 7
+        }
+      },
+      "noise": {
+        "kind": "test/noise"
+      },
+      "mix": {
+        "kind": "test/mix",
+        "in": {
+          "a": "noise.image",
+          "strength": "count.value"
+        },
+        "params": {
+          "blend": 0.25
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "mix.image"
+        }
+      }
+    },
+    "studio": {
+      "quick": [
+        "enhance.bypass",
+        "mix.blend"
+      ],
+      "presets": {
+        "Plain": {
+          "enhance.bypass": true
+        }
+      }
+    }
+  },
+  "problems": []
+}

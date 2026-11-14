@@ -3,6 +3,7 @@
 package registry
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -58,8 +59,9 @@ func (p Param) ImageInput() (field string, ok bool) {
 
 // Port is a typed input or output of a node.
 type Port struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Optional bool   `json:"optional,omitempty"` // inputs only: may be left unwired
 }
 
 // NodeSchema is one node kind a runner can execute.
@@ -73,11 +75,50 @@ type NodeSchema struct {
 	Outputs []Port  `json:"outputs"`
 }
 
-// Node is one node of a workflow graph.
+// Node is one node of a workflow graph. Bypass and Position belong to an edited workflow: a command never carries them.
 type Node struct {
-	Kind   string            `json:"kind"`
-	Params map[string]any    `json:"params"` // never nil: a command must carry every node's params
-	In     map[string]string `json:"in,omitempty"`
+	Kind     string            `json:"kind"`
+	Params   map[string]any    `json:"params"` // never nil: a command must carry every node's params
+	In       map[string]string `json:"in,omitempty"`
+	Bypass   bool              `json:"bypass,omitempty"`
+	Position *Position         `json:"position,omitempty"`
+}
+
+// Position is a node card's top-left in the Graph view.
+type Position struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+// PaletteNode is a node kind live hosts publish, with every env that publishes it.
+type PaletteNode struct {
+	NodeSchema
+	Envs []string `json:"envs"`
+}
+
+// Family is the part of a kind before "/", "" for a core kind.
+func Family(kind string) string {
+	family, _, found := strings.Cut(kind, "/")
+	if !found {
+		return ""
+	}
+	return family
+}
+
+// Passthrough is the input each output passes through when the node is bypassed (the first input of the output's
+// type, each once, in output order); nil when a kind of this schema cannot be bypassed.
+func (s NodeSchema) Passthrough() []string {
+	var through []string
+	for _, output := range s.Outputs {
+		i := slices.IndexFunc(s.Inputs, func(input Port) bool { return input.Type == output.Type })
+		if i < 0 {
+			return nil
+		}
+		if !slices.Contains(through, s.Inputs[i].Name) {
+			through = append(through, s.Inputs[i].Name)
+		}
+	}
+	return through
 }
 
 // Workflow is a runnable graph as a runner publishes it, with the schemas of its kinds from the same runner.
@@ -122,6 +163,7 @@ type Resident struct {
 type Model struct {
 	ID       string    `json:"id"`
 	Family   string    `json:"family"`
+	Title    string    `json:"title"`
 	Variants []Variant `json:"variants"` // absent for a model without variants (echo)
 }
 
@@ -143,6 +185,7 @@ func (h Host) Live(now time.Time) bool { return now.Sub(h.UpdatedAt) <= Stale }
 type Registry struct {
 	mu        sync.RWMutex
 	nodes     map[string][]NodeSchema // "<host>.<env>" → its node schemas
+	nodesAt   map[string]time.Time    // "<host>.<env>" → when its nodes were published
 	workflows map[string][]Workflow   // "<host>.<env>" → its workflows (without node schemas)
 	models    map[string][]Model      // "<host>.<env>" → the models present there
 	hosts     map[string]Host         // "<host>.<env>" → its state
@@ -187,15 +230,18 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 	case "nodes":
 		if value == nil {
 			delete(r.nodes, source)
+			delete(r.nodesAt, source)
 			return nil
 		}
 		var parsed struct {
-			Nodes []NodeSchema `json:"nodes"`
+			Nodes       []NodeSchema `json:"nodes"`
+			PublishedAt time.Time    `json:"published_at"`
 		}
 		if err := json.Unmarshal(value, &parsed); err != nil {
 			return err
 		}
 		set(&r.nodes, source, parsed.Nodes)
+		set(&r.nodesAt, source, parsed.PublishedAt)
 	case "workflows":
 		if value == nil {
 			delete(r.workflows, source)
@@ -326,6 +372,135 @@ func (r *Registry) Publishes(source, id string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return slices.ContainsFunc(r.workflows[source], func(w Workflow) bool { return w.ID == id })
+}
+
+// PublishesKinds reports whether the runner at source ("<host>.<env>") publishes every one of kinds.
+func (r *Registry) PublishesKinds(source string, kinds []string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, kind := range kinds {
+		if !slices.ContainsFunc(r.nodes[source], func(s NodeSchema) bool { return s.Kind == kind }) {
+			return false
+		}
+	}
+	return true
+}
+
+// Schemas returns every kind any runner publishes, live or not: the schema of the newest publish.
+func (r *Registry) Schemas() map[string]NodeSchema {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := map[string]NodeSchema{}
+	for kind, found := range r.newest(func(string) bool { return true }) {
+		out[kind] = found.schema
+	}
+	return out
+}
+
+// Palette returns every kind a live host publishes now (its hosts key fresh), with the envs that publish it, sorted,
+// and the schema of the newest publish.
+func (r *Registry) Palette(now time.Time) map[string]PaletteNode {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := map[string]PaletteNode{}
+	for kind, found := range r.newest(func(source string) bool { host, ok := r.hosts[source]; return ok && host.Live(now) }) {
+		out[kind] = PaletteNode{NodeSchema: found.schema, Envs: found.envs}
+	}
+	return out
+}
+
+// PaletteGroup is one family's kinds in the palette (Family "" for the core kinds).
+type PaletteGroup struct {
+	Family *string       `json:"family"`
+	Title  string        `json:"title"`
+	Nodes  []PaletteNode `json:"nodes"`
+}
+
+// PaletteGroups is the palette for GET /nodes: only kinds env publishes (all when ""), the core kinds first (title
+// Core), then each family by title (its live models entry's title, else the family id); in a group, kinds in the
+// order their newest publisher lists them.
+func (r *Registry) PaletteGroups(now time.Time, env string) []PaletteGroup {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	live := func(source string) bool { host, ok := r.hosts[source]; return ok && host.Live(now) }
+	byFamily := map[string][]found{}
+	for _, found := range r.newest(live) {
+		if env == "" || slices.Contains(found.envs, env) {
+			family := Family(found.schema.Kind)
+			byFamily[family] = append(byFamily[family], found)
+		}
+	}
+	titles := map[string]string{}
+	for source, models := range r.models {
+		for _, model := range models {
+			if live(source) && model.Title != "" {
+				titles[model.Family] = model.Title
+			}
+		}
+	}
+	out := []PaletteGroup{}
+	for family, kinds := range byFamily {
+		slices.SortFunc(kinds, func(a, b found) int {
+			return cmp.Or(cmp.Compare(a.index, b.index), strings.Compare(a.schema.Kind, b.schema.Kind))
+		})
+		group := PaletteGroup{Title: cmp.Or(titles[family], family)}
+		if family == "" {
+			group.Title = "Core"
+		} else {
+			group.Family = &family
+		}
+		for _, kind := range kinds {
+			group.Nodes = append(group.Nodes, PaletteNode{NodeSchema: kind.schema, Envs: kind.envs})
+		}
+		out = append(out, group)
+	}
+	slices.SortFunc(out, func(a, b PaletteGroup) int {
+		return cmp.Or(cmp.Compare(btoi(a.Family != nil), btoi(b.Family != nil)), strings.Compare(a.Title, b.Title))
+	})
+	return out
+}
+
+// found is one kind as newest finds it: the newest schema, its index in that publisher's list, every env.
+type found struct {
+	schema NodeSchema
+	index  int
+	at     time.Time
+	envs   []string
+}
+
+// newest collects every kind the sources keep publishes: the schema of the newest publish (ties: the first source
+// by key) and every env, sorted. Callers hold r.mu.
+func (r *Registry) newest(keep func(source string) bool) map[string]found {
+	out := map[string]found{}
+	for _, source := range slices.Sorted(maps.Keys(r.nodes)) {
+		if !keep(source) {
+			continue
+		}
+		env := source[strings.IndexByte(source, '.')+1:]
+		at := r.nodesAt[source]
+		for i, schema := range r.nodes[source] {
+			old, seen := out[schema.Kind]
+			envs := old.envs
+			if !slices.Contains(envs, env) {
+				envs = append(slices.Clone(envs), env)
+				slices.Sort(envs)
+			}
+			if !seen || at.After(old.at) {
+				old = found{schema: schema, index: i, at: at}
+			}
+			old.envs = envs
+			out[schema.Kind] = old
+		}
+	}
+	return out
+}
+
+// btoi is 1 for true.
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Model returns the model of family that the runner at source ("<host>.<env>") has, or false.

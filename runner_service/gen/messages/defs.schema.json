@@ -50,7 +50,8 @@
     },
     "workflowId": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "description": "a registry workflow's slug (echo, qwen-image) or a user workflow's UUID (lower-case, which also fits this pattern)"
     },
     "nodeId": {
       "type": "string",
@@ -260,12 +261,33 @@
         },
         "in": {
           "type": "object",
-          "description": "input port name → the output it is wired to",
+          "description": "input port name (or the name of a value param wired from upstream: contracts/README.md, Graph rules) → the output it is wired to",
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
           },
           "additionalProperties": {
             "$ref": "#/$defs/portRef"
+          }
+        },
+        "bypass": {
+          "type": "boolean",
+          "description": "true = the node is switched off and passes its inputs through (contracts/README.md, Graph rules); absent = false. Never true in cmd.run.execute: studio splices bypassed nodes out before it sends a graph"
+        },
+        "position": {
+          "type": "object",
+          "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+          "required": [
+            "x",
+            "y"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
           }
         }
       }
@@ -299,7 +321,7 @@
     },
     "workflowSnapshot": {
       "type": "object",
-      "description": "a registry workflow as it was when the batch was submitted; the batch runs this graph, never the live one",
+      "description": "a registry workflow or a user workflow as it was when the batch was submitted (a user workflow's nodes keep `bypass`, drop `position`; no `studio`); the batch runs this graph, never the live one",
       "required": [
         "id",
         "title",

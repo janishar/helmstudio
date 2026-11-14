@@ -1,0 +1,42 @@
+{
+  "description": "a bypassed node needs exactly its pass-through inputs wired (enhance.prompt); its other required inputs do not count",
+  "workflow": {
+    "title": "Bypass unwired",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "enhance": {
+        "kind": "test/enhance",
+        "bypass": true
+      },
+      "noise": {
+        "kind": "test/noise"
+      },
+      "mix": {
+        "kind": "test/mix",
+        "bypass": true,
+        "in": {
+          "b": "noise.image"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "mix.image"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "required_input",
+      "node": "enhance",
+      "port": "prompt"
+    },
+    {
+      "code": "required_input",
+      "node": "mix",
+      "port": "a"
+    }
+  ]
+}

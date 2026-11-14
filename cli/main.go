@@ -27,7 +27,12 @@ const usage = `usage:
   helm use [--param node.param] <take_id> <workflow_id>   print the helm run command with the take as reference 1
 
 An image input takes a comma list of take ids and @files (uploaded first): -p encode.refs=@a.png,<take_id>
-  helm workflows
+  helm workflows                      templates, then your own (id, source, version, env, title)
+  helm workflow get <id> > file.json  a workflow as a file (yours: with id and version; a template: based_on)
+  helm workflow save file.json        replace yours (id + version; stale = 409) or create one; prints problems
+  helm workflow validate file.json    print every problem; exit 1 if it cannot run
+  helm workflow copy <id> [--title t] a copy of a template or of yours; prints the new id
+  helm workflow rm <id>
   helm whoami
   helm logout
 
@@ -66,6 +71,8 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = useCmd(args[1:], stdout, stderr)
 	case "workflows":
 		err = workflows(stdout)
+	case "workflow":
+		err = workflowCmd(args[1:], stdout, stderr)
 	case "whoami":
 		err = whoami(stdout)
 	case "logout":
@@ -171,23 +178,6 @@ func whoami(stdout io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "%s (%s) roles: %s\n", u.Email, u.Name, strings.Join(u.Roles, ","))
-	return nil
-}
-
-func workflows(stdout io.Writer) error {
-	c, err := loggedIn()
-	if err != nil {
-		return err
-	}
-	var list struct {
-		Workflows []workflow `json:"workflows"`
-	}
-	if err := c.call(http.MethodGet, "/v1/studio/workflows", nil, http.StatusOK, &list); err != nil {
-		return err
-	}
-	for _, w := range list.Workflows {
-		fmt.Fprintf(stdout, "%-20s %-8s %s\n", w.ID, w.Env, w.Title)
-	}
 	return nil
 }
 

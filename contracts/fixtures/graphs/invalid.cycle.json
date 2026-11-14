@@ -1,0 +1,48 @@
+{
+  "description": "mix_2 and mix_3 feed each other: one cycle problem per node on it",
+  "workflow": {
+    "title": "Cycle",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "noise": {
+        "kind": "test/noise"
+      },
+      "mix": {
+        "kind": "test/mix",
+        "in": {
+          "a": "noise.image",
+          "b": "mix_3.image"
+        }
+      },
+      "mix_2": {
+        "kind": "test/mix",
+        "in": {
+          "a": "mix_3.image"
+        }
+      },
+      "mix_3": {
+        "kind": "test/mix",
+        "in": {
+          "a": "mix_2.image"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "mix.image"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "cycle",
+      "node": "mix_2"
+    },
+    {
+      "code": "cycle",
+      "node": "mix_3"
+    }
+  ]
+}

@@ -52,13 +52,49 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Every workflow the runners publish in the registry, by id
-         * @description Read from the KV `registry` keys `<host>.<env>.workflows` and `.nodes`, whether or not a host with that env is
-         *     live now (`GET /v1/studio/hosts` tells). The same id from several hosts is listed once.
+         * The templates the runners publish in the registry, then the caller's own workflows
+         * @description Templates (`source: template`) are read from the KV `registry` keys `<host>.<env>.workflows` and `.nodes`,
+         *     whether or not a host with that env is live now (`GET /v1/studio/hosts` tells); the same id from several hosts
+         *     is listed once; sorted by title. Then the caller's own workflows (`source: mine`, at most 200), newest
+         *     `updated_at` first. `problems` is never in a list (only `GET /v1/studio/workflows/{workflow_id}`).
          */
         get: operations["studioListWorkflows"];
         put?: never;
-        post?: never;
+        /**
+         * Save a workflow of the caller's own, from a whole document or as a copy of another
+         * @description Two forms (`WorkflowCreate`): a whole document (`title`, `family`, `env`, `nodes`, optional `studio`, optional
+         *     `based_on`), or `{based_on, title?}` to copy a template or one of the caller's workflows (nodes, positions,
+         *     studio, family, env; `title` absent = `<source title> copy`, cut to 80 characters). The new workflow's id is a
+         *     UUID, `version` 1. The document is checked with the graph rules (contracts/README.md, Graph rules): any
+         *     problem that blocks saving is 422 `WorkflowError` with every problem; problems that only block running
+         *     (`unknown_kind`, `env_mismatch`, `required_input`, `no_output`) do not stop the save and are in the answer's
+         *     `problems`. 404 when `based_on` is unknown or another user's. 409 when the caller already has 200 workflows
+         *     (`You have 200 workflows; delete some first.`). 503 while studio's registry watches have not delivered yet.
+         */
+        post: operations["studioCreateWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/workflows/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a workflow document with the graph rules without saving it
+         * @description Runs every graph rule (contracts/README.md, Graph rules) against the live node palette (`GET /v1/studio/nodes`)
+         *     and answers every problem, with `can_save` and `can_run`. A body that does not fit `WorkflowDoc` (the JSON
+         *     schema: a node id that is not a slug, a missing `kind`, …) is a plain 422 `{detail}`; graph problems are
+         *     never a 422 here. 503 while studio's registry watches have not delivered yet.
+         */
+        post: operations["studioValidateWorkflow"];
         delete?: never;
         options?: never;
         head?: never;
@@ -72,7 +108,57 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description A template (a registry slug) or one of the caller's workflows (a UUID; another user's is 404), with
+         *     `node_schemas` for every kind of its nodes found in the registry (live or not; a kind no runner publishes at
+         *     all is left out) and `problems`: the graph rules against the live palette now (an offline env makes its
+         *     kinds `unknown_kind`).
+         */
         get: operations["studioGetWorkflow"];
+        /**
+         * Replace one of the caller's workflows with an edited document
+         * @description Optimistic concurrency: `version` is the version the edit started from. When it is not the stored version,
+         *     409 `workflow changed since you opened it (now version <n>)` and nothing changes; the client reloads and
+         *     re-applies. On success `version` + 1 and `updated_at` now. Checked like POST: save-blocking problems are 422
+         *     `WorkflowError`. Runs, batches and takes made before keep their snapshot (README, User workflows). 409 for a
+         *     template id (`templates cannot be changed; save a copy`). 404 for another user's.
+         */
+        put: operations["studioReplaceWorkflow"];
+        post?: never;
+        /**
+         * Delete one of the caller's workflows
+         * @description 409 while a run of it is `queued` or `running` (`a run of this workflow is unfinished; cancel it or wait`) or a
+         *     batch of it is `queued`, `running` or `paused` (`a batch of this workflow is unfinished; stop it or wait`), and
+         *     for a template id. Past runs, batches and takes keep their snapshots; reuse of their takes answers
+         *     `workflow_status: deleted`. Deleting again is 404.
+         */
+        delete: operations["studioDeleteWorkflow"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename one of the caller's workflows
+         * @description `version` + 1 (an editor holding the old version gets 409 on its next PUT). 409 for a template id.
+         */
+        patch: operations["studioRenameWorkflow"];
+        trace?: never;
+    };
+    "/v1/studio/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The node palette — every node kind a live runner publishes now, grouped by family
+         * @description From the KV `registry` keys `<host>.<env>.nodes` of every host whose `hosts` key is fresh (30 s). A kind
+         *     published by several live hosts or envs is listed once, with every env (`envs`) and the schema of the newest
+         *     `published_at`. Groups: core kinds (`family: null`, title `Core`) first, then each family sorted by title (the
+         *     model title from the family's live `models` entry, else the family id); kinds in a group in the order the
+         *     newest publisher lists them. `env` keeps only kinds that env publishes. 503 while studio's registry watches
+         *     have not delivered yet.
+         */
+        get: operations["studioListNodes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -107,6 +193,13 @@ export interface paths {
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
          *     409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
          *     running; wait for some to finish.`
+         *
+         *     A user workflow (`workflow_id` a UUID of the caller's; another user's is 422 `unknown workflow <id>`) runs as
+         *     it is stored now: studio checks it with the graph rules against the live palette and any problem is 422
+         *     `workflow cannot run: <first problem's message>`; the run keeps that version (`workflow_version`) and the
+         *     resolved graph as its snapshot, which the dispatcher sends however the workflow changes later. `inputs` may
+         *     also hold `<node>.bypass: true|false` for a bypassable node; an input naming a param that is wired from
+         *     upstream is 422 (`sample.steps: wired from count.value; it cannot be set`).
          */
         post: operations["studioCreateRun"];
         delete?: never;
@@ -284,6 +377,10 @@ export interface paths {
          * @description `workflow_id` and `inputs` = `made_with.inputs` (every param, the seed the runner used instead of random), ready
          *     to post as a `RunRequest` or to load into the form; image values come back as recorded (`{take_id}`), so a
          *     reference deleted since makes that request 422. Nothing is created. 409 for an upload (it has no settings).
+         *     `workflow_status` compares the workflow now with the one that made the take: `current` (a template still
+         *     published, or a user workflow at `made_with.workflow_version`), `changed` (a user workflow edited since: keys
+         *     that are no longer a settable param of it are dropped from `inputs`, the rest kept), `deleted` (no longer
+         *     published, or deleted: `inputs` as recorded; a run of it is 422).
          */
         post: operations["studioReuseTake"];
         delete?: never;
@@ -415,6 +512,9 @@ export interface paths {
          *     409 when the caller already has 5 batches queued, running or paused (`You have 5 unfinished batches; wait for
          *     one to finish.`). The interactive cap of 100 open runs does not count batch-lane runs and does not stop a batch.
          *     404 for a `session_id` that is unknown or another user's.
+         *
+         *     `workflow_id` may name one of the caller's workflows: it must pass the graph rules (else 422 `workflow cannot
+         *     run: …`) and the snapshot is its version now (nodes with `bypass`, no positions, no `studio`).
          *
          *     On success studio stores the batch (`queued`, `control: run`) with its snapshot (the workflow as published
          *     now: the batch never runs a later version), every row (`queued`, attempt 1, seeds drawn), a new session titled
@@ -852,6 +952,8 @@ export interface components {
         Port: {
             name: string;
             type: components["schemas"]["PortType"];
+            /** @description inputs only: true = may be left unwired (the feature is off); absent = required */
+            optional?: boolean;
         };
         /** @description null only for a seed (random) or an image param left empty */
         ScalarValue: string | number | boolean | null;
@@ -921,18 +1023,35 @@ export interface components {
             params?: {
                 [key: string]: components["schemas"]["ParamValue"];
             };
-            /** @description input port → `<node id>.<output>` */
+            /** @description input port (or a wired value param) → `<node id>.<output>` */
             in?: {
                 [key: string]: string;
             };
+            /** @description switched off: passes its inputs through (README, Graph rules); absent = false */
+            bypass?: boolean;
+            position?: components["schemas"]["NodePosition"];
         };
+        /** @description the card's top-left in the Graph view, canvas pixels; absent = laid out by the client (elkjs, "Tidy layout") */
+        NodePosition: {
+            x: number;
+            y: number;
+        };
+        /**
+         * @description template: published by a runner in the registry (read-only, id a slug); mine: the caller's own (id a UUID)
+         * @enum {string}
+         */
+        WorkflowSource: "template" | "mine";
         /**
          * @description A runnable graph. A form is derived from it: for every node in `nodes`, the params of
          *     `node_schemas[node.kind]`, each addressed as `<node id>.<param name>` in `RunRequest.inputs`, its starting value
-         *     `node.params[name]` else the schema `default`.
+         *     `node.params[name]` else the schema `default`. With `studio`, the Studio shows exactly the paths it places
+         *     (README, User workflows); without, the form is derived as above.
          */
         Workflow: {
-            /** @example echo */
+            /**
+             * @example echo
+             * @example 6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88
+             */
             id: string;
             title: string;
             family: string;
@@ -942,13 +1061,171 @@ export interface components {
             nodes: {
                 [key: string]: components["schemas"]["GraphNode"];
             };
-            /** @description kind → schema, for every kind in nodes */
+            /** @description kind → schema, for every kind in nodes the registry has (a kind no runner publishes is left out) */
             node_schemas: {
                 [key: string]: components["schemas"]["NodeSchema"];
             };
+            source: components["schemas"]["WorkflowSource"];
+            studio?: components["schemas"]["StudioLayout"];
+            /** @description mine only: the template or workflow it was copied or saved from (it may be gone since); null when made from nothing */
+            based_on?: string | null;
+            /** @description mine only: 1 on create, +1 on every PUT and PATCH; send it back in WorkflowUpdate */
+            version?: number;
+            /**
+             * Format: date-time
+             * @description mine only
+             */
+            created_at?: string;
+            /**
+             * Format: date-time
+             * @description mine only
+             */
+            updated_at?: string;
+            /** @description only from GET /v1/studio/workflows/{workflow_id}, POST and PUT: the graph rules against the live palette now; empty = it can run */
+            problems?: components["schemas"]["Problem"][];
         };
         WorkflowList: {
             workflows: components["schemas"]["Workflow"][];
+        };
+        /**
+         * @description `<node id>.<param>`, or `<node id>.bypass` for a bypassable node (a switch)
+         * @example sample.steps
+         * @example enhance.bypass
+         */
+        StudioPath: string;
+        /**
+         * @description Which params the Studio (Create) shows and where (plan 04-workflows.md section 7). Present = exactly the placed
+         *     paths show; every other param keeps its graph value and is edited in Graph view only. Absent = the derived
+         *     form (every param, as `Workflow` says). A path is placed at most once over composer, quick and inspector.
+         */
+        StudioLayout: {
+            /** @description in the composer box, in order (the prompt, the references) */
+            composer?: components["schemas"]["StudioPath"][];
+            /** @description chips on the composer, in order */
+            quick?: components["schemas"]["StudioPath"][];
+            /** @description the inspector's sections, in order */
+            inspector?: {
+                /** @example Quality */
+                title: string;
+                items: components["schemas"]["StudioPath"][];
+            }[];
+            /** @description a field's title in the Studio when it should differ from the param's label */
+            labels?: {
+                [key: string]: string;
+            };
+            /**
+             * @description named sets of values over this workflow's paths (Draft, Final); choosing one sets them in the form
+             * @example {
+             *       "Draft": {
+             *         "model.variant": "turbo",
+             *         "model.precision": "int8"
+             *       }
+             *     }
+             */
+            presets?: {
+                [key: string]: {
+                    [key: string]: components["schemas"]["ParamValue"];
+                };
+            };
+        };
+        /**
+         * @description A workflow as the editor saves or validates it. Node ids are stable slugs: once made they never change (README,
+         *     Graph rules). At most 64 nodes and 256 KB (checked as problems, not by the schema). Other top-level keys are
+         *     ignored by validate (so a WorkflowUpdate body validates as is); WorkflowCreate and WorkflowUpdate are closed.
+         */
+        WorkflowDoc: {
+            /** @description trimmed; blank = 422 */
+            title: string;
+            /** @description the model family every `<family>/…` kind of it belongs to */
+            family: string;
+            /** @description the one runner env that runs every node */
+            env: string;
+            nodes: {
+                [key: string]: components["schemas"]["EditorNode"];
+            };
+            studio?: components["schemas"]["StudioLayout"];
+        };
+        EditorNode: {
+            kind: string;
+            /** @description param → value; left out = the schema default. A workflow holds no take: image params null, rows without Image items */
+            params?: {
+                [key: string]: components["schemas"]["ParamValue"];
+            };
+            /** @description input port, or wired value param → `<node id>.<output>`; one wire per key (connecting again replaces it) */
+            in?: {
+                [key: string]: string;
+            };
+            bypass?: boolean;
+            position?: components["schemas"]["NodePosition"];
+        };
+        /** @description a whole document (based_on optional: "Save as" from an open workflow), or `{based_on, title?}` to copy one */
+        WorkflowCreate: ({
+            /** @description the template or workflow id it was made from; must exist and be readable by the caller (404) */
+            based_on?: string;
+        } & components["schemas"]["WorkflowDoc"]) | {
+            based_on: string;
+            /** @description absent = `<source title> copy` */
+            title?: string;
+        };
+        WorkflowUpdate: {
+            /** @description the version the edit started from (409 when stale) */
+            version: number;
+        } & components["schemas"]["WorkflowDoc"];
+        WorkflowPatch: {
+            /** @description trimmed; blank = 422 */
+            title: string;
+        };
+        /**
+         * @description meaning and which ones block saving: contracts/README.md, Graph rules. May grow in a minor version; an unknown code blocks running
+         * @enum {string}
+         */
+        ProblemCode: "too_many_nodes" | "too_large" | "too_many_outputs" | "too_many_seeds" | "wrong_family" | "unknown_kind" | "env_mismatch" | "unknown_param" | "param_invalid" | "unknown_input" | "unknown_source" | "type_mismatch" | "not_bypassable" | "required_input" | "cycle" | "no_output" | "studio_unknown_path" | "studio_duplicate" | "preset_invalid";
+        /** @description one broken graph rule; `node` / `port` / `param` say where, for the editor to mark (absent = the whole workflow) */
+        Problem: {
+            code: components["schemas"]["ProblemCode"];
+            /** @description human text, e.g. `sample.cond: expects Conditioning, got Text from prompt.text`; not stable */
+            message: string;
+            /**
+             * @description save: the document cannot be saved (and cannot run); run: it can be saved, not run
+             * @enum {string}
+             */
+            blocks: "save" | "run";
+            /** @description the node id (for a Studio path, the path's node, which may not exist) */
+            node?: string;
+            /** @description the `in` key: an input port or a wired value param */
+            port?: string;
+            /** @description a param name (for a Studio path or preset, the path's param; may be `bypass`) */
+            param?: string;
+        };
+        WorkflowValidation: {
+            /** @description sorted by node (whole-workflow ones first), then code, port, param */
+            problems: components["schemas"]["Problem"][];
+            /** @description no problem blocks saving */
+            can_save: boolean;
+            /** @description no problem at all */
+            can_run: boolean;
+        };
+        WorkflowError: {
+            /** @description `workflow has <n> problems: <first message>` for graph problems */
+            detail: string;
+            /** @description every problem; absent for a schema error */
+            problems?: components["schemas"]["Problem"][];
+        };
+        PaletteNode: components["schemas"]["NodeSchema"] & {
+            /** @description every env a live host publishes it in (sorted); a workflow may use it when its env is one of them */
+            envs: string[];
+        };
+        NodePalette: {
+            groups: {
+                /** @description null for the core kinds */
+                family: string | null;
+                /**
+                 * @example Core
+                 * @example Qwen Image 2.1
+                 */
+                title: string;
+                nodes: components["schemas"]["PaletteNode"][];
+            }[];
         };
         /** @enum {string} */
         RunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -1038,6 +1315,8 @@ export interface components {
             batch_id?: string | null;
             /** @description the batch row number; with batch_id */
             batch_row?: number | null;
+            /** @description a user workflow: the version it ran (its graph is the run's snapshot); absent or null for a template */
+            workflow_version?: number | null;
         };
         /** @description values the runner chose (a random seed), sent with succeeded; absent until then and from M0 runners */
         Resolved: {
@@ -1202,7 +1481,10 @@ export interface components {
         /** @description a snapshot taken when the take was stored: it survives the run and the session */
         MadeWith: {
             workflow_id: string;
+            /** @description as it was when the run was created (a later rename or delete does not change it) */
             workflow_title: string;
+            /** @description a user workflow: the version that made it; absent or null for a template */
+            workflow_version?: number | null;
             /** @description every param of every node (`<node id>.<param>`), resolved, with the seed the runner used in place of null / -1; image values as `{take_id}` (the references, in order), never keys */
             inputs: components["schemas"]["RunInputs"];
             /** @description the text of the workflow's `prompt` node; null without one */
@@ -1247,6 +1529,11 @@ export interface components {
         TakeReuse: {
             workflow_id: string;
             inputs: components["schemas"]["RunInputs"];
+            /**
+             * @description reuse only (not use): how the workflow now compares with the one that made the take (studioReuseTake)
+             * @enum {string}
+             */
+            workflow_status?: "current" | "changed" | "deleted";
         };
         UploadCreate: {
             /** @description the file's name; only its base name (without extension) is kept, as the title */
@@ -1693,6 +1980,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description the body does not fit the schema (`{detail}` only), or the graph has problems that block saving (`problems`: every problem, save- and run-blocking) */
+        WorkflowUnprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["WorkflowError"];
+            };
+        };
     };
     parameters: {
         /** @description session UUID (malformed = 404) */
@@ -1850,7 +2146,10 @@ export interface operations {
     };
     studioListWorkflows: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description only templates or only the caller's own; absent = both */
+                source?: components["schemas"]["WorkflowSource"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1867,6 +2166,63 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowCreate"];
+            };
+        };
+        responses: {
+            /** @description the workflow, with problems */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["WorkflowUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioValidateWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowDoc"];
+            };
+        };
+        responses: {
+            /** @description the problems */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowValidation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -1893,6 +2249,121 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioReplaceWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description workflow id (unknown or malformed = 404) */
+                workflow_id: components["parameters"]["WorkflowId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowUpdate"];
+            };
+        };
+        responses: {
+            /** @description the workflow, with problems */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["WorkflowUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description workflow id (unknown or malformed = 404) */
+                workflow_id: components["parameters"]["WorkflowId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRenameWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description workflow id (unknown or malformed = 404) */
+                workflow_id: components["parameters"]["WorkflowId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowPatch"];
+            };
+        };
+        responses: {
+            /** @description the workflow */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workflow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListNodes: {
+        parameters: {
+            query?: {
+                /** @description only kinds this env publishes (a workflow's env); absent = all */
+                env?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the palette */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodePalette"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

@@ -36,6 +36,7 @@ type fakeAPI struct {
 	access      string // the access token the server accepts
 	refreshes   int
 	inputs      map[string]any
+	workflowID  string // the last run's workflow_id
 	cancelled   chan struct{}
 	positions   []int          // queue positions GET /runs/r1 answers before the run starts
 	query       string         // the last GET /v1/studio/takes query
@@ -104,15 +105,18 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 	case "GET /v1/studio/workflows/echo":
 		fmt.Fprint(w, echoWorkflow)
+	case "GET /v1/studio/workflows/" + mineID:
+		fmt.Fprint(w, mineWorkflow)
 	case "POST /v1/studio/sessions":
 		w.WriteHeader(201)
 		fmt.Fprint(w, `{"id":"s1","title":"Echo"}`)
 	case "POST /v1/studio/sessions/s1/runs":
 		var b struct {
-			Inputs map[string]any `json:"inputs"`
+			WorkflowID string         `json:"workflow_id"`
+			Inputs     map[string]any `json:"inputs"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&b)
-		f.inputs = b.Inputs
+		f.inputs, f.workflowID = b.Inputs, b.WorkflowID
 		w.WriteHeader(202)
 		if len(f.positions) > 0 {
 			fmt.Fprintf(w, `{"id":"r1","status":"queued","position":%d,"outputs":[]}`, f.positions[0])
@@ -572,5 +576,16 @@ func TestBatchesAndStop(t *testing.T) {
 	out.Reset()
 	if code := helm([]string{"batch-stop", "b1"}, nil, &out, &errb, nil); code != 0 || out.String() != "batch b1 stopping: 2 succeeded, 0 failed of 6\n" {
 		t.Fatalf("stop: %d %q %s", code, out.String(), errb.String())
+	}
+}
+
+func TestRunUserWorkflow(t *testing.T) {
+	f, _ := setup(t, "succeeded")
+	var out, errb bytes.Buffer
+	if code := helm([]string{"run", mineID, "-p", "echo.steps=2", "--out", t.TempDir()}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("run: %d %s", code, errb.String())
+	}
+	if f.workflowID != mineID || f.inputs["echo.steps"] != 2.0 {
+		t.Fatalf("workflow %q inputs %v", f.workflowID, f.inputs)
 	}
 }

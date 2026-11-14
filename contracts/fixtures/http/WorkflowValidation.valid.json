@@ -1,0 +1,18 @@
+{
+  "problems": [
+    {
+      "code": "type_mismatch",
+      "message": "output.media: expects Image, got Text from prompt.text",
+      "blocks": "save",
+      "node": "output",
+      "port": "media"
+    },
+    {
+      "code": "no_output",
+      "message": "the workflow has no output node",
+      "blocks": "run"
+    }
+  ],
+  "can_save": false,
+  "can_run": false
+}

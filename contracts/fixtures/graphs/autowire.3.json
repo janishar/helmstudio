@@ -1,0 +1,30 @@
+{
+  "description": "two Text outputs, prompt_2 selected: its one Text output wins",
+  "workflow": {
+    "title": "Two prompts",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "output": {
+        "kind": "output"
+      },
+      "prompt_2": {
+        "kind": "prompt"
+      }
+    }
+  },
+  "selected": "prompt_2",
+  "add": {
+    "id": "echo",
+    "kind": "echo/echo"
+  },
+  "expect_in": {
+    "text": "prompt_2.text"
+  }
+}

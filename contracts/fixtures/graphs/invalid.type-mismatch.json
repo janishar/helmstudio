@@ -1,0 +1,41 @@
+{
+  "description": "a Text output into an Image input",
+  "workflow": {
+    "title": "Bad wire",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "prompt.text"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "type_mismatch",
+      "node": "output",
+      "port": "media"
+    }
+  ]
+}

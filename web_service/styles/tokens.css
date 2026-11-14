@@ -15,6 +15,7 @@
   --dash: #5a7265;
   --t2: #a9b8ab;
   --t1: #f0f2e8;
+  --t1b: #dfe5d8;
   --ib: #354a3f;
   --it: #cfdacb;
   --a1: #b9e37a;
@@ -38,6 +39,7 @@
   --dash: #5e779e;
   --t2: #9fb0c6;
   --t1: #eaf0f7;
+  --t1b: #d6dfeb;
   --ib: #33486b;
   --it: #cdd8e6;
   --a1: #ff8a6b;
@@ -59,6 +61,7 @@
   --dash: #7a678c;
   --t2: #b3a6b8;
   --t1: #f3ecf2;
+  --t1b: #e2d8e3;
   --ib: #4a3b5a;
   --it: #d9cedc;
   --a1: #ffb36b;
@@ -80,6 +83,7 @@
   --dash: #84705e;
   --t2: #b8a896;
   --t1: #f5ece0;
+  --t1b: #e5d9c9;
   --ib: #514033;
   --it: #dccfbd;
   --a1: #f2b84b;
@@ -101,6 +105,7 @@
   --dash: #896266;
   --t2: #bfa8a6;
   --t1: #f6ecea;
+  --t1b: #e6d8d6;
   --ib: #54363a;
   --it: #dccccb;
   --a1: #f6c177;
@@ -122,6 +127,7 @@
   --dash: #6a70b0;
   --t2: #a5a9cf;
   --t1: #eceefc;
+  --t1b: #d9dcf3;
   --ib: #3c417d;
   --it: #d0d3ee;
   --a1: #ffc145;
@@ -143,6 +149,7 @@
   --dash: #a8987f;
   --t2: #6e6455;
   --t1: #1f1a14;
+  --t1b: #3a3228;
   --ib: #dcd1be;
   --it: #3a3228;
   --a1: #c8553d;

@@ -42,9 +42,10 @@ func (m *Module) RootMiddlewares() []network.RootMiddleware {
 
 // Controllers returns every controller, each a micro.Controller as gomicro's are.
 func (m *Module) Controllers() []micro.Controller {
+	service := studio.NewService(m.db, m.signer, m.registry, m.cancel, m.store)
 	return []micro.Controller{
 		m.health,
-		studio.NewController(studio.NewService(m.db, m.signer, m.registry, m.cancel, m.store), m.recheck, m.shutdown),
-		gallery.NewController(gallery.NewService(m.db, m.signer, m.store, m.registry)),
+		studio.NewController(service, m.recheck, m.shutdown),
+		gallery.NewController(gallery.NewService(m.db, m.signer, m.store, m.registry, service.FindWorkflow)),
 	}
 }

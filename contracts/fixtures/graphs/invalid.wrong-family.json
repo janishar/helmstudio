@@ -1,0 +1,46 @@
+{
+  "description": "a test/ kind in an echo workflow (the Text wire itself is fine: Text is no handle)",
+  "workflow": {
+    "title": "Wrong family",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "enhance.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      },
+      "enhance": {
+        "kind": "test/enhance",
+        "in": {
+          "prompt": "prompt.text"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "wrong_family",
+      "node": "enhance"
+    }
+  ]
+}

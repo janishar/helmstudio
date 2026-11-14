@@ -127,3 +127,41 @@ func TestQwenAndHostMemory(t *testing.T) {
 		t.Fatalf("busy with a run, attempt absent: %+v", host)
 	}
 }
+
+// The palette is every kind a live host publishes, with its envs; GET /nodes groups it core first, then by family
+// title. A stale host's kinds leave the palette but keep their schemas.
+func TestPalette(t *testing.T) {
+	var r Registry
+	t0 := time.Now()
+	_ = r.SetRegistry("fake.fake.nodes", fixture(t, "nodes"))
+	_ = r.SetRegistry("mac.torch.nodes", fixture(t, "qwen-image.nodes"))
+	_ = r.SetRegistry("mac.torch.models", fixture(t, "qwen-image.models"))
+	host := func(name, env string, at time.Time) []byte {
+		return []byte(`{"host": "` + name + `", "env": "` + env + `", "state": "idle", "run_id": null, "updated_at": "` +
+			at.UTC().Format(time.RFC3339Nano) + `"}`)
+	}
+	_ = r.SetHost("fake.fake", host("fake", "fake", t0))
+	_ = r.SetHost("mac.torch", host("mac", "torch", t0))
+	palette := r.Palette(t0)
+	if prompt := palette["prompt"]; len(prompt.Envs) != 2 || prompt.Envs[0] != "fake" || prompt.Envs[1] != "torch" {
+		t.Fatalf("%+v", prompt)
+	}
+	groups := r.PaletteGroups(t0, "")
+	if len(groups) != 3 || groups[0].Title != "Core" || groups[0].Family != nil || groups[1].Title != "Qwen Image 2.1" ||
+		*groups[2].Family != "echo" || groups[2].Title != "echo" { // a family title from its live models entry, else its id
+		t.Fatalf("%+v", groups)
+	}
+	if torch := r.PaletteGroups(t0, "torch"); len(torch) != 2 || torch[1].Nodes[0].Kind != "qwen-image/model" {
+		t.Fatalf("%+v", torch)
+	}
+	if !r.PublishesKinds("mac.torch", []string{"prompt", "qwen-image/sample"}) || r.PublishesKinds("mac.torch", []string{"echo/echo"}) {
+		t.Fatal("PublishesKinds")
+	}
+	_ = r.SetHost("mac.torch", host("mac", "torch", t0.Add(-time.Minute)))
+	if _, ok := r.Palette(t0)["qwen-image/sample"]; ok {
+		t.Fatal("a stale host's kinds are not in the palette")
+	}
+	if _, ok := r.Schemas()["qwen-image/sample"]; !ok {
+		t.Fatal("but the registry still has their schemas")
+	}
+}

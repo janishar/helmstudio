@@ -53,8 +53,10 @@ def broken(edit) -> list[str]:
         ),
         (
             lambda n: n["echo"]["in"].update(text="prompt.image"),
-            "echo.text: wants Text, prompt.image is missing",
+            "echo.text: prompt has no output 'image'",
         ),
+        (lambda n: n["echo"].update(bypass=True), "echo: a bypassed node reached the runner"),
+        (lambda n: n.pop("output"), "the graph has no output node"),
         (
             lambda n: n["output"]["in"].update(media="prompt.text"),
             "output.media: wants Image, prompt.text is Text",
@@ -79,7 +81,7 @@ def test_validate_reports_a_cycle():
         "a": {"kind": "t/t", "params": {}, "in": {"x": "b.x"}},
         "b": {"kind": "t/t", "params": {}, "in": {"x": "a.x"}},
     }
-    assert any(e.startswith("the graph has a cycle") for e in graph.validate(n, schemas))
+    assert {"a: on a cycle", "b: on a cycle"} <= set(graph.validate(n, schemas))
 
 
 def ctx(check=lambda: None, owner="a", residency=None) -> Ctx:
@@ -199,15 +201,14 @@ async def test_cache_reruns_only_what_a_change_reaches(tmp_path, monkeypatch):
     assert len(q.loads) == len(set(q.loads)) == 6
 
 
-def test_cache_keeps_only_the_most_recent_owners():
+def test_cache_drops_the_least_recently_used(monkeypatch):
+    monkeypatch.setattr(Cache, "SIZE", 3)
     cache = Cache()
-    for owner in "abcde":
-        cache[(owner, "encode")] = ("k", {})
-        cache[(owner, "sample")] = ("k", {})
-    cache[("b", "encode")] = ("k2", {})  # b stores again: the most recent
-    cache[("f", "encode")] = ("k", {})
-    assert sorted({o for o, _ in cache}) == ["b", "d", "e", "f"]
-    assert ("b", "sample") in cache
+    for key in "abc":
+        cache[key] = {}
+    assert cache.get("a") == {}  # a used: b is now the oldest
+    cache["d"] = {}
+    assert list(cache) == ["c", "a", "d"]
 
 
 async def test_cache_key_changes_with_the_weights_files(tmp_path, monkeypatch):
@@ -230,7 +231,7 @@ async def test_model_input_of_another_type_is_rejected_by_validate(tmp_path, mon
     q = FakeQwen(tmp_path, monkeypatch)
     nodes = qwen_nodes()
     nodes["sample"]["in"]["cond"] = "prompt.text"
-    assert "sample.cond: wants Conditioning, prompt.text is Text" in graph.validate(
+    assert "sample.cond: wants Conditioning[qwen-image], prompt.text is Text" in graph.validate(
         nodes, q.schemas
     )
 

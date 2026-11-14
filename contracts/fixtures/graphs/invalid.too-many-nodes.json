@@ -1,0 +1,219 @@
+{
+  "description": "66 nodes: more than 64; nothing else is checked (prompt_1 is of an unknown kind of another family)",
+  "workflow": {
+    "title": "Too many",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt_1": {
+        "kind": "other/thing"
+      },
+      "prompt_2": {
+        "kind": "prompt"
+      },
+      "prompt_3": {
+        "kind": "prompt"
+      },
+      "prompt_4": {
+        "kind": "prompt"
+      },
+      "prompt_5": {
+        "kind": "prompt"
+      },
+      "prompt_6": {
+        "kind": "prompt"
+      },
+      "prompt_7": {
+        "kind": "prompt"
+      },
+      "prompt_8": {
+        "kind": "prompt"
+      },
+      "prompt_9": {
+        "kind": "prompt"
+      },
+      "prompt_10": {
+        "kind": "prompt"
+      },
+      "prompt_11": {
+        "kind": "prompt"
+      },
+      "prompt_12": {
+        "kind": "prompt"
+      },
+      "prompt_13": {
+        "kind": "prompt"
+      },
+      "prompt_14": {
+        "kind": "prompt"
+      },
+      "prompt_15": {
+        "kind": "prompt"
+      },
+      "prompt_16": {
+        "kind": "prompt"
+      },
+      "prompt_17": {
+        "kind": "prompt"
+      },
+      "prompt_18": {
+        "kind": "prompt"
+      },
+      "prompt_19": {
+        "kind": "prompt"
+      },
+      "prompt_20": {
+        "kind": "prompt"
+      },
+      "prompt_21": {
+        "kind": "prompt"
+      },
+      "prompt_22": {
+        "kind": "prompt"
+      },
+      "prompt_23": {
+        "kind": "prompt"
+      },
+      "prompt_24": {
+        "kind": "prompt"
+      },
+      "prompt_25": {
+        "kind": "prompt"
+      },
+      "prompt_26": {
+        "kind": "prompt"
+      },
+      "prompt_27": {
+        "kind": "prompt"
+      },
+      "prompt_28": {
+        "kind": "prompt"
+      },
+      "prompt_29": {
+        "kind": "prompt"
+      },
+      "prompt_30": {
+        "kind": "prompt"
+      },
+      "prompt_31": {
+        "kind": "prompt"
+      },
+      "prompt_32": {
+        "kind": "prompt"
+      },
+      "prompt_33": {
+        "kind": "prompt"
+      },
+      "prompt_34": {
+        "kind": "prompt"
+      },
+      "prompt_35": {
+        "kind": "prompt"
+      },
+      "prompt_36": {
+        "kind": "prompt"
+      },
+      "prompt_37": {
+        "kind": "prompt"
+      },
+      "prompt_38": {
+        "kind": "prompt"
+      },
+      "prompt_39": {
+        "kind": "prompt"
+      },
+      "prompt_40": {
+        "kind": "prompt"
+      },
+      "prompt_41": {
+        "kind": "prompt"
+      },
+      "prompt_42": {
+        "kind": "prompt"
+      },
+      "prompt_43": {
+        "kind": "prompt"
+      },
+      "prompt_44": {
+        "kind": "prompt"
+      },
+      "prompt_45": {
+        "kind": "prompt"
+      },
+      "prompt_46": {
+        "kind": "prompt"
+      },
+      "prompt_47": {
+        "kind": "prompt"
+      },
+      "prompt_48": {
+        "kind": "prompt"
+      },
+      "prompt_49": {
+        "kind": "prompt"
+      },
+      "prompt_50": {
+        "kind": "prompt"
+      },
+      "prompt_51": {
+        "kind": "prompt"
+      },
+      "prompt_52": {
+        "kind": "prompt"
+      },
+      "prompt_53": {
+        "kind": "prompt"
+      },
+      "prompt_54": {
+        "kind": "prompt"
+      },
+      "prompt_55": {
+        "kind": "prompt"
+      },
+      "prompt_56": {
+        "kind": "prompt"
+      },
+      "prompt_57": {
+        "kind": "prompt"
+      },
+      "prompt_58": {
+        "kind": "prompt"
+      },
+      "prompt_59": {
+        "kind": "prompt"
+      },
+      "prompt_60": {
+        "kind": "prompt"
+      },
+      "prompt_61": {
+        "kind": "prompt"
+      },
+      "prompt_62": {
+        "kind": "prompt"
+      },
+      "prompt_63": {
+        "kind": "prompt"
+      },
+      "prompt_64": {
+        "kind": "prompt"
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt_1.text"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "too_many_nodes"
+    }
+  ]
+}

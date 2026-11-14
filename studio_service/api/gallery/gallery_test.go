@@ -244,7 +244,15 @@ func setup(t *testing.T) *fixture {
 	}
 	t.Cleanup(pool.Close)
 	f := &fixture{t: t, pool: pool, store: storage.NewMemory(), sessionID: utility.NewID(), runID: utility.NewID()}
-	f.service = NewService(pool, common.NewSigner("test-secret-0123456789", "http://kong", time.Hour), f.store, &registry.Registry{})
+	reg := &registry.Registry{}
+	find := func(_ context.Context, _ common.Caller, id string) (registry.Workflow, *int, error) {
+		workflow, ok := reg.Workflow(id)
+		if !ok {
+			return workflow, nil, errNotFound
+		}
+		return workflow, nil, nil
+	}
+	f.service = NewService(pool, common.NewSigner("test-secret-0123456789", "http://kong", time.Hour), f.store, reg, find)
 	f.system(`INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, 'S')`, f.sessionID, userA)
 	f.system(`INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status) VALUES ($1, $2, $3, 'echo', 'fake', '{}', 'running')`,
 		f.runID, userA, f.sessionID)

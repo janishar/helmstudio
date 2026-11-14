@@ -1,0 +1,137 @@
+/* Graph view cards, ports and wires (docs/mock/Graph.dc.html: .n, .h, .r, .pi, .po). Loaded only with the graph. */
+.gv .react-flow__pane {
+  cursor: default;
+}
+.gv .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+.gn {
+  position: relative;
+  width: 172px;
+  box-sizing: border-box;
+  padding-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px 20px 20px 8px;
+  background: linear-gradient(180deg, var(--s3), var(--s1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent);
+  color: var(--t1);
+  font-size: 12px;
+  line-height: 16px;
+}
+.gn[data-state="running"] {
+  border-color: var(--a1);
+}
+.gn[data-bypass] {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.gn[data-bad] {
+  border-color: var(--bad);
+}
+.react-flow__node.selected > .gn,
+.react-flow__node:focus-visible > .gn {
+  outline: 2px solid var(--t2);
+  outline-offset: 2px;
+}
+.react-flow__node:focus-visible {
+  outline: none;
+}
+.gn-h {
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid var(--s5);
+  font-size: 13px;
+  font-weight: 600;
+}
+.gn-h > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gn-h > span + span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--t2);
+}
+.gn-r {
+  position: relative;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 14px;
+  color: var(--t1b);
+  white-space: nowrap;
+}
+.gn-r b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+  font-family: var(--font-mono);
+  color: var(--t2);
+}
+.gn-r [data-opt] {
+  color: var(--t2);
+}
+.gn-t {
+  position: relative;
+  height: 22px;
+  padding: 2px 14px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--t2);
+}
+.gn-p {
+  padding: 4px 14px 0;
+  color: var(--bad);
+  font-size: 11px;
+  line-height: 14px;
+}
+.gv .react-flow__handle.gp {
+  top: 8px;
+  width: 10px;
+  height: 10px;
+  min-width: 0;
+  min-height: 0;
+  transform: none;
+  border: 2px solid var(--s2);
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+.gv .react-flow__handle.gp.react-flow__handle-left {
+  left: -6px;
+}
+.gv .react-flow__handle.gp.react-flow__handle-right {
+  right: -6px;
+  left: auto;
+}
+.gv .react-flow__handle.gp[data-bad] {
+  border-color: var(--bad);
+}
+.gv .react-flow__handle.gp[data-dim] {
+  opacity: 0.2;
+  box-shadow: none;
+}
+.gv .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3.5px;
+}
+.gv .react-flow__connection-path {
+  stroke: var(--t2);
+  stroke-width: 2;
+}

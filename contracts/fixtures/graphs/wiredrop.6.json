@@ -1,0 +1,44 @@
+{
+  "description": "from enhance's prompt input (Text) in a test workflow, picking Enhance: the new node feeds enhance, so its own prompt is auto-wired from prompt, never from enhance (a cycle)",
+  "workflow": {
+    "title": "Enhance",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt"
+      },
+      "enhance": {
+        "kind": "test/enhance",
+        "in": {
+          "prompt": "prompt.text"
+        }
+      },
+      "noise": {
+        "kind": "test/noise"
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "noise.image"
+        }
+      }
+    }
+  },
+  "from": {
+    "node": "enhance",
+    "port": "prompt",
+    "side": "input"
+  },
+  "expect": [
+    "test/enhance",
+    "prompt"
+  ],
+  "pick": {
+    "id": "enhance_2",
+    "kind": "test/enhance"
+  },
+  "expect_in": {
+    "prompt": "prompt.text"
+  }
+}

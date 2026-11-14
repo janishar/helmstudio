@@ -181,7 +181,11 @@ def test_rename_and_star(api, gallery):
 def test_reuse(api, gallery):
     take = gallery["takes"][1]
     reuse = ok(api.post(f"{STUDIO}/takes/{take['id']}/reuse"))
-    assert reuse == {"workflow_id": "echo", "inputs": take["made_with"]["inputs"]}
+    assert reuse == {
+        "workflow_id": "echo",
+        "inputs": take["made_with"]["inputs"],
+        "workflow_status": "current",
+    }
     run = start_run(api, gallery["session_id"], reuse["inputs"], reuse["workflow_id"])
     assert wait_run(api, run["id"])["status"] == "succeeded"  # ready to post as a RunRequest
     assert take_of_run(api, run["id"])["made_with"]["inputs"] == reuse["inputs"]

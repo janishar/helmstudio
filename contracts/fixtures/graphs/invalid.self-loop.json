@@ -1,0 +1,28 @@
+{
+  "description": "a node wired to itself is a cycle",
+  "workflow": {
+    "title": "Self loop",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "mix": {
+        "kind": "test/mix",
+        "in": {
+          "a": "mix.image"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "mix.image"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "cycle",
+      "node": "mix"
+    }
+  ]
+}

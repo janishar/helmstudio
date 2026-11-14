@@ -1,0 +1,62 @@
+{
+  "description": "Text into a float param, an Int into a bool param (not wireable), a wired param placed in the studio",
+  "workflow": {
+    "title": "Bad param wires",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt"
+      },
+      "count": {
+        "kind": "test/count"
+      },
+      "enhance": {
+        "kind": "test/enhance",
+        "in": {
+          "prompt": "prompt.text",
+          "think": "count.value"
+        }
+      },
+      "noise": {
+        "kind": "test/noise"
+      },
+      "mix": {
+        "kind": "test/mix",
+        "in": {
+          "a": "noise.image",
+          "blend": "prompt.text",
+          "strength": "count.value"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "mix.image"
+        }
+      }
+    },
+    "studio": {
+      "quick": [
+        "mix.strength"
+      ]
+    }
+  },
+  "problems": [
+    {
+      "code": "unknown_input",
+      "node": "enhance",
+      "port": "think"
+    },
+    {
+      "code": "type_mismatch",
+      "node": "mix",
+      "port": "blend"
+    },
+    {
+      "code": "studio_unknown_path",
+      "node": "mix",
+      "param": "strength"
+    }
+  ]
+}

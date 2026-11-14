@@ -3,11 +3,15 @@
 // schemas; progress comes live from the session's event stream (SSE through the BFF, ?since= polling when the stream
 // can't be held).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { Check, ChevronDown, Cpu, Maximize, Minus, Plus, Star } from "lucide-react";
 import { FullScreen, useFullScreenKey } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { takeDrop, useRefUploads } from "@/components/create/refs";
+import { WorkflowPicker } from "@/components/create/workflows";
+import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/lib/graph";
+import { studioView } from "@/lib/studio";
 import { api, message, ok, okOr, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import {
@@ -36,6 +40,7 @@ import {
   refIds,
   targetLabel,
 } from "@/lib/refs";
+import type { GraphProps } from "@/components/graph/graph";
 import {
   buildInputs,
   fields as fieldsOf,
@@ -54,6 +59,37 @@ type SessionEvent = S<"SessionEvent">;
 
 /** The most runs one Generate queues (consecutive seeds). */
 const MAX_QUEUE = 4;
+
+/** Graph view: @xyflow/react and elkjs load only when it is opened. */
+const GraphView = dynamic<GraphProps>(
+  () => import("@/components/graph/graph").then((m) => m.GraphView),
+  {
+    ssr: false,
+    loading: () => (
+      <main className="flex min-w-0 flex-[999_1_560px] items-center justify-center p-5 text-t2">
+        Loading the graph…
+      </main>
+    ),
+  },
+);
+
+/** The node palette (GET /v1/studio/nodes), read once Create has a workflow; null until then or when studio can't
+ * answer (an older studio: the graph then shows a workflow's own kinds). */
+function usePalette(when: string | null) {
+  const [p, setP] = useState<{ map: Palette; groups: S<"NodePalette">["groups"] } | null>(null);
+  // read again each time `when` changes (Graph opened on a workflow): runners come and go
+  useEffect(() => {
+    if (!when) return;
+    let stop = false;
+    ok(api.GET("/v1/studio/nodes"))
+      .then((r) => !stop && setP({ map: paletteOf(r), groups: r.groups }))
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [when]);
+  return p;
+}
 
 /** Calls `onEvent` for each new event of the session (see followSession). */
 function useSessionEvents(sessionId: string | null, onEvent: (e: SessionEvent) => void) {
@@ -131,6 +167,9 @@ export function Create({
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(1);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [view, setView] = useState<"studio" | "graph">("studio");
+  // the graph's problems for the document it holds (its own check merged with studio's)
+  const [lifted, setLifted] = useState<{ id: string; problems: Problem[] } | null>(null);
   const hosts = useHosts();
   // the run list as the event handler last left it, so an event and a fetch never fold onto a stale copy, and the
   // open session, so a late answer about another one is dropped
@@ -171,6 +210,18 @@ export function Create({
   useEffect(() => {
     if (load !== serverLoad.current) load();
   }, [load]);
+
+  // ⌘\ (Ctrl+\) switches Studio and Graph (plan 05-ui.md 8.2)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
+        e.preventDefault();
+        setView((v) => (v === "graph" ? "studio" : "graph"));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // the open session is in the URL, without a server round trip
   useEffect(() => {
@@ -291,8 +342,38 @@ export function Create({
     (runs === null && sessionId ? "" : (known(runs?.[0]?.workflow_id) ?? workflows?.[0]?.id ?? ""));
   const workflow = workflows?.find((w) => w.id === workflowId);
   const all = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
+  const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
-  const fields = visible(all, raws);
+  const fields = visible(layout ? layout.shown : all, raws);
+  const palette = usePalette(
+    view === "graph" ? `graph ${workflowId}` : workflow?.source === "mine" ? "mine" : null,
+  );
+  const own = useMemo(
+    () =>
+      workflow?.source === "mine" && palette ? graphProblems(docOf(workflow), palette.map) : [],
+    [workflow, palette],
+  );
+  // a workflow of one's own runs only without problems (studio refuses it with 422); templates are not checked
+  const problems = lifted && lifted.id === workflow?.id ? lifted.problems : own;
+  const blocked = workflow?.source === "mine" ? problems.length : 0;
+  const onProblems = useCallback(
+    (id: string, ps: Problem[]) => setLifted({ id, problems: ps }),
+    [],
+  );
+  /** A workflow saved, copied, renamed or reloaded: into the list (new ones first among one's own) and open. */
+  const onWorkflow = useCallback((w: S<"Workflow">, open: boolean) => {
+    setWorkflows((list) =>
+      list?.some((x) => x.id === w.id)
+        ? list.map((x) => (x.id === w.id ? w : x))
+        : [
+            ...(list ?? []).filter((x) => x.source !== "mine"),
+            w,
+            ...(list ?? []).filter((x) => x.source === "mine"),
+          ],
+    );
+    if (open) setChosen(w.id);
+  }, []);
   const seedField = fields.find((f) => f.param.type === "seed");
   const change = (key: string, u: Update) => {
     setRaws((r) => ({ ...r, [key]: typeof u === "function" ? u(r[key]) : u }));
@@ -341,12 +422,24 @@ export function Create({
   const sending = useRef(false);
   async function generate(e: React.FormEvent) {
     e.preventDefault();
-    if (!workflow || sending.current) return;
+    if (workflow && !blocked) await send(workflow, fields);
+  }
+  /** Queues runs of `w` (Graph view passes the version it just saved) with the form's settings for it. */
+  async function send(w: S<"Workflow">, fields: Field[]) {
+    if (sending.current) return;
     const built = buildInputs(fields, raws);
-    const queued = queueInputs(fields, built.inputs, seedField ? count : 1);
+    const queued = queueInputs(
+      fields,
+      built.inputs,
+      fields.some((f) => f.param.type === "seed") ? count : 1,
+    );
     const errs = { ...built.errors, ...queued.errors };
     setErrors(errs);
-    if (Object.keys(errs).length) return;
+    if (Object.keys(errs).length) {
+      if (view === "graph")
+        setError("Some Studio settings are not valid: open Studio to fix them.");
+      return;
+    }
     sending.current = true;
     setBusy(true);
     setError("");
@@ -362,7 +455,7 @@ export function Create({
         const run = await ok(
           api.POST("/v1/studio/sessions/{session_id}/runs", {
             params: { path: { session_id: sid } },
-            body: { workflow_id: workflow.id, inputs: each },
+            body: { workflow_id: w.id, inputs: each },
           }),
         );
         if (sid === sessionRef.current) put(mergeRuns(runsRef.current, [run]));
@@ -408,94 +501,141 @@ export function Create({
   const host = hosts?.find((h) => h.env === workflow?.env && h.state !== "offline" && h.memory);
   const session = sessions?.find((s) => s.id === sessionId);
 
+  const topBar = (badge?: string) => (
+    <div className="flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        popoverTarget="sessions"
+        aria-label={`Session: ${session?.title ?? "new"}. Change session`}
+        className="flex h-10 max-w-[40ch] min-w-0 items-center gap-2 rounded-[10px] px-3 font-display text-lg font-bold"
+        style={{ anchorName: "--sessions" } as React.CSSProperties}
+      >
+        <span className="truncate">{session?.title ?? "New session"}</span>
+        <ChevronDown size={16} strokeWidth={2} aria-hidden className="shrink-0" />
+      </button>
+      <div
+        id="sessions"
+        popover="auto"
+        role="dialog"
+        aria-label="Sessions"
+        className="pop w-72"
+        style={
+          {
+            positionAnchor: "--sessions",
+            positionArea: "bottom span-right",
+            marginTop: 6,
+          } as React.CSSProperties
+        }
+      >
+        <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
+          <button
+            type="button"
+            className="chip bevel mb-1 justify-center rounded-[10px] bg-s4"
+            onClick={() => {
+              document.getElementById("sessions")?.hidePopover();
+              newSession().catch((e) => setError(message(e)));
+            }}
+          >
+            <Plus size={14} aria-hidden /> New session
+          </button>
+          {sessions?.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              aria-current={s.id === sessionId || undefined}
+              className="truncate rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-[current]:bg-s4 aria-[current]:font-semibold"
+              onClick={() => {
+                document.getElementById("sessions")?.hidePopover();
+                if (s.id !== sessionId) open(s.id);
+              }}
+            >
+              {s.title}
+            </button>
+          ))}
+        </div>
+      </div>
+      {workflows && workflows.length > 0 && (
+        <WorkflowPicker
+          workflows={workflows}
+          current={workflow}
+          label={badge ?? (workflow ? editLabel(workflow.title, refs) : "Workflow")}
+          onPick={(id) => {
+            setChosen(id);
+            setOpenKey(null);
+          }}
+          onChanged={(w) => onWorkflow(w, false)}
+          onDeleted={(id) => {
+            setWorkflows((list) => list?.filter((x) => x.id !== id) ?? null);
+            if (chosen === id) setChosen("");
+          }}
+          onError={setError}
+        />
+      )}
+      <div className="grow" />
+      {workflow && (
+        <div
+          role="group"
+          aria-label="View"
+          className="flex rounded-[10px] border border-s3 bg-s1 p-[3px]"
+        >
+          {(["studio", "graph"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={view === v}
+              title={`${v === "studio" ? "Studio" : "Graph"} (⌘ or Ctrl + \\)`}
+              onClick={() => setView(v)}
+              className="h-[34px] rounded-lg px-4 font-medium text-t2 aria-pressed:bg-s5 aria-pressed:text-t1"
+            >
+              {v === "studio" ? "Studio" : "Graph"}
+            </button>
+          ))}
+        </div>
+      )}
+      {host?.memory && <Memory host={host} memory={host.memory} />}
+    </div>
+  );
+
+  if (view === "graph" && workflow)
+    return (
+      <>
+        <GraphView
+          workflow={workflow}
+          palette={palette}
+          topBar={(badge) => (
+            <>
+              {topBar(badge)}
+              {error && <ErrorNote>{error}</ErrorNote>}
+            </>
+          )}
+          overrides={buildInputs(fields, raws).inputs}
+          onParamSet={(key) =>
+            setRaws((r) => {
+              const next = { ...r };
+              delete next[key];
+              return next;
+            })
+          }
+          onWorkflow={onWorkflow}
+          onProblems={onProblems}
+          onError={setError}
+          run={shown}
+          track={shown && tracks[shown.id]}
+          take={shownTake}
+          generate={(w) => {
+            const fs = fieldsOf(w);
+            return send(w, visible(studioView(w, fs)?.shown ?? fs, raws));
+          }}
+          busy={busy}
+          anyActive={anyActive}
+        />
+      </>
+    );
+
   return (
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            popoverTarget="sessions"
-            aria-label={`Session: ${session?.title ?? "new"}. Change session`}
-            className="flex h-10 max-w-[40ch] min-w-0 items-center gap-2 rounded-[10px] px-3 font-display text-lg font-bold"
-            style={{ anchorName: "--sessions" } as React.CSSProperties}
-          >
-            <span className="truncate">{session?.title ?? "New session"}</span>
-            <ChevronDown size={16} strokeWidth={2} aria-hidden className="shrink-0" />
-          </button>
-          <div
-            id="sessions"
-            popover="auto"
-            role="dialog"
-            aria-label="Sessions"
-            className="pop w-72"
-            style={
-              {
-                positionAnchor: "--sessions",
-                positionArea: "bottom span-right",
-                marginTop: 6,
-              } as React.CSSProperties
-            }
-          >
-            <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
-              <button
-                type="button"
-                className="chip bevel mb-1 justify-center rounded-[10px] bg-s4"
-                onClick={() => {
-                  document.getElementById("sessions")?.hidePopover();
-                  newSession().catch((e) => setError(message(e)));
-                }}
-              >
-                <Plus size={14} aria-hidden /> New session
-              </button>
-              {sessions?.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  aria-current={s.id === sessionId || undefined}
-                  className="truncate rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-[current]:bg-s4 aria-[current]:font-semibold"
-                  onClick={() => {
-                    document.getElementById("sessions")?.hidePopover();
-                    if (s.id !== sessionId) open(s.id);
-                  }}
-                >
-                  {s.title}
-                </button>
-              ))}
-            </div>
-          </div>
-          {workflows && workflows.length > 1 ? (
-            <span className="relative inline-flex items-center text-t2">
-              <select
-                aria-label="Workflow"
-                className="appearance-none rounded-full border-0 bg-s2 py-1 pr-7 pl-2.5 text-[12px] font-medium text-t2"
-                value={workflowId}
-                onChange={(e) => {
-                  setChosen(e.target.value);
-                  setOpenKey(null);
-                }}
-              >
-                {workflows.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.id === workflowId ? editLabel(w.title, refs) : w.title}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={12}
-                aria-hidden
-                className="pointer-events-none absolute right-2.5"
-              />
-            </span>
-          ) : (
-            workflow && (
-              <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
-                {editLabel(workflow.title, refs)}
-              </span>
-            )
-          )}
-          <div className="grow" />
-          {host?.memory && <Memory host={host} memory={host.memory} />}
-        </div>
+        {topBar()}
 
         {error && (
           <ErrorNote
@@ -601,7 +741,18 @@ export function Create({
               />
             </div>
           )}
-          <TextFields fields={fields} raws={raws} errors={errors} onChange={change} />
+          <TextFields
+            fields={layout ? fields.filter((f) => layout.text.includes(f)) : fields}
+            raws={raws}
+            errors={errors}
+            onChange={change}
+          />
+          {blocked > 0 && (
+            <p role="status" className="text-[12px] text-bad">
+              This workflow has {blocked} problem{blocked === 1 ? "" : "s"}: open Graph to fix{" "}
+              {blocked === 1 ? "it" : "them"}.
+            </p>
+          )}
           {fields.some((f) => f.param.type !== "text" && errors[f.key]) && (
             <ErrorNote>Some settings are not valid: see the Inspector.</ErrorNote>
           )}
@@ -648,10 +799,16 @@ export function Create({
               type="submit"
               title="Generate (⌘ or Ctrl + Enter)"
               className="key flex h-14 flex-col items-center justify-center gap-px px-6"
-              disabled={!workflow || busy}
+              disabled={!workflow || busy || blocked > 0}
             >
               <span className="text-sm">
-                {busy ? "Sending…" : anyActive ? "Add to queue" : "Generate"}
+                {busy
+                  ? "Sending…"
+                  : blocked
+                    ? `${blocked} problem${blocked === 1 ? "" : "s"}`
+                    : anyActive
+                      ? "Add to queue"
+                      : "Generate"}
               </span>
               {took != null && !busy && (
                 <span className="mono text-[11px] font-medium">last took {clock(took)}</span>
@@ -666,6 +823,10 @@ export function Create({
         className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
       >
         <Inspector
+          groups={layout?.groups.map((g) => ({
+            title: g.title,
+            fields: g.fields.filter((f) => fields.includes(f)),
+          }))}
           fields={fields}
           raws={raws}
           errors={errors}

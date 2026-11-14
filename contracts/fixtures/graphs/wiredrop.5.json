@@ -1,0 +1,21 @@
+{
+  "description": "from an int param used as an input (count.value feeds params): kinds with an Int output",
+  "workflow": {
+    "title": "Drop",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "mix": {
+        "kind": "test/mix"
+      }
+    }
+  },
+  "from": {
+    "node": "mix",
+    "port": "strength",
+    "side": "input"
+  },
+  "expect": [
+    "test/count"
+  ]
+}

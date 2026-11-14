@@ -52,9 +52,9 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		} else if open >= MaxOpenBatches {
 			return network.NewConflictError(fmt.Sprintf("You have %d unfinished batches; wait for one to finish.", MaxOpenBatches), nil)
 		}
-		workflow, ok := s.registry.Workflow(body.WorkflowID)
-		if !ok {
-			return network.NewUnprocessableError("unknown workflow "+body.WorkflowID, nil)
+		workflow, version, err := s.runnable(ctx, tx, body.WorkflowID)
+		if err != nil {
+			return err
 		}
 		rows, detail := expand(workflow, body, randomSeedStart)
 		if detail != "" {
@@ -67,7 +67,7 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		}
 		nodes, _ := resolve(workflow, rows[0])
 		graph, _ := json.Marshal(nodes)
-		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph}
+		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			return network.NewUnprocessableError(reason, nil)
 		}
@@ -94,8 +94,8 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		}
 		batchID := utility.NewID()
 		if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
-			inputs) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, batchID, caller.ID, sessionID, title, workflow.ID, workflow.Title,
-			workflow, base); err != nil {
+			inputs, workflow_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, batchID, caller.ID, sessionID, title,
+			workflow.ID, workflow.Title, workflow, base, version); err != nil {
 			return err
 		}
 		numbers := make([]int, len(rows))
@@ -111,7 +111,7 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		if err := appendBatchEvent(ctx, tx, batchID, "batch", 0); err != nil {
 			return err
 		}
-		err := messaging.Enqueue(ctx, tx, messaging.Command{JobID: batchID, OwnerID: caller.ID, Attempt: 1,
+		err = messaging.Enqueue(ctx, tx, messaging.Command{JobID: batchID, OwnerID: caller.ID, Attempt: 1,
 			Data: message.Submit{BatchID: batchID, SessionID: sessionID, Inputs: base, Rows: submitRows,
 				Snapshot: message.Snapshot{WorkflowID: workflow.ID, Workflow: message.SnapshotWorkflow{ID: workflow.ID,
 					Title: workflow.Title, Family: workflow.Family, Env: workflow.Env, Nodes: workflow.Nodes}}}})
@@ -501,8 +501,10 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			Status    string
 			Control   string
 			Snapshot  json.RawMessage
+			Version   *int // a user workflow's version at Submit
 		}
-		batch, err := one[batchRecord](ctx, tx, `SELECT owner_id::text, session_id::text, status, control, snapshot FROM batches
+		batch, err := one[batchRecord](ctx, tx, `SELECT owner_id::text, session_id::text, status, control, snapshot,
+			workflow_version FROM batches
 			WHERE id = $1 FOR UPDATE`, req.BatchID) // serialises two asks under one key
 		var workflow registry.Workflow
 		if err == nil {
@@ -543,7 +545,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				refused = invalid(detail)
 				return nil
 			}
-			if run, err = createBatchRun(ctx, tx, s.registry, workflow, nodes, batch.Status, batch.Control, req); err != nil {
+			if run, err = createBatchRun(ctx, tx, s.registry, workflow, batch.Version, nodes, batch.Status, batch.Control, req); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -565,22 +567,22 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 
 // createBatchRun stores the run of a batch row's step: cancelled for a stopped batch, failed with no eligible host,
 // else queued (lane batch); its status event goes to the session's log, and a terminal one to pipelines.
-func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, workflow registry.Workflow,
+func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, workflow registry.Workflow, version *int,
 	nodes map[string]registry.Node, batchStatus, control string, req *message.RunsCreate) (model.Run, error) {
 	graph, _ := json.Marshal(nodes)
 	status, failure := "queued", (*string)(nil)
 	if control == "stop" || batchStatus == "stopped" {
 		status = "cancelled"
-	} else if _, _, reason := eligible(reg, reg.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph},
-		time.Now()); reason != "" {
+	} else if _, _, reason := eligible(reg, reg.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph,
+		WorkflowVersion: version}, time.Now()); reason != "" {
 		status, failure = "failed", &reason
 	}
 	inputs, _ := json.Marshal(req.Inputs)
 	run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-		nodes, lane, batch_id, batch_row, idempotency_key, finished_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END)
-		RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
-		failure, graph, req.BatchID, req.Row, req.IdempotencyKey)
+		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
+		$13, $14) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
+		failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title)
 	if err != nil {
 		return run, err
 	}

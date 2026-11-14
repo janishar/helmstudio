@@ -123,7 +123,7 @@ func setup(t *testing.T) *env {
 	}
 	e.service = studio.NewService(pool, signer, e.registry, cancel, e.store)
 	router.LoadControllers(studio.NewController(e.service, recheck, shutdown),
-		gallery.NewController(gallery.NewService(pool, signer, e.store, e.registry)))
+		gallery.NewController(gallery.NewService(pool, signer, e.store, e.registry, e.service.FindWorkflow)))
 	e.srv = httptest.NewServer(router.Engine())
 	t.Cleanup(e.srv.Close)
 	return e

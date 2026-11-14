@@ -1,0 +1,102 @@
+{
+  "description": "a Model handle from qwen-image into test/lora and back: Model[qwen-image] is not Model[test]",
+  "workflow": {
+    "title": "Handle across families",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "canvas": {
+        "kind": "canvas",
+        "params": {
+          "mode": "auto",
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "model": {
+        "kind": "qwen-image/model",
+        "params": {
+          "variant": "base",
+          "precision": "int8"
+        }
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "transparent": false,
+          "refs": []
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "lora.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        },
+        "params": {
+          "steps": 40
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        },
+        "params": {
+          "tiled": "auto"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      },
+      "lora": {
+        "kind": "test/lora",
+        "in": {
+          "model": "model.model"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "wrong_family",
+      "node": "lora"
+    },
+    {
+      "code": "env_mismatch",
+      "node": "lora"
+    },
+    {
+      "code": "type_mismatch",
+      "node": "lora",
+      "port": "model"
+    },
+    {
+      "code": "type_mismatch",
+      "node": "sample",
+      "port": "model"
+    }
+  ]
+}

@@ -127,6 +127,22 @@ func TestEligible(t *testing.T) {
 	if slots, _, _ := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "turbo", "bf16"), t0); len(slots) != 1 || slots["gpu"] == "" {
 		t.Fatal("mac lacks turbo", slots)
 	}
+	// two model nodes: every variant must be present, and resident only when all are (whatever the map order)
+	two := run("qwen-image", "torch", "base", "bf16")
+	graph := map[string]registry.Node{}
+	_ = json.Unmarshal(two.Nodes, &graph)
+	graph["model_2"] = registry.Node{Kind: "qwen-image/model", Params: map[string]any{"variant": "turbo", "precision": "bf16"}}
+	two.Nodes, _ = json.Marshal(graph)
+	for range 20 {
+		if slots, resident, _ := eligible(reg, reg.Hosts(), two, t0); len(slots) != 1 || slots["gpu"] == "" || resident["gpu"] {
+			t.Fatal("mac lacks model_2's turbo", slots, resident)
+		}
+	}
+	graph["model_2"] = graph["model"]
+	two.Nodes, _ = json.Marshal(graph)
+	if _, resident, _ := eligible(reg, reg.Hosts(), two, t0); !resident["mac"] {
+		t.Fatal("both base bf16: resident on mac")
+	}
 	_ = reg.SetHost("gpu.torch", nil)
 	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "turbo", "bf16"), t0); reason !=
 		"model qwen-image variant turbo is not present on any live host for env torch" {
@@ -141,6 +157,17 @@ func TestEligible(t *testing.T) {
 	}
 	echo := model.Run{WorkflowID: "echo", Env: "fake", Nodes: json.RawMessage(`{"echo": {"kind": "echo/echo", "params": {}}}`)}
 	if slots, _, reason := eligible(reg, reg.Hosts(), echo, t0); reason != "" || slots["fake"] != "fake" {
+		t.Fatal(slots, reason)
+	}
+	// a user workflow's run: the host must publish every kind of its graph, not the workflow id
+	version := 1
+	mine := model.Run{WorkflowID: "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88", Env: "fake", Nodes: echo.Nodes, WorkflowVersion: &version}
+	if _, _, reason := eligible(reg, reg.Hosts(), mine, t0); reason != "no live host for env fake" {
+		t.Fatal("echo/echo is not in fake's nodes yet:", reason)
+	}
+	_ = reg.SetRegistry("fake.fake.nodes", []byte(`{"nodes": [{"kind": "echo/echo", "title": "Echo", "family": "echo",
+		"params": [], "inputs": [], "outputs": []}]}`))
+	if slots, _, reason := eligible(reg, reg.Hosts(), mine, t0); reason != "" || slots["fake"] != "fake" {
 		t.Fatal(slots, reason)
 	}
 }

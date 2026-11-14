@@ -16,8 +16,9 @@ import (
 )
 
 // resolve returns the workflow's graph with every param of every node filled: the node schema's default, then the
-// workflow's own value, then the run's input "<node id>.<param>". The second result is the 422 detail of the first bad
-// input (in key order), "" when all are good.
+// workflow's own value, then the run's input "<node id>.<param>" (or "<node id>.bypass" for a bypassable node). Bypassed
+// nodes are then spliced out and positions dropped: the graph is what a command carries. The second result is the 422
+// detail of the first bad input (in key order), "" when all are good.
 func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]registry.Node, string) {
 	nodes := map[string]registry.Node{}
 	for id, node := range workflow.Nodes {
@@ -28,24 +29,61 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 				params[param.Name] = value
 			}
 		}
-		nodes[id] = registry.Node{Kind: node.Kind, Params: params, In: maps.Clone(node.In)}
+		nodes[id] = registry.Node{Kind: node.Kind, Params: params, In: maps.Clone(node.In), Bypass: node.Bypass}
 	}
 	for _, key := range slices.Sorted(maps.Keys(inputs)) {
+		nodeID, name, _ := strings.Cut(key, ".")
+		if node, ok := nodes[nodeID]; ok && name == "bypass" {
+			bypass, isBool := inputs[key].(bool)
+			switch {
+			case workflow.NodeSchemas[node.Kind].Passthrough() == nil:
+				return nil, key + ": " + nodeID + " cannot be bypassed"
+			case !isBool:
+				return nil, key + ": must be true or false"
+			}
+			node.Bypass = bypass
+			nodes[nodeID] = node
+			continue
+		}
 		param, ok := findParam(workflow, key)
 		if !ok {
 			return nil, key + ": not a param of this workflow"
+		}
+		if ref, wired := nodes[nodeID].In[name]; wired {
+			return nil, key + ": wired from " + ref + "; it cannot be set"
 		}
 		value, detail := check(param, inputs[key])
 		if detail != "" {
 			return nil, join(key, detail)
 		}
-		nodeID, _, _ := strings.Cut(key, ".")
 		nodes[nodeID].Params[param.Name] = value
 	}
-	// what a default or the workflow left unfilled: an image param needs an image, a rows param its min items
+	// what a default or the workflow left unfilled: an image param needs an image, a rows param its min items, a node
+	// its inputs (a bypassed one only those it passes through); a bypassed node's params do not matter
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
-		for _, param := range workflow.NodeSchemas[nodes[id].Kind].Params {
-			value := nodes[id].Params[param.Name]
+		node, schema := nodes[id], workflow.NodeSchemas[nodes[id].Kind]
+		needs := schema.Passthrough()
+		if !node.Bypass {
+			needs = nil
+			for _, input := range schema.Inputs {
+				if !input.Optional {
+					needs = append(needs, input.Name)
+				}
+			}
+		}
+		for _, input := range needs {
+			if _, wired := node.In[input]; !wired {
+				return nil, id + "." + input + ": not wired"
+			}
+		}
+		if node.Bypass {
+			continue
+		}
+		for _, param := range schema.Params {
+			value := node.Params[param.Name]
+			if _, wired := node.In[param.Name]; wired {
+				continue
+			}
 			switch {
 			case param.Type == "image" && value == nil:
 				return nil, id + "." + param.Name + ": an image is required"
@@ -56,6 +94,7 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 			}
 		}
 	}
+	splice(nodes, workflow.NodeSchemas)
 	return nodes, ""
 }
 

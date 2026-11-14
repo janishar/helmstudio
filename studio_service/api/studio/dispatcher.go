@@ -355,49 +355,68 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 	return snap, nil
 }
 
-// eligible returns where run may go now: each live host with the run's env whose runner publishes its workflow and,
-// when its models key lists the variants of the run's model family, has the run's variant present (host name → env),
-// and which of those hold the run's model resident. With none, reason says why.
+// eligible returns where run may go now: each live host with the run's env whose runner publishes its workflow (a user
+// workflow's run: every kind of its graph) and, for every <family>/model node whose family its models key lists, has
+// that variant present (host name → env), and which of those hold every such model resident. With none, reason says
+// why.
 func eligible(reg *registry.Registry, values []registry.Host, run model.Run, now time.Time) (map[string]string, map[string]bool, string) {
-	family, variant, precision, hasModel := runModel(run.Nodes)
-	slots, resident, missing := map[string]string{}, map[string]bool{}, false
+	var graph map[string]registry.Node
+	_ = json.Unmarshal(run.Nodes, &graph)
+	models := runModels(graph)
+	slots, resident, missing := map[string]string{}, map[string]bool{}, ""
+hosts:
 	for _, value := range values {
 		source := value.Host + "." + value.Env
-		if value.Env != run.Env || !value.Live(now) || !reg.Publishes(source, run.WorkflowID) {
+		if value.Env != run.Env || !value.Live(now) {
 			continue
 		}
-		if model, listed := reg.Model(source, family); hasModel && listed {
-			if !model.Has(variant) {
-				missing = true
+		if run.WorkflowVersion == nil && !reg.Publishes(source, run.WorkflowID) {
+			continue
+		}
+		if run.WorkflowVersion != nil && !reg.PublishesKinds(source, kinds(graph)) {
+			continue // a user workflow: the runner must publish every kind of its snapshot
+		}
+		all := len(models) > 0
+		for _, m := range models {
+			model, listed := reg.Model(source, m.family)
+			if !listed {
+				all = false
 				continue
 			}
-			resident[value.Host] = slices.ContainsFunc(value.Resident, func(r registry.Resident) bool {
-				return r.Model == model.ID && r.Variant == variant && r.Precision == precision
+			if !model.Has(m.variant) {
+				missing = cmp.Or(missing, fmt.Sprintf("model %s variant %s", m.family, m.variant))
+				continue hosts
+			}
+			all = all && slices.ContainsFunc(value.Resident, func(r registry.Resident) bool {
+				return r.Model == model.ID && r.Variant == m.variant && r.Precision == m.precision
 			})
 		}
+		resident[value.Host] = all
 		slots[value.Host] = value.Env
 	}
 	switch {
 	case len(slots) > 0:
 		return slots, resident, ""
-	case missing:
-		return nil, nil, fmt.Sprintf("model %s variant %s is not present on any live host for env %s", family, variant, run.Env)
+	case missing != "":
+		return nil, nil, fmt.Sprintf("%s is not present on any live host for env %s", missing, run.Env)
 	}
 	return nil, nil, "no live host for env " + run.Env
 }
 
-// runModel is the family, variant and precision of the run's <family>/model node; ok is false without one.
-func runModel(nodes json.RawMessage) (family, variant, precision string, ok bool) {
-	var graph map[string]registry.Node
-	_ = json.Unmarshal(nodes, &graph)
-	for _, node := range graph {
-		if family, found := strings.CutSuffix(node.Kind, "/model"); found {
-			variant, _ = node.Params["variant"].(string)
-			precision, _ = node.Params["precision"].(string)
-			return family, variant, precision, true
+// runModel is what a <family>/model node of a run loads.
+type runModel struct{ family, variant, precision string }
+
+// runModels lists the graph's <family>/model nodes by node id.
+func runModels(graph map[string]registry.Node) []runModel {
+	var out []runModel
+	for _, id := range slices.Sorted(maps.Keys(graph)) {
+		if family, found := strings.CutSuffix(graph[id].Kind, "/model"); found {
+			variant, _ := graph[id].Params["variant"].(string)
+			precision, _ := graph[id].Params["precision"].(string)
+			out = append(out, runModel{family, variant, precision})
 		}
 	}
-	return "", "", "", false
+	return out
 }
 
 // lineup orders waiting runs (oldest first) onto hosts the way the dispatcher releases them. Hosts take turns in

@@ -41,12 +41,15 @@ type Run struct {
 	BatchID    *string         // the batch it runs a row of (lane batch)
 	BatchRow   *int
 	Key        *string // its studio.runs.create idempotency key
+	// a user workflow's run: the version it ran and the workflow's title then (nil for a template)
+	WorkflowVersion *int
+	WorkflowTitle   *string
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
-	batch_id::text, batch_row, idempotency_key`
+	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title`
 
 // Output is a run_outputs row.
 type Output struct {
@@ -128,3 +131,20 @@ const BatchRowFrom = `SELECT br.n, br.attempt, br.inputs, ` + RowShown + `, br.r
 	FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id
 	LEFT JOIN LATERAL (SELECT array_agg(t.id::text ORDER BY u.ord) ids, array_agg(t.key ORDER BY u.ord) keys
 		FROM unnest(br.take_ids) WITH ORDINALITY u(id, ord) JOIN takes t ON t.id = u.id AND t.deleted_at IS NULL) tk ON true `
+
+// UserWorkflow is a user_workflows row.
+type UserWorkflow struct {
+	ID        string
+	Title     string
+	Family    string
+	Env       string
+	Nodes     json.RawMessage
+	Studio    json.RawMessage // null: the derived form
+	BasedOn   *string
+	Version   int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// UserWorkflowCols are the columns UserWorkflow scans, in order.
+const UserWorkflowCols = `id::text, title, family, env, nodes, studio, based_on, version, created_at, updated_at`

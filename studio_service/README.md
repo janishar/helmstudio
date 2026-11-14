@@ -1,7 +1,7 @@
 # studio_service
 
 The Go service behind Kong for `/v1/studio/*` ([contracts/openapi.yaml](../contracts/openapi.yaml), tag `studio`):
-sessions, workflows read from the runners' registry, runs, the per-session event log and stream, hosts. gomicro layout
+sessions, workflows (the runners' registry templates and each user's own), runs, the per-session event log and stream, hosts. gomicro layout
 on [helmgo](../helmgo/README.md) (through the `replace` in `go.mod`; image builds pass `../helmgo` as a named build context),
 `pgx` + `goose` on its own `studio` database with row-level security, NATS JetStream through `helmgo/micro`. Output
 links are signed `/files/…` URLs that [files_service](../files_service/README.md) serves (shared `FILE_URL_SECRET`).
@@ -60,6 +60,21 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
 - Lineage: the projector stores `take_parents` (input order, each once); deleted parents are left out on read;
   `GET /takes/{id}` adds `children`. `POST /takes/{id}/use` (gallery) fills a workflow's image input.
 
+## User workflows (API 1.5)
+
+- `user_workflows` (migration 00009, RLS on `owner_id`) holds a user's own documents (`nodes` with `bypass` and
+  `position`, `studio`, `based_on`, `version`); templates stay the registry's. `workflows.go` serves `GET/POST
+  /workflows`, `GET/PUT/PATCH/DELETE /workflows/{id}` (PUT checks `version`: 409 when stale; a template id is 409),
+  `POST /workflows/validate` and `GET /nodes` (`registry.PaletteGroups`: kinds of live hosts only). At most 200 per user.
+- `graph.go` is the graph rules (contracts/README.md "Graph rules"), tested on every `contracts/fixtures/graphs`
+  valid/invalid fixture (`graph_test.go`); auto-wiring and wire-drop are the editor's and live in the web.
+- A run or batch of a user workflow checks it against the live palette (any problem: 422 `workflow cannot run: …`);
+  `resolve` takes `<node>.bypass` inputs, refuses inputs to wired params, splices bypassed nodes out and drops positions,
+  so the run's `nodes` (sent as is) never change after an edit or a delete. The run keeps `workflow_version` and
+  `workflow_title`; a batch keeps `workflow_version` with its snapshot. Eligible host for such a run: its `.nodes`
+  publish every kind of the graph. `made_with` keeps the version and the settable inputs; reuse answers
+  `workflow_status` (`current`, `changed` with unsettable inputs dropped, `deleted`).
+
 ## Batches (pipelines_service runs them)
 
 - `POST /batches` builds the rows (lines, table or grid, then seed repeats; `batch_rows.go` `expand`), checks each with
@@ -99,5 +114,6 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 | `api/auth/` | Bearer token → NATS `auth.validate.token`, cached until expiry, dropped on `evt.auth.revoked`; `middleware/` is the `/v1/` guard |
 | `api/studio/` | `controller.go` (routes, SSE), `service.go` (sessions, workflows, hosts), `runs.go` (create, list, get, cancel, the state machine), `resolve.go` (inputs → filled graph), `projector.go`, `events.go`, `dispatcher.go` (the fair queue, leases, `GET /queue`) |
 | `api/studio/{dto,model,message}/` | HTTP bodies, table rows, NATS bodies (`cmd.run.execute`, `evt.run.*`) |
+| `api/studio/{workflows,graph}.go` | user workflows (CRUD, validate, the palette) and the graph rules, `splice` |
 | `api/studio/batch*.go` | batches: `batches.go` (Submit, reads, control, events, `studio.runs.create`), `batch_rows.go` (rows from lines/table/grid/seeds), `batch_projector.go` (`evt.pipeline.*`), `batch_record.go` (`run_finished`, the batch log) |
 | `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id` |

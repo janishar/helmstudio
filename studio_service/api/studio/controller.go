@@ -1,10 +1,16 @@
 package studio
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -48,7 +54,13 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/sessions/:id/runs", c.createRunHandler)
 	group.GET("/sessions/:id/events", c.eventsHandler)
 	group.GET("/workflows", c.listWorkflowsHandler)
+	group.POST("/workflows", c.createWorkflowHandler)
+	group.POST("/workflows/validate", c.validateWorkflowHandler)
 	group.GET("/workflows/:id", c.getWorkflowHandler)
+	group.PUT("/workflows/:id", c.replaceWorkflowHandler)
+	group.PATCH("/workflows/:id", c.renameWorkflowHandler)
+	group.DELETE("/workflows/:id", c.deleteWorkflowHandler)
+	group.GET("/nodes", c.nodesHandler)
 	group.GET("/runs/:id", c.getRunHandler)
 	group.POST("/runs/:id/cancel", c.cancelRunHandler)
 	group.GET("/hosts", c.listHostsHandler)
@@ -155,15 +167,127 @@ func (c *controller) deleteSessionHandler(ctx *gin.Context) {
 
 // ------------------------------------------------------------------ workflows and hosts
 
-// listWorkflowsHandler: GET /workflows.
+// listWorkflowsHandler: GET /workflows?source=.
 func (c *controller) listWorkflowsHandler(ctx *gin.Context) {
-	network.SendJSON(ctx, http.StatusOK, c.service.Workflows())
+	out, err := c.service.ListWorkflows(ctx.Request.Context(), common.MustCaller(ctx), ctx.Query("source"))
+	reply(ctx, http.StatusOK, out, err)
 }
 
 // getWorkflowHandler: GET /workflows/{id}.
 func (c *controller) getWorkflowHandler(ctx *gin.Context) {
-	out, err := c.service.Workflow(ctx.Param("id"))
+	out, err := c.service.GetWorkflow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
 	reply(ctx, http.StatusOK, out, err)
+}
+
+// createWorkflowHandler: POST /workflows — 201 with the workflow and its problems.
+func (c *controller) createWorkflowHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.WorkflowCreate](ctx, false)
+	var out dto.Workflow
+	if err == nil {
+		out, err = c.service.CreateWorkflow(ctx.Request.Context(), common.MustCaller(ctx), body)
+	}
+	replyWorkflow(ctx, http.StatusCreated, out, err)
+}
+
+// validateWorkflowHandler: POST /workflows/validate — other top-level keys are ignored (a WorkflowUpdate validates).
+func (c *controller) validateWorkflowHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.WorkflowDoc](ctx, true)
+	var out dto.WorkflowValidation
+	if err == nil {
+		out, err = c.service.ValidateWorkflow(*body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// replaceWorkflowHandler: PUT /workflows/{id}.
+func (c *controller) replaceWorkflowHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.WorkflowUpdate](ctx, false)
+	var out dto.Workflow
+	if err == nil {
+		out, err = c.service.ReplaceWorkflow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	replyWorkflow(ctx, http.StatusOK, out, err)
+}
+
+// renameWorkflowHandler: PATCH /workflows/{id}.
+func (c *controller) renameWorkflowHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.WorkflowPatch](ctx, false)
+	var out dto.Workflow
+	if err == nil {
+		out, err = c.service.RenameWorkflow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// deleteWorkflowHandler: DELETE /workflows/{id}.
+func (c *controller) deleteWorkflowHandler(ctx *gin.Context) {
+	if err := c.service.DeleteWorkflow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	network.SendNoContent(ctx)
+}
+
+// nodesHandler: GET /nodes?env=.
+func (c *controller) nodesHandler(ctx *gin.Context) {
+	env := ctx.Query("env")
+	if env != "" && !envPattern.MatchString(env) {
+		network.SendError(ctx, http.StatusUnprocessableEntity, "env must be 1-32 lower-case letters and digits")
+		return
+	}
+	out, err := c.service.Nodes(env)
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// envPattern is an env name.
+var envPattern = regexp.MustCompile(`^[a-z0-9]{1,32}$`)
+
+// strictBody decodes a closed JSON body (an unknown field is 422; openTop ignores unknown top-level keys only) and
+// validates it. The module's body limit caps it; a document is larger than helmgo's 64 KiB JSON cap allows.
+func strictBody[B any](ctx *gin.Context, openTop bool) (*B, error) {
+	invalid := func(err error) error { return network.NewUnprocessableError("invalid JSON body", err) }
+	raw, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	if openTop {
+		var top map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &top); err != nil {
+			return nil, invalid(err)
+		}
+		for key := range top {
+			if !slices.Contains([]string{"title", "family", "env", "nodes", "studio"}, key) {
+				delete(top, key)
+			}
+		}
+		raw, _ = json.Marshal(top)
+	}
+	body := new(B)
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(body); err != nil {
+		var detail string
+		if field, ok := strings.CutPrefix(err.Error(), "json: unknown field "); ok {
+			detail = "unknown field " + strings.Trim(field, `"`)
+		}
+		return nil, network.NewUnprocessableError(cmp.Or(detail, "invalid JSON body"), err)
+	}
+	if validator, ok := any(body).(network.Validator); ok {
+		if detail := validator.Validate(); detail != "" {
+			return nil, network.NewUnprocessableError(detail, nil)
+		}
+	}
+	return body, nil
+}
+
+// replyWorkflow answers like reply, with a WorkflowError's problems in its 422.
+func replyWorkflow[T any](ctx *gin.Context, status int, out T, err error) {
+	var problems *WorkflowError
+	if errors.As(err, &problems) {
+		network.SendJSON(ctx, http.StatusUnprocessableEntity, problems)
+		return
+	}
+	reply(ctx, status, out, err)
 }
 
 // queueHandler: GET /queue — the caller's open runs and, per host, a count of others' queued runs.

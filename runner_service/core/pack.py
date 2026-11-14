@@ -200,7 +200,11 @@ def stage_schema(name: str, stage: dict, family: str | None) -> dict:
         "title": stage["title"],
         "family": family,
         "params": [{"name": p} | spec for p, spec in (stage.get("params") or {}).items()],
-        "inputs": [{"name": p, "type": t} for p, t in (stage.get("inputs") or {}).items()],
+        # an input is `name: Type`, or `name: {type: Type, optional: true}`
+        "inputs": [
+            {"name": p} | (t if isinstance(t, dict) else {"type": t})
+            for p, t in (stage.get("inputs") or {}).items()
+        ],
         "outputs": [{"name": p, "type": t} for p, t in (stage.get("outputs") or {}).items()],
     }
     if "help" in stage:
@@ -275,6 +279,10 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
     out = {}
     for name, stage in stages.items():
         schema = stage_schema(name, stage, family)
+        if shared := {p["name"] for p in schema["params"]} & {i["name"] for i in schema["inputs"]}:
+            raise ValueError(
+                f"{schema['kind']}: params and inputs share the names {sorted(shared)}"
+            )
         names = {"mp", "images"} | set(stage.get("params") or {})
         peak = compile_formula(stage["peak_gb"], names) if "peak_gb" in stage else None
         fn = getattr(module, name, None)

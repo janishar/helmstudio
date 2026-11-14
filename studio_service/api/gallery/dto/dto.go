@@ -13,12 +13,14 @@ import (
 
 // MadeWith is the snapshot of what made a run output, taken when its take was stored.
 type MadeWith struct {
-	WorkflowID    string         `json:"workflow_id"`
-	WorkflowTitle string         `json:"workflow_title"`
-	Inputs        map[string]any `json:"inputs"`
-	Prompt        *string        `json:"prompt"`
-	Seed          *int64         `json:"seed"`
-	Model         *Model         `json:"model"`
+	WorkflowID    string `json:"workflow_id"`
+	WorkflowTitle string `json:"workflow_title"`
+	// a user workflow: the version that made it
+	WorkflowVersion *int           `json:"workflow_version,omitempty"`
+	Inputs          map[string]any `json:"inputs"`
+	Prompt          *string        `json:"prompt"`
+	Seed            *int64         `json:"seed"`
+	Model           *Model         `json:"model"`
 }
 
 // Model is the workflow's <family>/model node as it ran.
@@ -101,6 +103,8 @@ type TakePage struct {
 type TakeReuse struct {
 	WorkflowID string         `json:"workflow_id"`
 	Inputs     map[string]any `json:"inputs"`
+	// reuse only: current | changed | deleted, how the workflow now compares with the one that made the take
+	WorkflowStatus string `json:"workflow_status,omitempty"`
 }
 
 // TakePatch renames or stars a take: at least one field, no others.

@@ -1,12 +1,14 @@
 """A resolved workflow graph (cmd.run.execute data.workflow.nodes): node id → {kind, params, in}, where `in` wires
-an input port to "<node id>.<output>".
+an input port (or a wireable value param) to "<node id>.<output>".
 
-- `validate` checks it against the node schemas this runner publishes (kinds, params, typed ports, no cycle);
+- `problems` / `validate` check it against the node schemas this runner publishes with the graph rules of
+  contracts/README.md (known kinds, params, typed wires with family-scoped handles, required inputs, no cycle, an
+  output, node, size, output and seed caps), independently of studio;
 - `resolve` picks the run's random seed (a seed param null or -1);
-- `run` executes it pull-based: each sink (a node without outputs) pulls its inputs, and a node whose cache key
-  matches the one kept for (owner, node id) is not run again. The key hashes the owner, the kind, the pack code,
-  the params and the upstream keys; a Model input counts only the files of the components the stage uses, so a
-  new seed re-runs sample and decode but not encode, and switching base → turbo does not re-encode.
+- `run` executes it pull-based: each sink (an `output` node) pulls its inputs, so a node no output needs never runs,
+  and a node whose cache key is cached is not run again. The key hashes the owner, the kind, the pack code, the
+  params and the upstream keys (never node ids); a Model input counts only the files of the components the stage
+  uses, so a new seed re-runs sample and decode but not encode, and switching base → turbo does not re-encode.
 
 Node functions run one at a time on the GPU thread (GPU), off the event loop, so heartbeats, cancel and
 progress keep flowing; Ctx bridges their progress and output calls back to the loop."""
@@ -18,6 +20,7 @@ import json
 import logging
 import secrets
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
 from core import images
@@ -38,18 +41,22 @@ class Cancelled(Exception):
     """The run was cancelled (KV cancels)."""
 
 
-class Cache(dict):
-    """(owner, node id) → (key, outputs): the latest result of each node, for the OWNERS owners who stored one most
-    recently (an older owner's entries go, so the cache cannot grow with the number of users)."""
+class Cache(OrderedDict):
+    """cache key (`keys`, which hashes the owner) → a node's outputs, least recently used first, at most SIZE."""
 
-    OWNERS = 4  # ponytail: a count, not bytes; size by memory if cached outputs ever get large
+    SIZE = 24  # ponytail: a count, not bytes; size by memory if cached outputs ever get large
+
+    def get(self, key, default=None):
+        if key not in self:
+            return default
+        self.move_to_end(key)
+        return self[key]
 
     def __setitem__(self, key, value) -> None:
-        self.pop(key, None)  # re-inserted: the most recent
         super().__setitem__(key, value)
-        owners = list(dict.fromkeys(o for o, _ in reversed(self)))
-        for k in [k for k in self if k[0] in owners[self.OWNERS :]]:
-            del self[k]
+        self.move_to_end(key)
+        while len(self) > self.SIZE:
+            self.popitem(last=False)
 
 
 class Ctx:
@@ -166,43 +173,157 @@ def _check_rows(spec: dict, value) -> str | None:
     return None
 
 
-def validate(nodes: dict, schemas: dict[str, dict]) -> list[str]:
-    """Errors of a resolved graph against the node schemas (kind → registry nodeSchema): known
-    kinds, every declared param present and in range and no other, every input wired to an
-    existing output of the same type, no cycle. Empty when it can run."""
-    errs = []
-    for nid, node in nodes.items():
-        schema = schemas.get(node["kind"])
-        if schema is None:
-            errs.append(f"{nid}: unknown node kind {node['kind']!r}")
+HANDLES = {"Model", "Conditioning", "Latent"}  # family-scoped: Model[f] is not Model[g]
+WIREABLE = {
+    "int": "Int",
+    "float": "Float",
+    "seed": "Seed",
+    "string": "Text",
+    "text": "Text",
+    "image": "Image",
+}
+MAX_NODES, MAX_BYTES, MAX_OUTPUTS = 64, 262144, 4
+
+
+def family(kind: str) -> str | None:
+    return kind.split("/")[0] if "/" in kind else None
+
+
+def passthrough(schema: dict) -> list[str] | None:
+    """The inputs a bypassed node passes through (per output, the first input of its type), or None when the kind
+    cannot be bypassed."""
+    through = []
+    for o in schema["outputs"]:
+        i = next((i["name"] for i in schema["inputs"] if i["type"] == o["type"]), None)
+        if i is None:
+            return None
+        through.append(i)
+    return list(dict.fromkeys(through)) or None
+
+
+def port_type(schema: dict, name: str) -> str | None:
+    """The type a wire into `name` carries: an input's type, or a wireable value param's port type."""
+    t = next((i["type"] for i in schema["inputs"] if i["name"] == name), None)
+    p = next((p for p in schema["params"] if p["name"] == name), None)
+    return t or (WIREABLE.get(p["type"]) if p else None)
+
+
+def _typed(t: str, kind: str) -> str:
+    return f"{t}[{family(kind)}]" if t in HANDLES else t
+
+
+def problems(
+    nodes: dict, schemas: dict[str, dict], workflow_family: str | None = None
+) -> list[tuple]:
+    """The graph rules of contracts/README.md ("Graph rules") that a runner can check, as (code, node, port, param,
+    message): the palette is this runner's node schemas (so a kind of another env is `unknown_kind`); `wrong_family`
+    only when `workflow_family` is given; no studio block. Every param must be present (studio fills defaults):
+    `param_missing`, a runner-only code. Bypass follows the rules, though studio splices it out (see `validate`)."""
+    out = []
+
+    def add(code, node=None, port=None, param=None, message=""):
+        out.append((code, node, port, param, message))
+
+    if len(nodes) > MAX_NODES:
+        add("too_many_nodes", message=f"the graph has {len(nodes)} nodes, at most {MAX_NODES}")
+    if len(json.dumps(nodes, separators=(",", ":"), ensure_ascii=False).encode()) > MAX_BYTES:
+        add("too_large", message=f"the graph is larger than {MAX_BYTES} bytes")
+    if out:
+        return out  # nothing else is checked: the work stays bounded
+    if (outputs := sum(n["kind"] == "output" for n in nodes.values())) > MAX_OUTPUTS:
+        add("too_many_outputs", message=f"the graph has {outputs} outputs, at most {MAX_OUTPUTS}")
+    seeds = [
+        f"{nid}.{p['name']}"
+        for nid, n in nodes.items()
+        if n["kind"] in schemas
+        for p in schemas[n["kind"]]["params"]
+        if p["type"] == "seed" and p["name"] not in n.get("in", {})
+    ]
+    if len(seeds) > 1:
+        add("too_many_seeds", message=f"the graph has {len(seeds)} unwired seeds, at most one")
+    for nid, n in nodes.items():
+        kind, wires = n["kind"], n.get("in", {})
+        if workflow_family and family(kind) and family(kind) != workflow_family:
+            add(
+                "wrong_family", nid, message=f"{nid}: {kind} is not of the family {workflow_family}"
+            )
+        s = schemas.get(kind)
+        if s is None:
+            add("unknown_kind", nid, message=f"{nid}: unknown node kind {kind!r}")
             continue
-        params, specs = node.get("params", {}), {p["name"]: p for p in schema["params"]}
-        errs += [f"{nid}.{name}: unknown param" for name in params.keys() - specs.keys()]
+        params, specs = n.get("params", {}), {p["name"]: p for p in s["params"]}
+        for name in params.keys() - specs.keys():
+            add("unknown_param", nid, param=name, message=f"{nid}.{name}: unknown param")
         for name, spec in specs.items():
             if name not in params:
-                errs.append(f"{nid}.{name}: missing")
+                add("param_missing", nid, param=name, message=f"{nid}.{name}: missing")
             elif why := _check_param(spec, params[name]):
-                errs.append(f"{nid}.{name} {why}")
-        wires, inputs = node.get("in", {}), {p["name"]: p["type"] for p in schema["inputs"]}
-        errs += [f"{nid}.{port}: unknown input" for port in wires.keys() - inputs.keys()]
-        for port, want in inputs.items():
-            if port not in wires:
-                errs.append(f"{nid}.{port}: not wired")
+                add("param_invalid", nid, param=name, message=f"{nid}.{name} {why}")
+        for port, ref in wires.items():
+            want = port_type(s, port)
+            if not want:
+                add("unknown_input", nid, port, message=f"{nid}.{port}: unknown input")
                 continue
-            src, _, out = wires[port].partition(".")
-            src_schema = schemas.get(nodes.get(src, {}).get("kind"))
-            if src_schema is None:
-                errs.append(f"{nid}.{port}: wired to a missing node {src!r}")
+            src_id, _, out_name = ref.partition(".")
+            src = nodes.get(src_id)
+            if src is None:
+                add(
+                    "unknown_source",
+                    nid,
+                    port,
+                    message=f"{nid}.{port}: wired to a missing node {src_id!r}",
+                )
                 continue
-            got = {p["name"]: p["type"] for p in src_schema["outputs"]}.get(out)
-            if got != want:
-                errs.append(f"{nid}.{port}: wants {want}, {wires[port]} is {got or 'missing'}")
-    if not errs:
-        try:
-            order(nodes)
-        except graphlib.CycleError as e:
-            errs.append(f"the graph has a cycle: {' → '.join(e.args[1])}")
-    return errs
+            ss = schemas.get(src["kind"])
+            if ss is None:
+                continue  # an unknown kind's outputs are not checked
+            got = next((o["type"] for o in ss["outputs"] if o["name"] == out_name), None)
+            if not got:
+                add(
+                    "unknown_source",
+                    nid,
+                    port,
+                    message=f"{nid}.{port}: {src_id} has no output {out_name!r}",
+                )
+            elif got != want or (want in HANDLES and family(src["kind"]) != family(kind)):
+                add("type_mismatch", nid, port,
+                    message=f"{nid}.{port}: wants {_typed(want, kind)}, {ref} is {_typed(got, src['kind'])}")  # fmt: skip
+        if n.get("bypass"):
+            through = passthrough(s)
+            if through is None:
+                add("not_bypassable", nid, message=f"{nid}: {kind} cannot be bypassed")
+            required = through or []
+        else:
+            required = [i["name"] for i in s["inputs"] if not i.get("optional")]
+        for i in required:
+            if i not in wires:
+                add("required_input", nid, i, message=f"{nid}.{i}: not wired")
+    succ = {nid: set() for nid in nodes}
+    for nid, n in nodes.items():
+        for ref in n.get("in", {}).values():
+            if (src := ref.partition(".")[0]) in nodes:
+                succ[src].add(nid)
+    for nid in nodes:  # on a cycle = reachable from itself; ponytail: O(n·e), fine at 64 nodes
+        seen, todo = set(), list(succ[nid])
+        while todo:
+            if (x := todo.pop()) not in seen:
+                seen.add(x)
+                todo += succ[x]
+        if nid in seen:
+            add("cycle", nid, message=f"{nid}: on a cycle")
+    if not any(n["kind"] == "output" for n in nodes.values()):
+        add("no_output", message="the graph has no output node")
+    return out
+
+
+def validate(nodes: dict, schemas: dict[str, dict]) -> list[str]:
+    """Why this runner refuses a resolved graph (cmd.run.execute), each message naming its node; empty when it can
+    run. Checked here, independently of studio: the graph rules (`problems`), every param present, and no bypassed
+    node (studio splices them out before it sends a graph)."""
+    errs = [
+        f"{nid}: a bypassed node reached the runner" for nid, n in nodes.items() if n.get("bypass")
+    ]
+    return errs + [p[4] for p in problems(nodes, schemas)]
 
 
 def order(nodes: dict) -> list[str]:
@@ -213,12 +334,29 @@ def order(nodes: dict) -> list[str]:
     return list(graphlib.TopologicalSorter(deps).static_order())
 
 
+def upstream(nodes: dict, ids) -> set[str]:
+    """`ids` and every node they are wired from, transitively."""
+    seen, todo = set(), list(ids)
+    while todo:
+        if (cur := todo.pop()) not in seen:
+            seen.add(cur)
+            todo += [ref.partition(".")[0] for ref in nodes[cur].get("in", {}).values()]
+    return seen
+
+
+def _wired_params(node: dict, schema: dict) -> set[str]:
+    """The params of `node` wired from upstream (their `params` entries are ignored)."""
+    return node.get("in", {}).keys() & {p["name"] for p in schema["params"]}
+
+
 def resolve(nodes: dict, schemas: dict[str, dict]) -> tuple[dict, dict]:
-    """(nodes with every random seed picked, the resolved values {"seed": n} when the graph has a seed)."""
+    """(nodes with every random seed picked, the resolved values {"seed": n} when the graph has a seed; the graph
+    rules allow one unwired seed param, so it is the run's only seed)."""
     nodes, resolved = json.loads(json.dumps(nodes)), {}
     for node in nodes.values():
+        wired = _wired_params(node, schemas[node["kind"]])
         for spec in schemas[node["kind"]]["params"]:
-            if spec["type"] == "seed":
+            if spec["type"] == "seed" and spec["name"] not in wired:
                 params = node.setdefault("params", {})
                 if params.get(spec["name"]) in (None, -1):
                     params[spec["name"]] = secrets.randbelow(SEED_MAX + 1)
@@ -228,35 +366,37 @@ def resolve(nodes: dict, schemas: dict[str, dict]) -> tuple[dict, dict]:
 
 def _model(nodes: dict, impls: dict, ref: str):
     """The Model handle wired at `ref`: model nodes are pure, so it is built from the node's params."""
+    # ponytail: assumes a Model comes straight from a <family>/model node (true of every published kind); a
+    # Model → Model kind (LoRA) needs its handle resolved through the graph instead
+
     src = nodes[ref.partition(".")[0]]
     return impls[src["kind"]].fn(None, src.get("params", {}), {})["model"]
 
 
 def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
-    """node id → cache key."""
+    """node id → cache key, over what the node computes from, never its id or its sources' ids: the owner, kind,
+    pack code, its own params (not those wired from upstream) and per wired key the source's key and output."""
     out = {}
     for nid in order(nodes):
         node, impl = nodes[nid], impls[nodes[nid]["kind"]]
         types = {p["name"]: p["type"] for p in schemas[node["kind"]]["inputs"]}
         ins = {}
         for port, ref in node.get("in", {}).items():
-            if types[port] == "Model":
+            if types.get(port) == "Model":
                 ins[port] = _model(nodes, impls, ref).fingerprint(impl.uses)
             else:
-                ins[port] = [out[ref.partition(".")[0]], ref]
-        blob = [owner, node["kind"], impl.code, node.get("params", {}), ins]
+                src, _, name = ref.partition(".")
+                ins[port] = [out[src], name]
+        wired = _wired_params(node, schemas[node["kind"]])
+        params = {p: v for p, v in node.get("params", {}).items() if p not in wired}
+        blob = [owner, node["kind"], impl.code, params, ins]
         out[nid] = hashlib.sha256(json.dumps(blob, sort_keys=True).encode()).hexdigest()
     return out
 
 
 def _image_values(nodes: dict, schemas: dict, nid: str) -> list[dict]:
     """The Image values in the params of `nid` and of every node upstream of it, in graph order."""
-    seen, queue = set(), [nid]
-    while queue:
-        cur = queue.pop()
-        if cur not in seen:
-            seen.add(cur)
-            queue += [ref.partition(".")[0] for ref in nodes[cur].get("in", {}).values()]
+    seen = upstream(nodes, [nid])
     return [
         v
         for n in order(nodes)
@@ -296,19 +436,22 @@ def _components(nodes: dict, impls: dict, schemas: dict, nid: str) -> dict[tuple
     types = {p["name"]: p["type"] for p in schemas[node["kind"]]["inputs"]}
     out = {}
     for port, ref in node.get("in", {}).items():
-        if types[port] == "Model":
+        if types.get(port) == "Model":
             model = _model(nodes, impls, ref)
             out |= {model.key(c): model for c in impl.uses}
     return out
 
 
 async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -> None:
-    """Run every sink of a validated, resolved graph, pulling only what is not cached."""
+    """Run every sink (an `output` node) of a validated, resolved graph, pulling only what is not cached; a node no
+    sink needs is not run. A node's result is reused when its cache key matches, whatever its id: within the run
+    (two identical nodes run once) and across runs."""
     loop = asyncio.get_running_loop()
     ctx.loop = loop
     k = keys(nodes, impls, schemas, ctx.owner)
     done: dict[str, dict] = {}
-    pending = set(nodes)
+    sinks = [nid for nid in order(nodes) if not schemas[nodes[nid]["kind"]]["outputs"]]
+    pending = upstream(nodes, sinks)
 
     def later() -> set[tuple]:
         return {key for n in pending for key in _components(nodes, impls, schemas, n)}
@@ -330,31 +473,32 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
     async def get(nid: str) -> dict:
         if nid in done:
             return done[nid]
-        node, impl = nodes[nid], impls[nodes[nid]["kind"]]
-        sink = not schemas[node["kind"]]["outputs"]
-        hit = cache.get((ctx.owner, nid))
-        if not sink and hit and hit[0] == k[nid]:
+        node, impl, schema = nodes[nid], impls[nodes[nid]["kind"]], schemas[nodes[nid]["kind"]]
+        sink = not schema["outputs"]
+        if not sink and (hit := cache.get(k[nid])) is not None:
             log.info("%s: cache hit", nid)
-            done[nid] = hit[1]
+            done[nid] = hit
             pending.discard(nid)
-            return hit[1]
-        inputs = {}
+            return hit
+        wired = _wired_params(node, schema)
+        inputs, upstream_params = {}, {}
         for port, ref in node.get("in", {}).items():
             src, _, out = ref.partition(".")
-            inputs[port] = (await get(src))[out]
+            (upstream_params if port in wired else inputs)[port] = (await get(src))[out]
         ctx.node, ctx.impl, ctx.started = nid, impl, time.monotonic()
         pending.discard(nid)
-        params, specs = node.get("params", {}), schemas[node["kind"]]["params"]
+        specs = schema["params"]
+        params = {p: v for p, v in node.get("params", {}).items() if p not in wired}
         # read the Image values before the node's first step; the bytes go after decoding
         if images.values(specs, params):
             params = await images.load(specs, params, ctx.owner, ctx.fetch)
+        params |= upstream_params  # a wired value param gets the upstream value
         outs = await loop.run_in_executor(GPU, job, nid, impl, params, inputs)
         log.info("%s: ran in %.1f s", nid, time.monotonic() - ctx.started)
         if not sink:
-            cache[(ctx.owner, nid)] = (k[nid], outs)
+            cache[k[nid]] = outs
         done[nid] = outs
         return outs
 
-    for nid in order(nodes):
-        if not schemas[nodes[nid]["kind"]]["outputs"]:
-            await get(nid)
+    for nid in sinks:
+        await get(nid)

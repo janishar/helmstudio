@@ -109,7 +109,10 @@ Keys the core understands; anything else is ignored:
     and for rows `item` (field → `Image` or a param schema) and `mention` (`<image{n}>`)). Order is kept.
     **YAML 1.1 reads bare `on`, `off`, `yes`, `no` as booleans: quote them.**
   - `inputs` / `outputs`: port name → port type, in order. Types: `Text`, `Image`, `Int`, `Float`, `Seed`,
-    `Canvas` (plain values) and the family-scoped handles `Model`, `Conditioning`, `Latent`.
+    `Canvas` (plain values) and the family-scoped handles `Model`, `Conditioning`, `Latent`. An input that may be
+    left unwired is `name: {type: Image, optional: true}`. Param and input names are disjoint, and no param is named
+    `bypass` (the runner refuses to start otherwise).
+  - `title` and `help` are what the Graph view's palette and node cards show (the core publishes them as is).
   - `peak_gb`: a Python expression over `mp` (megapixels of the nearest upstream Canvas, 0 without one),
     `images` (how many Image values the params of the stage and of every node upstream of it hold) and the
     stage's own params: numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
@@ -150,15 +153,23 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   object store, only under `u/<owner_id>/`, at most 64 MB and exactly `bytes` long (else the run fails `input
   image <take_id> is gone`), decodes it with Pillow (PNG, JPEG or WebP) and applies its EXIF orientation. The
   mode is kept as decoded (RGB, RGBA, P, …); the bytes are dropped. A `rows` param is a list of dicts.
-- **`inputs`**: port → upstream value. `Text`: `str`. `Seed`: `int`. `Canvas`: `{"width", "height", "mode"}`
+- **`inputs`**: port → upstream value; an unwired optional input has no key. A value param (`int`, `float`, `seed`,
+  `string`, `text`, `image`) wired from upstream in a user's graph arrives in `params` with the upstream value (an
+  `image` param wired from an `image` node: a `PIL.Image`), so a stage reads params the same way either way.
+  Port values: `Text`: `str`. `Seed`: `int`. `Canvas`: `{"width", "height", "mode"}`
   (the stage applies `mode`: auto may size from the references). `Image`: a `PIL.Image` (the core `output` node
   stores it as PNG; RGBA is fine). `Model`: a `core.pack.ModelRef`
   (`variant`, `precision`, `pack.spec`, `folder(component=None)` → the variant's folder for configs, the
   tokenizer and the scheduler, which the pack reads itself). `Conditioning` / `Latent`: whatever object the
   pack returns. Handles never leave the process.
-- **Results are cached** per (owner, node id) by a key over the owner, kind, pack code hash (model.yaml + the
-  module), params, upstream keys, and for a Model input only the files (size, mtime) and precision of the
-  components the stage `uses`. A new seed re-runs sample and decode, not encode; base → turbo re-runs sample
+- **Graphs**: a run may be a user's own graph (contracts/README.md, "Graph rules"). The core checks it before it
+  starts (known kinds, params, typed wires, required inputs, no cycle, an output, at most 64 nodes) and fails the
+  run naming the node; it runs only what an `output` node needs, a kind may appear several times, and each `output`
+  node stores its own take (index = the order outputs are stored). A stage only sees its params and inputs.
+- **Results are cached** (the 24 most recently used, across nodes and owners) by a key over the owner, kind, pack
+  code hash (model.yaml + the module), params (a wired one: its upstream instead), each upstream node's key and
+  output name (never node ids: a renamed node, or two identical nodes in one graph, share a result), and for a Model
+  input only the files (size, mtime) and precision of the components the stage `uses`. A new seed re-runs sample and decode, not encode; base → turbo re-runs sample
   but not encode. An Image param counts as its resolved value, so `(owner, key, etag)`: a changed reference
   re-runs encode, an unchanged one is a hit and is not read again. So a handle must be materialised (`.clone()`, `.contiguous()`): never a view into weights, and
   it must not depend on anything outside `params` and `inputs`.

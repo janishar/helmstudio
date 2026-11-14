@@ -1,0 +1,51 @@
+{
+  "description": "echo/echo (Text in, Image out) has no pass-through, so it cannot be bypassed",
+  "workflow": {
+    "title": "Bypass echo",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        },
+        "bypass": true
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      }
+    },
+    "studio": {
+      "quick": [
+        "echo.bypass"
+      ]
+    }
+  },
+  "problems": [
+    {
+      "code": "not_bypassable",
+      "node": "echo"
+    },
+    {
+      "code": "studio_unknown_path",
+      "node": "echo",
+      "param": "bypass"
+    }
+  ]
+}

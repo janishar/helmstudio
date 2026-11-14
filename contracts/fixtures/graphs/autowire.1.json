@@ -1,0 +1,74 @@
+{
+  "description": "adding a sample wires each required input that has exactly one candidate in the graph",
+  "workflow": {
+    "title": "No sample",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "canvas": {
+        "kind": "canvas",
+        "params": {
+          "mode": "auto",
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "model": {
+        "kind": "qwen-image/model",
+        "params": {
+          "variant": "base",
+          "precision": "int8"
+        }
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "transparent": false,
+          "refs": []
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model"
+        },
+        "params": {
+          "tiled": "auto"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "selected": null,
+  "add": {
+    "id": "sample",
+    "kind": "qwen-image/sample"
+  },
+  "expect_in": {
+    "model": "model.model",
+    "cond": "encode.cond",
+    "canvas": "canvas.canvas",
+    "seed": "seed.seed"
+  }
+}

@@ -64,6 +64,10 @@
         },
         "type": {
           "$ref": "#/$defs/portType"
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "inputs only: true = may be left unwired (the feature is off; the stage gets no such key); absent = false, a required input"
         }
       }
     },
@@ -79,7 +83,11 @@
       "properties": {
         "name": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "not": {
+            "const": "bypass"
+          },
+          "description": "unique among the kind's params and inputs; `bypass` is reserved (the Studio path <node>.bypass)"
         },
         "type": {
           "enum": [

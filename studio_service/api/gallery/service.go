@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"maps"
+	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
@@ -40,18 +41,23 @@ const (
 // visible is the condition of a take the caller can see: not deleted and, for an upload, completed.
 const visible = `t.deleted_at IS NULL AND t.ready`
 
+// Find returns a template or one of the caller's workflows with the schemas of its kinds and its stored version (nil
+// for a template); an error that is a 404 when there is none (studio's FindWorkflow).
+type Find func(ctx context.Context, caller common.Caller, id string) (registry.Workflow, *int, error)
+
 // Service owns the takes table. signer makes the links (GET for takes, PUT for uploads), store is read to check an
-// upload, registry has the workflows "Use in…" fills.
+// upload, registry tells whether the watches have loaded, find has the workflows reuse and "Use in…" read.
 type Service struct {
 	db       *pgxpool.Pool
 	signer   *common.Signer
 	store    storage.Store
 	registry *registry.Registry
+	find     Find
 }
 
 // NewService returns the service.
-func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, registry *registry.Registry) *Service {
-	return &Service{db: db, signer: signer, store: store, registry: registry}
+func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, registry *registry.Registry, find Find) *Service {
+	return &Service{db: db, signer: signer, store: store, registry: registry, find: find}
 }
 
 // tx runs fn scoped to the caller as a plain user: an admin sees only their own takes here too.
@@ -303,7 +309,8 @@ func (s *Service) Delete(ctx context.Context, caller common.Caller, id string) e
 	})
 }
 
-// Reuse returns the settings that made a take: 409 for an upload.
+// Reuse returns the settings that made a take (409 for an upload) and how its workflow compares now: current, changed
+// (a user workflow edited since: inputs no longer settable are dropped) or deleted (inputs as recorded).
 func (s *Service) Reuse(ctx context.Context, caller common.Caller, id string) (dto.TakeReuse, error) {
 	row, err := s.get(ctx, caller, id)
 	if err != nil {
@@ -317,7 +324,42 @@ func (s *Service) Reuse(ctx context.Context, caller common.Caller, id string) (d
 	if madeWith.Inputs == nil {
 		madeWith.Inputs = map[string]any{}
 	}
-	return dto.TakeReuse{WorkflowID: madeWith.WorkflowID, Inputs: madeWith.Inputs}, nil
+	if !s.registry.Ready() {
+		return dto.TakeReuse{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	out := dto.TakeReuse{WorkflowID: madeWith.WorkflowID, Inputs: madeWith.Inputs, WorkflowStatus: "current"}
+	workflow, version, err := s.find(ctx, caller, madeWith.WorkflowID)
+	var notFound *network.APIError
+	switch {
+	case errors.As(err, &notFound) && notFound.Code == http.StatusNotFound:
+		out.WorkflowStatus = "deleted"
+	case err != nil:
+		return dto.TakeReuse{}, err
+	case version != nil && (madeWith.WorkflowVersion == nil || *version != *madeWith.WorkflowVersion):
+		out.WorkflowStatus = "changed"
+		for key := range out.Inputs {
+			if !settable(workflow, key) {
+				delete(out.Inputs, key)
+			}
+		}
+	}
+	return out, nil
+}
+
+// settable reports whether a run of workflow may set the input key: "<node>.<param>" of an unwired param, or
+// "<node>.bypass" of a node that can be bypassed.
+func settable(workflow registry.Workflow, key string) bool {
+	nodeID, name, _ := strings.Cut(key, ".")
+	node, ok := workflow.Nodes[nodeID]
+	schema := workflow.NodeSchemas[node.Kind]
+	if !ok {
+		return false
+	}
+	if name == "bypass" {
+		return schema.Passthrough() != nil
+	}
+	_, wired := node.In[name]
+	return !wired && slices.ContainsFunc(schema.Params, func(p registry.Param) bool { return p.Name == name })
 }
 
 // Use answers "Use in…": the inputs that put the take into the workflow's image input (body.Param, else its only
@@ -336,9 +378,12 @@ func (s *Service) Use(ctx context.Context, caller common.Caller, id string, body
 	if !s.registry.Ready() {
 		return dto.TakeReuse{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
 	}
-	workflow, ok := s.registry.Workflow(body.WorkflowID)
-	if !ok {
+	workflow, _, err := s.find(ctx, caller, body.WorkflowID)
+	var notFound *network.APIError
+	if errors.As(err, &notFound) && notFound.Code == http.StatusNotFound {
 		return dto.TakeReuse{}, network.NewUnprocessableError("unknown workflow "+body.WorkflowID, nil)
+	} else if err != nil {
+		return dto.TakeReuse{}, err
 	}
 	key, param, detail := imageInput(workflow, body.Param)
 	if detail != "" {
@@ -358,7 +403,11 @@ func imageInput(workflow registry.Workflow, want *string) (string, registry.Para
 	var keys []string
 	params := map[string]registry.Param{}
 	for _, nodeID := range slices.Sorted(maps.Keys(workflow.Nodes)) {
-		for _, param := range workflow.NodeSchemas[workflow.Nodes[nodeID].Kind].Params {
+		node := workflow.Nodes[nodeID]
+		for _, param := range workflow.NodeSchemas[node.Kind].Params {
+			if _, wired := node.In[param.Name]; wired {
+				continue // filled from upstream, not settable
+			}
 			if _, ok := param.ImageInput(); ok {
 				keys = append(keys, nodeID+"."+param.Name)
 				params[nodeID+"."+param.Name] = param

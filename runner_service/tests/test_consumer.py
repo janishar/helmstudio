@@ -5,6 +5,7 @@ import io
 import json
 import threading
 
+import pytest
 from conftest import IMPLS, FakeJS, FakeKV, FakeMsg, FakeQwen, command, consumer
 from conftest import qwen_command as qwen_fixture
 from PIL import Image
@@ -165,6 +166,26 @@ async def test_graph_that_does_not_fit_the_node_schemas_is_rejected_and_reported
     status = js.events()[0]["data"]
     assert status["status"] == "failed" and "unknown node kind" in status["error"]
     assert msg.log == [("term", 2)]
+
+
+@pytest.mark.parametrize(
+    ("edit", "error"),
+    [
+        (
+            lambda n: n["echo"].update(bypass=True),
+            "rejected: echo: a bypassed node reached the runner",
+        ),
+        (
+            lambda n: n["output"]["in"].update(media="prompt.text"),
+            "rejected: output.media: wants Image",
+        ),
+    ],
+)
+async def test_a_user_graph_breaking_a_rule_fails_naming_the_node(edit, error):
+    bad = command()
+    edit(bad["data"]["workflow"]["nodes"])
+    js, _, _ = await run(bad)
+    assert js.events()[0]["data"]["error"].startswith(error)
 
 
 async def test_a_failed_term_does_not_take_the_runner_down():

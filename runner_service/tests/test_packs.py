@@ -102,3 +102,40 @@ def test_peak_formulas_refuse_anything_else(formula):
 def test_readme_yaml_quotes_on_and_off():
     tiled = readme_model_yaml()["stages"]["decode"]["params"]["tiled"]
     assert tiled["enum"] == ["auto", "on", "off"]
+
+
+@pytest.mark.parametrize("env", ["fake", "torch"])
+def test_published_nodes_equal_the_canonical_palette(env):
+    """Each env's node schemas (title and help from model.yaml / nodes.yaml included) are the canonical palette's
+    kinds of that env (contracts/fixtures/graphs/palette.json, without its fictional `test` family), and each
+    family's group title is the model's title."""
+    if env == "torch":
+        pytest.importorskip("torch")
+    palette = json.loads((CONTRACTS / "fixtures/graphs/palette.json").read_text())["groups"]
+    want = {
+        n["kind"]: {k: v for k, v in n.items() if k != "envs"}
+        for g in palette
+        for n in g["nodes"]
+        if env in n["envs"] and n["family"] != "test"
+    }
+    values, _, _ = registry.build(env)
+    assert {n["kind"]: n for n in values["nodes"]["nodes"]} == want
+    titles = {g["family"]: g["title"] for g in palette}
+    assert all(titles[m["family"]] == m["title"] for m in values["models"]["models"])
+
+
+def test_stage_inputs_may_be_optional_and_never_share_a_param_name():
+    stage = {
+        "title": "Mix",
+        "inputs": {"a": "Image", "b": {"type": "Image", "optional": True}},
+        "params": {},
+    }
+    assert pack.stage_schema("mix", stage, "t")["inputs"] == [
+        {"name": "a", "type": "Image"},
+        {"name": "b", "type": "Image", "optional": True},
+    ]
+    stage["params"] = {"a": {"type": "int", "default": 1}}
+    import types
+
+    with pytest.raises(ValueError, match="share the names"):
+        pack._nodes({"mix": stage}, "t", "c", None, types.SimpleNamespace(mix=lambda *a: {}))

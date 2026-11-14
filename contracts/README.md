@@ -22,7 +22,8 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
 | `fixtures/registry/{nodes,workflows,models}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), lints `openapi.yaml` and the house rules |
+| `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -267,6 +268,129 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
 - **"Use in…"** `POST /v1/studio/takes/{id}/use {workflow_id, param?}` → `{workflow_id, inputs}` with one key: the
   workflow's only image or Image-rows param (or `param`) holding this take (as reference 1). The client merges it
   over the form. 422 when the workflow has no such param, several and no `param`, or the take is not an image.
+
+## User workflows (API 1.5)
+
+A user can open any workflow as a node graph (Create's Studio | Graph switch), edit it and save it as their own.
+Studio and Graph are two views of one `WorkflowDoc`; a run always names a saved workflow by id (an edited, unsaved
+graph is saved first: "Save" for one's own, "Save as my workflow" for a template).
+
+- **Document** (`WorkflowDoc`): `title`, `family`, `env`, `nodes` (node id → `{kind, params?, in?, bypass?,
+  position?}`), optional `studio`. Templates are the registry workflows (`source: template`, slug ids, read-only);
+  a user's own are `source: mine`, UUID ids, owner-scoped by RLS (another user's id is 404), at most 200 per user,
+  with `based_on` (the id it was copied or saved from, or null), `version` (1, +1 on every PUT and PATCH),
+  `created_at`, `updated_at`.
+- **Endpoints** (`/v1/studio`): `GET /workflows?source=template|mine` (templates by title, then mine newest first;
+  no `problems`); `GET /workflows/{id}` (either kind, `node_schemas` for every kind the registry has, `problems`
+  against the live palette); `POST /workflows` (a whole doc with optional `based_on`, or `{based_on, title?}` to copy:
+  201); `PUT /workflows/{id}` (`WorkflowUpdate` = doc + `version`; stale = 409); `PATCH` (`{title}`); `DELETE` (204;
+  409 while a run of it is queued/running or a batch of it queued/running/paused); `POST /workflows/validate`
+  (`WorkflowValidation {problems, can_save, can_run}`, nothing saved); `GET /nodes?env=` (the palette). POST and PUT
+  with a problem that blocks saving answer 422 `WorkflowError {detail, problems}`; problems that block only running
+  are saved and returned in `problems`. PUT, PATCH and DELETE on a template id are 409.
+- **Studio block** (`StudioLayout`, plan 04-workflows.md section 7): `composer`, `quick` (lists of paths),
+  `inspector` (`[{title, items}]`), `labels` (path → field title), `presets` (name → `{path: value}`, at most 8).
+  A path is `<node>.<param>` or `<node>.bypass`. Present = Create shows exactly the placed paths, each at most once;
+  every other param keeps its graph value. Absent = the derived form (every param, as today). Graph view "Show in
+  Studio" on a param: if `studio` is absent the editor first writes the derived form out as a block (the web's own
+  derivation, kept stable), then appends the path to the inspector section titled like the node's schema title
+  (created last when missing); "Hide" removes the path from wherever it is placed (and its label). Deleting a node
+  removes its paths from `studio` and its keys from every preset; wiring a param removes it from `studio`.
+- **Runs, batches and takes** name a user workflow by id like a template (`RunRequest.workflow_id`,
+  `BatchCreate.workflow_id`, `TakeUse.workflow_id`). Creating a run checks the stored version with the graph rules
+  (any problem: 422 `workflow cannot run: <message>`), stores the resolved graph as the run's snapshot and
+  `Run.workflow_version`; the dispatcher sends that snapshot, so editing or deleting the workflow never changes a
+  queued, running or past run. Eligible host for a user-workflow run: live, the workflow's `env`, and its
+  `<host>.<env>.nodes` publishes every kind of the snapshot (instead of publishing the workflow id). A batch's
+  snapshot is the version at Submit (nodes keep `bypass`, no `position`, no `studio`); `studio.runs.create` resolves
+  rows against it as before, so Retry after an edit or a delete still runs the old graph.
+- **Takes**: `made_with` keeps `workflow_id`, `workflow_title` as it was, and `workflow_version`. `POST
+  /takes/{id}/reuse` adds `workflow_status`: `current`, `changed` (inputs that are no longer a settable param of the
+  current version are dropped), `deleted` (inputs as recorded; running it is 422). `use` is unchanged.
+- **Resolving a run of a graph**: `inputs` may also set `<node>.bypass` (a bool, bypassable nodes only); an input
+  naming a wired param is 422 (`<node>.<param>: wired from <ref>; it cannot be set`). Studio then splices every
+  bypassed node out (each consumer of output O is rewired to the source of O's pass-through input, following chains
+  of bypassed nodes) and drops `position`, so `cmd.run.execute` never carries `bypass` or `position`. A wired value
+  param reaches the stage as that param (the runner reads `in` keys that name params; its `params` entry is still
+  filled and ignored). An unwired optional input is simply absent from the stage's inputs.
+- **Before studio's registry watches have delivered**, POST/PUT `/workflows`, `/workflows/validate`, `/nodes` and
+  runs of user workflows answer 503.
+
+## Graph rules (normative)
+
+studio_service (Go) and the web editor (TypeScript) implement exactly these rules and both test against
+`fixtures/graphs/`; `check.py` holds a reference implementation (`graph_problems`, `autowire`, `wire_drop`). The
+**palette** is every node kind a live host (fresh `hosts` key) publishes, with the envs that publish it
+(`GET /v1/studio/nodes`, `PaletteNode.envs`); a kind not in it is **unknown**. `family(kind)` is the part before
+`/` (`qwen-image/sample` → `qwen-image`), none for a core kind (`prompt`). A schema's param and input names are
+disjoint and no param is named `bypass` (registry.schema.json).
+
+**Types.** A wire `in[key] = "<src>.<out>"` carries the type of `src`'s output `out`. `key` is an input port (its
+type) or a **wireable value param** — values are both parameter and port: `int`→`Int`, `float`→`Float`,
+`seed`→`Seed`, `string`/`text`→`Text`, `image`→`Image` (`bool`, `enum`, `rows` take no wire). The types must be
+equal. The handles `Model`, `Conditioning`, `Latent` must also join two kinds of the same family (`Model[f]` is not
+`Model[g]`). One wire per key (the `in` map has one value per key; connecting to a wired key replaces the wire); an
+output may feed any number of keys.
+
+**Inputs.** An input is required unless its port has `optional: true`. A node that is not bypassed needs every
+required input wired. **Bypass**: a bypassed node passes through, for each of its outputs, the first input (schema
+order) of the same type; a kind with no outputs or with an output that has no same-type input cannot be bypassed.
+A bypassed node needs exactly those pass-through inputs wired (its other inputs and its params do not matter).
+
+**Problems.** Each is `{code, message, blocks, node?, port?, param?}`; `port` is the `in` key, `param` a param name.
+The set of `(code, node, port, param)` is what fixtures compare (each at most once; `message` is free text; the API
+sorts by node, whole-workflow ones first, then code, port, param). `run` problems block running only; every other
+code blocks saving (and running). A document with `too_many_nodes` or `too_large` gets only those (nothing else is
+checked, so the work stays bounded).
+
+| Code | Blocks | Where | When |
+|---|---|---|---|
+| `too_many_nodes` | save | — | more than 64 nodes |
+| `too_large` | save | — | the document as compact JSON (`json.Marshal` / `JSON.stringify`, UTF-8) is over 262144 bytes |
+| `too_many_outputs` | run | — | more than 4 nodes of kind `output` (a run's work budget: each output pulls its own chain) |
+| `too_many_seeds` | run | — | more than one unwired `seed` param over the known kinds (a run reports one seed, as a batch does) |
+| `wrong_family` | save | node | `family(kind)` exists and is not the workflow's `family` (a workflow is one family; crossing families is a pipeline) |
+| `unknown_kind` | run | node | the kind is not in the palette; nothing else of that node is checked (its params, its `in`, wires from it, studio paths and presets on it) |
+| `env_mismatch` | run | node | the palette kind's `envs` lack the workflow's `env` |
+| `unknown_param` | save | node, param | a `params` key the kind does not have |
+| `param_invalid` | save | node, param | the value breaks the run rules (type, `min`/`max` — string length in Unicode code points, `enum`, rows count and fields) or holds a take (a workflow holds none: image params null, no Image items in rows) |
+| `unknown_input` | save | node, port | an `in` key that is neither an input nor a wireable param of the kind |
+| `unknown_source` | save | node, port | the wire names a node that is not in the graph, or an output its (known) kind does not have |
+| `type_mismatch` | save | node, port | the types differ, or a handle joins two families |
+| `not_bypassable` | save | node | `bypass: true` on a kind that cannot be bypassed |
+| `required_input` | run | node, port | a required input unwired (bypassed: a pass-through input unwired) |
+| `cycle` | save | node | the node can reach itself through wires (one problem per node on a cycle; a self-wire counts) |
+| `no_output` | run | — | no node of kind `output` |
+| `studio_unknown_path` | save | node, param | a path in `composer`, `quick`, `inspector` or `labels` whose node is missing, whose param the kind lacks, which is wired, or `<node>.bypass` of a node that cannot be bypassed |
+| `studio_duplicate` | save | node, param | a path placed more than once over composer, quick and inspector |
+| `preset_invalid` | save | node, param | a preset key that would be `studio_unknown_path`, or a value that is `param_invalid` (`bypass`: not a bool) |
+
+Ids: node ids match `^[a-z][a-z0-9_]{0,63}$` (the schema) and are **stable**: made once, never renamed. The editor
+makes a new node's id from its kind's last segment with `-` → `_` (`qwen-image/sample` → `sample`), adding `_2`,
+`_3`, … for the first free one; a deleted id may be reused.
+
+**Auto-wiring** (client). When node N of kind K is added, for each required input I of K in schema order: the
+candidates in a scope are the outputs `<m>.<out>` of known-kind nodes m ≠ N in the scope whose type is I's type (a
+handle: of K's family). If a node is selected and it offers exactly one candidate, wire it; else if the whole graph
+offers exactly one, wire it; else leave I unwired. Optional inputs and params are never auto-wired. A candidate the new node already reaches (a
+wire-drop from an input gives it an outgoing wire) is left out, so this never makes a cycle.
+
+**Wire-drop search** (client). A wire dragged from port P of node m (`side: output`, or `side: input` where P may be
+a wireable param) and dropped on empty canvas offers the palette kinds k with the workflow's `env` in `envs` and
+`family(k)` equal to the workflow's family or none, that have — for an output P of type T — an input or a wireable
+param of type T, or — for an input P of type T — an output of type T; for a handle T only kinds of `family(m.kind)`.
+Order: the workflow's family first, then core kinds, each by `title`, then `kind` (code-point order, not locale).
+Picking one adds the node and wires P to its first port of type T (inputs before params, schema order; for an
+input P, P is wired from the new node's first output of type T), then auto-wires its other inputs with m selected
+for an output P and nothing selected for an input P (m consumes the new node; it is not its source).
+
+**Fixtures** (`fixtures/graphs/`, all against `palette.json`, which adds a fictional `test` family to the canonical
+echo and qwen-image kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
+and `float` params), `count` (an Int source), `model`, `lora` (bypassable Model → Model), `upscale` (torch only)):
+`valid.*.json` / `invalid.*.json` `{description, workflow, problems: [{code, node?, port?, param?}]}`;
+`autowire.*.json` `{description, workflow, selected, add: {id, kind}, expect_in}`; `wiredrop.*.json`
+`{description, workflow, from: {node, port, side}, expect: [kind, …]}`, optionally `pick: {id, kind}` and
+`expect_in`: the picked node's `in` after the drop and its auto-wiring.
 
 ## Rules
 
