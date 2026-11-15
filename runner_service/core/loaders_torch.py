@@ -22,6 +22,7 @@ from torch import nn
 
 from core import pack as packs
 from core.graph import RunError
+from core.residency import footprint_gb
 
 log = logging.getLogger("loader")
 DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}
@@ -63,9 +64,11 @@ def free() -> None:
 
 
 def measure_gb() -> float | None:
-    """What the device really holds: MPS driver allocation (torch's own counter misses safetensors' buffers)."""
+    """What the process really holds: on MPS its physical footprint (the driver allocation, safetensors' buffers
+    torch's own counter misses, and the CPU side), else the CUDA allocator's reservation."""
     if torch.backends.mps.is_available():
-        return torch.mps.driver_allocated_memory() / 2**30
+        fp = footprint_gb()
+        return fp if fp is not None else torch.mps.driver_allocated_memory() / 2**30
     if torch.cuda.is_available():
         return torch.cuda.memory_reserved() / 2**30
     return None
@@ -296,6 +299,7 @@ def load(
                 read = 0
             done += 1
             progress(done, total)
+    free()  # the last window's cache too: the component then holds about its declared size
     if unbaked := sorted(bake.keys() - baked):
         raise KeyError(
             f"{type(module).__name__}: LoRA modules without a weight: {', '.join(unbaked[:8])}"

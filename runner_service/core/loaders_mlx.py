@@ -17,8 +17,8 @@ float32 (s = strength · alpha / rank); a quantized Linear is dequantized, + del
 scales and biases), a float one is (W.f32 + delta) cast back to W's dtype. A baked component is its own residency
 entry (core.pack.ModelRef.key).
 
-Memory: `measure_gb` is MLX active + cache memory; `free` is gc + `mx.clear_cache()`; the Metal cache is capped at
-the residency budget (RAM - RUNNER_RESERVE_GB), never raising a stricter cap already set."""
+Memory: `measure_gb` is the process's physical footprint (core.residency.footprint_gb); `free` is gc +
+`mx.clear_cache()`; the Metal buffer cache is capped at CACHE_GB (never raising a stricter cap already set)."""
 
 import gc
 import logging
@@ -29,7 +29,7 @@ from mlx import nn
 import config
 from core import pack as packs
 from core.graph import RunError
-from core.residency import ram_gb
+from core.residency import footprint_gb, ram_gb
 
 log = logging.getLogger("loader")
 GROUP = 64  # quantization group size
@@ -37,8 +37,14 @@ BITS = {"int8": 8, "int4": 4}
 DTYPES = {"bf16": mx.bfloat16, "fp16": mx.float16, "fp32": mx.float32, "stored": None}
 
 
+# GB of freed Metal buffers MLX may keep for reuse. At the default (the memory limit) one LTX VAE decode grew the cache
+# to 27 GB beside a 9 GB active peak (footprint 49 GB, decode 6.8 s); at 0.5-8 GB it takes 1.9 s and the samplers'
+# speed is unchanged (GOTCHAS.md, Measured). The stages' peak_gb are measured footprints at this cap.
+CACHE_GB = 2
+
+
 def _cap_cache() -> None:
-    cap = int(max(ram_gb() - config.RESERVE_GB, 1) * 2**30)
+    cap = int(min(CACHE_GB, max(ram_gb() - config.RESERVE_GB, 1)) * 2**30)
     previous = mx.set_cache_limit(cap)  # the only way to read the current limit
     if previous < cap:
         mx.set_cache_limit(previous)
@@ -58,8 +64,10 @@ def free() -> None:
 
 
 def measure_gb() -> float:
-    """What MLX really holds: active buffers plus its buffer cache."""
-    return (mx.get_active_memory() + mx.get_cache_memory()) / 2**30
+    """What the process really holds: its physical footprint (MLX active + cache + everything else), or MLX active
+    + cache where the footprint cannot be read."""
+    fp = footprint_gb()
+    return fp if fp is not None else (mx.get_active_memory() + mx.get_cache_memory()) / 2**30
 
 
 def linears(module: nn.Module) -> list[str]:

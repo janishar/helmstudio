@@ -265,3 +265,17 @@ def test_a_need_short_of_what_the_device_measures_fails_with_those_numbers():
     with pytest.raises(RunError, match=r"needs 15.0 GB more, 12.0 GB in use .* budget 20.0 GB"):
         res.admit({}, 15, set())
     assert freed == [1]  # the device cache was given back before failing
+
+
+def test_footprint_is_this_process_and_grows_with_what_it_touches():
+    import sys
+
+    from core.residency import footprint_gb
+
+    if sys.platform != "darwin":
+        assert footprint_gb() is None
+        return
+    before = footprint_gb()
+    block = bytearray(256 * 2**20)  # touched (zeroed) pages count
+    assert 0 < before < footprint_gb() and footprint_gb() - before >= 0.2
+    del block

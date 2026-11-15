@@ -65,7 +65,7 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
   42.42 / 1.47, beats 23.25 / 16.53 / 1.53, lora 26.91 / 23.73 / 1.15; bars just under them.
 - Memory: one process keeps components resident within the budget (RAM - 12 GB), so a baked transformer and the
   plain one can sit side by side (38 GB; decode peaked 50.5 GiB in the bench). Who evicts what across envs and runs
-  is stage C. The Metal buffer cache is capped at the budget too, so the process footprint reached 53 GB.
+  is stage C. The Metal buffer cache was then capped at the budget too, so the process footprint reached 53 GB (now 2 GB: GPU and Metal).
 
 ## Weights and memory
 
@@ -92,7 +92,11 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
   connector layer (`LTX2_GEMMA_EVAL_EVERY`, default 1; the Gemma 4 tower itself runs as one graph), every 8 DiT
   blocks (`LTX2_DIT_EVAL_EVERY`), before each loop (the noised states) and after each step. If it still fires,
   relaunch with `AGX_RELAX_CDM_CTXSTORE_TIMEOUT=1`.
-- `gc.collect(); mx.clear_cache()` after a stage that frees memory; the Metal cache is capped at the residency budget.
+- `gc.collect(); mx.clear_cache()` after a stage that frees memory. **The Metal buffer cache is capped at 2 GB**
+  (core/loaders_mlx.py `CACHE_GB`): at MLX's default (the memory limit; the residency budget before) one VAE decode
+  graph kept 27 GB of freed buffers beside a 9 GB active peak, so the process footprint reached 49 GB at 448x256x49
+  (61 GB on the host with the torch runner) for 3 s, and the decode took 6.8 s instead of 1.9 s. At 0, 0.5, 2 and 8 GB
+  the decode takes 1.8-1.9 s and the samplers run at the same speed; the MP4 is byte-identical (no numerics change).
 - `mx.compile` only in the vendored RoPE helpers; nothing else (lazily loaded weights + compile have known hazards).
 
 ## Video
@@ -104,7 +108,11 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
   `-c copy -movflags +faststart` remux (container only) so `moov` comes first for Range playback; the poster is frame
   0 read back from the MP4. ffmpeg's stderr never goes to a pipe the runner does not drain (#92).
 - The conv VAE tiles in time once its block-3 activation passes `LTX2_VAE_DECODE_BUDGET_GB` (8): tiling changes
-  pixels; the goldens never tile.
+  pixels; the goldens never tile. That estimate misses the real peak: the full-resolution 128-channel stages hold
+  about 0.76 GB per megapixel-frame (23.4 GB above the resident at 704x448x97, where block 3 is 0.26 GB), and block 3
+  passes 8 GB only beyond 1920x1088x321, so in practice the decode never tiles and its memory grows linearly; the
+  decode peak_gb says so and admission refuses what does not fit (a tiling estimate on the real peak would change
+  pixels at those sizes: not done).
 
 ## Measured (64 GB M-series, macOS 27.2, mlx 0.32.4, int8, warm page cache; `tests/test_ltx_golden.py`)
 
@@ -118,3 +126,17 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
 | **total** (cold) / re-roll with a new seed (no encode, no loads) | **37.6 s** / 30.4 s | **29.5 s** / 17.6 s | resident after: 21.4 GB |
 
 The first case's first run paid a cold read of some files (the old studio: 26.1 s / 30.8 s for the same cases).
+
+Physical memory per stage (2026-11-15, the Metal cache capped at 2 GB; the larger of the process footprint and MLX
+active + cache, sampled every 20 ms, minus the components resident after the stage: what peak_gb plans; one cold
+run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 GB of it MLX's cache):
+
+| stage | t2v 448x256x49 | t2v 704x448x97 | i2v 448x256x49 | resident after |
+|---|---|---|---|---|
+| encode (loads Gemma + connector) | 4.90 | 4.95 | 5.12 | 18.57 (then unloaded) |
+| sample1 (loads the DiT; i2v also the VAE encoder) | 2.61 | 3.54 | 3.51 | 19.18 / 19.77 |
+| upscale | 2.12 | 1.45 | 2.13 | 20.87 / 21.46 |
+| sample2 | 3.33 | 4.18 | 4.20 | 20.87 / 21.46 |
+| decode (audio, VAE, mux) | 10.57 | 23.41 | 10.57 | 21.41 / 22.00 |
+| process footprint peak (whole run) | 27.7 (was 49.1) | 39.8 (was 49.8) | 28.1 | |
+| run time | 26.0 s (was 30.8) | 62.7 s (was 64.5) | 25.1 s | |

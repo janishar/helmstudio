@@ -416,7 +416,7 @@ func TestPlanOf(t *testing.T) {
 		Strength: 0.8, Mode: "bake", Bytes: 1 << 30}
 	run := model.Run{Env: "mlx", Nodes: graph("int8"), Loras: lorasJSON([]lora.Used{grain})}
 	p := planOf(reg, "mac", run)
-	if p.peak != 4407+100 || len(p.needs) == 0 ||
+	if p.peak != 4587+100 || len(p.needs) == 0 ||
 		!slices.Contains(p.needs, "transformer ltx-2.5 distilled int8 "+grain.ID+"@0.8") {
 		t.Fatal(p)
 	}
@@ -452,9 +452,9 @@ func TestPlanOfALargerRun(t *testing.T) {
 		peak          int
 		unload        []string // torch's victims at B = 52
 	}{
-		{"defaults", 704, 448, 49.0, 4407, []string{"text_encoder"}},
-		{"smaller", 448, 256, 49.0, 4407, []string{"text_encoder"}},
-		{"auto length", 704, 448, "auto", 4407, []string{"text_encoder"}},
+		{"defaults", 704, 448, 49.0, 4587, []string{"text_encoder", "transformer"}},
+		{"smaller", 448, 256, 49.0, 4587, []string{"text_encoder", "transformer"}},
+		{"auto length", 704, 448, "auto", 4587, []string{"text_encoder", "transformer"}},
 		{"larger canvas", 1280, 720, 49.0, -1, []string{"text_encoder", "transformer", "vae"}},
 		{"longer clip", 704, 448, 121.0, -1, []string{"text_encoder", "transformer", "vae"}},
 	} {

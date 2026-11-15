@@ -86,9 +86,8 @@ def test_load_gives_the_allocator_cache_back_as_it_goes(weights, monkeypatch):
     )  # every 1000 bytes read: the 32x32 fp32 weights
     lt.load(meta_tiny(), [path], dev=lt.device(), dtype=torch.bfloat16,
             rename=lambda key: key.removeprefix("model."))  # fmt: skip
-    assert (
-        len(freed) == 2
-    )  # after blocks.0.weight and head.weight (4096 bytes each); the biases add up to less
+    # after blocks.0.weight and head.weight (4096 bytes each; the biases add up to less), and once at the end
+    assert len(freed) == 3
 
 
 def test_load_reports_missing_and_unknown_keys(weights):

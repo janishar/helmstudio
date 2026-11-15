@@ -1,5 +1,5 @@
 {
-  "description": "the M4 demonstration as mac runs it (API 1.13): both runners report 64 - 12 = 52 GB, sizes as the runners publish them (Qwen Turbo int8 kept 16.67, peak 29.25; LTX int8 kept 22.0, peak 44.07, components in the order of last use). LTX's kept components + Qwen's peak fit (51.25), Qwen's + LTX's peak do not (60.74): row 1 end to end, then all stills, then all clips; Qwen's text encoder is unloaded before row 1's clip and before row 2's clip, so Qwen loads twice and LTX once",
+  "description": "the M4 demonstration as mac runs it (API 1.13): both runners report 64 - 12 = 52 GB, sizes as the runners publish them (Qwen Turbo int8 kept 16.67, peak 29.25; LTX int8 kept 22.0, peak 45.87 (measured footprints, M4 stage C), components in the order of last use). LTX's kept components + Qwen's peak fit (51.25), Qwen's + LTX's peak do not (62.54): row 1 end to end, then all stills, then all clips; Qwen's text encoder and transformer are unloaded before row 1's clip and before row 2's clip (the VAE alone fits beside LTX's peak), so Qwen loads twice and LTX once",
   "budget_gb": 52,
   "plans": {
     "qwen": {
@@ -31,7 +31,7 @@
     "ltx": {
       "env": "mlx",
       "model": "ltx-2.5",
-      "peak_gb": 44.07,
+      "peak_gb": 45.87,
       "lora_component": "transformer",
       "components": [
         {
@@ -131,14 +131,16 @@
         "before": "b.1.2",
         "env": "torch",
         "components": [
-          "text_encoder"
+          "text_encoder",
+          "transformer"
         ]
       },
       {
         "before": "b.2.2",
         "env": "torch",
         "components": [
-          "text_encoder"
+          "text_encoder",
+          "transformer"
         ]
       }
     ],

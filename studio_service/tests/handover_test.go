@@ -61,7 +61,7 @@ func (e *env) done(owner, sessionID, runID string) {
 }
 
 // torchVictims is the unload request an LTX run makes of torch holding qwenResident: the larger two go (LRU: no
-// last_used, then larger first) until 1.3 + 44.07 fits 48.
+// last_used, then larger first) until 1.3 + 45.87 fits 48.
 func torchVictims(runID string) string {
 	return `runner.unload.mac.torch {"for_env":"mlx","run_id":"` + runID + `","components":[` +
 		`{"component":"text_encoder","model":"qwen-image-2.1","variant":"base","precision":"int8"},` +
@@ -225,7 +225,7 @@ func TestHandoverTooBig(t *testing.T) {
 		t.Fatal(got)
 	}
 	if run := e.call(userA, "GET", "/v1/studio/runs/"+mlx, nil, 200); run["status"] != "failed" ||
-		run["error"] != "needs 44.1 GB at its peak; host mac has 48.0 GB, 7.4 GB of it pinned" {
+		run["error"] != "needs 45.9 GB at its peak; host mac has 48.0 GB, 7.4 GB of it pinned" {
 		t.Fatal(run)
 	}
 }

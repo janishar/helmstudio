@@ -154,7 +154,9 @@ Keys the core understands; anything else is ignored:
     attribute, such as a Latent after an auto length resolved; else the `frames` param of the nearest upstream node
     that has one, `"auto"` counting as its longest clip, 0 without) and the
     stage's own params: numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
-    `max()`. Anything else fails at start.
+    `max()`. Anything else fails at start. The value is GB the stage holds at its peak above the components resident
+    after it, as the runner measures memory (the process footprint: device buffers and the allocators' caches
+    included, not only the framework's active count); fit it from measured runs at two sizes or more.
 
 ## The runtime module (`torch.py`)
 
@@ -290,7 +292,8 @@ The same contract as `torch.py`, on `core/loaders_mlx.py`: `build(component, mod
 channels-last), casts only for an explicit `dtype`, quantizes the matching 2-D `.weight`s one at a time
 (`mx.quantize`, group 64, after the kept tensors are evaluated), applies `nn.quantize` to exactly those Linears and
 loads with `strict=True`. Phase `loading <component>` (underscores as spaces) is reported under the node that needs
-it. Memory: MLX active + cache; eviction runs `gc` + `mx.clear_cache()`; the Metal cache is capped at the budget.
+it. Memory: the process footprint; eviction runs `gc` + `mx.clear_cache()`; the Metal cache is capped at 2 GB
+(`CACHE_GB`: at the default one VAE decode kept 27 GB of freed buffers).
 A stage that must refuse a wiring before anything runs defines `check_<stage>(params, wired) -> str | None` (the
 text after the node id, e.g. `": stage 2 needs latent, not canvas or duration"`). LoRA on MLX is bake only
 (`modes: [bake]`): the rows are normalised like torch's, then merged after quantization module by module

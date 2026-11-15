@@ -20,8 +20,10 @@ budget of physical RAM minus RUNNER_RESERVE_GB.
 
 Every method but `state` runs on the GPU thread; `state` (read by the hosts heartbeat) takes the lock."""
 
+import ctypes
 import logging
 import os
+import sys
 import threading
 import time
 from collections import OrderedDict
@@ -38,6 +40,20 @@ POLICIES = ("unload", "keep_warm", "keep_pinned")
 def ram_gb() -> float:
     """Physical memory in GB (2^30 bytes)."""
     return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
+
+
+# rusage_info_v4: a 16-byte uuid, then u64 fields; phys_footprint is the 8th
+_RUSAGE = (ctypes.c_uint64 * 64)()
+
+
+def footprint_gb() -> float | None:
+    """This process's physical footprint (macOS phys_footprint, what Activity Monitor and jetsam count: Metal
+    buffers and the allocators' caches included) in GB; None where the call does not exist."""
+    if sys.platform != "darwin":
+        return None
+    if ctypes.CDLL(None).proc_pid_rusage(os.getpid(), 4, ctypes.byref(_RUSAGE)) != 0:
+        return None
+    return _RUSAGE[2 + 7] / 2**30
 
 
 class Residency:

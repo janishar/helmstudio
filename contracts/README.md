@@ -299,10 +299,11 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   and resident while each new clip is not).
 - Other users' work in the same lane can add at most one swap per N releases or T seconds.
 - **mac**: both runners report 64 − 12 = 52 GB (B = 52); the runners' plans: Qwen Turbo int8 kept 16.67 GB (text
-  encoder 9.28, transformer 6.76, VAE 0.63), peak 29.25; LTX int8 kept 22.0, peak 44.07. LTX kept + Qwen peak = 51.25
-  fits, Qwen kept + LTX peak = 60.74 does not: the M4 demonstration (Qwen still → LTX clip, ten rows, from cold)
-  expects **Qwen loaded twice and LTX once**, with exactly the unloads of `order.two-family-mac.json`: torch
-  `text_encoder` before row 1's clip and before row 2's clip, nothing else. `order.two-family-batch.json` is the same
+  encoder 9.28, transformer 6.76, VAE 0.63), peak 29.25; LTX int8 kept 22.0, peak 45.87 (its stages' measured
+  footprints). LTX kept + Qwen peak = 51.25 fits, Qwen kept + LTX peak = 62.54 does not: the M4 demonstration (Qwen
+  still → LTX clip, ten rows, from cold) expects **Qwen loaded twice and LTX once**, with exactly the unloads of
+  `order.two-family-mac.json`: torch `text_encoder` and `transformer` before row 1's clip and before row 2's clip,
+  nothing else. `order.two-family-batch.json` is the same
   pipeline at B = 48, where neither fits: each loads twice. These plans hold with 0.75 GB to spare: an idle mlx
   measuring more than 22.75 GB (its caches; Measured) makes Qwen's runs evict LTX components too.
 
@@ -317,13 +318,18 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   admission then evicts or fails the run with numbers as before, so a run larger than its plan never crosses into
   another env's memory.
 - **Measured memory above the declared sizes** (device caches, the runtime itself, cached node results, a load's
-  transient). The runner reports it: `memory.used_gb` is what the device measures (torch MPS
-  `driver_allocated_memory`, MLX active + cache), and every resident `gb` stays the declared size. Studio counts a key
+  transient). The runner reports it: `memory.used_gb` is what its process physically holds, measured when the key is
+  written: on macOS the process's physical footprint (`phys_footprint`: Metal buffers, the allocators' caches and the
+  CPU side alike; MLX's own active + cache missed none of it but was read only at that instant), elsewhere what the
+  device measures (CUDA reserved); every resident `gb` stays the declared size. A stage's `peak_gb` is the same
+  measure's peak above the components resident after it, so the instants between keys are planned, not reported. Studio counts a key
   of another env at max(Σ `gb`, `used_gb`) (Measured, `budget_gb`, `host_memory`). The runner counts itself the same
   way: before each stage's admission and each load it holds Σ `gb` + max(0, measured − Σ `gb`) against its budget;
   when that is short it first drops cached node results and frees the device cache, then measures again, and only
   then evicts or fails. A load gives the allocator's cache back as it goes (torch: at least every 1 GB of tensors
-  read), so a load's transient stays near its largest tensor rather than the component's full source size.
+  read, and once at its end; MLX keeps at most 2 GB of freed buffers at any time), so a load's transient stays a few
+  GB above the component rather than its full source size (measured, Qwen's int8 text encoder: 18 GB at the peak,
+  11 GB after, against 9.3 declared; every 4 / 8 GB: 20 / 24 GB, no faster).
 - **Own eviction order** (its admission, a stage's need): components the rest of the run does not need before those
   it does (as before); within each, a baked set the current run does not use before plain components; then least
   recently used. After-run policies (`RUNNER_AFTER_RUN`, `keep_warm` the default) and the idle unload

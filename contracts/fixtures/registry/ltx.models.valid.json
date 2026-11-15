@@ -22,7 +22,7 @@
           "memory": [
             {
               "precision": "int8",
-              "peak_gb": 44.07,
+              "peak_gb": 45.87,
               "components": [
                 {
                   "component": "text_encoder",

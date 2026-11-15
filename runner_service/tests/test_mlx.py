@@ -409,12 +409,13 @@ def test_vae_encoder_keys_are_renamed():
 
 @needs_mlx
 def test_sample_peak_counts_the_tokens_keyframes_append():
-    """Each keyframe appends a latent frame of tokens: 8 rows at 1024x576, 121 frames, stage 2 plan ~ 55 GB."""
+    """Each keyframe appends a latent frame of tokens and encodes its image at the stage's grid (model.yaml)."""
     _, impls, _ = ltx()
     peak = impls["ltx/sample"].peak
-    at = {"mp": 1024 * 576 / 1e6, "frames": 121, "role": "stage2", "steps": 3, "mp_in": 1}
-    assert pack.evaluate(peak, at | {"images": 8}) > 55
-    assert pack.evaluate(peak, at | {"images": 0}) < 26
+    mp = 1024 * 576 / 1e6
+    at = {"mp": mp, "frames": 121, "role": "stage2", "steps": 3, "mp_in": 1}
+    extra = pack.evaluate(peak, at | {"images": 8}) - pack.evaluate(peak, at | {"images": 0})
+    assert extra == pytest.approx(8 * (0.7 + 1.5 * mp) + 0.26 * 8 * mp)
     assert (
         pack.evaluate(impls["ltx/keyframes"].peak, {"mp_in": 50, "images": 8, "mp": 0, "frames": 0})
         == 2.0
@@ -458,3 +459,17 @@ def test_a_baked_entry_counts_its_float32_scales():
     )  # 8 x 2 groups, scales and biases, 2 bytes more each
     q.scales, q.biases = q.scales.astype(mx.bfloat16), q.biases.astype(mx.bfloat16)
     assert loaders_mlx.extra_gb(q) == 0
+
+
+@needs_mlx
+def test_the_metal_cache_is_capped_and_measure_is_the_process_footprint():
+    """At MLX's default cache limit one VAE decode grew the cache to 27 GB beside its 9 GB peak (GOTCHAS.md)."""
+    import mlx.core as mx
+
+    from core import loaders_mlx
+    from core.residency import footprint_gb
+
+    limit = mx.set_cache_limit(0)  # returns the limit the import set
+    mx.set_cache_limit(limit)
+    assert limit <= loaders_mlx.CACHE_GB * 2**30
+    assert loaders_mlx.measure_gb() == pytest.approx(footprint_gb(), abs=0.05)
