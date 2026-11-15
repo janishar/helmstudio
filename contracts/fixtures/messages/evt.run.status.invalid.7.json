@@ -1,0 +1,68 @@
+{
+  "type": "evt.run.status",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001402",
+  "job_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b40",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:20:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 4,
+    "status": "succeeded",
+    "answer": {
+      "tries": [
+        {
+          "text": "x",
+          "error": null
+        },
+        {
+          "text": "x",
+          "error": null
+        },
+        {
+          "text": "x",
+          "error": null
+        }
+      ],
+      "seen": [
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "width": 1024,
+          "height": 1024
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "width": 1024,
+          "height": 1024
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.jpg",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "width": 1024,
+          "height": 1024
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.jpg",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "width": 1024,
+          "height": 1024
+        }
+      ],
+      "tokens_in": 4512,
+      "tokens_out": 179,
+      "seconds": 8.9
+    }
+  }
+}

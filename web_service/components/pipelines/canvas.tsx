@@ -31,6 +31,7 @@ import {
   analyse,
   connectNodes,
   disconnectNodes,
+  isAgent,
   movePipelineNodes,
   nodeLabel,
   removePipelineNodes,
@@ -50,6 +51,7 @@ const FIT: FitViewOptions = { maxZoom: 1, padding: { top: "56px", x: "24px", bot
 const TEXT = "var(--t1b)";
 const IMAGE = "#f3a0bd";
 const LOOP = "#f2c14e";
+const AGENT = "#c1a8f5";
 
 type Ctx = {
   doc: PDoc;
@@ -316,17 +318,13 @@ function Canvas({
  * dashed loop with its cap, then as a dashed line. With marks, edges the row never took are faint. */
 function edgesOf(doc: PDoc, marks?: Marks): Edge[] {
   const out: Edge[] = [];
-  const color = (from: string) => (doc.nodes[from]?.kind === "inputs" ? TEXT : IMAGE);
+  const color = (from: string) =>
+    ["inputs", "write", "memory"].includes(doc.nodes[from]?.kind ?? "") ? TEXT : IMAGE;
   const a = analyse(doc);
   const ok = (from: string) => !a.refused.some(([, f]) => f === from);
-  const add = (
-    from: string,
-    to: string,
-    via: "next" | "pass" | "fail" | "then",
-    extra: Partial<Edge>,
-  ) => {
+  const add = (from: string, to: string, via: Via | "pass", extra: Partial<Edge>) => {
     if (!(from in doc.nodes) || !(to in doc.nodes)) return;
-    const taken = marks ? marks.taken(from, to, via) : 1;
+    const taken = marks ? marks.taken(from, to, via.startsWith("r:") ? "*" : via) : 1;
     out.push({
       id: `${from}:${via === "pass" ? "next" : via}`,
       source: from,
@@ -334,7 +332,7 @@ function edgesOf(doc: PDoc, marks?: Marks): Edge[] {
       target: to,
       targetHandle: "i:in",
       data: { via: via === "pass" ? "next" : via, taken },
-      ariaLabel: `${via === "fail" ? "Retry" : via === "then" ? "Then" : "Edge"} from ${nodeLabel(doc, from)} to ${nodeLabel(doc, to)}`,
+      ariaLabel: `${via === "fail" ? "Retry" : via === "then" ? "Then" : via.startsWith("r:") ? `Route ${via.slice(2)}` : "Edge"} from ${nodeLabel(doc, from)} to ${nodeLabel(doc, to)}`,
       ...extra,
       style: {
         stroke: ok(from) ? (extra.style?.stroke ?? color(from)) : "var(--bad)",
@@ -349,6 +347,16 @@ function edgesOf(doc: PDoc, marks?: Marks): Edge[] {
       add(from, to, "next", {});
       continue;
     }
+    if ("routes" in to) {
+      // a decide: each route from its own port; the capped ones dashed like a loop, with the cap
+      for (const [label, t] of Object.entries(to.routes))
+        add(from, t, `r:${label}`, {
+          type: "loop",
+          label: label === to.then ? label : `${label} · at most ${to.max}`,
+          style: label === to.then ? { stroke: AGENT } : { stroke: LOOP, strokeDasharray: "5 5" },
+        });
+      continue;
+    }
     add(from, to.pass, "pass", {});
     const loops = marks?.loops[from] ?? 0;
     add(from, to.fail, "fail", {
@@ -360,6 +368,20 @@ function edgesOf(doc: PDoc, marks?: Marks): Edge[] {
     });
     add(from, to.then, "then", { style: { stroke: "var(--t2)", strokeDasharray: "2 4" } });
   }
+  // a judge's memory: the examples it reads, from the memory node (a field of the judge, not an edge of the row)
+  for (const [id, n] of Object.entries(doc.nodes))
+    if (n.kind === "judge" && n.memory && doc.nodes[n.memory])
+      out.push({
+        id: `${id}:memory`,
+        source: n.memory,
+        sourceHandle: "o:examples",
+        target: id,
+        targetHandle: "i:memory",
+        deletable: false,
+        selectable: false,
+        ariaLabel: `Memory from ${nodeLabel(doc, n.memory)} to ${nodeLabel(doc, id)}`,
+        style: { stroke: AGENT, strokeWidth: 2, opacity: marks && !marks.nodes[id] ? 0.25 : 1 },
+      });
   return out;
 }
 
@@ -426,7 +448,9 @@ function Card({ id }: NodeProps) {
           : "done"
     : g.marks
       ? "not reached"
-      : { inputs: "list", step: "step", gate: "gate", output: "" }[n.kind];
+      : isAgent(n.kind)
+        ? "agent node"
+        : { inputs: "list", step: "step", gate: "gate", output: "" }[n.kind as "step"];
   const port = (side: "source" | "target", via: string, color: string, label?: string) => (
     <Handle
       type={side}
@@ -438,7 +462,7 @@ function Card({ id }: NodeProps) {
       aria-label={label ?? (side === "target" ? "in" : via)}
     />
   );
-  const color = n.kind === "inputs" ? TEXT : IMAGE;
+  const color = n.kind === "inputs" || n.kind === "write" || n.kind === "memory" ? TEXT : IMAGE;
   const row = (k: string, v: React.ReactNode, bad?: boolean) => (
     <div className="gn-r">
       <span>{k}</span>
@@ -455,7 +479,7 @@ function Card({ id }: NodeProps) {
       style={{
         width: W,
         opacity: g.marks && !m ? 0.5 : undefined,
-        borderColor: m?.current ? "var(--a2)" : undefined,
+        borderColor: m?.current ? "var(--a2)" : isAgent(n.kind) ? AGENT : undefined,
         outline: g.selected === id ? "2px solid var(--t2)" : undefined,
         outlineOffset: 2,
       }}
@@ -499,16 +523,36 @@ function Card({ id }: NodeProps) {
           )}
         </>
       )}
-      {n.kind === "gate" && (
+      {(n.kind === "gate" || n.kind === "judge") && (
         <>
           <div className="gn-r">
             {port("target", "in", IMAGE)}
             <span>takes of</span>
             <b>{g.doc.nodes[n.takes] ? nodeLabel(g.doc, n.takes, g.titles) : n.takes}</b>
           </div>
-          {row("keep", `${n.keep ?? 1} of ${g.steps[n.takes] || "?"}`)}
+          {n.kind === "judge" && (
+            <>
+              {n.memory && (
+                <div className="gn-r">
+                  {port("target", "memory", AGENT, "examples in")}
+                  <span>examples</span>
+                </div>
+              )}
+              {row(
+                "checks",
+                `${(n.criteria.must ?? []).length} must · ${(n.criteria.nice ?? []).length} nice`,
+              )}
+            </>
+          )}
+          {row(
+            "keep",
+            n.kind === "judge"
+              ? `best ${n.keep ?? 1} of ${g.steps[n.takes] || "?"}`
+              : `${n.keep ?? 1} of ${g.steps[n.takes] || "?"}`,
+          )}
+          {n.kind === "judge" && row("mode", n.mode === "auto" ? "Auto" : "Suggest")}
           <div className="gn-r">
-            <span>pass</span>
+            <span>{n.kind === "judge" ? "pass · picked" : "pass"}</span>
             {port("source", "next", IMAGE)}
           </div>
           {out !== undefined && (
@@ -525,6 +569,62 @@ function Card({ id }: NodeProps) {
                 </div>
               )}
             </>
+          )}
+        </>
+      )}
+      {n.kind === "write" && (
+        <>
+          <div className="gn-r">
+            {port("target", "in", TEXT)}
+            <span>reads</span>
+            <b>{n.from.length}</b>
+          </div>
+          <div className="gn-r">
+            <span>writes</span>
+            <b>{n.to.slice(1)}</b>
+            {port("source", "next", TEXT)}
+          </div>
+        </>
+      )}
+      {n.kind === "decide" && (
+        <>
+          <div className="gn-r">
+            {port("target", "in", TEXT)}
+            <span>reads</span>
+            <b>{n.from.length}</b>
+          </div>
+          {Object.keys(n.routes).map((label) => (
+            <div key={label} className="gn-r">
+              <span>route</span>
+              <b>{label}</b>
+              {port(
+                "source",
+                `r:${label}`,
+                typeof out === "object" && "routes" in out && out.then === label ? AGENT : LOOP,
+                `route ${label}`,
+              )}
+            </div>
+          ))}
+          {typeof out === "object" &&
+            "routes" in out &&
+            row("at most", `${out.max} · then ${out.then}`)}
+        </>
+      )}
+      {n.kind === "memory" && (
+        <>
+          <div className="gn-r">
+            {port("target", "in", TEXT)}
+            <span>{n.op === "read" ? "reads" : "writes"}</span>
+            <b>{n.op === "read" ? `${n.limit ?? 8} newest` : n.key}</b>
+            {port("source", "next", TEXT)}
+          </div>
+          {n.op === "read" ? (
+            <div className="gn-r">
+              <span>examples</span>
+              {port("source", "examples", AGENT, "examples out")}
+            </div>
+          ) : (
+            row("from", n.from.length)
           )}
         </>
       )}
@@ -574,6 +674,10 @@ function AddMenu({
     ...(hasInputs ? [] : [["inputs", "Inputs", "the batch's columns"] as [Kind, string, string]]),
     ["step", "Step", "runs a workflow"],
     ["gate", "Gate", "stops the row for your pick"],
+    ["judge", "Judge", "checks takes, keeps the best"],
+    ["write", "Write", "rewrites a text input"],
+    ["decide", "Decide", "routes the row by an answer"],
+    ["memory", "Memory", "reads what past batches learnt"],
     ["output", "Output", "names the collection"],
   ];
   const [active, setActive] = useState(0);
@@ -635,13 +739,20 @@ async function layout(doc: PDoc): Promise<Record<string, Pos>> {
         ? n.inputs.length
         : n.kind === "step"
           ? 2 + (n.preset ? 1 : 0) + Object.keys(n.bind ?? {}).length
-          : n.kind === "gate"
-            ? 5
-            : 2;
+          : n.kind === "gate" || n.kind === "judge"
+            ? 7
+            : n.kind === "decide"
+              ? 2 + Object.keys(n.routes).length
+              : 2;
     return 45 + rows * 26 + 10;
   };
   const edges = doc.edges.flatMap(([from, to], i) =>
-    (typeof to === "string" ? [to] : [to.pass, to.then])
+    (typeof to === "string"
+      ? [to]
+      : "routes" in to
+        ? [to.routes[to.then]].filter(Boolean)
+        : [to.pass, to.then]
+    )
       .filter((t) => t in doc.nodes && from in doc.nodes)
       .map((t, j) => ({ id: `e${i}-${j}`, sources: [from], targets: [t] })),
   );

@@ -1,0 +1,174 @@
+{
+  "description": "agent-node rules (API 1.14): a judge judging a gate (gate_takes) with an empty checklist (judge_criteria), a step workflow as its model (unknown_model, run) and a step as its memory (bind_source memory); a step binding the judge's reasons (bind_source); a write into an Int input (write_target) from takes (bind_source from); a branch out of a write (branch_not_gate: refused); a decide whose routes edge names other labels (decide_routes: refused, so it and the write before it are dead ends) and reads an Int (bind_source from)",
+  "pipeline": {
+    "title": "Broken agents",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "count",
+            "type": "Int"
+          }
+        ]
+      },
+      "still": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "seeds": 4,
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "bind": {
+          "prompt.text": "judge.reasons"
+        }
+      },
+      "review": {
+        "kind": "gate",
+        "takes": "still"
+      },
+      "judge": {
+        "kind": "judge",
+        "takes": "review",
+        "criteria": {
+          "must": [],
+          "nice": []
+        },
+        "model": "qwen-image",
+        "memory": "still"
+      },
+      "rewrite": {
+        "kind": "write",
+        "from": [
+          "still.takes"
+        ],
+        "to": "$count"
+      },
+      "check": {
+        "kind": "decide",
+        "question": "Again?",
+        "from": [
+          "$count"
+        ],
+        "routes": {
+          "retry": "miss",
+          "accept": "ok"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "judge.picked",
+        "collection": "Broken"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "still"
+      ],
+      [
+        "still",
+        "review"
+      ],
+      [
+        "review",
+        "judge"
+      ],
+      [
+        "judge",
+        {
+          "pass": "out",
+          "fail": "rewrite",
+          "max": 1,
+          "then": "out"
+        }
+      ],
+      [
+        "rewrite",
+        {
+          "pass": "check",
+          "fail": "still",
+          "max": 1,
+          "then": "out"
+        }
+      ],
+      [
+        "rewrite",
+        "check"
+      ],
+      [
+        "check",
+        {
+          "routes": {
+            "retry": "still",
+            "again": "out"
+          },
+          "max": 1,
+          "then": "again"
+        }
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "gate_takes",
+      "node": "judge"
+    },
+    {
+      "code": "judge_criteria",
+      "node": "judge"
+    },
+    {
+      "code": "unknown_model",
+      "node": "judge"
+    },
+    {
+      "code": "bind_source",
+      "node": "judge",
+      "port": "memory"
+    },
+    {
+      "code": "bind_source",
+      "node": "still",
+      "port": "prompt.text"
+    },
+    {
+      "code": "write_target",
+      "node": "rewrite"
+    },
+    {
+      "code": "bind_source",
+      "node": "rewrite",
+      "port": "from"
+    },
+    {
+      "code": "branch_not_gate",
+      "node": "rewrite"
+    },
+    {
+      "code": "decide_routes",
+      "node": "check"
+    },
+    {
+      "code": "bind_source",
+      "node": "check",
+      "port": "from"
+    },
+    {
+      "code": "dead_end",
+      "node": "check"
+    },
+    {
+      "code": "dead_end",
+      "node": "rewrite"
+    }
+  ]
+}

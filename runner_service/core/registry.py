@@ -51,8 +51,9 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
         for variant in entry.get("variants", []):
             if variant["presence"] == "present" and p.spec.get("components"):
                 variant["memory"] = [
-                    memory_plan(p, variant["id"], x, impls, node_schemas)
+                    plan
                     for x in variant["precisions"]
+                    for plan in memory_plans(p, variant["id"], x, impls, node_schemas)
                 ]
     for kind, value in values.items():
         if errs := schemas.registry_errors(kind, value):
@@ -68,7 +69,27 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     return values, impls, [p for p, _ in loaded]
 
 
-def memory_plan(pack, variant: str, precision: str, impls: dict, node_schemas: dict) -> dict:
+ASK_IMAGES = (
+    4  # a text workflow is planned at 4 thumbnails of 1024 px (contracts/README.md, memory plans)
+)
+
+
+def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: dict) -> list[dict]:
+    """The `memory` items of (variant, precision): one over the media workflows, and one per text (ask) workflow,
+    named by `workflow` and planned at ASK_IMAGES thumbnails; a pack with only text workflows (llm) has one item
+    without `workflow`."""
+    text = [w for w in pack.workflows if w.get("media") == "text"]
+    media = [w for w in pack.workflows if w.get("media") != "text"]
+    if not media:
+        return [memory_plan(pack, variant, precision, impls, node_schemas, text)]
+    plans = [memory_plan(pack, variant, precision, impls, node_schemas, media)]
+    return plans + [memory_plan(pack, variant, precision, impls, node_schemas, [w]) | {"workflow": w["id"]}
+                    for w in text]  # fmt: skip
+
+
+def memory_plan(
+    pack, variant: str, precision: str, impls: dict, node_schemas: dict, workflows=None
+) -> dict:
     """The models key's `memory` item of (variant, precision) (contracts/README.md, Two envs on one host: the
     hand-over): over the pack's workflows at their default sizes, run in `graph.run`'s order, the components a run
     loads in the order of their last use (`unloads_after` when the stage that last uses one unloads it) and
@@ -77,13 +98,31 @@ def memory_plan(pack, variant: str, precision: str, impls: dict, node_schemas: d
     comps: dict[tuple, dict] = {}  # residency key → component item, in order of last use
     stages = []  # (keys, peak) per stage
     at = {"mp": 0.0, "frames": 0}  # the largest sizes a stage's formula saw (planned_at)
-    for w in pack.workflows:
+    if workflows is None:  # the media workflows' plan (memory_plans adds the text ones')
+        workflows = [w for w in pack.workflows if w.get("media") != "text"]
+    asks = any(w.get("media") == "text" for w in workflows)
+    for w in workflows:
         nodes = json.loads(json.dumps(w["nodes"]))
         for node in nodes.values():
             params = node.setdefault("params", {})
             for spec in node_schemas[node["kind"]]["params"]:
                 if "default" in spec:
                     params.setdefault(spec["name"], spec["default"])
+                if (
+                    spec["type"] == "rows"
+                    and "Media" in spec["item"].values()
+                    and w.get("media") == "text"
+                ):
+                    thumb = {
+                        "take_id": "",
+                        "key": "",
+                        "content_type": "image/png",
+                        "width": 1024,
+                        "height": 1024,
+                    }
+                    params[spec["name"]] = [
+                        {"take": thumb}
+                    ] * ASK_IMAGES  # sized as planned_at.images says
             if node["kind"] == f"{pack.family}/model":
                 params |= {"variant": variant, "precision": precision}
         sinks = [n for n in graph.order(nodes) if not node_schemas[nodes[n]["kind"]]["outputs"]]
@@ -107,8 +146,11 @@ def memory_plan(pack, variant: str, precision: str, impls: dict, node_schemas: d
     kept = {k for k, c in comps.items() if not c.get("unloads_after")}
     peak = max((sum(comps[k]["gb"] for k in kept | keys) + p for keys, p in stages), default=0.0)
     items = [c | {"gb": round(c["gb"], 2)} for c in comps.values()]
+    at = {"mp": round(at["mp"], 4), "frames": at["frames"]} | (
+        {"images": ASK_IMAGES} if asks else {}
+    )
     return {"precision": precision, "peak_gb": round(max(peak, 0.01), 2), "components": items,
-            "planned_at": {"mp": round(at["mp"], 4), "frames": at["frames"]}}  # fmt: skip
+            "planned_at": at}  # fmt: skip
 
 
 def scanned_value(kind: str, entries: list[dict], env: str = ENV) -> dict:

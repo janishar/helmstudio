@@ -33,3 +33,6 @@ filterwarnings = ["ignore::DeprecationWarning:langsmith.*"]
 line-length = 100
 target-version = "py314"
 extend-exclude = ["gen"]
+
+[tool.ruff.lint.per-file-ignores]
+"main.py" = ["E402"]  # tracing is forced off before the imports

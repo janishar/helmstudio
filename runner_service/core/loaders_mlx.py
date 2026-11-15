@@ -8,7 +8,8 @@ convert (the pack's optional `convert(component, name, value)`, e.g. conv weight
 with an explicit component `dtype`; `stored` keeps each tensor's own dtype) → quantize (at int8 / int4, the 2-D
 `.weight`s whose module matches the component's `quantize` globs: `mx.quantize`, group 64, one tensor at a time,
 after the kept tensors are evaluated: quantizing can evict lazy buffers) → `nn.quantize` on exactly those Linears →
-`load_weights(strict=True)`: a missing or extra key fails the load. Nothing is written anywhere.
+`load_weights(strict=True)`: a missing or extra key fails the load. Nothing is written anywhere. A pack whose library
+loads its own checkpoint format (llm: mlx-vlm) defines `load_component(component, model, ctx)` instead.
 
 LoRA (contracts/README.md "LoRAs", MLX bake): bake only, no adapters. The rows of mode bake are normalised against
 the family's lora block (core/lora.py: no key is silently dropped) and merged after quantization, module by module
@@ -211,6 +212,10 @@ def load_component(model, component: str, ctx):
     if not files:
         raise RunError(f"{component}: no weights for {model.owner(component)} in the models folder")
     ctx.progress(1, 1, f"loading {component.replace('_', ' ')}")
+    if own := getattr(
+        model.pack.module, "load_component", None
+    ):  # a pack whose library loads its own format
+        return own(component, model, ctx)
     module = model.pack.module.build(component, model)
     rename = getattr(model.pack.module, "rename", None)
     convert = getattr(model.pack.module, "convert", None)

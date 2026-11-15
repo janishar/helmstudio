@@ -40,6 +40,10 @@
           ],
           "maxLength": 2000,
           "description": "why it is paused or failed, user-readable: `paused by you`, `the pipeline service restarted; press Resume`, `3 rows in a row failed: <error>`; required (non-empty) with paused and failed"
+        },
+        "memory": {
+          "$ref": "defs.schema.json#/$defs/memorySnapshot",
+          "description": "from API 1.14, a pipeline batch: the memory snapshot it reads, sent from its first running event on"
         }
       },
       "if": {

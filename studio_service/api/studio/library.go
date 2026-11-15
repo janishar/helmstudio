@@ -526,7 +526,7 @@ func (s *Service) checkItem(ctx context.Context, tx pgx.Tx, ownerID, id, kind st
 	for i, image := range fields.Images {
 		refs[i] = imageAt{Path: fmt.Sprintf("images[%d]", i+1), TakeID: image.TakeID}
 	}
-	problems, err := vetTakes(ctx, tx, s.store, ownerID, refs)
+	problems, err := vetTakes(ctx, tx, s.store, ownerID, refs, false)
 	if err != nil {
 		return err
 	}

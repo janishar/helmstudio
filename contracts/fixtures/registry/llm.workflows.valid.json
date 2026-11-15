@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "published_at": "2026-11-15T12:00:00Z",
+  "published_by": "runner mlx 0.4.0",
+  "workflows": [
+    {
+      "id": "llm-ask",
+      "title": "Ask Qwen3.8 27B",
+      "family": "llm",
+      "env": "mlx",
+      "media": "text",
+      "nodes": {
+        "model": {
+          "kind": "llm/model",
+          "params": {
+            "variant": "4bit",
+            "precision": "int4"
+          }
+        },
+        "ask": {
+          "kind": "llm/ask",
+          "params": {
+            "max_tokens": 800
+          },
+          "in": {
+            "model": "model.model"
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "ask.answer"
+          }
+        }
+      }
+    }
+  ]
+}

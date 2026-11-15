@@ -1,0 +1,530 @@
+{
+  "description": "judge_verdict (README, Agent nodes: Judge): the parsed judge answer, its checklist, keep and candidates → the derived verdict, picked takes, first failed must, per-take passes and ranks (1 = best), or the error text pipelines appends to its one re-ask. pipelines_service runs these",
+  "cases": [
+    {
+      "description": "keep 1 of 4: the model's ranking puts a failing take first; derived order keeps the best that passes",
+      "criteria": {
+        "must": [
+          "No extra or missing limbs",
+          "No text or watermarks"
+        ],
+        "nice": [
+          "Subject is sharp"
+        ]
+      },
+      "keep": 1,
+      "candidates": [
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54"
+      ],
+      "answer": {
+        "takes": [
+          {
+            "take": 1,
+            "checks": [
+              false,
+              true,
+              true
+            ],
+            "reason": "Extra hand on the left."
+          },
+          {
+            "take": 2,
+            "checks": [
+              true,
+              true,
+              false
+            ],
+            "reason": "Clean but soft."
+          },
+          {
+            "take": 3,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "Clean and sharp."
+          },
+          {
+            "take": 4,
+            "checks": [
+              true,
+              false,
+              true
+            ],
+            "reason": "Watermark bottom right."
+          }
+        ],
+        "ranking": [
+          1,
+          3,
+          2,
+          4
+        ]
+      },
+      "expect": {
+        "verdict": "pass",
+        "picked": [
+          "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53"
+        ],
+        "first_failed": null,
+        "passes": [
+          false,
+          true,
+          true,
+          false
+        ],
+        "ranks": [
+          3,
+          2,
+          1,
+          4
+        ]
+      }
+    },
+    {
+      "description": "nothing passes: fail, first failed must of the best take",
+      "criteria": {
+        "must": [
+          "No extra or missing limbs",
+          "No text or watermarks"
+        ],
+        "nice": [
+          "Subject is sharp"
+        ]
+      },
+      "keep": 1,
+      "candidates": [
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54"
+      ],
+      "answer": {
+        "takes": [
+          {
+            "take": 1,
+            "checks": [
+              false,
+              true,
+              true
+            ],
+            "reason": "Extra hand."
+          },
+          {
+            "take": 2,
+            "checks": [
+              true,
+              false,
+              false
+            ],
+            "reason": "Text in the sky."
+          },
+          {
+            "take": 3,
+            "checks": [
+              false,
+              false,
+              false
+            ],
+            "reason": "Broken."
+          },
+          {
+            "take": 4,
+            "checks": [
+              true,
+              false,
+              true
+            ],
+            "reason": "Watermark."
+          }
+        ],
+        "ranking": [
+          4,
+          2,
+          1,
+          3
+        ]
+      },
+      "expect": {
+        "verdict": "fail",
+        "picked": [],
+        "first_failed": "No text or watermarks",
+        "passes": [
+          false,
+          false,
+          false,
+          false
+        ],
+        "ranks": [
+          2,
+          3,
+          4,
+          1
+        ]
+      }
+    },
+    {
+      "description": "keep 2 with only one passing: fail",
+      "criteria": {
+        "must": [
+          "No extra or missing limbs",
+          "No text or watermarks"
+        ],
+        "nice": [
+          "Subject is sharp"
+        ]
+      },
+      "keep": 2,
+      "candidates": [
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54"
+      ],
+      "answer": {
+        "takes": [
+          {
+            "take": 1,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 2,
+            "checks": [
+              false,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 3,
+            "checks": [
+              true,
+              false,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 4,
+            "checks": [
+              false,
+              false,
+              true
+            ],
+            "reason": "ok"
+          }
+        ],
+        "ranking": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "expect": {
+        "verdict": "fail",
+        "picked": [],
+        "first_failed": null,
+        "passes": [
+          true,
+          false,
+          false,
+          false
+        ],
+        "ranks": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "description": "nice-only checklist: every take passes; ties broken by the model's ranking",
+      "criteria": {
+        "must": [],
+        "nice": [
+          "Centred"
+        ]
+      },
+      "keep": 2,
+      "candidates": [
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54"
+      ],
+      "answer": {
+        "takes": [
+          {
+            "take": 1,
+            "checks": [
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 2,
+            "checks": [
+              false
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 3,
+            "checks": [
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 4,
+            "checks": [
+              true
+            ],
+            "reason": "ok"
+          }
+        ],
+        "ranking": [
+          4,
+          3,
+          2,
+          1
+        ]
+      },
+      "expect": {
+        "verdict": "pass",
+        "picked": [
+          "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54",
+          "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53"
+        ],
+        "first_failed": null,
+        "passes": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "ranks": [
+          3,
+          4,
+          2,
+          1
+        ]
+      }
+    },
+    {
+      "description": "a ranking that is not a permutation: the re-ask error",
+      "criteria": {
+        "must": [
+          "No extra or missing limbs",
+          "No text or watermarks"
+        ],
+        "nice": [
+          "Subject is sharp"
+        ]
+      },
+      "keep": 1,
+      "candidates": [
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54"
+      ],
+      "answer": {
+        "takes": [
+          {
+            "take": 1,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 2,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 3,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 4,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          }
+        ],
+        "ranking": [
+          1,
+          1,
+          2,
+          3
+        ]
+      },
+      "expect": {
+        "error": "ranking must order every take 1..4 once"
+      }
+    },
+    {
+      "description": "takes out of order: the re-ask error",
+      "criteria": {
+        "must": [
+          "No extra or missing limbs",
+          "No text or watermarks"
+        ],
+        "nice": [
+          "Subject is sharp"
+        ]
+      },
+      "keep": 1,
+      "candidates": [
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54"
+      ],
+      "answer": {
+        "takes": [
+          {
+            "take": 2,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 1,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 3,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 4,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          }
+        ],
+        "ranking": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "expect": {
+        "error": "takes must be 1..4 in order"
+      }
+    },
+    {
+      "description": "a take with too few checks: the re-ask error",
+      "criteria": {
+        "must": [
+          "No extra or missing limbs",
+          "No text or watermarks"
+        ],
+        "nice": [
+          "Subject is sharp"
+        ]
+      },
+      "keep": 1,
+      "candidates": [
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53",
+        "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a54"
+      ],
+      "answer": {
+        "takes": [
+          {
+            "take": 1,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 2,
+            "checks": [
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 3,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          },
+          {
+            "take": 4,
+            "checks": [
+              true,
+              true,
+              true
+            ],
+            "reason": "ok"
+          }
+        ],
+        "ranking": [
+          1,
+          2,
+          3,
+          4
+        ]
+      },
+      "expect": {
+        "error": "take 2 needs 3 checks"
+      }
+    }
+  ]
+}

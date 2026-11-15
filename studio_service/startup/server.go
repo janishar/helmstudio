@@ -102,6 +102,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// the same 5 s for a pipeline's memory (API 1.14)
+		memory: func(ctx context.Context, req message.MemoryRequest) (message.MemoryReply, error) {
+			var reply message.MemoryReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectMemory, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	if module.store, err = objectStore(ctx, env); err != nil {
 		return err

@@ -2,19 +2,31 @@
 
 Opens the `pipelines` database (migrations, then LangGraph's checkpoint tables), reports every batch it had
 running as paused (engine.start), then pulls cmd.pipeline.> from CMD (durable `pipelines`, one at a time, in
-order) and evt.studio.> from EVT (durable `pipelines-runs`), and answers pipelines.state.get. SIGINT/SIGTERM stop pulling and exit; threads
+order) and evt.studio.> from EVT (durable `pipelines-runs`), and answers pipelines.state.get and pipelines.memory
+(LangGraph's Postgres store). LangSmith tracing is forced off (plan 16.4: no network call). SIGINT/SIGTERM stop pulling and exit; threads
 continue from their checkpoints on the next start (after the user's Resume)."""
 
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 from pathlib import Path
+
+# plan 16.4: tracing forced off, before anything imports langsmith (it reads LANGSMITH_ then LANGCHAIN_, _V2 first)
+for _v in (
+    "LANGSMITH_TRACING_V2",
+    "LANGSMITH_TRACING",
+    "LANGCHAIN_TRACING_V2",
+    "LANGCHAIN_TRACING",
+):
+    os.environ[_v] = "false"
 
 import nats
 import nats.errors
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.store.postgres.aio import AsyncPostgresStore
 from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
@@ -23,6 +35,7 @@ import config
 import consumer
 import events
 import health
+import memory
 import states
 from engine import Engine
 from messaging.publisher import Publisher
@@ -60,6 +73,7 @@ async def migrate(pool, saver: AsyncPostgresSaver) -> None:
             for f in sorted(MIGRATIONS.glob("*.sql")):
                 await conn.execute(f.read_text())
             await saver.setup()
+            await AsyncPostgresStore(pool).setup()  # memory
         finally:
             await conn.execute("SELECT pg_advisory_unlock(hashtext('pipelines_migrate'))")
 
@@ -113,7 +127,10 @@ async def main() -> None:
         saver = saver_for(pool)
         await migrate(pool, saver)
         js = nc.jetstream()
-        engine = Engine(pool, saver, Publisher(js), Studio(nc).create_run, config.DRIVE_CONCURRENCY)
+        store = AsyncPostgresStore(pool)
+        engine = Engine(
+            pool, saver, Publisher(js), Studio(nc).create_run, config.DRIVE_CONCURRENCY, store=store
+        )
         await engine.start()
         cmds = await durable(
             js,
@@ -127,6 +144,7 @@ async def main() -> None:
         runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
         server = await health.serve(nc, pool)
         state_sub = await states.serve(nc, engine)
+        memory_sub = await memory.serve(nc, store)
 
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
@@ -140,6 +158,7 @@ async def main() -> None:
         log.info("shutting down")
         server.close()
         await state_sub.unsubscribe()
+        await memory_sub.unsubscribe()
         await engine.close()
     finally:
         # close, not drain: every publish was awaited; draining pull subscriptions is slow

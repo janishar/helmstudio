@@ -143,9 +143,10 @@ class Consumer:
         )
         ctx.seed = resolved.get("seed")
         ctx.fetch = self.store.get
+        ctx.store = self.store
         ctx.loras = self.loras
         beat = asyncio.create_task(self._in_progress(msg, events))
-        end = None  # the terminal status (status, error, resolved), sent in `finally` once the hosts key is current
+        end = None  # the terminal status (status, error, resolved[, answer]), sent in `finally` once the hosts key is current
         try:
             if await cancels.requested(self.cancels_kv, run_id):
                 await events.status("cancelled")
@@ -174,8 +175,8 @@ class Consumer:
                 await graph.run(nodes, self.impls, self.node_schemas, ctx, self.cache)
             except Cancelled:
                 end = ("cancelled", None, None)
-            except RunError as e:
-                end = ("failed", str(e), None)
+            except RunError as e:  # an AnswerError still carries the tries (core.ask)
+                end = ("failed", str(e), None, getattr(e, "answer", None))
             except Exception as e:
                 log.exception("run %s: node %s failed", run_id, ctx.node)
                 end = ("failed", f"{ctx.node}: internal error ({type(e).__name__})", None)
@@ -184,6 +185,7 @@ class Consumer:
                     "succeeded",
                     None,
                     resolved | ({"params": ctx.resolved} if ctx.resolved else {}),
+                    ctx.answer,
                 )
         except Exception as e:  # the cancels KV or a publish broke: still try to end the run
             log.exception("run %s: runner error", run_id)
@@ -215,11 +217,11 @@ class Consumer:
             if not self.stalled:
                 await self.host.put()
 
-    async def _end(self, events, status: str, error=None, resolved=None) -> None:
+    async def _end(self, events, status: str, error=None, resolved=None, answer=None) -> None:
         """The terminal status, unless the stall watchdog already sent one."""
         log.info("run %s: %s%s", events.cmd["job_id"], status, f" ({error})" if error else "")
         if not self.stalled:
-            await events.status(status, error, resolved)
+            await events.status(status, error, resolved, answer)
 
     def _stalled_for(self) -> float | None:
         """Seconds past the running stage's stall limit since the last cancel point, or None."""

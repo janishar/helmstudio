@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.pick.schema.json",
   "title": "studio → pipelines: a gate's answer for one parked row",
-  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.pick` (stream CMD) in the transaction that records the pick; Nats-Msg-Id `<batch_id>:<n>` (the batch's command counter). pipelines consumes it with the other cmd.pipeline.* (durable `pipelines`, in order) and resumes the row's thread parked on that gate visit with it (`take_ids`: pass, `reject`: the fail edge, the cap's `then`, or a plain edge's failure). A pick for a thread not parked on that gate visit and attempt is acked and dropped.",
+  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.pick` (stream CMD) in the transaction that records the pick; Nats-Msg-Id `<batch_id>:<n>` (the batch's command counter). pipelines consumes it with the other cmd.pipeline.* (durable `pipelines`, in order) and resumes the row's thread parked on that gate visit with it (`take_ids`: pass, `reject`: the fail edge, the cap's `then`, or a plain edge's failure). A pick for a thread not parked on that gate visit and attempt is acked and dropped. A judge pick resumes the judge's gate part: take_ids → pass edge with that pick, reject → the judge's fail edge, its then, or (plain edge) the row fails `rejected at <judge>`; with `note`, pipelines writes one judge_example memory item (key = the judge id, source pick).",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -40,7 +40,8 @@
           "$ref": "defs.schema.json#/$defs/rowAttempt"
         },
         "gate": {
-          "$ref": "defs.schema.json#/$defs/nodeId"
+          "$ref": "defs.schema.json#/$defs/nodeId",
+          "description": "the gate or (API 1.14) judge the row is parked on"
         },
         "visit": {
           "type": "integer",
@@ -54,6 +55,16 @@
         "reject": {
           "const": true,
           "description": "every candidate rejected"
+        },
+        "agreed": {
+          "type": "boolean",
+          "description": "from API 1.14, a judge only (studio derives it): the picked set equals the judge's suggestion (reject all with an empty suggestion: true)"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "from API 1.14, a judge only: the user's note; pipelines stores the pick as a judge example (memory) with it"
         }
       },
       "oneOf": [

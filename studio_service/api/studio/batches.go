@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,9 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 			return err
 		}
 		workflow, version, err := s.runnable(ctx, tx, body.WorkflowID)
+		if err == nil {
+			err = refuseText(workflow)
+		}
 		if err != nil {
 			return err
 		}
@@ -180,12 +184,21 @@ func batchDTO(row model.Batch) dto.Batch {
 	if status == "running" && row.Waiting > 0 && row.Queued+row.Running == 0 {
 		status = "waiting"
 	}
-	return dto.Batch{ID: row.ID, Title: row.Title, WorkflowID: row.WorkflowID, WorkflowTitle: row.WorkflowTitle,
+	out := dto.Batch{ID: row.ID, Title: row.Title, WorkflowID: row.WorkflowID, WorkflowTitle: row.WorkflowTitle,
 		SessionID: row.SessionID, Status: status, Control: row.Control, Reason: row.Reason, CreatedAt: row.CreatedAt,
 		StartedAt: row.StartedAt, FinishedAt: row.FinishedAt, Counts: dto.BatchCounts{Total: row.Total, Queued: row.Queued,
 			Running: row.Running, Waiting: row.Waiting, Succeeded: row.Succeeded, Failed: row.Failed, Cancelled: row.Cancelled},
 		PipelineID: row.PipelineID, PipelineTitle: row.PipelineTitle, PipelineVersion: row.PipelineVersion,
-		Collection: row.Collection}
+		Collection: row.Collection, AgainOf: row.AgainOf}
+	_ = json.Unmarshal(row.Bounds, &out.Bounds) // null leaves each out
+	_ = json.Unmarshal(row.Models, &out.Models)
+	if len(row.Memory) > 0 && string(row.Memory) != "null" {
+		out.Memory = row.Memory
+	}
+	if row.AgainOf != nil {
+		out.SameDecisions = &row.SameDecisions
+	}
+	return out
 }
 
 // rowDTO maps a row, signing its first take's key for the thumbnail.
@@ -515,9 +528,9 @@ func (s *Service) RetryBatchRow(ctx context.Context, caller common.Caller, batch
 		if checkpoint != nil {
 			command.CheckpointID = checkpoint
 			if _, err := tx.Exec(ctx, `INSERT INTO batch_steps (batch_id, n, attempt, step, owner_id, seq, node, part, visit,
-				status, what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, at)
+				status, what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, at, decision_id, memory)
 				SELECT batch_id, n, $3, step, owner_id, 0, node, part, visit, status, what, changed, edge, loops, run_ids,
-				take_ids, error, checkpoint_id, at FROM batch_steps WHERE batch_id = $1 AND n = $2 AND attempt = $3 - 1
+				take_ids, error, checkpoint_id, at, decision_id, memory FROM batch_steps WHERE batch_id = $1 AND n = $2 AND attempt = $3 - 1
 				AND step < $4`, batchID, row, attempt, fromStep); err != nil {
 				return err
 			}
@@ -713,7 +726,12 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				refused = invalid(detail)
 				return nil
 			}
-			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, graphs[0], looks, batch.Status, batch.Control, req); err != nil {
+			thumbs, err := thumbCount(ctx, tx, req.OwnerID, graphs[0].Nodes)
+			if err != nil {
+				return err
+			}
+			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, graphs[0], looks, batch.Status, batch.Control, req,
+				thumbs); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -725,6 +743,9 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			takeIDs = []string{}
 		}
 		out = message.RunsCreated{RunID: run.ID, Status: run.Status, Created: created, TakeIDs: takeIDs, Error: run.Error}
+		if terminal[run.Status] && len(run.Answer) > 0 && string(run.Answer) != "null" {
+			out.Answer = run.Answer // a text workflow's run already ended: resume with its answer
+		}
 		return err
 	})
 	if err != nil {
@@ -736,7 +757,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 // createBatchRun stores the run of a batch row's step: cancelled for a stopped batch, failed with no eligible host,
 // else queued (lane batch); its status event goes to the session's log, and a terminal one to pipelines.
 func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, workflow registry.Workflow, version *int,
-	built built, looks []string, batchStatus, control string, req *message.RunsCreate) (model.Run, error) {
+	built built, looks []string, batchStatus, control string, req *message.RunsCreate, thumbs *int) (model.Run, error) {
 	graph, _ := json.Marshal(built.Nodes)
 	status, failure := "queued", (*string)(nil)
 	if control == "stop" || batchStatus == "stopped" {
@@ -747,11 +768,11 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	}
 	inputs, _ := json.Marshal(req.Inputs)
 	run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions, loras, looks)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
-		$13, $14, $15, $16, $17) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
-		failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion),
-		lorasJSON(built.Loras), looksJSON(looks))
+		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions, loras, looks,
+		thumbs) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
+		$13, $14, $15, $16, $17, $18) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env,
+		inputs, status, failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion),
+		lorasJSON(built.Loras), looksJSON(looks), thumbs)
 	if err != nil {
 		return run, err
 	}
@@ -774,6 +795,27 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	return run, nil
 }
 
+// thumbCount is how many thumbnails an ask run sends (contracts/README.md, Memory plans): 1 per image take and 3 per
+// video take of its graph; nil for a run that is not a text workflow's.
+func thumbCount(ctx context.Context, tx pgx.Tx, ownerID string, nodes map[string]registry.Node) (*int, error) {
+	if !registry.IsText(nodes) {
+		return nil, nil
+	}
+	refs := images(nodes)
+	ids := make([]string, len(refs))
+	for i, ref := range refs {
+		ids[i] = ref.TakeID
+	}
+	rows, _ := tx.Query(ctx, `SELECT id::text FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND kind = 'video'`,
+		uuids(ids), ownerID)
+	videos, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	n := 0
+	for _, ref := range refs {
+		n += map[bool]int{true: 3, false: 1}[slices.Contains(videos, ref.TakeID)]
+	}
+	return &n, err
+}
+
 // checkRowImages checks the Image values of every row's graph (element images included) as Create does, each distinct
 // take once: the detail of the first bad one ("row 3: encode.refs[1].image: take <id> not found"), "" when all are good.
 func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string, graphs []built) (string, error) {
@@ -783,7 +825,7 @@ func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string,
 		perRow[i] = images(graph.Nodes)
 		all = append(all, perRow[i]...)
 	}
-	problems, err := vetTakes(ctx, tx, s.store, ownerID, all)
+	problems, err := vetTakes(ctx, tx, s.store, ownerID, all, false)
 	if err != nil {
 		return "", err
 	}

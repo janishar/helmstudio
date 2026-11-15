@@ -24,9 +24,10 @@ import (
 
 // checkImages returns the 422 detail of the first Image value of nodes whose take is not the owner's completed,
 // undeleted image with its object in the store ("encode.refs[2].image: take <id> not found"), "" when all are good.
+// A text (ask) workflow's takes may also be videos (its Media rows; API 1.14).
 func checkImages(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, nodes map[string]registry.Node) (string, error) {
 	refs := images(nodes)
-	problems, err := vetTakes(ctx, tx, store, ownerID, refs)
+	problems, err := vetTakes(ctx, tx, store, ownerID, refs, registry.IsText(nodes))
 	return firstBad(refs, problems), err
 }
 
@@ -46,7 +47,9 @@ func firstBad(refs []imageAt, problems map[string]string) string {
 // HEADed statHeads at a time (a batch can name hundreds of takes). A take without a content hash gets one now (the
 // lazy backfill of run outputs recorded before evt.run.output carried an etag: uploads get theirs at complete).
 // ponytail: the backfill reads whole objects one at a time inside the transaction; only old takes need it.
-func vetTakes(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, refs []imageAt) (map[string]string, error) {
+// video allows video takes too (a text workflow's Media rows). ponytail: per run, not per field; an ask workflow's only
+// takes are its Media rows.
+func vetTakes(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, refs []imageAt, video bool) (map[string]string, error) {
 	problems := map[string]string{}
 	var ids []string
 	for _, ref := range refs {
@@ -71,7 +74,7 @@ func vetTakes(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID strin
 	}
 	var usable []found
 	for _, take := range takes {
-		if take.Kind != "image" {
+		if take.Kind != "image" && !(video && take.Kind == "video") {
 			problems[take.ID] = "is not an image"
 		} else if take.Width == nil || take.Height == nil {
 			problems[take.ID] = "has no size"
@@ -172,8 +175,8 @@ func resolveImages(ctx context.Context, tx pgx.Tx, ownerID string, graph []byte)
 		Etag        string `json:"etag"`
 	}
 	rows, err := collect[descriptor](ctx, tx, `SELECT id::text, key, content_type, width, height, bytes, etag FROM takes
-		WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND deleted_at IS NULL AND ready AND kind = 'image'
-		AND width IS NOT NULL AND height IS NOT NULL AND etag IS NOT NULL`, ids, ownerID)
+		WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND deleted_at IS NULL AND ready AND (kind = 'image' OR $3 AND kind = 'video')
+		AND width IS NOT NULL AND height IS NOT NULL AND etag IS NOT NULL`, ids, ownerID, registry.IsText(nodes))
 	if err != nil {
 		return nil, "", err
 	}

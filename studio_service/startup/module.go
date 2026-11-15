@@ -28,6 +28,7 @@ type Module struct {
 	maxBody        int64              // bytes
 	store          storage.Store      // read to check uploads and reference images
 	stateGet       studio.StateGet    // pipelines.state.get (a row's checkpoint state)
+	memory         studio.MemoryAsk   // pipelines.memory (a pipeline's memory)
 	dispatcher     *studio.Dispatcher // positions use its skip counts; nil in tests
 }
 
@@ -47,6 +48,7 @@ func (m *Module) RootMiddlewares() []network.RootMiddleware {
 func (m *Module) Controllers() []micro.Controller {
 	service := studio.NewService(m.db, m.signer, m.registry, m.cancel, m.store)
 	service.SetStateGet(m.stateGet)
+	service.SetMemory(m.memory)
 	service.SetDispatcher(m.dispatcher)
 	return []micro.Controller{
 		m.health,

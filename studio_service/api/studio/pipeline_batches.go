@@ -35,10 +35,13 @@ type storedPipeline struct {
 	Title      string                       `json:"title"`
 	Version    int                          `json:"version"`
 	Doc        dto.PipelineDoc              `json:"doc"`
-	Workflows  map[string]registry.Workflow `json:"workflows"`   // with node_schemas, as resolve needs them
-	Versions   map[string]int               `json:"versions"`    // a user workflow's version at Submit
-	Presets    map[string]map[string]any    `json:"presets"`     // step → its preset's values
-	SeedParams map[string]string            `json:"seed_params"` // step → its workflow's one unwired seed param
+	Workflows  map[string]registry.Workflow `json:"workflows"`        // with node_schemas, as resolve needs them
+	Versions   map[string]int               `json:"versions"`         // a user workflow's version at Submit
+	Presets    map[string]map[string]any    `json:"presets"`          // step → its preset's values
+	SeedParams map[string]string            `json:"seed_params"`      // step → its workflow's one unwired seed param
+	Models     map[string]string            `json:"models,omitempty"` // judge, write, decide → its ask workflow (API 1.14)
+	Near       map[string]string            `json:"near,omitempty"`   // such a node → the step whose model a family ask reuses
+	Bounds     dto.PipelineBounds           `json:"bounds"`
 }
 
 // placeholderTake stands in for a take a step will get from an earlier step: Submit checks the rest of the row.
@@ -65,12 +68,13 @@ func (p storedPipeline) steps() []string {
 	return out
 }
 
-// firstStep is the first step along the edges from the inputs node (a gate's pass), else the first by id.
+// firstStep is the first step along the edges from the inputs node (a branch's pass, a decide's first route by
+// label), else the first by id.
 func (p storedPipeline) firstStep() string {
 	next := map[string]string{}
 	for _, edge := range p.Doc.Edges {
 		if _, taken := next[edge.From]; !taken {
-			next[edge.From] = cmpOr(edge.To, func() string { return edge.Branch.Pass })
+			next[edge.From] = edge.Targets()[0] // to, a branch's pass, or a decide's first route
 		}
 	}
 	at := p.root()
@@ -81,14 +85,6 @@ func (p storedPipeline) firstStep() string {
 		}
 	}
 	return p.steps()[0]
-}
-
-// cmpOr is value, or fallback() when value is empty.
-func cmpOr(value string, fallback func() string) string {
-	if value != "" {
-		return value
-	}
-	return fallback()
 }
 
 // fixed is a step's inputs: its preset's values, then its own.
@@ -165,6 +161,21 @@ func (p storedPipeline) snapshot() *message.PipelineSnapshot {
 			}
 		case "gate":
 			fields["keep"] = node.KeepOr1()
+		case "judge":
+			fields["keep"], fields["mode"], fields["model"] = node.KeepOr1(), node.ModeOr(), node.ModelOr()
+			// both lists, [] when missing (the snapshot requires them; the struct leaves an empty list out)
+			fields["criteria"] = map[string][]string{"must": nonNil(node.Criteria.Must), "nice": nonNil(node.Criteria.Nice)}
+		case "write":
+			fields["instruction"], fields["model"] = node.InstructionOr(), node.ModelOr()
+		case "decide":
+			fields["model"] = node.ModelOr()
+		case "memory":
+			if node.Op == "read" {
+				fields["limit"] = node.LimitOr()
+			}
+		}
+		if dto.Asks(node.Kind) {
+			fields["workflow"] = p.Models[id]
 		}
 		out.Nodes[id] = fields
 	}
@@ -223,7 +234,7 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM user_workflows WHERE id = ANY($1::uuid[]) FOR SHARE`, own); err != nil {
 		return dto.Batch{}, err
 	}
-	problems, docs, err := s.pipelineProblemsNow(ctx, tx, caller.ID, doc)
+	problems, docs, info, err := s.pipelineProblemsNow(ctx, tx, caller.ID, doc)
 	if err != nil {
 		return dto.Batch{}, err
 	} else if len(problems) > 0 {
@@ -231,7 +242,7 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	stored := storedPipeline{ID: row.ID, Title: row.Title, Version: row.Version, Doc: doc,
 		Workflows: map[string]registry.Workflow{}, Versions: map[string]int{}, Presets: map[string]map[string]any{},
-		SeedParams: map[string]string{}}
+		SeedParams: map[string]string{}, Models: info.Models, Near: info.Near, Bounds: info.Bounds}
 	palette := s.palette()
 	for _, step := range stored.steps() {
 		node := doc.Nodes[step]
@@ -252,6 +263,9 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 			stored.SeedParams[step] = key
 		}
 	}
+	if err := s.askWorkflows(ctx, tx, &stored); err != nil {
+		return dto.Batch{}, err
+	}
 	rows, detail := pipelineRows(stored, body, randomBase)
 	if detail != "" {
 		return dto.Batch{}, unprocessable("%s", detail)
@@ -268,7 +282,7 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 		}
 		all = append(all, perRow[i]...)
 	}
-	bad, err := vetTakes(ctx, tx, s.store, caller.ID, all)
+	bad, err := vetTakes(ctx, tx, s.store, caller.ID, all, false)
 	if err != nil {
 		return dto.Batch{}, err
 	}
@@ -355,10 +369,10 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	batchID := utility.NewID()
 	if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
-		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements, looks)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`, batchID, caller.ID, sessionID, title,
-		first.ID, first.Title, first, base, stored.version(first.ID), row.ID, row.Title, row.Version, collection, stored,
-		lib, looks); err != nil {
+		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements, looks, bounds,
+		models) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`, batchID, caller.ID,
+		sessionID, title, first.ID, first.Title, first, base, stored.version(first.ID), row.ID, row.Title, row.Version,
+		collection, stored, lib, looks, stored.Bounds, stored.Models); err != nil {
 		return dto.Batch{}, err
 	}
 	numbers := make([]int, len(rows))
@@ -382,6 +396,80 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 		return dto.Batch{}, err
 	}
 	return getBatch(ctx, tx, batchID, false)
+}
+
+// askWorkflows adds every resolved ask workflow to the stored pipeline (as runnable reads it now) and checks a live
+// host for each (askHosts).
+func (s *Service) askWorkflows(ctx context.Context, tx pgx.Tx, stored *storedPipeline) error {
+	for _, node := range slices.Sorted(maps.Keys(stored.Models)) {
+		id := stored.Models[node]
+		if _, done := stored.Workflows[id]; !done {
+			workflow, version, err := s.runnable(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			stored.Workflows[id] = workflow
+			if version != nil {
+				stored.Versions[id] = *version
+			}
+		}
+	}
+	return s.askHosts(*stored)
+}
+
+// askHosts checks a live host for every ask workflow of the stored pipeline as its runs will ask: with the reused
+// step's model variant and precision (none: 422 no live host for env <env>).
+func (s *Service) askHosts(stored storedPipeline) error {
+	for _, node := range slices.Sorted(maps.Keys(stored.Models)) {
+		id := stored.Models[node]
+		workflow := stored.Workflows[id]
+		nodes, detail := resolve(workflow, stored.askModel(node))
+		if detail != "" {
+			return network.NewUnprocessableError(fmt.Sprintf("%s: %s", node, detail), nil)
+		}
+		graph, _ := json.Marshal(nodes)
+		probe := model.Run{WorkflowID: id, Env: workflow.Env, Nodes: graph, WorkflowVersion: stored.version(id)}
+		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
+			return network.NewUnprocessableError(reason, nil)
+		}
+	}
+	return nil
+}
+
+// askModel is the model a family ask of node runs with: the reused step's merged variant and precision
+// (`<model node>.variant`, `.precision` of the ask workflow), none for another family's ask.
+func (p storedPipeline) askModel(node string) map[string]any {
+	out := map[string]any{}
+	step, ok := p.Near[node]
+	if !ok {
+		return out
+	}
+	stepWorkflow, ask := p.Workflows[p.Doc.Nodes[step].Workflow], p.Workflows[p.Models[node]]
+	from, to := modelNode(stepWorkflow), modelNode(ask)
+	if from == "" || to == "" {
+		return out
+	}
+	fixed := p.fixed(step)
+	for _, param := range []string{"variant", "precision"} {
+		value, set := fixed[from+"."+param]
+		if !set {
+			value = stepWorkflow.Nodes[from].Params[param]
+		}
+		if value != nil {
+			out[to+"."+param] = value
+		}
+	}
+	return out
+}
+
+// modelNode is a workflow's <family>/model node id, "" without one.
+func modelNode(workflow registry.Workflow) string {
+	for _, id := range slices.Sorted(maps.Keys(workflow.Nodes)) {
+		if strings.HasSuffix(workflow.Nodes[id].Kind, "/model") {
+			return id
+		}
+	}
+	return ""
 }
 
 // stepGraph is one input row's resolved graph of one step, named for the 422 detail ("row 3: step_1").
@@ -565,9 +653,25 @@ func parsePipelineKey(key string) (pipelineKey, bool) {
 // pipelineStepRun picks what a pipeline batch's run is made from: the step the key names must be one of the
 // snapshot's, its workflow the request's, the attempt the row's current one and the seed index below its seeds. The
 // inputs are the request's (pipelines fills the binds from earlier steps), resolved against that workflow's snapshot.
+//
+// A judge, write or decide node's ask run (API 1.14): its workflow must be the node's resolved ask workflow, the branch
+// 0 or 1 (the re-ask), the visit within the LLM-call bound.
 func pipelineStepRun(p storedPipeline, req *message.RunsCreate, attempt int) (registry.Workflow, string) {
 	key, ok := parsePipelineKey(req.IdempotencyKey)
 	node, known := p.Doc.Nodes[key.Step]
+	if known && dto.Asks(node.Kind) {
+		switch {
+		case !ok || key.Index > 1:
+			return registry.Workflow{}, "idempotency_key's branch must be 0, or 1 for the re-ask"
+		case p.Models[key.Step] != req.WorkflowID:
+			return registry.Workflow{}, fmt.Sprintf("workflow_id must be %s, the ask workflow of %s", p.Models[key.Step], key.Step)
+		case key.Attempt != attempt:
+			return registry.Workflow{}, fmt.Sprintf("idempotency_key must carry the row's attempt %d", attempt)
+		case key.Visit >= MaxPipelineCalls:
+			return registry.Workflow{}, "idempotency_key's visit is beyond any cap"
+		}
+		return p.Workflows[req.WorkflowID], ""
+	}
 	switch {
 	case !ok || !known || node.Kind != "step" || key.Index >= node.SeedsOr1():
 		return registry.Workflow{}, "idempotency_key must name a step of this pipeline and a seed index below its seeds"

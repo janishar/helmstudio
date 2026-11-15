@@ -47,12 +47,14 @@ type Run struct {
 	Mentions        json.RawMessage // {typed, elements}: what the mention expansion did; null when nothing
 	Loras           json.RawMessage // its LoRA values as resolved when it was made ([]lora.Used); null when none
 	Looks           json.RawMessage // the look ids it was asked with (Run.looks); null when none
+	Answer          json.RawMessage // an ask run's defs answer; null otherwise
+	Thumbs          *int            // an ask run: the thumbnails it sends (an image 1, a video 3); nil otherwise
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
-	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks`
+	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks, answer, thumbs`
 
 // Output is a run_outputs row.
 type Output struct {
@@ -99,6 +101,11 @@ type Batch struct {
 	PipelineTitle   *string
 	PipelineVersion *int
 	Collection      *string
+	Bounds          json.RawMessage // {runs, llm_calls}; null for a workflow batch
+	Models          json.RawMessage // node → ask workflow; null without
+	Memory          json.RawMessage // pipelines' memory snapshot; null until taken
+	AgainOf         *string
+	SameDecisions   bool
 	Total           int
 	Queued          int
 	Running         int
@@ -116,7 +123,7 @@ const RowShown = `CASE WHEN br.status IN ('succeeded', 'failed', 'cancelled', 'w
 // BatchFrom selects Batch's columns, in order, from batches aliased b; append WHERE … to it.
 const BatchFrom = `SELECT b.id::text, b.owner_id::text, b.session_id::text, b.title, b.workflow_id, b.workflow_title, b.status,
 	b.control, b.reason, b.commands, b.created_at, b.started_at, b.finished_at, b.pipeline_id::text, b.pipeline_title,
-	b.pipeline_version, b.collection, c.* FROM batches b, LATERAL (
+	b.pipeline_version, b.collection, b.bounds, b.models, b.memory, b.again_of::text, b.same_decisions, c.* FROM batches b, LATERAL (
 	SELECT count(*)::int, count(*) FILTER (WHERE s = 'queued')::int, count(*) FILTER (WHERE s = 'running')::int,
 	count(*) FILTER (WHERE s = 'waiting')::int, count(*) FILTER (WHERE s = 'succeeded')::int, count(*) FILTER (WHERE s = 'failed')::int,
 	count(*) FILTER (WHERE s = 'cancelled')::int
@@ -197,8 +204,10 @@ type BatchStep struct {
 	Error        *string
 	CheckpointID *string
 	At           time.Time
+	DecisionID   *string
+	Memory       json.RawMessage // {read, wrote}; null without
 }
 
 // BatchStepCols are the columns BatchStep scans, in order.
 const BatchStepCols = `step, node, part, visit, status, what, changed, edge, loops, run_ids::text[], take_ids::text[], error,
-	checkpoint_id, at`
+	checkpoint_id, at, decision_id, memory`

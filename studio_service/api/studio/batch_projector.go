@@ -81,7 +81,8 @@ func pipelineHandler[D interface{ PipelineSeq() int64 }](p *Projector, apply pip
 var batchStatuses = map[string]bool{"running": true, "paused": true, "done": true, "failed": true, "stopped": true}
 
 // applyPipelineBatch sets the batch's status when the event is newer than the last one applied: reason with paused or
-// failed, started_at at the first running, finished_at while done, failed or stopped.
+// failed, started_at at the first running, finished_at while done, failed or stopped; done is stopped once the
+// user stopped the batch.
 func applyPipelineBatch(ctx context.Context, tx pgx.Tx, batchID, _ string, data message.PipelineBatch) (int, bool, error) {
 	if !batchStatuses[data.Status] {
 		log.Printf("batch projector: batch %s: unknown status %q", batchID, data.Status)
@@ -90,10 +91,20 @@ func applyPipelineBatch(ctx context.Context, tx pgx.Tx, batchID, _ string, data 
 	if data.Status != "paused" && data.Status != "failed" {
 		data.Reason = nil
 	}
-	tag, err := tx.Exec(ctx, `UPDATE batches SET status = $2, reason = $3, pipeline_seq = $4,
+	var memory any // the memory snapshot pipelines took (a pipeline batch), kept once sent
+	if snap := (struct {
+		TakenAt *string `json:"taken_at"`
+	}{}); json.Unmarshal(data.Memory, &snap) == nil && snap.TakenAt != nil {
+		memory = data.Memory
+	}
+	// done after the user's Stop is stopped: pipelines learns of the stop through cmd.pipeline.stop (CMD), and the runs
+	// studio cancelled for it can end the last rows first (EVT), so it may end the batch done before it reads the stop
+	tag, err := tx.Exec(ctx, `UPDATE batches SET status = CASE WHEN $2 = 'done' AND control = 'stop' THEN 'stopped' ELSE $2 END,
+		reason = $3, pipeline_seq = $4,
 		started_at = CASE WHEN $2 = 'running' THEN coalesce(started_at, clock_timestamp()) ELSE started_at END,
-		finished_at = CASE WHEN $2 IN ('done', 'failed', 'stopped') THEN coalesce(finished_at, clock_timestamp()) END
-		WHERE id = $1 AND pipeline_seq < $4`, batchID, data.Status, data.Reason, data.Seq)
+		finished_at = CASE WHEN $2 IN ('done', 'failed', 'stopped') THEN coalesce(finished_at, clock_timestamp()) END,
+		memory = coalesce($5::jsonb, memory)
+		WHERE id = $1 AND pipeline_seq < $4`, batchID, data.Status, data.Reason, data.Seq, memory)
 	return 0, err == nil && tag.RowsAffected() == 1, err
 }
 
@@ -152,7 +163,8 @@ func applyPipelineRow(ctx context.Context, tx pgx.Tx, batchID, ownerID string, d
 
 // stepParts and stepStatuses are what evt.pipeline.step may carry.
 var (
-	stepParts    = map[string]bool{"inputs": true, "submit": true, "wait": true, "gate": true, "route": true, "output": true}
+	stepParts = map[string]bool{"inputs": true, "submit": true, "wait": true, "gate": true, "route": true, "output": true,
+		"verdict": true, "apply": true, "memory": true}
 	stepStatuses = map[string]bool{"finished": true, "resumed": true, "current": true}
 )
 
@@ -176,22 +188,74 @@ func applyPipelineStep(ctx context.Context, tx pgx.Tx, batchID, ownerID string, 
 	if data.Loops == nil {
 		data.Loops = map[string]int{}
 	}
+	decisionID, err := storeDecision(ctx, tx, batchID, ownerID, data)
+	if err != nil {
+		return 0, false, err
+	}
+	var memory any
+	if stepMemory := (dto.StepMemory{}); json.Unmarshal(data.Memory, &stepMemory) == nil && stepMemory.Read != nil &&
+		stepMemory.Wrote != nil {
+		memory = dto.StepMemory{Read: keep(stepMemory.Read), Wrote: keep(stepMemory.Wrote)}
+	}
 	tag, err := tx.Exec(ctx, `INSERT INTO batch_steps (batch_id, n, attempt, step, owner_id, seq, node, part, visit, status,
-		what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id)
+		what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, decision_id, memory)
 		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14,
 		coalesce((SELECT array_agg(r.id ORDER BY u.ord) FROM unnest($15::uuid[]) WITH ORDINALITY u(id, ord)
 			JOIN runs r ON r.id = u.id AND r.batch_id = $1 AND r.batch_row = $2), '{}'),
 		coalesce((SELECT array_agg(t.id ORDER BY u.ord) FROM unnest($16::uuid[]) WITH ORDINALITY u(id, ord)
-			JOIN takes t ON t.id = u.id AND t.owner_id = $5), '{}'), $17, $18
+			JOIN takes t ON t.id = u.id AND t.owner_id = $5), '{}'), $17, $18, $19, $20::jsonb
 		FROM batch_rows WHERE batch_id = $1 AND n = $2
 		ON CONFLICT (batch_id, n, attempt, step) DO UPDATE SET seq = excluded.seq, node = excluded.node, part = excluded.part,
 		visit = excluded.visit, status = excluded.status, what = excluded.what, changed = excluded.changed,
 		edge = excluded.edge, loops = excluded.loops, run_ids = excluded.run_ids, take_ids = excluded.take_ids,
-		error = excluded.error, checkpoint_id = excluded.checkpoint_id, at = excluded.at
+		error = excluded.error, checkpoint_id = excluded.checkpoint_id, at = excluded.at,
+		decision_id = coalesce(excluded.decision_id, batch_steps.decision_id), memory = coalesce(excluded.memory, batch_steps.memory)
 		WHERE batch_steps.seq < excluded.seq`,
 		batchID, data.Row, data.Attempt, data.Step, ownerID, data.Seq, data.Node, data.Part, max(data.Visit, 1), data.Status,
-		data.What, data.Changed, edge, data.Loops, keep(data.RunIDs), keep(data.TakeIDs), data.Error, data.CheckpointID)
+		data.What, data.Changed, edge, data.Loops, keep(data.RunIDs), keep(data.TakeIDs), data.Error, data.CheckpointID,
+		decisionID, memory)
 	return data.Row, err == nil && tag.RowsAffected() == 1, err
+}
+
+// storeDecision keeps a step event's decision (the newest seq per id) when its id names this batch, row, attempt and
+// node; a judge's candidates (the owner's takes) are the takes it affected. It returns the id, nil without one.
+func storeDecision(ctx context.Context, tx pgx.Tx, batchID, ownerID string, data message.PipelineStep) (*string, error) {
+	var d struct {
+		ID       string `json:"id"`
+		Node     string `json:"node"`
+		Kind     string `json:"kind"`
+		Visit    int    `json:"visit"`
+		Attempt  int    `json:"attempt"`
+		Workflow string `json:"workflow"`
+		Judge    *struct {
+			Takes []struct {
+				TakeID string `json:"take_id"`
+			} `json:"takes"`
+		} `json:"judge"`
+	}
+	if len(data.Decision) == 0 || string(data.Decision) == "null" {
+		return nil, nil
+	}
+	if json.Unmarshal(data.Decision, &d) != nil || !dto.Asks(d.Kind) || d.Node != data.Node || d.Attempt != data.Attempt ||
+		d.ID != fmt.Sprintf("%s:%d:%d:%s:%d", batchID, data.Row, d.Attempt, d.Node, d.Visit) {
+		log.Printf("batch projector: batch %s row %d: dropping a decision that is not this row's", batchID, data.Row)
+		return nil, nil
+	}
+	var takes []string
+	if d.Judge != nil {
+		for _, t := range d.Judge.Takes {
+			takes = append(takes, t.TakeID)
+		}
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO decisions (id, batch_id, n, attempt, owner_id, seq, kind, data, workflow_title, take_ids)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8, b.pipeline->'workflows'->$9->>'title',
+		coalesce((SELECT array_agg(t.id ORDER BY u.ord) FROM unnest($10::uuid[]) WITH ORDINALITY u(id, ord)
+			JOIN takes t ON t.id = u.id AND t.owner_id = $5), '{}')
+		FROM batches b WHERE b.id = $2
+		ON CONFLICT (id) DO UPDATE SET seq = excluded.seq, data = excluded.data, workflow_title = excluded.workflow_title,
+		take_ids = excluded.take_ids WHERE decisions.seq < excluded.seq`,
+		d.ID, batchID, data.Row, d.Attempt, ownerID, data.Seq, d.Kind, data.Decision, d.Workflow, uuids(takes))
+	return &d.ID, err
 }
 
 // pickKey names one gate visit of a row attempt in batch_rows.picks.

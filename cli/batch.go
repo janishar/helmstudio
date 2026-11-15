@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,9 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 	}
 	if len(args) > 0 && args[0] == "pick" {
 		return batchPick(args[1:], stdout)
+	}
+	if len(args) > 0 && args[0] == "decisions" {
+		return batchDecisions(args[1:], stdout)
 	}
 	fs := flag.NewFlagSet("batch", flag.ContinueOnError)
 	pipelineID := fs.String("pipeline", "", "run one of your pipelines instead of a workflow; its inputs are the columns (inputs.<name>)")
@@ -184,7 +188,16 @@ type reviewItem struct {
 	Candidates  []struct {
 		TakeID string `json:"take_id"`
 		Seed   *int64 `json:"seed"`
+		Judge  *struct {
+			Passes bool   `json:"passes"`
+			Rank   int    `json:"rank"`
+			Reason string `json:"reason"`
+		} `json:"judge"`
 	} `json:"candidates"`
+	Kind      string   `json:"kind"` // gate (or absent) | judge
+	Suggested []string `json:"suggested"`
+	Verdict   string   `json:"verdict"`
+	Model     string   `json:"model"`
 }
 
 func (c *client) review(id string) ([]reviewItem, error) {
@@ -217,29 +230,44 @@ func batchReview(args []string, stdout io.Writer) error {
 			left = fmt.Sprintf(", %d left", it.RejectsLeft)
 		}
 		fmt.Fprintf(stdout, "row %d at %s (visit %d): pick 1 to %d; reject = %s%s\n", it.Row, it.Gate, it.Visit, it.Keep, it.OnReject, left)
+		if it.Kind == "judge" {
+			fmt.Fprintf(stdout, "  judge (%s): %s, suggests %s\n", it.Model, it.Verdict, orNone(it.Suggested))
+		}
 		for _, cand := range it.Candidates {
 			seed := "-"
 			if cand.Seed != nil {
 				seed = strconv.FormatInt(*cand.Seed, 10)
 			}
-			fmt.Fprintf(stdout, "  %s seed %s\n", cand.TakeID, seed)
+			line := fmt.Sprintf("  %s seed %s", cand.TakeID, seed)
+			if j := cand.Judge; j != nil {
+				line += fmt.Sprintf(" rank %d %s: %s", j.Rank, passFail(j.Passes), j.Reason)
+			}
+			if slices.Contains(it.Suggested, cand.TakeID) {
+				line += "  <- suggested"
+			}
+			fmt.Fprintln(stdout, line)
 		}
 	}
 	return nil
 }
 
-// batchPick answers the gate a row is parked on: the picked takes, or --reject.
+// batchPick answers the gate (or the judge in Suggest) a row is parked on: the picked takes, or --reject; --note
+// (a judge only) says why, and the pipeline's memory keeps it as an example for its next batches.
 func batchPick(args []string, stdout io.Writer) error {
-	reject, rest := false, []string{}
-	for _, a := range args {
-		if a == "--reject" || a == "-reject" {
+	reject, note, rest := false, "", []string{}
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--reject" || a == "-reject":
 			reject = true
-		} else {
+		case (a == "--note" || a == "-note") && i+1 < len(args):
+			i++
+			note = args[i]
+		default:
 			rest = append(rest, a)
 		}
 	}
 	if len(rest) < 2 || reject == (len(rest) > 2) {
-		return errors.New("usage: helm batch pick <batch_id> <row> (<take_id>... | --reject)")
+		return errors.New("usage: helm batch pick <batch_id> <row> (<take_id>... | --reject) [--note text]")
 	}
 	row, err := strconv.Atoi(rest[1])
 	if err != nil {
@@ -253,18 +281,22 @@ func batchPick(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	gate := ""
-	for _, it := range items {
-		if it.Row == row {
-			gate = it.Gate
+	var at *reviewItem
+	for i := range items {
+		if items[i].Row == row {
+			at = &items[i]
 		}
 	}
-	if gate == "" {
+	if at == nil {
 		return fmt.Errorf("row %d is not waiting for a pick", row)
 	}
+	gate := at.Gate
 	body := map[string]any{"gate": gate, "take_ids": rest[2:]}
 	if reject {
 		body = map[string]any{"gate": gate, "reject": true}
+	}
+	if note != "" {
+		body["note"] = note
 	}
 	var r batchRow
 	path := fmt.Sprintf("/v1/studio/batches/%s/rows/%d/pick", url.PathEscape(rest[0]), row)
@@ -275,8 +307,180 @@ func batchPick(args []string, stdout io.Writer) error {
 	if reject {
 		what = "rejected all"
 	}
+	if at.Kind == "judge" {
+		if sameSet(rest[2:], at.Suggested) {
+			what += " (as the judge suggested)"
+		} else {
+			what += " (the judge suggested " + orNone(at.Suggested) + ")"
+		}
+	}
 	fmt.Fprintf(stdout, "row %d at %s: %s; row %s\n", row, gate, what, r.Status)
 	return nil
+}
+
+type decision struct {
+	ID           string   `json:"id"`
+	Row          int      `json:"row"`
+	Node         string   `json:"node"`
+	Kind         string   `json:"kind"`
+	Visit        int      `json:"visit"`
+	Attempt      int      `json:"attempt"`
+	Replayed     bool     `json:"replayed"`
+	ReplayedFrom *string  `json:"replayed_from"`
+	RunIDs       []string `json:"run_ids"`
+	Workflow     string   `json:"workflow"`
+	Template     string   `json:"template"`
+	MemoryRead   []string `json:"memory_read"`
+	Error        *string  `json:"error"`
+	Judge        *struct {
+		Mode        string   `json:"mode"`
+		Verdict     string   `json:"verdict"`
+		Picked      []string `json:"picked"`
+		FirstFailed *string  `json:"first_failed"`
+		Agreed      *bool    `json:"agreed"`
+		UserPick    []string `json:"user_pick"`
+		Takes       []struct {
+			TakeID string `json:"take_id"`
+			Passes bool   `json:"passes"`
+			Rank   int    `json:"rank"`
+			Reason string `json:"reason"`
+		} `json:"takes"`
+	} `json:"judge"`
+	Write *struct {
+		To     string `json:"to"`
+		Before string `json:"before"`
+		After  string `json:"after"`
+	} `json:"write"`
+	Decide *struct {
+		Route  string `json:"route"`
+		To     string `json:"to"`
+		Reason string `json:"reason"`
+		Forced bool   `json:"forced"`
+	} `json:"decide"`
+}
+
+// batchDecisions prints the judge, write and decide decisions of one row, or of every row, oldest first.
+func batchDecisions(args []string, stdout io.Writer) error {
+	if len(args) < 1 || len(args) > 2 {
+		return errors.New("usage: helm batch decisions <batch_id> [row]")
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	base := "/v1/studio/batches/" + url.PathEscape(args[0])
+	rows := []int{}
+	if len(args) == 2 {
+		n, err := strconv.Atoi(args[1])
+		if err != nil {
+			return fmt.Errorf("row %q: not a number", args[1])
+		}
+		rows = append(rows, n)
+	} else {
+		for cursor := ""; ; {
+			var page struct {
+				Rows       []batchRow `json:"rows"`
+				NextCursor *string    `json:"next_cursor"`
+			}
+			path := base + "/rows"
+			if cursor != "" {
+				path += "?cursor=" + url.QueryEscape(cursor)
+			}
+			if err := c.call(http.MethodGet, path, nil, http.StatusOK, &page); err != nil {
+				return err
+			}
+			for _, r := range page.Rows {
+				rows = append(rows, r.Row)
+			}
+			if page.NextCursor == nil {
+				break
+			}
+			cursor = *page.NextCursor
+		}
+	}
+	none := true
+	for _, n := range rows {
+		var list struct {
+			Decisions []decision `json:"decisions"`
+		}
+		if err := c.call(http.MethodGet, fmt.Sprintf("%s/rows/%d/decisions", base, n), nil, http.StatusOK, &list); err != nil {
+			return err
+		}
+		for _, d := range list.Decisions {
+			none = false
+			fmt.Fprint(stdout, d.lines())
+		}
+	}
+	if none {
+		fmt.Fprintln(stdout, "no decisions")
+	}
+	return nil
+}
+
+func (d decision) lines() string {
+	head := fmt.Sprintf("row %d attempt %d %s visit %d (%s, %s)", d.Row, d.Attempt, d.Node, d.Visit, d.Template, d.Workflow)
+	switch {
+	case d.Replayed:
+		head += " replayed from " + deref(d.ReplayedFrom)
+	case len(d.RunIDs) > 0:
+		head += " run " + strings.Join(d.RunIDs, ",")
+	}
+	if len(d.MemoryRead) > 0 {
+		head += fmt.Sprintf("; read %d from memory", len(d.MemoryRead))
+	}
+	switch {
+	case d.Error != nil:
+		return head + ": error: " + *d.Error + "\n"
+	case d.Judge != nil:
+		j := d.Judge
+		out := fmt.Sprintf("%s: %s %s, kept %s", head, j.Mode, j.Verdict, orNone(j.Picked))
+		if j.FirstFailed != nil {
+			out += ", first failed: " + *j.FirstFailed
+		}
+		if j.Agreed != nil {
+			out += fmt.Sprintf("; you picked %s (agreed: %t)", orNone(j.UserPick), *j.Agreed)
+		}
+		out += "\n"
+		for _, t := range j.Takes {
+			out += fmt.Sprintf("  %s rank %d %s: %s\n", t.TakeID, t.Rank, passFail(t.Passes), t.Reason)
+		}
+		return out
+	case d.Write != nil:
+		return fmt.Sprintf("%s: %s %q -> %q\n", head, d.Write.To, d.Write.Before, d.Write.After)
+	case d.Decide != nil:
+		forced := ""
+		if d.Decide.Forced {
+			forced = " (forced: the loop's cap)"
+		}
+		return fmt.Sprintf("%s: %s -> %s%s: %s\n", head, d.Decide.Route, d.Decide.To, forced, d.Decide.Reason)
+	}
+	return head + "\n"
+}
+
+func passFail(ok bool) string {
+	if ok {
+		return "pass"
+	}
+	return "fail"
+}
+
+func orNone(ids []string) string {
+	if len(ids) == 0 {
+		return "none"
+	}
+	return strings.Join(ids, ",")
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, x := range a {
+		if !slices.Contains(b, x) {
+			return false
+		}
+	}
+	return true
 }
 
 func btoi(b bool) int {

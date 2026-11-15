@@ -53,3 +53,8 @@ def runs_create_errors(part: str, value) -> list[str]:
 def state_get_errors(part: str, value) -> list[str]:
     """Errors of a pipelines.state.get `request` or `reply`."""
     return errors(f"{BASE}req.pipelines.state.get.schema.json#/$defs/{part}", value)
+
+
+def memory_errors(part: str, value) -> list[str]:
+    """Errors of a pipelines.memory `request` or `reply`."""
+    return errors(f"{BASE}req.pipelines.memory.schema.json#/$defs/{part}", value)

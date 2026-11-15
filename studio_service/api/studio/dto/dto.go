@@ -3,6 +3,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -149,6 +150,16 @@ type Run struct {
 	WorkflowVersion *int `json:"workflow_version,omitempty"`
 	// the looks it was asked with, as requested
 	Looks []string `json:"looks,omitempty"`
+	// a text (ask) workflow's run: its answer, never a take (API 1.14)
+	Answer *RunAnswer `json:"answer,omitempty"`
+}
+
+// RunAnswer is an ask run's answer: the last try's text, the tokens and the time.
+type RunAnswer struct {
+	Text      string  `json:"text"`
+	TokensIn  int     `json:"tokens_in"`
+	TokensOut int     `json:"tokens_out"`
+	Seconds   float64 `json:"seconds"`
 }
 
 // RunList is a session's runs, newest first.
@@ -231,6 +242,12 @@ type Batch struct {
 	PipelineTitle   *string `json:"pipeline_title,omitempty"`
 	PipelineVersion *int    `json:"pipeline_version,omitempty"`
 	Collection      *string `json:"collection,omitempty"`
+	// API 1.14, a pipeline batch: its worst case, its ask workflows, its memory snapshot; Run again's source
+	Bounds        *PipelineBounds   `json:"bounds,omitempty"`
+	Models        map[string]string `json:"models,omitempty"`
+	Memory        json.RawMessage   `json:"memory,omitempty"`
+	AgainOf       *string           `json:"again_of,omitempty"`
+	SameDecisions *bool             `json:"same_decisions,omitempty"`
 }
 
 // BatchRow is one row of a batch.

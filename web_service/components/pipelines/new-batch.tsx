@@ -18,7 +18,8 @@ import { chosenIds, liveChosen, reasonOf, tilesOf, type Chosen } from "@/lib/loo
 import { withInputs } from "@/lib/mentions";
 import { imageInputs } from "@/lib/refs";
 import { remember } from "@/lib/take-cache";
-import { pipelineFields } from "@/lib/pipeline";
+import { pipelineBounds, pipelineFields } from "@/lib/pipeline";
+import { boundsLine } from "@/lib/pipeline-run";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   MAX_AXES,
@@ -631,7 +632,15 @@ export function NewBatch({
             {tooBig && built.count ? (
               <span className="text-bad">{tooBig}</span>
             ) : (
-              summary(built.count, seedField ? seedCount : null, !!pipeline)
+              <>
+                {summary(built.count, seedField ? seedCount : null, !!pipeline)}
+                {pipeline &&
+                  built.count > 0 &&
+                  ` · ${boundsLine(
+                    pipeline.bounds ?? pipelineBounds(pipeline),
+                    built.count * (seedField ? seedCount : 1),
+                  )}`}
+              </>
             )}
           </span>
           <button type="button" className="chip bevel" onClick={onClose}>

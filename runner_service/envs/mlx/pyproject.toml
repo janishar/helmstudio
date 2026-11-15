@@ -18,6 +18,12 @@ dependencies = [
     "numpy>=2.5.4",
 ]
 
+[project.optional-dependencies]
+# the llm pack (Qwen3.8-27B-4bit, a vision-language model; docs/reference-notes/llm.md 2.3): Mac-only, a heavy
+# tree (datasets, pandas, opencv, ...), so an extra: `uv sync --project envs/mlx --extra llm`. mlx-lm is not
+# needed: it is text-only and does not load the vision tower. llguidance (structured output) comes with mlx-vlm.
+llm = ["mlx-vlm>=0.7.12"]
+
 [dependency-groups]
 dev = ["pytest>=9.2.0", "pytest-asyncio>=1.5.0", "ruff==0.17.5"]
 

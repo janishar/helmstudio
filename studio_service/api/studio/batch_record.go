@@ -2,6 +2,7 @@ package studio
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5"
 
@@ -32,11 +33,19 @@ func runEnded(ctx context.Context, tx pgx.Tx, run model.Run) error {
 	}
 	err = messaging.Enqueue(ctx, tx, messaging.Command{JobID: run.ID, OwnerID: run.OwnerID, MsgID: run.ID + ":finished",
 		Data: message.RunFinished{RunID: run.ID, BatchID: *run.BatchID, Row: *run.BatchRow, IdempotencyKey: *run.Key,
-			Status: run.Status, TakeIDs: takeIDs, Error: failure, SessionID: run.SessionID}})
+			Status: run.Status, TakeIDs: takeIDs, Error: failure, Answer: answerOf(run), SessionID: run.SessionID}})
 	if err != nil {
 		return err
 	}
 	return runMoved(ctx, tx, run)
+}
+
+// answerOf is a run's stored answer (a text workflow's), nil without one.
+func answerOf(run model.Run) json.RawMessage {
+	if len(run.Answer) == 0 || string(run.Answer) == "null" {
+		return nil
+	}
+	return run.Answer
 }
 
 // runMoved logs a batch run's row (its shown status follows the run) and its batch (the counts) as changed.

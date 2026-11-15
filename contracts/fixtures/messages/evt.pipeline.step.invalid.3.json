@@ -1,0 +1,183 @@
+{
+  "type": "evt.pipeline.step",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000201",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 11,
+    "row": 6,
+    "attempt": 1,
+    "step": 4,
+    "node": "judge",
+    "part": "verdict",
+    "visit": 1,
+    "status": "finished",
+    "what": "Picked take 3 · all checks pass",
+    "changed": [
+      "decisions.judge = 1",
+      "picked.judge = 1"
+    ],
+    "edge": null,
+    "loops": {
+      "judge": 0
+    },
+    "run_ids": [
+      "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b40"
+    ],
+    "take_ids": [
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62"
+    ],
+    "error": null,
+    "checkpoint_id": "1efa2b3c-0000-6000-8000-0000000004",
+    "decision": {
+      "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:judge:0",
+      "replay_key": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:judge:1:3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f3f",
+      "node": "judge",
+      "kind": "judge",
+      "visit": 1,
+      "attempt": 1,
+      "replayed": false,
+      "replayed_from": null,
+      "run_ids": [
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b40"
+      ],
+      "workflow": "qwen-image-ask",
+      "model": {
+        "id": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      "template": "judge/v1",
+      "system": "You are a careful reviewer for an image and video studio. Answer only with JSON that matches the given schema.",
+      "prompt": "The brief: \"a red fox in snow\". ...",
+      "schema": "{\"type\":\"object\"}",
+      "seen": [
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "width": 1024,
+          "height": 1024
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "width": 1024,
+          "height": 1024
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.jpg",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "width": 1024,
+          "height": 1024
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+          "frame": null,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.jpg",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "width": 1024,
+          "height": 1024
+        }
+      ],
+      "answers": [
+        {
+          "text": "{\"takes\":[{\"take\":1,\"checks\":[false,true,true,true],\"reason\":\"Extra hand on the left.\"},{\"take\":2,\"checks\":[true,true,true,false],\"reason\":\"Clean but soft.\"},{\"take\":3,\"checks\":[true,true,true,true],\"reason\":\"Clean and sharp.\"},{\"take\":4,\"checks\":[true,false,true,true],\"reason\":\"Watermark bottom right.\"}],\"ranking\":[3,2,1,4]}",
+          "error": null
+        }
+      ],
+      "tokens_in": 4512,
+      "tokens_out": 179,
+      "seconds": 8.9,
+      "memory_read": [
+        "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a70"
+      ],
+      "error": null,
+      "judge": {
+        "criteria": {
+          "must": [
+            "No extra or missing limbs",
+            "No text or watermarks",
+            "Matches the brief"
+          ],
+          "nice": [
+            "Subject is sharp"
+          ]
+        },
+        "keep": 1,
+        "mode": "suggest",
+        "takes": [
+          {
+            "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+            "checks": [
+              false,
+              true,
+              true,
+              true
+            ],
+            "reason": "Extra hand on the left.",
+            "passes": false,
+            "rank": 3
+          },
+          {
+            "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+            "checks": [
+              true,
+              true,
+              true,
+              false
+            ],
+            "reason": "Clean but soft.",
+            "passes": true,
+            "rank": 2
+          },
+          {
+            "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+            "checks": [
+              true,
+              true,
+              true,
+              true
+            ],
+            "reason": "Clean and sharp.",
+            "passes": true,
+            "rank": 1
+          },
+          {
+            "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+            "checks": [
+              true,
+              false,
+              true,
+              true
+            ],
+            "reason": "Watermark bottom right.",
+            "passes": false,
+            "rank": 4
+          }
+        ],
+        "picked": [
+          "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62"
+        ],
+        "verdict": "pass",
+        "first_failed": null
+      }
+    },
+    "memory": {
+      "read": [
+        "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a70"
+      ],
+      "wrote": []
+    }
+  }
+}

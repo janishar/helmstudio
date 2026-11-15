@@ -79,6 +79,12 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/batches/:id/rows/:row/pick", c.pickBatchRowHandler)
 	group.GET("/batches/:id/rows/:row/execution", c.rowExecutionHandler)
 	group.GET("/batches/:id/rows/:row/execution/:step/state", c.rowStepStateHandler)
+	group.GET("/batches/:id/rows/:row/decisions", c.rowDecisionsHandler)
+	group.POST("/batches/:id/again", c.againBatchHandler)
+	group.GET("/takes/:id/decisions", c.takeDecisionsHandler)
+	group.GET("/memory", c.listMemoryHandler)
+	group.POST("/memory", c.createMemoryHandler)
+	group.DELETE("/memory/:id", c.deleteMemoryHandler)
 	group.GET("/pipelines", c.listPipelinesHandler)
 	group.POST("/pipelines", c.createPipelineHandler)
 	group.POST("/pipelines/validate", c.validatePipelineHandler)
@@ -552,6 +558,54 @@ func (c *controller) rowStepStateHandler(ctx *gin.Context) {
 	reply(ctx, http.StatusOK, out, err)
 }
 
+// rowDecisionsHandler: GET /batches/{id}/rows/{row}/decisions[?attempt=].
+func (c *controller) rowDecisionsHandler(ctx *gin.Context) {
+	out, err := c.service.RowDecisions(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("row"),
+		ctx.Query("attempt"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// takeDecisionsHandler: GET /takes/{id}/decisions.
+func (c *controller) takeDecisionsHandler(ctx *gin.Context) {
+	out, err := c.service.TakeDecisions(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// againBatchHandler: POST /batches/{id}/again — 201 with the new batch.
+func (c *controller) againBatchHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.BatchAgain](ctx, false)
+	var out dto.Batch
+	if err == nil {
+		out, err = c.service.AgainBatch(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusCreated, out, err)
+}
+
+// listMemoryHandler: GET /memory?pipeline_id=&kind= — an unknown pipeline is a 404.
+func (c *controller) listMemoryHandler(ctx *gin.Context) {
+	out, err := c.service.ListMemory(ctx.Request.Context(), common.MustCaller(ctx), ctx.Query("pipeline_id"), ctx.Query("kind"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// createMemoryHandler: POST /memory — 201 with the note.
+func (c *controller) createMemoryHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.MemoryCreate](ctx, false)
+	var out dto.MemoryItem
+	if err == nil {
+		out, err = c.service.CreateMemoryNote(ctx.Request.Context(), common.MustCaller(ctx), body)
+	}
+	reply(ctx, http.StatusCreated, out, err)
+}
+
+// deleteMemoryHandler: DELETE /memory/{item_id} — 204.
+func (c *controller) deleteMemoryHandler(ctx *gin.Context) {
+	if err := c.service.DeleteMemoryItem(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	ctx.Status(http.StatusNoContent)
+}
+
 // ------------------------------------------------------------------ pipelines
 
 // listPipelinesHandler: GET /pipelines.
@@ -579,7 +633,7 @@ func (c *controller) createPipelineHandler(ctx *gin.Context) {
 // validatePipelineHandler: POST /pipelines/validate — other top-level keys are ignored.
 func (c *controller) validatePipelineHandler(ctx *gin.Context) {
 	body, err := strictBodyKeeping[dto.PipelineDoc](ctx, "title", "nodes", "edges")
-	var out dto.WorkflowValidation
+	var out dto.PipelineValidation
 	if err == nil {
 		out, err = c.service.ValidatePipeline(ctx.Request.Context(), common.MustCaller(ctx), *body)
 	}

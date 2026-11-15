@@ -452,11 +452,14 @@ func planOf(reg *registry.Registry, host string, run model.Run) plan {
 	if !ok {
 		return out
 	}
-	memory, ok := found.Plan(models[0].variant, models[0].precision)
+	memory, ok := found.Plan(models[0].variant, models[0].precision, run.WorkflowID)
 	if !ok {
 		return out
 	}
 	larger := len(models) > 1 || memory.PlannedAt != nil && beyond(graph, *memory.PlannedAt)
+	if at := memory.PlannedAt; at != nil && at.Images != nil && run.Thumbs != nil && *run.Thumbs > *at.Images {
+		larger = true // more thumbnails than the ask plan holds for
+	}
 	used := runUsed(run.Loras)
 	bake := baked(used, graph)
 	for _, c := range memory.Components {

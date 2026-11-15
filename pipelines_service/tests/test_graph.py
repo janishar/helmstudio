@@ -119,10 +119,11 @@ async def test_binds_seeds_and_a_gate_in_the_demo_pipeline():
     )  # inputs, still.submit, still.wait, review.gate, review.route, edit ×2, out
 
 
-def fx_problems(name):
+def fx_problems(name, with_bounds=False):
     fx = json.loads((CONTRACTS / "fixtures/pipelines" / name).read_text())
     want = {(p["code"], p.get("node"), p.get("port"), p.get("param")) for p in fx["problems"]}
-    return fx["pipeline"], {p for p in want if p[0] in pipeline.CODES}
+    out = fx["pipeline"], {p for p in want if p[0] in pipeline.CODES}
+    return (*out, fx.get("bounds")) if with_bounds else out
 
 
 @pytest.mark.parametrize(
@@ -134,8 +135,11 @@ def fx_problems(name):
     ),
 )
 def test_pipeline_rules_match_the_fixtures(name):
-    doc, want = fx_problems(name)
-    assert pipeline.problems(doc) == want
+    doc, want, bounds = fx_problems(name, with_bounds=True)
+    info = {}
+    assert pipeline.problems(doc, info) == want
+    if bounds:  # Submit's worst case per row: runs and LLM calls
+        assert info["bounds"] == bounds
 
 
 def test_an_uncapped_loop_does_not_validate():

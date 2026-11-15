@@ -1,0 +1,172 @@
+{
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "items": [
+    {
+      "row": 6,
+      "attempt": 1,
+      "inputs": {
+        "inputs.prompt": "a red fox in snow",
+        "inputs.motion": "the fox turns its head"
+      },
+      "gate": "judge",
+      "gate_title": null,
+      "visit": 1,
+      "keep": 1,
+      "on_reject": "retry",
+      "rejects_left": 2,
+      "candidates": [
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+          "kind": "image",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 42,
+          "judge": {
+            "passes": false,
+            "rank": 3,
+            "checks": [
+              {
+                "criterion": "No extra or missing limbs",
+                "level": "must",
+                "pass": false
+              },
+              {
+                "criterion": "No text or watermarks",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "Matches the brief",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "Subject is sharp",
+                "level": "nice",
+                "pass": true
+              }
+            ],
+            "reason": "Extra hand on the left."
+          }
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+          "kind": "image",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 43,
+          "judge": {
+            "passes": true,
+            "rank": 2,
+            "checks": [
+              {
+                "criterion": "No extra or missing limbs",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "No text or watermarks",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "Matches the brief",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "Subject is sharp",
+                "level": "nice",
+                "pass": false
+              }
+            ],
+            "reason": "Clean but soft."
+          }
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+          "kind": "image",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 44,
+          "judge": {
+            "passes": true,
+            "rank": 1,
+            "checks": [
+              {
+                "criterion": "No extra or missing limbs",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "No text or watermarks",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "Matches the brief",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "Subject is sharp",
+                "level": "nice",
+                "pass": true
+              }
+            ],
+            "reason": "Clean and sharp."
+          }
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+          "kind": "image",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 45,
+          "judge": {
+            "passes": false,
+            "rank": 4,
+            "checks": [
+              {
+                "criterion": "No extra or missing limbs",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "No text or watermarks",
+                "level": "must",
+                "pass": false
+              },
+              {
+                "criterion": "Matches the brief",
+                "level": "must",
+                "pass": true
+              },
+              {
+                "criterion": "Subject is sharp",
+                "level": "nice",
+                "pass": true
+              }
+            ],
+            "reason": "Watermark bottom right."
+          }
+        }
+      ],
+      "kind": "judge",
+      "suggested": [
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62"
+      ],
+      "verdict": "pass",
+      "model": "Ask Qwen Image (Qwen3-VL 8B)",
+      "decision_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:judge:1"
+    }
+  ]
+}

@@ -92,7 +92,7 @@
     },
     "image": {
       "type": "object",
-      "description": "an Image value as studio resolves it for cmd.run.execute: the take's immutable object, owned by the envelope's owner_id. The runner reads `key` from the object store and nothing else; its cache key for the image is (owner_id, key, etag)",
+      "description": "an Image value as studio resolves it for cmd.run.execute: the take's immutable object, owned by the envelope's owner_id. The runner reads `key` from the object store and nothing else; its cache key for the image is (owner_id, key, etag). From API 1.14 the same form also carries a video take for a rows field of ref kind Media (an ask node's `media`): content_type video/mp4, its MP4 object, width and height of the video",
       "required": [
         "take_id",
         "key",
@@ -115,7 +115,8 @@
           "enum": [
             "image/png",
             "image/jpeg",
-            "image/webp"
+            "image/webp",
+            "video/mp4"
           ]
         },
         "width": {
@@ -459,7 +460,7 @@
     "idempotencyKey": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$",
-      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key. A pipeline batch: <graph node> = the step node id, <loop count> = its visit in the row attempt from 0, <branch> = the seed index from 0"
+      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key. A pipeline batch: <graph node> = the step node id, <loop count> = its visit in the row attempt from 0, <branch> = the seed index from 0. A judge, write or decide node of a pipeline batch (an LLM call): <graph node> = that node id, <loop count> = its visit from 0, <branch> = the call's run: 0, or 1 for the one re-ask after pipelines' own answer checks failed (contracts/README.md, Agent nodes)"
     },
     "takeIds": {
       "type": "array",
@@ -506,11 +507,11 @@
     },
     "pipelineSource": {
       "type": "string",
-      "pattern": "^(\\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\\.(takes|picked))$",
-      "description": "`$<input>`, `<step>.takes` or `<gate>.picked` (contracts/README.md, Pipeline rules)"
+      "pattern": "^(\\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\\.(takes|picked|reasons|notes))$",
+      "description": "`$<input>`, `<step>.takes`, `<gate or judge>.picked`, from API 1.14 `<judge>.reasons` and `<memory read node>.notes` (text sources: write, decide and memory write `from` only) (contracts/README.md, Pipeline rules)"
     },
     "pipelineNode": {
-      "description": "a node of a pipeline snapshot: the document's node, a step's `inputs` already merged over its preset by studio at Submit, plus `seed_param`",
+      "description": "a node of a pipeline snapshot: the document's node, a step's `inputs` already merged over its preset by studio at Submit, plus `seed_param`; from API 1.14 judge, write and decide nodes add `workflow` (the resolved ask workflow) and a judge's `criteria` is always both lists",
       "oneOf": [
         {
           "type": "object",
@@ -745,6 +746,269 @@
               "maxLength": 80
             }
           }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "takes",
+            "criteria",
+            "keep",
+            "mode",
+            "model",
+            "workflow"
+          ],
+          "properties": {
+            "kind": {
+              "const": "judge"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "takes": {
+              "$ref": "#/$defs/nodeId"
+            },
+            "criteria": {
+              "$ref": "#/$defs/judgeCriteria"
+            },
+            "keep": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "mode": {
+              "enum": [
+                "suggest",
+                "auto"
+              ]
+            },
+            "model": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+              "description": "as in the document: auto or an ask workflow id"
+            },
+            "workflow": {
+              "$ref": "#/$defs/workflowId",
+              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model)"
+            },
+            "memory": {
+              "$ref": "#/$defs/nodeId",
+              "description": "a memory read node: its examples (key = this judge's id) and notes go into the prompt"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "from",
+            "to",
+            "instruction",
+            "model",
+            "workflow"
+          ],
+          "properties": {
+            "kind": {
+              "const": "write"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "from": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/$defs/pipelineSource"
+              }
+            },
+            "to": {
+              "type": "string",
+              "pattern": "^\\$[a-z][a-z0-9_]{0,63}$"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "model": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+              "description": "as in the document: auto or an ask workflow id"
+            },
+            "workflow": {
+              "$ref": "#/$defs/workflowId",
+              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model)"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "question",
+            "from",
+            "routes",
+            "model",
+            "workflow"
+          ],
+          "properties": {
+            "kind": {
+              "const": "decide"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "from": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/$defs/pipelineSource"
+              }
+            },
+            "routes": {
+              "type": "object",
+              "minProperties": 2,
+              "maxProperties": 6,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "model": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+              "description": "as in the document: auto or an ask workflow id"
+            },
+            "workflow": {
+              "$ref": "#/$defs/workflowId",
+              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model)"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "op"
+          ],
+          "properties": {
+            "kind": {
+              "const": "memory"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "op": {
+              "enum": [
+                "read",
+                "write"
+              ]
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "from": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/$defs/pipelineSource"
+              }
+            }
+          }
         }
       ]
     },
@@ -786,11 +1050,42 @@
                   "maximum": 10
                 }
               }
+            },
+            {
+              "type": "object",
+              "required": [
+                "routes",
+                "max",
+                "then"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "routes": {
+                  "type": "object",
+                  "minProperties": 2,
+                  "maxProperties": 6,
+                  "propertyNames": {
+                    "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/$defs/nodeId"
+                  }
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                },
+                "then": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,31}$"
+                }
+              }
             }
           ]
         }
       ],
-      "description": "[from, to] or [gate, {pass, fail, max, then}]"
+      "description": "[from, to], [gate or judge, {pass, fail, max, then}] or (API 1.14) [decide, {routes: {label: to}, max, then: label}]"
     },
     "pipelineSnapshot": {
       "type": "object",
@@ -869,7 +1164,7 @@
             "picked",
             "rejected"
           ],
-          "description": "a step: running (runs requested) then its end; a gate: waiting, picked, rejected; an output: succeeded"
+          "description": "a step: running (runs requested) then its end; a gate: waiting, picked, rejected; an output: succeeded; a judge: running (its call), then picked (a pass applied: Auto, or the user's pick), waiting (parked in Suggest), rejected (a fail verdict or the user rejected all) or failed (the call failed); write and decide: running, then succeeded or failed; memory: succeeded"
         },
         "run_ids": {
           "$ref": "#/$defs/takeIdList",
@@ -896,6 +1191,126 @@
             "null"
           ],
           "maxLength": 2000
+        },
+        "decision_id": {
+          "$ref": "#/$defs/decisionId",
+          "description": "judge, write, decide: the visit's decision"
+        },
+        "judged": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verdict",
+            "picked",
+            "of",
+            "keep",
+            "first_failed",
+            "suggested",
+            "agreed",
+            "takes"
+          ],
+          "description": "a judge attempt's verdict summary (the run table's judged cell)",
+          "properties": {
+            "verdict": {
+              "enum": [
+                "pass",
+                "fail"
+              ]
+            },
+            "picked": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 8,
+              "description": "takes kept (the user's pick once made)"
+            },
+            "of": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "description": "candidates"
+            },
+            "keep": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "first_failed": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/criterion"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "suggested": {
+              "$ref": "#/$defs/takeIdList",
+              "description": "the judge's pick (pre-selected in the review grid)"
+            },
+            "agreed": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "description": "Suggest: the user's pick equalled the suggestion; null before a pick and in Auto"
+            },
+            "takes": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "take_id",
+                  "passes",
+                  "first_failed",
+                  "reason"
+                ],
+                "properties": {
+                  "take_id": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "passes": {
+                    "type": "boolean"
+                  },
+                  "first_failed": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/criterion"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                }
+              },
+              "description": "every candidate with its reason, in candidate order (the attempts side by side)"
+            }
+          }
+        },
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "label",
+            "to"
+          ],
+          "properties": {
+            "label": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,31}$"
+            },
+            "to": {
+              "$ref": "#/$defs/nodeId"
+            }
+          },
+          "description": "a decide attempt: the route taken"
         }
       }
     },
@@ -914,7 +1329,11 @@
           "enum": [
             "step",
             "gate",
-            "output"
+            "output",
+            "judge",
+            "write",
+            "decide",
+            "memory"
           ]
         },
         "attempts": {
@@ -924,6 +1343,694 @@
           "items": {
             "$ref": "#/$defs/cellAttempt"
           }
+        },
+        "loop": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "turns",
+            "max",
+            "then",
+            "gave_up"
+          ],
+          "description": "a judge with a branch, a decide: its capped loop (retried <turns> of <max>; gave up → then)",
+          "properties": {
+            "turns": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10,
+              "description": "capped turns taken so far (a judge: its fail edge; a decide: its routes other than then)"
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "then": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nodeId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "gave_up": {
+              "type": "boolean",
+              "description": "the cap forced `then`"
+            }
+          }
+        }
+      }
+    },
+    "criterion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "one plain checklist line, e.g. `No extra or missing limbs`"
+    },
+    "judgeCriteria": {
+      "type": "object",
+      "required": [
+        "must",
+        "nice"
+      ],
+      "additionalProperties": false,
+      "description": "a judge's checklist: every `must` passes for a take to pass; `nice` only orders the takes that pass. At most 12 lines in all, none twice (pipeline rule judge_criteria)",
+      "properties": {
+        "must": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/criterion"
+          }
+        },
+        "nice": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/criterion"
+          }
+        }
+      }
+    },
+    "thumbKey": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/objectKey"
+        },
+        {
+          "pattern": "^u/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/llm/thumbs/[0-9a-f]{64}\\.jpg$"
+        }
+      ],
+      "description": "a derived thumbnail an ask run sent to the model: u/<owner_id>/llm/thumbs/<sha256 of the JPEG>.jpg, content-addressed, written once"
+    },
+    "seenItem": {
+      "type": "object",
+      "required": [
+        "take_id",
+        "frame",
+        "key",
+        "sha256",
+        "width",
+        "height"
+      ],
+      "additionalProperties": false,
+      "description": "one thumbnail the model saw, in the order it saw them",
+      "properties": {
+        "take_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "frame": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "a video take's keyframe (frame index); null for an image take"
+        },
+        "key": {
+          "$ref": "#/$defs/thumbKey"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 1024
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 32,
+          "maximum": 1024
+        }
+      }
+    },
+    "answerTry": {
+      "type": "object",
+      "required": [
+        "text",
+        "error"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 32768,
+          "description": "the model's answer as generated"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000,
+          "description": "why it did not pass (`answer did not match the schema: <validator error>`); null: it passed"
+        }
+      }
+    },
+    "answer": {
+      "type": "object",
+      "required": [
+        "tries",
+        "seen",
+        "tokens_in",
+        "tokens_out",
+        "seconds"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.14: the result of a run of a text (ask) workflow, stored on the run, never a take. The last try is the answer; a succeeded run's last try has error null and matches its `schema` (an empty schema: plain text). A failed run's tries are both failures (`answer did not match the schema: …`)",
+      "properties": {
+        "tries": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/answerTry"
+          },
+          "description": "1, or 2 when the first did not parse or match the schema and the runner asked once more in the same run"
+        },
+        "seen": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/seenItem"
+          },
+          "description": "every thumbnail sent, in order (media items in order, a video's 3 keyframes in frame order)"
+        },
+        "tokens_in": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "prompt tokens, images included, over the tries"
+        },
+        "tokens_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "generation time over the tries (load not included)"
+        }
+      }
+    },
+    "decisionId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:[1-9][0-9]{0,4}$",
+      "description": "<batch_id>:<row>:<row attempt>:<node>:<visit from 1>: one judge, write or decide visit"
+    },
+    "replayKey": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[a-z][a-z0-9_]{0,63}:[1-9][0-9]{0,4}:[0-9a-f]{64}$",
+      "description": "<batch_id>:<row>:<node>:<visit from 1>:<inputs hash> (contracts/README.md, Decisions: replay): a stored decision with this key is reused instead of asking the model"
+    },
+    "modelRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "variant",
+            "precision"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "variant": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "precision": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "the ask workflow's <family>/model node as it ran (made_with.model's shape)"
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "replay_key",
+        "node",
+        "kind",
+        "visit",
+        "attempt",
+        "replayed",
+        "replayed_from",
+        "run_ids",
+        "workflow",
+        "model",
+        "template",
+        "system",
+        "prompt",
+        "schema",
+        "seen",
+        "answers",
+        "tokens_in",
+        "tokens_out",
+        "seconds",
+        "memory_read",
+        "error"
+      ],
+      "description": "from API 1.14: what one judge, write or decide visit decided and from what (plan 16.7). Made by pipelines, published in evt.pipeline.step, stored by studio on the batch row and on the takes it affected (a judge: its candidates). `judge`, `write` or `decide` holds the derived result for its kind; absent when `error` is set before one was derived",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/decisionId"
+        },
+        "replay_key": {
+          "$ref": "#/$defs/replayKey"
+        },
+        "node": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "kind": {
+          "enum": [
+            "judge",
+            "write",
+            "decide"
+          ]
+        },
+        "visit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "attempt": {
+          "$ref": "#/$defs/rowAttempt"
+        },
+        "replayed": {
+          "type": "boolean",
+          "description": "true: taken from a stored decision with the same replay key (Resume, Retry, Run again with the same decisions); no model was asked"
+        },
+        "replayed_from": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/decisionId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "with replayed: the decision it reused"
+        },
+        "run_ids": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          },
+          "description": "the ask runs (branch 0, and 1 after pipelines' own checks failed); empty when replayed"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflowId",
+          "description": "the ask workflow that answered (resolved at Submit)"
+        },
+        "model": {
+          "$ref": "#/$defs/modelRef"
+        },
+        "template": {
+          "type": "string",
+          "pattern": "^(judge|write|decide)/v[1-9][0-9]{0,2}$",
+          "description": "the prompt template and its version"
+        },
+        "system": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "prompt": {
+          "type": "string",
+          "maxLength": 32768,
+          "description": "the filled prompt of the last run"
+        },
+        "schema": {
+          "type": "string",
+          "maxLength": 16384,
+          "description": "the JSON schema sent (text)"
+        },
+        "seen": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/seenItem"
+          },
+          "description": "the thumbnails the model saw on this visit; [] for a replayed decision (its replayed_from holds them)"
+        },
+        "answers": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/answerTry"
+          },
+          "description": "every try of every run, in order; the last one with error null is what was decided"
+        },
+        "tokens_in": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "memory_read": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          },
+          "description": "the memory items (from the batch's snapshot) the prompt used"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000,
+          "description": "the call failed (its run failed, or both answers failed the checks): the row failed with it"
+        },
+        "judge": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "criteria",
+            "keep",
+            "mode",
+            "takes",
+            "picked",
+            "verdict",
+            "first_failed"
+          ],
+          "properties": {
+            "criteria": {
+              "$ref": "#/$defs/judgeCriteria"
+            },
+            "keep": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "mode": {
+              "enum": [
+                "suggest",
+                "auto"
+              ]
+            },
+            "takes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "description": "every candidate, in candidate order",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "take_id",
+                  "checks",
+                  "reason",
+                  "passes",
+                  "rank"
+                ],
+                "properties": {
+                  "take_id": {
+                    "$ref": "#/$defs/uuid"
+                  },
+                  "checks": {
+                    "type": "array",
+                    "maxItems": 24,
+                    "items": {
+                      "type": "boolean"
+                    },
+                    "description": "one per criterion, must lines then nice lines, true = passes"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "passes": {
+                    "type": "boolean",
+                    "description": "every must is true"
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8,
+                    "description": "its place in the derived order (1 = best)"
+                  }
+                }
+              }
+            },
+            "picked": {
+              "$ref": "#/$defs/takeIdList",
+              "description": "the first keep takes of the derived order that pass, when verdict is pass; [] when fail"
+            },
+            "verdict": {
+              "enum": [
+                "pass",
+                "fail"
+              ],
+              "description": "pass: at least keep takes pass"
+            },
+            "first_failed": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/criterion"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the best take's first must that is false; null when it passes"
+            }
+          }
+        },
+        "write": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "to",
+            "before",
+            "after",
+            "note"
+          ],
+          "properties": {
+            "to": {
+              "type": "string",
+              "pattern": "^\\$[a-z][a-z0-9_]{0,63}$"
+            },
+            "before": {
+              "type": "string",
+              "maxLength": 32768
+            },
+            "after": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 300
+            }
+          }
+        },
+        "decide": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "route",
+            "to",
+            "reason",
+            "forced"
+          ],
+          "properties": {
+            "route": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,31}$"
+            },
+            "to": {
+              "$ref": "#/$defs/nodeId"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "forced": {
+              "type": "boolean",
+              "description": "the loop cap forced the `then` route; the model's route was not followed"
+            }
+          }
+        }
+      }
+    },
+    "memorySource": {
+      "type": "object",
+      "required": [
+        "kind",
+        "batch_id",
+        "row",
+        "node",
+        "visit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "pick",
+            "node",
+            "user"
+          ],
+          "description": "pick: a pick with a note at a judge; node: a memory write node; user: typed in the Memory panel"
+        },
+        "batch_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "row": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/batchRow"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "node": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nodeId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visit": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "memoryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "pipeline_id",
+        "key",
+        "text",
+        "kept",
+        "rejected",
+        "agreed",
+        "source",
+        "created_at",
+        "updated_at"
+      ],
+      "description": "from API 1.14: one item of a pipeline's memory (namespace <owner_id>/pipeline/<pipeline_id>, LangGraph's store in pipelines). Never images: takes by id",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "judge_example",
+            "note"
+          ]
+        },
+        "pipeline_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "description": "a note's key (a memory write node's, or the user's; null = none); a judge example's: its judge node id"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "a note's text; an example's note (the user's words at the pick)"
+        },
+        "kept": {
+          "$ref": "#/$defs/takeIdList",
+          "description": "an example: the takes the user picked ([] when they rejected all)"
+        },
+        "rejected": {
+          "$ref": "#/$defs/takeIdList",
+          "description": "an example: the candidates not picked"
+        },
+        "agreed": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "an example: the pick equalled the judge's suggestion; null for a note"
+        },
+        "source": {
+          "$ref": "#/$defs/memorySource"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "memorySnapshot": {
+      "type": "object",
+      "required": [
+        "examples",
+        "notes",
+        "taken_at"
+      ],
+      "additionalProperties": false,
+      "description": "the copy of the pipeline's memory a batch reads (taken when pipelines starts the batch); every read of the batch uses it",
+      "properties": {
+        "examples": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "taken_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }

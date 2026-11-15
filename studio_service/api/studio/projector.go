@@ -128,15 +128,22 @@ func applyStatus(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Messa
 	if data.Status != "succeeded" || len(data.Resolved) == 0 {
 		data.Resolved = nil
 	}
+	var answer message.Answer // a text workflow's answer, kept when it has a try (succeeded, or failed on the schema)
+	if (data.Status != "succeeded" && data.Status != "failed") || json.Unmarshal(data.Answer, &answer) != nil || len(answer.Tries) == 0 {
+		data.Answer = nil
+	}
 	_, err := tx.Exec(ctx, `UPDATE runs SET status = $2, error = $3, host = $4, updated_at = clock_timestamp(),
 		started_at = CASE WHEN $2 = 'running' THEN clock_timestamp() ELSE started_at END,
 		finished_at = CASE WHEN $2 = 'running' THEN NULL ELSE clock_timestamp() END,
-		resolved = coalesce($5::jsonb, resolved)
-		WHERE id = $1`, run.ID, data.Status, data.Error, host, data.Resolved)
+		resolved = coalesce($5::jsonb, resolved), answer = coalesce($6::jsonb, answer)
+		WHERE id = $1`, run.ID, data.Status, data.Error, host, data.Resolved, data.Answer)
 	if err != nil {
 		return nil, err
 	}
 	run.Status, run.Error = data.Status, data.Error
+	if data.Answer != nil {
+		run.Answer = data.Answer
+	}
 	if terminal[data.Status] {
 		err = runEnded(ctx, tx, run)
 	} else {

@@ -433,6 +433,11 @@ func TestBatchControl(t *testing.T) {
 	for _, call := range []string{"/stop", "/pause", "/resume", "/rows/2/retry"} {
 		e.call(userA, "POST", path+call, nil, 409)
 	}
+	// pipelines ended the batch done before it read the stop (the cancelled runs ended its rows first): stopped
+	e.pipeline(userA, id, "batch", map[string]any{"seq": 3, "status": "done"})
+	if done := e.call(userA, "GET", path, nil, 200); done["status"] != "stopped" || done["finished_at"] == nil {
+		t.Fatal("done after Stop is stopped", done)
+	}
 }
 
 // rowCursor is the rows cursor after row n.

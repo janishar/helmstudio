@@ -72,10 +72,14 @@ class RunEvents:
                 await asyncio.sleep(RETRY_EVERY)
 
     async def status(
-        self, status: str, error: str | None = None, resolved: dict | None = None
+        self,
+        status: str,
+        error: str | None = None,
+        resolved: dict | None = None,
+        answer: dict | None = None,
     ) -> dict:
         """running (with the host), succeeded (with the resolved values), failed (with a plain error) or
-        cancelled."""
+        cancelled; a text workflow's succeeded (or schema-failed) status carries its `answer`."""
         data: dict = {"status": status}
         if status == "running":
             data["host"] = HOST
@@ -83,6 +87,8 @@ class RunEvents:
             data["error"] = error[:2000]
         if resolved:
             data["resolved"] = resolved
+        if answer is not None:
+            data["answer"] = answer
         return await self.publish("status", data)
 
     async def progress(

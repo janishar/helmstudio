@@ -317,6 +317,10 @@
     background: transparent;
     box-shadow: inset 0 0 0 1px var(--dash);
   }
+  .pl-ag {
+    background: color-mix(in srgb, var(--a2) 26%, var(--s3));
+    color: var(--t1);
+  }
   /* rows done as a bar (docs/mock/Pipelines .prog) */
   .prog {
     display: inline-block;

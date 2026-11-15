@@ -4,7 +4,7 @@ import type { S } from "@/lib/api";
 
 type Workflow = S<"Workflow">;
 type Param = S<"ParamSchema">;
-export type MediaKind = S<"WorkflowMedia">;
+export type MediaKind = NonNullable<Workflow["media"]>; // text: an ask workflow (never listed)
 
 /** A workflow's media; absent (an API before 1.11) is image. */
 export const mediaOf = (w: Pick<Workflow, "media">): MediaKind => w.media ?? "image";

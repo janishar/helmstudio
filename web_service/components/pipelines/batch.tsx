@@ -1,8 +1,9 @@
 "use client";
 // The batch run view (plan 8.3, docs/mock/PipelineGraph.dc.html's table): the header with the batch's state, counts
 // and Pause / Resume / Stop, and one table line per row, live from the batch's events. A pipeline batch shows the
-// run table (a cell per step and gate, loop attempts stacked) and adds Pick, Retry failed and Run again; its graph is
-// the pipeline's editor and each row's execution view.
+// run table (a cell per step, gate and agent node, loop attempts stacked) and adds Pick, Retry failed and Run again
+// (same decisions or decide again: docs/mock/AgentSteps.dc.html); its graph is the pipeline's editor and each row's
+// execution view.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -48,6 +49,7 @@ export function BatchRun({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [stopping, setStopping] = useState(false);
+  const [again, setAgain] = useState<"same" | "again" | null>(null);
   const [viewer, setViewer] = useState<{ takes: S<"Take">[]; i: number } | null>(null);
   const router = useRouter();
   // a pipeline batch: the pipeline now, for its node and workflow titles (cells name nodes the snapshot had)
@@ -149,38 +151,22 @@ export function BatchRun({
     for (const r of view?.rows.filter((x) => view && canRetry(view.batch, x)) ?? []) await retry(r);
   }
 
-  /** Run again: a new batch of the same pipeline with every row's inputs as a table (all pages read first). */
-  async function runAgain() {
-    if (!view?.batch.pipeline_id) return;
+  /** Run again: a new batch of the source's snapshot, rows and seeds; `same` reuses its decisions. */
+  async function runAgain(decisions: "same" | "again") {
     setBusy("again");
     setError("");
     try {
-      let rows = view.rows;
-      let next = cursor;
-      while (next) {
-        const p = await ok(
-          api.GET("/v1/studio/batches/{batch_id}/rows", {
-            params: { path: { batch_id: id }, query: { limit: 200, cursor: next } },
-          }),
-        );
-        rows = appendRows(rows, p.rows);
-        next = p.next_cursor;
-      }
-      const columns = [...new Set(rows.flatMap((r) => Object.keys(r.inputs)))];
       const batch = await ok(
-        api.POST("/v1/studio/batches", {
-          body: {
-            pipeline_id: view.batch.pipeline_id,
-            rows: {
-              table: { columns, rows: rows.map((r) => columns.map((c) => r.inputs[c] ?? null)) },
-            },
-          },
+        api.POST("/v1/studio/batches/{batch_id}/again", {
+          params: { path: { batch_id: id } },
+          body: { decisions },
         }),
       );
       router.push(`/pipelines/batches/${batch.id}`);
     } catch (e) {
       setError(message(e));
       setBusy("");
+      setAgain(null);
     }
   }
 
@@ -230,6 +216,8 @@ export function BatchRun({
     hydrated && b.started_at && `started ${when(b.started_at)}`,
     hydrated && b.finished_at && `finished ${when(b.finished_at)}`,
     took && `took ${took}`,
+    b.memory && `memory read: ${b.memory.examples} examples, ${b.memory.notes} notes`,
+    b.again_of && (b.same_decisions ? "same decisions as its source" : "run again"),
   ].filter(Boolean);
 
   return (
@@ -303,7 +291,7 @@ export function BatchRun({
             type="button"
             className="chip bevel"
             disabled={!!busy}
-            onClick={() => void runAgain()}
+            onClick={() => setAgain("same")}
           >
             Run again
           </button>
@@ -446,6 +434,57 @@ export function BatchRun({
             {isPipeline ? "Cancel remaining" : "Stop"}
           </button>
         </div>
+      </Modal>
+
+      <Modal open={!!again} onClose={() => setAgain(null)} title="Run this batch again">
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (again) void runAgain(again);
+          }}
+        >
+          <p className="m-0 text-[13px] text-t2">
+            A new batch with the same pipeline version, rows and seeds.
+          </p>
+          {(
+            [
+              [
+                "same",
+                "Same decisions",
+                "Judge, write and decide answers are reused where their inputs match; no model is asked. Your picks are asked again.",
+              ],
+              ["again", "Decide again", "Every judge, write and decide asks its model again."],
+            ] as const
+          ).map(([v, t, help]) => (
+            <label key={v} className="flex items-start gap-2.5">
+              <input
+                type="radio"
+                name="again"
+                className="mt-1 accent-[var(--a2)]"
+                checked={again === v}
+                onChange={() => setAgain(v)}
+              />
+              <span>
+                <b className="font-semibold">{t}</b>
+                <br />
+                <small className="text-t2">{help}</small>
+              </span>
+            </label>
+          ))}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="chip bevel" onClick={() => setAgain(null)}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="chip bevel bg-a1 font-semibold text-on1"
+              disabled={busy === "again"}
+            >
+              Run again
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {viewer && (

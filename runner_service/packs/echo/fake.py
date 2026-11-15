@@ -1,10 +1,12 @@
 """Stage functions of the echo pack (runtime fake): see model.yaml."""
 
+import json
 import textwrap
 import time
 
 from PIL import Image, ImageDraw, ImageFont
 
+from core import ask as asks
 from core.graph import RunError, auto_frames
 from packs.echo import mp4
 
@@ -117,6 +119,41 @@ def lora_stack(ctx, params: dict, inputs: dict) -> dict:
         return {"text": inputs["text"]}
     used = ", ".join(f"{r['lora']['name']} x{r['strength']:g}" for r in rows)
     return {"text": f"{inputs['text']} [LoRA {used}]"}
+
+
+ANSWER, RETRY = "ECHO-ANSWER:", "ECHO-RETRY:"
+
+
+def scripted(prompt: str, marker: str) -> str | None:
+    """The first JSON value after the last `marker` (a JSON string: its text; not JSON: the rest of that line), or
+    None without the marker."""
+    at = prompt.rfind(marker)
+    if at < 0:
+        return None
+    rest = prompt[at + len(marker) :].lstrip()
+    try:
+        value, _ = json.JSONDecoder().raw_decode(rest)
+    except ValueError:
+        return rest.split("\n", 1)[0]
+    return value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
+
+
+def ask(ctx, params: dict, inputs: dict) -> dict:
+    """The fake ask (contracts/README.md, the fake): the scripted answer after the last ECHO-ANSWER: in the prompt,
+    else `{}` with a schema and `echo` without; checked and retried as the real one (core.ask). The retry answers
+    the JSON after ECHO-RETRY: when the prompt has one (a bad answer then a good one: one retry that passes).
+    Reads its takes (the core's checks) but sends no thumbnails: `seen` [], tokens and seconds 0."""
+    tries = []
+
+    def generate(prompt: str, thumbs: list) -> tuple[str, int, int]:
+        tries.append(prompt)
+        original = params["prompt"]
+        text = (len(tries) > 1 and scripted(original, RETRY)) or scripted(original, ANSWER)
+        if text is None:
+            text = "{}" if params["schema"].strip() else "echo"
+        return text, 0, 0
+
+    return asks.ask(ctx, params, generate, see=False)  # seconds round to 0
 
 
 globals()["lora-stack"] = lora_stack  # the stage is named lora-stack (kind echo/lora-stack)

@@ -219,13 +219,27 @@ def test_at_most_100_pipelines(new_user):
 
 
 def live_workflows(client, pipeline: dict) -> dict:
-    """id → WorkflowDoc of every workflow the pipeline's steps name that the caller can run now."""
+    """id → WorkflowDoc of every workflow the pipeline's steps name that the caller can run now, plus the ask (text)
+    workflows its judge, write and decide nodes may run (API 1.14): the named models, `llm-ask` and `<family>-ask`
+    of each step's family (text workflows are never listed, so `auto`'s candidates are fetched by those names)."""
     out = {}
-    for n in pipeline["nodes"].values():
-        if n["kind"] == "step" and n["workflow"] not in out:
-            r = client.get(f"{STUDIO}/workflows/{n['workflow']}")
-            if r.status_code == 200:
-                out[n["workflow"]] = doc(r.json())
+
+    def fetch(wid: str) -> None:
+        if wid not in out and (r := client.get(f"{STUDIO}/workflows/{wid}")).status_code == 200:
+            out[wid] = doc(r.json())
+
+    nodes = list(pipeline["nodes"].values())
+    for n in nodes:
+        if n["kind"] == "step":
+            fetch(n["workflow"])
+    for n in nodes:
+        if n["kind"] in ("judge", "write", "decide") and n.get("model", "auto") != "auto":
+            fetch(n["model"])
+    for fam in sorted({w["family"] for w in out.values() if w.get("family")}):
+        fetch(
+            f"{fam}-ask"
+        )  # ponytail: the templates' naming (echo-ask, qwen-image-ask); a list route would be exact
+    fetch("llm-ask")
     return out
 
 

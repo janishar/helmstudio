@@ -397,6 +397,65 @@
       "help": "Fake two-stage video model: as Echo video, with steps fixed by the stage (stage1 4, stage2 2)."
     },
     {
+      "kind": "echo/ask",
+      "title": "Ask (fake)",
+      "family": "echo",
+      "help": "Fake ask: answers the JSON after the last ECHO-ANSWER: in the prompt (contracts/README.md, The llm pack: the fake).",
+      "params": [
+        {
+          "name": "system",
+          "type": "string",
+          "label": "System",
+          "default": "",
+          "max": 4000,
+          "help": "The system turn."
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "label": "Prompt",
+          "default": "",
+          "max": 32768,
+          "help": "The filled template (pipelines writes it). Not scanned for mentions."
+        },
+        {
+          "name": "media",
+          "type": "rows",
+          "label": "Takes",
+          "default": [],
+          "min": 0,
+          "max": 8,
+          "item": {
+            "take": "Media"
+          },
+          "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+        },
+        {
+          "name": "schema",
+          "type": "string",
+          "label": "Answer schema",
+          "default": "",
+          "max": 16384,
+          "help": "A JSON schema the answer must match; empty = plain text."
+        },
+        {
+          "name": "max_tokens",
+          "type": "int",
+          "label": "Max tokens",
+          "default": 800,
+          "min": 16,
+          "max": 4096
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "answer",
+          "type": "Text"
+        }
+      ]
+    },
+    {
       "kind": "output",
       "title": "Output",
       "family": null,
@@ -406,6 +465,20 @@
         {
           "name": "media",
           "type": "Media"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "kind": "answer",
+      "title": "Answer",
+      "family": null,
+      "help": "Stores its text as the run's answer: no take. Ask workflows end with it.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
         }
       ],
       "outputs": []

@@ -1,0 +1,1 @@
+Rewrite the text below. {instruction}  Text: "{text}"  Reviewer's reasons: {reasons}  Allowed mentions (keep them exactly; add no others): {mentions}

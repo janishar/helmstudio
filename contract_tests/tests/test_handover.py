@@ -50,7 +50,10 @@ def test_hosts_data_shape(api):
         budget, used = hm.pop()
         assert budget == pytest.approx(min(e["memory"]["budget_gb"] for e in reporting), abs=0.05)
         # per env the larger of what its entries declare and what it measured (caches count too)
-        held = sum(max(sum(r["gb"] for r in e.get("resident", [])), e["memory"]["used_gb"]) for e in reporting)
+        held = sum(
+            max(sum(r["gb"] for r in e.get("resident", [])), e["memory"]["used_gb"])
+            for e in reporting
+        )
         assert used == pytest.approx(held, abs=0.1), (name, used, held)
     fake = by_host["fake"]
     assert [e["env"] for e in fake] == ["fake"] and "host_memory" not in fake[0], fake

@@ -2,8 +2,9 @@
 // The execution view of one row (docs/mock/Execution.dc.html, plan 16.8): the pipeline's graph as the row ran it
 // (passed nodes marked, edges not taken faint, the loop's count, the node it is at now outlined), the step list, and
 // the chosen step's details: a step's runs and takes, a gate's candidates and pick, the state after it (read on
-// demand; gone once the batch has finished) and Retry row from here. Live from the batch's events. The mock's
-// judge verdict, model and memory tiles belong to later milestones and are left out.
+// demand; gone once the batch has finished) and Retry row from here. Live from the batch's events. A judge, write or
+// decide step shows its decision: a judge's verdict per check, the thumbnails it saw, the model and what it read from
+// memory (Execution.dc.html); a write's text before and after as a diff, a decide's route (AgentSteps.dc.html).
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,7 +17,15 @@ import { StateChip, followBatch } from "@/components/pipelines/pipelines";
 import type { CanvasProps } from "@/components/pipelines/canvas";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
 import { nodeLabel } from "@/lib/pipeline";
-import { asRun, canRetryFrom, stepDetail, stepLines } from "@/lib/pipeline-run";
+import {
+  asRun,
+  canRetryFrom,
+  criterionLines,
+  stepDetail,
+  stepLines,
+  wordDiff,
+} from "@/lib/pipeline-run";
+import { safeUrl } from "@/lib/format";
 import { useTakes } from "@/lib/take-cache";
 
 type Exec = S<"RowExecution">;
@@ -316,36 +325,42 @@ export function Execution({
               </span>
             </div>
             {s.error && <p className="m-0 text-[13px] text-[#f2c14e]">{s.error}</p>}
-            <div className="flex flex-col gap-2">
-              <h3 className="heading">
-                {detail?.kind === "gate"
-                  ? "Candidates"
-                  : s.run_ids.length
-                    ? "Takes"
-                    : "What it did"}
-              </h3>
-              {takeIds.length > 0 ? (
-                <div className="grid grid-cols-4 gap-1.5">
-                  {takeIds.map((t, i) => {
-                    const tk = take(t);
-                    const on = picked?.includes(t);
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        aria-label={`Take ${i + 1}${on ? ", picked" : ""}`}
-                        className={`grid aspect-square place-items-center overflow-hidden rounded-lg p-0 text-[10px] text-t2 ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
-                        onClick={() => setFull({ ids: takeIds, i })}
-                      >
-                        {tk ? <Thumb take={tk} className="size-full" /> : `take ${i + 1}`}
-                      </button>
-                    );
-                  })}
+            {detail && "decision" in detail && detail.decision ? (
+              <DecisionDetail d={detail.decision} name={(id) => nodeLabel(doc, id, titles)} />
+            ) : (
+              <>
+                <div className="flex flex-col gap-2">
+                  <h3 className="heading">
+                    {detail?.kind === "gate"
+                      ? "Candidates"
+                      : s.run_ids.length
+                        ? "Takes"
+                        : "What it did"}
+                  </h3>
+                  {takeIds.length > 0 ? (
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {takeIds.map((t, i) => {
+                        const tk = take(t);
+                        const on = picked?.includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            aria-label={`Take ${i + 1}${on ? ", picked" : ""}`}
+                            className={`grid aspect-square place-items-center overflow-hidden rounded-lg p-0 text-[10px] text-t2 ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
+                            onClick={() => setFull({ ids: takeIds, i })}
+                          >
+                            {tk ? <Thumb take={tk} className="size-full" /> : `take ${i + 1}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="m-0 text-[13px] text-t2">{s.what}</p>
+                  )}
                 </div>
-              ) : (
-                <p className="m-0 text-[13px] text-t2">{s.what}</p>
-              )}
-            </div>
+              </>
+            )}
             <div className="grid grid-cols-2 gap-2">
               {detail?.kind === "gate" ? (
                 <div className="set flex flex-col gap-0.5">
@@ -449,6 +464,134 @@ export function Execution({
             />
           ) : null;
         })()}
+    </>
+  );
+}
+
+const tile = (label: string, value: React.ReactNode) => (
+  <div className="set flex min-w-0 flex-col gap-0.5">
+    <small className="text-[12px] text-t2">{label}</small>
+    <b className="truncate font-semibold">{value}</b>
+  </div>
+);
+
+/** A judge's, write's or decide's step details from its decision. */
+function DecisionDetail({ d, name }: { d: S<"Decision">; name: (id: string) => string }) {
+  const model = d.workflow_title ?? d.workflow;
+  const answer = d.replayed
+    ? tile("Reused", d.replayed_from ? `from ${d.replayed_from.split(":")[0].slice(0, 8)}` : "yes")
+    : tile("Answer", `${Math.round(d.seconds * 10) / 10} s · ${d.tokens_out} tokens`);
+  return (
+    <>
+      {d.error && <p className="m-0 text-[13px] text-[#f2c14e]">{d.error}</p>}
+      {d.judge && (
+        <>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="heading">Verdict</h3>
+            {criterionLines(d.judge).map((c) => (
+              <div
+                key={c.criterion}
+                className="set flex items-center justify-between gap-2 py-2 text-[13px]"
+              >
+                {c.criterion}
+                <span
+                  className="text-[11px] whitespace-nowrap"
+                  style={{ color: c.bad ? "#f2c14e" : "var(--t2)" }}
+                >
+                  {c.text}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col gap-2">
+            <h3 className="heading">What it saw</h3>
+            <div className="grid grid-cols-4 gap-1.5">
+              {d.seen.map((t) => (
+                <img
+                  key={`${t.take_id}:${t.frame}`}
+                  src={safeUrl(t.thumb_url)}
+                  alt={`take ${d.judge!.takes.findIndex((x) => x.take_id === t.take_id) + 1}${t.frame != null ? `, frame ${t.frame}` : ""}`}
+                  title={`${t.width} × ${t.height}${t.frame != null ? ` · frame ${t.frame}` : ""}`}
+                  className={`aspect-square rounded-lg bg-s3 object-cover ${d.judge!.picked.includes(t.take_id) ? "outline-2 outline-a1" : ""}`}
+                />
+              ))}
+              {!d.seen.length && (
+                <span className="col-span-4 text-[12px] text-t2">No thumbnails.</span>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {tile("Model", model)}
+            {tile(
+              "Memory read",
+              d.memory_read.length ? `${d.memory_read.length} items` : "nothing",
+            )}
+            {d.judge.agreed != null && tile("Your pick", d.judge.agreed ? "agreed" : "changed it")}
+            {answer}
+          </div>
+        </>
+      )}
+      {d.write && (
+        <>
+          <div className="flex flex-col gap-2">
+            <h3 className="heading">Input · {d.write.to.slice(1)}, before and after</h3>
+            <p
+              className="m-0 rounded-xl px-3 py-2.5 text-[13px] leading-5"
+              style={{ background: "var(--in)" }}
+            >
+              {wordDiff(d.write.before, d.write.after).map((p, i) =>
+                p.op === "same" ? (
+                  <span key={i}>{p.text}</span>
+                ) : p.op === "del" ? (
+                  <del
+                    key={i}
+                    className="bg-[color-mix(in_srgb,#f2c14e_22%,transparent)] text-[#f2c14e]"
+                  >
+                    {p.text}
+                  </del>
+                ) : (
+                  <ins
+                    key={i}
+                    className="bg-[color-mix(in_srgb,var(--a1)_22%,transparent)] text-a1 no-underline"
+                  >
+                    {p.text}
+                  </ins>
+                ),
+              )}
+            </p>
+            {d.write.note && (
+              <div className="set flex items-center justify-between gap-2 py-2 text-[13px]">
+                {d.write.note}
+                <span className="text-[11px] text-t2">its note</span>
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {tile("Model", model)}
+            {answer}
+          </div>
+        </>
+      )}
+      {d.decide && (
+        <>
+          <div className="flex flex-col gap-2">
+            <h3 className="heading">Route</h3>
+            <div className="set flex items-center justify-between gap-2 py-2 text-[13px]">
+              {d.decide.route} → {name(d.decide.to)}
+              <span className="text-[11px] text-t2">
+                {d.decide.forced ? "forced by the cap" : "answered"}
+              </span>
+            </div>
+            {d.decide.reason && (
+              <p className="m-0 text-[13px] text-[var(--t1b)]">{d.decide.reason}</p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {tile("Model", model)}
+            {answer}
+          </div>
+        </>
+      )}
     </>
   );
 }

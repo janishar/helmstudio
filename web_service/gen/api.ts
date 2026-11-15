@@ -785,6 +785,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/takes/{take_id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The judge decisions that weighed this take (the Explain drawer), newest first
+         * @description From 1.14: every decision whose judge had the take among its candidates (owner only: another user's take is 404). Deleted batches' decisions go with them.
+         */
+        get: operations["studioListTakeDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/sessions/{session_id}/takes": {
         parameters: {
             query?: never;
@@ -1062,8 +1082,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Every row parked on a gate with its candidate takes, for the review grid
-         * @description Rows with status `waiting`, by row number (at most 500, not paginated); a workflow batch has none.
+         * Every row parked on a gate or a judge with its candidate takes, for the review grid
+         * @description Rows with status `waiting`, by row number (at most 500, not paginated); a workflow batch has none. From 1.14 a row parked on a judge (Suggest mode, or a judge that gave up) has `kind: judge`, the judge's `suggested` pick (pre-selected) and each candidate's `judge` verdict and reason.
          */
         get: operations["studioGetBatchReview"];
         put?: never;
@@ -1092,6 +1112,12 @@ export interface paths {
          *     visit was already sent, or the batch is `stopped`/`failed` or its `control` is `stop`. 422 when `take_ids`
          *     are not among the candidates, repeat one, or are more than the gate's `keep` (`pick 1 to <keep> of the
          *     candidates`).
+         *
+         *     From 1.14 `gate` may name the judge the row is parked on (contracts/README.md, Agent nodes: Suggest). Studio
+         *     derives `agreed` (the picked set equals the judge's suggestion; reject all with an empty suggestion: true),
+         *     records it on the judge cell (`judged.agreed`) and the decision's takes, and sends it with the optional `note`
+         *     in `cmd.pipeline.pick`; pipelines stores a pick with a note as a judge example in the pipeline's memory.
+         *     `note` on a gate pick is 422 (`a note is kept for judge picks only`).
          */
         post: operations["studioPickBatchRow"];
         delete?: never;
@@ -1140,6 +1166,99 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/rows/{row}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every judge, write and decide decision of one row (plan 16.7), oldest first
+         * @description From 1.14. Stored by studio from the `decision` of each `evt.pipeline.step` (contracts/README.md, Decisions).
+         *     Thumbnails are signed links (`seen[].thumb_url`), never keys. 404 for a workflow batch, another user's batch
+         *     or an `attempt` the row never had.
+         */
+        get: operations["studioListRowDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/again": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run an ended batch again as a new batch, with the same decisions or deciding again
+         * @description From 1.14 (plan 16.3, 16.7). Creates a new batch with the source batch's snapshot (pipeline and workflows as
+         *     submitted), session, rows (inputs and seeds), elements and looks copies, and memory snapshot is taken anew;
+         *     its title is `<source title> again` unless given. `decisions: same`: `cmd.pipeline.submit` carries
+         *     `replay_from` = the source batch, so every judge, write and decide visit whose replay key matches a stored
+         *     decision of the source reuses it without asking a model (same seeds make the same takes, so the keys match;
+         *     a visit whose inputs differ asks again). `again`: every node asks. A batch of one workflow ignores
+         *     `decisions`. 409 while the source is `queued`, `running`, `waiting` or `paused` (`batch <id> has not ended`),
+         *     and at 5 unfinished batches (as Submit). 422 when a step's workflow or an ask workflow has no live host (as
+         *     Submit).
+         */
+        post: operations["studioRunBatchAgain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A pipeline's memory (judge examples and notes), newest first — the Memory panel
+         * @description From 1.14 (plan 16.6). Studio checks the pipeline is the caller's (another user's: 404), then asks
+         *     pipelines_service (`pipelines.memory` `list`, 5 s: else 503). Example takes are signed TakeRefs; deleted
+         *     takes are left out.
+         */
+        get: operations["studioListMemory"];
+        put?: never;
+        /**
+         * Add a note to a pipeline's memory (seen by its next batches)
+         * @description From 1.14. `text` is trimmed (blank: 422). 404 for a pipeline that is not the caller's; 409 `memory is full (500 items); delete some first`.
+         */
+        post: operations["studioCreateMemoryNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/memory/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete one memory item (an example or a note); batches already started keep their snapshot */
+        delete: operations["studioDeleteMemoryItem"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1527,9 +1646,9 @@ export interface components {
             help?: string;
             /** @description visibility expression; absent = always shown */
             when?: string;
-            /** @description rows only: field → a ref kind (`Image`: a take, `Lora`: a LoRA; required in every item) or a param schema without name */
+            /** @description rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node's `media`), `Lora`: a LoRA; required in every item) or a param schema without name */
             item?: {
-                [key: string]: "Image" | "Lora" | Record<string, never>;
+                [key: string]: "Image" | "Media" | "Lora" | Record<string, never>;
             };
             /**
              * @description rows only: the prompt's name for item n, with `{n}` from 1
@@ -1589,8 +1708,11 @@ export interface components {
             family: string;
             /** @description the runner env that executes it */
             env: string;
-            /** @description always sent from API 1.11: a template's as published (registry `media`, absent = image), a user workflow's computed from its graph (contracts/README.md, Video) */
-            media?: components["schemas"]["WorkflowMedia"];
+            /**
+             * @description always sent from API 1.11: a template's as published (registry `media`, absent = image), a user workflow's computed from its graph (contracts/README.md, Video); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed
+             * @enum {string}
+             */
+            media?: "image" | "video" | "text";
             /** @description node id → node */
             nodes: {
                 [key: string]: components["schemas"]["GraphNode"];
@@ -1784,7 +1906,7 @@ export interface components {
             label?: string;
         };
         /**
-         * @description `$<input>` (a pipeline input), `<step>.takes` (that step's takes from its latest visit), `<gate>.picked` (that gate's latest pick)
+         * @description `$<input>` (a pipeline input), `<step>.takes` (that step's takes from its latest visit), `<gate>.picked` / `<judge>.picked` (its latest pick); from 1.14 the text sources `<judge>.reasons` (its latest reasons, one line per take) and `<memory>.notes` (a memory read node's notes), for write, decide and memory write `from` only
          * @example $prompt
          * @example still.takes
          * @example review.picked
@@ -1865,10 +1987,124 @@ export interface components {
             collection: string;
             position?: components["schemas"]["NodePosition"];
         };
+        /** @description a judge's checklist (from 1.14): a take passes when every `must` line holds; `nice` lines only order the takes that pass. 1 to 12 lines in all, none twice (judge_criteria). Missing list = [] */
+        PipelineCriteria: {
+            /**
+             * @example [
+             *       "No extra or missing limbs",
+             *       "No text or watermarks"
+             *     ]
+             */
+            must?: string[];
+            /**
+             * @example [
+             *       "Subject is sharp"
+             *     ]
+             */
+            nice?: string[];
+        };
+        /**
+         * @description `auto` (resolved at Submit: contracts/README.md, Agent nodes: model) or an ask workflow (`media: text`) the caller can run: `qwen-image-ask` (Qwen Image's own text encoder, no extra load after a Qwen step), `llm-ask` (Qwen3.8 27B)
+         * @default auto
+         */
+        PipelineModel: string;
+        /** @description text sources, in order: `$<Text input>`, `<judge>.reasons`, `<memory>.notes` */
+        PipelineTextSources: components["schemas"]["PipelineSource"][];
+        /** @description from 1.14 (plan 16.2): a vision-language model checks a step's takes against the checklist, keeps the best `keep` and gives reasons; its pass / fail edges are a branch like a gate's */
+        PipelineJudgeNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "judge";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /** @description the step whose latest takes it judges */
+            takes: string;
+            criteria: components["schemas"]["PipelineCriteria"];
+            /**
+             * @description keep the best K of the takes (at most the step's seeds)
+             * @default 1
+             */
+            keep?: number;
+            /**
+             * @description suggest: the row parks like a gate with the judge's pick pre-selected (a fail with loops left retries without parking); auto: it picks alone
+             * @default suggest
+             * @enum {string}
+             */
+            mode?: "suggest" | "auto";
+            model?: components["schemas"]["PipelineModel"];
+            /** @description a memory read node before it: the user's past picks at this judge (judge examples) and notes go into its prompt; absent = no memory ("Memory: Off") */
+            memory?: string;
+            position?: components["schemas"]["NodePosition"];
+        };
+        /** @description from 1.14: writes text from its sources (a rewritten prompt from a judge's reasons) into a Text input for the rest of the row; mentions in the answer are expanded by studio like any prompt */
+        PipelineWriteNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "write";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            from: components["schemas"]["PipelineTextSources"];
+            /** @description the Text input it overwrites (`$prompt`): later binds of it read the new text */
+            to: string;
+            /** @default Fix what the reviewer found; keep everything else. */
+            instruction?: string;
+            model?: components["schemas"]["PipelineModel"];
+            position?: components["schemas"]["NodePosition"];
+        };
+        /** @description from 1.14: routes the row along one of its declared routes from a structured answer (its routes edge maps each label to a node) */
+        PipelineDecideNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "decide";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            question: string;
+            from: components["schemas"]["PipelineTextSources"];
+            /**
+             * @description route label → what it means (the model reads it)
+             * @example {
+             *       "retry": "the takes miss the brief",
+             *       "accept": "good enough to animate"
+             *     }
+             */
+            routes: {
+                [key: string]: string;
+            };
+            model?: components["schemas"]["PipelineModel"];
+            position?: components["schemas"]["NodePosition"];
+        };
+        /** @description from 1.14 (plan 16.6): read the batch's memory snapshot (taken when the batch starts), or write a note for the next batches */
+        PipelineMemoryNode: {
+            /** @constant */
+            kind: "memory";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /** @constant */
+            op: "read";
+            /** @description only notes with this key; absent = every note */
+            key?: string;
+            /**
+             * @description at most this many examples and this many notes, newest first
+             * @default 8
+             */
+            limit?: number;
+            position?: components["schemas"]["NodePosition"];
+        } | {
+            /** @constant */
+            kind: "memory";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /** @constant */
+            op: "write";
+            key: string;
+            from: components["schemas"]["PipelineTextSources"];
+            position?: components["schemas"]["NodePosition"];
+        };
         /** @description the card's title; absent = derived by the client */
         PipelineNodeTitle: string;
-        PipelineNode: components["schemas"]["PipelineInputsNode"] | components["schemas"]["PipelineStepNode"] | components["schemas"]["PipelineGateNode"] | components["schemas"]["PipelineOutputNode"];
-        /** @description a gate's branch: pass = a pick was made; fail = every candidate rejected, taken at most `max` times per row; on the next reject the row goes to `then` */
+        PipelineNode: components["schemas"]["PipelineInputsNode"] | components["schemas"]["PipelineStepNode"] | components["schemas"]["PipelineGateNode"] | components["schemas"]["PipelineOutputNode"] | components["schemas"]["PipelineJudgeNode"] | components["schemas"]["PipelineWriteNode"] | components["schemas"]["PipelineDecideNode"] | components["schemas"]["PipelineMemoryNode"];
+        /** @description a gate's or (1.14) a judge's branch: pass = a pick was made (a judge: its verdict pass, or the user's pick); fail = every candidate rejected (a judge: verdict fail), taken at most `max` times per row; on the next reject the row goes to `then` */
         PipelineBranch: {
             pass: string;
             fail: string;
@@ -1890,13 +2126,34 @@ export interface components {
          *         "then": "out"
          *       }
          *     ]
+         * @example [
+         *       "check",
+         *       {
+         *         "routes": {
+         *           "retry": "still",
+         *           "accept": "clip"
+         *         },
+         *         "max": 2,
+         *         "then": "accept"
+         *       }
+         *     ]
          */
         PipelineEdge: [
             string,
-            string | components["schemas"]["PipelineBranch"]
+            string | components["schemas"]["PipelineBranch"] | components["schemas"]["PipelineRoutes"]
         ];
+        /** @description from 1.14, a decide's only edge: route label → node (the same labels as the node's `routes`). Every route but `then` counts against `max` per row; once taken `max` times, `then` is taken whatever the answer */
+        PipelineRoutes: {
+            routes: {
+                [key: string]: string;
+            };
+            max: number;
+            /** @description one of the labels */
+            then: string;
+        };
         /**
-         * @description A pipeline as the editor saves or validates it (plan 16.2, restricted to inputs, step, gate and output).
+         * @description A pipeline as the editor saves or validates it (plan 16.2: inputs, step, gate and output; from 1.14 judge,
+         *     write, decide and memory; agent and custom come later).
          *     Node ids are stable slugs. At most 24 nodes and 64 KB (problems, not the schema). Other top-level keys are
          *     ignored by validate; PipelineCreate and PipelineUpdate are closed.
          */
@@ -1927,6 +2184,8 @@ export interface components {
             last_batch: components["schemas"]["Batch"] | null;
             /** @description only from GET /v1/studio/pipelines/{pipeline_id}, POST and PUT; empty = it can run */
             problems?: components["schemas"]["PipelineProblem"][];
+            /** @description from 1.14, with problems when nothing blocks saving */
+            bounds?: components["schemas"]["PipelineBounds"];
         } & components["schemas"]["PipelineDoc"];
         PipelineList: {
             pipelines: components["schemas"]["Pipeline"][];
@@ -1956,7 +2215,7 @@ export interface components {
          * @description meaning and which block saving: contracts/README.md, Pipeline rules. May grow in a minor version; an unknown code blocks running
          * @enum {string}
          */
-        PipelineProblemCode: "too_many_nodes" | "too_large" | "inputs_node" | "duplicate_input" | "unknown_node" | "edge_invalid" | "branch_not_gate" | "uncapped_cycle" | "too_many_runs" | "unreachable" | "dead_end" | "no_output" | "gate_takes" | "gate_keep" | "bind_source" | "unknown_workflow" | "workflow_cannot_run" | "unknown_preset" | "step_input_invalid" | "bind_unknown" | "bind_type" | "unbound_input" | "step_seeds" | "unknown_look" | "look_fit";
+        PipelineProblemCode: "too_many_nodes" | "too_large" | "inputs_node" | "duplicate_input" | "unknown_node" | "edge_invalid" | "branch_not_gate" | "uncapped_cycle" | "too_many_runs" | "unreachable" | "dead_end" | "no_output" | "gate_takes" | "gate_keep" | "bind_source" | "unknown_workflow" | "workflow_cannot_run" | "unknown_preset" | "step_input_invalid" | "bind_unknown" | "bind_type" | "unbound_input" | "step_seeds" | "unknown_look" | "look_fit" | "too_many_calls" | "judge_criteria" | "decide_routes" | "write_target" | "unknown_model";
         /** @description one broken pipeline rule, the same shape as Problem: `node` the pipeline node, `port` a bind key (`<node>.<param>` of the step's workflow) or `from` for an output, `param` an input name or a step input key */
         PipelineProblem: {
             code: components["schemas"]["PipelineProblemCode"];
@@ -1973,6 +2232,18 @@ export interface components {
             problems: components["schemas"]["PipelineProblem"][];
             can_save: boolean;
             can_run: boolean;
+            bounds?: components["schemas"]["PipelineBounds"];
+            /** @description from 1.14: judge, write and decide node id → the ask workflow its model resolves to now (auto included); a node without one is left out */
+            models?: {
+                [key: string]: string;
+            };
+        };
+        /** @description from 1.14: the worst case per row (contracts/README.md, Pipeline rules: worst case), sent when nothing blocks saving. Submit multiplies by the rows for its estimate */
+        PipelineBounds: {
+            /** @description generation runs: Σ over steps of seeds × visits */
+            runs: number;
+            /** @description judge, write and decide visits (each one ask run, at most 2 tries; a re-ask after a failed check is a second run) */
+            llm_calls: number;
         };
         PipelineError: {
             /** @description `pipeline has <n> problems: <first message>` for pipeline problems */
@@ -2088,6 +2359,15 @@ export interface components {
             workflow_version?: number | null;
             /** @description the looks it was asked with (RunRequest.looks; a batch run: its row's or step's), as requested; absent or empty = none */
             looks?: components["schemas"]["LookIds"];
+            answer?: components["schemas"]["RunAnswer"];
+        };
+        /** @description from 1.14, a run of a text (ask) workflow (lane batch: a judge, write or decide call): its answer, stored on the run, never a take (`outputs` stays empty). Sent once it succeeded, and when it failed on the schema */
+        RunAnswer: {
+            /** @description the last try */
+            text: string;
+            tokens_in: number;
+            tokens_out: number;
+            seconds: number;
         };
         /** @description values the runner chose (a random seed, an auto length), sent with succeeded; absent until then and from M0 runners */
         Resolved: {
@@ -2280,6 +2560,23 @@ export interface components {
             batch_id?: string | null;
             /** @description kind video only (absent for an image): length, frame rate, audio and the poster */
             video?: components["schemas"]["VideoInfo"];
+            /** @description from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions) */
+            decisions?: components["schemas"]["TakeDecision"][];
+        };
+        TakeDecision: {
+            decision_id: string;
+            /** Format: uuid */
+            batch_id: string;
+            row: number;
+            /** @description the judge node id */
+            node: string;
+            /**
+             * @description picked: kept (by the judge, or the user's pick); passed: every must held but it was not kept; failed: a must failed
+             * @enum {string}
+             */
+            outcome: "picked" | "passed" | "failed";
+            /** @description its first false must; null when it passed */
+            first_failed: string | null;
         };
         /**
          * @description A video take's or output's metadata, from the runner's `evt.run.output` `video`. `url` / `thumb_url` of the take
@@ -2764,6 +3061,36 @@ export interface components {
             pipeline_version?: number | null;
             /** @description with pipeline_id: the collection its output node names (the first output, by node id) */
             collection?: string | null;
+            /** @description from 1.14, a pipeline batch: its worst case per row at Submit */
+            bounds?: components["schemas"]["PipelineBounds"];
+            /** @description from 1.14, a pipeline batch: judge, write and decide node id → the ask workflow it runs (resolved at Submit, in the snapshot) */
+            models?: {
+                [key: string]: string;
+            };
+            /** @description from 1.14, a pipeline batch: the memory snapshot it reads; null until pipelines took it */
+            memory?: components["schemas"]["BatchMemory"] | null;
+            /**
+             * Format: uuid
+             * @description from 1.14: made by "Run again" of this batch
+             */
+            again_of?: string | null;
+            /** @description from 1.14, with again_of: it reuses that batch's decisions */
+            same_decisions?: boolean;
+        };
+        BatchMemory: {
+            examples: number;
+            notes: number;
+            /** Format: date-time */
+            taken_at: string;
+        };
+        BatchAgain: {
+            /**
+             * @description same: reuse the source's stored decisions where the inputs match; again: ask the models again
+             * @enum {string}
+             */
+            decisions: "same" | "again";
+            /** @description absent = `<source title> again` */
+            title?: string;
         };
         /**
          * @description a run's statuses plus waiting: parked on a gate for a pick (pipeline batches only)
@@ -2806,8 +3133,17 @@ export interface components {
             cells?: components["schemas"]["BatchCell"][];
         };
         BatchRowParked: {
-            /** @description the gate node id */
+            /** @description the gate node id (from 1.14: or the judge's) */
             gate: string;
+            /**
+             * @description from 1.14; absent = gate
+             * @enum {string}
+             */
+            kind?: "gate" | "judge";
+            /** @description a judge: its pick, pre-selected ([] when no take passed) */
+            suggested?: string[];
+            /** @description a judge: the decision shown (GET …/rows/{row}/decisions) */
+            decision_id?: string;
             /** @description which visit of the gate (1 + times its loop went round) */
             visit: number;
             /** @description pick 1 to keep of the candidates */
@@ -2816,17 +3152,28 @@ export interface components {
             candidates: string[];
         };
         /**
-         * @description a step attempt: its runs' state (queued while none of them has started); a gate attempt: waiting, picked or rejected; an output: succeeded
+         * @description a step attempt: its runs' state (queued while none of them has started); a gate attempt: waiting, picked or rejected; an output: succeeded. From 1.14 a judge: queued / running (its ask run), then picked, waiting (Suggest), rejected (verdict fail or all rejected) or failed (the call failed); write, decide: queued / running, then succeeded or failed; memory: succeeded
          * @enum {string}
          */
         CellStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "waiting" | "picked" | "rejected";
         BatchCell: {
             /** @description the pipeline node id */
             node: string;
-            /** @enum {string} */
-            kind: "step" | "gate" | "output";
+            /**
+             * @description judge, write, decide, memory from 1.14
+             * @enum {string}
+             */
+            kind: "step" | "gate" | "output" | "judge" | "write" | "decide" | "memory";
             /** @description one per visit (loop attempts stacked), oldest first */
             attempts: components["schemas"]["BatchCellAttempt"][];
+            /** @description from 1.14, a judge with a branch or a decide: its capped loop for the cell's "retried <turns> of <max>", "gave up → <then>" */
+            loop?: {
+                turns: number;
+                max: number;
+                /** @description the node the cap sends the row to */
+                then: string | null;
+                gave_up: boolean;
+            };
         };
         BatchCellAttempt: {
             visit: number;
@@ -2844,6 +3191,34 @@ export interface components {
             error: string | null;
             /** @description the first of take_ids (else candidates) */
             thumb_url: components["schemas"]["SignedUrl"] | null;
+            /** @description from 1.14, judge, write, decide: the visit's decision */
+            decision_id?: string;
+            judged?: components["schemas"]["CellJudged"];
+            /** @description from 1.14, a decide: the route taken */
+            route?: {
+                label: string;
+                to: string;
+            };
+        };
+        /** @description from 1.14, a judge attempt (the run table's judged cell: "picked 1 of 4", the first failed criterion; the attempts side by side with each take's reason) */
+        CellJudged: {
+            /** @enum {string} */
+            verdict: "pass" | "fail";
+            picked: number;
+            of: number;
+            keep: number;
+            /** @description the best take's first false must; null when it passed */
+            first_failed: string | null;
+            suggested: string[];
+            /** @description Suggest: the user's pick equalled the suggestion; null before a pick and in Auto */
+            agreed: boolean | null;
+            takes: {
+                /** Format: uuid */
+                take_id: string;
+                passes: boolean;
+                first_failed: string | null;
+                reason: string;
+            }[];
         };
         BatchPage: {
             batches: components["schemas"]["Batch"][];
@@ -2952,11 +3327,15 @@ export interface components {
         BatchPick: {
             gate: string;
             take_ids: string[];
+            note?: components["schemas"]["PickNote"];
         } | {
             gate: string;
             /** @constant */
             reject: true;
+            note?: components["schemas"]["PickNote"];
         };
+        /** @description from 1.14, a judge pick only: why (kept as a judge example in the pipeline's memory: how the judge learns your taste) */
+        PickNote: string;
         ReviewCandidate: {
             /** Format: uuid */
             take_id: string;
@@ -2970,6 +3349,20 @@ export interface components {
             width: number | null;
             height: number | null;
             seed: number | null;
+            /** @description from 1.14, a row parked on a judge: this take's verdict */
+            judge?: {
+                passes: boolean;
+                /** @description its place in the judge's order (1 = best) */
+                rank: number;
+                checks: components["schemas"]["JudgeCheck"][];
+                reason: string;
+            };
+        };
+        JudgeCheck: {
+            criterion: string;
+            /** @enum {string} */
+            level: "must" | "nice";
+            pass: boolean;
         };
         BatchReviewItem: {
             row: number;
@@ -2988,6 +3381,21 @@ export interface components {
             /** @description fail-edge turns left before then (0 for a plain edge) */
             rejects_left: number;
             candidates: components["schemas"]["ReviewCandidate"][];
+            /**
+             * @description from 1.14; absent = gate
+             * @enum {string}
+             */
+            kind?: "gate" | "judge";
+            /** @description a judge: pre-selected */
+            suggested?: string[];
+            /**
+             * @description a judge: its verdict (fail = it gave up: nothing passed)
+             * @enum {string}
+             */
+            verdict?: "pass" | "fail";
+            /** @description a judge: the ask workflow's title ("Ask Qwen Image (Qwen3-VL 8B)") */
+            model?: string;
+            decision_id?: string;
         };
         BatchReview: {
             /** Format: uuid */
@@ -2996,10 +3404,10 @@ export interface components {
             items: components["schemas"]["BatchReviewItem"][];
         };
         /**
-         * @description which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step's two halves), gate (parked for a pick), route (the pick applied, the edge chosen), output (the row ends)
+         * @description which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step's or, from 1.14, a judge's, write's or decide's two halves: its runs), gate (parked for a pick: a gate, or a judge in Suggest), route (the pick or the verdict applied, the edge chosen; a decide's route), output (the row ends); from 1.14 verdict (a judge's answer checked and its decision derived), apply (a write's text set), memory (a memory node read or wrote)
          * @enum {string}
          */
-        ExecutionPart: "inputs" | "submit" | "wait" | "gate" | "route" | "output";
+        ExecutionPart: "inputs" | "submit" | "wait" | "gate" | "route" | "output" | "verdict" | "apply" | "memory";
         ExecutionEdge: {
             to: string;
             /**
@@ -3025,7 +3433,7 @@ export interface components {
             status: "finished" | "resumed" | "current";
             /** @description the edge it took when it left the node */
             edge: components["schemas"]["ExecutionEdge"] | null;
-            /** @description gate id → times its fail edge was taken, after this step */
+            /** @description gate (from 1.14: judge, decide) id → times its capped edge was taken, after this step */
             loops: {
                 [key: string]: number;
             };
@@ -3036,6 +3444,154 @@ export interface components {
             at: string;
             /** @description its checkpoint can be read (GET …/execution/{step}/state) and retried from */
             has_state: boolean;
+            /** @description from 1.14, on the step that derived it (a judge's verdict, a write's apply, a decide's route): the step details */
+            decision?: components["schemas"]["Decision"];
+            /** @description from 1.14: memory items read from the batch's snapshot and written for the next batches */
+            memory?: {
+                read: string[];
+                wrote: string[];
+            };
+        };
+        /**
+         * @description From 1.14 (plan 16.7): one judge, write or decide visit, as pipelines recorded it (messages defs `decision`),
+         *     with thumbnails as signed links. `judge` / `write` / `decide` hold the result for its kind (absent when
+         *     `error` came first). The execution view's step details: a judge's checks with pass or fail, the thumbnails
+         *     it saw, the model, what it read from memory; a write's text before and after; a decide's route.
+         */
+        Decision: {
+            /** @description <batch_id>:<row>:<attempt>:<node>:<visit> */
+            id: string;
+            /** Format: uuid */
+            batch_id: string;
+            row: number;
+            node: string;
+            /** @enum {string} */
+            kind: "judge" | "write" | "decide";
+            visit: number;
+            attempt: number;
+            /** @description reused a stored decision (Resume, Retry, Run again: same decisions); no model was asked */
+            replayed: boolean;
+            replayed_from: string | null;
+            run_ids: string[];
+            /** @description the ask workflow */
+            workflow: string;
+            /** @description "Ask Qwen Image (Qwen3-VL 8B)": what the panel shows as Model */
+            workflow_title?: string;
+            model: {
+                id: string | null;
+                variant: string | null;
+                precision: string | null;
+            } | null;
+            /** @example judge/v1 */
+            template: string;
+            prompt: string;
+            seen: {
+                /** Format: uuid */
+                take_id: string;
+                frame: number | null;
+                sha256: string;
+                width: number;
+                height: number;
+                /** @description the derived thumbnail the model saw */
+                thumb_url: components["schemas"]["SignedUrl"];
+            }[];
+            answers: {
+                text: string;
+                error: string | null;
+            }[];
+            tokens_in: number;
+            tokens_out: number;
+            seconds: number;
+            memory_read: string[];
+            error: string | null;
+            /** Format: date-time */
+            at: string;
+            judge?: {
+                criteria: components["schemas"]["PipelineCriteria"];
+                keep: number;
+                /** @enum {string} */
+                mode: "suggest" | "auto";
+                takes: {
+                    /** Format: uuid */
+                    take_id: string;
+                    checks: components["schemas"]["JudgeCheck"][];
+                    reason: string;
+                    passes: boolean;
+                    rank: number;
+                    /** @description the take's own thumbnail; null once deleted */
+                    thumb_url?: components["schemas"]["SignedUrl"] | null;
+                }[];
+                picked: string[];
+                /** @enum {string} */
+                verdict: "pass" | "fail";
+                first_failed: string | null;
+                /** @description Suggest: the user's pick equalled it; null before a pick and in Auto */
+                agreed?: boolean | null;
+                /** @description Suggest: what the user picked ([] = rejected all); null before a pick */
+                user_pick?: string[] | null;
+            };
+            write?: {
+                /** @example $prompt */
+                to: string;
+                before: string;
+                after: string;
+                note: string;
+            };
+            decide?: {
+                route: string;
+                to: string;
+                reason: string;
+                forced: boolean;
+            };
+        };
+        DecisionList: {
+            decisions: components["schemas"]["Decision"][];
+        };
+        /** @description from 1.14: one item of a pipeline's memory (plan 16.6): a judge example (a pick with a note at a judge) or a note (a memory write node's, or typed here). `source` says where it came from */
+        MemoryItem: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "judge_example" | "note";
+            /** Format: uuid */
+            pipeline_id: string;
+            /** @description a note's key; an example's: its judge node id */
+            key: string | null;
+            text: string;
+            /** @description an example: the takes picked (deleted ones left out) */
+            kept: components["schemas"]["TakeRef"][];
+            rejected: components["schemas"]["TakeRef"][];
+            agreed: boolean | null;
+            source: {
+                /** @enum {string} */
+                kind: "pick" | "node" | "user";
+                /** Format: uuid */
+                batch_id: string | null;
+                row: number | null;
+                node: string | null;
+                visit: number | null;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MemoryList: {
+            /** Format: uuid */
+            pipeline_id: string;
+            items: components["schemas"]["MemoryItem"][];
+            /** @description From 1.14: older items were left out to keep pipelines' reply under NATS max_payload (delete some to see them) */
+            truncated?: boolean;
+            counts: {
+                judge_example: number;
+                note: number;
+            };
+        };
+        MemoryCreate: {
+            /** Format: uuid */
+            pipeline_id: string;
+            text: string;
+            key?: string;
         };
         RowExecution: {
             /** Format: uuid */
@@ -4742,6 +5298,32 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioListTakeDecisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the decisions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     studioListSessionTakes: {
         parameters: {
             query?: {
@@ -5179,6 +5761,150 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListRowDecisions: {
+        parameters: {
+            query?: {
+                /** @description absent = every attempt of the row */
+                attempt?: number;
+            };
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+                /** @description row number, from 1 (unknown or malformed = 404) */
+                row: components["parameters"]["BatchRowN"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the decisions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRunBatchAgain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchAgain"];
+            };
+        };
+        responses: {
+            /** @description the new batch */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Batch"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListMemory: {
+        parameters: {
+            query: {
+                /** @description one of the caller's pipelines (unknown or malformed = 404) */
+                pipeline_id: string;
+                kind?: "judge_example" | "note";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateMemoryNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryCreate"];
+            };
+        };
+        responses: {
+            /** @description the note */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description memory item UUID (unknown, another user's or malformed = 404) */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["Unavailable"];
         };
     };

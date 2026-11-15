@@ -118,6 +118,18 @@ type Take struct {
 	Children    *[]TakeRef `json:"children,omitempty"` // only GET /takes/{id}
 	BatchID     *string    `json:"batch_id,omitempty"`
 	Video       *VideoInfo `json:"video,omitempty"` // kind video only
+	// only GET /takes/{id}: the judge decisions that weighed it, newest first (API 1.14)
+	Decisions *[]TakeDecision `json:"decisions,omitempty"`
+}
+
+// TakeDecision is one judge decision about a take: kept (by the judge or the user's pick), passed or failed.
+type TakeDecision struct {
+	DecisionID  string  `json:"decision_id"`
+	BatchID     string  `json:"batch_id"`
+	Row         int     `json:"row"`
+	Node        string  `json:"node"`
+	Outcome     string  `json:"outcome"` // picked | passed | failed
+	FirstFailed *string `json:"first_failed"`
 }
 
 // VideoInfo is a video take's or run output's metadata with its signed poster (contracts VideoInfo).

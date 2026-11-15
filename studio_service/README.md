@@ -190,6 +190,32 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 - Tests: `api/studio/handover_test.go` runs every `contracts/fixtures/dispatch` fixture (`admit.*` through `admit`,
   `order.*` through a simulation of `pick` and `admit`); `tests/handover_test.go` the interleavings on the DB.
 
+## The llm pack and agent nodes (API 1.14, M4b stage A)
+
+- Text (ask) workflows (`registry.IsText`: an `answer` node with its text wired; `media: text`) are internal: left out
+  of `GET /workflows`, 422 from Create, a workflow batch and "Use in…" (`refuseText`), `workflow_cannot_run` as a step.
+  Only `studio.runs.create` for a judge, write or decide node makes one (`pipelineStepRun`: the node's resolved ask
+  workflow, branch 0 or 1, visit < 32). Its `Media` rows take image or video takes (`vetTakes`/`resolveImages` allow a
+  video for a text graph, sent in the image form); `runs.thumbs` counts 1 per image and 3 per video for the memory plan.
+  The answer (`evt.run.status` `answer`) is stored on the run (`runs.answer`, `Run.answer`), copied into
+  `run_finished` and a terminal `runs.create` reply; no take, no lineage.
+- Dispatcher: `Model.Plan(variant, precision, workflow)` takes the item naming the run's workflow, else the general
+  one; more thumbnails than `planned_at.images` plans at the whole budget. llm is one more mlx family (no new mechanism).
+- Pipeline rules (`pipeline_rules.go`, every `contracts/fixtures/pipelines` fixture incl. `bounds` and `models`):
+  judge/write/decide/memory nodes, decide routes, `too_many_calls`, `unknown_model` and `auto` resolution
+  (`pipelineModels`). `Pipeline.bounds`, `PipelineValidation.{bounds, models}`; Submit stores `batches.bounds`/`models`,
+  puts every ask workflow in the snapshot, fills each node's defaults and `workflow`, and checks a live host for each ask
+  as its runs will ask (a family ask on the reused step's variant and precision: `askModel`).
+- Decisions (migration 00015): the batch projector keeps each step event's `decision` (`decisions`, newest seq per id,
+  a judge's candidates in `take_ids`) and `memory`, and the batch's `memory` snapshot. `GET …/rows/{n}/decisions`,
+  `GET /takes/{id}/decisions`, `Take.decisions` (gallery), the execution view's `decision`/`memory`, the review grid of a
+  judge (suggested, verdict, model, each candidate's checks). A judge pick derives `agreed`, records it on the cell and
+  the decision and sends it with `note` (a gate pick with a note is 422).
+- Run again (`batch_again.go`): an ended batch's snapshot, session, rows and seeds as a new batch; `same` sends
+  `replay_from`. Memory (`memory.go`): `/memory` checks the pipeline is the caller's, then asks `pipelines.memory` as
+  the caller (5 s, else 503); deleting a pipeline asks `clear`. DELETE `/memory/{id}` asks each of the caller's
+  pipelines (the request needs a pipeline id).
+
 ## Layout
 
 | Path | What |

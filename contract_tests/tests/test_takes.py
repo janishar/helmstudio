@@ -169,7 +169,11 @@ def test_rename_and_star(api, gallery):
     assert (t["title"], t["starred"]) == ("Heron at dawn", False)
     t = ok(api.patch(f"{STUDIO}/takes/{tid}", json={"starred": True}))
     assert (t["title"], t["starred"]) == ("Heron at dawn", True)
-    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == {**t, "children": []}  # children only on GET
+    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == {
+        **t,
+        "children": [],
+        "decisions": [],
+    }  # children and decisions only on GET
     starred = all_takes(api, session_id=gallery["session_id"], starred="true")
     assert [x["id"] for x in starred] == [tid]
     for body in ({}, {"title": "   "}, {"title": "x" * 201}, {"starred": "yes"}, {"kind": "video"}):

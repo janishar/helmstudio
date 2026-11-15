@@ -1,0 +1,45 @@
+{
+  "id": "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a70",
+  "kind": "judge_example",
+  "pipeline_id": "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88",
+  "key": "judge",
+  "text": "The softer one keeps the fox's face; sharpness matters less than the face.",
+  "kept": [
+    {
+      "id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+      "kind": "image",
+      "title": "a red fox in snow",
+      "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/1.png?exp=1767225600&sig=ab12"
+    }
+  ],
+  "rejected": [
+    {
+      "id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+      "kind": "image",
+      "title": "a red fox in snow",
+      "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12"
+    },
+    {
+      "id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+      "kind": "image",
+      "title": "a red fox in snow",
+      "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/2.png?exp=1767225600&sig=ab12"
+    },
+    {
+      "id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+      "kind": "image",
+      "title": "a red fox in snow",
+      "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/3.png?exp=1767225600&sig=ab12"
+    }
+  ],
+  "agreed": false,
+  "source": {
+    "kind": "pick",
+    "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+    "row": 6,
+    "node": "judge",
+    "visit": 1
+  },
+  "created_at": "2026-11-15T10:21:00Z",
+  "updated_at": "2026-11-15T10:21:00Z"
+}

@@ -58,6 +58,9 @@ type ValuesBy struct {
 // IsImageField reports whether a rows item field holds an Image.
 func IsImageField(raw json.RawMessage) bool { return string(raw) == `"Image"` }
 
+// IsMediaField reports whether a rows item field holds an image or a video take (API 1.14, an ask node's media).
+func IsMediaField(raw json.RawMessage) bool { return string(raw) == `"Media"` }
+
 // IsLoraField reports whether a rows item field holds a Lora ({lora_id}).
 func IsLoraField(raw json.RawMessage) bool { return string(raw) == `"Lora"` }
 
@@ -280,12 +283,14 @@ type MemoryPlan struct {
 	PeakGB     float64         `json:"peak_gb"`
 	Components []PlanComponent `json:"components"`
 	PlannedAt  *PlannedAt      `json:"planned_at,omitempty"` // the largest sizes PeakGB holds for; nil: every size
+	Workflow   string          `json:"workflow,omitempty"`   // API 1.14: plans only runs of this workflow ("" = any)
 }
 
 // PlannedAt is the largest megapixels and frames a memory plan's peak was computed at.
 type PlannedAt struct {
 	MP     float64 `json:"mp"`
 	Frames int     `json:"frames"`
+	Images *int    `json:"images,omitempty"` // API 1.14, ask workflows: the most thumbnails it holds for
 }
 
 // PlanComponent is one component a run loads: the variant that owns its files and the precision it is loaded at.
@@ -302,16 +307,31 @@ func (m Model) Has(variant string) bool {
 	return len(m.Variants) == 0 || slices.ContainsFunc(m.Variants, func(v Variant) bool { return v.ID == variant && v.Presence == "present" })
 }
 
-// Plan returns the memory plan of variant at precision, if the runner publishes one.
-func (m Model) Plan(variant, precision string) (MemoryPlan, bool) {
+// Plan returns the memory plan of variant at precision for a run of workflow, if the runner publishes one: the item
+// naming that workflow, else the one naming none.
+func (m Model) Plan(variant, precision, workflow string) (MemoryPlan, bool) {
 	for _, v := range m.Variants {
-		if v.ID == variant {
-			if i := slices.IndexFunc(v.Memory, func(p MemoryPlan) bool { return p.Precision == precision }); i >= 0 {
+		if v.ID != variant {
+			continue
+		}
+		for _, want := range []string{workflow, ""} {
+			if i := slices.IndexFunc(v.Memory, func(p MemoryPlan) bool { return p.Precision == precision && p.Workflow == want }); i >= 0 {
 				return v.Memory[i], true
 			}
 		}
 	}
 	return MemoryPlan{}, false
+}
+
+// IsText reports whether a graph answers text (API 1.14): an answer node with its text wired. Such a workflow makes
+// no take; only a pipeline's judge, write and decide nodes run it.
+func IsText(nodes map[string]Node) bool {
+	for _, node := range nodes {
+		if _, ok := node.In["text"]; ok && node.Kind == "answer" {
+			return true
+		}
+	}
+	return false
 }
 
 // Live reports whether the runner refreshed its key within Stale of now.

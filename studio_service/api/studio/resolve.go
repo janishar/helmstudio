@@ -263,7 +263,7 @@ func checkRows(param registry.Param, value any) (any, string) {
 		for _, name := range slices.Sorted(maps.Keys(param.Item)) {
 			raw := param.Item[name]
 			field, given := fields[name]
-			if registry.IsImageField(raw) {
+			if registry.IsImageField(raw) || registry.IsMediaField(raw) {
 				if !given || field == nil {
 					return nil, at + "." + name + ": an image is required"
 				}

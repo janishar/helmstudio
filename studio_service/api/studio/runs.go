@@ -15,6 +15,7 @@ import (
 
 	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/studio/dto"
+	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/common"
 )
@@ -69,6 +70,9 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 			return network.NewConflictError(fmt.Sprintf("You have %d runs queued or running; wait for some to finish.", MaxOpenRuns), nil)
 		}
 		workflow, version, err := s.runnable(ctx, tx, body.WorkflowID)
+		if err == nil {
+			err = refuseText(workflow)
+		}
 		if err != nil {
 			return err
 		}
@@ -282,6 +286,11 @@ func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 	_ = json.Unmarshal(run.Inputs, &out.Inputs)
 	_ = json.Unmarshal(run.Resolved, &out.Resolved) // null or absent leaves it nil (omitted)
 	_ = json.Unmarshal(run.Looks, &out.Looks)
+	var answer message.Answer
+	if json.Unmarshal(run.Answer, &answer) == nil && len(answer.Tries) > 0 {
+		out.Answer = &dto.RunAnswer{Text: answer.Tries[len(answer.Tries)-1].Text, TokensIn: answer.TokensIn,
+			TokensOut: answer.TokensOut, Seconds: answer.Seconds}
+	}
 	if len(run.Progress) > 0 && string(run.Progress) != "null" {
 		out.Progress = &dto.RunProgress{}
 		_ = json.Unmarshal(run.Progress, out.Progress)

@@ -116,17 +116,45 @@ func (s *Service) BatchReview(ctx context.Context, caller common.Caller, batchID
 		for _, c := range found {
 			byID[c.ID] = c
 		}
+		var decisionIDs []string
+		for _, p := range parked {
+			if p.Kind == "judge" && p.DecisionID != "" {
+				decisionIDs = append(decisionIDs, p.DecisionID)
+			}
+		}
+		decisions, err := s.readDecisions(ctx, tx, decisionIDs)
+		if err != nil {
+			return err
+		}
 		for i, row := range rows {
 			p := parked[i]
 			item := dto.BatchReviewItem{Row: row.Row, Attempt: row.Attempt, Inputs: map[string]any{}, Gate: p.Gate,
 				GateTitle: stored.Doc.Nodes[p.Gate].Title, Visit: p.Visit, Keep: p.Keep, Candidates: []dto.ReviewCandidate{}}
 			_ = json.Unmarshal(row.Inputs, &item.Inputs)
 			item.OnReject, item.RejectsLeft = onReject(stored, p.Gate, row.Cells)
+			decision, judged := decisions[p.DecisionID]
+			judged = judged && decision.Judge != nil
+			if p.Kind == "judge" { // the judge's pick pre-selected, its verdict and the model that gave it
+				item.Kind, item.Suggested, item.DecisionID = "judge", nonNil(p.Suggested), p.DecisionID
+				item.Model = stored.Workflows[stored.Models[p.Gate]].Title
+				if p.OnReject != "" {
+					item.OnReject = p.OnReject
+				}
+				if judged {
+					item.Verdict = decision.Judge.Verdict
+				}
+			}
 			for _, id := range p.Candidates {
 				if c, ok := byID[id]; ok {
-					item.Candidates = append(item.Candidates, dto.ReviewCandidate{TakeID: id, Kind: c.Kind, URL: s.signer.Sign(c.Key),
+					candidate := dto.ReviewCandidate{TakeID: id, Kind: c.Kind, URL: s.signer.Sign(c.Key),
 						ThumbURL: s.signer.Sign(c.Thumb), Video: gallerydto.Info(c.Video, s.signer.Sign),
-						Width: c.Width, Height: c.Height, Seed: c.Seed})
+						Width: c.Width, Height: c.Height, Seed: c.Seed}
+					for i := 0; judged && i < len(decision.Judge.Takes); i++ {
+						if t := decision.Judge.Takes[i]; t.TakeID == id {
+							candidate.Judge = &dto.ReviewJudge{Passes: t.Passes, Rank: t.Rank, Checks: t.Checks, Reason: t.Reason}
+						}
+					}
+					item.Candidates = append(item.Candidates, candidate)
 				}
 			}
 			if len(item.Candidates) > 0 {
@@ -186,6 +214,8 @@ func (s *Service) PickBatchRow(ctx context.Context, caller common.Caller, batchI
 			return network.NewConflictError(fmt.Sprintf("row %d already has another pick at %s", n, body.Gate), nil)
 		case ended(batch.Status) || batch.Control == "stop":
 			return network.NewConflictError("This batch has ended or is stopping.", nil)
+		case body.Note != nil && parked.Kind != "judge":
+			return network.NewUnprocessableError("a note is kept for judge picks only", nil)
 		}
 		seen := map[string]bool{}
 		for _, id := range want.TakeIDs {
@@ -195,15 +225,26 @@ func (s *Service) PickBatchRow(ctx context.Context, caller common.Caller, batchI
 			seen[id] = true
 		}
 		picks[key] = want
-		cells := markGateCell(row.Cells, parked.Gate, parked.Visit, want)
+		var agreed *bool // a judge: the pick equals its suggestion (reject all with none suggested: true)
+		if parked.Kind == "judge" {
+			same := sameSet(want.TakeIDs, parked.Suggested)
+			agreed = &same
+		}
+		cells := markGateCell(row.Cells, parked.Gate, parked.Visit, want, agreed)
 		if _, err := tx.Exec(ctx, `UPDATE batch_rows SET status = 'running', parked = NULL, picks = $3, cells = $4
 			WHERE batch_id = $1 AND n = $2`, batchID, n, picks, cells); err != nil {
 			return err
 		}
 		command := message.Pick{BatchID: batchID, Row: n, Attempt: row.Attempt, Gate: parked.Gate, Visit: parked.Visit,
-			TakeIDs: want.TakeIDs}
+			TakeIDs: want.TakeIDs, Agreed: agreed, Note: body.Note}
 		if want.Reject {
 			command.Reject = &want.Reject
+		}
+		if agreed != nil && parked.DecisionID != "" {
+			if _, err := tx.Exec(ctx, `UPDATE decisions SET user_pick = $2, agreed = $3 WHERE id = $1`, parked.DecisionID,
+				nonNil(want.TakeIDs), *agreed); err != nil {
+				return err
+			}
 		}
 		if err := s.command(ctx, tx, batchID, caller.ID, command); err != nil {
 			return err
@@ -233,8 +274,17 @@ func latestPick(picks map[string]pickRecord, attempt int, gate string) int {
 	return latest
 }
 
-// markGateCell records a pick on the gate's cell attempt of that visit (picked or rejected, the picked takes).
-func markGateCell(cells json.RawMessage, gate string, visit int, pick pickRecord) json.RawMessage {
+// sameSet reports whether two lists hold the same ids.
+func sameSet(a, b []string) bool {
+	x, y := slices.Clone(a), slices.Clone(b)
+	slices.Sort(x)
+	slices.Sort(y)
+	return slices.Equal(slices.Compact(x), slices.Compact(y))
+}
+
+// markGateCell records a pick on the gate's cell attempt of that visit (picked or rejected, the picked takes); at a
+// judge (agreed set) also on its judged summary: how many were kept and whether the user agreed.
+func markGateCell(cells json.RawMessage, gate string, visit int, pick pickRecord, agreed *bool) json.RawMessage {
 	var list []map[string]any
 	if json.Unmarshal(cells, &list) != nil {
 		return cells
@@ -247,6 +297,9 @@ func markGateCell(cells json.RawMessage, gate string, visit int, pick pickRecord
 				attempt["status"], attempt["take_ids"] = "picked", pick.TakeIDs
 				if pick.Reject {
 					attempt["status"], attempt["take_ids"] = "rejected", []string{}
+				}
+				if judged, ok := attempt["judged"].(map[string]any); ok && agreed != nil {
+					judged["agreed"], judged["picked"] = *agreed, len(pick.TakeIDs)
 				}
 			}
 		}
@@ -319,6 +372,8 @@ func stepStatus(step model.BatchStep) string {
 		return "waiting"
 	case step.Part == "route" && edge.Via == "pass":
 		return "picked"
+	case step.Part == "route" && edge.Via == "next": // a decide's route
+		return "succeeded"
 	case step.Part == "route":
 		return "rejected"
 	case step.Part == "submit" || (step.Part == "wait" && step.Status == "current"):
@@ -362,6 +417,16 @@ func (s *Service) RowExecution(ctx context.Context, caller common.Caller, batchI
 				threads = false
 			}
 		}
+		var decisionIDs []string
+		for _, step := range steps {
+			if step.DecisionID != nil {
+				decisionIDs = append(decisionIDs, *step.DecisionID)
+			}
+		}
+		decisions, err := s.readDecisions(ctx, tx, decisionIDs)
+		if err != nil {
+			return err
+		}
 		counts := map[dto.ExecutionEdgeCount]int{}
 		var order []dto.ExecutionEdgeCount
 		for _, step := range steps {
@@ -370,6 +435,12 @@ func (s *Service) RowExecution(ctx context.Context, caller common.Caller, batchI
 				TakeIDs: nonNil(step.TakeIDs), Error: step.Error, At: step.At, HasState: threads && step.CheckpointID != nil}
 			_ = json.Unmarshal(step.Changed, &shown.Changed)
 			_ = json.Unmarshal(step.Loops, &shown.Loops)
+			_ = json.Unmarshal(step.Memory, &shown.Memory) // null leaves it out
+			if step.DecisionID != nil {
+				if d, ok := decisions[*step.DecisionID]; ok {
+					shown.Decision = &d
+				}
+			}
 			if json.Unmarshal(step.Edge, &shown.Edge) == nil && shown.Edge != nil {
 				key := dto.ExecutionEdgeCount{From: step.Node, To: shown.Edge.To, Via: shown.Edge.Via}
 				if counts[key]++; counts[key] == 1 {

@@ -1,0 +1,108 @@
+{
+  "description": "a judge loop capped at 10 through three writes: 4 nodes × 11 visits = 44 LLM calls per row, over the 32 bound (too_many_calls); 11 runs are fine",
+  "pipeline": {
+    "title": "Too many calls",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "motion",
+            "type": "Text"
+          }
+        ]
+      },
+      "still": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "seeds": 1,
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "judge": {
+        "kind": "judge",
+        "takes": "still",
+        "criteria": {
+          "must": [
+            "Matches the brief"
+          ]
+        }
+      },
+      "w1": {
+        "kind": "write",
+        "from": [
+          "$prompt",
+          "judge.reasons"
+        ],
+        "to": "$prompt"
+      },
+      "w2": {
+        "kind": "write",
+        "from": [
+          "$prompt"
+        ],
+        "to": "$prompt"
+      },
+      "w3": {
+        "kind": "write",
+        "from": [
+          "$prompt"
+        ],
+        "to": "$prompt"
+      },
+      "out": {
+        "kind": "output",
+        "from": "judge.picked",
+        "collection": "x"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "still"
+      ],
+      [
+        "still",
+        "judge"
+      ],
+      [
+        "judge",
+        {
+          "pass": "out",
+          "fail": "w1",
+          "max": 10,
+          "then": "out"
+        }
+      ],
+      [
+        "w1",
+        "w2"
+      ],
+      [
+        "w2",
+        "w3"
+      ],
+      [
+        "w3",
+        "still"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "too_many_calls"
+    }
+  ]
+}

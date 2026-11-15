@@ -64,7 +64,7 @@ RUN_DIR := runner_service/.run
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')
 SECRETS := $(CURDIR)/deploy/secrets
 UV_RUN_torch := run --extra torch
-UV_RUN_mlx := run --project envs/mlx
+UV_RUN_mlx := run --project envs/mlx --extra llm
 HEALTH_PORT_torch := 8091   # each runner's GET /health on 0.0.0.0 (two on one Mac need two ports)
 HEALTH_PORT_mlx := 8092
 

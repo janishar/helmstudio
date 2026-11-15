@@ -82,7 +82,11 @@ def test_upload_becomes_a_take(api, anon, user_a):
     assert (
         put(anon, path, q, b"x" * len(data)).status_code == 409
     )  # a checked upload is never replaced
-    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == {**take, "children": []}  # children only on GET
+    assert ok(api.get(f"{STUDIO}/takes/{tid}")) == {
+        **take,
+        "children": [],
+        "decisions": [],
+    }  # children and decisions only on GET
     for link in (take["url"], take["thumb_url"]):  # the original is its own thumbnail in 1.2
         r = anon.get(link)
         assert r.status_code == 200 and r.content == data

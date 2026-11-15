@@ -207,7 +207,7 @@
         },
         "item": {
           "type": "object",
-          "description": "rows only: field name → a ref kind (the field holds a value of that kind, required in every item: Image = a take {take_id}; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows)",
+          "description": "rows only: field name → a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows)",
           "minProperties": 1,
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
@@ -216,6 +216,9 @@
             "anyOf": [
               {
                 "const": "Image"
+              },
+              {
+                "const": "Media"
               },
               {
                 "const": "Lora"
@@ -922,9 +925,10 @@
         "media": {
           "enum": [
             "image",
-            "video"
+            "video",
+            "text"
           ],
-          "description": "what its takes are: the Image / Video switch filters templates by it. Absent = image. Must equal what studio computes from the graph (contracts/README.md, Video: a workflow's media)"
+          "description": "what its runs make: image / video takes (the Image / Video switch filters templates by it), or from API 1.14 `text`: an answer stored on the run, no take (an ask workflow: its `answer` node; contracts/README.md, The llm pack). Absent = image. Must equal what studio computes from the graph (contracts/README.md, Video: a workflow's media). A text workflow is internal: never listed for Create, never run from Create or a workflow batch; only a pipeline's judge, write and decide nodes run it"
         },
         "nodes": {
           "$ref": "messages/defs.schema.json#/$defs/graph",
@@ -1099,6 +1103,11 @@
                                   "frames": {
                                     "type": "integer",
                                     "minimum": 0
+                                  },
+                                  "images": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "description": "from API 1.14, ask workflows: the most thumbnails (each image take 1, each video take 3 keyframes) peak_gb was planned at; a run sending more has no plan (planned at the whole budget). Absent: not a limit"
                                   }
                                 }
                               },
@@ -1144,6 +1153,10 @@
                                     }
                                   }
                                 }
+                              },
+                              "workflow": {
+                                "$ref": "messages/defs.schema.json#/$defs/workflowId",
+                                "description": "from API 1.14: this item plans only runs of that workflow (an ask workflow that loads one component of the family: `qwen-image-ask` loads the text encoder only). The dispatcher takes the item of the run's precision and workflow, else the item of its precision without `workflow`. Items are unique by (precision, workflow)"
                               }
                             }
                           }

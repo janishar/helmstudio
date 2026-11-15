@@ -401,6 +401,64 @@
           }
         }
       }
+    },
+    "llm-ask": {
+      "title": "Ask Qwen3.8 27B",
+      "family": "llm",
+      "env": "mlx",
+      "nodes": {
+        "model": {
+          "kind": "llm/model",
+          "params": {
+            "variant": "4bit",
+            "precision": "int4"
+          }
+        },
+        "ask": {
+          "kind": "llm/ask",
+          "params": {
+            "max_tokens": 800
+          },
+          "in": {
+            "model": "model.model"
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "ask.answer"
+          }
+        }
+      }
+    },
+    "qwen-image-ask": {
+      "title": "Ask Qwen Image (Qwen3-VL 8B)",
+      "family": "qwen-image",
+      "env": "torch",
+      "nodes": {
+        "model": {
+          "kind": "qwen-image/model",
+          "params": {
+            "variant": "base",
+            "precision": "int8"
+          }
+        },
+        "ask": {
+          "kind": "qwen-image/ask",
+          "params": {
+            "max_tokens": 800
+          },
+          "in": {
+            "model": "model.model"
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "ask.answer"
+          }
+        }
+      }
     }
   }
 }

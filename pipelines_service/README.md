@@ -8,13 +8,15 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
 |---|---|
 | `main.py` | connect, migrate, report running batches paused (restart), pull `CMD` and `EVT` |
 | `pipeline.py` | the pipeline rules the engine depends on (`problems`, tested on contracts/fixtures/pipelines) and the plan a graph is built from (a batch of one workflow = `step → out`) |
-| `graph.py` | the row graph per node: inputs; step `submit` + `wait`; gate `gate` (interrupt) + `route` (pick, edge, loop cap); output |
+| `graph.py` | the row graph per node: inputs; step `submit` + `wait`; gate `gate` (interrupt) + `route` (pick, edge, loop cap); output; judge `submit` `wait` `verdict` [`gate`] `route`; write `submit` `wait` `apply`; decide `submit` `wait` `route`; memory |
+| `agents.py` | judge/write/decide templates (`judge/v1` …) and schemas, the answer parse, `judge_verdict`, `inputs_hash`, the mention scan |
+| `memory.py` | pipeline memory on LangGraph's `AsyncPostgresStore` (namespace `<owner>/pipeline/<id>`, 500 items) and the `pipelines.memory` responder |
 | `states.py` | `pipelines.state.get` responder (queue group `pipelines`): a row's state at a checkpoint, owner only |
 | `engine.py` | batches and rows: row 1 first, pause, resume, stop, retry, restart, events, thread cleanup |
 | `consumer.py` | `cmd.pipeline.{submit,resume,pause,stop,retry,pick}`, durable `pipelines` on `CMD`, one at a time, inbox dedupe |
 | `events.py` | `evt.studio.<session>.run_finished`, durable `pipelines-runs` on `EVT`: resumes the waiting thread |
 | `messaging/` | contract validation (`gen/`), `evt.pipeline.<batch_id>.{batch,row}` publisher, `studio.runs.create` client |
-| `migrations/` | `batches` (snapshot, control, seq, fail streak), `batch_rows`, `inbox`; LangGraph's tables via `setup()` |
+| `migrations/` | `batches` (snapshot, control, seq, fail streak, memory snapshot, replay_from), `batch_rows`, `inbox`, `decisions` (the replay source); LangGraph's checkpoint and store tables via `setup()` |
 | `health.py` | `GET /health`: 200 while NATS is connected and the database answers |
 
 ## How a batch runs
@@ -42,6 +44,19 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
   `cmd.pipeline.pick` for that gate visit (stored in `batch_rows.pick`, any other dropped); a reject takes the fail
   edge until `max`, then `then`. Every graph step is published as `evt.pipeline.step` from the checkpoint history.
   Retry with `from_step` forks the thread from `checkpoint_id` (`aupdate_state`) as the new attempt.
+- **Agent nodes** (contracts/README.md "The llm pack and agent nodes"): every judge, write or decide visit is one
+  ask run through `studio.runs.create` under `<batch>:<row>:<attempt>:<node>:<visit>:0` (`:1` for the one re-ask
+  after its answer failed pipelines' checks), waited for like a step's run. `submit` first looks up the replay key
+  `<batch|replay_from>:<row>:<node>:<visit>:<inputs hash>` in `decisions`: a hit is reused, no run. A judge derives
+  its verdict (keep the best K that pass every must), records the decision (on `evt.pipeline.step`, stored first),
+  then parks like a gate in Suggest (its pick suggested; `agreed` and a pick's `note`, which becomes a judge example)
+  or routes alone in Auto; a fail goes along its fail edge until `max`, then `then`. A write sets its `$<Text input>`
+  for the rest of the row attempt; a decide takes one of its declared routes (the schema's enum; `then` is forced
+  once `max` capped turns are used). A failed run, or a second failed check, fails the row `<node>: <error>`.
+- **Memory**: the pipeline's namespace is copied onto the batch at Submit (`evt.pipeline.batch` `memory`); every
+  read of the batch (memory read nodes, a judge's examples) uses that copy; memory write nodes write the live
+  namespace under one id per (batch, row, node, visit), seen from the next batch. LangSmith tracing is off unless
+  `LANGSMITH_TRACING` is set.
 - When every row has ended the batch is `done` (or `stopped`) and its threads are deleted; the batch row and
   snapshot stay.
 

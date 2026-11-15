@@ -73,6 +73,10 @@
         "attempt": {
           "$ref": "defs.schema.json#/$defs/attempt",
           "description": "the attempt of cmd.run.execute this event belongs to; absent = 1. seq restarts at 1 for each attempt; the projector dedupes on (job_id, attempt, seq) and drops events of an attempt that is not the run's current one"
+        },
+        "answer": {
+          "$ref": "defs.schema.json#/$defs/answer",
+          "description": "from API 1.14, a run of a text (ask) workflow: sent with succeeded (required then) and with failed when the answers did not match the schema; studio stores it as Run.answer and copies it into evt.studio.run_finished"
         }
       },
       "if": {

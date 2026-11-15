@@ -161,6 +161,16 @@ func (s *Service) runnable(ctx context.Context, tx pgx.Tx, id string) (registry.
 	return workflow, &row.Version, nil
 }
 
+// refuseText is the 422 of Create, a workflow batch and "Use in…" for a text (ask) workflow (API 1.14): only a
+// pipeline's judge, write and decide nodes run one.
+func refuseText(workflow registry.Workflow) error {
+	if registry.IsText(workflow.Nodes) {
+		return network.NewUnprocessableError(fmt.Sprintf("workflow %s answers text; only a judge, write or decide node runs it",
+			workflow.ID), nil)
+	}
+	return nil
+}
+
 // kinds lists the kinds of a graph, each once, sorted.
 func kinds(nodes map[string]registry.Node) []string {
 	var out []string
@@ -186,7 +196,7 @@ func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, sourc
 		return out, network.NewUnprocessableError("media must be image or video", nil)
 	}
 	keep := func(workflow dto.Workflow) {
-		if media == "" || workflow.Media == media {
+		if workflow.Media != "text" && (media == "" || workflow.Media == media) { // text workflows are internal
 			out.Workflows = append(out.Workflows, workflow)
 		}
 	}

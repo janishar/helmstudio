@@ -10,8 +10,11 @@ type Attempt = S<"BatchCellAttempt">;
 type Exec = S<"RowExecution">;
 type Batch = S<"Batch">;
 
-/** A run table column: one per step and gate, in row order. */
-export type Column = { node: string; kind: "step" | "gate"; title: string };
+type Kind = Cell["kind"];
+/** A run table column: one per step, gate, judge, write and decide, in row order. */
+export type Column = { node: string; kind: Kind; title: string };
+/** the kinds with a column (a memory node and the output have none: the takes column is the output's) */
+const COLUMN_KINDS = new Set<Kind>(["step", "gate", "judge", "write", "decide"]);
 
 /** The columns: the pipeline's steps and gates in the order a row meets them ("Step 1 · Qwen Image", the gate's
  * title), then any node a row reached that the document no longer has (cells name it). Without the document, the
@@ -28,12 +31,13 @@ export function runColumns(
       const k = doc.nodes[id].kind;
       if (k === "step")
         out.push({ node: id, kind: k, title: `Step ${n[id]} · ${nodeLabel(doc, id, titles)}` });
-      if (k === "gate") out.push({ node: id, kind: k, title: nodeLabel(doc, id, titles) });
+      else if (COLUMN_KINDS.has(k as Kind))
+        out.push({ node: id, kind: k as Kind, title: nodeLabel(doc, id, titles) });
     }
   }
   for (const r of rows)
     for (const c of r.cells ?? [])
-      if (c.kind !== "output" && !out.some((x) => x.node === c.node))
+      if (COLUMN_KINDS.has(c.kind) && !out.some((x) => x.node === c.node))
         out.push({ node: c.node, kind: c.kind, title: c.node });
   return out;
 }
@@ -76,6 +80,11 @@ function lineOf(cell: Cell, a: Attempt): CellLine {
     error: a.error,
   };
   const n = a.take_ids.length;
+  if (cell.kind === "judge") return { ...base, ...judgeLine(a) };
+  if (cell.kind === "decide" && a.route)
+    return { ...base, text: `${a.route.label} → ${a.route.to}`, tone: "" };
+  if (cell.kind === "write" && a.status === "succeeded")
+    return { ...base, text: "rewritten", tone: "" };
   switch (a.status) {
     case "succeeded":
       return {
@@ -101,6 +110,143 @@ function lineOf(cell: Cell, a: Attempt): CellLine {
       return { ...base, text: String(a.status), tone: "" };
   }
 }
+
+/** A judge attempt in words: "picked take 3 · all checks pass", "failed · extra limb", "suggests take 2". */
+export function judgeLine(a: Attempt): Pick<CellLine, "text" | "tone"> {
+  const j = a.judged;
+  if (a.status === "queued" || a.status === "running" || !j)
+    return a.status === "failed"
+      ? { text: a.error ? `failed · ${a.error}` : "failed", tone: "warn" }
+      : {
+          text: a.status === "running" ? "judging" : String(a.status),
+          tone: a.status === "running" ? "run" : "",
+        };
+  const idx = (ids: string[]) => ids.map((t) => j.takes.findIndex((x) => x.take_id === t) + 1);
+  const which = (ids: string[]) =>
+    ids.length === 1 ? `take ${idx(ids)[0]}` : `${ids.length} of ${j.of}`;
+  if (a.status === "waiting")
+    return {
+      text: j.suggested.length
+        ? `suggests ${which(j.suggested)} · waiting for you`
+        : "none passed · waiting for you",
+      tone: "wait",
+    };
+  if (j.verdict === "fail" || a.status === "rejected")
+    return { text: j.first_failed ? `failed · ${j.first_failed}` : "none passed", tone: "warn" };
+  const kept = a.take_ids.length ? a.take_ids : j.suggested;
+  const clean = j.takes.filter((t) => kept.includes(t.take_id)).every((t) => t.passes);
+  return {
+    text: `picked ${which(kept)}${clean ? " · all checks pass" : ""}`,
+    tone: "ok",
+  };
+}
+
+/** A judge's cell as the run table's one line (docs/mock/PipelineGraph: "picked take 3 · all checks pass",
+ * "retried 1 of 2 · extra limb", "none passed · waiting for you", "gave up → Review"); its attempts open side by
+ * side. */
+export function judgeSummary(
+  cell: Cell,
+  name: (id: string) => string = (id) => id,
+): Pick<CellLine, "text" | "tone"> {
+  const last = cell.attempts.at(-1);
+  if (!last) return { text: "—", tone: "" };
+  const now = judgeLine(last);
+  const loop = cell.loop;
+  if (loop?.gave_up && last.status !== "waiting")
+    return { text: `gave up → ${loop.then ? name(loop.then) : "the row ends"}`, tone: "warn" };
+  if (!loop?.turns || now.tone === "wait" || now.tone === "run") return now;
+  const failed = cell.attempts.filter((x) => x.judged?.verdict === "fail").at(-1)?.judged;
+  return {
+    text: `retried ${loop.turns} of ${loop.max}${failed?.first_failed ? ` · ${failed.first_failed}` : ""}`,
+    tone: "warn",
+  };
+}
+
+/** One criterion over a judge's takes (docs/mock/Execution's Verdict): "passed", "failed on all 4", "passed on 3". */
+export function criterionLines(
+  j: NonNullable<S<"Decision">["judge"]>,
+): { criterion: string; level: "must" | "nice"; text: string; bad: boolean }[] {
+  const n = j.takes.length;
+  const all = [
+    ...(j.criteria.must ?? []).map((c) => [c, "must"] as const),
+    ...(j.criteria.nice ?? []).map((c) => [c, "nice"] as const),
+  ];
+  return all.map(([criterion, level]) => {
+    const k = j.takes.filter((t) => t.checks.find((c) => c.criterion === criterion)?.pass).length;
+    const text =
+      k === n
+        ? "passed"
+        : k === 0
+          ? n > 1
+            ? `failed on all ${n}`
+            : "failed"
+          : level === "must"
+            ? `failed on ${n - k}`
+            : `passed on ${k}`;
+    return { criterion, level, text, bad: level === "must" && k < n };
+  });
+}
+
+/** A text before and after (a write's rewrite) as a word diff: runs of kept, removed and added text. */
+export function wordDiff(
+  before: string,
+  after: string,
+): { text: string; op: "same" | "del" | "add" }[] {
+  const a = before.split(/(\s+)/).filter(Boolean);
+  const b = after.split(/(\s+)/).filter(Boolean);
+  // ponytail: O(n·m) LCS table; fine for a prompt (≤ a few hundred words)
+  const L = Array.from({ length: a.length + 1 }, () => new Array<number>(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out: { text: string; op: "same" | "del" | "add" }[] = [];
+  const push = (text: string, op: "same" | "del" | "add") => {
+    const last = out.at(-1);
+    if (last?.op === op) last.text += text;
+    else out.push({ text, op });
+  };
+  let i = 0;
+  let j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      push(a[i++], "same");
+      j++;
+    } else if (j < b.length && (i === a.length || L[i][j + 1] >= L[i + 1][j])) push(b[j++], "add");
+    else push(a[i++], "del");
+  }
+  return out;
+}
+
+/** Submit's worst case: "at most 13 runs and 6 LLM calls per row (130 runs, 60 calls in all)". */
+export function boundsLine(b: S<"PipelineBounds">, rows: number): string {
+  const s = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const per = [s(b.runs, "run"), b.llm_calls ? s(b.llm_calls, "LLM call") : ""].filter(Boolean);
+  const all =
+    rows > 1
+      ? ` (${[s(b.runs * rows, "run"), b.llm_calls ? s(b.llm_calls * rows, "call") : ""].filter(Boolean).join(", ")} in all)`
+      : "";
+  return `at most ${per.join(" and ")} per row${all}`;
+}
+
+/** Where a memory item came from, for the Memory panel. */
+export function memorySource(
+  m: S<"MemoryItem">,
+  name: (node: string) => string = (x) => x,
+): string {
+  const s = m.source;
+  if (s.kind === "user") return "added by you";
+  const at = [s.row != null && `row ${s.row}`, s.visit != null && s.visit > 1 && `try ${s.visit}`]
+    .filter(Boolean)
+    .join(", ");
+  const node = s.node ? name(s.node) : "";
+  if (s.kind === "pick")
+    return `your pick at ${node || "a judge"}${at ? ` · ${at}` : ""}${m.agreed === false ? " · you changed its pick" : m.agreed ? " · you agreed" : ""}`;
+  return `written by ${node || "a memory node"}${at ? ` · ${at}` : ""}`;
+}
+
+/** The pick a review row opens with: the judge's suggestion (Suggest mode), else nothing. */
+export const initialPick = (item: S<"BatchReviewItem">) =>
+  item.kind === "judge" ? (item.suggested ?? []) : [];
 
 /** A cell the row has not reached: skipped once the row ended, else nothing yet. */
 export const unreached = (r: Row) =>
@@ -177,8 +323,11 @@ export function asRun(x: Exec) {
     taken[`${e.from}>${e.to}>${e.via}`] = (taken[`${e.from}>${e.to}>${e.via}`] ?? 0) + e.count;
   return {
     nodes,
-    /** times the edge from → to was taken (`via`: next, pass, fail, then) */
-    taken: (from: string, to: string, via: string) => taken[`${from}>${to}>${via}`] ?? 0,
+    /** times the edge from → to was taken (`via`: next, pass, fail, then; `*` any) */
+    taken: (from: string, to: string, via: string) =>
+      via === "*" // a decide's route: the contract's edge has no route label, so any edge from → to
+        ? x.edges.filter((e) => e.from === from && e.to === to).reduce((n, e) => n + e.count, 0)
+        : (taken[`${from}>${to}>${via}`] ?? 0),
     loops: x.loops,
   };
 }
@@ -189,6 +338,8 @@ export function stepDetail(x: Exec, step: number) {
   const s = x.steps.find((t) => t.step === step);
   if (!s) return null;
   const n = x.pipeline.nodes[s.node];
+  if (s.decision)
+    return { kind: s.decision.kind, step: s, decision: s.decision, runs: s.run_ids, takes: [] };
   if (n?.kind !== "gate")
     return { kind: n?.kind ?? "step", step: s, runs: s.run_ids, takes: s.take_ids };
   const before = x.steps

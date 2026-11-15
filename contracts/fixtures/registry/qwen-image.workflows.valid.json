@@ -87,6 +87,37 @@
           }
         }
       }
+    },
+    {
+      "id": "qwen-image-ask",
+      "title": "Ask Qwen Image (Qwen3-VL 8B)",
+      "family": "qwen-image",
+      "env": "torch",
+      "media": "text",
+      "nodes": {
+        "model": {
+          "kind": "qwen-image/model",
+          "params": {
+            "variant": "base",
+            "precision": "int8"
+          }
+        },
+        "ask": {
+          "kind": "qwen-image/ask",
+          "params": {
+            "max_tokens": 800
+          },
+          "in": {
+            "model": "model.model"
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "ask.answer"
+          }
+        }
+      }
     }
   ]
 }

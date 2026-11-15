@@ -87,7 +87,8 @@
               ],
               "properties": {
                 "gate": {
-                  "$ref": "defs.schema.json#/$defs/nodeId"
+                  "$ref": "defs.schema.json#/$defs/nodeId",
+                  "description": "the gate or judge node id it is parked on"
                 },
                 "visit": {
                   "type": "integer",
@@ -101,6 +102,29 @@
                 "candidates": {
                   "$ref": "defs.schema.json#/$defs/takeIdList",
                   "minItems": 1
+                },
+                "kind": {
+                  "enum": [
+                    "gate",
+                    "judge"
+                  ],
+                  "description": "from API 1.14; absent = gate. judge: a judge in Suggest mode (or one that gave up with no take passing), `suggested` pre-selected"
+                },
+                "suggested": {
+                  "$ref": "defs.schema.json#/$defs/takeIdList",
+                  "description": "judge: the judge's pick (subset of candidates; [] when no take passed)"
+                },
+                "decision_id": {
+                  "$ref": "defs.schema.json#/$defs/decisionId",
+                  "description": "judge: the decision the review shows"
+                },
+                "on_reject": {
+                  "enum": [
+                    "retry",
+                    "then",
+                    "fail"
+                  ],
+                  "description": "judge: what rejecting all does now (as BatchReviewItem.on_reject)"
                 }
               }
             },
@@ -116,7 +140,7 @@
           "items": {
             "$ref": "defs.schema.json#/$defs/rowCell"
           },
-          "description": "pipeline batches: one cell per node reached, in the order first reached, attempts stacked (studio adds seconds and queued from its runs)"
+          "description": "pipeline batches: one cell per node reached, in the order first reached, attempts stacked (studio adds seconds and queued from its runs); from API 1.14 judge, write, decide and memory cells too"
         }
       },
       "allOf": [

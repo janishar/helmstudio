@@ -92,6 +92,10 @@
               }
             }
           }
+        },
+        "replay_from": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "from API 1.14, Run again with the same decisions: the batch whose decisions are reused (replay keys with that batch id); absent = decide again. The snapshot and rows (seeds included) are the source batch's"
         }
       }
     }

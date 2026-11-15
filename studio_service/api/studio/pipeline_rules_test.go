@@ -48,10 +48,12 @@ func TestPipelineFixtures(t *testing.T) {
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			var fixture struct {
-				Pipeline dto.PipelineDoc   `json:"pipeline"`
-				Problems []dto.Problem     `json:"problems"`
-				Looks    []lookItem        `json:"looks"`
-				Loras    map[string]string `json:"loras"`
+				Pipeline dto.PipelineDoc     `json:"pipeline"`
+				Problems []dto.Problem       `json:"problems"`
+				Looks    []lookItem          `json:"looks"`
+				Loras    map[string]string   `json:"loras"`
+				Bounds   *dto.PipelineBounds `json:"bounds"`
+				Models   map[string]string   `json:"models"`
 			}
 			data, _ := os.ReadFile(file)
 			if err := json.Unmarshal(data, &fixture); err != nil {
@@ -65,8 +67,9 @@ func TestPipelineFixtures(t *testing.T) {
 			for _, p := range fixture.Problems {
 				want[key(p)] = true
 			}
-			for _, p := range pipelineProblems(fixture.Pipeline, workflows, palette, fixture.Looks,
-				func(string) map[string]string { return fixture.Loras }) {
+			problems, info := pipelineProblems(fixture.Pipeline, workflows, palette, fixture.Looks,
+				func(string) map[string]string { return fixture.Loras })
+			for _, p := range problems {
 				got[key(p)] = true
 				if p.Message == "" || (p.Blocks == "run") != pipelineRunOnly[p.Code] {
 					t.Errorf("problem %+v", p)
@@ -75,6 +78,12 @@ func TestPipelineFixtures(t *testing.T) {
 			if !maps.Equal(got, want) {
 				t.Errorf("got %v, want %v", slices.Sorted(maps.Keys(got)), slices.Sorted(maps.Keys(want)))
 			}
+			if fixture.Bounds != nil && info.Bounds != *fixture.Bounds {
+				t.Errorf("bounds %+v, want %+v", info.Bounds, *fixture.Bounds)
+			}
+			if fixture.Models != nil && !maps.Equal(info.Models, fixture.Models) {
+				t.Errorf("models %v, want %v", info.Models, fixture.Models)
+			}
 		})
 	}
 }
@@ -82,23 +91,25 @@ func TestPipelineFixtures(t *testing.T) {
 // TestPipelineDocRoundTrip: a document decodes and encodes to the same JSON (stored documents are never reshaped), and
 // a field of another kind is refused.
 func TestPipelineDocRoundTrip(t *testing.T) {
-	data, _ := os.ReadFile(filepath.Join(pipelineFixtures, "valid.text-to-edit.json"))
-	var fixture struct {
-		Pipeline json.RawMessage `json:"pipeline"`
+	for _, name := range []string{"valid.text-to-edit.json", "valid.judge-best-of-4.json", "valid.decide.json"} {
+		data, _ := os.ReadFile(filepath.Join(pipelineFixtures, name))
+		var fixture struct {
+			Pipeline json.RawMessage `json:"pipeline"`
+		}
+		_ = json.Unmarshal(data, &fixture)
+		var doc dto.PipelineDoc
+		if err := json.Unmarshal(fixture.Pipeline, &doc); err != nil {
+			t.Fatal(err)
+		}
+		again, _ := json.Marshal(doc)
+		var a, b any
+		_ = json.Unmarshal(fixture.Pipeline, &a)
+		_ = json.Unmarshal(again, &b)
+		if x, y := mustJSON(a), mustJSON(b); x != y {
+			t.Fatalf("%s:\n%s\n%s", name, x, y)
+		}
 	}
-	_ = json.Unmarshal(data, &fixture)
-	var doc dto.PipelineDoc
-	if err := json.Unmarshal(fixture.Pipeline, &doc); err != nil {
-		t.Fatal(err)
-	}
-	again, _ := json.Marshal(doc)
-	var a, b any
-	_ = json.Unmarshal(fixture.Pipeline, &a)
-	_ = json.Unmarshal(again, &b)
-	if x, y := mustJSON(a), mustJSON(b); x != y {
-		t.Fatalf("%s\n%s", x, y)
-	}
-	for _, bad := range []string{`{"kind": "gate", "takes": "s", "workflow": "echo"}`, `{"kind": "judge"}`,
+	for _, bad := range []string{`{"kind": "gate", "takes": "s", "workflow": "echo"}`, `{"kind": "agent"}`, `{"kind": "judge", "takes": "s", "criteria": {"must": ["a"]}, "to": "$x"}`,
 		`{"kind": "inputs", "inputs": {"a": 1}}`} {
 		var node dto.PipelineNode
 		if err := json.Unmarshal([]byte(bad), &node); err == nil {

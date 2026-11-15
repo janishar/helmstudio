@@ -2,8 +2,10 @@
 // The pipeline editor (docs/mock/PipelineGraph.dc.html, plan 16.2): the pipeline's graph (components/pipelines/canvas,
 // loaded only here), the selected node's settings in the side panel, and its last batch's run table. Edits are
 // checked by lib/pipeline and POST /pipelines/validate, saved with debounce by PUT with the version (409 reloads),
-// and undone with ⌘Z / ⇧⌘Z. Run opens New batch with the pipeline's inputs as columns. The mock's director chat,
-// Studio | Graph switch, memory meter and judge panel belong to later milestones and are left out.
+// and undone with ⌘Z / ⇧⌘Z. Run opens New batch with the pipeline's inputs as columns. Agent nodes (M4b stage A):
+// the Judge panel (checklist, keep, retry, mode, model, memory: PipelineGraph.dc.html's aside), Write and Decide
+// (docs/mock/AgentNodes.dc.html), Memory (read or write) and the Memory dialog. The mock's director chat (stage B),
+// Studio | Graph switch, memory meter, "Remote agents" and "Test on takes" have no backend yet and are left out.
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -11,6 +13,7 @@ import { Activity, ChevronLeft, Plus, X } from "lucide-react";
 import { ErrorNote, Info } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { Head, Problems } from "@/components/graph/panel";
+import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
 import { followBatch } from "@/components/pipelines/pipelines";
 import { RunTable } from "@/components/pipelines/run-table";
@@ -26,15 +29,22 @@ import {
   disconnectNodes,
   edgeOut,
   gateCandidates,
+  KIND_NAMES,
+  memoryCandidates,
   nodeLabel,
   order,
   outputCandidates,
   pipelineProblems,
   removePipelineNodes,
+  resolveModels,
   setCap,
   setNode,
+  setRoutes,
+  setThen,
   settable,
   stepNumbers,
+  textCandidates,
+  WRITE_INSTRUCTION,
   type PDoc,
   type PProblem,
 } from "@/lib/pipeline";
@@ -83,10 +93,13 @@ export function sourceLabel(doc: PDoc, src: string, titles: Record<string, strin
 export function PipelineEditor({
   pipeline,
   workflows,
+  asks = [],
   nodes,
 }: {
   pipeline: Pipeline;
   workflows: Workflow[];
+  /** the ask workflows a judge, write or decide may run (never listed: read by id) */
+  asks?: Workflow[];
   nodes: S<"NodePalette"> | null;
 }) {
   const [h, dispatch] = useReducer(history<PDoc>, pipeline, (p) => historyOf(docOfPipeline(p)));
@@ -96,15 +109,19 @@ export function PipelineEditor({
     [nodes, workflows],
   );
   const wfDocs = useMemo(
-    () => Object.fromEntries(workflows.map((w) => [w.id, docOf(w)])) as Record<string, Doc>,
-    [workflows],
+    () =>
+      Object.fromEntries([...workflows, ...asks].map((w) => [w.id, docOf(w)])) as Record<
+        string,
+        Doc
+      >,
+    [workflows, asks],
   );
   const titles = useMemo(
     () => ({
       ...pipeline.workflow_titles,
-      ...Object.fromEntries(workflows.map((w) => [w.id, w.title])),
+      ...Object.fromEntries([...workflows, ...asks].map((w) => [w.id, w.title])),
     }),
-    [pipeline.workflow_titles, workflows],
+    [pipeline.workflow_titles, workflows, asks],
   );
 
   const [cur, setCur] = useState(pipeline);
@@ -114,7 +131,13 @@ export function PipelineEditor({
   useEffect(() => {
     latest.current = doc;
   });
-  const [server, setServer] = useState<{ doc: PDoc; problems: PProblem[] } | null>(null);
+  const [server, setServer] = useState<{
+    doc: PDoc;
+    problems: PProblem[];
+    models?: Record<string, string>;
+  } | null>(null);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const memory = useMemory(pipeline.id);
   const [saving, setSaving] = useState<"" | "saving" | "failed">("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -142,7 +165,7 @@ export function PipelineEditor({
       let canSave = !pipelineProblems(d, wfDocs, palette).some((p) => p.blocks === "save");
       try {
         const v = await ok(api.POST("/v1/studio/pipelines/validate", { body: d }));
-        setServer({ doc: d, problems: v.problems });
+        setServer({ doc: d, problems: v.problems, models: v.models });
         canSave = v.can_save;
       } catch {
         // studio can't check now: the client's check stands
@@ -286,10 +309,13 @@ export function PipelineEditor({
   const ns = Object.values(doc.nodes);
   const count = (k: string) => ns.filter((n) => n.kind === k).length;
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  // the models as studio resolves them (the client's own until it has answered for this document)
+  const models = server?.doc === doc && server.models ? server.models : resolveModels(doc, wfDocs);
   const badge = [
     "Unattended",
     plural(count("step"), "step"),
-    plural(count("gate"), "gate"),
+    count("gate") ? plural(count("gate"), "gate") : "",
+    count("judge") ? plural(count("judge"), "judge") : "",
     problems.length ? plural(problems.length, "problem") : "valid",
     saving === "saving" ? "saving…" : saving === "failed" ? "not saved" : "",
   ]
@@ -389,6 +415,10 @@ export function PipelineEditor({
             titles={titles}
             edit={edit}
             onRemoved={() => setSelected(null)}
+            asks={asks}
+            models={models}
+            memory={memory.list?.counts ?? null}
+            onOpenMemory={() => setMemoryOpen(true)}
           />
         ) : (
           <>
@@ -425,6 +455,16 @@ export function PipelineEditor({
         )}
       </aside>
       {running && <NewBatch open onClose={() => setRunning(false)} pipeline={{ ...cur, ...doc }} />}
+      <MemoryDialog
+        open={memoryOpen}
+        onClose={() => {
+          setMemoryOpen(false);
+          void memory.load();
+        }}
+        pipelineId={pipeline.id}
+        title={doc.title}
+        name={(id) => nodeLabel(doc, id, titles)}
+      />
       {viewer && (
         <FullScreen
           take={viewer.takes[viewer.i]}
@@ -477,6 +517,11 @@ type PanelProps = {
   titles: Record<string, string>;
   edit: Edit;
   onRemoved: () => void;
+  asks: Workflow[];
+  /** node id → the ask workflow it resolves to now */
+  models: Record<string, string>;
+  memory: S<"MemoryList">["counts"] | null;
+  onOpenMemory: () => void;
 };
 
 /** A labelled select, the panel's one control for a choice. */
@@ -526,13 +571,13 @@ const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
 function NodePanel(props: PanelProps) {
   const { doc, id, problems, titles, edit, onRemoved } = props;
   const n = doc.nodes[id];
-  const kindName = { inputs: "Inputs", step: "Step", gate: "Gate", output: "Output" }[n.kind];
+  const kindName = KIND_NAMES[n.kind];
   const nums = stepNumbers(doc);
   const targets: [string, string][] = order(doc)
     .filter((x) => x !== id && doc.nodes[x].kind !== "inputs")
     .map((x) => [x, `${nums[x] ? `${nums[x]} · ` : ""}${nodeLabel(doc, x, titles)}`]);
   const out = edgeOut(doc, id)?.[1];
-  const next = typeof out === "string" ? out : (out?.pass ?? "");
+  const next = typeof out === "string" ? out : out && "pass" in out ? out.pass : "";
   const general = problems.filter((p) => !p.port && !p.param);
   return (
     <>
@@ -564,8 +609,12 @@ function NodePanel(props: PanelProps) {
       {n.kind === "inputs" && <InputsPanel {...props} />}
       {n.kind === "step" && <StepPanel {...props} />}
       {n.kind === "gate" && <GatePanel {...props} targets={targets} />}
+      {n.kind === "judge" && <JudgePanel {...props} targets={targets} />}
+      {n.kind === "write" && <WritePanel {...props} />}
+      {n.kind === "decide" && <DecidePanel {...props} targets={targets} />}
+      {n.kind === "memory" && <MemoryNodePanel {...props} />}
       {n.kind === "output" && <OutputPanel {...props} />}
-      {(n.kind === "inputs" || n.kind === "step") && (
+      {(n.kind === "inputs" || n.kind === "step" || n.kind === "write" || n.kind === "memory") && (
         <Choice
           id="pp-next"
           label="Then goes to"
@@ -844,7 +893,8 @@ function GatePanel({
   edit,
   targets,
 }: PanelProps & { targets: [string, string][] }) {
-  const n = doc.nodes[id] as S<"PipelineGateNode">;
+  const n = doc.nodes[id] as S<"PipelineGateNode"> | S<"PipelineJudgeNode">;
+  const judge = n.kind === "judge";
   const steps = gateCandidates(doc, id);
   const opts = n.takes && !steps.includes(n.takes) ? [n.takes, ...steps] : steps;
   const made =
@@ -852,13 +902,13 @@ function GatePanel({
       ? ((doc.nodes[n.takes] as S<"PipelineStepNode">).seeds ?? 1)
       : 8;
   const out = edgeOut(doc, id)?.[1];
-  const branch = typeof out === "object" ? out : null;
+  const branch = typeof out === "object" && "pass" in out ? out : null;
   const pass = typeof out === "string" ? out : (branch?.pass ?? "");
   return (
     <>
       <Choice
         id="pp-takes"
-        label="Pick from"
+        label={judge ? "Judges the takes of" : "Pick from"}
         value={n.takes}
         options={[
           ...(n.takes ? [] : ([["", "Choose a step"]] as [string, string][])),
@@ -876,13 +926,13 @@ function GatePanel({
           >
             {range(Math.max(made, n.keep ?? 1)).map((i) => (
               <option key={i} value={i}>
-                {i === 1 ? `best 1 of ${made}` : `up to ${i} of ${made}`}
+                {judge || i === 1 ? `best ${i} of ${made}` : `up to ${i} of ${made}`}
               </option>
             ))}
           </select>
         </label>
         <label className="set flex flex-col gap-1">
-          <small className="text-[12px] text-t2">If picked</small>
+          <small className="text-[12px] text-t2">{judge ? "If it passes" : "If picked"}</small>
           <select
             className="bg-transparent font-semibold text-t1"
             value={pass}
@@ -916,10 +966,10 @@ function GatePanel({
               )
             }
           >
-            <option value="">Fail the row</option>
+            <option value="">{judge ? "Ask me / fail the row" : "Fail the row"}</option>
             {targets.map(([v, l]) => (
               <option key={v} value={v}>
-                Retry at {l}
+                {judge ? `Retry: ${l}` : `Retry at ${l}`}
               </option>
             ))}
           </select>
@@ -957,8 +1007,525 @@ function GatePanel({
           </>
         )}
       </div>
+      {!judge && (
+        <p className="m-0 text-[12px] text-t2">
+          The row parks here until you pick from the review grid; parked rows never hold up the
+          queue.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** The model a judge, write or decide runs on: Auto (the step's family's own vision model, else the llm pack's) or
+ * a named ask workflow. */
+function ModelChoice({
+  doc,
+  id,
+  asks,
+  models,
+  titles,
+  edit,
+  label,
+}: PanelProps & { label: string }) {
+  const n = doc.nodes[id] as
+    S<"PipelineJudgeNode"> | S<"PipelineWriteNode"> | S<"PipelineDecideNode">;
+  const m = n.model ?? "auto";
+  const now = models[id];
+  const title = (w: string) => titles[w] ?? w;
+  return (
+    <label className="set flex flex-col gap-1">
+      <small className="text-[12px] text-t2">{label}</small>
+      <select
+        className="bg-transparent font-semibold text-t1"
+        value={m}
+        onChange={(e) => {
+          const { model: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+          edit((d) =>
+            setNode(
+              d,
+              id,
+              (e.target.value === "auto" ? rest : { ...rest, model: e.target.value }) as PNodeOf,
+            ),
+          );
+        }}
+      >
+        <option value="auto">{now ? `Auto · ${title(now)}` : "Auto · none found"}</option>
+        {asks.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.title}
+          </option>
+        ))}
+        {m !== "auto" && !asks.some((w) => w.id === m) && <option value={m}>{title(m)}</option>}
+      </select>
+    </label>
+  );
+}
+type PNodeOf = S<"PipelineNode">;
+
+/** A write's, decide's or memory write's sources (`from`): a list with remove, and Add a source. */
+function TextSources(props: PanelProps) {
+  const { doc, id, titles, edit, problems } = props;
+  const n = doc.nodes[id] as { from: string[] } & PNodeOf;
+  const c = textCandidates(doc, id).filter((x) => !n.from.includes(x));
+  const set = (from: string[]) => edit((d) => setNode(d, id, { ...n, from } as PNodeOf));
+  return (
+    <section aria-labelledby={`pp-reads-${id}`} className="flex flex-col gap-1.5">
+      <h3 id={`pp-reads-${id}`} className="heading">
+        Reads
+      </h3>
+      {n.from.map((src) => (
+        <div key={src} className="set flex items-center justify-between gap-2 text-[13px]">
+          {sourceLabel(doc, src, titles)}
+          <button
+            type="button"
+            className="rounded-md px-1.5 py-0.5 text-[11px] text-t2 hover:bg-s3 hover:text-t1"
+            aria-label={`Remove ${sourceLabel(doc, src, titles)}`}
+            onClick={() => set(n.from.filter((x) => x !== src))}
+          >
+            remove
+          </button>
+        </div>
+      ))}
+      {problems.find((p) => p.port === "from") && (
+        <span className="text-[12px] text-bad">
+          {problems.find((p) => p.port === "from")!.message}
+        </span>
+      )}
+      {n.from.length < 4 && c.length > 0 && (
+        <select
+          aria-label="Add a source"
+          className="h-9 rounded-[10px] border border-dashed border-dash bg-transparent px-2 text-[13px] text-t1"
+          value=""
+          onChange={(e) => e.target.value && set([...n.from, e.target.value])}
+        >
+          <option value="">Add a source</option>
+          {c.map((x) => (
+            <option key={x} value={x}>
+              {sourceLabel(doc, x, titles)}
+            </option>
+          ))}
+        </select>
+      )}
+    </section>
+  );
+}
+
+/** The Judge panel (docs/mock/PipelineGraph.dc.html's aside): checklist, keep and the retry branch (GatePanel),
+ * Trust (Suggest | Auto), the model, and memory. */
+function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
+  const { doc, id, problems, edit, models, titles, memory, onOpenMemory } = props;
+  const n = doc.nodes[id] as S<"PipelineJudgeNode">;
+  const set = (v: Partial<S<"PipelineJudgeNode">>) => edit((d) => setNode(d, id, { ...n, ...v }));
+  const lines = [
+    ...(n.criteria.must ?? []).map((t) => ({ t, must: true })),
+    ...(n.criteria.nice ?? []).map((t) => ({ t, must: false })),
+  ];
+  const setLines = (ls: { t: string; must: boolean }[]) =>
+    set({
+      criteria: {
+        must: ls.filter((l) => l.must).map((l) => l.t),
+        nice: ls.filter((l) => !l.must).map((l) => l.t),
+      },
+    });
+  const mems = memoryCandidates(doc, id);
+  const seeds = (doc.nodes[n.takes] as S<"PipelineStepNode"> | undefined)?.seeds ?? 1;
+  return (
+    <>
+      <p className="m-0 flex items-center text-[12px] text-t2">
+        Looks at each row&apos;s {seeds} take{seeds === 1 ? "" : "s"} and decides what goes on.
+        <Info>
+          Runs locally on {models[id] ? (titles[models[id]] ?? models[id]) : "no model yet"}, as a
+          queue item like any step. On Auto it uses the step&apos;s own vision model when its family
+          has one, so no extra model is loaded.
+        </Info>
+      </p>
+      <section aria-labelledby="pp-checks" className="flex flex-col gap-1.5">
+        <h3 id="pp-checks" className="heading">
+          Checklist
+        </h3>
+        {lines.map((l, i) => (
+          <div key={i} className="set flex items-center gap-2 py-1.5">
+            <input
+              aria-label={`Check ${i + 1}`}
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-t1"
+              maxLength={200}
+              value={l.t}
+              onChange={(e) =>
+                setLines(lines.map((x, j) => (j === i ? { ...x, t: e.target.value } : x)))
+              }
+            />
+            <button
+              type="button"
+              className="rounded-md px-1.5 py-0.5 text-[11px] whitespace-nowrap text-t2 hover:bg-s3"
+              aria-label={`Check ${i + 1}: ${l.must ? "must" : "nice to have"}; switch`}
+              onClick={() => setLines(lines.map((x, j) => (j === i ? { ...x, must: !x.must } : x)))}
+            >
+              {l.must ? "must" : "nice to have"}
+            </button>
+            <button
+              type="button"
+              aria-label={`Remove check ${i + 1}`}
+              className="grid size-6 shrink-0 place-items-center rounded-md text-t2 hover:bg-s3"
+              onClick={() => setLines(lines.filter((_, j) => j !== i))}
+            >
+              <X size={12} aria-hidden />
+            </button>
+          </div>
+        ))}
+        {problems
+          .filter((p) => p.code === "judge_criteria")
+          .map((p) => (
+            <span key={p.code} className="text-[12px] text-bad">
+              {p.message}
+            </span>
+          ))}
+        {lines.length < 12 && (
+          <button
+            type="button"
+            className="h-9 rounded-[10px] border border-dashed border-dash bg-transparent text-[13px]"
+            onClick={() => setLines([...lines, { t: `Check ${lines.length + 1}`, must: true }])}
+          >
+            Add a check
+          </button>
+        )}
+      </section>
+      <GatePanel {...props} />
+      <section aria-labelledby="pp-trust" className="flex flex-col gap-2">
+        <h3 id="pp-trust" className="heading flex items-center">
+          Trust
+          <Info>
+            Suggest: the judge pre-selects and says why; you confirm each pick. Switch to Auto once
+            it agrees with you often enough.
+          </Info>
+        </h3>
+        <div
+          role="group"
+          aria-label="Judge mode"
+          className="flex rounded-[10px] border border-s3 bg-s1 p-[3px]"
+        >
+          {(["suggest", "auto"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={(n.mode ?? "suggest") === m}
+              className="h-[34px] flex-1 rounded-lg border-0 font-medium text-t2 aria-pressed:bg-s5 aria-pressed:text-t1"
+              onClick={() => set({ mode: m })}
+            >
+              {m === "suggest" ? "Suggest" : "Auto"}
+            </button>
+          ))}
+        </div>
+      </section>
+      <section aria-labelledby="pp-model" className="flex flex-col gap-2">
+        <h3 id="pp-model" className="heading">
+          Model
+        </h3>
+        <ModelChoice {...props} label="Judge runs on" />
+        {problems
+          .filter((p) => p.code === "unknown_model")
+          .map((p) => (
+            <span key={p.code} className="text-[12px] text-bad">
+              {p.message}
+            </span>
+          ))}
+      </section>
+      <section aria-labelledby="pp-memory" className="flex flex-col gap-2">
+        <h3 id="pp-memory" className="heading flex items-center">
+          Memory
+          <Info>
+            Read once when the batch starts, so every row is judged the same way. What it learns
+            tonight is used next time.
+          </Info>
+        </h3>
+        <Choice
+          id="pp-mem"
+          label="Learns from"
+          value={n.memory ?? ""}
+          error={problems.find((p) => p.port === "memory")?.message}
+          options={[
+            ["", mems.length ? "Off" : "Off (add a Memory node before it)"],
+            ...mems.map((m) => [m, nodeLabel(doc, m, titles)] as [string, string]),
+            ...(n.memory && !mems.includes(n.memory)
+              ? [[n.memory, n.memory] as [string, string]]
+              : []),
+          ]}
+          onChange={(v) => {
+            const { memory: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+            edit((d) => setNode(d, id, v ? { ...rest, memory: v } : rest));
+          }}
+        />
+        <div className="set flex items-center justify-between text-[13px]">
+          Examples from your picks
+          <span className="text-[11px] text-t2">
+            {memory ? `${memory.judge_example} takes` : "—"}
+          </span>
+        </div>
+        <div className="set flex items-center justify-between text-[13px]">
+          Notes
+          <span className="text-[11px] text-t2">{memory ? `${memory.note} notes` : "—"}</span>
+        </div>
+        <button type="button" className="chip bevel self-start" onClick={onOpenMemory}>
+          Open memory
+        </button>
+      </section>
+    </>
+  );
+}
+
+/** The Write panel (docs/mock/AgentNodes.dc.html): what it reads, the Text input it writes, the instruction, the
+ * model. */
+function WritePanel(props: PanelProps) {
+  const { doc, id, problems, edit } = props;
+  const n = doc.nodes[id] as S<"PipelineWriteNode">;
+  const a = Object.values(doc.nodes).flatMap((x) => (x.kind === "inputs" ? x.inputs : []));
+  const texts = a.filter((i) => i.type === "Text").map((i) => `$${i.name}`);
+  return (
+    <>
+      <p className="m-0 flex items-center text-[12px] text-t2">
+        Writes text into a Text input for the rest of the row.
+        <Info>
+          Later steps that bind the input read the new text. @ mentions in the answer are expanded
+          like any prompt; looks are never added.
+        </Info>
+      </p>
+      <TextSources {...props} />
+      <Choice
+        id="pp-to"
+        label="Writes to"
+        value={n.to}
+        error={problems.find((p) => p.code === "write_target")?.message}
+        options={[
+          ...(texts.includes(n.to) ? [] : ([[n.to, n.to]] as [string, string][])),
+          ...texts.map((t) => [t, sourceLabel(doc, t, {})] as [string, string]),
+        ]}
+        onChange={(v) => edit((d) => setNode(d, id, { ...n, to: v }))}
+      />
+      <label className="flex flex-col gap-1.5">
+        <span className="heading">Instruction</span>
+        <textarea
+          className="in h-auto py-2"
+          rows={3}
+          maxLength={2000}
+          value={n.instruction ?? WRITE_INSTRUCTION}
+          onChange={(e) => edit((d) => setNode(d, id, { ...n, instruction: e.target.value }))}
+        />
+      </label>
+      <ModelChoice {...props} label="Runs on" />
+    </>
+  );
+}
+
+/** The Decide panel (docs/mock/AgentNodes.dc.html): the question, what it reads, its routes (label, meaning, where
+ * each goes), the cap and the route the cap forces. */
+function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
+  const { doc, id, edit, targets, problems } = props;
+  const n = doc.nodes[id] as S<"PipelineDecideNode">;
+  const out = edgeOut(doc, id)?.[1];
+  const edge = typeof out === "object" && "routes" in out ? out : null;
+  const routes = Object.entries(n.routes);
+  const relabel = (i: number, label: string, meaning: string) => {
+    const next = Object.fromEntries(
+      routes.map(([l, m], j) => (j === i ? [label, meaning] : [l, m])),
+    );
+    if (Object.keys(next).length === routes.length) edit((d) => setRoutes(d, id, next));
+  };
+  return (
+    <>
+      <label className="flex flex-col gap-1.5">
+        <span className="heading">Question</span>
+        <textarea
+          className="in h-auto py-2"
+          rows={2}
+          maxLength={2000}
+          value={n.question}
+          onChange={(e) => edit((d) => setNode(d, id, { ...n, question: e.target.value }))}
+        />
+      </label>
+      <TextSources {...props} />
+      <section aria-labelledby="pp-routes" className="flex flex-col gap-1.5">
+        <h3 id="pp-routes" className="heading">
+          Routes
+        </h3>
+        {routes.map(([label, meaning], i) => (
+          <div key={i} className="set flex flex-col gap-1.5">
+            <div className="flex gap-1.5">
+              <input
+                aria-label={`Route ${i + 1} label`}
+                className="in mono h-[34px] w-24"
+                value={label}
+                onChange={(e) =>
+                  relabel(
+                    i,
+                    e.target.value
+                      .toLowerCase()
+                      .replace(/[^a-z0-9_-]/g, "_")
+                      .slice(0, 40) || "x",
+                    meaning,
+                  )
+                }
+              />
+              <input
+                aria-label={`Route ${i + 1}: what it means`}
+                className="in h-[34px]"
+                maxLength={200}
+                value={meaning}
+                onChange={(e) => relabel(i, label, e.target.value)}
+              />
+              {routes.length > 2 && (
+                <button
+                  type="button"
+                  aria-label={`Remove route ${label}`}
+                  className="grid size-[34px] shrink-0 place-items-center rounded-lg bg-s3"
+                  onClick={() =>
+                    edit((d) =>
+                      setRoutes(d, id, Object.fromEntries(routes.filter((_, j) => j !== i))),
+                    )
+                  }
+                >
+                  <X size={14} aria-hidden />
+                </button>
+              )}
+            </div>
+            <Choice
+              id={`pp-r-${i}`}
+              label="goes to"
+              value={edge?.routes[label] ?? ""}
+              options={[["", "Nowhere yet"], ...targets]}
+              onChange={(v) => v && edit((d) => connectNodes(d, id, `r:${label}`, v))}
+            />
+          </div>
+        ))}
+        {problems
+          .filter((p) => p.code === "decide_routes")
+          .map((p) => (
+            <span key={p.code} className="text-[12px] text-bad">
+              {p.message}
+            </span>
+          ))}
+        {routes.length < 6 && (
+          <button
+            type="button"
+            className="h-9 rounded-[10px] border border-dashed border-dash bg-transparent text-[13px]"
+            onClick={() => {
+              let k = routes.length + 1;
+              while (`route_${k}` in n.routes) k++;
+              edit((d) => setRoutes(d, id, { ...n.routes, [`route_${k}`]: "" }));
+            }}
+          >
+            Add a route
+          </button>
+        )}
+      </section>
+      {edge && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Routes at most</small>
+            <select
+              className="bg-transparent font-semibold text-t1"
+              value={edge.max}
+              onChange={(e) => edit((d) => setCap(d, id, Number(e.target.value)))}
+            >
+              {range(10).map((i) => (
+                <option key={i} value={i}>
+                  {i} time{i === 1 ? "" : "s"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Then</small>
+            <select
+              className="bg-transparent font-semibold text-t1"
+              value={edge.then}
+              onChange={(e) => edit((d) => setThen(d, id, e.target.value))}
+            >
+              {routes.map(([l]) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      <ModelChoice {...props} label="Runs on" />
+    </>
+  );
+}
+
+/** A Memory node: read (the batch's snapshot: notes by key, the newest few) or write (a note for the next batches),
+ * the same controls as the Write panel's. */
+function MemoryNodePanel(props: PanelProps) {
+  const { doc, id, edit } = props;
+  const n = doc.nodes[id] as S<"PipelineMemoryNode">;
+  const base = {
+    kind: "memory" as const,
+    ...(n.title && { title: n.title }),
+    ...(n.position && { position: n.position }),
+  };
+  return (
+    <>
+      <div
+        role="group"
+        aria-label="Memory node"
+        className="flex rounded-[10px] border border-s3 bg-s1 p-[3px]"
+      >
+        {(["read", "write"] as const).map((op) => (
+          <button
+            key={op}
+            type="button"
+            aria-pressed={n.op === op}
+            className="h-[34px] flex-1 rounded-lg border-0 font-medium text-t2 aria-pressed:bg-s5 aria-pressed:text-t1"
+            onClick={() =>
+              op !== n.op &&
+              edit((d) =>
+                setNode(
+                  d,
+                  id,
+                  op === "read"
+                    ? { ...base, op, limit: 8 }
+                    : { ...base, op, key: "notes", from: textCandidates(d, id).slice(0, 1) },
+                ),
+              )
+            }
+          >
+            {op === "read" ? "Read" : "Write"}
+          </button>
+        ))}
+      </div>
+      <label className="flex flex-col gap-1.5">
+        <span className="heading">{n.op === "read" ? "Only notes with the key" : "Key"}</span>
+        <input
+          className="in mono"
+          maxLength={40}
+          placeholder={n.op === "read" ? "every note" : "notes"}
+          value={n.key ?? ""}
+          onChange={(e) => {
+            const key = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "_");
+            if (n.op === "write") edit((d) => setNode(d, id, { ...n, key: key || "notes" }));
+            else {
+              const { key: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+              edit((d) => setNode(d, id, key ? { ...rest, key } : rest));
+            }
+          }}
+        />
+      </label>
+      {n.op === "read" ? (
+        <Choice
+          id="pp-limit"
+          label="Reads the newest"
+          value={String(n.limit ?? 8)}
+          options={range(16).map((i) => [String(i), `${i}`])}
+          onChange={(v) => edit((d) => setNode(d, id, { ...n, limit: Number(v) }))}
+        />
+      ) : (
+        <TextSources {...props} />
+      )}
       <p className="m-0 text-[12px] text-t2">
-        The row parks here until you pick from the review grid; parked rows never hold up the queue.
+        {n.op === "read"
+          ? "Reads the snapshot taken when the batch starts; a judge set to learn from it adds your past picks there."
+          : "Kept for the next batches, one note per row; see them in Memory."}
       </p>
     </>
   );

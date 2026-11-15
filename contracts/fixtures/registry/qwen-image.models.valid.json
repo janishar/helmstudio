@@ -55,6 +55,24 @@
                 "mp": 1.0486,
                 "frames": 0
               }
+            },
+            {
+              "precision": "int8",
+              "workflow": "qwen-image-ask",
+              "peak_gb": 17.0,
+              "planned_at": {
+                "mp": 0,
+                "frames": 0,
+                "images": 4
+              },
+              "components": [
+                {
+                  "component": "text_encoder",
+                  "variant": "base",
+                  "precision": "int8",
+                  "gb": 8.5
+                }
+              ]
             }
           ]
         }

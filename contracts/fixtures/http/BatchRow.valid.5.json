@@ -1,0 +1,130 @@
+{
+  "row": 6,
+  "attempt": 1,
+  "inputs": {
+    "inputs.prompt": "a red fox in snow",
+    "inputs.motion": "the fox turns its head"
+  },
+  "status": "waiting",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b40",
+  "take_ids": [],
+  "thumb_url": null,
+  "error": null,
+  "started_at": "2026-11-15T10:15:38Z",
+  "finished_at": null,
+  "node": "judge",
+  "parked": {
+    "gate": "judge",
+    "kind": "judge",
+    "visit": 1,
+    "keep": 1,
+    "candidates": [
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+    ],
+    "suggested": [
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62"
+    ],
+    "decision_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:judge:1"
+  },
+  "cells": [
+    {
+      "node": "still",
+      "kind": "step",
+      "attempts": [
+        {
+          "visit": 1,
+          "status": "succeeded",
+          "run_ids": [
+            "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30"
+          ],
+          "take_ids": [
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+          ],
+          "seeds": [
+            42,
+            43,
+            44,
+            45
+          ],
+          "seconds": 12.5,
+          "error": null,
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12"
+        }
+      ]
+    },
+    {
+      "node": "judge",
+      "kind": "judge",
+      "loop": {
+        "turns": 0,
+        "max": 2,
+        "then": "review",
+        "gave_up": false
+      },
+      "attempts": [
+        {
+          "visit": 1,
+          "status": "waiting",
+          "run_ids": [
+            "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b40"
+          ],
+          "take_ids": [],
+          "candidates": [
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+            "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+          ],
+          "decision_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:judge:1",
+          "judged": {
+            "verdict": "pass",
+            "picked": 1,
+            "of": 4,
+            "keep": 1,
+            "first_failed": null,
+            "suggested": [
+              "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62"
+            ],
+            "agreed": null,
+            "takes": [
+              {
+                "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+                "passes": false,
+                "first_failed": "No extra or missing limbs",
+                "reason": "Extra hand on the left."
+              },
+              {
+                "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+                "passes": true,
+                "first_failed": null,
+                "reason": "Clean but soft."
+              },
+              {
+                "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+                "passes": true,
+                "first_failed": null,
+                "reason": "Clean and sharp."
+              },
+              {
+                "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+                "passes": false,
+                "first_failed": "No text or watermarks",
+                "reason": "Watermark bottom right."
+              }
+            ]
+          },
+          "seconds": 8.9,
+          "error": null,
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "seeds": []
+        }
+      ]
+    }
+  ]
+}

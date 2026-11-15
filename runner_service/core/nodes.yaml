@@ -33,3 +33,7 @@ stages:
     title: Output
     help: "Stores its input as a run output: an image or a video take."
     inputs: {media: Media}
+  answer:
+    title: Answer
+    help: "Stores its text as the run's answer: no take. Ask workflows end with it."
+    inputs: {text: Text}

@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.pipelines.memory.schema.json",
+  "title": "NATS request/reply pipelines.memory (studio → pipelines)",
+  "description": "From API 1.14. Core NATS request/reply on subject `pipelines.memory` (queue group `pipelines`), bare JSON, for /v1/studio/memory (plan 16.6). Pipelines owns memory (LangGraph's Postgres store in `pipelines`, namespace <owner_id>/pipeline/<pipeline_id>) and answers only inside the request owner's namespace: an item of another owner or another pipeline is `not_found`. Studio checks first that the pipeline is the caller's (RLS), then asks; it waits 5 s (no answer: 503). `list`: every item, newest first (`kind` filters); `create`: a note typed by the user (source user); `delete`: one item; `clear`: every item of the pipeline, and the namespace is marked deleted so later writes are refused (studio sends it when the pipeline is deleted). Batches already started keep their snapshot.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "owner_id",
+        "op",
+        "pipeline_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "owner_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "op": {
+          "enum": [
+            "list",
+            "create",
+            "delete",
+            "clear"
+          ]
+        },
+        "pipeline_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "judge_example",
+            "note"
+          ],
+          "description": "list only: just that kind"
+        },
+        "item_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "delete only"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "create only: trimmed by studio"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "description": "create only: optional"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "delete"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "item_id"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "create"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "not": {
+        "required": [
+          "code"
+        ]
+      },
+      "description": "list: items (at most 500, the namespace's cap; newest first, cut to fit 900 000 bytes of UTF-8 JSON with `truncated` true); create: item; delete and clear: deleted (how many)",
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "defs.schema.json#/$defs/memoryItem"
+          }
+        },
+        "item": {
+          "$ref": "defs.schema.json#/$defs/memoryItem"
+        },
+        "deleted": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean",
+          "description": "list only: true when older items were left out to keep the reply under NATS max_payload"
+        }
+      },
+      "minProperties": 1
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error",
+        "code"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "description": "`memory is full (500 items); delete some first` (full), `memory item not found` (not_found)"
+        },
+        "code": {
+          "enum": [
+            "not_found",
+            "full",
+            "invalid",
+            "internal"
+          ]
+        }
+      }
+    }
+  }
+}

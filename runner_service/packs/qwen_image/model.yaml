@@ -78,3 +78,22 @@ stages:
               help: "Tiling cuts decode memory (27 GB vs 65 GB at 4 MP) but changes pixels; auto tiles only when needed."}
     # auto tiles above 2.5 MP (torch.py AUTO_TILE_MP); whole decodes grow faster than linear (65 GB at 4 MP)
     peak_gb: "6 if tiled == 'on' or (tiled == 'auto' and mp > 2.5) else 12 * mp"  # measured 6.1 GB at 0.59 MP, 11.9 at 1 MP
+  ask:
+    title: Ask
+    help: "Asks Qwen Image's own text encoder (Qwen3-VL 8B) one question about its takes: no extra load when it is resident. Temperature 0, thinking off, one more try in the same run when the answer does not match the schema."
+    uses: [text_encoder]   # the encode stage's residency entry: after a still it loads nothing
+    inputs: {model: Model}
+    outputs: {answer: Text}
+    params:
+      system: {type: string, label: System, default: "", max: 4000, help: The system turn.}
+      prompt: {type: string, label: Prompt, default: "", max: 32768,
+               help: "The filled template (pipelines writes it). Not scanned for mentions."}
+      media: {type: rows, label: Takes, default: [], min: 0, max: 8, item: {take: Media},
+              help: "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."}
+      schema: {type: string, label: Answer schema, default: "", max: 16384,
+               help: "A JSON schema the answer must match; empty = plain text."}
+      max_tokens: {type: int, label: Max tokens, default: 800, min: 16, max: 4096}
+    # measured 2026-11-15 through the stage (torch 2.15 MPS, int8 text encoder 9.28 GB, footprint loaded 11.52): peak
+    # above it 2.3 GB judging 4 x 512 px (1427 tokens, 7.7 s), 3.51 at 4 x 1024 px (4499 tokens, 12.8 s); greedy,
+    # identical across two processes, JSON valid on the first try. A bound over both, extrapolated beyond 4.
+    peak_gb: "2.2 + 0.35 * images"

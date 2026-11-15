@@ -4,6 +4,7 @@ the helpers with `from conftest import ...`."""
 
 import asyncio
 import copy
+import hashlib
 import json
 import os
 import uuid
@@ -85,6 +86,7 @@ class FakeStudio:
             "queued"  # cancelled once the batch is stopped, failed with no live host
         )
         self.reply_error: dict | None = None  # {error, code}: answer every request with it
+        self.answer_for = lambda req: "{}"  # an ask run's answer text (runs of `*-ask` workflows)
 
     async def create_run(self, req: dict) -> dict:
         assert not schemas.runs_create_errors("request", req)
@@ -123,10 +125,11 @@ class FakeStudio:
                key: str | None = None):  # fmt: skip
         """The run of `row` (or under `key`) ends: its evt.studio.run_finished data (on contract)."""
         run = self.runs[key] if key else self.run(row, attempt)
-        run["status"] = status
-        run["take_ids"] = [str(uuid.uuid4())] if status == "succeeded" else []
-        run["error"] = error or ("boom" if status == "failed" else None)
         req = run["req"]
+        ask = req["workflow_id"].endswith("-ask")
+        run["status"] = status
+        run["take_ids"] = [str(uuid.uuid4())] if status == "succeeded" and not ask else []
+        run["error"] = error or ("boom" if status == "failed" else None)
         data = {
             "run_id": run["run_id"],
             "batch_id": req["batch_id"],
@@ -136,6 +139,13 @@ class FakeStudio:
             "take_ids": run["take_ids"],
             "error": run["error"],
         }
+        if ask and status == "succeeded":
+            sha = lambda t: hashlib.sha256(t.encode()).hexdigest()
+            seen = [{"take_id": m["take"]["take_id"], "frame": None, "sha256": sha(m["take"]["take_id"]),
+                     "key": f"u/{OWNER}/llm/thumbs/{sha(m['take']['take_id'])}.jpg", "width": 64, "height": 64}
+                    for m in req["inputs"].get("ask.media") or []]  # fmt: skip
+            data["answer"] = {"tries": [{"text": self.answer_for(req), "error": None}], "seen": seen,
+                              "tokens_in": 10, "tokens_out": 5, "seconds": 0.5}  # fmt: skip
         evt = {
             "type": "evt.studio.run_finished",
             "version": 1,

@@ -1,18 +1,27 @@
 "use client";
 // Pipelines (docs/mock/Pipelines.dc.html, plan 7.2): the saved pipelines (search, filter chips, a card each with its
-// chain of nodes and its last batch), the selected pipeline's panel (its steps, Run, Open graph, Duplicate, Rename,
-// Delete), New pipeline and New batch, and the Recent batches table. The mock's agent-node chip and tags, "Models it
-// will load" and the Memory box belong to later milestones and are left out.
+// chain of nodes and its last batch), the selected pipeline's panel (its steps, its Memory box with Open memory, Run,
+// Open graph, Duplicate, Rename, Delete), New pipeline and New batch, and the Recent batches table. The mock's "Models
+// it will load" box is left out: a listed pipeline carries no resolved models (the editor and New batch show them).
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
 import { api, message, ok, type S } from "@/lib/api";
 import { batchState, canPause, canResume, doneRows } from "@/lib/batches";
 import { when } from "@/lib/format";
 import { useHydrated } from "@/lib/hydrated";
-import { blankPipeline, facts, nodeLabel, order, type PDoc } from "@/lib/pipeline";
+import {
+  blankPipeline,
+  facts,
+  isAgent,
+  KIND_NAMES,
+  nodeLabel,
+  order,
+  type PDoc,
+} from "@/lib/pipeline";
 import { followEvents } from "@/lib/runs";
 
 type Batch = S<"Batch">;
@@ -83,7 +92,14 @@ export function RowsDone({ counts }: { counts: S<"BatchCounts"> }) {
 
 /** A node of a pipeline as the mock's pill: inputs and outputs `.pl-io`, gates `.pl-gt`, steps plain. */
 export function NodePill({ kind, children }: { kind: string; children: React.ReactNode }) {
-  const tone = kind === "inputs" || kind === "output" ? "pl-io" : kind === "gate" ? "pl-gt" : "";
+  const tone =
+    kind === "inputs" || kind === "output"
+      ? "pl-io"
+      : kind === "gate"
+        ? "pl-gt"
+        : isAgent(kind as S<"PipelineNode">["kind"])
+          ? "pl-ag"
+          : "";
   return <span className={`pl ${tone}`}>{children}</span>;
 }
 
@@ -94,7 +110,7 @@ function Chain({ p }: { p: Pipeline }) {
     const n = p.nodes[id];
     return n.kind === "step"
       ? (p.workflow_titles[n.workflow] ?? nodeLabel(p, id))
-      : { inputs: "Inputs", gate: "Gate", output: "Output" }[n.kind];
+      : KIND_NAMES[n.kind];
   };
   return (
     <div className="chain" aria-label={ids.map(label).join(", ")}>
@@ -112,7 +128,8 @@ function Chain({ p }: { p: Pipeline }) {
   );
 }
 
-type Filter = "all" | "running";
+type Filter = "all" | "agents" | "running";
+const hasAgents = (p: Pipeline) => Object.values(p.nodes).some((n) => isAgent(n.kind));
 
 export function Pipelines({
   initial,
@@ -270,7 +287,8 @@ export function Pipelines({
   const runningCount = (pipelines ?? []).filter((p) => p.last_batch && !ended(p.last_batch)).length;
   const shown = (pipelines ?? []).filter(
     (p) =>
-      (filter === "all" || (p.last_batch && !ended(p.last_batch))) &&
+      (filter === "all" ||
+        (filter === "agents" ? hasAgents(p) : p.last_batch && !ended(p.last_batch))) &&
       p.title.toLowerCase().includes(q.trim().toLowerCase()),
   );
   const selected = pipelines?.find((p) => p.id === selectedId) ?? null;
@@ -320,6 +338,7 @@ export function Pipelines({
             {(
               [
                 ["all", `All · ${pipelines?.length ?? 0}`],
+                ["agents", `With agent nodes · ${(pipelines ?? []).filter(hasAgents).length}`],
                 ["running", `Has a running batch · ${runningCount}`],
               ] as const
             ).map(([f, l]) => (
@@ -339,6 +358,7 @@ export function Pipelines({
           <span className="flex items-center gap-1.5 text-[11px] text-t2">
             <NodePill kind="inputs">input / output</NodePill>
             <NodePill kind="step">step</NodePill>
+            <NodePill kind="judge">agent node</NodePill>
             <NodePill kind="gate">gate</NodePill>
           </span>
         </div>
@@ -514,6 +534,7 @@ export function Pipelines({
           </div>
           <h3 className="heading">Steps</h3>
           <Steps p={selected} />
+          {hasAgents(selected) && <MemoryBox key={selected.id} p={selected} />}
           <div className="grow" />
           <button
             type="button"
@@ -632,6 +653,32 @@ function Steps({ p }: { p: Pipeline }) {
       }
       case "output":
         return ["Output", `collection ${n.collection}`, ""];
+      case "judge": {
+        const loop = doc.edges.find((e) => e[0] === id)?.[1];
+        const checks = (n.criteria.must ?? []).length + (n.criteria.nice ?? []).length;
+        const seeds = (doc.nodes[n.takes] as S<"PipelineStepNode"> | undefined)?.seeds ?? 1;
+        return [
+          "Judge",
+          n.title ?? `${checks} check${checks === 1 ? "" : "s"}`,
+          [
+            `best ${n.keep ?? 1} of ${seeds}`,
+            n.mode === "auto" ? "Auto" : "Suggest",
+            typeof loop === "object" && `retry max ${loop.max}`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        ];
+      }
+      case "write":
+        return ["Write", n.title ?? `Rewrite ${n.to.slice(1)}`, ""];
+      case "decide":
+        return ["Decide", n.title ?? n.question, `${Object.keys(n.routes).length} routes`];
+      case "memory":
+        return [
+          "Memory",
+          n.title ?? (n.op === "read" ? "Read past picks and notes" : `Note ${n.key}`),
+          "",
+        ];
     }
   };
   return (
@@ -652,5 +699,53 @@ function Steps({ p }: { p: Pipeline }) {
         );
       })}
     </ol>
+  );
+}
+
+/** The selected pipeline's Memory box (docs/mock/Pipelines.dc.html): its counts and Open memory. */
+function MemoryBox({ p }: { p: Pipeline }) {
+  const { list, load } = useMemory(p.id);
+  const [open, setOpen] = useState(false);
+  const c = list?.counts;
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-s1 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex items-center text-[13px] font-semibold">
+          Memory
+          <Info>
+            Judge examples come from your picks at review, with your note. A batch reads the
+            snapshot taken at submit.
+          </Info>
+        </span>
+        <span className="mono text-[12px] text-t2">
+          {c ? `${c.judge_example + c.note} entries` : "—"}
+        </span>
+      </div>
+      <div className="flex justify-between text-[13px]">
+        <span>Judge examples</span>
+        <span className="mono text-[12px] text-t2">{c?.judge_example ?? "—"}</span>
+      </div>
+      <div className="flex justify-between text-[13px]">
+        <span>Notes</span>
+        <span className="mono text-[12px] text-t2">{c?.note ?? "—"}</span>
+      </div>
+      <button
+        type="button"
+        className="chip bevel h-[30px] self-start"
+        onClick={() => setOpen(true)}
+      >
+        Open memory
+      </button>
+      <MemoryDialog
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          void load();
+        }}
+        pipelineId={p.id}
+        title={p.title}
+        name={(id) => nodeLabel(p, id, p.workflow_titles)}
+      />
+    </div>
   );
 }

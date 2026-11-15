@@ -1,0 +1,4 @@
+{
+  "error": "memory is full (500 items); delete some first",
+  "code": "full"
+}

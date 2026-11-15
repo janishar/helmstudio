@@ -23,9 +23,9 @@ workflow against the node schemas at start, so a broken pack stops the runner in
 
 The core also provides five nodes in the same grammar (`runner_service/core/nodes.yaml`), published when a
 workflow uses them or a pack lists them in `publish`: `prompt` (→ `text: Text`), `seed` (→ `seed: Seed`), `canvas`
-(`mode` auto | fixed, `width`, `height` → `canvas: Canvas`), `image` (param `image: image` → `image: Image`) and
+(`mode` auto | fixed, `width`, `height` → `canvas: Canvas`), `image` (param `image: image` → `image: Image`),
 `output` (`media: Media` in, an Image or a Video; stores it as the run's next output: a PNG, or an MP4 with its
-poster PNG).
+poster PNG) and `answer` (`text: Text` in, no outputs: the sink of a text workflow, below).
 
 ## model.yaml
 
@@ -102,6 +102,22 @@ stages:                           # one node kind each: <family>/<stage>; the fu
       tiled: {type: enum, label: Tiled decode, default: auto, enum: ["auto", "on", "off"],
               help: "Tiling cuts decode memory (27 GB vs 65 GB at 4 MP) but changes pixels; auto tiles only when needed."}
     peak_gb: "6 if tiled == 'on' else 8.5 * mp"
+  ask:                            # an ask stage (API 1.14): the text encoder is a vision-language model
+    title: Ask
+    help: "Asks Qwen Image's own text encoder (Qwen3-VL 8B) one question about its takes: no extra load when it is resident. Temperature 0, thinking off, one more try in the same run when the answer does not match the schema."
+    uses: [text_encoder]          # the same residency entry as encode: after a still it loads nothing
+    inputs: {model: Model}
+    outputs: {answer: Text}
+    params:
+      system: {type: string, label: System, default: "", max: 4000, help: The system turn.}
+      prompt: {type: string, label: Prompt, default: "", max: 32768,
+               help: "The filled template (pipelines writes it). Not scanned for mentions."}
+      media: {type: rows, label: Takes, default: [], min: 0, max: 8, item: {take: Media},
+              help: "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."}
+      schema: {type: string, label: Answer schema, default: "", max: 16384,
+               help: "A JSON schema the answer must match; empty = plain text."}
+      max_tokens: {type: int, label: Max tokens, default: 800, min: 16, max: 4096}
+    peak_gb: "2.5 + 1.5 * images"
 ```
 
 Keys the core understands; anything else is ignored:
@@ -248,6 +264,38 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   `RUNNER_IDLE_UNLOAD_S`), `unload`, or `keep_pinned` (`RUNNER_PIN=transformer,vae`). Eviction drops the
   module, runs `gc` and `torch.mps.empty_cache()` (synchronised first). A pack that needs an `auto` decision
   (tiling) decides it inside the stage; its `peak_gb` should then describe the larger case.
+
+## Ask stages and text workflows (API 1.14; contracts/README.md "The llm pack and agent nodes")
+
+A judge, write or decide node asks a vision-language model through a **text workflow** (`"media": "text"`):
+`<family>/model → <family>/ask → answer`. Three packs have one: `llm` (`llm-ask`, env mlx: Qwen3.8-27B-4bit on
+mlx-vlm, the mlx env's `llm` extra), `qwen_image` (`qwen-image-ask`: its text encoder, Qwen3-VL 8B, `uses:
+[text_encoder]`, so after a still it loads nothing) and the fake `echo` (`echo-ask`). LTX has none: its Gemma
+encoder has no vision blocks. Name text workflow files `text-<id>.json` (they sort after the media ones).
+
+- **The stage** is one call: `core.ask.ask(ctx, params, generate)` with the runtime's `generate(prompt,
+  thumbnails) -> (text, tokens_in, tokens_out)`, greedy, seed `core.ask.SEED` (0), thinking off. The core does
+  the rest, the same for every runtime: thumbnails of the `media` takes (an image: over white, long edge
+  min(1024, native), sides floored to 32, JPEG q90, PUT once to `u/<owner_id>/llm/thumbs/<sha256>.jpg`; a video:
+  3 keyframes at ⌊F·(2k+1)/6⌋ with ffprobe/ffmpeg, each as an image; at most 24), the schema appended to the
+  prompt, the outermost `{…}` parsed and validated with jsonschema, one more try with `Your answer was invalid:
+  <error>. Answer again with JSON only.`, then `answer did not match the schema: <error>` fails the run. Where the
+  library can, the runtime also constrains decoding to the schema (mlx: llguidance through mlx-vlm).
+- **`Media`** (a rows item ref kind): an image or a video take, resolved like an Image value; the stage gets
+  `{"take_id", "image": PIL image}` or `{"take_id", "mp4": bytes}` (read and checked by the core, not decoded).
+  `peak_gb`'s `images` counts each video as its 3 keyframes.
+- **The answer** is not a take: the stage returns a `core.ask.Answer` (the text, carrying the record `{tries, seen,
+  tokens_in, tokens_out, seconds}`), the `answer` node sets it on the run, and the terminal `evt.run.status` carries
+  it (also on a schema failure). A repeated ask (same prompt, schema, takes `(owner, key, etag)`, model files) is a
+  node-cache hit, record included. Templates for judge/write/decide (filled by pipelines) ship as
+  `packs/llm/prompts/*.txt`.
+- **Memory plans**: each text workflow gets its own `memory` item (`workflow`, planned at 4 thumbnails of 1024 px:
+  `planned_at.images`); a pack with only text workflows (llm) has one item without `workflow`.
+- **A pack whose library loads its own checkpoint format** (mlx-vlm) defines `load_component(component, model,
+  ctx)` in its module: `core.loaders_mlx` calls it instead of build/rename/quantize (the residency manager, the
+  phase `loading <component>` and the size from the headers stay the core's; packed `U32` weights count 4 bytes).
+- The fake `echo/ask` answers the first JSON value after the last `ECHO-ANSWER:` in its prompt (a JSON string: its
+  text), else `{}` with a schema and `echo` without; its retry answers the one after `ECHO-RETRY:` when present.
 
 ## workflows/*.json
 

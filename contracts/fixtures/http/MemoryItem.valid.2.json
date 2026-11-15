@@ -1,0 +1,19 @@
+{
+  "id": "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a72",
+  "kind": "note",
+  "pipeline_id": "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88",
+  "key": null,
+  "text": "Foxes are always red, never grey.",
+  "kept": [],
+  "rejected": [],
+  "agreed": null,
+  "source": {
+    "kind": "user",
+    "batch_id": null,
+    "row": null,
+    "node": null,
+    "visit": null
+  },
+  "created_at": "2026-11-15T09:00:00Z",
+  "updated_at": "2026-11-15T09:00:00Z"
+}

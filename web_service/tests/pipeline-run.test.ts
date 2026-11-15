@@ -2,10 +2,22 @@ import { describe, expect, it } from "vitest";
 import rowFixture from "../../contracts/fixtures/http/BatchRow.valid.3.json";
 import execFixture from "../../contracts/fixtures/http/RowExecution.valid.json";
 import batchFixture from "../../contracts/fixtures/http/Batch.valid.3.json";
+import row5 from "../../contracts/fixtures/http/BatchRow.valid.5.json";
+import decision1 from "../../contracts/fixtures/http/Decision.valid.1.json";
+import memory1 from "../../contracts/fixtures/http/MemoryItem.valid.1.json";
+import review2 from "../../contracts/fixtures/http/BatchReview.valid.2.json";
+import exec2 from "../../contracts/fixtures/http/RowExecution.valid.2.json";
 import type { S } from "@/lib/api";
 import {
   asRun,
+  boundsLine,
   canPick,
+  criterionLines,
+  initialPick,
+  judgeLine,
+  judgeSummary,
+  memorySource,
+  wordDiff,
   canRetryFrom,
   cellLines,
   countFacts,
@@ -150,5 +162,106 @@ describe("review grid", () => {
     expect(rejectLabel({ on_reject: "retry", rejects_left: 2 })).toBe("None, try again (2 left)");
     expect(rejectLabel({ on_reject: "then", rejects_left: 0 })).toBe("None, move on");
     expect(rejectLabel({ on_reject: "fail", rejects_left: 0 })).toBe("None, fail the row");
+  });
+});
+
+describe("agent nodes in the run table, execution view and review", () => {
+  const judgeRow = row5 as unknown as S<"BatchRow">;
+  const cell = judgeRow.cells!.find((c) => c.kind === "judge")!;
+  it("the judge's cell: suggestion, pick, retries, give-up", () => {
+    expect(judgeSummary(cell)).toEqual({ text: "suggests take 3 · waiting for you", tone: "wait" });
+    const a = cell.attempts[0];
+    const picked = { ...a, status: "picked" as const, take_ids: [a.judged!.suggested[0]] };
+    expect(judgeLine(picked)).toEqual({ text: "picked take 3 · all checks pass", tone: "ok" });
+    const failed = {
+      ...a,
+      visit: 1,
+      status: "rejected" as const,
+      judged: { ...a.judged!, verdict: "fail" as const, first_failed: "extra limb", suggested: [] },
+    };
+    const retried = {
+      ...cell,
+      loop: { ...cell.loop!, turns: 1 },
+      attempts: [failed, { ...picked, visit: 2 }],
+    };
+    expect(judgeSummary(retried)).toEqual({ text: "retried 1 of 2 · extra limb", tone: "warn" });
+    const gaveUp = {
+      ...retried,
+      loop: { ...retried.loop, turns: 2, gave_up: true },
+      attempts: [failed],
+    };
+    expect(judgeSummary(gaveUp, (id) => (id === "review" ? "Review" : id))).toEqual({
+      text: "gave up → Review",
+      tone: "warn",
+    });
+    expect(judgeSummary({ ...gaveUp, attempts: [{ ...failed, status: "waiting" }] }).text).toBe(
+      "none passed · waiting for you",
+    );
+    expect(runColumns(null, [judgeRow]).map((c) => c.kind)).toEqual(["step", "judge"]);
+  });
+  it("criteria over the takes, as the Verdict tile says them", () => {
+    const j = (decision1 as unknown as S<"Decision">).judge!;
+    const lines = criterionLines(j);
+    expect(lines.map((l) => [l.criterion, l.text, l.bad])).toEqual(
+      lines.map((l) => {
+        const k = j.takes.filter(
+          (t) => t.checks.find((c) => c.criterion === l.criterion)?.pass,
+        ).length;
+        return [l.criterion, l.text, l.level === "must" && k < j.takes.length];
+      }),
+    );
+    const one = (pass: boolean[]) =>
+      criterionLines({
+        ...j,
+        criteria: { must: ["a"], nice: ["b"] },
+        takes: pass.map((p, i) => ({
+          ...j.takes[0],
+          take_id: String(i),
+          checks: [
+            { criterion: "a", level: "must", pass: p },
+            { criterion: "b", level: "nice", pass: !p },
+          ],
+        })),
+      }).map((l) => l.text);
+    expect(one([false, false, false, false])).toEqual(["failed on all 4", "passed"]);
+    expect(one([true, true, true, false])).toEqual(["failed on 1", "passed on 1"]);
+  });
+  it("a write's diff, the bounds line, memory sources, the review's first pick", () => {
+    expect(wordDiff("@fox in snow", "@fox in deep snow")).toEqual([
+      { text: "@fox in ", op: "same" },
+      { text: "deep ", op: "add" },
+      { text: "snow", op: "same" },
+    ]);
+    const d = wordDiff("a red fox", "a blue fox");
+    expect(
+      d
+        .filter((x) => x.op !== "add")
+        .map((x) => x.text)
+        .join(""),
+    ).toBe("a red fox");
+    expect(
+      d
+        .filter((x) => x.op !== "del")
+        .map((x) => x.text)
+        .join(""),
+    ).toBe("a blue fox");
+    expect(d.find((x) => x.op === "del")?.text).toBe("red");
+    expect(boundsLine({ runs: 13, llm_calls: 6 }, 10)).toBe(
+      "at most 13 runs and 6 LLM calls per row (130 runs, 60 calls in all)",
+    );
+    expect(boundsLine({ runs: 1, llm_calls: 0 }, 1)).toBe("at most 1 run per row");
+    const m = memory1 as unknown as S<"MemoryItem">;
+    expect(memorySource(m, () => "Judge")).toBe(
+      "your pick at Judge · row 6 · you changed its pick",
+    );
+    expect(memorySource({ ...m, source: { ...m.source, kind: "user" } })).toBe("added by you");
+    const item = (review2 as unknown as S<"BatchReview">).items[0];
+    expect(initialPick(item)).toEqual(item.suggested);
+    expect(initialPick({ ...item, kind: "gate" })).toEqual([]);
+  });
+  it("a step with a decision shows it", () => {
+    const x = exec2 as unknown as S<"RowExecution">;
+    const s = x.steps.find((t) => t.decision)!;
+    expect(stepDetail(x, s.step)).toMatchObject({ kind: s.decision!.kind, decision: s.decision });
   });
 });

@@ -1,0 +1,13 @@
+{
+  "problems": [],
+  "can_save": true,
+  "can_run": true,
+  "bounds": {
+    "runs": 13,
+    "llm_calls": 6
+  },
+  "models": {
+    "judge": "qwen-image-ask",
+    "rewrite": "qwen-image-ask"
+  }
+}

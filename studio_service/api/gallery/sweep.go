@@ -34,8 +34,9 @@ func NewSweeper(pool *pgxpool.Pool, store storage.Store) *Sweeper {
 
 // Sweep removes one batch as System and returns how many takes it removed. It only ever deletes a key under its own
 // take's owner prefix u/<owner_id>/ (anything else is logged and left, row included) and never a key another live
-// take still points at. A video's poster goes with its MP4. The objects go first: a failure keeps the rows for the next
-// sweep.
+// take still points at. A video's poster goes with its MP4, and the LLM thumbnails a judge made of it
+// (u/<owner_id>/llm/thumbs/, a copy of the take) unless a live take's decision shows the same one. The objects go
+// first: a failure keeps the rows for the next sweep.
 func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 	removed := 0
 	err := common.System(ctx, s.pool, func(tx pgx.Tx) error {
@@ -66,6 +67,11 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 		if len(ids) == 0 {
 			return nil
 		}
+		thumbs, err := sweptThumbs(ctx, tx, ids)
+		if err != nil {
+			return err
+		}
+		keys = append(keys, thumbs...)
 		if err := s.store.Delete(ctx, keys...); err != nil {
 			return err
 		}
@@ -74,6 +80,19 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 		return err
 	})
 	return removed, err
+}
+
+// sweptThumbs are the LLM thumbnail keys the decisions saw of the takes ids (decisions.data seen[]), under their
+// owner's u/<owner_id>/llm/thumbs/, that no decision shows of a take not deleted. ponytail: scans the owner's decisions
+// for the shared check; a thumbs table keyed by take if that grows slow.
+func sweptThumbs(ctx context.Context, tx pgx.Tx, ids []string) ([]string, error) {
+	rows, _ := tx.Query(ctx, `SELECT DISTINCT s->>'key' FROM decisions d, jsonb_array_elements(d.data->'seen') s
+		WHERE d.take_ids && $1::uuid[] AND s->>'take_id' = ANY($1::uuid[]::text[])
+		AND starts_with(s->>'key', 'u/' || d.owner_id::text || '/llm/thumbs/')
+		AND NOT EXISTS (SELECT 1 FROM decisions o, jsonb_array_elements(o.data->'seen') os
+			JOIN takes t ON t.id::text = os->>'take_id' AND t.deleted_at IS NULL
+			WHERE o.owner_id = d.owner_id AND os->>'key' = s->>'key')`, ids)
+	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
 // Run sweeps every minute until ctx ends.

@@ -37,7 +37,8 @@ type Service struct {
 	registry *registry.Registry
 	cancel   Cancel
 	store    storage.Store
-	stateGet StateGet // pipelines.state.get; nil answers 503
+	stateGet StateGet  // pipelines.state.get; nil answers 503
+	memory   MemoryAsk // pipelines.memory; nil answers 503
 	// the dispatcher whose skip counts positions use; nil: none
 	dispatcher *Dispatcher
 }

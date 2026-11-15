@@ -10,10 +10,12 @@ checked against openapi.yaml components/schemas/<name>. fixtures/graphs/ run thr
 (README, Pipeline rules) against fixtures/pipelines/workflows.json and the same palette; fixtures/mentions/ through
 the reference mention rules (README, Mentions) against the same palette; fixtures/loras/ through the reference
 LoRA normaliser (README, LoRA normaliser) against the canonical qwen-image lora block (or the fixture's `family`);
+fixtures/decisions/ through the reference judge verdict and replay hash (README, Agent nodes);
 fixtures/video/ through the reference auto length and keyframe position rules (README, Video); fixtures/dispatch/
 through the reference host admission (`admit`) and dispatch order (`simulate`) (README, The hand-over).
 Exit code 1 on any failure."""
 
+import hashlib
 import json
 import math
 from fnmatch import fnmatchcase
@@ -40,7 +42,7 @@ REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
 # Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
-CANONICAL = ["", "qwen-image.", "ltx."]
+CANONICAL = ["", "qwen-image.", "ltx.", "llm."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",
@@ -59,6 +61,7 @@ HTTP_SCHEMAS = [
     "LibraryItem", "LibraryItemList", "LibraryItemCreate", "LibraryItemUpdate",
     "Lora", "LoraList", "LoraPatch", "LoraUploadCreate", "LoraUpload",
     "HostList",
+    "Decision", "DecisionList", "MemoryItem", "MemoryList", "MemoryCreate", "BatchAgain",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -151,7 +154,7 @@ def value_error(param: dict, v) -> str | None:
     if t == "rows":
         if not isinstance(v, list):
             return f"{v!r} is not a list"
-        if v == [] and "Image" in param["item"].values():
+        if v == [] and any(x in ("Image", "Media") for x in param["item"].values()):
             return None  # a workflow holds no takes: [] even under min; the run needs min items (README, Video)
         if not param.get("min", 0) <= len(v) <= param["max"]:
             return f"{len(v)} items is outside {param.get('min', 0)}..{param['max']}"
@@ -159,7 +162,7 @@ def value_error(param: dict, v) -> str | None:
             if not isinstance(row, dict) or set(row) - set(param["item"]):
                 return f"item {i}: fields must be among {sorted(param['item'])}"
             for f, spec in param["item"].items():
-                if spec == "Image":  # a take; never in a registry workflow
+                if spec in ("Image", "Media"):  # a take; never in a registry workflow
                     return f"item {i}.{f}: a workflow cannot fill an image"
                 if spec == "Lora":  # required in every item, {lora_id} (README, LoRAs)
                     v_ = row.get(f)
@@ -271,7 +274,10 @@ def fits(got: str | None, want: str) -> bool:
 
 
 def workflow_media(nodes: dict, kinds: dict) -> str:
-    """video when an output node's media is wired from a Video output, else image (README, Video)."""
+    """video when an output node's media is wired from a Video output, text when an answer node's text is wired
+    (README, The llm pack), else image (README, Video)."""
+    if any(n["kind"] == "answer" and "text" in n.get("in", {}) for n in nodes.values()):
+        return "text"
     for n in nodes.values():
         ref = n.get("in", {}).get("media") if n["kind"] == "output" else None
         src = nodes.get(ref.split(".")[0]) if ref else None
@@ -398,8 +404,8 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
                 todo += succ[x]
         if nid in seen:
             add("cycle", nid)
-    if not any(n["kind"] == "output" for n in nodes.values()):
-        add("no_output")
+    if not any(n["kind"] in ("output", "answer") for n in nodes.values()):
+        add("no_output")  # an ask workflow ends in an answer node (README, The llm pack)
 
     def bad_path(path: str) -> bool:
         nid, param = path.split(".")
@@ -556,10 +562,13 @@ def check_graphs(registry: Registry) -> dict:
 
 
 # ---------------------------------------------------------------- pipeline rules (README, "Pipeline rules")
-P_MAX_NODES, P_MAX_BYTES, P_MAX_RUNS = 24, 65536, 64
+P_MAX_NODES, P_MAX_BYTES, P_MAX_RUNS, P_MAX_CALLS = 24, 65536, 64, 32
 P_RUN_ONLY = {"unreachable", "dead_end", "no_output", "unknown_workflow", "workflow_cannot_run", "unknown_preset",
-              "step_input_invalid", "bind_unknown", "bind_type", "unbound_input", "step_seeds", "unknown_look", "look_fit"}
+              "step_input_invalid", "bind_unknown", "bind_type", "unbound_input", "step_seeds", "unknown_look", "look_fit",
+              "unknown_model"}
 INPUT_FITS = {"Text": {"string", "text"}, "Int": {"int"}, "Float": {"float"}, "Seed": {"seed"}, "Image": {"image"}}
+LLM_KINDS = ("judge", "write", "decide")  # nodes that ask a model (README, Agent nodes)
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
 def lora_field(param: dict) -> str | None:
@@ -580,9 +589,10 @@ def settable(wf: dict, palette: dict) -> dict[str, dict]:
 
 
 def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, looks: list[dict] | None = None,
-                      loras: dict[str, str] | None = None) -> set[tuple]:
+                      loras: dict[str, str] | None = None, info: dict | None = None) -> set[tuple]:
     """Every problem as (code, node, port, param); workflows: the id → WorkflowDoc the caller can run; looks, loras:
-    the looks and LoRAs the caller can use now (as resolve_mentions takes them)."""
+    the looks and LoRAs the caller can use now (as resolve_mentions takes them). `info`, when given, receives the
+    worst case per row (`bounds`: runs, llm_calls) and the judge/write/decide models as resolved (`models`)."""
     out, nodes = set(), doc["nodes"]
     add = lambda code, node=None, port=None, param=None: out.add((code, node, port, param))
     if len(nodes) > P_MAX_NODES:
@@ -600,24 +610,40 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         for name in {x for x in names if names.count(x) > 1}:
             add("duplicate_input", nid, param=name)
         inputs |= {i["name"]: i["type"] for i in nodes[nid]["inputs"]}
-    succ, outdeg, capped = {nid: [] for nid in nodes}, {}, []  # succ: node → [(to, capped)]
+    succ, outdeg, capped, routed = {nid: [] for nid in nodes}, {}, [], set()  # succ: node → [(to, capped)]
     for frm, to in doc["edges"]:
-        targets = [to] if isinstance(to, str) else [to["pass"], to["fail"], to["then"]]
+        kind = "plain" if isinstance(to, str) else "routes" if "routes" in to else "branch"
+        targets = [to] if kind == "plain" else list(to["routes"].values()) if kind == "routes" else [
+            to["pass"], to["fail"], to["then"]]
         if frm not in nodes or any(t not in nodes for t in targets):
             add("unknown_node", frm)
             continue
-        if not isinstance(to, str) and nodes[frm]["kind"] != "gate":
+        fk = nodes[frm]["kind"]
+        if (kind == "branch" and fk not in ("gate", "judge")) or (kind == "routes" and fk != "decide"):
             add("branch_not_gate", frm)
             continue
+        if fk == "decide" and (kind != "routes" or set(to["routes"]) != set(nodes[frm]["routes"])
+                               or to["then"] not in to["routes"]):
+            add("decide_routes", frm)
+            continue
         outdeg[frm] = outdeg.get(frm, 0) + 1
-        if outdeg[frm] > 1 or nodes[frm]["kind"] == "output" or any(nodes[t]["kind"] == "inputs" for t in targets):
+        if outdeg[frm] > 1 or fk == "output" or any(nodes[t]["kind"] == "inputs" for t in targets):
             add("edge_invalid", frm)
             continue
-        if isinstance(to, str):
+        if kind == "plain":
             succ[frm].append((to, False))
-        else:
+        elif kind == "branch":
             succ[frm] += [(to["pass"], False), (to["fail"], True), (to["then"], False)]
             capped.append((frm, to["fail"], to["max"]))
+        else:  # every route but then counts against the decide's max
+            routed.add(frm)
+            for label, t in to["routes"].items():
+                succ[frm].append((t, label != to["then"]))
+                if label != to["then"]:
+                    capped.append((frm, t, to["max"]))
+    for nid in of("decide"):
+        if nid not in routed:
+            add("decide_routes", nid)
 
     def reach(src: str, avoid: str | None = None, uncapped_only: bool = False) -> set[str]:
         """Nodes reachable from src in one edge or more (never through `avoid`)."""
@@ -632,10 +658,13 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
     for nid in nodes:  # ponytail: O(n·e) per node, fine at 24 nodes
         if nid in reach(nid, uncapped_only=True):
             add("uncapped_cycle", nid)
-    runs = sum(n.get("seeds", 1) * (1 + sum(m for g, f, m in capped if (nid == f or nid in reach(f)) and g in reach(nid)))
-               for nid, n in nodes.items() if n["kind"] == "step")
+    visits = lambda nid: 1 + sum(m for g, f, m in capped if (nid == f or nid in reach(f)) and g in reach(nid))
+    runs = sum(n.get("seeds", 1) * visits(nid) for nid, n in nodes.items() if n["kind"] == "step")
+    calls = sum(visits(nid) for nid, n in nodes.items() if n["kind"] in LLM_KINDS)
     if runs > P_MAX_RUNS:
         add("too_many_runs")
+    if calls > P_MAX_CALLS:
+        add("too_many_calls")
     root = roots[0] if len(roots) == 1 else None
     if root:
         for nid in set(nodes) - reach(root) - {root}:
@@ -649,23 +678,74 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
     # a before b on every path from the inputs node (unchecked without exactly one inputs node)
     dominates = lambda a, b: root is None or a == root or (a != b and b not in reach(root, avoid=a))
 
-    def source(src: str) -> tuple[str, str | int] | None:
-        """('input', type) or ('takes', how many at most), None when it names nothing of the right kind."""
+    def source(src: str) -> tuple[str, str | int | None] | None:
+        """('input', type), ('takes', how many at most) or ('text', None); None when it names nothing of that kind."""
         if src.startswith("$"):
             return ("input", inputs[src[1:]]) if src[1:] in inputs else None
         nid, what = src.split(".")
-        n = nodes.get(nid)
-        if not n or n["kind"] != ("step" if what == "takes" else "gate"):
-            return None
-        return "takes", n.get("seeds", 1) if what == "takes" else n.get("keep", 1)
+        k, n = nodes.get(nid, {}).get("kind"), nodes.get(nid, {})
+        if what == "takes" and k == "step":
+            return "takes", n.get("seeds", 1)
+        if what == "picked" and k in ("gate", "judge"):
+            return "takes", n.get("keep", 1)
+        if (what == "reasons" and k == "judge") or (what == "notes" and k == "memory" and n["op"] == "read"):
+            return "text", None
+        return None
 
-    for nid in of("gate"):
+    def text_sources(nid: str) -> None:
+        """write, decide and memory write `from`: Text inputs and text sources that come before the node."""
+        for src in nodes[nid].get("from", []):
+            s = source(src)
+            if not s or s[0] == "takes" or (s[0] == "input" and s[1] != "Text") or (
+                    not src.startswith("$") and not dominates(src.split(".")[0], nid)):
+                add("bind_source", nid, "from")
+
+    for nid in of("gate") + of("judge"):
         g = nodes[nid]
         t = nodes.get(g["takes"])
         if not t or t["kind"] != "step" or not dominates(g["takes"], nid):
             add("gate_takes", nid)
         elif g.get("keep", 1) > t.get("seeds", 1):
             add("gate_keep", nid)
+    for nid in of("judge"):
+        c = nodes[nid]["criteria"]
+        lines = c.get("must", []) + c.get("nice", [])
+        if not 1 <= len(lines) <= 12 or len(set(lines)) < len(lines):
+            add("judge_criteria", nid)
+        m = nodes[nid].get("memory")
+        if m is not None and (nodes.get(m, {}).get("kind") != "memory" or nodes[m]["op"] != "read" or not dominates(m, nid)):
+            add("bind_source", nid, "memory")
+    for nid in of("write"):
+        if inputs.get(nodes[nid]["to"][1:]) != "Text":
+            add("write_target", nid)
+    for nid in of("write") + of("decide") + [m for m in of("memory") if nodes[m]["op"] == "write"]:
+        text_sources(nid)
+
+    def text_workflow(wid: str) -> bool:
+        return wid in workflows and workflow_media(workflows[wid]["nodes"], palette) == "text"
+
+    def family_ask(step: str | None) -> str | None:
+        """The ask template of the step's workflow's family (first by id), else llm-ask (README, Agent nodes: model)."""
+        fam = workflows.get(nodes[step]["workflow"], {}).get("family") if step in nodes and nodes[step]["kind"] == "step" else None
+        own = sorted(w for w in workflows if not UUID.match(w) and workflows[w]["family"] == fam and text_workflow(w))
+        return own[0] if fam and own else "llm-ask" if text_workflow("llm-ask") else None
+
+    models = {}
+    for nid in [n for n in nodes if nodes[n]["kind"] in LLM_KINDS]:
+        n, m = nodes[nid], nodes[nid].get("model", "auto")
+        if m != "auto":
+            wid = m if text_workflow(m) else None
+        elif n["kind"] == "judge":
+            wid = family_ask(n["takes"])
+        else:  # the step nearest before it: the one every other step before it comes before
+            doms = [s for s in of("step") if dominates(s, nid) and s != nid]
+            wid = family_ask(next((d for d in doms if all(o == d or dominates(o, d) for o in doms)), None))
+        if wid:
+            models[nid] = wid
+        else:
+            add("unknown_model", nid)
+    if info is not None:
+        info.update(bounds={"runs": runs, "llm_calls": calls}, models=models)
     for nid in outputs:
         src = nodes[nid]["from"]
         if not source(src) or (root and nid not in reach(src.split(".")[0])):
@@ -674,15 +754,15 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         n = nodes[nid]
         binds = {k: source(v) for k, v in n.get("bind", {}).items()}
         for k, v in n.get("bind", {}).items():
-            if not binds[k] or (not v.startswith("$") and not dominates(v.split(".")[0], nid)):
+            if not binds[k] or binds[k][0] == "text" or (not v.startswith("$") and not dominates(v.split(".")[0], nid)):
                 add("bind_source", nid, k)
                 binds[k] = None
         wf = workflows.get(n["workflow"])
         if not wf:
             add("unknown_workflow", nid)
             continue
-        if graph_problems(wf, palette):
-            add("workflow_cannot_run", nid)
+        if graph_problems(wf, palette) or text_workflow(n["workflow"]):
+            add("workflow_cannot_run", nid)  # a text workflow answers a judge, write or decide only
         if "preset" in n and n["preset"] not in wf.get("studio", {}).get("presets", {}):
             add("unknown_preset", nid)
         found = {x["id"]: x for x in looks or []}
@@ -735,14 +815,60 @@ def check_pipelines(registry: Registry, palette: dict) -> None:
         if errs := list(doc_v.iter_errors(fx["pipeline"])):
             fail(f"{name}: pipeline is not a PipelineDoc: {errs[0].json_path}: {errs[0].message}")
             continue
-        got = pipeline_problems(fx["pipeline"], workflows, palette, fx.get("looks"), fx.get("loras"))
+        info = {}
+        got = pipeline_problems(fx["pipeline"], workflows, palette, fx.get("looks"), fx.get("loras"), info)
         want = {(x["code"], x.get("node"), x.get("port"), x.get("param")) for x in fx["problems"]}
         if not p.name.startswith(("valid.", "invalid.")) or p.name.startswith("valid.") != (not want):
             fail(f"{name}: valid.* has no problems, invalid.* has some")
         if got != want:
             fail(f"{name}: got {sorted(got, key=str)}, want {sorted(want, key=str)}")
+        elif any(k in fx and fx[k] != info.get(k) for k in ("bounds", "models")):
+            fail(f"{name}: got bounds {info.get('bounds')} models {info.get('models')}, want {fx.get('bounds')} {fx.get('models')}")
         else:
             print(f"ok   {name}")
+
+
+# ---------------------------------------------------------------- decisions (README, "Decisions")
+def judge_verdict(answer: dict, criteria: dict, keep: int, candidates: list[str]) -> dict:
+    """The judge's result derived from its parsed answer (README, Agent nodes: Judge), or {error} for the re-ask."""
+    must, nice, n = criteria["must"], criteria["nice"], len(candidates)
+    takes, ranking = answer["takes"], answer["ranking"]
+    if [t["take"] for t in takes] != list(range(1, n + 1)):
+        return {"error": f"takes must be 1..{n} in order"}
+    if bad := next((t["take"] for t in takes if len(t["checks"]) != len(must) + len(nice)), None):
+        return {"error": f"take {bad} needs {len(must) + len(nice)} checks"}
+    if sorted(ranking) != list(range(1, n + 1)):
+        return {"error": f"ranking must order every take 1..{n} once"}
+    m = len(must)
+    order = sorted(range(n), key=lambda i: (-sum(takes[i]["checks"][:m]), -sum(takes[i]["checks"][m:]),
+                                            ranking.index(i + 1)))
+    passes = [all(t["checks"][:m]) for t in takes]
+    good = [i for i in order if passes[i]]
+    verdict = "pass" if len(good) >= keep else "fail"
+    best = takes[order[0]]["checks"]
+    return {"verdict": verdict, "picked": [candidates[i] for i in good[:keep]] if verdict == "pass" else [],
+            "first_failed": next((must[j] for j in range(m) if not best[j]), None), "passes": passes,
+            "ranks": [order.index(i) + 1 for i in range(n)]}
+
+
+def inputs_hash(call: dict) -> str:
+    """sha256 of the call as canonical JSON (sorted keys, no spaces, UTF-8): the replay key's last part."""
+    return hashlib.sha256(json.dumps(call, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
+def check_decisions() -> None:
+    g = HERE / "fixtures" / "decisions"
+    for c in json.loads((g / "verdict.json").read_text())["cases"]:
+        got = judge_verdict(c["answer"], c["criteria"], c["keep"], c["candidates"])
+        if got != c["expect"]:
+            fail(f"fixtures/decisions/verdict.json {c['description']}: got {got}, want {c['expect']}")
+        else:
+            print(f"ok   fixtures/decisions/verdict.json {c['description']}")
+    for c in json.loads((g / "replay.json").read_text())["cases"]:
+        if (got := inputs_hash(c["call"])) != c["expect"]:
+            fail(f"fixtures/decisions/replay.json {c['description']}: got {got}, want {c['expect']}")
+        else:
+            print(f"ok   fixtures/decisions/replay.json {c['description']}")
 
 
 # ---------------------------------------------------------------- mention rules (README, "Mentions")
@@ -1126,6 +1252,8 @@ def check_loras() -> None:
     blocks = {}
     for prefix in CANONICAL[1:]:
         m = json.loads((HERE / "fixtures" / "registry" / f"{prefix}models.valid.json").read_text())["models"][0]
+        if "lora" not in m:
+            continue  # a family without LoRAs (llm)
         blocks[m["family"]] = spec = m["lora"]
         mods = expand_modules(spec["modules"])
         if len({m.replace(".", "_") for m in mods}) != len(mods):
@@ -1558,6 +1686,7 @@ def main() -> int:
     check_canonical_registries()
     palette = check_graphs(registry)
     check_pipelines(registry, palette)
+    check_decisions()
     check_mentions(registry, palette)
     check_loras()
     check_lora_detection()

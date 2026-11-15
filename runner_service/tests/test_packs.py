@@ -224,3 +224,28 @@ def test_memory_plan_marks_unload_after_and_leaves_it_out_of_the_kept_set(tmp_pa
     assert te["component"] == "text_encoder" and te["unloads_after"] is True
     others = sum(c["gb"] for c in plan["components"][1:])
     assert plan["peak_gb"] == pytest.approx(others + te["gb"] + 100, abs=0.01)  # its stage holds it
+
+
+def test_a_text_workflow_gets_its_own_memory_plan_at_four_thumbnails(tmp_path, monkeypatch):
+    """qwen-image-ask (contracts/README.md, memory plans): its own item, named by `workflow`, only the text encoder
+    (the encode stage's entry), peak = kept + the README example's ask 2.5 + 1.5 x 4 thumbnails; the media plan is
+    unchanged."""
+    q = FakeQwen(tmp_path, monkeypatch)
+    q.pack.workflows = fixture("qwen-image.workflows.valid.json")["workflows"]
+    media, text = registry.memory_plans(q.pack, "turbo", "int8", q.impls, q.schemas)
+    assert "workflow" not in media and media == registry.memory_plan(
+        q.pack, "turbo", "int8", q.impls, q.schemas
+    )
+    assert text["workflow"] == "qwen-image-ask" and text["planned_at"] == {
+        "mp": 0.0,
+        "frames": 0,
+        "images": 4,
+    }
+    (te,) = text["components"]
+    assert (te["component"], te["variant"], te["precision"]) == ("text_encoder", "base", "int8")
+    assert text["peak_gb"] == pytest.approx(te["gb"] + 2.5 + 1.5 * 4, abs=0.01)
+    q.pack.workflows = q.pack.workflows[
+        1:
+    ]  # only text workflows (the llm pack): one item, no `workflow`
+    (only,) = registry.memory_plans(q.pack, "turbo", "int8", q.impls, q.schemas)
+    assert "workflow" not in only and only["planned_at"]["images"] == 4

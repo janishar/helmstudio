@@ -39,6 +39,7 @@ const RUN_ONLY = new Set<Code>([
   "step_seeds",
   "unknown_look",
   "look_fit",
+  "unknown_model",
 ]);
 /** the param types a pipeline input of each type fills */
 const INPUT_FITS: Record<InputType, string[]> = {
@@ -73,11 +74,22 @@ export function settable(wf: Doc, palette: Palette): Record<string, Param> {
   return out;
 }
 
-/** The node ids an edge leads to: one for a plain edge, pass / fail / then for a branch. */
+/** The node ids an edge leads to: one for a plain edge, pass / fail / then for a branch, each route of a decide. */
 export const targets = (to: PEdge[1]) =>
-  typeof to === "string" ? [to] : [to.pass, to.fail, to.then];
+  typeof to === "string"
+    ? [to]
+    : "routes" in to
+      ? Object.values(to.routes)
+      : [to.pass, to.fail, to.then];
 
-/** The edges as the rules read them (refused edges dropped), the inputs, reach and dominance. */
+/** The kinds that ask a model (README, The llm pack and agent nodes). */
+export const LLM_KINDS: Kind[] = ["judge", "write", "decide"];
+export const P_MAX_CALLS = 32;
+const sameSet = (a: string[], b: string[]) =>
+  a.length === b.length && new Set([...a, ...b]).size === a.length;
+
+/** The edges as the rules read them (refused edges dropped), the inputs, reach and dominance. A capped edge is a
+ * branch's fail edge or a decide route other than its `then`. */
 export function analyse(doc: PDoc) {
   const nodes = doc.nodes;
   const ids = Object.keys(nodes);
@@ -89,31 +101,54 @@ export function analyse(doc: PDoc) {
   const capped: [string, string, number][] = [];
   const refused: [Code, string][] = [];
   const outdeg: Record<string, number> = {};
+  const routed = new Set<string>();
   for (const [from, to] of doc.edges) {
     const ts = targets(to);
     if (!(from in nodes) || ts.some((t) => !(t in nodes))) {
       refused.push(["unknown_node", from]);
       continue;
     }
-    if (typeof to !== "string" && nodes[from].kind !== "gate") {
+    const fk = nodes[from].kind;
+    const kind = typeof to === "string" ? "plain" : "routes" in to ? "routes" : "branch";
+    if (
+      (kind === "branch" && fk !== "gate" && fk !== "judge") ||
+      (kind === "routes" && fk !== "decide")
+    ) {
       refused.push(["branch_not_gate", from]);
       continue;
     }
-    outdeg[from] = (outdeg[from] ?? 0) + 1;
     if (
-      outdeg[from] > 1 ||
-      nodes[from].kind === "output" ||
-      ts.some((t) => nodes[t].kind === "inputs")
+      fk === "decide" &&
+      (typeof to !== "object" ||
+        !("routes" in to) ||
+        !sameSet(
+          Object.keys(to.routes),
+          Object.keys((nodes[from] as S<"PipelineDecideNode">).routes),
+        ) ||
+        !(to.then in to.routes))
     ) {
+      refused.push(["decide_routes", from]);
+      continue;
+    }
+    outdeg[from] = (outdeg[from] ?? 0) + 1;
+    if (outdeg[from] > 1 || fk === "output" || ts.some((t) => nodes[t].kind === "inputs")) {
       refused.push(["edge_invalid", from]);
       continue;
     }
     if (typeof to === "string") succ[from].push([to, false]);
-    else {
+    else if ("routes" in to) {
+      routed.add(from);
+      for (const [label, t] of Object.entries(to.routes)) {
+        succ[from].push([t, label !== to.then]);
+        if (label !== to.then) capped.push([from, t, to.max]);
+      }
+    } else {
       succ[from].push([to.pass, false], [to.fail, true], [to.then, false]);
       capped.push([from, to.fail, to.max]);
     }
   }
+  for (const id of ids)
+    if (nodes[id].kind === "decide" && !routed.has(id)) refused.push(["decide_routes", id]);
   /** nodes reachable from src in one edge or more, never through `avoid` */
   const reach = (src: string, avoid?: string, uncappedOnly = false) => {
     const seen = new Set<string>();
@@ -130,24 +165,89 @@ export function analyse(doc: PDoc) {
   /** a is on every path from the inputs node to b (unchecked without exactly one inputs node) */
   const dominates = (a: string, b: string) =>
     root === null || a === root || (a !== b && !reach(root, a).has(b));
-  return { nodes, ids, roots, root, inputs, succ, capped, refused, reach, dominates };
+  /** how often a row may visit a node: 1 + the caps of the loops it is on */
+  const visits = (id: string) =>
+    1 +
+    capped
+      .filter(([g, f]) => (id === f || reach(f).has(id)) && reach(id).has(g))
+      .reduce((s, [, , m]) => s + m, 0);
+  return { nodes, ids, roots, root, inputs, succ, capped, refused, reach, dominates, visits };
 }
 
-/** What a source gives: an input of a type, or at most n takes; null when it names nothing of the right kind. */
-function sourceOf(
-  a: ReturnType<typeof analyse>,
-  src: string,
-): { input: InputType } | { takes: number } | null {
+/** The worst case per row (README, Pipeline rules: worst case): generation runs and LLM calls. */
+export function pipelineBounds(doc: PDoc): S<"PipelineBounds"> {
+  const a = analyse(doc);
+  let runs = 0;
+  let calls = 0;
+  for (const id of a.ids) {
+    const n = a.nodes[id];
+    if (n.kind === "step") runs += (n.seeds ?? 1) * a.visits(id);
+    if (LLM_KINDS.includes(n.kind)) calls += a.visits(id);
+  }
+  return { runs, llm_calls: calls };
+}
+
+type Source = { input: InputType } | { takes: number } | { text: true };
+
+/** What a source gives: an input of a type, at most n takes, or text (a judge's reasons, a memory read's notes);
+ * null when it names nothing of the right kind. */
+function sourceOf(a: ReturnType<typeof analyse>, src: string): Source | null {
   if (src.startsWith("$"))
     return src.slice(1) in a.inputs ? { input: a.inputs[src.slice(1)] } : null;
   const [id, what] = src.split(".");
   const n = a.nodes[id];
-  if (!n || n.kind !== (what === "takes" ? "step" : "gate")) return null;
-  return { takes: n.kind === "step" ? (n.seeds ?? 1) : n.kind === "gate" ? (n.keep ?? 1) : 1 };
+  if (!n) return null;
+  if (what === "takes" && n.kind === "step") return { takes: n.seeds ?? 1 };
+  if (what === "picked" && (n.kind === "gate" || n.kind === "judge")) return { takes: n.keep ?? 1 };
+  if (
+    (what === "reasons" && n.kind === "judge") ||
+    (what === "notes" && n.kind === "memory" && n.op === "read")
+  )
+    return { text: true };
+  return null;
+}
+
+/** Whether a workflow answers text (an ask workflow: its `answer` node's text is wired). */
+export const isTextWorkflow = (wf: Doc | undefined) =>
+  !!wf && Object.values(wf.nodes).some((n) => n.kind === "answer" && "text" in (n.in ?? {}));
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** The ask workflow each judge, write and decide node runs (README, Model): a named one when the caller can run it;
+ * `auto`: a judge → the ask template of its takes step's family, write and decide → that of the nearest step before
+ * them, else `llm-ask`. A node with none is left out (`unknown_model`). */
+export function resolveModels(doc: PDoc, workflows: Record<string, Doc>): Record<string, string> {
+  const a = analyse(doc);
+  const text = (w: string) => isTextWorkflow(workflows[w]);
+  const familyAsk = (step: string | undefined) => {
+    const n = step ? a.nodes[step] : undefined;
+    const fam = n?.kind === "step" ? workflows[n.workflow]?.family : undefined;
+    const own = Object.keys(workflows)
+      .filter((w) => !UUID.test(w) && workflows[w].family === fam && text(w))
+      .sort();
+    return fam && own.length ? own[0] : text("llm-ask") ? "llm-ask" : undefined;
+  };
+  const steps = a.ids.filter((id) => a.nodes[id].kind === "step");
+  const out: Record<string, string> = {};
+  for (const id of a.ids) {
+    const n = a.nodes[id];
+    if (n.kind !== "judge" && n.kind !== "write" && n.kind !== "decide") continue;
+    const m = n.model ?? "auto";
+    let wid: string | undefined;
+    if (m !== "auto") wid = text(m) ? m : undefined;
+    else if (n.kind === "judge") wid = familyAsk(n.takes);
+    else {
+      const doms = steps.filter((s) => s !== id && a.dominates(s, id));
+      wid = familyAsk(doms.find((d) => doms.every((o) => o === d || a.dominates(o, d))));
+    }
+    if (wid) out[id] = wid;
+  }
+  return out;
 }
 
 /** Whether a source fits a workflow param (README, `bind_type`). */
-export function fits(p: Param, src: { input: InputType } | { takes: number }): boolean {
+export function fits(p: Param, src: Source): boolean {
+  if ("text" in src) return false;
   if ("input" in src)
     return INPUT_FITS[src.input].includes(p.type) || (src.input === "Image" && !!imageField(p));
   return (
@@ -166,6 +266,8 @@ export function pipelineProblems(
   palette: Palette,
   looks?: ResolvableLook[],
   loras: Record<string, string> = {},
+  /** receives the worst case per row and the resolved models (as PipelineValidation's) */
+  info?: { bounds?: S<"PipelineBounds">; models?: Record<string, string> },
 ): PProblem[] {
   const out = new Map<string, PProblem>();
   const add = (code: Code, message: string, node?: string, port?: string, param?: string) => {
@@ -199,7 +301,8 @@ export function pipelineProblems(
       code,
       {
         unknown_node: `${from}: an edge names a node that is not in the pipeline`,
-        branch_not_gate: `${from}: only a gate can branch`,
+        branch_not_gate: `${from}: only a gate or a judge can branch, and only a decide routes`,
+        decide_routes: `${from}: a decide needs one routes edge with its own labels`,
         edge_invalid: `${from}: this edge is not allowed (one edge out of a node, none out of an output, none into the inputs)`,
       }[code as "unknown_node"],
       from,
@@ -207,17 +310,11 @@ export function pipelineProblems(
   for (const id of ids)
     if (reach(id, undefined, true).has(id))
       add("uncapped_cycle", `${name(id)}: it loops back without a capped fail edge`, id);
-  const runs = ids
-    .filter((id) => nodes[id].kind === "step")
-    .reduce((sum, id) => {
-      const n = nodes[id] as S<"PipelineStepNode">;
-      const loops = a.capped
-        .filter(([g, f]) => (id === f || reach(f).has(id)) && reach(id).has(g))
-        .reduce((s, [, , m]) => s + m, 0);
-      return sum + (n.seeds ?? 1) * (1 + loops);
-    }, 0);
+  const { runs, llm_calls } = pipelineBounds(doc);
   if (runs > P_MAX_RUNS)
     add("too_many_runs", `a row could make ${runs} runs; at most ${P_MAX_RUNS}`);
+  if (llm_calls > P_MAX_CALLS)
+    add("too_many_calls", `a row could ask a model ${llm_calls} times; at most ${P_MAX_CALLS}`);
   if (root) {
     const r = reach(root);
     for (const id of ids)
@@ -234,14 +331,55 @@ export function pipelineProblems(
     )
       add("dead_end", `${name(id)}: it leads to no Output`, id);
 
-  for (const id of of("gate")) {
-    const g = nodes[id] as S<"PipelineGateNode">;
+  for (const id of [...of("gate"), ...of("judge")]) {
+    const g = nodes[id] as S<"PipelineGateNode"> | S<"PipelineJudgeNode">;
     const t = nodes[g.takes];
     if (!t || t.kind !== "step" || !dominates(g.takes, id))
       add("gate_takes", `${name(id)}: its takes must come from a step every row passes first`, id);
     else if ((g.keep ?? 1) > (t.seeds ?? 1))
       add("gate_keep", `${name(id)}: it keeps more than ${name(g.takes)} makes`, id);
   }
+  for (const id of of("judge")) {
+    const j = nodes[id] as S<"PipelineJudgeNode">;
+    const lines = [...(j.criteria.must ?? []), ...(j.criteria.nice ?? [])];
+    if (!lines.length || lines.length > 12 || new Set(lines).size < lines.length)
+      add("judge_criteria", `${name(id)}: its checklist needs 1 to 12 checks, none twice`, id);
+    const m = j.memory === undefined ? undefined : nodes[j.memory];
+    if (
+      j.memory !== undefined &&
+      (m?.kind !== "memory" || m.op !== "read" || !dominates(j.memory, id))
+    )
+      add(
+        "bind_source",
+        `${name(id)}: its memory must be a Memory read node before it`,
+        id,
+        "memory",
+      );
+  }
+  for (const id of of("write"))
+    if (a.inputs[(nodes[id] as S<"PipelineWriteNode">).to.slice(1)] !== "Text")
+      add("write_target", `${name(id)}: it must write a Text input`, id);
+  for (const id of ids) {
+    const n = nodes[id];
+    if (n.kind !== "write" && n.kind !== "decide" && !(n.kind === "memory" && n.op === "write"))
+      continue;
+    for (const src of n.from) {
+      const s = sourceOf(a, src);
+      if (
+        !s ||
+        "takes" in s ||
+        ("input" in s && s.input !== "Text") ||
+        (!src.startsWith("$") && !dominates(src.split(".")[0], id))
+      )
+        add("bind_source", `${name(id)}: ${src} is not text set before it`, id, "from");
+    }
+  }
+  const models = resolveModels(doc, workflows);
+  if (info) info.bounds = { runs, llm_calls };
+  if (info) info.models = models;
+  for (const id of ids)
+    if (LLM_KINDS.includes(nodes[id].kind) && !(id in models))
+      add("unknown_model", `${name(id)}: its model is not an ask workflow you can run`, id);
   for (const id of outputs) {
     const src = (nodes[id] as S<"PipelineOutputNode">).from;
     if (!sourceOf(a, src) || (root && !reach(src.split(".")[0]).has(id)))
@@ -252,7 +390,11 @@ export function pipelineProblems(
     const binds: Record<string, ReturnType<typeof sourceOf>> = {};
     for (const [k, v] of Object.entries(n.bind ?? {})) {
       binds[k] = sourceOf(a, v);
-      if (!binds[k] || (!v.startsWith("$") && !dominates(v.split(".")[0], id))) {
+      if (
+        !binds[k] ||
+        "text" in binds[k] ||
+        (!v.startsWith("$") && !dominates(v.split(".")[0], id))
+      ) {
         add("bind_source", `${name(id)}: ${k} ← ${v} is not set before this step`, id, k);
         binds[k] = null;
       }
@@ -264,6 +406,12 @@ export function pipelineProblems(
     }
     const wp = graphProblems(wf, palette);
     if (wp.length) add("workflow_cannot_run", `${name(id)}: ${wf.title}: ${wp[0].message}`, id);
+    else if (isTextWorkflow(wf))
+      add(
+        "workflow_cannot_run",
+        `${name(id)}: ${wf.title} answers text; only a judge, write or decide runs it`,
+        id,
+      );
     if (n.preset !== undefined && !(n.preset in (wf.studio?.presets ?? {})))
       add("unknown_preset", `${name(id)}: ${wf.title} has no preset ${n.preset}`, id);
     const stepLooks = (n as { looks?: string[] }).looks ?? [];
@@ -326,10 +474,36 @@ export function bindCandidates(doc: PDoc, step: string, p: Param): string[] {
     const n = a.nodes[id];
     if (id === step || !a.dominates(id, step)) continue;
     if (n.kind === "step" && fits(p, { takes: n.seeds ?? 1 })) out.push(`${id}.takes`);
-    if (n.kind === "gate" && fits(p, { takes: n.keep ?? 1 })) out.push(`${id}.picked`);
+    if ((n.kind === "gate" || n.kind === "judge") && fits(p, { takes: n.keep ?? 1 }))
+      out.push(`${id}.picked`);
   }
   return out;
 }
+
+/** The text a write, decide or memory write may read (its `from`): Text inputs, then the reasons of judges and the
+ * notes of memory reads every row passes before it. */
+export function textCandidates(doc: PDoc, node: string): string[] {
+  const a = analyse(doc);
+  const out = Object.entries(a.inputs)
+    .filter(([, t]) => t === "Text")
+    .map(([name]) => `$${name}`);
+  for (const id of order(doc)) {
+    const n = a.nodes[id];
+    if (id === node || !a.dominates(id, node)) continue;
+    if (n.kind === "judge") out.push(`${id}.reasons`);
+    if (n.kind === "memory" && n.op === "read") out.push(`${id}.notes`);
+  }
+  return out;
+}
+
+/** The memory read nodes a judge may learn from (each one every row passes before it). */
+export const memoryCandidates = (doc: PDoc, judge: string) => {
+  const a = analyse(doc);
+  return order(doc).filter((id) => {
+    const n = a.nodes[id];
+    return n.kind === "memory" && n.op === "read" && a.dominates(id, judge);
+  });
+};
 
 /** The steps a gate may review (each a step every row passes before it). */
 export const gateCandidates = (doc: PDoc, gate: string) => {
@@ -342,7 +516,7 @@ export const outputCandidates = (doc: PDoc, out: string) => {
   const a = analyse(doc);
   return order(doc).flatMap((id) => {
     const k = a.nodes[id].kind;
-    if ((k !== "step" && k !== "gate") || !a.reach(id).has(out)) return [];
+    if ((k !== "step" && k !== "gate" && k !== "judge") || !a.reach(id).has(out)) return [];
     return [`${id}.${k === "step" ? "takes" : "picked"}`];
   });
 };
@@ -368,8 +542,22 @@ export function nodeLabel(doc: PDoc, id: string, titles: Record<string, string> 
   if (!n) return id;
   if (n.title) return n.title;
   if (n.kind === "step") return titles[n.workflow] ?? n.workflow;
-  return { inputs: "Inputs", gate: "Gate", output: "Output" }[n.kind];
+  return KIND_NAMES[n.kind];
 }
+
+export const KIND_NAMES: Record<Kind, string> = {
+  inputs: "Inputs",
+  step: "Step",
+  gate: "Gate",
+  output: "Output",
+  judge: "Judge",
+  write: "Write",
+  decide: "Decide",
+  memory: "Memory",
+};
+/** Whether a node is an agent node (the mock's `.pl.ag`). */
+export const isAgent = (k: Kind) =>
+  k === "judge" || k === "write" || k === "decide" || k === "memory";
 
 /** Steps numbered in row order: "1 · Qwen Image". */
 export function stepNumbers(doc: PDoc): Record<string, number> {
@@ -377,12 +565,14 @@ export function stepNumbers(doc: PDoc): Record<string, number> {
   return Object.fromEntries(steps.map((id, i) => [id, i + 1]));
 }
 
-/** A one-line description of a pipeline for its card tags: steps, gates, loops. */
+/** A one-line description of a pipeline for its card tags: steps, gates, agent nodes, loops. */
 export function facts(doc: PDoc): string[] {
   const ns = Object.values(doc.nodes);
   const count = (k: Kind) => ns.filter((n) => n.kind === k).length;
   const s = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const agents = ns.filter((n) => isAgent(n.kind)).length;
   const out = [s(count("step"), "step"), s(count("gate"), "gate")];
+  if (agents) out.push(s(agents, "agent node"));
   for (const [, to] of doc.edges)
     if (typeof to !== "string") out.push(`retry loop · cap ${to.max}`);
   return out;
@@ -418,6 +608,9 @@ export function newNodeId(doc: PDoc, base: string): string {
   for (let i = 2; ; i++) if (!(`${base}_${i}` in doc.nodes)) return `${base}_${i}`;
 }
 
+/** A write's instruction when none is given (README, write). */
+export const WRITE_INSTRUCTION = "Fix what the reviewer found; keep everything else.";
+
 /** A new pipeline: inputs with a prompt, no steps yet. */
 export const blankPipeline = (title: string): PDoc => ({
   title,
@@ -450,16 +643,42 @@ export function addPipelineNode(
   let node: PNode;
   if (kind === "inputs") node = { kind, inputs: [{ name: "prompt", type: "Text" }], position };
   else if (kind === "step") node = { kind, workflow: opts.workflow ?? "", seeds: 1, position };
-  else if (kind === "gate")
-    node = {
-      kind,
-      takes: sel && doc.nodes[sel].kind === "step" ? sel : (steps.at(-1) ?? ""),
-      keep: 1,
-      position,
+  else if (kind === "gate" || kind === "judge") {
+    const takes = sel && doc.nodes[sel].kind === "step" ? sel : (steps.at(-1) ?? "");
+    node =
+      kind === "gate"
+        ? { kind, takes, keep: 1, position }
+        : {
+            kind,
+            takes,
+            keep: 1,
+            mode: "suggest",
+            criteria: { must: ["No extra or missing limbs", "No text or watermarks"], nice: [] },
+            position,
+          };
+  } else if (kind === "write" || kind === "decide" || kind === "memory") {
+    const draft = {
+      ...doc,
+      nodes: { ...doc.nodes, [id]: { kind: "memory", op: "read" } as PNode },
     };
-  else {
+    const text = textCandidates(draft, id);
+    const prompt = text.find((x) => x === "$prompt") ?? text.find((x) => x.startsWith("$"));
+    const reasons = text.find((x) => x.endsWith(".reasons"));
+    const from = [prompt, reasons].filter((x): x is string => !!x);
+    if (kind === "write")
+      node = { kind, from, to: prompt ?? "$prompt", instruction: WRITE_INSTRUCTION, position };
+    else if (kind === "decide")
+      node = {
+        kind,
+        question: "Are the takes good enough to go on?",
+        from,
+        routes: { retry: "the takes miss the brief", accept: "good enough to go on" },
+        position,
+      };
+    else node = { kind, op: "read", limit: 8, position };
+  } else {
     const from =
-      sel && doc.nodes[sel].kind === "gate"
+      sel && (doc.nodes[sel].kind === "gate" || doc.nodes[sel].kind === "judge")
         ? `${sel}.picked`
         : `${sel && doc.nodes[sel].kind === "step" ? sel : (steps.at(-1) ?? "step")}.takes`;
     node = { kind, from, collection: doc.title.slice(0, 80) || "Collection", position };
@@ -476,8 +695,9 @@ export const setNode = (doc: PDoc, id: string, n: PNode): PDoc => ({
 /** The edge out of a node, or undefined. */
 export const edgeOut = (doc: PDoc, id: string) => doc.edges.find((e) => e[0] === id);
 
-/** How a gate's out-edge is connected: `next` (a plain edge or a branch's pass), `fail`, or `then`. */
-export type Via = "next" | "fail" | "then";
+/** How a node's out-edge is connected: `next` (a plain edge or a branch's pass), `fail`, `then`, or a decide's
+ * route `r:<label>`. */
+export type Via = "next" | "fail" | "then" | `r:${string}`;
 
 /** A connection from node `from` (its port `via`) to `to`: `next` replaces the node's out-edge (keeping a branch's
  * fail and then); `fail` turns the gate's plain edge into a branch (cap 2, then: the first output, else the pass
@@ -485,9 +705,23 @@ export type Via = "next" | "fail" | "then";
 export function connectNodes(doc: PDoc, from: string, via: Via, to: string): PDoc {
   const i = doc.edges.findIndex((e) => e[0] === from);
   const cur = i >= 0 ? doc.edges[i][1] : undefined;
+  const n = doc.nodes[from];
   let next: PEdge[1];
-  if (via === "next") next = typeof cur === "object" ? { ...cur, pass: to } : to;
+  if (n?.kind === "decide") {
+    // a decide has only its routes edge: every label of the node, the first one's node until each is set
+    const label = via.startsWith("r:") ? via.slice(2) : Object.keys(n.routes)[0];
+    const old = typeof cur === "object" && "routes" in cur ? cur : null;
+    const labels = Object.keys(n.routes);
+    const routes = Object.fromEntries(
+      labels.map((l) => [l, l === label ? to : (old?.routes[l] ?? to)]),
+    );
+    const then = old && labels.includes(old.then) ? old.then : labels.at(-1)!;
+    next = { routes, max: old?.max ?? 2, then };
+  } else if (via.startsWith("r:")) return doc;
+  else if (via === "next")
+    next = typeof cur === "object" && !("routes" in cur) ? { ...cur, pass: to } : to;
   else if (cur === undefined) return doc;
+  else if (typeof cur === "object" && "routes" in cur) return doc;
   else if (via === "fail") {
     const pass = typeof cur === "string" ? cur : cur.pass;
     const out = order(doc).find((x) => doc.nodes[x].kind === "output");
@@ -508,12 +742,37 @@ export function disconnectNodes(doc: PDoc, from: string, via: Via): PDoc {
   if (i < 0) return doc;
   const cur = doc.edges[i][1];
   const edges = doc.edges.slice();
-  if (via === "next" || typeof cur === "string") edges.splice(i, 1);
+  if (via === "next" || typeof cur === "string" || "routes" in cur) edges.splice(i, 1);
   else edges[i] = [from, cur.pass];
   return { ...doc, edges };
 }
 
-/** A branch's cap changed (1..10). */
+/** A decide's routes changed (labels → meanings): its edge keeps the routes still there; a new label goes where the
+ * first route goes. */
+export function setRoutes(doc: PDoc, id: string, routes: Record<string, string>): PDoc {
+  const n = doc.nodes[id] as S<"PipelineDecideNode">;
+  const d = setNode(doc, id, { ...n, routes });
+  const e = edgeOut(doc, id)?.[1];
+  if (typeof e !== "object" || !("routes" in e)) return d;
+  const first = Object.values(e.routes)[0];
+  const labels = Object.keys(routes);
+  const next = {
+    routes: Object.fromEntries(labels.map((l) => [l, e.routes[l] ?? first])),
+    max: e.max,
+    then: labels.includes(e.then) ? e.then : labels.at(-1)!,
+  };
+  return { ...d, edges: d.edges.map((x) => (x[0] === id ? [id, next] : x)) };
+}
+
+/** A decide's `then` route (the one the cap forces) chosen. */
+export const setThen = (doc: PDoc, id: string, then: string): PDoc => ({
+  ...doc,
+  edges: doc.edges.map((e) =>
+    e[0] === id && typeof e[1] === "object" && "routes" in e[1] ? [id, { ...e[1], then }] : e,
+  ),
+});
+
+/** A branch's (or a decide's) cap changed (1..10). */
 export function setCap(doc: PDoc, gate: string, max: number): PDoc {
   return {
     ...doc,
@@ -531,13 +790,21 @@ export function removePipelineNodes(doc: PDoc, ids: string[]): PDoc {
   const gone = new Set(ids);
   if (![...gone].some((id) => id in doc.nodes)) return doc;
   const nodes: PDoc["nodes"] = {};
+  const kept = (v: string) => v.startsWith("$") || !gone.has(v.split(".")[0]);
   for (const [id, n] of Object.entries(doc.nodes)) {
     if (gone.has(id)) continue;
     if (n.kind === "step" && n.bind) {
-      const bind = Object.fromEntries(
-        Object.entries(n.bind).filter(([, v]) => v.startsWith("$") || !gone.has(v.split(".")[0])),
-      );
+      const bind = Object.fromEntries(Object.entries(n.bind).filter(([, v]) => kept(v)));
       nodes[id] = { ...n, bind };
+    } else if (
+      n.kind === "write" ||
+      n.kind === "decide" ||
+      (n.kind === "memory" && n.op === "write")
+    )
+      nodes[id] = { ...n, from: n.from.filter(kept) };
+    else if (n.kind === "judge" && n.memory && gone.has(n.memory)) {
+      const { memory: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+      nodes[id] = rest;
     } else nodes[id] = n;
   }
   const edges: PEdge[] = [];
@@ -545,6 +812,8 @@ export function removePipelineNodes(doc: PDoc, ids: string[]): PDoc {
     if (gone.has(from)) continue;
     if (typeof to === "string") {
       if (!gone.has(to)) edges.push([from, to]);
+    } else if ("routes" in to) {
+      if (!Object.values(to.routes).some((t) => gone.has(t))) edges.push([from, to]);
     } else if (!gone.has(to.pass))
       edges.push(gone.has(to.fail) || gone.has(to.then) ? [from, to.pass] : [from, to]);
   }

@@ -254,8 +254,71 @@ func (s *Service) Get(ctx context.Context, caller common.Caller, id string) (dto
 			refs[i] = dto.TakeRef{ID: c.ID, Kind: c.Kind, Title: c.Title, ThumbURL: s.signer.Sign(c.Key)}
 		}
 		out.Children = &refs
+		if err != nil {
+			return err
+		}
+		decisions, err := takeDecisions(ctx, tx, id)
+		out.Decisions = &decisions
 		return err
 	})
+	return out, err
+}
+
+// takeDecisions are the judge decisions that weighed a take, newest first, at most 16: picked when it was kept (the
+// user's pick at a Suggest judge once made, else the judge's), passed when every must held, else failed with its first
+// false must.
+func takeDecisions(ctx context.Context, tx pgx.Tx, id string) ([]dto.TakeDecision, error) {
+	type row struct {
+		ID, BatchID string
+		Row         int
+		Data        json.RawMessage
+		UserPick    json.RawMessage
+	}
+	rows, _ := tx.Query(ctx, `SELECT id, batch_id::text, n, data, user_pick FROM decisions WHERE take_ids @> ARRAY[$1::uuid]
+		ORDER BY created_at DESC, id LIMIT 16`, id)
+	found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[row])
+	out := []dto.TakeDecision{}
+	for _, d := range found {
+		var data struct {
+			Node  string `json:"node"`
+			Judge struct {
+				Criteria struct {
+					Must []string `json:"must"`
+				} `json:"criteria"`
+				Takes []struct {
+					TakeID string `json:"take_id"`
+					Checks []bool `json:"checks"`
+					Passes bool   `json:"passes"`
+				} `json:"takes"`
+				Picked []string `json:"picked"`
+			} `json:"judge"`
+		}
+		_ = json.Unmarshal(d.Data, &data)
+		kept := data.Judge.Picked
+		if len(d.UserPick) > 0 && string(d.UserPick) != "null" {
+			kept = nil
+			_ = json.Unmarshal(d.UserPick, &kept)
+		}
+		shown := dto.TakeDecision{DecisionID: d.ID, BatchID: d.BatchID, Row: d.Row, Node: data.Node, Outcome: "failed"}
+		for _, t := range data.Judge.Takes {
+			if t.TakeID != id {
+				continue
+			}
+			switch {
+			case slices.Contains(kept, id):
+				shown.Outcome = "picked"
+			case t.Passes:
+				shown.Outcome = "passed"
+			}
+			for i, must := range data.Judge.Criteria.Must {
+				if !t.Passes && i < len(t.Checks) && !t.Checks[i] {
+					shown.FirstFailed = &must
+					break
+				}
+			}
+		}
+		out = append(out, shown)
+	}
 	return out, err
 }
 
@@ -498,6 +561,9 @@ func (s *Service) Use(ctx context.Context, caller common.Caller, id string, body
 		return dto.TakeReuse{}, network.NewUnprocessableError("unknown workflow "+body.WorkflowID, nil)
 	} else if err != nil {
 		return dto.TakeReuse{}, err
+	}
+	if registry.IsText(workflow.Nodes) {
+		return dto.TakeReuse{}, network.NewUnprocessableError("workflow "+workflow.ID+" answers text; only a judge, write or decide node runs it", nil)
 	}
 	key, param, detail := imageInput(workflow, body.Param)
 	if detail != "" {

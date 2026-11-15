@@ -10,6 +10,13 @@ from messaging import schemas
 log = logging.getLogger(__name__)
 
 SUBJECT = "pipelines.state.get"
+REPLY_MAX = 900_000  # under NATS max_payload (1 MB)
+TOO_LARGE = {"error": "the row's state is too large to show", "code": "internal"}
+
+
+def encode(reply: dict) -> bytes:
+    body = json.dumps(reply, ensure_ascii=False).encode()
+    return body if len(body) <= REPLY_MAX else json.dumps(TOO_LARGE).encode()
 
 
 async def answer(engine, body: bytes) -> dict:
@@ -34,6 +41,6 @@ async def serve(nc, engine):
     """Subscribe the responder; returns the subscription."""
 
     async def handle(msg) -> None:
-        await msg.respond(json.dumps(await answer(engine, msg.data)).encode())
+        await msg.respond(encode(await answer(engine, msg.data)))
 
     return await nc.subscribe(SUBJECT, queue="pipelines", cb=handle)

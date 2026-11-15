@@ -1,0 +1,44 @@
+# The llm pack (M4b stage A): a local vision-language model for judge, write and decide nodes, asked as a queue item
+# (a run of the text workflow llm-ask). Qwen3.8-27B-4bit (Qwen3_5ForConditionalGeneration: vision tower + 64-layer
+# hybrid-attention LM, stored MLX 4-bit, group 64) on mlx-vlm (the env's `llm` extra); the stage, the prompt and the
+# answer rules are core/ask.py + mlx.py. Generates exactly contracts/fixtures/registry/llm.{nodes,workflows}.
+# Memory, measured 2026-11-15 through this pack's stage (graph.run, the residency manager, Metal cache cap 2 GB;
+# mlx 0.32.4, mlx-vlm 0.7.12, 64 GB M-series, both runners stopped): the component is the stored safetensors at
+# their own dtypes (core.pack.size_gb, U32 packed: 14.95 GB); footprint after load 15.87 (load 1-2 s, warm page
+# cache). Process peak during an ask: 16.2 text only (127 prompt tokens, incl. the load), 19.38 judging 4 x 512 px
+# (1432 tokens, 14.3 s), 20.84 judging 4 x 1024 px (4504 tokens, 21.5 s); two fresh processes gave byte-identical
+# answers and thumbnails, JSON valid on the first try (constrained by llguidance).
+id: qwen3.8-27b
+family: llm
+title: Qwen3.8 27B
+runtimes:
+  mlx: {env: mlx}
+model:
+  help: "The local vision-language model for judge, write and decide nodes (MLX 4-bit)."
+  variant: {label: Variant}
+  precision:
+    label: Precision
+    help: "Stored 4-bit; nothing is quantized at load."
+variants:
+  4bit: {dir: Qwen3.8-27B-4bit}
+components:
+  model: {files: "*.safetensors", dtype: stored, precision: [int4]}   # loaded whole by mlx-vlm (mlx.py)
+stages:
+  ask:
+    title: Ask
+    help: "Asks the model one question about its takes: temperature 0, thinking off, one more try in the same run when the answer does not match the schema."
+    uses: [model]
+    inputs: {model: Model}
+    outputs: {answer: Text}
+    params:
+      system: {type: string, label: System, default: "", max: 4000, help: The system turn.}
+      prompt: {type: string, label: Prompt, default: "", max: 32768,
+               help: "The filled template (pipelines writes it). Not scanned for mentions."}
+      media: {type: rows, label: Takes, default: [], min: 0, max: 8, item: {take: Media},
+              help: "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."}
+      schema: {type: string, label: Answer schema, default: "", max: 16384,
+               help: "A JSON schema the answer must match; empty = plain text."}
+      max_tokens: {type: int, label: Max tokens, default: 800, min: 16, max: 4096}
+    # peak above the 14.95 GB component: 4.43 at 4 x 512 px, 5.89 at 4 x 1024 px (~1024 tokens per thumbnail);
+    # a bound over both, extrapolated beyond 4 thumbnails (a video counts 3)
+    peak_gb: "4 + 0.5 * images"

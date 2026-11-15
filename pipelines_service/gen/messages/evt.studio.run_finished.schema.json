@@ -57,6 +57,10 @@
           ],
           "maxLength": 2000,
           "description": "required (non-empty) when failed"
+        },
+        "answer": {
+          "$ref": "defs.schema.json#/$defs/answer",
+          "description": "from API 1.14: the run's answer (a text workflow), as evt.run.status carried it; absent otherwise"
         }
       },
       "if": {

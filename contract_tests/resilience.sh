@@ -5,7 +5,7 @@
 #   make resilience                (from the repo root: brings the test stack up and runs this)
 #   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats
-# batch-postgres batch-kill pipeline-parked handover-studio; studio-queued restarts studio while a second run is still queued behind the first (not yet
+# batch-postgres batch-kill pipeline-parked agents-parked handover-studio; studio-queued restarts studio while a second run is still queued behind the first (not yet
 # released) and requires that it then succeeds. batch-<svc> restarts <svc> during a 12-row slow echo batch (batch-kill:
 # SIGKILL the pipelines container, then start it), presses Resume whenever the batch is paused (pipelines pauses its
 # batches after a restart) and requires the batch to end done with exactly 12 runs (one per row) and 12 takes.
@@ -13,6 +13,10 @@
 # pipelines and studio while row 1's edit runs and rows 2 and 3 are parked, then presses Resume whenever the batch is
 # paused and picks every parked row; the batch must end done with exactly 6 runs and 6 distinct takes (a still and an
 # edit per row) and every row succeeded with one take.
+# agents-parked (API 1.14) runs a 3-row pipeline still -> judge (Suggest, echo-ask) -> out with slow stills, and once
+# row 1 is parked on the judge's suggestion restarts pipelines and studio while the other rows make stills or wait
+# on their judge calls; it presses Resume when paused and picks every suggestion: the batch must end done with
+# exactly 3 still runs, 3 judge runs and one decision per row (no decision asked twice) and 3 rows succeeded:1.
 # handover-studio restarts studio while a run waits for an unload (see handover_check; skipped on the fake stack).
 # Needs curl and python3. Exit 1 when any service fails.
 set -eu
@@ -171,6 +175,65 @@ print(" ".join(r["status"] + ":" + str(len(r["take_ids"])) for r in json.load(sy
   api DELETE "/v1/studio/pipelines/$pid" >/dev/null || true
 }
 
+# agents_check: restarts while rows wait on judge calls and row 1 is parked on a suggestion (see the header)
+agents_check() {
+  if ! api GET /v1/studio/workflows/echo-ask >/dev/null; then
+    echo "SKIP $1: the fake runner has no echo-ask (before API 1.14)"
+    return
+  fi
+  doc=$(python3 -c 'import json
+print(json.dumps({"title": "resilience agents", "nodes": {
+  "inputs": {"kind": "inputs", "inputs": [{"name": "prompt", "type": "Text"}]},
+  "still": {"kind": "step", "workflow": "echo", "bind": {"prompt.text": "$prompt"},
+            "inputs": {"echo.steps": 12, "echo.delay_ms": 300}},
+  "judge": {"kind": "judge", "takes": "still", "criteria": {"must": ["Shows the subject"]}, "mode": "suggest"},
+  "out": {"kind": "output", "from": "judge.picked", "collection": "resilience agents"}},
+  "edges": [["inputs", "still"], ["still", "judge"], ["judge", "out"]]}))')
+  pid=$(api POST /v1/studio/pipelines "$doc" | field id) || pid=""
+  bsid=$(api POST /v1/studio/sessions '{"title":"resilience agents"}' | field id)
+  body=$(python3 -c 'import json,sys
+ans = json.dumps({"takes": [{"take": 1, "checks": [True], "reason": "fine"}], "ranking": [1]})
+print(json.dumps({"pipeline_id": sys.argv[1], "session_id": sys.argv[2], "rows": {"lines": {"param": "inputs.prompt",
+  "values": [f"agents row {i} ECHO-ANSWER: {ans}" for i in (1, 2, 3)]}}}))' "$pid" "$bsid")
+  bid=$(api POST /v1/studio/batches "$body" | field id) || bid=""
+  [ -n "$bid" ] || { fails=$((fails + 1)); echo "FAIL $1: the pipeline batch was not accepted"; return; }
+  for _ in $(seq 60); do                     # row 1 parked on its suggestion; rows 2 and 3 still to judge
+    [ "$(api GET "/v1/studio/batches/$bid" | field counts waiting || echo 0)" -ge 1 ] 2>/dev/null && break
+    sleep 1
+  done
+  dc restart pipelines studio >/dev/null 2>&1
+  dc up -d --wait >/dev/null 2>&1
+  signin
+  status=unknown
+  for _ in $(seq $((END_TIMEOUT * 2))); do
+    status=$(api GET "/v1/studio/batches/$bid" | field status) || status=unreachable
+    case $status in
+      done | failed | stopped) break ;;
+      paused) api POST "/v1/studio/batches/$bid/resume" >/dev/null || true ;;
+      waiting)                               # agree with every suggestion
+        api GET "/v1/studio/batches/$bid/review" | python3 -c 'import json,sys
+for i in json.load(sys.stdin)["items"]:
+    print(i["row"], json.dumps({"gate": i["gate"], "take_ids": i.get("suggested") or [i["candidates"][0]["take_id"]]}))' 2>/dev/null |
+          while read -r n pick; do api POST "/v1/studio/batches/$bid/rows/$n/pick" "$pick" >/dev/null || true; done ;;
+    esac
+    sleep 1
+  done
+  runs=$(api GET "/v1/studio/sessions/$bsid/runs" | python3 -c 'import json,sys
+r=[x for x in json.load(sys.stdin)["runs"] if x.get("batch_id")==sys.argv[1]]
+print(sum(x["workflow_id"]=="echo" for x in r), sum(x["workflow_id"]=="echo-ask" for x in r), len({x["id"] for x in r}))' "$bid" 2>/dev/null) || runs="? ? ?"
+  decided=$(for n in 1 2 3; do api GET "/v1/studio/batches/$bid/rows/$n/decisions" | python3 -c 'import json,sys
+d=json.load(sys.stdin)["decisions"]; print(str(len(d)) + ":" + str(sum(len(x["run_ids"]) for x in d)))' 2>/dev/null || echo "?"; done | tr '\n' ' ')
+  rows=$(api GET "/v1/studio/batches/$bid/rows" | python3 -c 'import json,sys
+print(" ".join(r["status"] + ":" + str(len(r["take_ids"])) for r in json.load(sys.stdin)["rows"]))' 2>/dev/null) || rows="?"
+  verdict=PASS
+  [ "$status" = done ] && [ "$runs" = "3 3 6" ] && [ "$decided" = "1:1 1:1 1:1 " ] &&
+    [ "$rows" = "succeeded:1 succeeded:1 succeeded:1" ] || verdict=FAIL
+  [ $verdict = PASS ] || fails=$((fails + 1))
+  echo "$verdict $1: batch -> $status; runs (stills, judge calls, distinct) $runs; decisions:runs per row $decided; rows $rows"
+  api DELETE "/v1/studio/sessions/$bsid" >/dev/null || true
+  api DELETE "/v1/studio/pipelines/$pid" >/dev/null || true
+}
+
 # handover_check: restart studio while a run waits for another env of its host to unload (contracts/README.md, Two
 # envs on one host: the hand-over). HANDOVER_HOLD runs first on one env and leaves its weights resident; HANDOVER_WAIT
 # (another env of that host, too big to fit beside them) then waits for the unload while studio restarts. It must
@@ -206,10 +269,11 @@ print(sum(1 for e in json.load(sys.stdin)["events"] if e["run_id"]==sys.argv[1] 
 signin
 SID=$(api POST /v1/studio/sessions '{"title":"resilience"}' | field id)
 fails=0
-for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked handover-studio}; do
+for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked handover-studio}; do
   case $svc in
     batch-*) batch_check "$svc"; continue ;;
     pipeline-parked) pipeline_check "$svc"; continue ;;
+    agents-parked) agents_check "$svc"; continue ;;
     handover-studio) handover_check "$svc"; continue ;;
   esac
   rid=$(run "$SID" 40)                       # 40 steps x 300 ms: ~12 s of work

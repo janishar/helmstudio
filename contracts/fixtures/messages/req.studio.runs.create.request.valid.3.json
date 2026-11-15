@@ -1,0 +1,38 @@
+{
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "workflow_id": "qwen-image-ask",
+  "inputs": {
+    "ask.system": "You are a careful reviewer for an image and video studio. Answer only with JSON that matches the given schema.",
+    "ask.prompt": "The brief: \"a red fox in snow\". You see 4 takes, in order: take 1 ... take 4. Check every take against each criterion: 1. [must] No extra or missing limbs 2. [must] No text or watermarks 3. [must] Matches the brief 4. [nice] Subject is sharp. ...",
+    "ask.schema": "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"takes\",\"ranking\"]}",
+    "ask.max_tokens": 800,
+    "model.precision": "int8",
+    "ask.media": [
+      {
+        "take": {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60"
+        }
+      },
+      {
+        "take": {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61"
+        }
+      },
+      {
+        "take": {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62"
+        }
+      },
+      {
+        "take": {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+        }
+      }
+    ]
+  },
+  "lane": "batch",
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "row": 6,
+  "idempotency_key": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:judge:0:0"
+}

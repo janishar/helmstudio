@@ -28,6 +28,7 @@ STORED = {
     "F64": 8,
     "U8": 1,
     "I8": 1,
+    "U32": 4,  # MLX's packed quantized weights
     "I16": 2,
     "I32": 4,
     "I64": 8,

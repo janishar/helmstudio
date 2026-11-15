@@ -25,17 +25,25 @@ commands (consumer.py) and run_finished events (events.py).
 - Pipeline batches publish evt.pipeline.step for every graph step, read from the thread's checkpoint history
   (batch_rows.step_pub = the last one published), and `current` for the step a row is parked on.
 - Retry from a step forks the thread from that step's checkpoint with the new attempt (aupdate_state); a retry
-  from the start deletes the thread. When a batch ends its threads are deleted; the batch and its snapshot stay."""
+  from the start deletes the thread. When a batch ends its threads are deleted; the batch and its snapshot stay.
+- Agent nodes (graph.py, agents.py): an LLM call waits like a step's run (its result carries the `answer`); a
+  judge in Suggest parks like a gate (its cell and `parked` come from the thread). Every decision published in a
+  step event is stored in `decisions` first: the replay source (Context.replay) for Resume, Retry and Run again
+  with the same decisions (`replay_from`). Memory (memory.py): the namespace is copied onto the batch at Submit
+  (every read of the batch uses that copy); memory write nodes and picks with a note write the live namespace."""
 
 import asyncio
 import logging
 import weakref
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 
+from langgraph.store.postgres.aio import AsyncPostgresStore
 from langgraph.types import Command
 from psycopg.types.json import Jsonb
 
 import graph
+import memory
 import pipeline
 
 log = logging.getLogger(__name__)
@@ -112,7 +120,8 @@ def _resume_value(r: dict, at) -> dict | None:
         if all(rid in res for rid in val["runs"]):
             return {rid: res[rid] for rid in val["runs"]}
     elif (p := r["pick"]) and p["gate"] == val["gate"] and p["visit"] == val["visit"]:
-        return {"take_ids": p["take_ids"]} if p.get("take_ids") else {"reject": True}
+        out = {"take_ids": p["take_ids"]} if p.get("take_ids") else {"reject": True}
+        return out | ({"agreed": p["agreed"]} if "agreed" in p else {})
     return None
 
 
@@ -125,8 +134,10 @@ class Engine:
         create_run: Callable[[dict], Awaitable[dict]],
         concurrency: int = 8,
         window: int = WINDOW,
+        store=None,
     ) -> None:
         self.pool, self.saver, self.publisher, self.create_run = pool, saver, publisher, create_run
+        self.store = store if store is not None else AsyncPostgresStore(pool)  # memory
         self.graphs: dict[str, tuple[dict, object]] = {}  # batch id → (plan, compiled graph)
         self.row_locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
         self.batch_locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
@@ -184,6 +195,8 @@ class Engine:
         data = {"seq": b["seq"], "status": b["status"]}
         if b["reason"]:
             data["reason"] = b["reason"][:2000]
+        if b["memory_at"]:
+            data["memory"] = memory.snapshot_counts(b["memory"], b["memory_at"])
         await self.publisher.publish("batch", b, data)
 
     async def _publish_row(self, batch_id, row: int) -> None:
@@ -206,6 +219,13 @@ class Engine:
     async def _publish_step(self, batch_id, r: dict, data: dict, step_pub: int | None) -> None:
         """One evt.pipeline.step; with step_pub, record it as the last finished step published."""
         async with self.pool.connection() as conn, conn.transaction():
+            if dec := data.get("decision"):  # the replay source, stored before anyone can see it
+                await conn.execute(
+                    "INSERT INTO decisions (decision_id, batch_id, replay_key, decision) "
+                    "VALUES (%s, %s, %s, %s) ON CONFLICT (decision_id) DO UPDATE SET decision = "
+                    "EXCLUDED.decision, replay_key = EXCLUDED.replay_key",
+                    (dec["id"], batch_id, dec["replay_key"], Jsonb(dec)),
+                )
             b = await self._next_seq(conn, batch_id)
         base = {"seq": b["seq"], "row": r["row"], "attempt": r["attempt"]}
         await self.publisher.publish("step", b, base | data)
@@ -263,17 +283,37 @@ class Engine:
         cannot run fails the batch. A second delivery continues the batch it already has."""
         d = cmd["data"]
         b = d["batch_id"]
+        pid = (d["snapshot"].get("pipeline") or {}).get("id")
         async with _lock(self.batch_locks, b):
+            # the memory snapshot every read of the batch uses (kept from the first delivery); Run again with the
+            # same decisions reuses its source's, so the prompts and replay keys match the source's decisions
+            snap, taken = None, None
+            if pid and (src := d.get("replay_from")):
+                old = await self._one(
+                    "SELECT memory, memory_at FROM batches WHERE batch_id = %s AND owner_id = %s",
+                    (src, cmd["owner_id"]),
+                )
+                if old and old["memory_at"]:
+                    snap, taken = old["memory"], old["memory_at"]
+            if pid and taken is None:
+                snap, taken = (
+                    await memory.items(self.store, cmd["owner_id"], pid),
+                    datetime.now(UTC),
+                )
             async with self.pool.connection() as conn, conn.transaction():
                 cur = await conn.execute(
-                    "INSERT INTO batches (batch_id, owner_id, session_id, snapshot, trace) "
-                    "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (batch_id) DO NOTHING",
+                    "INSERT INTO batches (batch_id, owner_id, session_id, snapshot, trace, replay_from, "
+                    "memory, memory_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) "
+                    "ON CONFLICT (batch_id) DO NOTHING",
                     (
                         b,
                         cmd["owner_id"],
                         d["session_id"],
                         Jsonb(d["snapshot"]),
                         Jsonb(cmd["trace"]),
+                        d.get("replay_from"),
+                        Jsonb(snap) if pid else None,
+                        taken,
                     ),
                 )
                 if cur.rowcount:
@@ -393,6 +433,14 @@ class Engine:
         answer = {"gate": d["gate"], "visit": d["visit"]} | (
             {"take_ids": ids} if ids else {"reject": True}
         )
+        if "agreed" in d:
+            answer["agreed"] = d["agreed"]
+        if d.get("note") and p.get("kind") == "judge":  # a judge example, seen from the next batch
+            batch = await self._batch(b)
+            pid = (batch["snapshot"].get("pipeline") or {}).get("id")
+            iid, value = memory.judge_example(b, row, p, d)
+            if pid and (err := await memory.put(self.store, batch["owner_id"], pid, iid, value)):
+                log.warning("pipeline %s: the pick's note is not kept: %s", pid, err["error"])
         await self._one(
             "UPDATE batch_rows SET pick = %s WHERE batch_id = %s AND row = %s AND attempt = %s "
             "AND status = 'waiting' RETURNING 1",
@@ -496,7 +544,30 @@ class Engine:
             await self._after_row(batch_id)
 
     def _context(self, batch: dict) -> graph.Context:
-        return graph.Context(self.create_run, str(batch["owner_id"]), str(batch["session_id"]))
+        owner, pid = str(batch["owner_id"]), (batch["snapshot"].get("pipeline") or {}).get("id")
+
+        async def put_note(item_id: str, value: dict) -> str | None:
+            err = await memory.put(self.store, owner, pid, item_id, value)
+            return err and err["error"]
+
+        return graph.Context(
+            self.create_run,
+            owner,
+            str(batch["session_id"]),
+            replay=self._replay,
+            replay_batch=str(batch["replay_from"]) if batch["replay_from"] else None,
+            memory=batch["memory"] or [],
+            put_note=put_note if pid else None,
+        )
+
+    async def _replay(self, key: str) -> dict | None:
+        """The first stored decision (one that decided) under a replay key: the original, not a replay of it."""
+        r = await self._one(
+            "SELECT decision FROM decisions WHERE replay_key = %s AND decision->>'error' IS NULL "
+            "ORDER BY created_at LIMIT 1",
+            (key,),
+        )
+        return r and r["decision"]
 
     async def _drive(self, batch_id, row: int) -> None:
         """Run the row's thread until it parks or ends (again while it is poked meanwhile). A failure (database
@@ -600,7 +671,7 @@ class Engine:
             src = await g.aget_state(src.parent_config)
         last = src.values["last"]
         as_node = last["node"]
-        if last["part"] not in ("inputs", "output"):
+        if last["part"] not in ("inputs", "output", "memory"):
             as_node += f".{last['part']}"
         reset = {"attempt": r["attempt"], "status": None, "error": None, "pick": None}
         await g.aupdate_state(src.config, reset, as_node=as_node)
@@ -629,7 +700,9 @@ class Engine:
                 return False
             rid = data["run_id"]
             if at and at[1] == "wait" and rid in at[2]["runs"] and rid not in r["results"]:
-                result = {k: data.get(k) for k in ("status", "take_ids", "error")}
+                result = {
+                    k: data.get(k) for k in ("status", "take_ids", "error", "answer") if k in data
+                }
                 await self._one(
                     "UPDATE batch_rows SET results = results || %s WHERE batch_id = %s "
                     "AND row = %s AND attempt = %s RETURNING 1",
@@ -674,8 +747,9 @@ class Engine:
                     "visit": val["visit"],
                     "status": "waiting",
                     "candidates": val["candidates"],
-                }
-                cells = graph._cell(v, nid, "gate", waiting)
+                }  # a judge's waiting cell (with its verdict) is the thread's
+                judge = val.get("kind") == "judge"
+                cells = v.get("cells") if judge else graph._cell(v, nid, "gate", waiting)
             self.unsettled.add(t)  # until published and followed up (else the next try does it)
             async with self.pool.connection() as conn, conn.transaction():
                 if not await (

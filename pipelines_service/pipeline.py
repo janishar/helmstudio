@@ -1,7 +1,8 @@
 """A batch's pipeline: the rules the engine depends on (`problems`), and the plan it builds its graph from (`plan`).
 
 `problems` is contracts/README.md "Pipeline rules" without the ones that need the workflows or the palette (those
-studio checks at Submit): structure, cycles and caps, the run bound, gates, sources, reach. Same codes, same
+studio checks at Submit): structure, cycles and caps, the run and LLM-call bounds (Submit's worst case per
+row), gates, judges, writes, decides, sources, reach. Same codes, same
 (code, node, port, param) tuples as check.py's `pipeline_problems`, tested against contracts/fixtures/pipelines.
 
 `plan` turns cmd.pipeline.submit's snapshot into what graph.build needs. A batch of one workflow (no
@@ -10,16 +11,18 @@ stays `…:step:0:0`) and an output of its takes; it publishes no step events an
 
 import json
 
-MAX_NODES, MAX_BYTES, MAX_RUNS = 24, 65536, 64
+MAX_NODES, MAX_BYTES, MAX_RUNS, MAX_CALLS = 24, 65536, 64, 32
+LLM_KINDS = ("judge", "write", "decide")  # nodes that ask a model: one call (an ask run) per visit
 CODES = {
     "too_many_nodes", "too_large", "inputs_node", "duplicate_input", "unknown_node", "branch_not_gate",
-    "edge_invalid", "uncapped_cycle", "too_many_runs", "gate_takes", "gate_keep", "bind_source",
-    "unreachable", "dead_end", "no_output",
+    "decide_routes", "edge_invalid", "uncapped_cycle", "too_many_runs", "too_many_calls", "gate_takes",
+    "gate_keep", "judge_criteria", "write_target", "bind_source", "unreachable", "dead_end", "no_output",
 }  # fmt: skip
 
 
-def problems(doc: dict) -> set[tuple]:
-    """Every problem in CODES as (code, node, port, param)."""
+def problems(doc: dict, info: dict | None = None) -> set[tuple]:
+    """Every problem in CODES as (code, node, port, param); `info`, when given, receives the worst case per row
+    (`bounds`: runs, llm_calls) that Submit shows."""
     out, nodes = set(), doc["nodes"]
 
     def add(code, node=None, port=None, param=None):
@@ -31,36 +34,62 @@ def problems(doc: dict) -> set[tuple]:
         add("too_large")
     if out:
         return out
-    roots, inputs = [n for n, v in nodes.items() if v["kind"] == "inputs"], set()
+    of = lambda kind: [n for n, v in nodes.items() if v["kind"] == kind]
+    roots, inputs = of("inputs"), {}
     if len(roots) != 1:
         add("inputs_node")
     for nid in roots:
         names = [i["name"] for i in nodes[nid]["inputs"]]
         for name in {x for x in names if names.count(x) > 1}:
             add("duplicate_input", nid, param=name)
-        inputs |= set(names)
-    succ, outdeg, capped = {n: [] for n in nodes}, {}, []  # succ: node → [(to, capped)]
+        inputs |= {i["name"]: i["type"] for i in nodes[nid]["inputs"]}
+    succ, outdeg, capped, routed = (
+        {n: [] for n in nodes},
+        {},
+        [],
+        set(),
+    )  # succ: node → [(to, capped)]
     for frm, to in doc["edges"]:
-        targets = [to] if isinstance(to, str) else [to["pass"], to["fail"], to["then"]]
+        kind = "plain" if isinstance(to, str) else "routes" if "routes" in to else "branch"
+        targets = (
+            [to] if kind == "plain"
+            else list(to["routes"].values()) if kind == "routes"
+            else [to["pass"], to["fail"], to["then"]]
+        )  # fmt: skip
         if frm not in nodes or any(t not in nodes for t in targets):
             add("unknown_node", frm)
             continue
-        if not isinstance(to, str) and nodes[frm]["kind"] != "gate":
+        fk = nodes[frm]["kind"]
+        if (kind == "branch" and fk not in ("gate", "judge")) or (
+            kind == "routes" and fk != "decide"
+        ):
             add("branch_not_gate", frm)
             continue
-        outdeg[frm] = outdeg.get(frm, 0) + 1
-        if (
-            outdeg[frm] > 1
-            or nodes[frm]["kind"] == "output"
-            or any(nodes[t]["kind"] == "inputs" for t in targets)
+        if fk == "decide" and (
+            kind != "routes"
+            or set(to["routes"]) != set(nodes[frm]["routes"])
+            or to["then"] not in to["routes"]
         ):
+            add("decide_routes", frm)
+            continue
+        outdeg[frm] = outdeg.get(frm, 0) + 1
+        if outdeg[frm] > 1 or fk == "output" or any(nodes[t]["kind"] == "inputs" for t in targets):
             add("edge_invalid", frm)
             continue
-        if isinstance(to, str):
+        if kind == "plain":
             succ[frm].append((to, False))
-        else:
+        elif kind == "branch":
             succ[frm] += [(to["pass"], False), (to["fail"], True), (to["then"], False)]
             capped.append((frm, to["fail"], to["max"]))
+        else:  # every route but then counts against the decide's max
+            routed.add(frm)
+            for label, t in to["routes"].items():
+                succ[frm].append((t, label != to["then"]))
+                if label != to["then"]:
+                    capped.append((frm, t, to["max"]))
+    for nid in of("decide"):
+        if nid not in routed:
+            add("decide_routes", nid)
 
     def reach(src, avoid=None, uncapped_only=False) -> set[str]:
         seen, todo = set(), [src]
@@ -74,13 +103,24 @@ def problems(doc: dict) -> set[tuple]:
     for nid in nodes:  # ponytail: O(n·e) per node, fine at 24 nodes
         if nid in reach(nid, uncapped_only=True):
             add("uncapped_cycle", nid)
-    if sum(n.get("seeds", 1) * visits(nid, capped, reach) for nid, n in steps(nodes)) > MAX_RUNS:
+
+    def visits(nid) -> int:
+        """How often a node can run in a row: 1 + the caps of every capped edge g→f on a cycle through it."""
+        return 1 + sum(m for g, f, m in capped if (nid == f or nid in reach(f)) and g in reach(nid))
+
+    runs = sum(n.get("seeds", 1) * visits(nid) for nid, n in nodes.items() if n["kind"] == "step")
+    calls = sum(visits(nid) for nid, n in nodes.items() if n["kind"] in LLM_KINDS)
+    if info is not None:
+        info["bounds"] = {"runs": runs, "llm_calls": calls}
+    if runs > MAX_RUNS:
         add("too_many_runs")
+    if calls > MAX_CALLS:
+        add("too_many_calls")
     root = roots[0] if len(roots) == 1 else None
     if root:
         for nid in set(nodes) - reach(root) - {root}:
             add("unreachable", nid)
-    outputs = {n for n, v in nodes.items() if v["kind"] == "output"}
+    outputs = set(of("output"))
     if not outputs:
         add("no_output")
     for nid, n in nodes.items():
@@ -90,73 +130,109 @@ def problems(doc: dict) -> set[tuple]:
     def dominates(a, b) -> bool:
         return root is None or a == root or (a != b and b not in reach(root, avoid=a))
 
-    def names_something(src: str) -> bool:
+    def source(src: str):
+        """('input', type), ('takes', at most n) or ('text', None); None when it names nothing of that kind."""
         if src.startswith("$"):
-            return src[1:] in inputs
+            return ("input", inputs[src[1:]]) if src[1:] in inputs else None
         nid, what = src.split(".")
-        return nid in nodes and nodes[nid]["kind"] == ("step" if what == "takes" else "gate")
+        n = nodes.get(nid, {})
+        k = n.get("kind")
+        if what == "takes" and k == "step":
+            return "takes", n.get("seeds", 1)
+        if what == "picked" and k in ("gate", "judge"):
+            return "takes", n.get("keep", 1)
+        if (what == "reasons" and k == "judge") or (
+            what == "notes" and k == "memory" and n["op"] == "read"
+        ):
+            return "text", None
+        return None
 
-    for nid, g in nodes.items():
-        if g["kind"] != "gate":
-            continue
+    def before(src: str, nid: str) -> bool:
+        return src.startswith("$") or dominates(src.split(".")[0], nid)
+
+    for nid in of("gate") + of("judge"):
+        g = nodes[nid]
         t = nodes.get(g["takes"])
         if not t or t["kind"] != "step" or not dominates(g["takes"], nid):
             add("gate_takes", nid)
         elif g.get("keep", 1) > t.get("seeds", 1):
             add("gate_keep", nid)
+    for nid in of("judge"):
+        c = nodes[nid]["criteria"]
+        lines = c.get("must", []) + c.get("nice", [])
+        if not 1 <= len(lines) <= 12 or len(set(lines)) < len(lines):
+            add("judge_criteria", nid)
+        m = nodes[nid].get("memory")
+        if m is not None and (
+            nodes.get(m, {}).get("kind") != "memory"
+            or nodes[m]["op"] != "read"
+            or not dominates(m, nid)
+        ):
+            add("bind_source", nid, "memory")
+    for nid in of("write"):
+        if inputs.get(nodes[nid]["to"][1:]) != "Text":
+            add("write_target", nid)
+    texts = of("write") + of("decide") + [m for m in of("memory") if nodes[m]["op"] == "write"]
+    for nid in texts:
+        for src in nodes[nid].get("from", []):
+            s = source(src)
+            if (
+                not s
+                or s[0] == "takes"
+                or (s[0] == "input" and s[1] != "Text")
+                or not before(src, nid)
+            ):
+                add("bind_source", nid, "from")
     for nid in outputs:
         src = nodes[nid]["from"]
-        if not names_something(src) or (root and nid not in reach(src.split(".")[0])):
+        if not source(src) or (root and nid not in reach(src.split(".")[0])):
             add("bind_source", nid, "from")
-    for nid, n in steps(nodes):
-        for k, v in n.get("bind", {}).items():
-            if not names_something(v) or (
-                not v.startswith("$") and not dominates(v.split(".")[0], nid)
-            ):
+    for nid in of("step"):
+        for k, v in nodes[nid].get("bind", {}).items():
+            s = source(v)
+            if not s or s[0] == "text" or not before(v, nid):
                 add("bind_source", nid, k)
     return out
 
 
-def steps(nodes: dict):
-    return [(nid, n) for nid, n in nodes.items() if n["kind"] == "step"]
-
-
-def visits(nid: str, capped: list, reach) -> int:
-    """How often a step can run in a row: 1 + the caps of every capped edge g→f on a cycle through it."""
-    return 1 + sum(m for g, f, m in capped if (nid == f or nid in reach(f)) and g in reach(nid))
-
-
 def plan(snapshot: dict) -> dict:
-    """{pipeline, nodes, start, next (node → node), branch (gate → {pass, fail, max, then}), inputs_node,
-    workflows, gates}."""
+    """{pipeline, pipeline_id, nodes, start, next (node → node), branch (gate or judge → {pass, fail, max, then}),
+    routes (decide → {routes: {label: node}, max, then: label}), inputs_node, workflows, gates (every node with a
+    loop count: gates, judges, decides)}."""
     p = snapshot.get("pipeline")
     if not p:
         step = {"kind": "step", "workflow": snapshot["workflow_id"], "seeds": 1, "inputs": {}}
         step |= {"bind": {}, "seed_param": None, "row_inputs": True}
         return {
             "pipeline": False,
+            "pipeline_id": None,
             "nodes": {"step": step, "out": {"kind": "output", "from": "step.takes"}},
             "start": "step",
             "next": {"step": "out"},
             "branch": {},
+            "routes": {},
             "inputs_node": None,
             "workflows": {snapshot["workflow_id"]: snapshot["workflow"]},
             "gates": [],
         }
-    nodes, nxt, branch = p["nodes"], {}, {}
+    nodes, nxt, branch, routes = p["nodes"], {}, {}, {}
     for frm, to in p["edges"]:
         if isinstance(to, str):
             nxt[frm] = to
+        elif "routes" in to:
+            routes[frm] = to
         else:
             branch[frm] = to
     root = next(n for n, v in nodes.items() if v["kind"] == "inputs")
     return {
         "pipeline": True,
+        "pipeline_id": p.get("id"),
         "nodes": nodes,
         "start": root,
         "next": nxt,
         "branch": branch,
+        "routes": routes,
         "inputs_node": root,
         "workflows": p["workflows"],
-        "gates": sorted(n for n, v in nodes.items() if v["kind"] == "gate"),
+        "gates": sorted(n for n, v in nodes.items() if v["kind"] in ("gate", "judge", "decide")),
     }

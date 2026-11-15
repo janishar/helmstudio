@@ -14,8 +14,12 @@ import {
   gateCandidates,
   order,
   outputCandidates,
+  memoryCandidates,
+  pipelineBounds,
   pipelineProblems,
   removePipelineNodes,
+  setRoutes,
+  textCandidates,
   settable,
   stepNumbers,
   type PDoc,
@@ -33,9 +37,12 @@ describe("pipeline rules against contracts/fixtures/pipelines", () => {
   for (const f of readdirSync(DIR).filter((x) => /^(valid|invalid)\./.test(x)))
     it(f, () => {
       const fx = load(f);
-      const got = pipelineProblems(fx.pipeline, workflows, palette, fx.looks, fx.loras);
+      const info: Parameters<typeof pipelineProblems>[5] = {};
+      const got = pipelineProblems(fx.pipeline, workflows, palette, fx.looks, fx.loras, info);
       expect(new Set(got.map(key))).toEqual(new Set(fx.problems.map(key)));
       for (const p of got) expect(p.message).toBeTruthy();
+      if (fx.bounds) expect(info.bounds).toEqual(fx.bounds);
+      if (fx.models) expect(info.models).toEqual(fx.models);
     });
   it("marks run-only problems", () => {
     const got = pipelineProblems(load("invalid.reach.json").pipeline, workflows, palette);
@@ -129,5 +136,81 @@ describe("pipeline edits", () => {
       ["inputs", "still"],
       ["edit", "out"],
     ]);
+  });
+});
+
+describe("agent nodes", () => {
+  const best = load("valid.judge-best-of-4.json").pipeline as PDoc;
+  const decide = load("valid.decide.json").pipeline as PDoc;
+  it("offers text sources and memory reads that come before", () => {
+    expect(textCandidates(best, "rewrite")).toEqual([
+      "$prompt",
+      "$motion",
+      "mem.notes",
+      "judge.reasons",
+    ]);
+    expect(textCandidates(best, "judge")).toEqual(["$prompt", "$motion", "mem.notes"]);
+    expect(memoryCandidates(best, "judge")).toEqual(["mem"]);
+    expect(outputCandidates(best, "out")).toContain("judge.picked");
+    expect(pipelineBounds(best)).toEqual({ runs: 13, llm_calls: 6 });
+  });
+  it("adds a judge on the selected step and wires its branch like a gate's", () => {
+    let d = removePipelineNodes(best, ["judge", "rewrite", "review"]);
+    const r = addPipelineNode(d, "judge", { x: 0, y: 400 }, { selected: "still" });
+    expect(r.doc.nodes.judge).toMatchObject({
+      kind: "judge",
+      takes: "still",
+      keep: 1,
+      mode: "suggest",
+    });
+    d = connectNodes(connectNodes(r.doc, "still", "next", "judge"), "judge", "next", "clip");
+    d = connectNodes(d, "judge", "fail", "still");
+    // the clip lost its keyframe with the old judge; the new judge's pick is what fits it
+    const clip = d.nodes.clip as S<"PipelineStepNode">;
+    const kf = settable(workflows["ltx-image-to-video"], palette)["keyframes.images"];
+    expect(bindCandidates(d, "clip", kf)).toEqual(["judge.picked"]);
+    d = {
+      ...d,
+      nodes: {
+        ...d.nodes,
+        clip: { ...clip, bind: { ...clip.bind, "keyframes.images": "judge.picked" } },
+      },
+    };
+    expect(d.edges.find((e) => e[0] === "judge")).toEqual([
+      "judge",
+      { pass: "clip", fail: "still", max: 2, then: "out" },
+    ]);
+    expect(pipelineProblems(d, workflows, palette).map((p) => p.code)).toEqual([]);
+  });
+  it("a decide's routes edge follows its labels", () => {
+    let d = connectNodes(decide, "check", "r:retry", "clip");
+    expect(d.edges.find((e) => e[0] === "check")?.[1]).toEqual({
+      routes: { retry: "clip", accept: "note" },
+      max: 1,
+      then: "accept",
+    });
+    d = setRoutes(d, "check", { accept: "fine", redo: "bad" });
+    expect(d.edges.find((e) => e[0] === "check")?.[1]).toEqual({
+      routes: { accept: "note", redo: "clip" },
+      max: 1,
+      then: "accept",
+    });
+    expect(pipelineProblems(d, workflows, palette).map((p) => p.code)).toEqual([]);
+    // a plain edge never leaves a decide: connecting "next" makes its routes edge
+    const r = addPipelineNode(decide, "decide", { x: 0, y: 0 });
+    const e = connectNodes(r.doc, r.id, "next", "clip").edges.at(-1);
+    expect(e).toEqual([
+      r.id,
+      { routes: { retry: "clip", accept: "clip" }, max: 2, then: "accept" },
+    ]);
+  });
+  it("removing a source drops it from a write and a judge's memory", () => {
+    const d = removePipelineNodes(best, ["mem"]);
+    expect(d.nodes.judge).not.toHaveProperty("memory");
+    const e = removePipelineNodes(best, ["judge"]);
+    expect((e.nodes.rewrite as S<"PipelineWriteNode">).from).toEqual(["$prompt"]);
+    // a decide losing a route's node loses its edge (decide_routes then says so)
+    const f = removePipelineNodes(decide, ["note"]);
+    expect(f.edges.find((x) => x[0] === "check")).toBeUndefined();
   });
 });

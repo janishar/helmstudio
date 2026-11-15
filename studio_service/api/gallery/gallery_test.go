@@ -547,9 +547,28 @@ func TestSweep(t *testing.T) {
 	f.system(`UPDATE takes SET created_at = clock_timestamp() - interval '2 hours' WHERE id = $1`, abandoned.TakeID)
 	put(keyOf(abandoned.TakeID))
 
+	// a judge's thumbnails: one of the old take only, one a live take's decision shows too
+	thumb := func(c string) string { return "u/" + userA + "/llm/thumbs/" + strings.Repeat(c, 64) + ".jpg" }
+	seen := func(take, key string) string {
+		return `{"take_id": "` + take + `", "frame": null, "key": "` + key + `", "sha256": "", "width": 64, "height": 64}`
+	}
+	batch := utility.NewID()
+	f.system(`INSERT INTO batches (id, owner_id, title, workflow_id, workflow_title, snapshot, inputs)
+		VALUES ($1, $2, 'b', 'w', 'w', '{}', '{}')`, batch, userA)
+	f.system(`INSERT INTO decisions (id, batch_id, n, attempt, owner_id, seq, kind, data, take_ids)
+		VALUES ($7, $1, 1, 1, $2, 1, 'judge', $3::jsonb, ARRAY[$4, $5]::uuid[]),
+		       ($8, $1, 2, 1, $2, 2, 'judge', $6::jsonb, ARRAY[$5]::uuid[])`,
+		batch, userA, `{"seen": [`+seen(old, thumb("a"))+`, `+seen(old, thumb("b"))+`]}`, old, live,
+		`{"seen": [`+seen(live, thumb("b"))+`]}`, batch+":1:1:judge:1", batch+":2:1:judge:1")
+	put(thumb("a"))
+	put(thumb("b"))
+
 	removed, err := NewSweeper(f.pool, f.store).Sweep(ctx)
 	if err != nil || removed != 2 {
 		t.Fatal(removed, err)
+	}
+	if exists(thumb("a")) || !exists(thumb("b")) {
+		t.Fatal("the old take's own thumbnail must go, the one a live take's decision shows must stay")
 	}
 	if exists(keyOf(old)) || exists("u/"+userA+"/uploads/"+abandoned.TakeID+".png") {
 		t.Fatal("swept objects remain")

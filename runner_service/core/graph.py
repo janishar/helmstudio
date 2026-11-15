@@ -118,6 +118,12 @@ class Ctx:
         self.owner, self.residency, self.device, self.loop = owner, residency, device, loop
         self.node, self.impl, self.seed = "", None, None
         self.fetch = None  # async (key, limit) -> bytes | None
+        self.store = (
+            None  # the object store (storage.Store), set by the consumer: `put` writes through it
+        )
+        self.answer: dict | None = (
+            None  # a text workflow's answer record (defs answer), set by the `answer` node
+        )
         self.loras = None  # the host's core.lora.Library, set by the consumer
         self.outputs = 0  # outputs stored so far: the next one's index
         self.auto: list[
@@ -168,6 +174,12 @@ class Ctx:
         self._call(
             self._output(index, data, ext=ext, kind=kind, width=width, height=height, **extra)
         )
+
+    def put(self, key: str, data: bytes, content_type: str) -> None:
+        """Store `data` at `key` (under u/<owner_id>/ only), from the GPU thread: an ask stage's thumbnails."""
+        if not key.startswith(f"u/{self.owner}/"):
+            raise RunError(f"{self.node}: {key} is not under the run owner's prefix")
+        self._call(self.store.put(key, data, content_type))
 
     def component(self, model, name: str):
         """The component `name` of the Model handle `model`, loaded (to self.device) if it is not resident."""
@@ -258,7 +270,7 @@ def _image(value) -> bool:
 def _check_rows(spec: dict, value) -> str | None:
     if not isinstance(value, list):
         return "must be a list"
-    if value == [] and "Image" in spec["item"].values():
+    if value == [] and any(t in images.TAKES for t in spec["item"].values()):
         return (
             None  # a workflow holds no takes: [] even under min; `validate` needs min items at run
         )
@@ -268,9 +280,11 @@ def _check_rows(spec: dict, value) -> str | None:
         if not isinstance(row, dict) or row.keys() - spec["item"].keys():
             return f"item {i}: fields must be among {sorted(spec['item'])}"
         for f, item in spec["item"].items():
-            if item == "Image":
+            if item in images.TAKES:
                 if not _image(row.get(f)):
-                    return f"item {i}.{f}: an image is required"
+                    return (
+                        f"item {i}.{f}: {'an image' if item == 'Image' else 'a take'} is required"
+                    )
             elif item == "Lora":  # {lora_id} in a workflow, resolved (`defs lora`) in a command
                 v = row.get(f)
                 if not isinstance(v, dict) or not LORA_ID.match(str(v.get("lora_id"))):
@@ -294,6 +308,10 @@ WIREABLE = {
     "image": "Image",
 }
 MAX_NODES, MAX_BYTES, MAX_OUTPUTS = 64, 262144, 4
+SINKS = (
+    "output",
+    "answer",
+)  # graph rule no_output: `answer` (a text workflow's sink) counts as an output
 
 
 def family(kind: str) -> str | None:
@@ -445,7 +463,7 @@ def problems(
                 todo += succ[x]
         if nid in seen:
             add("cycle", nid, message=f"{nid}: on a cycle")
-    if not any(n["kind"] == "output" for n in nodes.values()):
+    if not any(n["kind"] in SINKS for n in nodes.values()):
         add("no_output", message="the graph has no output node")
     return out
 
@@ -464,11 +482,12 @@ def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[st
             if (
                 spec["type"] == "rows"
                 and rows == []
-                and "Image" in spec["item"].values()
+                and any(t in images.TAKES for t in spec["item"].values())
                 and spec.get("min")
             ):
                 errs.append(f"{nid}.{spec['name']}: at least {spec['min']} items")
-    return errs + [p[4] for p in problems(nodes, schemas)]
+    # a registry workflow may leave params at their defaults (the ask fixtures give only max_tokens); a run has all
+    return errs + [p[4] for p in problems(nodes, schemas) if run or p[0] != "param_missing"]
 
 
 def order(nodes: dict) -> list[str]:
@@ -639,7 +658,9 @@ def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
     known = [v.frames for v in inputs.values() if isinstance(getattr(v, "frames", None), int)]
     frames = known[0] if known else _frames(nodes, schemas, nid)
     mp_in = max((v["width"] * v["height"] / 1e6 for v in refs), default=0.0)
-    return {"mp": mp, "images": len(refs), "frames": frames, "mp_in": mp_in}
+    # a video take reaches an ask stage as its keyframes: each one is an image (core.ask.KEYFRAMES)
+    n = sum(3 if images.video(v) else 1 for v in refs)
+    return {"mp": mp, "images": n, "frames": frames, "mp_in": mp_in}
 
 
 def stage_peak(nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict) -> float:

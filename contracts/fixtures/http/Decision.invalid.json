@@ -1,0 +1,40 @@
+{
+  "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:rewrite:1",
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "row": 6,
+  "node": "rewrite",
+  "kind": "agent",
+  "visit": 1,
+  "attempt": 1,
+  "replayed": true,
+  "replayed_from": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c40:6:1:rewrite:1",
+  "run_ids": [],
+  "workflow": "qwen-image-ask",
+  "workflow_title": "Ask Qwen Image (Qwen3-VL 8B)",
+  "model": {
+    "id": "qwen-image-2.1",
+    "variant": "base",
+    "precision": "int8"
+  },
+  "template": "write/v1",
+  "prompt": "Rewrite the text below. Fix what the reviewer found; keep everything else. Text: \"@fox in snow\" ...",
+  "seen": [],
+  "answers": [
+    {
+      "text": "{\"text\":\"@fox in snow, four legs, no text in the frame\",\"note\":\"Named the limbs and banned text.\"}",
+      "error": null
+    }
+  ],
+  "tokens_in": 310,
+  "tokens_out": 28,
+  "seconds": 1.9,
+  "memory_read": [],
+  "error": null,
+  "at": "2026-11-15T10:21:00Z",
+  "write": {
+    "to": "$prompt",
+    "before": "@fox in snow",
+    "after": "@fox in snow, four legs, no text in the frame",
+    "note": "Named the limbs and banned text."
+  }
+}

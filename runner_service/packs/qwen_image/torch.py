@@ -9,6 +9,11 @@ the template, the VAE encodes all four channels whole into latent tokens that go
 sized from the last reference (canvas mode auto) and the noise seed mixes in the references' pixels (the studio's
 noise_seed), so re-editing a take with its own seed does not start from the noise that made it.
 
+Ask (API 1.14, workflow qwen-image-ask): the text encoder is Qwen3-VL 8B with its generation head, so a judge,
+write or decide node asks it after a still without loading anything (docs/reference-notes/llm.md 3). Greedy, seed
+core.ask.SEED, the stock chat template (no thinking in this instruct model); no constrained decoding in this env:
+the schema is in the prompt and core.ask checks the answer (one more try).
+
 Not ported: the prompt enhancer, CFG."""
 
 import hashlib
@@ -34,8 +39,15 @@ from diffusers.pipelines.qwenimage21.pipeline_qwenimage21 import (
 )
 from diffusers.utils.torch_utils import randn_tensor
 from PIL import Image
-from transformers import AutoConfig, AutoProcessor, Qwen3VLForConditionalGeneration
+from transformers import (
+    AutoConfig,
+    AutoProcessor,
+    Qwen3VLForConditionalGeneration,
+    StoppingCriteria,
+    StoppingCriteriaList,
+)
 
+from core import ask as asks
 from core.graph import RunError
 
 SYSTEM = "Comprehend and analyze the provided prompt."
@@ -283,3 +295,39 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
     pil = out.postprocess(image, output_type="pil")[0]  # RGBA: the VAE has 4 channels
     ctx.progress(1, 1, "decoding")
     return {"image": pil}
+
+
+class _Check(StoppingCriteria):
+    """A cancel point per generated token."""
+
+    def __init__(self, ctx) -> None:
+        self.ctx = ctx
+
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        self.ctx.check()
+        return False
+
+
+@torch.no_grad()
+def ask(ctx, params: dict, inputs: dict) -> dict:
+    model = inputs["model"]
+    te = ctx.component(model, "text_encoder")
+    proc, _ = processor(model.folder("text_encoder"))
+
+    def generate(prompt: str, thumbs: list) -> tuple[str, int, int]:
+        turns = (
+            [{"role": "system", "content": [{"type": "text", "text": params["system"]}]}]
+            if params["system"]
+            else []
+        )
+        content = [{"type": "image"} for _ in thumbs] + [{"type": "text", "text": prompt}]
+        turns.append({"role": "user", "content": content})
+        text = proc.apply_chat_template(turns, add_generation_prompt=True, tokenize=False)
+        batch = proc(text=[text], images=thumbs or None, return_tensors="pt").to(ctx.device)
+        torch.manual_seed(asks.SEED)
+        out = te.generate(**batch, do_sample=False, max_new_tokens=params["max_tokens"],
+                          stopping_criteria=StoppingCriteriaList([_Check(ctx)]))  # fmt: skip
+        new = out[0][batch.input_ids.shape[1] :]
+        return proc.decode(new, skip_special_tokens=True), batch.input_ids.shape[1], len(new)
+
+    return asks.ask(ctx, params, generate)

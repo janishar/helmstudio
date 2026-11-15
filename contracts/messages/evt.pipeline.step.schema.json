@@ -63,9 +63,12 @@
             "wait",
             "gate",
             "route",
-            "output"
+            "output",
+            "verdict",
+            "apply",
+            "memory"
           ],
-          "description": "which graph node of it: inputs, a step's submit / wait, a gate's gate (parked) / route (pick applied, edge chosen), output"
+          "description": "which graph node of it: inputs, a step's submit / wait, a gate's gate (parked) / route (pick applied, edge chosen), output; from API 1.14 a judge's submit / wait (its ask run), verdict (the answer checked, the decision derived), gate (Suggest: parked for a pick), route; a write's submit / wait / apply (the text set); a decide's submit / wait / route; a memory node's memory. A replayed decision: submit is followed by the next part at once (no wait)"
         },
         "visit": {
           "type": "integer",
@@ -132,7 +135,7 @@
             "type": "integer",
             "minimum": 0
           },
-          "description": "gate id → fail-edge turns so far, after this step"
+          "description": "gate, judge or decide id → capped turns so far (fail edge; a decide's routes other than then), after this step"
         },
         "run_ids": {
           "$ref": "defs.schema.json#/$defs/takeIdList"
@@ -154,6 +157,35 @@
           ],
           "maxLength": 200,
           "description": "LangGraph's checkpoint id after this step (the state request and retry-from-step name it); null while current"
+        },
+        "decision": {
+          "$ref": "defs.schema.json#/$defs/decision",
+          "description": "from API 1.14: on the part that derived it (judge verdict, write apply, decide route), also when replayed or failed; absent elsewhere"
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "read",
+            "wrote"
+          ],
+          "description": "from API 1.14: the memory items this step read (from the batch's snapshot) and wrote (to the pipeline's live memory, seen from the next batch)",
+          "properties": {
+            "read": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "$ref": "defs.schema.json#/$defs/uuid"
+              }
+            },
+            "wrote": {
+              "type": "array",
+              "maxItems": 1,
+              "items": {
+                "$ref": "defs.schema.json#/$defs/uuid"
+              }
+            }
+          }
         }
       }
     }

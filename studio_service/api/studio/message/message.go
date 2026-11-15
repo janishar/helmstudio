@@ -54,6 +54,20 @@ type Status struct {
 	Error    *string        `json:"error"`
 	Host     *string        `json:"host"`
 	Resolved map[string]any `json:"resolved"` // with succeeded: values the runner chose (a random seed)
+	// a text (ask) workflow's run: defs answer, with succeeded and with failed on the schema (API 1.14)
+	Answer json.RawMessage `json:"answer"`
+}
+
+// Answer is defs answer as studio reads it (Run.answer): the tries, the thumbnails seen, the tokens and time.
+type Answer struct {
+	Tries []struct {
+		Text  string  `json:"text"`
+		Error *string `json:"error"`
+	} `json:"tries"`
+	Seen      []json.RawMessage `json:"seen"`
+	TokensIn  int               `json:"tokens_in"`
+	TokensOut int               `json:"tokens_out"`
+	Seconds   float64           `json:"seconds"`
 }
 
 // Progress is evt.run.progress's data.
@@ -164,6 +178,8 @@ type Submit struct {
 	Snapshot  Snapshot       `json:"snapshot"`
 	Inputs    map[string]any `json:"inputs"`
 	Rows      []SubmitRow    `json:"rows"`
+	// Run again with the same decisions: the batch whose decisions are replayed (API 1.14)
+	ReplayFrom *string `json:"replay_from,omitempty"`
 }
 
 // Type is the envelope type.
@@ -198,6 +214,8 @@ type Pick struct {
 	Visit   int      `json:"visit"`
 	TakeIDs []string `json:"take_ids,omitempty"`
 	Reject  *bool    `json:"reject,omitempty"`
+	Agreed  *bool    `json:"agreed,omitempty"` // a judge: the pick equals its suggestion (API 1.14)
+	Note    *string  `json:"note,omitempty"`   // a judge: the user's note (a judge example)
 }
 
 // Type is the envelope type.
@@ -208,14 +226,15 @@ func (Pick) Subject() string { return "cmd.pipeline.pick" }
 
 // RunFinished is evt.studio.run_finished's data: a batch run reached a terminal status.
 type RunFinished struct {
-	RunID          string   `json:"run_id"`
-	BatchID        string   `json:"batch_id"`
-	Row            int      `json:"row"`
-	IdempotencyKey string   `json:"idempotency_key"`
-	Status         string   `json:"status"`
-	TakeIDs        []string `json:"take_ids"`
-	Error          *string  `json:"error"`
-	SessionID      string   `json:"-"`
+	RunID          string          `json:"run_id"`
+	BatchID        string          `json:"batch_id"`
+	Row            int             `json:"row"`
+	IdempotencyKey string          `json:"idempotency_key"`
+	Status         string          `json:"status"`
+	TakeIDs        []string        `json:"take_ids"`
+	Error          *string         `json:"error"`
+	Answer         json.RawMessage `json:"answer,omitempty"` // a text workflow's run: its answer (API 1.14)
+	SessionID      string          `json:"-"`
 }
 
 // Type is the envelope type.
@@ -226,9 +245,10 @@ func (r RunFinished) Subject() string { return "evt.studio." + r.SessionID + ".r
 
 // PipelineBatch is evt.pipeline.batch's data.
 type PipelineBatch struct {
-	Seq    int64   `json:"seq"`
-	Status string  `json:"status"`
-	Reason *string `json:"reason"`
+	Seq    int64           `json:"seq"`
+	Status string          `json:"status"`
+	Reason *string         `json:"reason"`
+	Memory json.RawMessage `json:"memory"` // a pipeline batch's memory snapshot (API 1.14)
 }
 
 // PipelineRow is evt.pipeline.row's data: the row's whole state.
@@ -264,6 +284,8 @@ type PipelineStep struct {
 	TakeIDs      []string        `json:"take_ids"`
 	Error        *string         `json:"error"`
 	CheckpointID *string         `json:"checkpoint_id"`
+	Decision     json.RawMessage `json:"decision"` // API 1.14: defs decision, on the part that derived it
+	Memory       json.RawMessage `json:"memory"`   // API 1.14: {read, wrote}
 }
 
 // PipelineSeq is the event's seq (per batch, over every kind).
@@ -308,15 +330,57 @@ type RunsCreate struct {
 
 // RunsCreated is studio.runs.create's reply for a run, new or already made under the key.
 type RunsCreated struct {
-	RunID   string   `json:"run_id"`
-	Status  string   `json:"status"`
-	Created bool     `json:"created"`
-	TakeIDs []string `json:"take_ids"`
-	Error   *string  `json:"error"`
+	RunID   string          `json:"run_id"`
+	Status  string          `json:"status"`
+	Created bool            `json:"created"`
+	TakeIDs []string        `json:"take_ids"`
+	Error   *string         `json:"error"`
+	Answer  json.RawMessage `json:"answer,omitempty"` // a text workflow's terminal run: its answer (defs answer)
 }
 
 // RunsCreateError is studio.runs.create's error reply; code is invalid | not_found | internal.
 type RunsCreateError struct {
 	Error string `json:"error"`
 	Code  string `json:"code"`
+}
+
+// SubjectMemory is pipelines' request/reply subject for a pipeline's memory (API 1.14).
+const SubjectMemory = "pipelines.memory"
+
+// MemoryRequest is the pipelines.memory request (bare JSON): list, create, delete or clear, in the owner's namespace.
+type MemoryRequest struct {
+	OwnerID    string  `json:"owner_id"`
+	Op         string  `json:"op"` // list | create | delete | clear
+	PipelineID string  `json:"pipeline_id"`
+	Kind       *string `json:"kind,omitempty"`    // list
+	ItemID     *string `json:"item_id,omitempty"` // delete
+	Text       *string `json:"text,omitempty"`    // create
+	Key        *string `json:"key,omitempty"`     // create
+}
+
+// MemoryItem is defs memoryItem: its takes by id.
+type MemoryItem struct {
+	ID         string          `json:"id"`
+	Kind       string          `json:"kind"`
+	PipelineID string          `json:"pipeline_id"`
+	Key        *string         `json:"key"`
+	Text       string          `json:"text"`
+	Kept       []string        `json:"kept"`
+	Rejected   []string        `json:"rejected"`
+	Agreed     *bool           `json:"agreed"`
+	Source     json.RawMessage `json:"source"`
+	CreatedAt  string          `json:"created_at"`
+	UpdatedAt  string          `json:"updated_at"`
+}
+
+// MemoryReply is its reply: items (list), item (create), deleted (delete, clear), or error and code (not_found | full |
+// invalid | internal).
+type MemoryReply struct {
+	Items   []MemoryItem `json:"items"`
+	Item    *MemoryItem  `json:"item"`
+	Deleted *int         `json:"deleted"`
+	// Truncated: list only, older items left out to keep the reply under NATS max_payload
+	Truncated bool   `json:"truncated"`
+	Error     string `json:"error"`
+	Code      string `json:"code"`
 }

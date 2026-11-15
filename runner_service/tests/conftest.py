@@ -229,6 +229,7 @@ class FakeQwen:
             encode=stage("encode", "cond"),
             sample=stage("sample", "latent"),
             decode=stage("decode", "image"),
+            ask=stage("ask", "answer"),
         )
         self.pack = pack.Pack("qwen_image", models, spec, "torch", module, "c0de")
         monkeypatch.setattr(pack.ModelRef, "load", lambda ref, c, ctx: self._load(ref, c, ctx))
@@ -248,7 +249,7 @@ class FakeQwen:
                 )
             }
             | stages
-            | {"output": core["output"]}
+            | {"output": core["output"], "answer": core["answer"]}
         )
         self.schemas = {k: s for k, (s, _) in every.items()}
         self.impls = {k: n for k, (_, n) in every.items()}

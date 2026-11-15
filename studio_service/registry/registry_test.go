@@ -39,8 +39,9 @@ func TestWorkflows(t *testing.T) {
 	}
 	_ = r.SetRegistry("other.fake.workflows", []byte(`{"workflows": [{"id": "echo", "env": "fake", "nodes": {"a": {"kind": "prompt"}}},
 		{"id": "lost", "env": "fake", "nodes": {"a": {"kind": "nope"}}}]}`))
-	if list := r.Workflows(); len(list) != 3 || list[0].ID != "echo" || list[1].ID != "echo-image-to-video" || list[2].ID != "echo-video" {
-		t.Fatalf("echo, echo-image-to-video and echo-video, no lost: %+v", list)
+	if list := r.Workflows(); len(list) != 4 || list[0].ID != "echo" || list[1].ID != "echo-ask" || list[2].ID != "echo-image-to-video" ||
+		list[3].ID != "echo-video" || list[1].Media != "text" || !IsText(list[1].Nodes) || IsText(list[0].Nodes) {
+		t.Fatalf("echo, echo-ask (text), echo-image-to-video and echo-video, no lost: %+v", list)
 	}
 	if _, ok := r.Workflow("lost"); ok {
 		t.Fatal("lost has no schema for its kind")

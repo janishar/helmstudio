@@ -1,0 +1,26 @@
+{
+  "description": "inputs_hash (README, Decisions: replay): sha256 hex of the call as canonical JSON (keys sorted at every level, separators , and :, UTF-8, no ASCII escaping). The call is {workflow, template, inputs}: the studio.runs.create inputs with `ask.media` replaced by each take's position `<step>:<visit from 1>:<seed index>:<seed>` (`-` for a step without a seed param), so a re-run with the same seeds makes the same key. pipelines_service runs these",
+  "cases": [
+    {
+      "description": "a judge of 4 Qwen stills",
+      "call": {
+        "workflow": "qwen-image-ask",
+        "template": "judge/v1",
+        "inputs": {
+          "ask.system": "You are a careful reviewer for an image and video studio. Answer only with JSON that matches the given schema.",
+          "ask.prompt": "The brief: \"a red fox in snow\". You see 4 takes ...",
+          "ask.schema": "{\"type\":\"object\"}",
+          "ask.max_tokens": 800,
+          "model.precision": "int8",
+          "ask.media": [
+            "still:1:0:42",
+            "still:1:1:43",
+            "still:1:2:44",
+            "still:1:3:45"
+          ]
+        }
+      },
+      "expect": "cc509d01e1388d87dc662691a43104bb96583f8f1eab607f9731dc5d84b98701"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "published_at": "2026-11-15T12:00:00Z",
+  "published_by": "runner mlx 0.4.0",
+  "models": [
+    {
+      "id": "qwen3.8-27b",
+      "family": "llm",
+      "title": "Qwen3.8 27B",
+      "variants": [
+        {
+          "id": "4bit",
+          "presence": "present",
+          "bytes": 16054262240,
+          "precisions": [
+            "int4"
+          ],
+          "memory": [
+            {
+              "precision": "int4",
+              "peak_gb": 27.2,
+              "planned_at": {
+                "mp": 0,
+                "frames": 0,
+                "images": 4
+              },
+              "components": [
+                {
+                  "component": "model",
+                  "variant": "4bit",
+                  "precision": "int4",
+                  "gb": 15.4
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -22,12 +22,14 @@ const (
 	MaxPipelineBytes = 65536
 	// MaxPipelineRuns bounds the runs one row may make (Submit's worst case).
 	MaxPipelineRuns = 64
+	// MaxPipelineCalls bounds the judge, write and decide visits (LLM calls) of one row (API 1.14).
+	MaxPipelineCalls = 32
 )
 
 // pipelineRunOnly are the codes that block running only; every other code blocks saving (and running).
 var pipelineRunOnly = map[string]bool{"unreachable": true, "dead_end": true, "no_output": true, "unknown_workflow": true,
 	"workflow_cannot_run": true, "unknown_preset": true, "step_input_invalid": true, "bind_unknown": true, "bind_type": true,
-	"unbound_input": true, "step_seeds": true, "unknown_look": true, "look_fit": true}
+	"unbound_input": true, "step_seeds": true, "unknown_look": true, "look_fit": true, "unknown_model": true}
 
 // inputFits maps a pipeline input type to the param types it fills.
 var inputFits = map[string][]string{"Text": {"string", "text"}, "Int": {"int"}, "Float": {"float"}, "Seed": {"seed"},
@@ -91,9 +93,20 @@ type pipelineHop struct {
 }
 
 type cappedEdge struct {
-	gate, fail string
+	gate, fail string // the branching node and the capped edge's target
 	max        int
 }
+
+// pipelineInfo is what the rules learn besides problems: the worst case per row, each judge, write and decide node's
+// ask workflow as resolved, and the step whose model a family ask reuses (its takes step, or the nearest before it).
+type pipelineInfo struct {
+	Bounds dto.PipelineBounds
+	Models map[string]string
+	Near   map[string]string
+}
+
+// isText reports whether a workflow document answers text (an ask workflow).
+func isText(wf dto.WorkflowDoc) bool { return registry.IsText(wf.Nodes) }
 
 // reach is the nodes reachable from src in one edge or more, never through avoid ("" = none); uncappedOnly skips
 // capped edges.
@@ -115,8 +128,10 @@ func (g pipelineGraph) reach(src, avoid string, uncappedOnly bool) map[string]bo
 // pipelineProblems checks doc with every pipeline rule, sorted as the API answers them. workflows are the documents the
 // caller can run (templates and their own) by id; palette the live kinds; looks the looks the caller can use now, loras
 // the LoRA id → family the caller can use now in an env (the fit rule).
+// workflows must also hold every text template (auto resolves to them) and the ask workflows nodes name.
 func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc, palette map[string]registry.PaletteNode,
-	looks []lookItem, loras func(env string) map[string]string) []dto.Problem {
+	looks []lookItem, loras func(env string) map[string]string) ([]dto.Problem, pipelineInfo) {
+	info := pipelineInfo{Models: map[string]string{}, Near: map[string]string{}}
 	found := map[[4]string]dto.Problem{}
 	add := func(code, node, port, param, message string, args ...any) {
 		blocks := "save"
@@ -134,7 +149,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 		add("too_large", "", "", "", "the pipeline takes %d bytes; at most %d", size, MaxPipelineBytes)
 	}
 	if len(found) > 0 {
-		return sortedProblems(found) // nothing else is checked: the work stays bounded
+		return sortedProblems(found), info // nothing else is checked: the work stays bounded
 	}
 	ids := slices.Sorted(maps.Keys(nodes))
 	of := func(kind string) []string {
@@ -154,7 +169,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 		}
 	}
 	graph := pipelineGraph{succ: map[string][]pipelineHop{}}
-	outdeg := map[string]int{}
+	outdeg, routed := map[string]int{}, map[string]bool{}
 	for _, edge := range doc.Edges {
 		from, targets := edge.From, edge.Targets()
 		_, known := nodes[from]
@@ -162,8 +177,14 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("unknown_node", from, "", "", "%s: an edge names a node that is not in the pipeline", from)
 			continue
 		}
-		if edge.Branch != nil && nodes[from].Kind != "gate" {
-			add("branch_not_gate", from, "", "", "%s: only a gate can branch", from)
+		kind := nodes[from].Kind
+		if (edge.Branch != nil && kind != "gate" && kind != "judge") || (edge.Routes != nil && kind != "decide") {
+			add("branch_not_gate", from, "", "", "%s: only a gate or a judge can branch, and only a decide has routes", from)
+			continue
+		}
+		if kind == "decide" && (edge.Routes == nil || !maps.EqualFunc(edge.Routes.Routes, nodes[from].Routes,
+			func(string, string) bool { return true }) || !hasKey(edge.Routes.Routes, edge.Routes.Then)) {
+			add("decide_routes", from, "", "", "%s: its one edge maps each of its routes to a node, and then names one", from)
 			continue
 		}
 		outdeg[from]++
@@ -172,12 +193,27 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("edge_invalid", from, "", "", "%s: a node has one way out, an output none, and nothing leads into the inputs node", from)
 			continue
 		}
-		if edge.Branch == nil {
-			graph.succ[from] = append(graph.succ[from], pipelineHop{edge.To, false})
-		} else {
+		switch {
+		case edge.Branch != nil:
 			b := edge.Branch
 			graph.succ[from] = append(graph.succ[from], pipelineHop{b.Pass, false}, pipelineHop{b.Fail, true}, pipelineHop{b.Then, false})
 			graph.capped = append(graph.capped, cappedEdge{from, b.Fail, b.Max})
+		case edge.Routes != nil: // every route but then counts against the decide's max
+			routed[from] = true
+			for _, label := range slices.Sorted(maps.Keys(edge.Routes.Routes)) {
+				to, capped := edge.Routes.Routes[label], label != edge.Routes.Then
+				graph.succ[from] = append(graph.succ[from], pipelineHop{to, capped})
+				if capped {
+					graph.capped = append(graph.capped, cappedEdge{from, to, edge.Routes.Max})
+				}
+			}
+		default:
+			graph.succ[from] = append(graph.succ[from], pipelineHop{edge.To, false})
+		}
+	}
+	for _, id := range of("decide") {
+		if !routed[id] {
+			add("decide_routes", id, "", "", "%s: a decide needs its routes edge", id)
 		}
 	}
 	reach := func(id string) map[string]bool { return graph.reach(id, "", false) }
@@ -186,18 +222,30 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("uncapped_cycle", id, "", "", "%s: it loops back to itself without a capped fail edge", id)
 		}
 	}
-	runs := 0
-	for _, id := range of("step") {
-		visits := 1
+	visits := func(id string) int {
+		n := 1
 		for _, c := range graph.capped {
 			if (id == c.fail || reach(c.fail)[id]) && reach(id)[c.gate] {
-				visits += c.max
+				n += c.max
 			}
 		}
-		runs += nodes[id].SeedsOr1() * visits
+		return n
 	}
+	runs, calls := 0, 0
+	for _, id := range ids {
+		switch kind := nodes[id].Kind; {
+		case kind == "step":
+			runs += nodes[id].SeedsOr1() * visits(id)
+		case dto.Asks(kind):
+			calls += visits(id)
+		}
+	}
+	info.Bounds = dto.PipelineBounds{Runs: runs, LLMCalls: calls}
 	if runs > MaxPipelineRuns {
 		add("too_many_runs", "", "", "", "a row may make %d runs; at most %d", runs, MaxPipelineRuns)
+	}
+	if calls > MaxPipelineCalls {
+		add("too_many_calls", "", "", "", "a row may ask a model %d times; at most %d", calls, MaxPipelineCalls)
 	}
 	root := ""
 	if len(roots) == 1 {
@@ -223,10 +271,11 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 	dominates := func(a, b string) bool {
 		return root == "" || a == root || (a != b && !graph.reach(root, a, false)[b])
 	}
-	// source is what a source names: an input's type, or at most how many takes; ok false when it names nothing fit
+	// source is what a source names: an input's type, at most how many takes, or text; ok false when it names nothing
 	type sourced struct {
-		input string // the input's type, "" for takes
+		input string // the input's type, "" for takes or text
 		takes int
+		text  bool // a judge's reasons, a memory read's notes
 	}
 	source := func(src string) (sourced, bool) {
 		if name, ok := strings.CutPrefix(src, "$"); ok {
@@ -240,20 +289,51 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			return sourced{}, false
 		case what == "takes" && n.Kind == "step":
 			return sourced{takes: n.SeedsOr1()}, true
-		case what == "picked" && n.Kind == "gate":
+		case what == "picked" && (n.Kind == "gate" || n.Kind == "judge"):
 			return sourced{takes: n.KeepOr1()}, true
+		case (what == "reasons" && n.Kind == "judge") || (what == "notes" && n.Kind == "memory" && n.Op == "read"):
+			return sourced{text: true}, true
 		}
 		return sourced{}, false
 	}
-	for _, id := range of("gate") {
+	for _, id := range append(of("gate"), of("judge")...) {
 		gate := nodes[id]
 		step, known := nodes[gate.Takes]
 		if !known || step.Kind != "step" || !dominates(gate.Takes, id) {
-			add("gate_takes", id, "", "", "%s: takes must name a step on every path to the gate", id)
+			add("gate_takes", id, "", "", "%s: takes must name a step on every path to it", id)
 		} else if gate.KeepOr1() > step.SeedsOr1() {
 			add("gate_keep", id, "", "", "%s: keeps %d of %s's %d takes", id, gate.KeepOr1(), gate.Takes, step.SeedsOr1())
 		}
 	}
+	for _, id := range of("judge") {
+		n := nodes[id]
+		lines := n.Criteria.Lines()
+		if len(lines) < 1 || len(lines) > 12 || len(slices.Compact(slices.Sorted(slices.Values(lines)))) < len(lines) {
+			add("judge_criteria", id, "", "", "%s: a checklist has 1 to 12 lines, none twice", id)
+		}
+		if m := n.Memory; m != nil {
+			if mem, ok := nodes[*m]; !ok || mem.Kind != "memory" || mem.Op != "read" || !dominates(*m, id) {
+				add("bind_source", id, "memory", "", "%s.memory: %s is not a memory read before this judge", id, *m)
+			}
+		}
+	}
+	for _, id := range of("write") {
+		if inputs[strings.TrimPrefix(nodes[id].To, "$")] != "Text" {
+			add("write_target", id, "", "", "%s.to: %s is not a Text input", id, nodes[id].To)
+		}
+	}
+	for _, id := range ids {
+		if n := nodes[id]; n.Kind == "write" || n.Kind == "decide" || (n.Kind == "memory" && n.Op == "write") {
+			for _, src := range n.Sources {
+				s, ok := source(src)
+				before, _, _ := strings.Cut(src, ".")
+				if !ok || (!s.text && s.input != "Text") || (!strings.HasPrefix(src, "$") && !dominates(before, id)) {
+					add("bind_source", id, "from", "", "%s.from: %s is not a Text input or a text source before this node", id, src)
+				}
+			}
+		}
+	}
+	pipelineModels(doc, workflows, of("step"), dominates, &info, add)
 	for _, id := range outputs {
 		from := nodes[id].From
 		src, _, _ := strings.Cut(from, ".")
@@ -268,7 +348,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			value := n.Bind[key]
 			src, ok := source(value)
 			before, _, _ := strings.Cut(value, ".")
-			if !ok || (!strings.HasPrefix(value, "$") && !dominates(before, id)) {
+			if !ok || src.text || (!strings.HasPrefix(value, "$") && !dominates(before, id)) {
 				add("bind_source", id, key, "", "%s.bind.%s: %s names no input, or no step or gate before this step", id, key, value)
 				binds[key] = nil
 				continue
@@ -282,6 +362,8 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 		}
 		if problems := graphProblems(wf, palette, nil); len(problems) > 0 {
 			add("workflow_cannot_run", id, "", "", "%s: workflow %s cannot run: %s", id, n.Workflow, problems[0].Message)
+		} else if isText(wf) {
+			add("workflow_cannot_run", id, "", "", "%s: workflow %s answers text; only a judge, write or decide node runs it", id, n.Workflow)
 		}
 		if n.Preset != nil {
 			if wf.Studio == nil || !hasKey(wf.Studio.Presets, *n.Preset) {
@@ -343,8 +425,74 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("step_seeds", id, "", "", "%s: seeds needs a workflow with a seed param", id)
 		}
 	}
-	return sortedProblems(found)
+	return sortedProblems(found), info
 }
+
+// pipelineModels resolves each judge, write and decide node's model (contracts/README.md, Agent nodes: model): a named
+// one must be a text workflow the caller can run; auto is the ask template of the family of a judge's takes step, or
+// of the nearest step before a write or decide (the step before it that every other step before it precedes), else
+// llm-ask; none is unknown_model.
+func pipelineModels(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc, steps []string, dominates func(a, b string) bool,
+	info *pipelineInfo, add func(code, node, port, param, message string, args ...any)) {
+	text := func(id string) bool { wf, ok := workflows[id]; return ok && isText(wf) }
+	familyAsk := func(step string) string {
+		node, ok := doc.Nodes[step]
+		family := ""
+		if ok && node.Kind == "step" {
+			family = workflows[node.Workflow].Family
+		}
+		for _, id := range slices.Sorted(maps.Keys(workflows)) {
+			if family != "" && !uuidLike(id) && workflows[id].Family == family && text(id) {
+				return id
+			}
+		}
+		if text("llm-ask") {
+			return "llm-ask"
+		}
+		return ""
+	}
+	for _, id := range slices.Sorted(maps.Keys(doc.Nodes)) {
+		n := doc.Nodes[id]
+		if !dto.Asks(n.Kind) {
+			continue
+		}
+		near := n.Takes
+		if n.Kind != "judge" {
+			var before []string
+			for _, s := range steps {
+				if s != id && dominates(s, id) {
+					before = append(before, s)
+				}
+			}
+			at := slices.IndexFunc(before, func(d string) bool {
+				return !slices.ContainsFunc(before, func(o string) bool { return o != d && !dominates(o, d) })
+			})
+			near = ""
+			if at >= 0 {
+				near = before[at]
+			}
+		}
+		wid := ""
+		if m := n.ModelOr(); m != "auto" {
+			if text(m) {
+				wid = m
+			}
+		} else {
+			wid = familyAsk(near)
+		}
+		if wid == "" {
+			add("unknown_model", id, "", "", "%s: model %s is not an ask workflow you can run", id, n.ModelOr())
+			continue
+		}
+		info.Models[id] = wid
+		if near != "" && workflows[wid].Family == workflows[doc.Nodes[near].Workflow].Family {
+			info.Near[id] = near // a family ask runs on that step's model variant and precision
+		}
+	}
+}
+
+// uuidLike reports whether a workflow id is a user workflow's (a uuid) rather than a template slug.
+func uuidLike(id string) bool { return len(id) == 36 && strings.Count(id, "-") == 4 }
 
 // pipelineLooks adds a step's look problems: unknown_look (a look the caller cannot use now), else look_fit (one that
 // does not fit the step's workflow as stored).

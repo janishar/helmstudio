@@ -62,9 +62,26 @@ def on_cpu():
     mx.set_default_device(mx.gpu)
 
 
+def only(values: dict, family: str) -> dict:
+    """The mlx values as one family's pack alone publishes them (the mlx runner publishes ltx and llm together):
+    its workflows, models and nodes, with the core nodes its workflows use."""
+    out = {
+        k: dict(v) for k, v in values.items()
+    }  # the entries stay shared (fill_prefused updates them)
+    out["workflows"]["workflows"] = [
+        w for w in out["workflows"]["workflows"] if w["family"] == family
+    ]
+    out["models"]["models"] = [m for m in out["models"]["models"] if m["family"] == family]
+    used = {n["kind"] for w in out["workflows"]["workflows"] for n in w["nodes"].values()}
+    out["nodes"]["nodes"] = [
+        n for n in out["nodes"]["nodes"] if n["family"] == family or n["kind"] in used
+    ]
+    return out
+
+
 def ltx():
     values, impls, packs = registry.build("mlx")
-    return values, impls, next(p for p in packs if p.family == "ltx")
+    return only(values, "ltx"), impls, next(p for p in packs if p.family == "ltx")
 
 
 @needs_mlx
@@ -77,6 +94,34 @@ def test_ltx_pack_publishes_the_canonical_fixtures():
     assert (model["id"], model["family"], model["title"]) == ("ltx-2.5", "ltx", "LTX-2.5")
     assert [v["id"] for v in model["variants"]] == ["distilled"]
     assert model["variants"][0]["precisions"] == ["bf16", "int8", "int4"]
+
+
+@needs_mlx
+def test_llm_pack_publishes_the_canonical_fixtures():
+    values, impls, _ = registry.build("mlx")
+    llm = only(values, "llm")
+    for kind in ("nodes", "workflows"):
+        want = json.loads((FIXTURES / f"llm.{kind}.valid.json").read_text())
+        assert llm[kind][kind] == want[kind]
+    (model,) = llm["models"]["models"]
+    assert (model["id"], model["family"], model["title"]) == ("qwen3.8-27b", "llm", "Qwen3.8 27B")
+    assert impls["llm/ask"].uses == ("model",) and model["variants"][0]["precisions"] == ["int4"]
+    if (
+        model["variants"][0]["presence"] == "present"
+    ):  # the weights are on this host: sized from the headers
+        (plan,) = model["variants"][0]["memory"]
+        assert (
+            plan["components"][0]["component"] == "model" and 14 < plan["components"][0]["gb"] < 16
+        )
+        assert plan["planned_at"]["images"] == 4 and "workflow" not in plan
+
+
+@needs_mlx
+def test_the_canonical_llm_ask_command_fits_the_published_nodes():
+    """cmd.run.execute.valid.7 (a judge's ask over a video and an image take) passes the runner's own graph check."""
+    values, _, _ = registry.build("mlx")
+    cmd = json.loads((CONTRACTS / "fixtures/messages/cmd.run.execute.valid.7.json").read_text())
+    assert graph.validate(cmd["data"]["workflow"]["nodes"], registry.node_schemas(values)) == []
 
 
 @needs_mlx

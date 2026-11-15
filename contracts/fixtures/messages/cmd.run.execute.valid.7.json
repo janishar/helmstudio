@@ -1,0 +1,72 @@
+{
+  "type": "cmd.run.execute",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000001",
+  "job_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b41",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-14T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b41",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "attempt": 1,
+    "workflow": {
+      "id": "llm-ask",
+      "nodes": {
+        "model": {
+          "kind": "llm/model",
+          "params": {
+            "variant": "4bit",
+            "precision": "int4"
+          }
+        },
+        "ask": {
+          "kind": "llm/ask",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {
+            "system": "You are a careful reviewer for an image and video studio. Answer only with JSON that matches the given schema.",
+            "prompt": "The brief: \"the fox turns its head\". You see 2 takes, in order: take 1 ... take 2 (a video take is 3 frames in order). ...",
+            "media": [
+              {
+                "take": {
+                  "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b70",
+                  "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b50/1/0.mp4",
+                  "content_type": "video/mp4",
+                  "width": 448,
+                  "height": 256,
+                  "bytes": 812345,
+                  "etag": "5d41402abc4b2a76b9719d911017c592"
+                }
+              },
+              {
+                "take": {
+                  "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+                  "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b32/1/0.png",
+                  "content_type": "image/png",
+                  "width": 1024,
+                  "height": 1024,
+                  "bytes": 1543210,
+                  "etag": "7d793037a0760186574b0282f2f435e7"
+                }
+              }
+            ],
+            "schema": "{\"type\":\"object\"}",
+            "max_tokens": 800
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "ask.answer"
+          },
+          "params": {}
+        }
+      }
+    },
+    "output_prefix": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b41/1/"
+  }
+}

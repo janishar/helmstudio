@@ -37,9 +37,12 @@ func fits(got, want string) bool {
 	return got == want || want == "Media" && (got == "Image" || got == "Video")
 }
 
-// workflowMedia is what a graph's takes are: video when an output node's media is wired from a Video output, else
+// workflowMedia is what a graph's takes are: text when it answers text, video when an output node's media is wired from a Video output, else
 // image (contracts/README.md, Video).
 func workflowMedia(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) string {
+	if registry.IsText(nodes) {
+		return "text" // an ask workflow (API 1.14): its answer is stored on the run
+	}
 	for _, node := range nodes {
 		ref, ok := node.In["media"]
 		if node.Kind != "output" || !ok {
@@ -87,7 +90,7 @@ func valueBad(param registry.Param, value any) bool {
 	case "rows":
 		if items, ok := value.([]any); ok && len(items) > 0 {
 			for _, raw := range param.Item {
-				if registry.IsImageField(raw) {
+				if registry.IsImageField(raw) || registry.IsMediaField(raw) {
 					return true
 				}
 			}
@@ -213,7 +216,7 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode,
 	for _, id := range onCycles(nodes) {
 		add("cycle", id, "", "", "%s: its wires lead back to itself", id)
 	}
-	if !slices.ContainsFunc(slices.Collect(maps.Values(nodes)), func(n registry.Node) bool { return n.Kind == "output" }) {
+	if !slices.ContainsFunc(slices.Collect(maps.Values(nodes)), func(n registry.Node) bool { return n.Kind == "output" || n.Kind == "answer" }) {
 		add("no_output", "", "", "", "the workflow has no output node")
 	}
 	studioProblems(doc, palette, add)

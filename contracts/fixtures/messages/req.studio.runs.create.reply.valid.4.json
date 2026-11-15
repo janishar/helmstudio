@@ -1,0 +1,52 @@
+{
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b40",
+  "status": "succeeded",
+  "created": false,
+  "take_ids": [],
+  "error": null,
+  "answer": {
+    "tries": [
+      {
+        "text": "{\"takes\":[{\"take\":1,\"checks\":[false,true,true,true],\"reason\":\"Extra hand on the left.\"},{\"take\":2,\"checks\":[true,true,true,false],\"reason\":\"Clean but soft.\"},{\"take\":3,\"checks\":[true,true,true,true],\"reason\":\"Clean and sharp.\"},{\"take\":4,\"checks\":[true,false,true,true],\"reason\":\"Watermark bottom right.\"}],\"ranking\":[3,2,1,4]}",
+        "error": null
+      }
+    ],
+    "seen": [
+      {
+        "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+        "frame": null,
+        "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.jpg",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "width": 1024,
+        "height": 1024
+      },
+      {
+        "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+        "frame": null,
+        "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "width": 1024,
+        "height": 1024
+      },
+      {
+        "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+        "frame": null,
+        "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.jpg",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "width": 1024,
+        "height": 1024
+      },
+      {
+        "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+        "frame": null,
+        "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/llm/thumbs/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.jpg",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "width": 1024,
+        "height": 1024
+      }
+    ],
+    "tokens_in": 4512,
+    "tokens_out": 179,
+    "seconds": 8.9
+  }
+}

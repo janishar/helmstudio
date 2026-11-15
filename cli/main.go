@@ -27,7 +27,9 @@ const usage = `usage:
   helm batch --pipeline <pipeline_id> (--lines ... [--param inputs.name] | --csv ... | --grid inputs.name=a,b ...) [-p inputs.name=value ...]
              the pipeline's inputs are the columns; --lines sets its first Text or Image input by default
   helm batch review <batch_id>        rows waiting at a gate, with their candidate takes
-  helm batch pick <batch_id> <row> (<take_id>... | --reject)   answer the gate the row waits at
+  helm batch pick <batch_id> <row> (<take_id>... | --reject) [--note text]   answer the gate (or Suggest judge) the
+             row waits at; review shows the judge's suggestion; --note (a judge) becomes an example in its memory
+  helm batch decisions <batch_id> [row]   judge, write and decide decisions (verdicts, reasons, routes, replays)
   helm batches [--limit n] [--cursor c]
   helm batch-stop <batch_id>
   helm takes [--kind image|video|audio] [--source create|upload] [--starred] [--session <id>] [--q <text>] [--limit n] [--cursor c]
@@ -43,6 +45,8 @@ An image input takes a comma list of take ids and @files (uploaded first): -p en
   helm workflow rm <id>
   helm pipelines                      your pipelines (id, version, last batch's status, title)
   helm pipeline get|save|validate|copy|rm ...   as helm workflow, for a pipeline file (title, nodes, edges)
+  helm memory list --pipeline <id> [--kind judge_example|note]   a pipeline's memory (id, kind, key, source, text)
+  helm memory add --pipeline <id> [--key k] <text>   a note its next batches read; helm memory rm <item_id>
   helm elements [--q prefix] [--group character|location|prop]   your elements (id, group, @handle, images, version, name)
   helm element get <id> > file.json   an element as a file (id, version, group, name, handle, text, images as take ids)
   helm element save file.json         replace yours (id + version; stale = 409) or, without an id, make one
@@ -102,6 +106,8 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = pipelines(stdout)
 	case "pipeline":
 		err = docCmd(pipelineKind, args[1:], stdout, stderr)
+	case "memory":
+		err = memoryCmd(args[1:], stdout, stderr)
 	case "elements":
 		err = elements(args[1:], stdout, stderr)
 	case "element":

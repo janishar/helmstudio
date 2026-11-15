@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.13.0
+  version: 1.14.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -951,6 +951,19 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/takes/{take_id}/decisions:
+    get:
+      tags: [studio]
+      operationId: studioListTakeDecisions
+      summary: The judge decisions that weighed this take (the Explain drawer), newest first
+      description: 'From 1.14: every decision whose judge had the take among its candidates (owner only: another user''s take is 404). Deleted batches'' decisions go with them.'
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      responses:
+        '200': {description: the decisions, content: {application/json: {schema: {$ref: '#/components/schemas/DecisionList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   /v1/studio/sessions/{session_id}/takes:
     get:
       tags: [studio]
@@ -1204,8 +1217,8 @@ paths:
     get:
       tags: [studio]
       operationId: studioGetBatchReview
-      summary: Every row parked on a gate with its candidate takes, for the review grid
-      description: 'Rows with status `waiting`, by row number (at most 500, not paginated); a workflow batch has none.'
+      summary: Every row parked on a gate or a judge with its candidate takes, for the review grid
+      description: 'Rows with status `waiting`, by row number (at most 500, not paginated); a workflow batch has none. From 1.14 a row parked on a judge (Suggest mode, or a judge that gave up) has `kind: judge`, the judge''s `suggested` pick (pre-selected) and each candidate''s `judge` verdict and reason.'
       parameters: [{$ref: '#/components/parameters/BatchId'}]
       responses:
         '200': {description: the parked rows, content: {application/json: {schema: {$ref: '#/components/schemas/BatchReview'}}}}
@@ -1226,6 +1239,12 @@ paths:
         visit was already sent, or the batch is `stopped`/`failed` or its `control` is `stop`. 422 when `take_ids`
         are not among the candidates, repeat one, or are more than the gate's `keep` (`pick 1 to <keep> of the
         candidates`).
+
+        From 1.14 `gate` may name the judge the row is parked on (contracts/README.md, Agent nodes: Suggest). Studio
+        derives `agreed` (the picked set equals the judge's suggestion; reject all with an empty suggestion: true),
+        records it on the judge cell (`judged.agreed`) and the decision's takes, and sends it with the optional `note`
+        in `cmd.pipeline.pick`; pipelines stores a pick with a note as a judge example in the pipeline's memory.
+        `note` on a gate pick is 422 (`a note is kept for judge picks only`).
       parameters:
         - {$ref: '#/components/parameters/BatchId'}
         - {$ref: '#/components/parameters/BatchRowN'}
@@ -1280,6 +1299,99 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/rows/{row}/decisions:
+    get:
+      tags: [studio]
+      operationId: studioListRowDecisions
+      summary: Every judge, write and decide decision of one row (plan 16.7), oldest first
+      description: |
+        From 1.14. Stored by studio from the `decision` of each `evt.pipeline.step` (contracts/README.md, Decisions).
+        Thumbnails are signed links (`seen[].thumb_url`), never keys. 404 for a workflow batch, another user's batch
+        or an `attempt` the row never had.
+      parameters:
+        - {$ref: '#/components/parameters/BatchId'}
+        - {$ref: '#/components/parameters/BatchRowN'}
+        - {name: attempt, in: query, required: false, schema: {type: integer, minimum: 1}, description: 'absent = every attempt of the row'}
+      responses:
+        '200': {description: the decisions, content: {application/json: {schema: {$ref: '#/components/schemas/DecisionList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/again:
+    post:
+      tags: [studio]
+      operationId: studioRunBatchAgain
+      summary: Run an ended batch again as a new batch, with the same decisions or deciding again
+      description: |
+        From 1.14 (plan 16.3, 16.7). Creates a new batch with the source batch's snapshot (pipeline and workflows as
+        submitted), session, rows (inputs and seeds), elements and looks copies, and memory snapshot is taken anew;
+        its title is `<source title> again` unless given. `decisions: same`: `cmd.pipeline.submit` carries
+        `replay_from` = the source batch, so every judge, write and decide visit whose replay key matches a stored
+        decision of the source reuses it without asking a model (same seeds make the same takes, so the keys match;
+        a visit whose inputs differ asks again). `again`: every node asks. A batch of one workflow ignores
+        `decisions`. 409 while the source is `queued`, `running`, `waiting` or `paused` (`batch <id> has not ended`),
+        and at 5 unfinished batches (as Submit). 422 when a step's workflow or an ask workflow has no live host (as
+        Submit).
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/BatchAgain'}}}
+      responses:
+        '201': {description: the new batch, content: {application/json: {schema: {$ref: '#/components/schemas/Batch'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/memory:
+    get:
+      tags: [studio]
+      operationId: studioListMemory
+      summary: A pipeline's memory (judge examples and notes), newest first — the Memory panel
+      description: |
+        From 1.14 (plan 16.6). Studio checks the pipeline is the caller's (another user's: 404), then asks
+        pipelines_service (`pipelines.memory` `list`, 5 s: else 503). Example takes are signed TakeRefs; deleted
+        takes are left out.
+      parameters:
+        - {name: pipeline_id, in: query, required: true, schema: {type: string}, description: 'one of the caller''s pipelines (unknown or malformed = 404)'}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [judge_example, note]}}
+      responses:
+        '200': {description: the items, content: {application/json: {schema: {$ref: '#/components/schemas/MemoryList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateMemoryNote
+      summary: Add a note to a pipeline's memory (seen by its next batches)
+      description: 'From 1.14. `text` is trimmed (blank: 422). 404 for a pipeline that is not the caller''s; 409 `memory is full (500 items); delete some first`.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MemoryCreate'}}}
+      responses:
+        '201': {description: the note, content: {application/json: {schema: {$ref: '#/components/schemas/MemoryItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/memory/{item_id}:
+    delete:
+      tags: [studio]
+      operationId: studioDeleteMemoryItem
+      summary: Delete one memory item (an example or a note); batches already started keep their snapshot
+      parameters:
+        - {name: item_id, in: path, required: true, schema: {type: string}, description: 'memory item UUID (unknown, another user''s or malformed = 404)'}
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
   /v1/studio/batches/{batch_id}/events:
@@ -1798,8 +1910,8 @@ components:
         when: {type: string, description: visibility expression; absent = always shown}
         item:
           type: object
-          description: 'rows only: field → a ref kind (`Image`: a take, `Lora`: a LoRA; required in every item) or a param schema without name'
-          additionalProperties: {anyOf: [{type: string, const: Image}, {type: string, const: Lora}, {type: object, description: 'a ParamSchema without name (registry.schema.json itemParam); a float may add `position: seconds` (a time on the clip)'}]}
+          description: 'rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node''s `media`), `Lora`: a LoRA; required in every item) or a param schema without name'
+          additionalProperties: {anyOf: [{type: string, const: Image}, {type: string, const: Media}, {type: string, const: Lora}, {type: object, description: 'a ParamSchema without name (registry.schema.json itemParam); a float may add `position: seconds` (a time on the clip)'}]}
         mention: {type: string, description: 'rows only: the prompt''s name for item n, with `{n}` from 1', examples: ['<image{n}>']}
     NodeSchema:
       type: object
@@ -1846,7 +1958,7 @@ components:
         title: {type: string}
         family: {type: string}
         env: {type: string, description: the runner env that executes it}
-        media: {$ref: '#/components/schemas/WorkflowMedia', description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video)'}
+        media: {type: string, enum: [image, video, text], description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed'}
         nodes: {type: object, additionalProperties: {$ref: '#/components/schemas/GraphNode'}, description: node id → node}
         node_schemas: {type: object, additionalProperties: {$ref: '#/components/schemas/NodeSchema'}, description: 'kind → schema, for every kind in nodes the registry has (a kind no runner publishes is left out)'}
         source: {$ref: '#/components/schemas/WorkflowSource'}
@@ -2046,8 +2158,8 @@ components:
         label: {type: string, minLength: 1, maxLength: 60, description: absent = the name}
     PipelineSource:
       type: string
-      pattern: '^(\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\.(takes|picked))$'
-      description: '`$<input>` (a pipeline input), `<step>.takes` (that step''s takes from its latest visit), `<gate>.picked` (that gate''s latest pick)'
+      pattern: '^(\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\.(takes|picked|reasons|notes))$'
+      description: '`$<input>` (a pipeline input), `<step>.takes` (that step''s takes from its latest visit), `<gate>.picked` / `<judge>.picked` (its latest pick); from 1.14 the text sources `<judge>.reasons` (its latest reasons, one line per take) and `<memory>.notes` (a memory read node''s notes), for write, decide and memory write `from` only'
       examples: [$prompt, still.takes, review.picked]
     PipelineInputsNode:
       type: object
@@ -2098,6 +2210,90 @@ components:
         from: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}\.(takes|picked)$', description: 'the takes the row ends with', examples: [edit.takes]}
         collection: {type: string, minLength: 1, maxLength: 80, description: 'names the collection (Batch.collection)'}
         position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineCriteria:
+      type: object
+      additionalProperties: false
+      description: 'a judge''s checklist (from 1.14): a take passes when every `must` line holds; `nice` lines only order the takes that pass. 1 to 12 lines in all, none twice (judge_criteria). Missing list = []'
+      properties:
+        must: {type: array, maxItems: 12, items: {type: string, minLength: 1, maxLength: 200}, examples: [[No extra or missing limbs, No text or watermarks]]}
+        nice: {type: array, maxItems: 12, items: {type: string, minLength: 1, maxLength: 200}, examples: [[Subject is sharp]]}
+    PipelineModel:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'
+      default: auto
+      description: '`auto` (resolved at Submit: contracts/README.md, Agent nodes: model) or an ask workflow (`media: text`) the caller can run: `qwen-image-ask` (Qwen Image''s own text encoder, no extra load after a Qwen step), `llm-ask` (Qwen3.8 27B)'
+    PipelineTextSources: {type: array, minItems: 1, maxItems: 4, items: {$ref: '#/components/schemas/PipelineSource'}, description: 'text sources, in order: `$<Text input>`, `<judge>.reasons`, `<memory>.notes`'}
+    PipelineJudgeNode:
+      type: object
+      required: [kind, takes, criteria]
+      additionalProperties: false
+      description: 'from 1.14 (plan 16.2): a vision-language model checks a step''s takes against the checklist, keeps the best `keep` and gives reasons; its pass / fail edges are a branch like a gate''s'
+      properties:
+        kind: {type: string, const: judge}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        takes: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'the step whose latest takes it judges'}
+        criteria: {$ref: '#/components/schemas/PipelineCriteria'}
+        keep: {type: integer, minimum: 1, maximum: 8, default: 1, description: 'keep the best K of the takes (at most the step''s seeds)'}
+        mode: {type: string, enum: [suggest, auto], default: suggest, description: 'suggest: the row parks like a gate with the judge''s pick pre-selected (a fail with loops left retries without parking); auto: it picks alone'}
+        model: {$ref: '#/components/schemas/PipelineModel'}
+        memory: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'a memory read node before it: the user''s past picks at this judge (judge examples) and notes go into its prompt; absent = no memory ("Memory: Off")'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineWriteNode:
+      type: object
+      required: [kind, from, to]
+      additionalProperties: false
+      description: 'from 1.14: writes text from its sources (a rewritten prompt from a judge''s reasons) into a Text input for the rest of the row; mentions in the answer are expanded by studio like any prompt'
+      properties:
+        kind: {type: string, const: write}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        from: {$ref: '#/components/schemas/PipelineTextSources'}
+        to: {type: string, pattern: '^\$[a-z][a-z0-9_]{0,63}$', description: 'the Text input it overwrites (`$prompt`): later binds of it read the new text'}
+        instruction: {type: string, minLength: 1, maxLength: 1000, default: 'Fix what the reviewer found; keep everything else.'}
+        model: {$ref: '#/components/schemas/PipelineModel'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineDecideNode:
+      type: object
+      required: [kind, question, from, routes]
+      additionalProperties: false
+      description: 'from 1.14: routes the row along one of its declared routes from a structured answer (its routes edge maps each label to a node)'
+      properties:
+        kind: {type: string, const: decide}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        question: {type: string, minLength: 1, maxLength: 1000}
+        from: {$ref: '#/components/schemas/PipelineTextSources'}
+        routes:
+          type: object
+          minProperties: 2
+          maxProperties: 6
+          propertyNames: {pattern: '^[a-z][a-z0-9_]{0,31}$'}
+          additionalProperties: {type: string, minLength: 1, maxLength: 200}
+          description: 'route label → what it means (the model reads it)'
+          examples: [{retry: the takes miss the brief, accept: good enough to animate}]
+        model: {$ref: '#/components/schemas/PipelineModel'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineMemoryNode:
+      description: 'from 1.14 (plan 16.6): read the batch''s memory snapshot (taken when the batch starts), or write a note for the next batches'
+      oneOf:
+        - type: object
+          required: [kind, op]
+          additionalProperties: false
+          properties:
+            kind: {type: string, const: memory}
+            title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+            op: {type: string, const: read}
+            key: {type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$', description: 'only notes with this key; absent = every note'}
+            limit: {type: integer, minimum: 1, maximum: 16, default: 8, description: 'at most this many examples and this many notes, newest first'}
+            position: {$ref: '#/components/schemas/NodePosition'}
+        - type: object
+          required: [kind, op, key, from]
+          additionalProperties: false
+          properties:
+            kind: {type: string, const: memory}
+            title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+            op: {type: string, const: write}
+            key: {type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$'}
+            from: {$ref: '#/components/schemas/PipelineTextSources'}
+            position: {$ref: '#/components/schemas/NodePosition'}
     PipelineNodeTitle: {type: string, minLength: 1, maxLength: 60, description: 'the card''s title; absent = derived by the client'}
     PipelineNode:
       oneOf:
@@ -2105,6 +2301,10 @@ components:
         - {$ref: '#/components/schemas/PipelineStepNode'}
         - {$ref: '#/components/schemas/PipelineGateNode'}
         - {$ref: '#/components/schemas/PipelineOutputNode'}
+        - {$ref: '#/components/schemas/PipelineJudgeNode'}
+        - {$ref: '#/components/schemas/PipelineWriteNode'}
+        - {$ref: '#/components/schemas/PipelineDecideNode'}
+        - {$ref: '#/components/schemas/PipelineMemoryNode'}
       discriminator:
         propertyName: kind
         mapping:
@@ -2112,11 +2312,15 @@ components:
           step: '#/components/schemas/PipelineStepNode'
           gate: '#/components/schemas/PipelineGateNode'
           output: '#/components/schemas/PipelineOutputNode'
+          judge: '#/components/schemas/PipelineJudgeNode'
+          write: '#/components/schemas/PipelineWriteNode'
+          decide: '#/components/schemas/PipelineDecideNode'
+          memory: '#/components/schemas/PipelineMemoryNode'
     PipelineBranch:
       type: object
       required: [pass, fail, max, then]
       additionalProperties: false
-      description: 'a gate''s branch: pass = a pick was made; fail = every candidate rejected, taken at most `max` times per row; on the next reject the row goes to `then`'
+      description: 'a gate''s or (1.14) a judge''s branch: pass = a pick was made (a judge: its verdict pass, or the user''s pick); fail = every candidate rejected (a judge: verdict fail), taken at most `max` times per row; on the next reject the row goes to `then`'
       properties:
         pass: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
         fail: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
@@ -2131,12 +2335,28 @@ components:
         - oneOf:
             - {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'to (plain edge)'}
             - {$ref: '#/components/schemas/PipelineBranch'}
-      examples: [[still, review], [review, {pass: edit, fail: still, max: 2, then: out}]]
+            - {$ref: '#/components/schemas/PipelineRoutes'}
+      examples: [[still, review], [review, {pass: edit, fail: still, max: 2, then: out}], [check, {routes: {retry: still, accept: clip}, max: 2, then: accept}]]
+    PipelineRoutes:
+      type: object
+      required: [routes, max, then]
+      additionalProperties: false
+      description: 'from 1.14, a decide''s only edge: route label → node (the same labels as the node''s `routes`). Every route but `then` counts against `max` per row; once taken `max` times, `then` is taken whatever the answer'
+      properties:
+        routes:
+          type: object
+          minProperties: 2
+          maxProperties: 6
+          propertyNames: {pattern: '^[a-z][a-z0-9_]{0,31}$'}
+          additionalProperties: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+        max: {type: integer, minimum: 1, maximum: 10}
+        then: {type: string, pattern: '^[a-z][a-z0-9_]{0,31}$', description: 'one of the labels'}
     PipelineDoc:
       type: object
       required: [title, nodes, edges]
       description: |
-        A pipeline as the editor saves or validates it (plan 16.2, restricted to inputs, step, gate and output).
+        A pipeline as the editor saves or validates it (plan 16.2: inputs, step, gate and output; from 1.14 judge,
+        write, decide and memory; agent and custom come later).
         Node ids are stable slugs. At most 24 nodes and 64 KB (problems, not the schema). Other top-level keys are
         ignored by validate; PipelineCreate and PipelineUpdate are closed.
       properties:
@@ -2161,6 +2381,7 @@ components:
         workflow_titles: {type: object, additionalProperties: {type: string}, description: 'every step''s workflow id → its title now (an unknown one left out), for the cards'}
         last_batch: {oneOf: [{$ref: '#/components/schemas/Batch'}, {type: 'null'}], description: 'the newest batch of it; null when it never ran'}
         problems: {type: array, items: {$ref: '#/components/schemas/PipelineProblem'}, description: 'only from GET /v1/studio/pipelines/{pipeline_id}, POST and PUT; empty = it can run'}
+        bounds: {$ref: '#/components/schemas/PipelineBounds', description: 'from 1.14, with problems when nothing blocks saving'}
     PipelineList:
       type: object
       required: [pipelines]
@@ -2196,7 +2417,7 @@ components:
         title: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
     PipelineProblemCode:
       type: string
-      enum: [too_many_nodes, too_large, inputs_node, duplicate_input, unknown_node, edge_invalid, branch_not_gate, uncapped_cycle, too_many_runs, unreachable, dead_end, no_output, gate_takes, gate_keep, bind_source, unknown_workflow, workflow_cannot_run, unknown_preset, step_input_invalid, bind_unknown, bind_type, unbound_input, step_seeds, unknown_look, look_fit]
+      enum: [too_many_nodes, too_large, inputs_node, duplicate_input, unknown_node, edge_invalid, branch_not_gate, uncapped_cycle, too_many_runs, unreachable, dead_end, no_output, gate_takes, gate_keep, bind_source, unknown_workflow, workflow_cannot_run, unknown_preset, step_input_invalid, bind_unknown, bind_type, unbound_input, step_seeds, unknown_look, look_fit, too_many_calls, judge_criteria, decide_routes, write_target, unknown_model]
       description: 'meaning and which block saving: contracts/README.md, Pipeline rules. May grow in a minor version; an unknown code blocks running'
     PipelineProblem:
       type: object
@@ -2218,6 +2439,16 @@ components:
         problems: {type: array, items: {$ref: '#/components/schemas/PipelineProblem'}, description: 'sorted by node (whole-pipeline ones first), then code, port, param'}
         can_save: {type: boolean}
         can_run: {type: boolean}
+        bounds: {$ref: '#/components/schemas/PipelineBounds'}
+        models: {type: object, additionalProperties: {type: string}, description: 'from 1.14: judge, write and decide node id → the ask workflow its model resolves to now (auto included); a node without one is left out'}
+    PipelineBounds:
+      type: object
+      required: [runs, llm_calls]
+      additionalProperties: false
+      description: 'from 1.14: the worst case per row (contracts/README.md, Pipeline rules: worst case), sent when nothing blocks saving. Submit multiplies by the rows for its estimate'
+      properties:
+        runs: {type: integer, minimum: 0, maximum: 64, description: 'generation runs: Σ over steps of seeds × visits'}
+        llm_calls: {type: integer, minimum: 0, maximum: 32, description: 'judge, write and decide visits (each one ask run, at most 2 tries; a re-ask after a failed check is a second run)'}
     PipelineError:
       type: object
       required: [detail]
@@ -2308,6 +2539,16 @@ components:
         batch_row: {type: [integer, 'null'], minimum: 1, description: 'the batch row number; with batch_id'}
         workflow_version: {type: [integer, 'null'], minimum: 1, description: 'a user workflow: the version it ran (its graph is the run''s snapshot); absent or null for a template'}
         looks: {$ref: '#/components/schemas/LookIds', description: 'the looks it was asked with (RunRequest.looks; a batch run: its row''s or step''s), as requested; absent or empty = none'}
+        answer: {$ref: '#/components/schemas/RunAnswer'}
+    RunAnswer:
+      type: object
+      required: [text, tokens_in, tokens_out, seconds]
+      description: 'from 1.14, a run of a text (ask) workflow (lane batch: a judge, write or decide call): its answer, stored on the run, never a take (`outputs` stays empty). Sent once it succeeded, and when it failed on the schema'
+      properties:
+        text: {type: string, maxLength: 32768, description: 'the last try'}
+        tokens_in: {type: integer, minimum: 0}
+        tokens_out: {type: integer, minimum: 0}
+        seconds: {type: number, minimum: 0}
     Resolved:
       type: object
       description: 'values the runner chose (a random seed, an auto length), sent with succeeded; absent until then and from M0 runners'
@@ -2483,6 +2724,21 @@ components:
           description: 'only in `GET /v1/studio/takes/{take_id}`: the takes made from this one ("Used in"), newest first, at most 50, deleted ones left out'
         batch_id: {type: [string, 'null'], format: uuid, description: 'with source pipeline: the batch that made it (its collection); absent or null otherwise'}
         video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image): length, frame rate, audio and the poster'}
+        decisions:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/TakeDecision'}
+          description: 'from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions)'
+    TakeDecision:
+      type: object
+      required: [decision_id, batch_id, row, node, outcome, first_failed]
+      properties:
+        decision_id: {type: string}
+        batch_id: {type: string, format: uuid}
+        row: {type: integer, minimum: 1, maximum: 500}
+        node: {type: string, description: the judge node id}
+        outcome: {type: string, enum: [picked, passed, failed], description: 'picked: kept (by the judge, or the user''s pick); passed: every must held but it was not kept; failed: a must failed'}
+        first_failed: {type: [string, 'null'], description: 'its first false must; null when it passed'}
     VideoInfo:
       type: object
       description: |
@@ -2904,6 +3160,25 @@ components:
         pipeline_title: {type: [string, 'null'], description: 'with pipeline_id: the title in the batch''s snapshot'}
         pipeline_version: {type: [integer, 'null'], minimum: 1, description: 'with pipeline_id: the version it was submitted with'}
         collection: {type: [string, 'null'], description: 'with pipeline_id: the collection its output node names (the first output, by node id)'}
+        bounds: {$ref: '#/components/schemas/PipelineBounds', description: 'from 1.14, a pipeline batch: its worst case per row at Submit'}
+        models: {type: object, additionalProperties: {type: string}, description: 'from 1.14, a pipeline batch: judge, write and decide node id → the ask workflow it runs (resolved at Submit, in the snapshot)'}
+        memory: {oneOf: [{$ref: '#/components/schemas/BatchMemory'}, {type: 'null'}], description: 'from 1.14, a pipeline batch: the memory snapshot it reads; null until pipelines took it'}
+        again_of: {type: [string, 'null'], format: uuid, description: 'from 1.14: made by "Run again" of this batch'}
+        same_decisions: {type: boolean, description: 'from 1.14, with again_of: it reuses that batch''s decisions'}
+    BatchMemory:
+      type: object
+      required: [examples, notes, taken_at]
+      properties:
+        examples: {type: integer, minimum: 0}
+        notes: {type: integer, minimum: 0}
+        taken_at: {type: string, format: date-time}
+    BatchAgain:
+      type: object
+      required: [decisions]
+      additionalProperties: false
+      properties:
+        decisions: {type: string, enum: [same, again], description: 'same: reuse the source''s stored decisions where the inputs match; again: ask the models again'}
+        title: {type: string, minLength: 1, maxLength: 200, description: 'absent = `<source title> again`'}
     BatchRowStatus:
       type: string
       enum: [queued, running, waiting, succeeded, failed, cancelled]
@@ -2930,21 +3205,33 @@ components:
       type: object
       required: [gate, visit, keep, candidates]
       properties:
-        gate: {type: string, description: the gate node id}
+        gate: {type: string, description: 'the gate node id (from 1.14: or the judge''s)'}
+        kind: {type: string, enum: [gate, judge], description: 'from 1.14; absent = gate'}
+        suggested: {type: array, maxItems: 8, items: {type: string, format: uuid}, description: 'a judge: its pick, pre-selected ([] when no take passed)'}
+        decision_id: {type: string, description: 'a judge: the decision shown (GET …/rows/{row}/decisions)'}
         visit: {type: integer, minimum: 1, description: 'which visit of the gate (1 + times its loop went round)'}
         keep: {type: integer, minimum: 1, maximum: 8, description: 'pick 1 to keep of the candidates'}
         candidates: {type: array, minItems: 1, maxItems: 8, items: {type: string, format: uuid}, description: 'the takes to pick from (the gate''s step''s latest takes)'}
     CellStatus:
       type: string
       enum: [queued, running, succeeded, failed, cancelled, waiting, picked, rejected]
-      description: 'a step attempt: its runs'' state (queued while none of them has started); a gate attempt: waiting, picked or rejected; an output: succeeded'
+      description: 'a step attempt: its runs'' state (queued while none of them has started); a gate attempt: waiting, picked or rejected; an output: succeeded. From 1.14 a judge: queued / running (its ask run), then picked, waiting (Suggest), rejected (verdict fail or all rejected) or failed (the call failed); write, decide: queued / running, then succeeded or failed; memory: succeeded'
     BatchCell:
       type: object
       required: [node, kind, attempts]
       properties:
         node: {type: string, description: the pipeline node id}
-        kind: {type: string, enum: [step, gate, output]}
+        kind: {type: string, enum: [step, gate, output, judge, write, decide, memory], description: 'judge, write, decide, memory from 1.14'}
         attempts: {type: array, minItems: 1, maxItems: 64, items: {$ref: '#/components/schemas/BatchCellAttempt'}, description: 'one per visit (loop attempts stacked), oldest first'}
+        loop:
+          description: 'from 1.14, a judge with a branch or a decide: its capped loop for the cell''s "retried <turns> of <max>", "gave up → <then>"'
+          type: object
+          required: [turns, max, then, gave_up]
+          properties:
+            turns: {type: integer, minimum: 0, maximum: 10}
+            max: {type: integer, minimum: 1, maximum: 10}
+            then: {type: [string, 'null'], description: 'the node the cap sends the row to'}
+            gave_up: {type: boolean}
     BatchCellAttempt:
       type: object
       required: [visit, status, run_ids, take_ids, seeds, seconds, error, thumb_url]
@@ -2958,6 +3245,32 @@ components:
         seconds: {type: [number, 'null'], minimum: 0, description: 'a step: the runs'' time on their hosts, summed (started to finished); null until one finished'}
         error: {type: [string, 'null']}
         thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first of take_ids (else candidates)'}
+        decision_id: {type: string, description: 'from 1.14, judge, write, decide: the visit''s decision'}
+        judged: {$ref: '#/components/schemas/CellJudged'}
+        route: {type: object, required: [label, to], properties: {label: {type: string}, to: {type: string}}, description: 'from 1.14, a decide: the route taken'}
+    CellJudged:
+      type: object
+      required: [verdict, picked, of, keep, first_failed, suggested, agreed, takes]
+      description: 'from 1.14, a judge attempt (the run table''s judged cell: "picked 1 of 4", the first failed criterion; the attempts side by side with each take''s reason)'
+      properties:
+        verdict: {type: string, enum: [pass, fail]}
+        picked: {type: integer, minimum: 0, maximum: 8}
+        of: {type: integer, minimum: 1, maximum: 8}
+        keep: {type: integer, minimum: 1, maximum: 8}
+        first_failed: {type: [string, 'null'], description: 'the best take''s first false must; null when it passed'}
+        suggested: {type: array, maxItems: 8, items: {type: string, format: uuid}}
+        agreed: {type: [boolean, 'null'], description: 'Suggest: the user''s pick equalled the suggestion; null before a pick and in Auto'}
+        takes:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            required: [take_id, passes, first_failed, reason]
+            properties:
+              take_id: {type: string, format: uuid}
+              passes: {type: boolean}
+              first_failed: {type: [string, 'null']}
+              reason: {type: string, maxLength: 300}
     BatchPage:
       type: object
       required: [batches, next_cursor]
@@ -3084,12 +3397,15 @@ components:
           properties:
             gate: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
             take_ids: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string, format: uuid}}
+            note: {$ref: '#/components/schemas/PickNote'}
         - type: object
           required: [gate, reject]
           additionalProperties: false
           properties:
             gate: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
             reject: {type: boolean, const: true}
+            note: {$ref: '#/components/schemas/PickNote'}
+    PickNote: {type: string, minLength: 1, maxLength: 2000, description: 'from 1.14, a judge pick only: why (kept as a judge example in the pipeline''s memory: how the judge learns your taste)'}
     ReviewCandidate:
       type: object
       required: [take_id, kind, url, thumb_url, width, height, seed]
@@ -3104,6 +3420,22 @@ components:
         width: {type: [integer, 'null']}
         height: {type: [integer, 'null']}
         seed: {type: [integer, 'null'], minimum: 0}
+        judge:
+          description: 'from 1.14, a row parked on a judge: this take''s verdict'
+          type: object
+          required: [passes, rank, checks, reason]
+          properties:
+            passes: {type: boolean}
+            rank: {type: integer, minimum: 1, maximum: 8, description: 'its place in the judge''s order (1 = best)'}
+            checks: {type: array, maxItems: 24, items: {$ref: '#/components/schemas/JudgeCheck'}}
+            reason: {type: string, maxLength: 300}
+    JudgeCheck:
+      type: object
+      required: [criterion, level, pass]
+      properties:
+        criterion: {type: string}
+        level: {type: string, enum: [must, nice]}
+        pass: {type: boolean}
     BatchReviewItem:
       type: object
       required: [row, attempt, inputs, gate, gate_title, visit, keep, on_reject, rejects_left, candidates]
@@ -3118,6 +3450,11 @@ components:
         on_reject: {type: string, enum: [retry, then, fail], description: 'what rejecting all does now: retry (the fail edge, loops left), then (cap reached: the branch''s then), fail (a plain edge: the row fails, `rejected at <gate>`)'}
         rejects_left: {type: integer, minimum: 0, description: 'fail-edge turns left before then (0 for a plain edge)'}
         candidates: {type: array, minItems: 1, maxItems: 8, items: {$ref: '#/components/schemas/ReviewCandidate'}}
+        kind: {type: string, enum: [gate, judge], description: 'from 1.14; absent = gate'}
+        suggested: {type: array, maxItems: 8, items: {type: string, format: uuid}, description: 'a judge: pre-selected'}
+        verdict: {type: string, enum: [pass, fail], description: 'a judge: its verdict (fail = it gave up: nothing passed)'}
+        model: {type: string, description: 'a judge: the ask workflow''s title ("Ask Qwen Image (Qwen3-VL 8B)")'}
+        decision_id: {type: string}
     BatchReview:
       type: object
       required: [batch_id, items]
@@ -3126,8 +3463,8 @@ components:
         items: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/BatchReviewItem'}, description: 'every waiting row, by row number'}
     ExecutionPart:
       type: string
-      enum: [inputs, submit, wait, gate, route, output]
-      description: 'which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step''s two halves), gate (parked for a pick), route (the pick applied, the edge chosen), output (the row ends)'
+      enum: [inputs, submit, wait, gate, route, output, verdict, apply, memory]
+      description: 'which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step''s or, from 1.14, a judge''s, write''s or decide''s two halves: its runs), gate (parked for a pick: a gate, or a judge in Suggest), route (the pick or the verdict applied, the edge chosen; a decide''s route), output (the row ends); from 1.14 verdict (a judge''s answer checked and its decision derived), apply (a write''s text set), memory (a memory node read or wrote)'
     ExecutionEdge:
       type: object
       required: [to, via]
@@ -3146,12 +3483,153 @@ components:
         changed: {type: array, items: {type: string}, description: 'the state that changed (`takes.still = 4`, `loops.review = 1`)'}
         status: {type: string, enum: [finished, resumed, current], description: 'finished; resumed after waiting (a run, a pick); current = where the row is now'}
         edge: {oneOf: [{$ref: '#/components/schemas/ExecutionEdge'}, {type: 'null'}], description: 'the edge it took when it left the node'}
-        loops: {type: object, additionalProperties: {type: integer, minimum: 0}, description: 'gate id → times its fail edge was taken, after this step'}
+        loops: {type: object, additionalProperties: {type: integer, minimum: 0}, description: 'gate (from 1.14: judge, decide) id → times its capped edge was taken, after this step'}
         run_ids: {type: array, items: {type: string, format: uuid}}
         take_ids: {type: array, items: {type: string, format: uuid}}
         error: {type: [string, 'null']}
         at: {type: string, format: date-time}
         has_state: {type: boolean, description: 'its checkpoint can be read (GET …/execution/{step}/state) and retried from'}
+        decision: {$ref: '#/components/schemas/Decision', description: 'from 1.14, on the step that derived it (a judge''s verdict, a write''s apply, a decide''s route): the step details'}
+        memory:
+          description: 'from 1.14: memory items read from the batch''s snapshot and written for the next batches'
+          type: object
+          required: [read, wrote]
+          properties:
+            read: {type: array, items: {type: string, format: uuid}}
+            wrote: {type: array, items: {type: string, format: uuid}}
+    Decision:
+      type: object
+      required: [id, batch_id, row, node, kind, visit, attempt, replayed, replayed_from, run_ids, workflow, model, template, prompt, seen, answers, tokens_in, tokens_out, seconds, memory_read, error, at]
+      description: |
+        From 1.14 (plan 16.7): one judge, write or decide visit, as pipelines recorded it (messages defs `decision`),
+        with thumbnails as signed links. `judge` / `write` / `decide` hold the result for its kind (absent when
+        `error` came first). The execution view's step details: a judge's checks with pass or fail, the thumbnails
+        it saw, the model, what it read from memory; a write's text before and after; a decide's route.
+      properties:
+        id: {type: string, description: '<batch_id>:<row>:<attempt>:<node>:<visit>'}
+        batch_id: {type: string, format: uuid}
+        row: {type: integer, minimum: 1, maximum: 500}
+        node: {type: string}
+        kind: {type: string, enum: [judge, write, decide]}
+        visit: {type: integer, minimum: 1}
+        attempt: {type: integer, minimum: 1}
+        replayed: {type: boolean, description: 'reused a stored decision (Resume, Retry, Run again: same decisions); no model was asked'}
+        replayed_from: {type: [string, 'null']}
+        run_ids: {type: array, maxItems: 2, items: {type: string, format: uuid}}
+        workflow: {type: string, description: the ask workflow}
+        workflow_title: {type: string, description: '"Ask Qwen Image (Qwen3-VL 8B)": what the panel shows as Model'}
+        model:
+          oneOf:
+            - {type: object, required: [id, variant, precision], properties: {id: {type: [string, 'null']}, variant: {type: [string, 'null']}, precision: {type: [string, 'null']}}}
+            - {type: 'null'}
+        template: {type: string, examples: [judge/v1]}
+        prompt: {type: string, maxLength: 32768}
+        seen:
+          type: array
+          maxItems: 24
+          items:
+            type: object
+            required: [take_id, frame, sha256, width, height, thumb_url]
+            properties:
+              take_id: {type: string, format: uuid}
+              frame: {type: [integer, 'null'], minimum: 0}
+              sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+              width: {type: integer}
+              height: {type: integer}
+              thumb_url: {$ref: '#/components/schemas/SignedUrl', description: 'the derived thumbnail the model saw'}
+        answers: {type: array, maxItems: 4, items: {type: object, required: [text, error], properties: {text: {type: string, maxLength: 32768}, error: {type: [string, 'null']}}}}
+        tokens_in: {type: integer, minimum: 0}
+        tokens_out: {type: integer, minimum: 0}
+        seconds: {type: number, minimum: 0}
+        memory_read: {type: array, maxItems: 32, items: {type: string, format: uuid}}
+        error: {type: [string, 'null']}
+        at: {type: string, format: date-time}
+        judge:
+          type: object
+          required: [criteria, keep, mode, takes, picked, verdict, first_failed]
+          properties:
+            criteria: {$ref: '#/components/schemas/PipelineCriteria'}
+            keep: {type: integer, minimum: 1, maximum: 8}
+            mode: {type: string, enum: [suggest, auto]}
+            takes:
+              type: array
+              maxItems: 8
+              items:
+                type: object
+                required: [take_id, checks, reason, passes, rank]
+                properties:
+                  take_id: {type: string, format: uuid}
+                  checks: {type: array, maxItems: 24, items: {$ref: '#/components/schemas/JudgeCheck'}}
+                  reason: {type: string, maxLength: 300}
+                  passes: {type: boolean}
+                  rank: {type: integer, minimum: 1, maximum: 8}
+                  thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the take''s own thumbnail; null once deleted'}
+            picked: {type: array, maxItems: 8, items: {type: string, format: uuid}}
+            verdict: {type: string, enum: [pass, fail]}
+            first_failed: {type: [string, 'null']}
+            agreed: {type: [boolean, 'null'], description: 'Suggest: the user''s pick equalled it; null before a pick and in Auto'}
+            user_pick: {type: [array, 'null'], maxItems: 8, items: {type: string, format: uuid}, description: 'Suggest: what the user picked ([] = rejected all); null before a pick'}
+        write:
+          type: object
+          required: [to, before, after, note]
+          properties:
+            to: {type: string, examples: [$prompt]}
+            before: {type: string}
+            after: {type: string}
+            note: {type: string}
+        decide:
+          type: object
+          required: [route, to, reason, forced]
+          properties:
+            route: {type: string}
+            to: {type: string}
+            reason: {type: string}
+            forced: {type: boolean}
+    DecisionList:
+      type: object
+      required: [decisions]
+      properties:
+        decisions: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/Decision'}}
+    MemoryItem:
+      type: object
+      required: [id, kind, pipeline_id, key, text, kept, rejected, agreed, source, created_at, updated_at]
+      description: 'from 1.14: one item of a pipeline''s memory (plan 16.6): a judge example (a pick with a note at a judge) or a note (a memory write node''s, or typed here). `source` says where it came from'
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [judge_example, note]}
+        pipeline_id: {type: string, format: uuid}
+        key: {type: [string, 'null'], description: 'a note''s key; an example''s: its judge node id'}
+        text: {type: string, maxLength: 2000}
+        kept: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/TakeRef'}, description: 'an example: the takes picked (deleted ones left out)'}
+        rejected: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/TakeRef'}}
+        agreed: {type: [boolean, 'null']}
+        source:
+          type: object
+          required: [kind, batch_id, row, node, visit]
+          properties:
+            kind: {type: string, enum: [pick, node, user]}
+            batch_id: {type: [string, 'null'], format: uuid}
+            row: {type: [integer, 'null'], minimum: 1, maximum: 500}
+            node: {type: [string, 'null']}
+            visit: {type: [integer, 'null'], minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    MemoryList:
+      type: object
+      required: [pipeline_id, items, counts]
+      properties:
+        pipeline_id: {type: string, format: uuid}
+        items: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/MemoryItem'}}
+        truncated: {type: boolean, description: 'From 1.14: older items were left out to keep pipelines'' reply under NATS max_payload (delete some to see them)'}
+        counts: {type: object, required: [judge_example, note], properties: {judge_example: {type: integer, minimum: 0}, note: {type: integer, minimum: 0}}}
+    MemoryCreate:
+      type: object
+      required: [pipeline_id, text]
+      additionalProperties: false
+      properties:
+        pipeline_id: {type: string, format: uuid}
+        text: {type: string, minLength: 1, maxLength: 2000}
+        key: {type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$'}
     RowExecution:
       type: object
       required: [batch_id, row, attempt, attempts, status, current, pipeline, steps, nodes, edges, loops, retried_from]

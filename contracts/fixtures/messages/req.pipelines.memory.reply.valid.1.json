@@ -1,0 +1,48 @@
+{
+  "items": [
+    {
+      "id": "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a70",
+      "kind": "judge_example",
+      "pipeline_id": "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88",
+      "key": "judge",
+      "text": "The softer one keeps the fox's face; sharpness matters less than the face.",
+      "kept": [
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61"
+      ],
+      "rejected": [
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+      ],
+      "agreed": false,
+      "source": {
+        "kind": "pick",
+        "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+        "row": 6,
+        "node": "judge",
+        "visit": 1
+      },
+      "created_at": "2026-11-15T10:21:00Z",
+      "updated_at": "2026-11-15T10:21:00Z"
+    },
+    {
+      "id": "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a72",
+      "kind": "note",
+      "pipeline_id": "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88",
+      "key": null,
+      "text": "Foxes are always red, never grey.",
+      "kept": [],
+      "rejected": [],
+      "agreed": null,
+      "source": {
+        "kind": "user",
+        "batch_id": null,
+        "row": null,
+        "node": null,
+        "visit": null
+      },
+      "created_at": "2026-11-15T09:00:00Z",
+      "updated_at": "2026-11-15T09:00:00Z"
+    }
+  ]
+}

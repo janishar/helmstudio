@@ -5,7 +5,11 @@ still `etag`), decodes it with Pillow (at most MAX_PIXELS), applies a JPEG's EXI
 records the upload's size) and hands the node a PIL image. The bytes are dropped after decoding.
 
 The node's cache key hashes its params, so it covers (owner, key, etag): a changed image re-runs the node, an
-unchanged one is a cache hit and is not read again."""
+unchanged one is a cache hit and is not read again.
+
+A `Media` field of a rows item (an ask node's `media`, API 1.14) takes an image or a video take in the same form; it
+is read with the same checks and handed over as {"take_id", "image": PIL image} or, for content_type video/mp4,
+{"take_id", "mp4": bytes} (the ask stage takes its keyframes)."""
 
 import asyncio
 import io
@@ -35,22 +39,29 @@ def auto_size(width: int, height: int) -> tuple[int, int]:
     return round(w / 32) * 32, round(w / ratio / 32) * 32
 
 
-def walk(specs: list[dict], params: dict, fn) -> dict:
-    """`params` with fn(value) applied to every Image value: an `image` param that is set, and each Image field
-    of a `rows` item. `specs` are the node's param schemas."""
+TAKES = ("Image", "Media")  # rows item ref kinds that hold a resolved take
+
+
+def walk(specs: list[dict], params: dict, fn, kinds=TAKES) -> dict:
+    """`params` with fn(value) applied to every take value: an `image` param that is set, and each field of a `rows`
+    item whose ref kind is in `kinds`. `specs` are the node's param schemas."""
     out = dict(params)
     for spec in specs:
         name, value = spec["name"], params.get(spec["name"])
-        if spec["type"] == "image" and value is not None:
+        if spec["type"] == "image" and value is not None and "Image" in kinds:
             out[name] = fn(value)
         elif spec["type"] == "rows" and value:
-            fields = [f for f, t in spec["item"].items() if t == "Image"]
+            fields = [f for f, t in spec["item"].items() if t in kinds]
             out[name] = [row | {f: fn(row[f]) for f in fields if row.get(f)} for row in value]
     return out
 
 
+def video(value: dict) -> bool:
+    return value.get("content_type") == "video/mp4"
+
+
 def values(specs: list[dict], params: dict) -> list[dict]:
-    """The Image values of `params`, in order."""
+    """The take values (Image and Media) of `params`, in order."""
     found: list[dict] = []
     walk(specs, params, found.append)
     return found
@@ -78,8 +89,8 @@ def decode(data: bytes, take_id: str) -> Image.Image:
         raise graph.RunError(f"input image {take_id} is not a readable image") from e
 
 
-async def read(value: dict, owner: str, fetch) -> Image.Image:
-    """Fetch one resolved Image value and decode it. `fetch(key, limit, etag)` → bytes (at most limit + 1), or None
+async def read(value: dict, owner: str, fetch) -> Image.Image | bytes:
+    """Fetch one resolved Image value and decode it (a video take: its checked bytes, undecoded). `fetch(key, limit, etag)` → bytes (at most limit + 1), or None
     when the object is missing or its ETag is no longer `etag` (re-PUT after studio checked it)."""
     take_id, key, size = value["take_id"], value["key"], value["bytes"]
     if not key.startswith(
@@ -93,13 +104,18 @@ async def read(value: dict, owner: str, fetch) -> Image.Image:
     data = await fetch(key, size, value["etag"])
     if data is None or len(data) != size:
         raise graph.RunError(f"input image {take_id} is gone")
+    if video(value):
+        return data
     return await asyncio.to_thread(decode, data, take_id)
 
 
 async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
-    """`params` with every Image value replaced by its PIL image (each key read once)."""
+    """`params` with every Image value replaced by its PIL image and every Media value by {take_id, image | mp4}
+    (each key read once)."""
     pics = {}
     for v in values(specs, params):
         if v["key"] not in pics:
             pics[v["key"]] = await read(v, owner, fetch)
-    return walk(specs, params, lambda v: pics[v["key"]])
+    out = walk(specs, params, lambda v: pics[v["key"]], ("Image",))
+    media = lambda v: {"take_id": v["take_id"], "mp4" if video(v) else "image": pics[v["key"]]}
+    return walk(specs, out, media, ("Media",))

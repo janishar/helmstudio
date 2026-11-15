@@ -15,16 +15,20 @@ import (
 
 // cellIn is one cell as pipelines reports it (defs rowCell).
 type cellIn struct {
-	Node     string `json:"node"`
-	Kind     string `json:"kind"`
+	Node     string          `json:"node"`
+	Kind     string          `json:"kind"`
+	Loop     json.RawMessage `json:"loop"` // a judge with a branch, a decide (API 1.14)
 	Attempts []struct {
-		Visit      int      `json:"visit"`
-		Status     string   `json:"status"`
-		RunIDs     []string `json:"run_ids"`
-		TakeIDs    []string `json:"take_ids"`
-		Candidates []string `json:"candidates"`
-		Seeds      []int64  `json:"seeds"`
-		Error      *string  `json:"error"`
+		Visit      int             `json:"visit"`
+		Status     string          `json:"status"`
+		RunIDs     []string        `json:"run_ids"`
+		TakeIDs    []string        `json:"take_ids"`
+		Candidates []string        `json:"candidates"`
+		Seeds      []int64         `json:"seeds"`
+		Error      *string         `json:"error"`
+		DecisionID string          `json:"decision_id"`
+		Judged     json.RawMessage `json:"judged"`
+		Route      json.RawMessage `json:"route"`
 	} `json:"attempts"`
 }
 
@@ -80,10 +84,11 @@ func (s *Service) rowsDTO(ctx context.Context, tx pgx.Tx, rows []model.BatchRow)
 		out[i].Parked = parked
 		shown := []dto.BatchCell{}
 		for _, cell := range cells[i] {
-			c := dto.BatchCell{Node: cell.Node, Kind: cell.Kind, Attempts: []dto.BatchCellAttempt{}}
+			c := dto.BatchCell{Node: cell.Node, Kind: cell.Kind, Attempts: []dto.BatchCellAttempt{}, Loop: rawOrNil(cell.Loop)}
 			for _, a := range cell.Attempts {
 				attempt := dto.BatchCellAttempt{Visit: a.Visit, Status: a.Status, RunIDs: nonNil(a.RunIDs),
-					TakeIDs: nonNil(a.TakeIDs), Candidates: a.Candidates, Seeds: a.Seeds, Error: a.Error}
+					TakeIDs: nonNil(a.TakeIDs), Candidates: a.Candidates, Seeds: a.Seeds, Error: a.Error,
+					DecisionID: a.DecisionID, Judged: rawOrNil(a.Judged), Route: rawOrNil(a.Route)}
 				if attempt.Seeds == nil {
 					attempt.Seeds = []int64{}
 				}
@@ -99,7 +104,7 @@ func (s *Service) rowsDTO(ctx context.Context, tx pgx.Tx, rows []model.BatchRow)
 						attempt.Seconds = &seconds
 					}
 				}
-				if cell.Kind == "step" && attempt.Status == "running" && !started {
+				if (cell.Kind == "step" || dto.Asks(cell.Kind)) && attempt.Status == "running" && !started {
 					attempt.Status = "queued"
 				}
 				for _, id := range append(append([]string{}, a.TakeIDs...), a.Candidates...) {
@@ -141,6 +146,14 @@ func uuids(ids []string) []string {
 		}
 	}
 	return out
+}
+
+// rawOrNil is raw, or nil when absent or null (left out of the answer).
+func rawOrNil(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return raw
 }
 
 // nonNil is list, or an empty list.

@@ -1,0 +1,135 @@
+{
+  "description": "the M4b demonstration (plan 16.2, 08 M4b): best-of-4 Qwen Turbo stills, a judge in Suggest mode keeps 1 (reading the batch's memory snapshot), a failed verdict rewrites the prompt and retries at most twice, then a human review; LTX animates the kept still. Its judge and write resolve `auto` to `qwen-image-ask` (Qwen Image's own text encoder: no extra load). Worst case per row: still 4 × 3 visits + clip 1 = 13 runs; judge 3 + rewrite 3 = 6 LLM calls (the bound counts the write's visits like a step's: 1 + the cap)",
+  "pipeline": {
+    "title": "Best still to clip",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "motion",
+            "type": "Text"
+          }
+        ]
+      },
+      "mem": {
+        "kind": "memory",
+        "op": "read",
+        "limit": 8
+      },
+      "still": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "seeds": 4,
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "judge": {
+        "kind": "judge",
+        "takes": "still",
+        "criteria": {
+          "must": [
+            "No extra or missing limbs",
+            "No text or watermarks",
+            "Matches the brief"
+          ],
+          "nice": [
+            "Subject is sharp"
+          ]
+        },
+        "keep": 1,
+        "mode": "suggest",
+        "model": "auto",
+        "memory": "mem"
+      },
+      "rewrite": {
+        "kind": "write",
+        "from": [
+          "$prompt",
+          "judge.reasons"
+        ],
+        "to": "$prompt",
+        "instruction": "Fix what the reviewer found; keep everything else."
+      },
+      "review": {
+        "kind": "gate",
+        "takes": "still"
+      },
+      "clip": {
+        "kind": "step",
+        "workflow": "ltx-image-to-video",
+        "inputs": {
+          "model.precision": "int8",
+          "canvas.width": 448,
+          "canvas.height": 256,
+          "duration.frames": 49
+        },
+        "bind": {
+          "prompt.text": "$motion",
+          "keyframes.images": "judge.picked"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "clip.takes",
+        "collection": "Best still to clip"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "mem"
+      ],
+      [
+        "mem",
+        "still"
+      ],
+      [
+        "still",
+        "judge"
+      ],
+      [
+        "judge",
+        {
+          "pass": "clip",
+          "fail": "rewrite",
+          "max": 2,
+          "then": "review"
+        }
+      ],
+      [
+        "rewrite",
+        "still"
+      ],
+      [
+        "review",
+        "clip"
+      ],
+      [
+        "clip",
+        "out"
+      ]
+    ]
+  },
+  "problems": [],
+  "bounds": {
+    "runs": 13,
+    "llm_calls": 6
+  },
+  "models": {
+    "judge": "qwen-image-ask",
+    "rewrite": "qwen-image-ask"
+  }
+}

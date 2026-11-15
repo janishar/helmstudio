@@ -1,0 +1,21 @@
+{
+  "id": "echo-ask",
+  "title": "Ask (fake)",
+  "family": "echo",
+  "env": "fake",
+  "media": "text",
+  "nodes": {
+    "ask": {
+      "kind": "echo/ask",
+      "params": {
+        "max_tokens": 800
+      }
+    },
+    "answer": {
+      "kind": "answer",
+      "in": {
+        "text": "ask.answer"
+      }
+    }
+  }
+}
