@@ -45,12 +45,13 @@ type Run struct {
 	WorkflowVersion *int
 	WorkflowTitle   *string
 	Mentions        json.RawMessage // {typed, elements}: what the mention expansion did; null when nothing
+	Loras           json.RawMessage // its LoRA values as resolved when it was made ([]lora.Used); null when none
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
-	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions`
+	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras`
 
 // Output is a run_outputs row.
 type Output struct {

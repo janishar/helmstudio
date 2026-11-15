@@ -3,6 +3,7 @@ package registry
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -111,7 +112,7 @@ func TestQwenAndHostMemory(t *testing.T) {
 	_ = r.SetRegistry("mac.torch.nodes", fixture(t, "qwen-image.nodes"))
 	_ = r.SetRegistry("mac.torch.workflows", fixture(t, "qwen-image.workflows"))
 	workflow, ok := r.Workflow("qwen-image")
-	if !ok || len(workflow.NodeSchemas) != 8 || workflow.Env != "torch" {
+	if !ok || len(workflow.NodeSchemas) != 9 || workflow.Env != "torch" {
 		t.Fatalf("%+v", workflow)
 	}
 	host3, _ := os.ReadFile(filepath.Join("..", "..", "contracts", "fixtures", "registry", "host.valid.3.json"))
@@ -163,5 +164,38 @@ func TestPalette(t *testing.T) {
 	}
 	if _, ok := r.Schemas()["qwen-image/sample"]; !ok {
 		t.Fatal("but the registry still has their schemas")
+	}
+}
+
+// Family detection prefers a family a non-fake env publishes: LoraBlocks marks the fake-only ones, and a shared LoRA
+// that a fake host and a torch host both index takes the torch host's family.
+func TestLoraFamiliesPreferNonFakeEnvs(t *testing.T) {
+	var r Registry
+	t0 := time.Now()
+	_ = r.SetRegistry("fake.fake.models", fixture(t, "models"))
+	_ = r.SetRegistry("mac.torch.models", fixture(t, "qwen-image.models"))
+	_ = r.SetRegistry("other.fake.models", fixture(t, "qwen-image.models"))
+	blocks := r.LoraBlocks()
+	if !blocks["echo"].Fake || blocks["qwen-image"].Fake || len(blocks["qwen-image"].Modules) == 0 {
+		t.Fatalf("%+v", blocks)
+	}
+	host := func(name, env string) []byte {
+		return []byte(`{"host": "` + name + `", "env": "` + env + `", "state": "idle", "run_id": null, "updated_at": "` +
+			t0.UTC().Format(time.RFC3339Nano) + `"}`)
+	}
+	lora := func(family string) []byte {
+		return []byte(`{"loras": [{"id": "` + strings.Repeat("a", 64) + `", "name": "x", "family": "` + family +
+			`", "rank": 4, "bytes": 1, "key_style": "peft", "licence": null, "modified_at": "2026-11-14T10:00:00Z"}]}`)
+	}
+	_ = r.SetHost("fake.fake", host("fake", "fake"))
+	_ = r.SetHost("mac.torch", host("mac", "torch"))
+	_ = r.SetRegistry("fake.fake.loras", lora("echo"))
+	_ = r.SetRegistry("mac.torch.loras", lora("qwen-image"))
+	if got := r.Loras(t0, "")[strings.Repeat("a", 64)]; got.Family != "qwen-image" || len(got.Hosts) != 2 {
+		t.Fatalf("%+v", got)
+	}
+	_ = r.SetRegistry("mac.torch.loras", lora("unknown"))
+	if got := r.Loras(t0, "")[strings.Repeat("a", 64)]; got.Family != "echo" {
+		t.Fatalf("%+v", got)
 	}
 }

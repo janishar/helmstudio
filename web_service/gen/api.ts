@@ -273,7 +273,8 @@ export interface paths {
          * Make an element from 1 to 4 of the caller's gallery images
          * @description `name` and `text` are trimmed. 422: `name must be 1-80 characters`, `handle must be a slug: a-z, 0-9, - and _,
          *     starting with a letter, ending with a letter or digit, at most 40 characters`, `text must be at most 2000
-         *     characters` (code points), `images: an element has 1 to 4 images`, `images[2]: take <id> is listed twice`,
+         *     characters` (code points), `name must not contain control characters`, `text must not contain control
+         *     characters other than newlines and tabs`, `images: an element has 1 to 4 images`, `images[2]: take <id> is listed twice`,
          *     `images[2]: take <id> is not an image`, `images[2]: take <id> has no size` (items from 1). 404 `images[2]: take
          *     <id> not found` for a take that is unknown, another user's, deleted or a pending upload. 409 `handle @<handle>
          *     is already used` (unique per owner, over every kind), 409 `You have 200 library items; delete some first.`
@@ -310,6 +311,104 @@ export interface paths {
          *     still mentions the handle is 422 at its next run. Deleting again is 404.
          */
         delete: operations["studioDeleteLibraryItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/loras": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The LoRAs the caller can use (shared ones of the live hosts, and the caller's own); not paginated
+         * @description Shared LoRAs are the union of every live host's registry `<host>.<env>.loras` (one entry per id, `hosts` = the
+         *     live hosts that list it, sorted; `family` = the first not `unknown` over those hosts); own LoRAs are the
+         *     caller's rows in every `state` (owner-scoped; another user's never appear). Filters combine with AND:
+         *     `source`, `family` (exact, `unknown` included), `q` (every whitespace-separated word occurs, case-insensitively,
+         *     in `name`). Order: own first, newest `created_at` first; then shared by `name` (case-insensitive, code points),
+         *     then `id`. `thumb_url` is the caller's oldest take whose `made_with.loras` has the id (never another user's).
+         */
+        get: operations["studioListLoras"];
+        put?: never;
+        /**
+         * Start uploading an own LoRA; answers a signed files_service URL to PUT the file to
+         * @description Stores the caller's LoRA `pending` (`name` = the file name without `.safetensors`, trimmed, cut to 80) and signs
+         *     a single-use `PUT` link for `u/<caller>/loras/<lora_id>.safetensors` with `Content-Type:
+         *     application/octet-stream`, valid 15 minutes (`PUT /files/{path}`, the take upload's pattern). 422 `only
+         *     .safetensors files can be uploaded` (the name must end in `.safetensors`, any case; the bytes are checked at
+         *     complete), `file is larger than 2 GB` (over 2147483648 bytes). 409 `You have 50 LoRAs; delete some first.`
+         *     (every own LoRA counts, whatever its state) and 409 `Your LoRAs would use more than 20 GB; delete some first.`
+         *     (`size_bytes` of the pending and ready ones plus this one, over 21474836480). A LoRA still `pending` an hour
+         *     after it was created is deleted (with its object).
+         */
+        post: operations["studioCreateLoraUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/loras/{lora_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description A shared LoRA a live host lists, or one of the caller's own (any state); anything else is 404. */
+        get: operations["studioGetLora"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete an own LoRA (never refused)
+         * @description The LoRA is gone at once (404 from then on, in no list, it frees its count and bytes); a sweep deletes the object
+         *     a day later. Past takes keep `made_with.loras` (reuse answers it `deleted`). A run not yet released that names
+         *     it fails at dispatch (`LoRA <name> was deleted`); a released one may still finish. A batch row whose run is made
+         *     later fails `invalid` (`lora.rows[1].lora: LoRA <id> not found`). A workflow or preset that still names it gets
+         *     the `lora_unknown` problem. 409 `shared LoRAs are managed on their host` for a shared id.
+         */
+        delete: operations["studioDeleteLora"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename an own LoRA
+         * @description `name` trimmed, then 1-80 characters without control characters (422 `name must be 1-80 characters`, `name must
+         *     not contain control characters`). Takes made before keep the name they recorded. 409 `shared LoRAs are managed
+         *     on their host` for a shared id.
+         */
+        patch: operations["studioRenameLora"];
+        trace?: never;
+    };
+    "/v1/studio/loras/{lora_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the uploaded file and index it
+         * @description Studio never trusts the client: it HEADs the object (size = the declared `size_bytes`), reads the safetensors
+         *     header with range GETs, then streams the whole object once to hash it (SHA-256; a 2 GB file takes seconds) and
+         *     checks it (contracts/README.md, LoRA upload checks). Success: `state: ready` with `sha256`, `rank`, `key_style`,
+         *     `family` (the first registry family by name the normaliser fits, else `unknown`) and `licence`. A failed check:
+         *     422 with the reason, and the LoRA stays listed `rejected` with that `reason` (until deleted; the sweep removes
+         *     its object): `size differs from the declared bytes`, `pickle checkpoints are not accepted; convert it to
+         *     safetensors`, `not a safetensors file`, `safetensors header is larger than 8 MB`, `tensor <key> lies outside
+         *     the file`, `tensor <key> has dtype <d>; LoRAs must be F32, F16 or BF16`, `no LoRA keys found (is it a full
+         *     model?)`, `<key> is not a LoRA weight`, `<module>: lora_A and lora_B ranks differ`, `<module>: lora_B is
+         *     missing`, `rank <r> is over 4096`, `more than 20000 tensors`. 409 `upload not received` while the object is
+         *     not there yet (PUT it, then call again). Calling again after it ended answers the same (200 ready, or the same
+         *     422). 404 for an id that is unknown, another user's or shared.
+         */
+        post: operations["studioCompleteLoraUpload"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -354,6 +453,15 @@ export interface paths {
          *     distinct one, joined by `; `), `encode.refs: at most 10 images; <n> used, @<handle> +<k>, … do not fit`,
          *     `prompt.text: at most 4000 characters once elements are added (<n>)`. The resolved graph is what is checked
          *     for a host, stored as the run's snapshot, sent and recorded in the take; `Run.inputs` stays as requested.
+         *
+         *     LoRA values (`LoraRef`, a Lora field of a `rows` item: the `<family>/lora-stack` node) are then resolved as the
+         *     caller (contracts/README.md, LoRAs), items numbered from 1: 422 `lora.rows[2].lora: LoRA <id> not found` (unknown,
+         *     another user's, deleted, pending or rejected, or a shared id no live host of the env lists: one message, nothing
+         *     leaks), `lora.rows[2].lora: LoRA <name> does not fit qwen-image (it is for <family>)` (or `(its model is
+         *     unknown)`), `lora.rows[2].lora: LoRA <name> is already in row 1`; strength and mode are checked by the run rules
+         *     (`lora.rows[1].strength: must be between -4 and 4`), the row count by `max` (`lora.rows: at most 8 items`). A
+         *     shared LoRA no live host of the env has at dispatch fails the run `no live host for env <env> has LoRA
+         *     <name>`.
          */
         post: operations["studioCreateRun"];
         delete?: never;
@@ -540,6 +648,9 @@ export interface paths {
          *     typed (with its mentions) and the reference rows without the element images; `elements_status` says, per
          *     element of `made_with.elements`, whether running it again would resolve the same (`current`), differently
          *     (`changed`: edited since) or not at all (`deleted`).
+         *     With LoRAs: `inputs` hold them as recorded (`{lora_id}`); `loras_status` says, per `made_with.loras` entry,
+         *     `current` (the caller can use it now), `missing` (shared: no live host lists it now; it may come back) or
+         *     `deleted` (own: deleted since). Running a missing or deleted one is 422 (`… LoRA <id> not found`).
          */
         post: operations["studioReuseTake"];
         delete?: never;
@@ -694,9 +805,10 @@ export interface paths {
          *     - Mentions (contracts/README.md, Mentions) resolve in every row against the caller's elements now; the rows
          *       that cannot are all listed, in row order (at most 10, then `; and <n> more rows`), joined by `; `:
          *       `row 3: prompt.text: unknown element @wolf; row 7: encode.refs: at most 10 images; 9 used, @fox +2 do not fit`.
-         *       A pipeline batch checks only unknown handles here, in every Text input value of its rows and every text
-         *       value of its steps' `inputs` (`row 3: inputs.prompt: unknown element @wolf`, `step_1: prompt.text: unknown
-         *       element @wolf`); the rest is checked when each run is made (that row fails `invalid`).
+         *       A pipeline batch checks only unknown handles here, in every step's graph as each input row's run will
+         *       resolve it (its row values, the step's `inputs` and preset, the step workflow's own params): `row 3:
+         *       step_1: prompt.text: unknown element @wolf`; the rest is checked when each run is made (that row fails
+         *       `invalid`).
          *       Studio keeps a copy of every element the batch mentions: its runs, Retry included, resolve against that
          *       copy, never against later edits or deletes.
          *     - A live host has the workflow's env and publishes the workflow (`no live host for env <env>`).
@@ -994,7 +1106,8 @@ export interface paths {
         get: operations["filesGetFile"];
         /**
          * Upload the bytes of a signed upload link (the signature is the auth; no API key)
-         * @description Only reachable through an `upload_url` from `POST /v1/studio/uploads`. The signature is the lower-case hex
+         * @description Only reachable through an `upload_url` from `POST /v1/studio/uploads` (images, at most 50 MB) or `POST
+         *     /v1/studio/loras` (`u/<owner>/loras/<lora_id>.safetensors`, `application/octet-stream`, at most 2 GiB). The signature is the lower-case hex
          *     HMAC-SHA256 (the `/files` secret) of `"PUT\n" + path + "\n" + exp + "\n" + bytes + "\n" + ct`; a GET link
          *     (`path + "\n" + exp`) never verifies as a PUT. The request must carry `Content-Type` equal to `ct` and
          *     `Content-Length` equal to `bytes` (no chunked body); the body is streamed to the object store under `path`
@@ -1264,9 +1377,16 @@ export interface components {
             /** Format: uuid */
             take_id: string;
         };
+        /**
+         * @description A Lora value (a rows item field of ref kind `Lora`): a LoRA the caller can use, by id; never a path, key or URL.
+         *     Studio checks it when it creates the run (contracts/README.md, "LoRAs").
+         */
+        LoraRef: {
+            lora_id: string;
+        };
         /** @description one item of a rows value: field (the param's `item`) → value */
         RowItem: {
-            [key: string]: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"];
+            [key: string]: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["LoraRef"];
         };
         /** @description a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items */
         ParamValue: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["RowItem"][];
@@ -1276,8 +1396,8 @@ export interface components {
          *     or -1 means random: the runner picks one and reports it (`Run.resolved.seed`, `RunOutput.seed`). `when`: a
          *     visibility expression over the graph (`model.variant != 'turbo'`), carried through, not evaluated yet.
          *     `image`: one take (`ImageRef`), default null; a run needs one. `rows` (the rows editor): an ordered list of
-         *     `RowItem`, default `[]`; `min`/`max` bound the count, `item` names each item's fields (a port type, only `Image`
-         *     in this version, or a param schema), `mention` is how the prompt refers to item n from 1 (`<image{n}>`: the
+         *     `RowItem`, default `[]`; `min`/`max` bound the count, `item` names each item's fields (a ref kind, `Image` or
+         *     `Lora`, required in every item, or a param schema), `mention` is how the prompt refers to item n from 1 (`<image{n}>`: the
          *     rows editor labels item n with it; the prompt is sent as typed).
          */
         ParamSchema: {
@@ -1294,9 +1414,9 @@ export interface components {
             help?: string;
             /** @description visibility expression; absent = always shown */
             when?: string;
-            /** @description rows only: field → a port type (`Image`) or a param schema without name */
+            /** @description rows only: field → a ref kind (`Image`: a take, `Lora`: a LoRA; required in every item) or a param schema without name */
             item?: {
-                [key: string]: "Image" | Record<string, never>;
+                [key: string]: "Image" | "Lora" | Record<string, never>;
             };
             /**
              * @description rows only: the prompt's name for item n, with `{n}` from 1
@@ -1478,7 +1598,7 @@ export interface components {
          * @description meaning and which ones block saving: contracts/README.md, Graph rules. May grow in a minor version; an unknown code blocks running
          * @enum {string}
          */
-        ProblemCode: "too_many_nodes" | "too_large" | "too_many_outputs" | "too_many_seeds" | "wrong_family" | "unknown_kind" | "env_mismatch" | "unknown_param" | "param_invalid" | "unknown_input" | "unknown_source" | "type_mismatch" | "not_bypassable" | "required_input" | "cycle" | "no_output" | "studio_unknown_path" | "studio_duplicate" | "preset_invalid";
+        ProblemCode: "too_many_nodes" | "too_large" | "too_many_outputs" | "too_many_seeds" | "wrong_family" | "unknown_kind" | "env_mismatch" | "unknown_param" | "param_invalid" | "unknown_input" | "unknown_source" | "type_mismatch" | "not_bypassable" | "required_input" | "cycle" | "no_output" | "studio_unknown_path" | "studio_duplicate" | "preset_invalid" | "lora_duplicate" | "lora_unknown" | "lora_family";
         /** @description one broken graph rule; `node` / `port` / `param` say where, for the editor to mark (absent = the whole workflow) */
         Problem: {
             code: components["schemas"]["ProblemCode"];
@@ -1931,6 +2051,13 @@ export interface components {
                 precision: "bf16" | "fp16" | "int8";
                 gb: number;
                 pinned: boolean;
+                /** @description a component with LoRAs baked in is its own entry: those LoRAs in order; absent or empty = the plain component. Another user's own LoRA shows only its size (`lora_id`, `name`, `strength` null) */
+                loras?: {
+                    lora_id: string | null;
+                    name: string | null;
+                    strength: number | null;
+                    bytes: number;
+                }[];
             }[];
         };
         HostList: {
@@ -2003,6 +2130,8 @@ export interface components {
             seed: number | null;
             /** @description the elements its prompt mentioned, first mention first, as they were when the run was made; absent or empty = none */
             elements?: components["schemas"]["MadeWithElement"][];
+            /** @description every LoRA of every lora-stack node that ran, node id order then row order, as resolved when the run was made; absent or empty = none */
+            loras?: components["schemas"]["MadeWithLora"][];
             /**
              * @description for each param the mention expansion changed (prompt params, the reference rows), its value before it: the
              *     prompt as typed, the rows without the element images. `inputs` holds the resolved values (what ran).
@@ -2072,6 +2201,30 @@ export interface components {
             workflow_status?: "current" | "changed" | "deleted";
             /** @description reuse only: one per `made_with.elements` entry, same order; absent or empty when the take mentioned none */
             elements_status?: components["schemas"]["ElementStatus"][];
+            /** @description reuse only: one per `made_with.loras` entry, same order; absent or empty without LoRAs */
+            loras_status?: components["schemas"]["LoraStatus"][];
+        };
+        MadeWithLora: {
+            /** @description the lora-stack node id */
+            node: string;
+            /** @description the LoRA (an own one may be deleted since) */
+            id: string;
+            source: components["schemas"]["LoraSource"];
+            /** @description as it was when the run was made */
+            name: string;
+            strength: number;
+            /** @enum {string} */
+            mode: "adapter" | "bake";
+            /** @description the file's content hash: what exactly ran */
+            sha256: string;
+        };
+        LoraStatus: {
+            id: string;
+            /**
+             * @description current: the caller can use it now; missing: shared, no live host lists it now; deleted: own, deleted since
+             * @enum {string}
+             */
+            status: "current" | "missing" | "deleted";
         };
         MadeWithElement: {
             /**
@@ -2188,6 +2341,82 @@ export interface components {
              */
             upload_url: string;
             content_type: string;
+            bytes: number;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        /**
+         * @description shared: a file on the GPU hosts (registry `<host>.<env>.loras`), usable by everyone; mine: the caller's own upload
+         * @enum {string}
+         */
+        LoraSource: "shared" | "mine";
+        /**
+         * @description own LoRAs: pending (created, not completed), ready (checked and indexed), rejected (a check failed: `reason`); shared ones are always ready
+         * @enum {string}
+         */
+        LoraState: "pending" | "ready" | "rejected";
+        /**
+         * @description how the file names its tensors (detected, never configured; contracts/README.md, LoRA normaliser)
+         * @enum {string}
+         */
+        LoraKeyStyle: "peft" | "kohya" | "comfyui";
+        /**
+         * @description A LoRA in the library. Shared and own LoRAs have one shape; `hosts` is set only for shared ones, `reason` only
+         *     for a rejected one. `rank`, `key_style`, `sha256` are null until an own LoRA is ready.
+         */
+        Lora: {
+            /** @description shared: the file's SHA-256; mine: a UUID */
+            id: string;
+            source: components["schemas"]["LoraSource"];
+            name: string;
+            /**
+             * @description the model family it fits (`qwen-image`), or `unknown` (it fits no family published now, or not checked yet)
+             * @example qwen-image
+             * @example unknown
+             */
+            family: string;
+            /** @description the largest A/B rank */
+            rank: number | null;
+            size_bytes: number;
+            key_style: components["schemas"]["LoraKeyStyle"] | null;
+            /** @description from the file's metadata (`modelspec.license`, else `license`); null when it names none */
+            licence: string | null;
+            sha256: string | null;
+            /** @description shared: the live hosts that have it (sorted); mine: [] (any host fetches it on first use) */
+            hosts: string[];
+            state: components["schemas"]["LoraState"];
+            /** @description rejected: why (the complete call's 422 detail); null otherwise */
+            reason: string | null;
+            /** @description the caller's oldest take made with it; null when none */
+            thumb_url: components["schemas"]["SignedUrl"] | null;
+            /**
+             * Format: date-time
+             * @description mine: the upload's creation; shared: the file's mtime (the oldest over its hosts)
+             */
+            created_at: string;
+        };
+        LoraList: {
+            loras: components["schemas"]["Lora"][];
+        };
+        LoraPatch: {
+            /** @description trimmed; must then be 1-80 characters */
+            name: string;
+        };
+        LoraUploadCreate: {
+            /** @description must end in .safetensors; the name without it becomes the LoRA's name */
+            filename: string;
+            bytes: number;
+        };
+        LoraUpload: {
+            /** @description state pending; pass its id to /v1/studio/loras/{lora_id}/complete */
+            lora: components["schemas"]["Lora"];
+            /**
+             * @description signed single-use link: PUT the file here with exactly this Content-Type and Content-Length
+             * @example /files/u/7d1e.../loras/2c4e....safetensors?exp=1767225600&bytes=18874368&ct=application%2Foctet-stream&sig=ab12
+             */
+            upload_url: string;
+            /** @constant */
+            content_type: "application/octet-stream";
             bytes: number;
             /** Format: date-time */
             expires_at: string;
@@ -2855,6 +3084,8 @@ export interface components {
         TakeId: string;
         /** @description pipeline UUID (malformed = 404) */
         PipelineId: string;
+        /** @description a shared LoRA's SHA-256 (64 hex) or an own LoRA's UUID (malformed = 404) */
+        LoraId: string;
         /** @description library item UUID (malformed = 404) */
         LibraryItemId: string;
         /** @description row number, from 1 (unknown or malformed = 404) */
@@ -3552,6 +3783,174 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListLoras: {
+        parameters: {
+            query?: {
+                source?: components["schemas"]["LoraSource"];
+                /** @description only LoRAs detected for this family (`unknown`: those that fit none) */
+                family?: string;
+                /** @description words of the name; blank = no filter */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description LoRAs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoraList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateLoraUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoraUploadCreate"];
+            };
+        };
+        responses: {
+            /** @description the upload */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoraUpload"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetLora: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a shared LoRA's SHA-256 (64 hex) or an own LoRA's UUID (malformed = 404) */
+                lora_id: components["parameters"]["LoraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the LoRA */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lora"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteLora: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a shared LoRA's SHA-256 (64 hex) or an own LoRA's UUID (malformed = 404) */
+                lora_id: components["parameters"]["LoraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRenameLora: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a shared LoRA's SHA-256 (64 hex) or an own LoRA's UUID (malformed = 404) */
+                lora_id: components["parameters"]["LoraId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoraPatch"];
+            };
+        };
+        responses: {
+            /** @description the LoRA */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lora"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCompleteLoraUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a shared LoRA's SHA-256 (64 hex) or an own LoRA's UUID (malformed = 404) */
+                lora_id: components["parameters"]["LoraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the LoRA, ready */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lora"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

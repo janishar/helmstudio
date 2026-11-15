@@ -17,8 +17,8 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/evt.studio.run_finished.schema.json` | studio → pipelines_service: a batch run ended (any terminal status) |
 | `messages/req.studio.runs.create.schema.json` | NATS request/reply pipelines → studio (not enveloped): create a batch-lane run, idempotent on its key |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
-| `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef`, `resolvedValue` with `image`) |
-| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (bucket `registry`), `$defs/host` (bucket `hosts`) |
+| `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
+| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras` (bucket `registry`), `$defs/host` (bucket `hosts`) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
 | `fixtures/registry/{nodes,workflows,models}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
@@ -26,7 +26,8 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention-rule fixtures** (Mentions, below): `scan.json` (prompt → parts), `resolve.*.json` (a graph with merged values, a library → the expanded inputs, `typed`, `elements`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention fixtures through `scan` / `resolve_mentions`, lints `openapi.yaml` and the house rules |
+| `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical qwen-image lora block (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention fixtures through `scan` / `resolve_mentions`, the LoRA fixtures through `normalise`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -49,7 +50,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `studio.runs.create` | core request/reply, queue group `studio` | bare JSON (`req.studio.runs.create`) | pipelines → studio |
 | `pipelines.state.get` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.state.get`) | studio → pipelines (5 s) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
-| KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models` | the runner writes its own keys once at start; studio reads |
+| KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras` | the runner writes its own keys once at start; studio reads |
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s; studio reads (older than 30 s = offline) |
 | KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step |
 
@@ -77,16 +78,22 @@ env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-
   output `image`: Image) → `output` (kind `output`, input `media`: Image). Before its first step the fake runner reads
   every `refs` image (Image inputs, below); the PNG it writes is unchanged. Running it: `status running` (seq 1), one `progress` per step (node `echo`, step 1..steps, each
   after `delay_ms`), the PNG written to `<output_prefix>0.png` and one `output` (index 0), then `succeeded`; when `fail` is true, no PNG and
-  `failed` after the last step. Cancel is checked before each step.
+  `failed` after the last step. Cancel is checked before each step. The family's LoRA stand-in `echo/lora-stack`
+  (title `LoRA Stack`, not in the `echo` workflow): input `text`: Text, output `text`: Text, param `rows` as
+  `<family>/lora-stack`'s (LoRAs, below); it writes `<text> [LoRA <name> x<strength>, …]` (no rows: the text as it
+  is) and applies nothing. Its models entry carries a `lora` block (`component` `transformer`, `modules` = exactly the
+  modules the qwen-image fixtures of `fixtures/loras/` name, `renames` and `ignore` `[]`), so those files fit echo on
+  a stack without a GPU.
 - **Seeds.** A `seed` param is an integer (≤ 2^53−1); `null` or `-1` means random: the runner picks one and reports it
   in `evt.run.status` `succeeded` `data.resolved.seed` and in each `evt.run.output` `data.seed` (both ≥ 0).
 - **The qwen-image family (torch).** Workflow `qwen-image` (env `torch`), text-to-image, and multi-reference edit
   when `encode.refs` is not empty:
   `prompt` (kind `prompt`, `text`) · `seed` (kind `seed`, `seed` default -1) · `canvas` (kind `canvas`, `mode`
   auto|fixed default auto, `width`, `height` 256–4096 step 32, default 1024) · `model` (`qwen-image/model`,
-  `variant` base|turbo, `precision` bf16|int8 default int8) → `encode` (`qwen-image/encode`, in `model`, `prompt`;
+  `variant` base|turbo, `precision` bf16|int8 default int8) → `lora` (`qwen-image/lora-stack`, in `model`, `rows` default
+  `[]`: LoRAs, below; only `sample` reads `lora.model`) · `encode` (`qwen-image/encode`, in `model`, `prompt`;
   `transparent`, `refs`: rows, 0–10 items `{image: Image}`, mention `<image{n}>`, default `[]`) → `sample`
-  (`qwen-image/sample`, in `model`, `cond`, `canvas`, `seed`; `steps` 1–200 default 40, hidden for turbo) → `decode`
+  (`qwen-image/sample`, in `model` = `lora.model`, `cond`, `canvas`, `seed`; `steps` 1–200 default 40, hidden for turbo) → `decode`
   (`qwen-image/decode`, in `model`, `latent`; `tiled` auto|on|off) → `output`. Progress events add `phase`
   (`loading transformer`, `encoding`, `sampling`, `decoding`; a phase without steps is step 1 of 1) and `eta_s`.
   Canvas `auto`: with references, the size is about 1 MP at the **last** reference's aspect (the diffusers pipeline's
@@ -113,8 +120,11 @@ The queue is studio's `runs` table; a dispatcher in studio_service decides what 
 create, terminal status and cancel, and every few seconds.
 
 - **Eligible host** for a run: its hosts key is fresher than 30 s, its env is the workflow's `env`, and its registry
-  `<host>.<env>.workflows` publishes the workflow id. None at creation, or at any later pass while the run is queued:
-  the run fails at once with `no live host for env <env>`.
+  `<host>.<env>.workflows` publishes the workflow id, and its `<host>.<env>.loras` lists every **shared** LoRA of the
+  run's resolved graph (own LoRAs are fetched by any host). None at creation, or at any later pass while the run is
+  queued: the run fails at once with `no live host for env <env>` (`no live host for env <env> has LoRA <name>` when
+  live hosts of the env exist but none has the first such LoRA, graph order). A queued run whose own LoRA was deleted
+  since it was created fails at its next pass: `LoRA <name> was deleted`.
 - **One run at a time per host**, across envs: a host is free when studio has no run dispatched to it (any env) that
   is not yet terminal. Studio's own table decides this, not the runner's `state`.
 - **Order**, when a host is free: `interactive` before `batch` (batch runs come from `studio.runs.create`); within a lane,
@@ -122,7 +132,8 @@ create, terminal status and cancel, and every few seconds.
   tie goes to the older oldest queued run); within one user, the oldest queued run, except that a queued run whose model is
   resident on that host goes first. A run's model is its `<family>/model` node (`variant`, `precision`) with the model
   id of the family in the host's `models` key; resident = an entry of the hosts value's `resident` with the same
-  `model`, `variant` and `precision`.
+  `model`, `variant` and `precision`, and the same baked LoRAs (`loras`: the run's `bake` rows' `(lora_id, strength)` in
+  graph order, one LoRA in two chained stacks once with the summed strength; none = an entry without `loras`).
 - **Placement**: among the run's eligible free hosts, one where its model is resident, else the one idle longest
   (oldest last terminal run on it). Releasing = in one transaction set `runs.host`, write the outbox row
   (`cmd.run.execute` on `cmd.run.<host>.<env>`, `Nats-Msg-Id <run_id>:<attempt>`).
@@ -359,7 +370,7 @@ checked, so the work stays bounded).
 | `unknown_kind` | run | node | the kind is not in the palette; nothing else of that node is checked (its params, its `in`, wires from it, studio paths and presets on it) |
 | `env_mismatch` | run | node | the palette kind's `envs` lack the workflow's `env` |
 | `unknown_param` | save | node, param | a `params` key the kind does not have |
-| `param_invalid` | save | node, param | the value breaks the run rules (type, `min`/`max` — string length in Unicode code points, `enum`, rows count and fields) or holds a take (a workflow holds none: image params null, no Image items in rows) |
+| `param_invalid` | save | node, param | the value breaks the run rules (type, `min`/`max` — string length in Unicode code points, `enum`, rows count and fields; a `Lora` field missing or not `{lora_id}`) or holds a take (a workflow holds none: image params null, no Image items in rows; LoRA ids are allowed) |
 | `unknown_input` | save | node, port | an `in` key that is neither an input nor a wireable param of the kind |
 | `unknown_source` | save | node, port | the wire names a node that is not in the graph, or an output its (known) kind does not have |
 | `type_mismatch` | save | node, port | the types differ, or a handle joins two families |
@@ -370,6 +381,9 @@ checked, so the work stays bounded).
 | `studio_unknown_path` | save | node, param | a path in `composer`, `quick`, `inspector` or `labels` whose node is missing, whose param the kind lacks, which is wired, or `<node>.bypass` of a node that cannot be bypassed |
 | `studio_duplicate` | save | node, param | a path placed more than once over composer, quick and inspector |
 | `preset_invalid` | save | node, param | a preset key that would be `studio_unknown_path`, or a value that is `param_invalid` (`bypass`: not a bool) |
+| `lora_duplicate` | save | node, param | a valid rows value with a `Lora` field names one LoRA id in two items |
+| `lora_unknown` | run | node, param | a node that is not bypassed has a LoRA id the caller cannot use now (unknown, another user's, deleted, pending, rejected, or shared and listed by no live host of the env) |
+| `lora_family` | run | node, param | a node that is not bypassed has a LoRA the caller can use whose detected family (`unknown` included) is not `family(kind)` |
 
 Ids: node ids match `^[a-z][a-z0-9_]{0,63}$` (the schema) and are **stable**: made once, never renamed. The editor
 makes a new node's id from its kind's last segment with `-` → `_` (`qwen-image/sample` → `sample`), adding `_2`,
@@ -389,6 +403,10 @@ Order: the workflow's family first, then core kinds, each by `title`, then `kind
 Picking one adds the node and wires P to its first port of type T (inputs before params, schema order; for an
 input P, P is wired from the new node's first output of type T), then auto-wires its other inputs with m selected
 for an output P and nothing selected for an input P (m consumes the new node; it is not its source).
+
+The `lora_*` codes need the caller's LoRA library (studio: as the caller, at read time; the editor: from `GET
+/v1/studio/loras`); preset values are not looked up (a preset's LoRA is checked when a run applies it). A graph fixture
+may carry `loras` (id → detected family: the library), absent = empty.
 
 **Fixtures** (`fixtures/graphs/`, all against `palette.json`, which adds a fictional `test` family to the canonical
 echo and qwen-image kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
@@ -658,6 +676,146 @@ params hold the merged values; missing params take the schema default), library:
 images: [take id]}] (as studio reads it: deleted takes already left out), sizes (optional: take id → [width, height]
 of the user's row takes), expect: {inputs, typed, elements} or
 {errors}}` (missing keys of a success = empty).
+
+## LoRAs (API 1.9, plan 03-runtime.md section 6.4)
+
+A LoRA is a safetensors file of low-rank weight deltas for one family's `lora.component` (Qwen: the transformer).
+**Shared** LoRAs are files on the GPU hosts, usable by everyone; **own** LoRAs are a user's uploads, usable only by them.
+Sharing a user's LoRA with others is not in this version.
+
+- **Shared** (registry `<host>.<env>.loras`, `$defs/loras`): at start the runner indexes every `*.safetensors` under
+  `<models>/loras/` and under any `loras/` folder inside a model folder (not recursive below those), from the header
+  only, plus one SHA-256 of the whole file (kept by path, size and mtime, so a restart rehashes nothing). Each entry:
+  `id` = the SHA-256 (the same file on two hosts is one LoRA), `name` (file stem, cut to 80), `family` (family
+  detection, LoRA normaliser, over its packs' families: one env, so by name), `rank`, `bytes`, `key_style`, `licence`,
+  `modified_at`. A file that is not a LoRA (LoRA upload checks below) is left out and logged. Rescans come with M5a.
+- **Own** (studio table `loras`, owner-scoped by RLS, another user's id is 404 everywhere): uploaded by the takes'
+  two-step signed PUT. `POST /v1/studio/loras {filename, bytes}` → 201 `LoraUpload` (the LoRA `pending`, a 15-minute
+  `PUT` link for `u/<owner>/loras/<lora_id>.safetensors`, `Content-Type: application/octet-stream`); the client PUTs
+  the file to files_service; `POST /v1/studio/loras/{lora_id}/complete` → studio checks it (LoRA upload checks), hashes
+  it, detects its family (family detection, LoRA normaliser) over every family the registry publishes a lora block
+  for (detected once, at complete), records `rank`, `key_style`, `licence`, `sha256` and
+  answers `ready`; a failed check is 422 with the reason and the LoRA stays listed `rejected` with that `reason`.
+  `.safetensors` only, at most 2 GiB (2147483648 bytes); per user at most 50 LoRAs (any state) and 20 GiB (21474836480
+  bytes, pending + ready, and deleted ones until the sweep removes their object). A LoRA still `pending` an hour after
+  its creation is deleted. Rename = `PATCH {name}`; `DELETE` = 204, never refused (soft at once, the object a day
+  later by the sweep). Shared ids: PATCH and DELETE are 409 `shared LoRAs are managed on their host`; `complete` is 404.
+- **Library** (`GET /v1/studio/loras`, `GET /v1/studio/loras/{lora_id}`, `Lora`): shared LoRAs = the union over live
+  hosts (fresh `hosts` key), `hosts` = those listing the id, `family` = the first not `unknown` over them (a non-fake env's before env `fake`'s), `created_at`
+  = the oldest `modified_at`; plus the caller's own in every state (`hosts: []`). `thumb_url` = the caller's own oldest
+  take whose `made_with.loras` holds the id (never another user's take). The picker shows the LoRAs whose `family` is
+  the connected Model's family and `state` is `ready`; the others greyed with the reason (`for <family>`, `model
+  unknown`, `checking…` (pending), `rejected: <reason>`).
+- **Values.** A rows `item` field may be the ref kind `Lora` (like `Image`: required in every item). Over HTTP, in
+  workflows, presets, batch rows, `made_with` and every pipelines message a Lora value is `{"lora_id": "<id>"}`
+  (`loraRef`, closed): never a path, key or URL. Unlike takes, a user's workflow and presets may hold LoRA ids (a
+  registry workflow holds none). Example: `"lora.rows": [{"lora": {"lora_id": "3f0a…"}, "strength": 0.8, "mode":
+  "adapter"}]`.
+- **The stack node** `<family>/lora-stack` (`qwen-image/lora-stack`, title `LoRA Stack`): input `model: Model`, output
+  `model: Model` (so it is bypassable: bypassed = the model as it is), one param `rows` (label `LoRAs`, default `[]`,
+  `min` 0, `max` 8 = the family's row cap) with item `{lora: Lora, strength: float -4..4 default 1 step 0.05, mode:
+  enum adapter|bake default adapter}`. A family that cannot run adapters yet publishes `enum: [bake]`. Graph rules:
+  Model → Model within one family (the handle rules), `lora_duplicate`, `lora_unknown`, `lora_family` (Graph rules).
+  Stacks may chain: the Model's LoRA set is the upstream set followed by this node's rows. An empty stack is the
+  identity: same handle, same cache identity, same pixels (the template carries one, so M2 goldens hold).
+- **Studio resolves** each Lora value when it creates the run (Create, and `studio.runs.create` for a batch row), as
+  the caller, after values and mentions are merged and checked: own = the caller's, `ready`, not deleted; shared = an
+  id a live host of the workflow's env lists. Errors are 422 naming the param and item from 1 (openapi
+  `studioCreateRun`): `lora.rows[2].lora: LoRA <id> not found` (one message for unknown, another user's, deleted,
+  pending, rejected, on no live host: nothing leaks), `lora.rows[2].lora: LoRA <name> does not fit qwen-image (it is
+  for <family>)` / `(its model is unknown)`, `lora.rows[2].lora: LoRA <name> is already in row 1`. A batch row: the
+  same text as `row <n>: …` or the `invalid` reply.
+- **In `cmd.run.execute`** each Lora value is resolved (`defs lora`): shared `{lora_id, source: shared, name, sha256,
+  bytes}`; own adds `key` (`u/<owner_id>/loras/<lora_id>.safetensors`). No URL, ever; `check.py`'s foreign-key rule
+  covers the key. The message version stays 1 (an additive value form).
+- **The runner** finds a shared LoRA by `sha256` in its index (absent: the run fails `LoRA <name> is not on host
+  <host>`); fetches an own one, only under the envelope owner's `u/<owner_id>/loras/`, straight from the object store
+  into its LoRA cache (`<cache>/loras/<sha256>.safetensors`, LRU, phase `fetching LoRA <name>`), and checks its size
+  and SHA-256 (else `LoRA <name> is gone`). Then it normalises it (LoRA normaliser) and applies it:
+  - **adapter**: `y = W x + s · B(A x)` around plain and int8-quantized Linears; `s` is a tensor held by the wrapper, set
+    per run, so a strength change or an adapter swap never reloads the base and compiled graphs see it.
+  - **bake**: `W' = W + s · (B @ A)` in fp32, cast to the component dtype, in the loader's hook chain rename → cast →
+    **bake** → quantize, so it works on an int8 base. A baked component is its own residency entry, keyed by (files,
+    precision, quantisation, the baked `(sha256, strength)` list in order; one file in two chained stacks is one delta
+    with the summed strength), reported in the hosts value's `resident[].loras`; a baked strength change is a
+    different entry (a load), a rename is not. The deltas (fp32, while loading) and the adapters count in the memory
+    budget before they are allocated (at most the file's size / 2 elements each).
+  - `s = strength · alpha / rank` per module (alpha absent: `s = strength`).
+- **Cache keys** (plan 6.1). The Model handle carries its ordered LoRA set `[(sha256, strength, mode)]`. A stage's key
+  hashes a Model input per component it `uses`, and the LoRA set only with the family's `lora.component`: Sample
+  (`uses: [transformer]`) includes it; Encode (`text_encoder`, `vae`) and Decode (`vae`) never do. So a strength
+  change, a mode change or another LoRA re-runs Sample, and Decode only because its latent changed; Encode is a hit;
+  adapters never reload the base. An empty set adds nothing to any key.
+- **Takes**: `made_with.loras` = every row of every lora-stack node that ran (node id order, then row order) as
+  `{node, id, source, name, strength, mode, sha256}` with the name as it was; `made_with.inputs` keeps `{lora_id}`.
+  **Reuse** adds `loras_status` per entry: `current` (the caller can use it now), `missing` (shared, no live host
+  lists it now), `deleted` (own, deleted since); running a missing or deleted one is 422.
+- **Nothing leaks.** Another user's own LoRA never appears in a list, a get, a problem message or an error (404 / `not
+  found`); in `GET /v1/studio/hosts` a baked entry shows it as its size only (`lora_id`, `name`, `strength` null).
+  Cache keys include the owner as before.
+
+## LoRA normaliser (normative)
+
+runner_service (`core/lora`, at load) and studio_service (at upload: style, rank and family detection) implement
+exactly this and test against `fixtures/loras/`; `check.py` holds the reference (`lora_style`, `lora_parse`,
+`normalise`, `expand_modules`). Inputs: the file's header (tensor key → `{dtype, shape}`; `__metadata__` is not a
+tensor) and one family's lora block (registry `models[].lora`, `$defs/loraBlock`).
+
+**Family block** (model.yaml `lora:` → registry): `component` (the patched component), `modules` (its Linear module
+names, canonical dotted form as the model's `named_modules`, sorted; one `{a..b}` range per entry expands to a..b
+inclusive; generated by the runner from the meta-device model; unique with `.` read as `_`), `renames` (ordered
+`{from, to}` prefix rewrites of a key's module part; the first whose `from` starts it applies; most families `[]`),
+`ignore` (fnmatch globs, case-sensitive, over raw keys a family declares harmless; Qwen: `[]`). The node's row cap,
+strength range and modes are in the stack node schema; model.yaml's `lora:` block holds both (`component`, `renames`,
+`ignore`, `modes`, `max_rows`, `strength {min, max, default}`) and the runner generates the node and the registry
+block from it.
+
+**Key styles** (detected from the keys, never configured). The first rule that matches any key decides:
+1. `kohya`: a key starts `lora_unet_` or `lora_transformer_`. Roles by suffix `.lora_down.weight` (A), `.lora_up.weight`
+   (B), `.alpha`. Module part = between the prefix and the suffix, `.` written as `_`; it names the module `m` of
+   `modules` whose `m` with every `.` read as `_` equals it (`lora_unet_transformer_blocks_0_attn_to_out_0.lora_down.weight`
+   → `transformer_blocks.0.attn.to_out.0`). Other prefixes (`lora_te1_…`) do not parse.
+2. `comfyui`: a key starts `diffusion_model.`. Suffixes `.lora_A.weight` / `.lora_down.weight` (A), `.lora_B.weight` /
+   `.lora_up.weight` (B), `.alpha` (`diffusion_model.transformer_blocks.7.attn.to_q.lora_A.weight`).
+3. `peft` (PEFT / diffusers): a key ends `.lora_A.weight`, `.lora_B.weight`, `.lora.down.weight`, `.lora.up.weight` (or
+   `.alpha` with one of them present). A leading `base_model.model.`, then a leading `transformer.`, is cut (each at most
+   once, in that order) (`transformer.transformer_blocks.0.attn.to_q.lora_A.weight`).
+None matches: the style is unrecognised and no key parses. Keys of another style in the same file do not parse.
+
+**Canonical form**: `module → (A [rank, in], B [out, rank], alpha | none)`. Per key, in code-point order: a key matching
+an `ignore` glob is **ignored**; else one that does not parse in the style is **unapplied**; else its module part is
+renamed and grouped with the other keys of that part. A group **applies** when it has exactly one A and one B and at
+most one alpha (no other role), A and B are 2-D with `A.shape[0] == B.shape[1] ≥ 1` (the rank), alpha's shape is `[]`
+or `[1]`, every dtype is F32, F16 or BF16, and the part names a module of `modules`; the runner also needs `A.shape[1]`
+= the Linear's `in_features` and `B.shape[0]` = its `out_features`. Its keys are then **applied**; otherwise every key
+of the group is unapplied. `rank` = the largest rank of the groups whose shapes are right (applied or not); `total` =
+every tensor key. **Applied** means: the module's delta is added (adapter) or merged (bake) with `s = strength · alpha /
+rank`, `s = strength` without alpha.
+
+**No key is silently dropped**: a file fits a family when `applied ≥ 1` and nothing is unapplied (`total = applied +
+ignored`). Otherwise loading fails the run with (unapplied keys in code-point order, the first three named):
+- `LoRA <name>: 0 of <total> keys apply to <family> (<peft|kohya|comfyui|unrecognised> keys); is it for another model?`
+- `LoRA <name>: <n> of <total> keys do not apply to <family>: <k1>, <k2>, <k3>` + ` and <n − 3> more` when n > 3.
+The runner logs every unapplied key.
+
+**Family detection** (studio at complete, the runner's shared index; reference `detect_family`): the families the file
+fits; of those, one a non-fake env publishes (in any registry key, live or not) comes before one only env `fake`
+publishes, then by name; none: `unknown`. So a real LoRA whose keys are all echo's modules is still `qwen-image` when a
+torch host publishes it. Studio cannot check `in` / `out` against the model, so a file whose shapes do not fit still
+fails at the runner with the second text.
+
+**LoRA upload checks** (studio at complete; the runner's index skips files that fail them), in this order, each a 422
+`detail` and the rejected `reason`: `size differs from the declared bytes` (HEAD); first bytes `PK\x03\x04` or
+`\x80` followed by 2-5 (zip / pickle): `pickle checkpoints are not accepted; convert it to safetensors`; header length
+(little-endian u64 at 0) under 2 or past the file: `not a safetensors file`; over 8388608: `safetensors header is
+larger than 8 MB`; not a UTF-8 JSON object whose entries are `{dtype, shape, data_offsets}` (and an optional
+`__metadata__` of strings): `not a safetensors file`; more than 20000 tensors: `more than 20000 tensors`; offsets
+outside the data or overlapping: `tensor <key> lies outside the file`; a dtype other than F32, F16, BF16: `tensor <key>
+has dtype <d>; LoRAs must be F32, F16 or BF16`; no style: `no LoRA keys found (is it a full model?)`; a key that does
+not parse in the style and matches no published family's `ignore`: `<key> is not a LoRA weight`; a group with A but
+not B (or B but not A): `<module part>: lora_B is missing` (`lora_A`); ranks that differ: `<module part>: lora_A and
+lora_B ranks differ`; a rank over 4096: `rank <r> is over 4096`. The first failing key in code-point order is named.
+`licence` = `__metadata__` `modelspec.license`, else `license`, trimmed, cut to 200; null when neither.
 
 ## Rules
 

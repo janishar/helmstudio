@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -33,11 +34,27 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/*path", c.uploadHandler)
 }
 
-// MaxUpload is the largest body an upload link may carry (50 MB); studio_service signs nothing larger.
-const MaxUpload = 52428800
+// MaxUpload is the largest image an upload link may carry (50 MB); MaxLoraUpload the largest LoRA (2 GiB). studio_service
+// signs nothing larger.
+const (
+	MaxUpload     = 52428800
+	MaxLoraUpload = 2147483648
+)
 
-// uploadTypes are the content types an upload may have.
+// uploadTypes are the content types an image upload may have.
 var uploadTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/webp": true}
+
+// loraKey is the only key shape a LoRA upload may have: u/<owner>/loras/<lora_id>.safetensors.
+var loraKey = regexp.MustCompile(`^u/[0-9a-f-]{36}/loras/[0-9a-f-]{36}\.safetensors$`)
+
+// uploadLimit is the cap and the allowed content types of a key: a LoRA key takes application/octet-stream up to
+// 2 GiB, any other key an image up to 50 MB.
+func uploadLimit(key string) (int64, func(string) bool) {
+	if loraKey.MatchString(key) {
+		return MaxLoraUpload, func(ct string) bool { return ct == "application/octet-stream" }
+	}
+	return MaxUpload, func(ct string) bool { return uploadTypes[ct] }
+}
 
 // uploadHandler stores the body of a signed upload link (PUT /files/<key>?exp=&bytes=&ct=&sig=) under its key, never
 // over an existing object. The request must carry exactly the signed Content-Length (the server then never reads
@@ -45,8 +62,9 @@ var uploadTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/
 func (c *controller) uploadHandler(ctx *gin.Context) {
 	key := strings.TrimPrefix(ctx.Param("path"), "/")
 	query := ctx.Request.URL.Query()
+	limit, allowed := uploadLimit(key)
 	size, err := strconv.ParseInt(query.Get("bytes"), 10, 64)
-	if err != nil || size < 1 || size > MaxUpload || strings.Contains(key, "..") || !strings.HasPrefix(key, "u/") ||
+	if err != nil || size < 1 || size > limit || strings.Contains(key, "..") || !strings.HasPrefix(key, "u/") ||
 		!c.signer.VerifyPut(key, query.Get("exp"), query.Get("bytes"), query.Get("ct"), query.Get("sig")) {
 		network.SendError(ctx, http.StatusForbidden, "invalid or expired link")
 		return
@@ -56,7 +74,7 @@ func (c *controller) uploadHandler(ctx *gin.Context) {
 		return
 	}
 	contentType := query.Get("ct")
-	if !uploadTypes[contentType] || ctx.GetHeader("Content-Type") != contentType {
+	if !allowed(contentType) || ctx.GetHeader("Content-Type") != contentType {
 		network.SendError(ctx, http.StatusUnsupportedMediaType, "Content-Type must be the signed type")
 		return
 	}

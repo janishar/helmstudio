@@ -31,6 +31,15 @@
         "precision": "int8"
       }
     },
+    "lora": {
+      "kind": "qwen-image/lora-stack",
+      "in": {
+        "model": "model.model"
+      },
+      "params": {
+        "rows": []
+      }
+    },
     "encode": {
       "kind": "qwen-image/encode",
       "in": {
@@ -45,7 +54,7 @@
     "sample": {
       "kind": "qwen-image/sample",
       "in": {
-        "model": "model.model",
+        "model": "lora.model",
         "cond": "encode.cond",
         "canvas": "canvas.canvas",
         "seed": "seed.seed"

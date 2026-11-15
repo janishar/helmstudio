@@ -1,0 +1,13 @@
+{
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "lora.rows": [
+      {
+        "lora": {
+          "lora_id": "u/x/loras/a.safetensors"
+        },
+        "strength": 1
+      }
+    ]
+  }
+}

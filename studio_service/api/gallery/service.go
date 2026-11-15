@@ -25,6 +25,7 @@ import (
 
 	"github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/gallery/model"
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -332,6 +333,9 @@ func (s *Service) Reuse(ctx context.Context, caller common.Caller, id string) (d
 	if out.ElementsStatus, err = s.elementsStatus(ctx, caller, madeWith.Elements); err != nil {
 		return dto.TakeReuse{}, err
 	}
+	if out.LorasStatus, err = s.lorasStatus(ctx, caller, madeWith.Loras); err != nil {
+		return dto.TakeReuse{}, err
+	}
 	workflow, version, err := s.find(ctx, caller, madeWith.WorkflowID)
 	var notFound *network.APIError
 	switch {
@@ -380,6 +384,31 @@ func (s *Service) elementsStatus(ctx context.Context, caller common.Caller, used
 			if rows[at].Version == e.Version {
 				out[i].Status = "current"
 			}
+		}
+	}
+	return out, err
+}
+
+// lorasStatus says, per LoRA a take was made with, whether the caller can use it now: current, missing (shared, no
+// live host lists it) or deleted (own).
+func (s *Service) lorasStatus(ctx context.Context, caller common.Caller, used []dto.MadeWithLora) ([]dto.LoraStatus, error) {
+	if len(used) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, len(used))
+	for i, u := range used {
+		ids[i] = u.ID
+	}
+	var usable map[string]lora.Info
+	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
+		usable, err = lora.Usable(ctx, tx, s.registry, caller.ID, "", ids)
+		return err
+	})
+	out := make([]dto.LoraStatus, len(used))
+	for i, u := range used {
+		out[i] = dto.LoraStatus{ID: u.ID, Status: "current"}
+		if _, ok := usable[u.ID]; !ok {
+			out[i].Status = map[bool]string{true: "missing", false: "deleted"}[u.Source == "shared"]
 		}
 	}
 	return out, err

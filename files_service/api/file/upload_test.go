@@ -95,3 +95,42 @@ func TestUpload(t *testing.T) {
 		t.Fatalf("second PUT: %d", got)
 	}
 }
+
+// A LoRA key takes application/octet-stream up to 2 GiB; it takes no image type, and no other key takes octet-stream.
+func TestLoraUpload(t *testing.T) {
+	signer := NewSigner("0123456789abcdef")
+	store := storage.NewMemory()
+	router, err := network.NewRouter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router.LoadControllers(NewController(store, signer))
+	put := func(key string, size int64, contentType, body string) int {
+		exp, bytes := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10), strconv.FormatInt(size, 10)
+		target := "/files/" + key + "?exp=" + exp + "&bytes=" + bytes + "&ct=" + url.QueryEscape(contentType) + "&sig=" +
+			signer.putSignature(key, exp, bytes, contentType)
+		request := httptest.NewRequest(http.MethodPut, target, strings.NewReader(body))
+		request.ContentLength = size
+		request.Header.Set("Content-Type", contentType)
+		recorder := httptest.NewRecorder()
+		router.Engine().ServeHTTP(recorder, request)
+		return recorder.Code
+	}
+	owner, id := "7d1e0000-0000-4000-8000-000000000001", "2c4e0000-0000-4000-8000-000000000002"
+	key := "u/" + owner + "/loras/" + id + ".safetensors"
+	if got := put(key, MaxLoraUpload+1, "application/octet-stream", ""); got != 403 {
+		t.Errorf("over 2 GiB: %d", got)
+	}
+	if got := put(key, 5, "image/png", "hello"); got != 415 {
+		t.Errorf("image type on a LoRA key: %d", got)
+	}
+	if got := put("u/"+owner+"/uploads/x.png", 5, "application/octet-stream", "hello"); got != 415 {
+		t.Errorf("octet-stream on an image key: %d", got)
+	}
+	if got := put("u/"+owner+"/loras/x.bin", MaxUpload+1, "application/octet-stream", ""); got != 403 {
+		t.Errorf("another loras key past 50 MB: %d", got)
+	}
+	if got := put(key, 5, "application/octet-stream", "hello"); got != 204 {
+		t.Fatalf("LoRA PUT: %d", got)
+	}
+}

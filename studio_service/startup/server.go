@@ -22,6 +22,7 @@ import (
 	"github.com/helmstudio/studio_service/api/auth"
 	authmiddleware "github.com/helmstudio/studio_service/api/auth/middleware"
 	"github.com/helmstudio/studio_service/api/gallery"
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/common"
@@ -146,6 +147,7 @@ func Run() error {
 	})
 	workers.Go(func() { dispatcher.Run(ctx) })
 	workers.Go(func() { gallery.NewSweeper(pool, module.store).Run(ctx) })
+	workers.Go(func() { lora.RunSweep(ctx, pool, module.store) })
 
 	log.Printf("studio_service listening on :%s", env.Port)
 	err = router.Start(ctx, ":"+env.Port)

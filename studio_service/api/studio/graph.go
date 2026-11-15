@@ -27,7 +27,7 @@ const (
 
 // runOnly are the codes that block running only; every other code blocks saving (and running).
 var runOnly = map[string]bool{"unknown_kind": true, "env_mismatch": true, "required_input": true, "no_output": true,
-	"too_many_outputs": true, "too_many_seeds": true}
+	"too_many_outputs": true, "too_many_seeds": true, "lora_unknown": true, "lora_family": true}
 
 // handles are the family-scoped port types.
 var handles = map[string]bool{"Model": true, "Conditioning": true, "Latent": true}
@@ -75,7 +75,9 @@ func valueBad(param registry.Param, value any) bool {
 }
 
 // graphProblems checks doc against the palette (the live kinds) with every graph rule, sorted as the API answers them.
-func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode) []dto.Problem {
+// loras is the caller's library (the LoRAs the caller can use now, id → detected family); nil leaves lora_unknown and
+// lora_family unchecked (a run checks its LoRAs once its inputs are merged).
+func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode, loras map[string]string) []dto.Problem {
 	found := map[[4]string]dto.Problem{}
 	add := func(code, node, port, param, message string, args ...any) {
 		blocks := "save"
@@ -134,6 +136,8 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode)
 				add("unknown_param", id, "", name, "%s.%s: %s has no such param", id, name, node.Kind)
 			case valueBad(param, node.Params[name]):
 				add("param_invalid", id, "", name, "%s.%s: %s", id, name, invalidReason(param, node.Params[name]))
+			case param.LoraField() != "":
+				loraProblems(id, node, param, loras, add)
 			}
 		}
 		for _, key := range slices.Sorted(maps.Keys(node.In)) {
@@ -185,6 +189,60 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode)
 	}
 	studioProblems(doc, palette, add)
 	return sortedProblems(found)
+}
+
+// loraProblems checks a valid rows value with a Lora field: an id twice (blocks saving) and, on a node that is not
+// bypassed, an id the caller cannot use or one detected for another family (block running).
+func loraProblems(id string, node registry.Node, param registry.Param, loras map[string]string,
+	add func(code, node, port, param, message string, args ...any)) {
+	field := param.LoraField()
+	items, _ := node.Params[param.Name].([]any)
+	var ids []string
+	for i, item := range items {
+		loraID := item.(map[string]any)[field].(map[string]any)["lora_id"].(string)
+		if slices.Contains(ids, loraID) {
+			add("lora_duplicate", id, "", param.Name, "%s.%s[%d]: LoRA %s is already in row %d", id, param.Name, i+1, loraID,
+				slices.Index(ids, loraID)+1)
+		}
+		ids = append(ids, loraID)
+	}
+	if node.Bypass || loras == nil {
+		return
+	}
+	family := registry.Family(node.Kind)
+	for i, loraID := range ids {
+		found, ok := loras[loraID]
+		switch {
+		case !ok:
+			add("lora_unknown", id, "", param.Name, "%s.%s[%d]: LoRA %s not found", id, param.Name, i+1, loraID)
+		case found == "unknown":
+			add("lora_family", id, "", param.Name, "%s.%s[%d]: LoRA %s does not fit %s (its model is unknown)", id,
+				param.Name, i+1, loraID, family)
+		case found != family:
+			add("lora_family", id, "", param.Name, "%s.%s[%d]: LoRA %s does not fit %s (it is for %s)", id, param.Name, i+1,
+				loraID, family, found)
+		}
+	}
+}
+
+// docLoraIDs lists every LoRA id a document's rows values name (presets are not looked up).
+func docLoraIDs(doc dto.WorkflowDoc) []string {
+	var ids []string
+	for _, node := range doc.Nodes {
+		for _, value := range node.Params {
+			items, _ := value.([]any)
+			for _, item := range items {
+				fields, _ := item.(map[string]any)
+				for _, v := range fields {
+					ref, _ := v.(map[string]any)
+					if loraID, ok := ref["lora_id"].(string); ok && !slices.Contains(ids, loraID) {
+						ids = append(ids, loraID)
+					}
+				}
+			}
+		}
+	}
+	return ids
 }
 
 // sortedProblems is found as the API answers it.

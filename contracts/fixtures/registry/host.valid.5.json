@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "state": "busy",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "updated_at": "2026-11-14T10:00:10Z",
+  "published_by": "runner torch 0.2.0",
+  "memory": {
+    "budget_gb": 52,
+    "used_gb": 17.2
+  },
+  "resident": [
+    {
+      "component": "transformer",
+      "model": "qwen-image-2.1",
+      "variant": "turbo",
+      "precision": "int8",
+      "gb": 7.4,
+      "pinned": true
+    },
+    {
+      "component": "vae",
+      "model": "qwen-image-2.1",
+      "variant": "base",
+      "precision": "bf16",
+      "gb": 1.3,
+      "pinned": true
+    },
+    {
+      "component": "transformer",
+      "model": "qwen-image-2.1",
+      "variant": "base",
+      "precision": "int8",
+      "gb": 20.1,
+      "pinned": false,
+      "loras": [
+        {
+          "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+          "name": "ink-wash",
+          "strength": 0.8,
+          "bytes": 295698432
+        }
+      ]
+    }
+  ],
+  "attempt": 2
+}

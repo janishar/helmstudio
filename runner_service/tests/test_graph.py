@@ -7,7 +7,7 @@ from conftest import SCHEMAS, FakeQwen, command, qwen_command
 
 from core import graph
 from core.graph import Cache, Cancelled, Ctx, RunError
-from core.pack import Node
+from core.pack import LoraUse, ModelRef, Node
 from core.residency import Residency
 
 
@@ -260,3 +260,183 @@ async def test_progress_eta_is_per_phase(monkeypatch):
         ("sampling", 3.0),
         ("sampling", 3.0),
     ]
+
+
+# --- LoRA Stack: cache keys and loads (contracts/README.md "LoRAs": a strength change re-runs Sample and Decode
+# only, adapters never reload the base, a baked model is its own residency entry)
+
+SHARED = {"lora_id": "3f0a" + "0" * 60, "source": "shared", "name": "ink-wash", "sha256": "3f0a" + "0" * 60,
+          "bytes": 1000}  # fmt: skip
+OTHER = SHARED | {"lora_id": "9d4c" + "0" * 60, "name": "flux-style", "sha256": "9d4c" + "0" * 60}
+
+
+def lora_nodes(rows=None) -> dict:
+    """The fixture's text-to-image graph with the template's LoRA Stack between model and sample (rows None: no
+    stack at all, the M2 graph)."""
+    nodes = qwen_nodes()
+    if rows is not None:
+        nodes["lora"] = {"kind": "qwen-image/lora-stack", "in": {"model": "model.model"},
+                         "params": {"rows": rows}}  # fmt: skip
+        nodes["sample"]["in"]["model"] = "lora.model"
+    return nodes
+
+
+async def run_graph(q: FakeQwen, nodes: dict, cache: Cache, res: Residency) -> list[str]:
+    assert graph.validate(nodes, q.schemas) == []
+    c = ctx(residency=res)
+
+    async def output(index, data, **meta):
+        pass
+
+    c._output = output
+    await graph.run(nodes, q.impls, q.schemas, c, cache)
+    return q.ran()
+
+
+def row(lora: dict, strength=1.0, mode="adapter") -> dict:
+    return {"lora": lora, "strength": strength, "mode": mode}
+
+
+def test_an_empty_stack_is_the_identity_for_every_cache_key(tmp_path, monkeypatch):
+    q = FakeQwen(tmp_path, monkeypatch)
+    plain = graph.keys(lora_nodes(), q.impls, q.schemas, "a")
+    empty = graph.keys(lora_nodes([]), q.impls, q.schemas, "a")
+    assert {k: empty[k] for k in plain} == plain  # the M2 keys hold with the template's empty stack
+
+
+async def test_a_strength_change_reruns_sample_and_decode_with_no_load(tmp_path, monkeypatch):
+    q, cache, res = FakeQwen(tmp_path, monkeypatch), Cache(), Residency(100)
+    assert await run_graph(q, lora_nodes([]), cache, res) == ["encode", "sample", "decode"]
+    loads = len(q.loads)
+    for rows in (
+        [row(SHARED, 0.8)],
+        [row(SHARED, 0.5)],
+        [row(OTHER, 0.5)],
+        [row(SHARED, 0.5), row(OTHER)],
+    ):
+        assert await run_graph(q, lora_nodes(rows), cache, res) == ["sample", "decode"]
+    assert (
+        len(q.loads) == loads
+    )  # adapters: strength changes and swaps never reload the transformer
+    assert (
+        await run_graph(q, lora_nodes([row(SHARED, 0.5)]), cache, res) == []
+    )  # seen before: all hits
+    assert q.active[-1] == ("transformer", ((SHARED["sha256"], 0.5), (OTHER["sha256"], 1.0)))
+    transformer = next(k for k in q.loads if k[2] == "transformer")
+    gb = ModelRef(q.pack, "turbo", "int8").gb("transformer")[0]
+    assert res.entries[transformer][0] == pytest.approx(
+        gb + 0.002
+    )  # the two adapters count, with their base
+
+    # bake: its own transformer entry (one load), listed with its LoRAs in the hosts value
+    assert await run_graph(q, lora_nodes([row(SHARED, 0.5, "bake")]), cache, res) == [
+        "sample",
+        "decode",
+    ]
+    assert len(q.loads) == loads + 1 and q.loads[-1][:3] == (
+        "qwen-image-2.1",
+        "turbo",
+        "transformer",
+    )
+    state = res.state()
+    baked = [r for r in state["resident"] if r.get("loras")]
+    assert baked[0]["loras"] == [{"lora_id": SHARED["lora_id"], "name": "ink-wash", "strength": 0.5, "bytes": 1000}]  # fmt: skip
+    value = {"schema_version": 1, "host": "mac", "env": "torch", "state": "idle", "run_id": None,
+             "updated_at": "2026-11-15T10:00:00Z", "published_by": "t"} | state  # fmt: skip
+    from messaging import schemas
+
+    assert schemas.registry_errors("host", value) == []
+
+
+async def test_two_stacks_on_one_base_run_one_after_the_other(tmp_path, monkeypatch):
+    q, res = FakeQwen(tmp_path, monkeypatch), Residency(100)
+    nodes = lora_nodes([row(SHARED, 0.8)])
+    nodes["lora_2"] = {"kind": "qwen-image/lora-stack", "in": {"model": "model.model"},
+                       "params": {"rows": [row(OTHER, 0.3)]}}  # fmt: skip
+    nodes["sample_2"] = copy.deepcopy(nodes["sample"]) | {"in": nodes["sample"]["in"] | {"model": "lora_2.model"}}  # fmt: skip
+    nodes["decode_2"] = {"kind": "qwen-image/decode", "in": {"model": "model.model", "latent": "sample_2.latent"},
+                         "params": {"tiled": "auto"}}  # fmt: skip
+    nodes["output_2"] = {"kind": "output", "in": {"media": "decode_2.image"}}
+    assert await run_graph(q, nodes, Cache(), res) == [
+        "encode",
+        "sample",
+        "decode",
+        "sample",
+        "decode",
+    ]
+    assert [a for a in q.active if a[0] == "transformer"] == [
+        ("transformer", ((SHARED["sha256"], 0.8),)), ("transformer", ((OTHER["sha256"], 0.3),)),
+    ]  # fmt: skip
+    assert sum(k[2] == "transformer" for k in q.loads) == 1
+
+
+def test_a_lora_twice_in_one_stack_is_refused():
+    nodes = lora_nodes([row(SHARED), row(SHARED, 0.5)])
+    errs = graph.validate(nodes, _qwen_schemas())
+    assert f"lora.rows: LoRA {SHARED['lora_id']} is already in row 1" in errs
+
+
+def _qwen_schemas() -> dict:
+    import json
+
+    from conftest import CONTRACTS
+
+    fx = json.loads((CONTRACTS / "fixtures/registry/qwen-image.nodes.valid.json").read_text())
+    return {n["kind"]: n for n in fx["nodes"]}
+
+
+async def test_a_stack_passes_the_handle_of_this_run_never_a_cached_one(tmp_path, monkeypatch):
+    q, cache, res = FakeQwen(tmp_path, monkeypatch), Cache(), Residency(100)
+    for variant in ("base", "turbo"):  # the template's empty stack between model and sample
+        nodes = lora_nodes([])
+        nodes["model"]["params"]["variant"] = variant
+        await run_graph(q, nodes, cache, res)
+    assert [k[1] for k in q.loads if k[2] == "transformer"] == ["base", "turbo"]
+    chained = lora_nodes([row(SHARED, 0.8)])
+    chained["lora_2"] = {"kind": "qwen-image/lora-stack", "in": {"model": "lora.model"},
+                         "params": {"rows": [row(OTHER, 0.3)]}}  # fmt: skip
+    chained["sample"]["in"]["model"] = "lora_2.model"
+    await run_graph(q, chained, cache, res)
+    chained["lora"]["params"]["rows"] = [row(SHARED, 0.2)]  # only the upstream stack changes
+    assert await run_graph(q, chained, cache, res) == ["sample", "decode"]
+    assert q.active[-1] == ("transformer", ((SHARED["sha256"], 0.2), (OTHER["sha256"], 0.3)))
+
+
+async def test_a_bake_twice_is_one_delta_and_a_rename_is_the_same_entry(tmp_path, monkeypatch):
+    q, res = FakeQwen(tmp_path, monkeypatch), Residency(100)
+    nodes = lora_nodes([row(SHARED, 0.5, "bake")])
+    nodes["lora_2"] = {"kind": "qwen-image/lora-stack", "in": {"model": "lora.model"},
+                       "params": {"rows": [row(SHARED, 0.25, "bake")]}}  # fmt: skip
+    nodes["sample"]["in"]["model"] = "lora_2.model"
+    await run_graph(q, nodes, Cache(), res)
+    key = q.loads[-1]
+    assert key[4] == ((SHARED["sha256"], 0.75),)  # merged: one delta, the summed strength
+    nodes["lora"]["params"]["rows"] = [row(SHARED | {"name": "renamed"}, 0.5, "bake")]
+    await run_graph(q, nodes, Cache(), res)
+    assert (
+        q.loads[-1] == key and sum(k[2] == "transformer" for k in q.loads) == 1
+    )  # no reload for a rename
+    listed = next(r["loras"] for r in res.state()["resident"] if r.get("loras"))
+    assert listed == [
+        {"lora_id": SHARED["lora_id"], "name": "renamed", "strength": 0.75, "bytes": 1000}
+    ]
+    ref = ModelRef(
+        q.pack, "turbo", "int8", (LoraUse.of(row(SHARED | {"bytes": 2**30}, 1.0, "bake")),)
+    )
+    base = ModelRef(q.pack, "turbo", "int8").gb("transformer")
+    assert ref.gb("transformer") == pytest.approx(
+        (base[0], base[1] + 2.0)
+    )  # 1 GiB file: ≤ 2 GiB of fp32 deltas
+
+
+async def test_adapters_that_do_not_fit_fail_before_anything_is_attached(tmp_path, monkeypatch):
+    q = FakeQwen(tmp_path, monkeypatch)
+    res = Residency(ModelRef(q.pack, "turbo", "int8").gb("transformer")[0] + 1)
+    with pytest.raises(graph.RunError, match="does not fit in memory"):
+        await run_graph(q, lora_nodes([row(SHARED | {"bytes": 2**31})]), Cache(), res)
+    assert not [a for a in q.active if a[1]]  # refused before activate
+
+
+def test_a_command_row_without_its_strength_is_refused():
+    nodes = lora_nodes([{"lora": SHARED, "mode": "adapter"}])
+    assert "lora.rows item 1.strength: missing" in graph.validate(nodes, _qwen_schemas())

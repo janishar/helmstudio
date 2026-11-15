@@ -6,6 +6,7 @@ import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
 import { RowsEditor, type RefUploads } from "@/components/create/refs";
+import { LoraRows } from "@/components/create/loras";
 import { autoSize, imageInputs, mentionOf, refIds } from "@/lib/refs";
 import { useTakes } from "@/lib/take-cache";
 import {
@@ -119,8 +120,27 @@ const sizeText = (w: number, h: number) =>
 /** Which inspector editor is open (a field key), and how to open or close one. */
 type OpenProps = { open: string | null; setOpen: (key: string | null) => void };
 
-/** The params other than the prompt: References (rows editors), Canvas, Quality (tiles), Options (switches), More.
- * With `groups` (a workflow's Studio block), its sections instead, in its order. */
+/** A LoRA stack's rows as the inspector edits them (the mock's LoRA section). */
+function Loras({ f, raws, errors, onChange }: { f: Field } & Omit<FormProps, "fields">) {
+  const raw = rawOf(f, raws);
+  return (
+    <LoraRows
+      param={f.param}
+      family={f.family ?? null}
+      rows={Array.isArray(raw) ? raw : []}
+      onRows={(rows) => onChange(f.key, rows)}
+      error={errors[f.key]}
+    />
+  );
+}
+
+/** The LoRA section's note (the mock's): what fits and what a strength change re-runs. */
+const loraHelp = (title: string) =>
+  `Only LoRAs made for ${title} can be added. Changing strength re-runs Sample without reloading the model. Drag a LoRA, or focus it and press Alt with an arrow key, to change the order; Delete removes it.`;
+
+/** The params other than the prompt: References (rows editors), Canvas, Quality (tiles), LoRA, Options (switches),
+ * More. With `groups` (a workflow's Studio block), its sections instead, in its order. `familyTitle` names the
+ * workflow's family in the LoRA note ("Qwen Image 2.1"). */
 export function Inspector({
   fields,
   raws,
@@ -130,11 +150,24 @@ export function Inspector({
   setOpen,
   uploads,
   groups,
-}: FormProps & OpenProps & { uploads: RefUploads; groups?: { title: string; fields: Field[] }[] }) {
+  familyTitle,
+}: FormProps &
+  OpenProps & {
+    uploads: RefUploads;
+    groups?: { title: string; fields: Field[] }[];
+    familyTitle?: string;
+  }) {
   const s = sections(fields);
   const c = canvasOf(fields, raws, useLastRef(fields, raws));
   const extra = s.canvas.filter((f) => f !== c?.width && f !== c?.height && f !== c?.mode);
-  if (!s.refs.length && !s.canvas.length && !s.tiles.length && !s.switches.length && !s.more.length)
+  if (
+    !s.refs.length &&
+    !s.loras.length &&
+    !s.canvas.length &&
+    !s.tiles.length &&
+    !s.switches.length &&
+    !s.more.length
+  )
     return <p className="text-[13px] text-t2">Nothing to set.</p>;
   const control = (f: Field) => {
     const raw = rawOf(f, raws);
@@ -176,16 +209,23 @@ export function Inspector({
   if (groups)
     return groups.map((g, i) => {
       const refs = g.fields.filter((f) => s.refs.includes(f));
+      const loras = g.fields.filter((f) => s.loras.includes(f));
       const canvas = c && g.fields.includes(c.width) && g.fields.includes(c.height);
       const rest = g.fields.filter(
-        (f) => !refs.includes(f) && !(canvas && (f === c.width || f === c.height || f === c.mode)),
+        (f) =>
+          !refs.includes(f) &&
+          !loras.includes(f) &&
+          !(canvas && (f === c.width || f === c.height || f === c.mode)),
       );
       return section(
         `sec-g${i}`,
         g.title,
         rest,
-        (refs.length > 0 || canvas) && (
+        (refs.length > 0 || loras.length > 0 || canvas) && (
           <>
+            {loras.map((f) => (
+              <Loras key={f.key} f={f} raws={raws} errors={errors} onChange={onChange} />
+            ))}
             {refs.map((f) => (
               <RowsEditor
                 key={f.key}
@@ -226,6 +266,15 @@ export function Inspector({
         s.canvas[0]?.nodeHelp,
       )}
       {section("sec-quality", "Quality", s.tiles, undefined, undefined, "gap-3")}
+      {s.loras.map((f, i) =>
+        section(
+          `sec-lora-${i}`,
+          s.loras.length > 1 ? `LoRA (${f.node})` : "LoRA",
+          [],
+          <Loras f={f} raws={raws} errors={errors} onChange={onChange} />,
+          loraHelp(familyTitle ?? f.family ?? "this model"),
+        ),
+      )}
       {section("sec-options", "Options", s.switches)}
       {section("sec-more", "More", s.more)}
     </>

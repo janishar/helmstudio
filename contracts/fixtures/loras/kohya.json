@@ -1,0 +1,99 @@
+{
+  "description": "kohya style: lora_unet_<module with . as _>.lora_down|lora_up.weight and .alpha; to_out_0, img_mlp_gate_layer and modulation_1 resolve against the family's module names; scale = strength * 4 / 8",
+  "name": "kohya",
+  "metadata": {
+    "ss_network_dim": "8",
+    "ss_network_alpha": "4"
+  },
+  "tensors": {
+    "lora_unet_transformer_blocks_0_attn_to_out_0.lora_down.weight": {
+      "dtype": "F16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "lora_unet_transformer_blocks_0_attn_to_out_0.lora_up.weight": {
+      "dtype": "F16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "lora_unet_transformer_blocks_0_attn_to_out_0.alpha": {
+      "dtype": "F32",
+      "shape": []
+    },
+    "lora_unet_transformer_blocks_0_img_mlp_gate_layer.lora_down.weight": {
+      "dtype": "F16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "lora_unet_transformer_blocks_0_img_mlp_gate_layer.lora_up.weight": {
+      "dtype": "F16",
+      "shape": [
+        12288,
+        8
+      ]
+    },
+    "lora_unet_transformer_blocks_0_img_mlp_gate_layer.alpha": {
+      "dtype": "F32",
+      "shape": []
+    },
+    "lora_unet_modulation_1.lora_down.weight": {
+      "dtype": "F16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "lora_unet_modulation_1.lora_up.weight": {
+      "dtype": "F16",
+      "shape": [
+        16384,
+        8
+      ]
+    },
+    "lora_unet_modulation_1.alpha": {
+      "dtype": "F32",
+      "shape": []
+    },
+    "lora_unet_time_text_embed_timestep_embedder_linear_1.lora_down.weight": {
+      "dtype": "F16",
+      "shape": [
+        8,
+        256
+      ]
+    },
+    "lora_unet_time_text_embed_timestep_embedder_linear_1.lora_up.weight": {
+      "dtype": "F16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "lora_unet_time_text_embed_timestep_embedder_linear_1.alpha": {
+      "dtype": "F32",
+      "shape": []
+    }
+  },
+  "values": {
+    "lora_unet_transformer_blocks_0_attn_to_out_0.alpha": 4.0,
+    "lora_unet_transformer_blocks_0_img_mlp_gate_layer.alpha": 4.0,
+    "lora_unet_modulation_1.alpha": 4.0,
+    "lora_unet_time_text_embed_timestep_embedder_linear_1.alpha": 4.0
+  },
+  "expect": {
+    "key_style": "kohya",
+    "rank": 8,
+    "total": 12,
+    "applied": 12,
+    "ignored": 0,
+    "unapplied": [],
+    "error": null,
+    "family": "qwen-image",
+    "licence": null
+  }
+}

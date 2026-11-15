@@ -38,3 +38,16 @@ def echo(ctx, params: dict, inputs: dict) -> dict:
     if params["fail"]:
         raise RunError("echo: failed on purpose (fail=true)")
     return {"image": draw(inputs["text"])}
+
+
+def lora_stack(ctx, params: dict, inputs: dict) -> dict:
+    """The text with the LoRAs it received named: `<text> [LoRA <name> x<strength>, ...]`; no rows: the text as it is
+    (an empty stack is the identity). The fake runner applies nothing."""
+    rows = params["rows"]
+    if not rows:
+        return {"text": inputs["text"]}
+    used = ", ".join(f"{r['lora']['name']} x{r['strength']:g}" for r in rows)
+    return {"text": f"{inputs['text']} [LoRA {used}]"}
+
+
+globals()["lora-stack"] = lora_stack  # the stage is named lora-stack (kind echo/lora-stack)

@@ -172,6 +172,8 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	out := fs.String("out", ".", "directory for the outputs")
 	var ps params
 	fs.Var(&ps, "p", "node.param=value (repeatable; a seed takes a number or random)")
+	var loras params
+	fs.Var(&loras, "lora", "<lora_id>:<strength> (repeatable): the rows of the workflow's LoRA stack, in order")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -201,6 +203,13 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	inputs, err := wf.inputs(ps)
 	if err != nil {
 		return err
+	}
+	rows, err := wf.loraRows(loras)
+	if err != nil {
+		return err
+	}
+	for k, v := range rows { // -p cannot set a rows param of LoRAs (no images in its items): no clash
+		inputs[k] = v
 	}
 
 	sid, since := *sessionID, 0

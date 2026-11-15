@@ -1,4 +1,5 @@
-"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows and .models, written once at start.
+"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows, .models and .loras, written once at
+start (`loras`: the shared LoRAs core.lora.Library indexed; main adds it with `loras_value`).
 
 The values are built from the packs whose runtime env is RUNNER_ENV (core.pack) plus the core nodes their
 workflows use or their model.yaml lists in `publish`, with this runner's published_at and published_by. Each is checked against registry.schema.json,
@@ -15,7 +16,7 @@ from messaging.publisher import now
 
 log = logging.getLogger(__name__)
 
-KINDS = ("nodes", "workflows", "models")
+KINDS = ("nodes", "workflows", "models", "loras")
 
 
 def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
@@ -53,6 +54,20 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
         if errs := graph.validate(w["nodes"], node_schemas):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
     return values, {k: n for k, (_, n) in every.items()}, [p for p, _ in loaded]
+
+
+def loras_value(entries: list[dict], env: str = ENV) -> dict:
+    """The `loras` value: the shared LoRAs this host indexed (core.lora.Library.scan). ValueError when off-contract."""
+    value = {"schema_version": 1, "host": HOST, "env": env, "published_at": now(),
+             "published_by": PUBLISHED_BY, "loras": entries}  # fmt: skip
+    if errs := schemas.registry_errors("loras", value):
+        raise ValueError(f"registry loras is off-contract: {'; '.join(errs[:3])}")
+    return value
+
+
+def lora_blocks(loaded) -> dict[str, dict]:
+    """family → its registry lora block, for the loaded packs that publish one."""
+    return {p.family: b for p in loaded if (b := packs.lora_block(p))}
 
 
 def node_schemas(values: dict[str, dict]) -> dict[str, dict]:

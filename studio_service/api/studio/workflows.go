@@ -15,6 +15,7 @@ import (
 	"github.com/helmstudio/helmgo/network"
 	"github.com/helmstudio/helmgo/utility"
 
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/common"
@@ -143,7 +144,7 @@ func (s *Service) runnable(ctx context.Context, tx pgx.Tx, id string) (registry.
 		return registry.Workflow{}, nil, err
 	}
 	doc, palette := rowDoc(row), s.palette()
-	if problems := graphProblems(doc, palette); len(problems) > 0 {
+	if problems := graphProblems(doc, palette, nil); len(problems) > 0 { // LoRAs: checked once inputs are merged
 		return registry.Workflow{}, nil, network.NewUnprocessableError("workflow cannot run: "+problems[0].Message, nil)
 	}
 	workflow := registry.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env,
@@ -210,24 +211,38 @@ func (s *Service) GetWorkflow(ctx context.Context, caller common.Caller, id stri
 		if !ok {
 			return dto.Workflow{}, errNotFound
 		}
-		problems := graphProblems(templateDoc(workflow), s.palette())
+		problems := graphProblems(templateDoc(workflow), s.palette(), map[string]string{}) // a template holds no LoRA
 		return s.templateDTO(workflow, &problems), nil
 	}
 	var out dto.Workflow
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		row, err := readWorkflow(ctx, tx, id, false)
-		if err == nil {
-			problems := graphProblems(rowDoc(row), s.palette())
-			out = s.mineDTO(row, &problems)
+		if err != nil {
+			return err
 		}
+		problems, err := s.problems(ctx, tx, caller, rowDoc(row))
+		out = s.mineDTO(row, &problems)
 		return err
 	})
 	return out, err
 }
 
+// problems checks doc with every graph rule, against the caller's LoRA library now (the ids it names).
+func (s *Service) problems(ctx context.Context, tx pgx.Tx, caller common.Caller, doc dto.WorkflowDoc) ([]dto.Problem, error) {
+	usable, err := lora.Usable(ctx, tx, s.registry, caller.ID, doc.Env, docLoraIDs(doc))
+	library := map[string]string{}
+	for id, info := range usable {
+		library[id] = info.Family
+	}
+	return graphProblems(doc, s.palette(), library), err
+}
+
 // checkSave returns the document's problems, or the 422 WorkflowError when one blocks saving.
-func (s *Service) checkSave(doc dto.WorkflowDoc) ([]dto.Problem, error) {
-	problems := graphProblems(doc, s.palette())
+func (s *Service) checkSave(ctx context.Context, tx pgx.Tx, caller common.Caller, doc dto.WorkflowDoc) ([]dto.Problem, error) {
+	problems, err := s.problems(ctx, tx, caller, doc)
+	if err != nil {
+		return nil, err
+	}
 	if blocksSave(problems) {
 		first := problems[slices.IndexFunc(problems, func(p dto.Problem) bool { return p.Blocks == "save" })]
 		return nil, &WorkflowError{Detail: fmt.Sprintf("workflow has %d problems: %s", len(problems), first.Message),
@@ -272,7 +287,7 @@ func (s *Service) CreateWorkflow(ctx context.Context, caller common.Caller, body
 		} else if count >= MaxWorkflows {
 			return network.NewConflictError(fmt.Sprintf("You have %d workflows; delete some first.", MaxWorkflows), nil)
 		}
-		problems, err := s.checkSave(doc)
+		problems, err := s.checkSave(ctx, tx, caller, doc)
 		if err != nil {
 			return err
 		}
@@ -304,7 +319,7 @@ func (s *Service) ReplaceWorkflow(ctx context.Context, caller common.Caller, id 
 		}
 		doc := body.WorkflowDoc
 		doc.Title = strings.TrimSpace(doc.Title)
-		problems, err := s.checkSave(doc)
+		problems, err := s.checkSave(ctx, tx, caller, doc)
 		if err != nil {
 			return err
 		}
@@ -372,12 +387,16 @@ func (s *Service) notTemplate(id string) error {
 }
 
 // ValidateWorkflow checks a document with the graph rules and saves nothing.
-func (s *Service) ValidateWorkflow(doc dto.WorkflowDoc) (dto.WorkflowValidation, error) {
+func (s *Service) ValidateWorkflow(ctx context.Context, caller common.Caller, doc dto.WorkflowDoc) (dto.WorkflowValidation, error) {
 	if err := s.ready(); err != nil {
 		return dto.WorkflowValidation{}, err
 	}
-	problems := graphProblems(doc, s.palette())
-	return dto.WorkflowValidation{Problems: problems, CanSave: !blocksSave(problems), CanRun: len(problems) == 0}, nil
+	var problems []dto.Problem
+	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
+		problems, err = s.problems(ctx, tx, caller, doc)
+		return err
+	})
+	return dto.WorkflowValidation{Problems: problems, CanSave: !blocksSave(problems), CanRun: len(problems) == 0}, err
 }
 
 // Nodes is the palette: every kind live hosts publish, grouped by family; env keeps the kinds that env publishes.

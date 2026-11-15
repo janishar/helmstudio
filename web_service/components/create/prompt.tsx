@@ -159,7 +159,8 @@ export function PromptArea({
           onChange(e.target.value);
           setCaret(e.target.selectionStart);
           // Escape closed the menu of one token only: once it is gone or another one, a new @ opens it again
-          if (mentionAt(e.target.value, e.target.selectionStart)?.start !== dismissed) setDismissed(null);
+          if (mentionAt(e.target.value, e.target.selectionStart)?.start !== dismissed)
+            setDismissed(null);
         }}
         onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
         onFocus={(e) => setCaret(e.currentTarget.selectionStart)}
@@ -308,7 +309,11 @@ function typeMention(
   el?.focus();
   el?.setSelectionRange(start, end);
   // ponytail: execCommand is deprecated, yet the one way to keep the native undo stack of a textarea
-  if (!el || el.value !== value || !document.execCommand("insertText", false, r.text.slice(start, r.caret))) {
+  if (
+    !el ||
+    el.value !== value ||
+    !document.execCommand("insertText", false, r.text.slice(start, r.caret))
+  ) {
     set(r.text);
     requestAnimationFrame(() => el?.setSelectionRange(r.caret, r.caret));
   }

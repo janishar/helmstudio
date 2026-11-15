@@ -1,6 +1,7 @@
 // Folding a session's events (SSE or ?since= pages) into its runs. Events are hints: a run that ends is fetched again.
 import { api, ok, type S } from "@/lib/api";
 import { graphOrder, nodeTitle } from "@/lib/workflow";
+import { emptyStack } from "@/lib/loras";
 
 type Run = S<"Run">;
 type Status = S<"RunStatus">;
@@ -128,7 +129,8 @@ export type Segment = {
   seconds?: number;
 };
 
-/** The progress strip: the nodes that do work (take inputs and give outputs, or reported progress), in graph order;
+/** The progress strip: the nodes that do work (take inputs and give outputs, and are not an empty LoRA stack, or
+ * reported progress), in graph order;
  * the stepping node is active (stopped if the run ended there); those before it, or up to the furthest node that
  * reported (a node may report again after a later one), are done; the rest pending. A done node's time runs from the
  * previous node's last report to its own; after a node that never reported, from its own first report. */
@@ -136,7 +138,8 @@ export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
   const nodes = t?.nodes ?? {};
   const order = graphOrder(w).filter((id) => {
     const s = w.node_schemas[w.nodes[id].kind];
-    return id in nodes || id === run.progress?.node || (!!s?.inputs.length && !!s.outputs.length);
+    if (id in nodes || id === run.progress?.node) return true;
+    return !!s?.inputs.length && !!s.outputs.length && !emptyStack(w, id);
   });
   // a node the graph does not have still gets its piece, at the end
   for (const id of Object.keys(nodes)) if (!order.includes(id)) order.push(id);

@@ -139,3 +139,48 @@ def test_stage_inputs_may_be_optional_and_never_share_a_param_name():
 
     with pytest.raises(ValueError, match="share the names"):
         pack._nodes({"mix": stage}, "t", "c", None, types.SimpleNamespace(mix=lambda *a: {}))
+
+
+def real_qwen_lora_block() -> dict:
+    pytest.importorskip("torch")
+    if not (pack.models_root() / "Qwen-Image-2.1" / "transformer" / "config.json").is_file():
+        pytest.skip("the Qwen-Image-2.1 configs are not on this host")
+    values, _, _ = registry.build("torch")
+    return next(m for m in values["models"]["models"] if m["family"] == "qwen-image")["lora"]
+
+
+def test_real_qwen_lora_block_comes_from_the_meta_model():
+    """No weights are read: build() on the meta device lists the transformer's Linears."""
+    from core import lora
+
+    block = real_qwen_lora_block()
+    mods = lora.expand(block["modules"])
+    assert block["component"] == "transformer" and block["modules"] == sorted(block["modules"])
+    assert len({m.replace(".", "_") for m in mods}) == len(mods)  # kohya names stay unique
+    assert "transformer_blocks.0.attn.to_q" in mods and lora.compress(mods) == block["modules"]
+
+
+def test_real_qwen_lora_block_equals_the_contract_fixture():
+    want = fixture("qwen-image.models.valid.json")["models"][0]["lora"]
+    assert real_qwen_lora_block() == want
+
+
+def test_lora_stack_node_is_generated_from_the_lora_block(tmp_path, monkeypatch):
+    q = FakeQwen(tmp_path, monkeypatch)
+    want = next(n for n in fixture("qwen-image.nodes.valid.json")["nodes"] if n["kind"] == "qwen-image/lora-stack")  # fmt: skip
+    assert pack.lora_stack_schema(q.pack) == want
+    assert schemas.registry_errors("loras", fixture("qwen-image.loras.valid.json")) == []
+
+
+def test_echo_lora_block_fits_the_contract_lora_fixtures():
+    """The fake echo block names the modules of the contract LoRA fixtures that fit qwen-image, so they fit echo on
+    a fake-only stack (no GPU); where qwen-image is also published, detection prefers it (contracts README)."""
+    from core import lora
+
+    (echo,) = [p for p, _ in pack.for_env("fake") if p.family == "echo"]
+    block = pack.lora_block(echo)
+    for f in sorted((CONTRACTS / "fixtures/loras").glob("*.json")):
+        fx = json.loads(f.read_text())
+        if fx["expect"]["family"] == "qwen-image" and "ignore" not in fx:
+            assert lora.normalise(fx["name"], fx["tensors"], block, "echo")["error"] is None, f.name
+    assert block == fixture("models.valid.json")["models"][0]["lora"]

@@ -1,4 +1,4 @@
-// Package registry: what the runners publish, watched and cached. KV `registry` keys <host>.<env>.nodes|workflows|models
+// Package registry: what the runners publish, watched and cached. KV `registry` keys <host>.<env>.nodes|workflows|models|loras
 // (contracts/registry.schema.json) and KV `hosts` keys <host>.<env> (each runner's live state).
 package registry
 
@@ -36,6 +36,22 @@ type Param struct {
 
 // IsImageField reports whether a rows item field holds an Image.
 func IsImageField(raw json.RawMessage) bool { return string(raw) == `"Image"` }
+
+// IsLoraField reports whether a rows item field holds a Lora ({lora_id}).
+func IsLoraField(raw json.RawMessage) bool { return string(raw) == `"Lora"` }
+
+// LoraField is the Lora field of a rows param's item (the lora-stack's rows), "" for any other param.
+func (p Param) LoraField() string {
+	if p.Type != "rows" {
+		return ""
+	}
+	for _, name := range slices.Sorted(maps.Keys(p.Item)) {
+		if IsLoraField(p.Item[name]) {
+			return name
+		}
+	}
+	return ""
+}
 
 // ImageInput reports whether the param takes images, and the item field that holds one: "" for an image param, the
 // only Image field for a rows param whose item has exactly one (ok false for any other param).
@@ -157,14 +173,63 @@ type Resident struct {
 	Precision string  `json:"precision"`
 	GB        float64 `json:"gb"`
 	Pinned    bool    `json:"pinned"`
+	// a component with LoRAs baked in: those LoRAs in order (absent = the plain component)
+	Loras []ResidentLora `json:"loras,omitempty"`
+}
+
+// ResidentLora is a LoRA baked into a resident component. The runner always fills every field; GET /hosts nulls the
+// id, name and strength of another user's own LoRA.
+type ResidentLora struct {
+	LoraID   *string  `json:"lora_id"`
+	Name     *string  `json:"name"`
+	Strength *float64 `json:"strength"`
+	Bytes    int64    `json:"bytes"`
+}
+
+// LoraBlock is a family's LoRA rules (registry models[].lora): what the normaliser needs to fit a file to it.
+type LoraBlock struct {
+	Component string   `json:"component"`
+	Modules   []string `json:"modules"`
+	Renames   []Rename `json:"renames"`
+	Ignore    []string `json:"ignore"`
+	// Fake: only env fake publishes the family (set by LoraBlocks); family detection prefers the others
+	Fake bool `json:"-"`
+}
+
+// Rename is one prefix rewrite of a LoRA key's module part.
+type Rename struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// SharedLora is one entry of a registry loras value: a LoRA file a runner indexed on its host.
+type SharedLora struct {
+	ID         string    `json:"id"` // the file's SHA-256
+	Name       string    `json:"name"`
+	Family     string    `json:"family"` // or unknown
+	Rank       int       `json:"rank"`
+	Bytes      int64     `json:"bytes"`
+	KeyStyle   string    `json:"key_style"`
+	Licence    *string   `json:"licence"`
+	ModifiedAt time.Time `json:"modified_at"`
+}
+
+// LiveLora is a shared LoRA as the live hosts of an env have it: the first host's entry (by key), the family the first
+// not unknown over them (a non-fake env's before env fake's, as family detection), the oldest mtime, and every host
+// that lists it (sorted).
+type LiveLora struct {
+	SharedLora
+	Hosts      []string
+	fakeFamily bool // Family came from an env fake host
 }
 
 // Model is one model of a registry models value: the models present on a host for an env.
 type Model struct {
-	ID       string    `json:"id"`
-	Family   string    `json:"family"`
-	Title    string    `json:"title"`
-	Variants []Variant `json:"variants"` // absent for a model without variants (echo)
+	ID       string     `json:"id"`
+	Family   string     `json:"family"`
+	Title    string     `json:"title"`
+	Variants []Variant  `json:"variants"` // absent for a model without variants (echo)
+	Lora     *LoraBlock `json:"lora,omitempty"`
 }
 
 // Variant is one variant of a model on a host.
@@ -188,6 +253,7 @@ type Registry struct {
 	nodesAt   map[string]time.Time    // "<host>.<env>" → when its nodes were published
 	workflows map[string][]Workflow   // "<host>.<env>" → its workflows (without node schemas)
 	models    map[string][]Model      // "<host>.<env>" → the models present there
+	loras     map[string][]SharedLora // "<host>.<env>" → the shared LoRAs on that host
 	hosts     map[string]Host         // "<host>.<env>" → its state
 	awaiting  map[string]bool         // watched buckets whose current values have not all arrived yet
 }
@@ -284,8 +350,82 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			return err
 		}
 		set(&r.models, source, parsed.Models)
+	case "loras":
+		if value == nil {
+			delete(r.loras, source)
+			return nil
+		}
+		var parsed struct {
+			Loras []SharedLora `json:"loras"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		set(&r.loras, source, parsed.Loras)
 	}
 	return nil
+}
+
+// Loras returns the shared LoRAs of the live hosts of env ("" = every env), by id.
+func (r *Registry) Loras(now time.Time, env string) map[string]LiveLora {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := map[string]LiveLora{}
+	for _, source := range slices.Sorted(maps.Keys(r.loras)) {
+		host, ok := r.hosts[source]
+		if !ok || !host.Live(now) || (env != "" && host.Env != env) {
+			continue
+		}
+		for _, entry := range r.loras[source] {
+			live, seen := out[entry.ID]
+			if !seen {
+				live.SharedLora, live.fakeFamily = entry, host.Env == "fake"
+			}
+			if entry.Family != "unknown" && (live.Family == "unknown" || live.fakeFamily && host.Env != "fake") {
+				live.Family, live.fakeFamily = entry.Family, host.Env == "fake"
+			}
+			if entry.ModifiedAt.Before(live.ModifiedAt) {
+				live.ModifiedAt = entry.ModifiedAt
+			}
+			if !slices.Contains(live.Hosts, host.Host) {
+				live.Hosts = append(live.Hosts, host.Host)
+				slices.Sort(live.Hosts)
+			}
+			out[entry.ID] = live
+		}
+	}
+	return out
+}
+
+// HasLora reports whether the runner at source ("<host>.<env>") lists the shared LoRA id.
+func (r *Registry) HasLora(source, id string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return slices.ContainsFunc(r.loras[source], func(l SharedLora) bool { return l.ID == id })
+}
+
+// LoraBlocks returns every family's lora block any runner publishes (live or not), by family: the first source by key;
+// Fake when every source publishing it is env fake.
+func (r *Registry) LoraBlocks() map[string]LoraBlock {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := map[string]LoraBlock{}
+	for _, source := range slices.Sorted(maps.Keys(r.models)) {
+		_, env, _ := strings.Cut(source, ".")
+		for _, model := range r.models[source] {
+			if model.Lora == nil {
+				continue
+			}
+			block, seen := out[model.Family]
+			if !seen {
+				block = *model.Lora
+				block.Fake = true
+			}
+			block.Fake = block.Fake && env == "fake"
+			out[model.Family] = block
+		}
+	}
+	return out
 }
 
 // ownerOf returns the source of another env that publishes workflow id, or "". Callers hold r.mu.

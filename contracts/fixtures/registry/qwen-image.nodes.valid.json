@@ -155,6 +155,56 @@
       ]
     },
     {
+      "kind": "qwen-image/lora-stack",
+      "title": "LoRA Stack",
+      "family": "qwen-image",
+      "help": "Applies LoRAs to the model's transformer, in order. Empty: the model as it is.",
+      "params": [
+        {
+          "name": "rows",
+          "type": "rows",
+          "label": "LoRAs",
+          "default": [],
+          "min": 0,
+          "max": 8,
+          "item": {
+            "lora": "Lora",
+            "strength": {
+              "type": "float",
+              "label": "Strength",
+              "default": 1,
+              "min": -4,
+              "max": 4,
+              "step": 0.05
+            },
+            "mode": {
+              "type": "enum",
+              "label": "Mode",
+              "default": "adapter",
+              "enum": [
+                "adapter",
+                "bake"
+              ],
+              "help": "Adapter: strength changes and swaps never reload the model. Bake: merged into the weights at load (its own copy in memory)."
+            }
+          },
+          "help": "Each row: a LoRA that fits this model, its strength and how it is applied."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ]
+    },
+    {
       "kind": "qwen-image/encode",
       "title": "Encode prompt",
       "family": "qwen-image",

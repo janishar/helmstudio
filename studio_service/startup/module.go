@@ -9,6 +9,7 @@ import (
 	"github.com/helmstudio/helmgo/storage"
 
 	"github.com/helmstudio/studio_service/api/gallery"
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/registry"
@@ -49,5 +50,6 @@ func (m *Module) Controllers() []micro.Controller {
 		m.health,
 		studio.NewController(service, m.recheck, m.shutdown),
 		gallery.NewController(gallery.NewService(m.db, m.signer, m.store, m.registry, service.FindWorkflow)),
+		lora.NewController(lora.NewService(m.db, m.signer, m.store, m.registry)),
 	}
 }

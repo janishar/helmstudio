@@ -36,4 +36,8 @@ AFTER_RUN = os.environ.get("RUNNER_AFTER_RUN", "keep_warm")  # unload | keep_war
 IDLE_UNLOAD_S = float(
     os.environ.get("RUNNER_IDLE_UNLOAD_S", "600")
 )  # keep_warm: unload after idle this long
+# the runner's own files: the LoRA cache (<cache>/loras/<sha256>.safetensors, own LoRAs, LRU) and the shared
+# LoRA hashes; never weights of a model
+CACHE = Path(os.environ.get("RUNNER_CACHE", "~/.cache/helmstudio-runner")).expanduser()
+LORA_CACHE_GB = float(os.environ.get("RUNNER_LORA_CACHE_GB", "20"))
 PINS = {c for c in os.environ.get("RUNNER_PIN", "").split(",") if c}  # components keep_pinned keeps

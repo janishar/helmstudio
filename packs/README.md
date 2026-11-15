@@ -54,6 +54,13 @@ components:                       # weight components the residency manager load
     precision: [bf16, int8]
     quantize: ["*.language_model.layers.*", "lm_head"]
   vae: {files: "vae/*.safetensors", dtype: bf16, precision: [bf16]}
+lora:                             # LoRAs: the generated qwen-image/lora-stack node and the registry lora block
+  component: transformer          # the component LoRAs patch; only stages that use it see the Model's LoRA set
+  renames: []                     # {from, to} prefix rewrites of a key's module part (most families: none)
+  ignore: []                      # fnmatch globs over raw keys counted as ignored, not unapplied
+  modes: [adapter, bake]          # [bake] for a runtime without adapters yet
+  max_rows: 8
+  strength: {min: -4, max: 4, default: 1}
 stages:                           # one node kind each: <family>/<stage>; the function <stage>() in torch.py
   encode:
     title: Encode prompt
@@ -95,11 +102,20 @@ stages:                           # one node kind each: <family>/<stage>; the fu
 Keys the core understands; anything else is ignored:
 
 - **Top level**: `id`, `family`, `title`, `publish` (core node kinds to publish without a workflow using them),
-  `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`, `stages`. A pack without `variants` (echo) has no model node and its `models` entry is `{id, family, title}`.
+  `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`, `lora`, `stages`. A pack without `variants` (echo) has no model node and its `models` entry is `{id, family, title}`.
 - **`variants.<id>`**: `dir`, `shares` (component names loaded from the first variant's folder, so they are one
   residency entry and one cache identity across variants).
 - **`components.<name>`**: `files`, `dtype` (`bf16` | `fp16` | `fp32`, default bf16), `precision` (default
   `[bf16]`), `quantize` (fnmatch globs over module names, used only at int8).
+- **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
+  `renames` (ordered `{from, to}` prefix rewrites of a key's module part), `ignore` (fnmatch globs over raw keys
+  counted as ignored), `modes` (`[adapter, bake]`, or `[bake]` for a runtime without adapters), `max_rows` (8),
+  `strength {min, max, default}`. The core generates the `<family>/lora-stack` node (`Model → Model`, param `rows` of
+  `{lora: Lora, strength, mode}`) and the registry `models[].lora` block, whose `modules` are the component's Linear
+  names read from `build()` on the meta device (no weights), compressed to `{a..b}` ranges. A stage whose `uses`
+  holds the component gets it from `ctx.component` with exactly its Model's adapters attached (strengths set; no
+  reload) and its bake rows merged at load (its own residency entry); only those stages' cache keys see the LoRA
+  set. A key that does not apply fails the run with the contract's text: no key is silently dropped.
 - **`model`**: `help`, and `variant` / `precision`, merged over the generated params (`label`, `help`, `default`).
   The generated node is `<family>/model` with param `variant` (enum: the variant ids, default the first) and
   `precision` (enum: every precision a component offers, in the order bf16, fp16, int8), output `model: Model`.
@@ -159,7 +175,7 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   Port values: `Text`: `str`. `Seed`: `int`. `Canvas`: `{"width", "height", "mode"}`
   (the stage applies `mode`: auto may size from the references). `Image`: a `PIL.Image` (the core `output` node
   stores it as PNG; RGBA is fine). `Model`: a `core.pack.ModelRef`
-  (`variant`, `precision`, `pack.spec`, `folder(component=None)` → the variant's folder for configs, the
+  (`variant`, `precision`, `loras` (the ordered LoRA rows of the stacks upstream), `pack.spec`, `folder(component=None)` → the variant's folder for configs, the
   tokenizer and the scheduler, which the pack reads itself). `Conditioning` / `Latent`: whatever object the
   pack returns. Handles never leave the process.
 - **Graphs**: a run may be a user's own graph (contracts/README.md, "Graph rules"). The core checks it before it
@@ -180,6 +196,9 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
     tensor by tensor through rename → cast to `dtype` → int8 quantize (`quantize` globs; an `Int8Linear` with an
     int8 weight and one bf16 scale per row), with a cancel point and `progress(n, total, "loading <name>")` as
     it goes. Do not keep components in module globals: the residency manager must be able to free them.
+    For the family's `lora.component`, the core then makes the module carry exactly the Model's adapter LoRAs
+    (`core/loaders_torch.py` LoraLinear: `y = base(x) + s · B(A x)`, `s` a tensor; detaching the last restores
+    the plain Linear), fetching an own LoRA to the host's LoRA cache first (phase `fetching LoRA <name>`).
   - `ctx.check()`: a cancel point. Call it at least once per step; a stage that passes none for `stall_s`
     seconds fails its run and restarts the runner.
   - `ctx.progress(step, of, phase=None)`: `1 <= step <= of`; a phase with no steps is `progress(1, 1, phase)`.

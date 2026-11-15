@@ -18,6 +18,7 @@ import graphlib
 import hashlib
 import json
 import logging
+import re
 import secrets
 import time
 from collections import OrderedDict
@@ -77,6 +78,7 @@ class Ctx:
         self.owner, self.residency, self.device, self.loop = owner, residency, device, loop
         self.node, self.impl, self.seed = "", None, None
         self.fetch = None  # async (key, limit) -> bytes | None
+        self.loras = None  # the host's core.lora.Library, set by the consumer
         self.outputs = 0  # outputs stored so far: the next one's index
         self.started = time.monotonic()  # when the running node started
         self.alive = (
@@ -119,7 +121,32 @@ class Ctx:
         if name not in self.impl.uses:
             raise RunError(f"{self.node}: component {name!r} is not in its stage's uses")
         gb, transient = model.gb(name)
-        return self.residency.get(model.key(name), gb, transient, lambda: model.load(name, self))
+        key = model.key(name)
+        module = self.residency.get(key, gb, transient, lambda: model.load(name, self), model.resident_loras(name))  # fmt: skip
+        if (
+            name == model.lora_component
+        ):  # exactly this handle's adapters, at its strengths; no reload
+            from core.pack import BYTES
+
+            uses = [u for u, _ in model.adapters(name).values()]
+            dtype = BYTES[model.pack.component(name).get("dtype", "bf16")]
+            self.residency.grow(
+                key, gb + model.lora_gb(uses, dtype)
+            )  # room first: nothing is allocated yet
+            self.residency.resize(key, gb + model.activate(name, module, self))
+        return module
+
+    def lora_path(self, use):
+        """The local file of a LoRA of this run (fetched to the host's LoRA cache first for an own one); called
+        on the GPU thread by the loader."""
+        if self.loras is None:
+            raise RunError(f"LoRA {use.name}: this runner has no LoRA library")
+        self.alive = time.monotonic()
+
+        async def tell(phase: str) -> None:  # awaited on the loop by the library
+            await self._progress(self.node, 1, 1, phase, None)
+
+        return self._call(self.loras.path(use, self.owner, tell))
 
 
 def _check_param(spec: dict, value) -> str | None:
@@ -168,11 +195,18 @@ def _check_rows(spec: dict, value) -> str | None:
             if item == "Image":
                 if not _image(row.get(f)):
                     return f"item {i}.{f}: an image is required"
+            elif item == "Lora":  # {lora_id} in a workflow, resolved (`defs lora`) in a command
+                v = row.get(f)
+                if not isinstance(v, dict) or not LORA_ID.match(str(v.get("lora_id"))):
+                    return f"item {i}.{f}: a LoRA is required"
             elif f in row and (why := _check_param(item, row[f])):
                 return f"item {i}.{f} {why}"
     return None
 
 
+LORA_ID = re.compile(
+    r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
+)
 HANDLES = {"Model", "Conditioning", "Latent"}  # family-scoped: Model[f] is not Model[g]
 WIREABLE = {
     "int": "Int",
@@ -199,6 +233,13 @@ def passthrough(schema: dict) -> list[str] | None:
             return None
         through.append(i)
     return list(dict.fromkeys(through)) or None
+
+
+def lora_field(spec: dict) -> str | None:
+    """A rows param's Lora field (the lora-stack's `lora`), else None."""
+    if spec["type"] == "rows":
+        return next((f for f, t in spec["item"].items() if t == "Lora"), None)
+    return None
 
 
 def port_type(schema: dict, name: str) -> str | None:
@@ -259,6 +300,19 @@ def problems(
                 add("param_missing", nid, param=name, message=f"{nid}.{name}: missing")
             elif why := _check_param(spec, params[name]):
                 add("param_invalid", nid, param=name, message=f"{nid}.{name} {why}")
+            elif spec["type"] == "rows" and (gap := next(((i, f) for i, r in enumerate(params[name], 1)
+                                                          for f in spec["item"] if f not in r), None)):  # fmt: skip
+                add(
+                    "param_missing",
+                    nid,
+                    param=name,
+                    message=f"{nid}.{name} item {gap[0]}.{gap[1]}: missing",
+                )
+            elif field := lora_field(spec):  # README, LoRAs: one LoRA once per stack
+                ids = [r[field]["lora_id"] for r in params[name]]
+                if dup := next((x for i, x in enumerate(ids) if x in ids[:i]), None):
+                    add("lora_duplicate", nid, param=name,
+                        message=f"{nid}.{name}: LoRA {dup} is already in row {ids.index(dup) + 1}")  # fmt: skip
         for port, ref in wires.items():
             want = port_type(s, port)
             if not want:
@@ -364,13 +418,18 @@ def resolve(nodes: dict, schemas: dict[str, dict]) -> tuple[dict, dict]:
     return nodes, resolved
 
 
-def _model(nodes: dict, impls: dict, ref: str):
-    """The Model handle wired at `ref`: model nodes are pure, so it is built from the node's params."""
-    # ponytail: assumes a Model comes straight from a <family>/model node (true of every published kind); a
-    # Model → Model kind (LoRA) needs its handle resolved through the graph instead
-
-    src = nodes[ref.partition(".")[0]]
-    return impls[src["kind"]].fn(None, src.get("params", {}), {})["model"]
+def _model(nodes: dict, impls: dict, schemas: dict, ref: str):
+    """The Model handle wired at `ref`. Nodes that make or pass a Model (<family>/model, <family>/lora-stack) are
+    pure functions of their params and Model inputs, so it is built through the graph without running anything."""
+    src_id, _, out = ref.partition(".")
+    src = nodes[src_id]
+    types = {i["name"]: i["type"] for i in schemas[src["kind"]]["inputs"]}
+    inputs = {
+        p: _model(nodes, impls, schemas, r)
+        for p, r in src.get("in", {}).items()
+        if types.get(p) == "Model"
+    }
+    return impls[src["kind"]].fn(None, src.get("params", {}), inputs)[out]
 
 
 def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
@@ -383,7 +442,7 @@ def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
         ins = {}
         for port, ref in node.get("in", {}).items():
             if types.get(port) == "Model":
-                ins[port] = _model(nodes, impls, ref).fingerprint(impl.uses)
+                ins[port] = _model(nodes, impls, schemas, ref).fingerprint(impl.uses)
             else:
                 src, _, name = ref.partition(".")
                 ins[port] = [out[src], name]
@@ -437,7 +496,7 @@ def _components(nodes: dict, impls: dict, schemas: dict, nid: str) -> dict[tuple
     out = {}
     for port, ref in node.get("in", {}).items():
         if types.get(port) == "Model":
-            model = _model(nodes, impls, ref)
+            model = _model(nodes, impls, schemas, ref)
             out |= {model.key(c): model for c in impl.uses}
     return out
 
@@ -474,8 +533,10 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         if nid in done:
             return done[nid]
         node, impl, schema = nodes[nid], impls[nodes[nid]["kind"]], schemas[nodes[nid]["kind"]]
-        sink = not schema["outputs"]
-        if not sink and (hit := cache.get(k[nid])) is not None:
+        # a node that makes or passes a Model (<family>/model, lora-stack) is pure and cheap: rebuilt every run, never
+        # cached (a lora-stack's key does not cover its upstream handle)
+        uncached = not schema["outputs"] or any(o["type"] == "Model" for o in schema["outputs"])
+        if not uncached and (hit := cache.get(k[nid])) is not None:
             log.info("%s: cache hit", nid)
             done[nid] = hit
             pending.discard(nid)
@@ -495,7 +556,7 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         params |= upstream_params  # a wired value param gets the upstream value
         outs = await loop.run_in_executor(GPU, job, nid, impl, params, inputs)
         log.info("%s: ran in %.1f s", nid, time.monotonic() - ctx.started)
-        if not sink:
+        if not uncached:
             cache[k[nid]] = outs
         done[nid] = outs
         return outs

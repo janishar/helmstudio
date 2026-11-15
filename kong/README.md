@@ -9,7 +9,7 @@ The gateway: Kong 3.9 DB-less ([kong.yml](kong.yml), baked into the image) plus 
 | `/auth/signin`, `/auth/refresh` | auth:8080 | `rate-limiting` per real client IP (trusted proxies only may set `X-Forwarded-For`) |
 | `/auth` | auth:8080 | |
 | `/v1/studio` | studio:8080 | SSE: 1 h read timeout |
-| `/files/` | files:8080 | no API key: the HMAC-signed, expiring link is the auth |
+| `/files/` | files:8080 | no API key: the HMAC-signed, expiring link is the auth; streamed (no request buffering), up to 2 GiB (a LoRA PUT) |
 | `/` | web:3000 | no API key: the BFF adds the web app's key server-side; 1 h read timeout (SSE) |
 
 Global plugins: `apikey-auth-plugin` (key → `GET http://auth:8080/verify/apikey`, 2 s timeout, fail closed with 503,

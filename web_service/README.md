@@ -44,6 +44,13 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   the stage adds one; sent as `{take_id}`. `?use=<take>&w=<workflow>` (and the strip's "Use in…") call
   `POST /v1/studio/takes/{id}/use`. Canvas Auto with references follows the last one (about 1 MP); a picked size sets
   `canvas.mode: fixed`.
+- LoRAs (`lib/loras.ts` logic, `lib/lora-library.ts` the cached `GET /v1/studio/loras`, `components/create/loras.tsx`):
+  a rows param whose item has a `Lora` field is the inspector's LoRA section and the graph card's rows (name,
+  strength over the schema's range, the mode toggle, remove, drag or Alt + arrows, each row's problem), with Add LoRA
+  opening the picker (docs/mock/LoraPicker.dc.html: shared + own, unfitting ones greyed with the reason, upload of a
+  `.safetensors` by signed PUT with progress, the server's rejection reason, rename, delete with confirm). The graph
+  rules add `lora_duplicate`, `lora_unknown`, `lora_family` from the library; takes list their LoRAs; Reuse says
+  which were deleted. An empty stack is left out of the progress strip.
 - `/gallery` (`components/gallery/`, `lib/takes.ts`): every take, search and filter chips, infinite scroll by
   cursor, upload (picker or drop: `POST /v1/studio/uploads` → `PUT` of the signed `/files` link with progress →
   `.../complete`), Select several (bulk star / delete), and the selected take's panel: Made with, Reuse settings,

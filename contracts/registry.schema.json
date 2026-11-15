@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/registry.schema.json",
-  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models) and bucket hosts (key <host>.<env>)",
-  "description": "Each runner writes only its own keys: the three registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
+  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras) and bucket hosts (key <host>.<env>)",
+  "description": "Each runner writes only its own keys: the four registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
   "$defs": {
     "meta": {
       "type": "object",
@@ -142,7 +142,7 @@
         },
         "item": {
           "type": "object",
-          "description": "rows only: field name → a port type (the field holds a value of that type; only Image in this version) or a param schema (without name; not rows)",
+          "description": "rows only: field name → a ref kind (the field holds a value of that kind, required in every item: Image = a take {take_id}; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows)",
           "minProperties": 1,
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
@@ -151,6 +151,9 @@
             "anyOf": [
               {
                 "const": "Image"
+              },
+              {
+                "const": "Lora"
               },
               {
                 "$ref": "#/$defs/itemParam"
@@ -867,6 +870,91 @@
                         }
                       }
                     }
+                  },
+                  "lora": {
+                    "$ref": "#/$defs/loraBlock",
+                    "description": "present when the family takes LoRAs (it publishes a <family>/lora-stack node)"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "loras": {
+      "description": "registry key <host>.<env>.loras: the shared LoRAs this runner indexed on its host (every *.safetensors under <models>/loras/ and under any loras/ folder inside a model folder), written at start. Studio's LoRA library lists the union over live hosts; the dispatcher sends a run that names a shared LoRA only to a host whose key lists it",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "loras"
+          ],
+          "properties": {
+            "loras": {
+              "type": "array",
+              "maxItems": 2000,
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "family",
+                  "rank",
+                  "bytes",
+                  "key_style",
+                  "licence",
+                  "modified_at"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "$ref": "messages/defs.schema.json#/$defs/sha256",
+                    "description": "the file's SHA-256 (the runner hashes it once and keeps the hash by path, size and mtime): the LoRA's id everywhere"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "description": "the file name without .safetensors, cut to 80"
+                  },
+                  "family": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "description": "the first family of this runner's packs (by name) the normaliser fits it to (every key applied or ignored, at least one applied); unknown when none"
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4096,
+                    "description": "the largest A/B pair rank"
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "key_style": {
+                    "enum": [
+                      "peft",
+                      "kohya",
+                      "comfyui"
+                    ]
+                  },
+                  "licence": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "__metadata__ modelspec.license, else license, trimmed; null when neither"
+                  },
+                  "modified_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "the file's mtime"
                   }
                 }
               }
@@ -984,6 +1072,38 @@
               "pinned": {
                 "type": "boolean",
                 "description": "in use by the running run: not evictable"
+              },
+              "loras": {
+                "type": "array",
+                "maxItems": 32,
+                "description": "a component with LoRAs baked in (mode bake) is its own entry: those LoRAs, in order; absent or empty = the plain component. Adapter LoRAs are not listed. GET /v1/studio/hosts shows another user's own LoRA only as its size",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "lora_id",
+                    "name",
+                    "strength",
+                    "bytes"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "lora_id": {
+                      "$ref": "messages/defs.schema.json#/$defs/loraId"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "strength": {
+                      "type": "number"
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                }
               }
             }
           }
@@ -1012,6 +1132,70 @@
           "run_id": {
             "type": "null"
           }
+        }
+      }
+    },
+    "loraBlock": {
+      "type": "object",
+      "description": "a family's LoRA rules (the `lora:` block of its model.yaml): what the normaliser needs to apply a LoRA file to this family, and what studio needs to detect a file's family (contracts/README.md, LoRA normaliser). The stack node's row cap, strength range and modes are in the <family>/lora-stack node schema",
+      "required": [
+        "component",
+        "modules",
+        "renames",
+        "ignore"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "description": "the weight component LoRAs patch (transformer); a stage whose `uses` holds it sees the Model's LoRA set"
+        },
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+|\\.\\{[0-9]+\\.\\.[0-9]+\\})*$",
+            "maxLength": 200
+          },
+          "description": "the component's Linear module names a LoRA may target (canonical, dotted, as the model's named_modules), sorted; one numeric range `{a..b}` per entry expands to a..b inclusive (transformer_blocks.{0..31}.attn.to_q). The runner generates it from the meta-device model; with every `.` read as `_` the expanded names must still be unique (kohya)"
+        },
+        "renames": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "family-specific key fixes, in order: the first whose `from` starts a key's module part (after the style's prefix and suffix are cut) replaces that prefix with `to`. Most families: []",
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "to": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          }
+        },
+        "ignore": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "glob patterns (fnmatch: `*` any run, `?` one character; case-sensitive) over raw tensor keys that are counted as ignored instead of unapplied. Empty = every key must apply"
         }
       }
     }

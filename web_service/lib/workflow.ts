@@ -17,6 +17,8 @@ export type Field = {
   canvas: boolean;
   /** the node outputs a Model handle (its params pick the weights) */
   model: boolean;
+  /** the node kind's family (a LoRA must fit it), null for a core kind */
+  family?: string | null;
 };
 
 /** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's
@@ -47,6 +49,7 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
         initial: n.params?.[param.name] ?? param.default,
         canvas: schema.outputs.some((o) => o.type === "Canvas"),
         model: schema.outputs.some((o) => o.type === "Model"),
+        family: schema.family,
       }));
   });
 }
@@ -176,7 +179,10 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
     if (p.min != null && items.length < p.min) return { error: `at least ${p.min} items` };
     const need = Object.keys(p.item ?? {}).filter((k) => p.item?.[k] === "Image");
     const bad = items.findIndex((it) => need.some((k) => !isRef(it[k])));
-    return bad < 0 ? { value: items } : { error: `item ${bad + 1}: an image is required` };
+    if (bad >= 0) return { error: `item ${bad + 1}: an image is required` };
+    const lora = Object.keys(p.item ?? {}).find((k) => p.item?.[k] === "Lora");
+    const noLora = lora ? items.findIndex((it) => !isLoraRef(it[lora])) : -1;
+    return noLora < 0 ? { value: items } : { error: `item ${noLora + 1}: a LoRA is required` };
   }
   if (p.type === "image")
     return typeof raw === "string" && raw
@@ -206,6 +212,10 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
     return { error: bounds(p.min, p.max, " characters") };
   return { value: text };
 }
+
+/** Whether a value is a Lora (`{lora_id}`). */
+const isLoraRef = (v: unknown) =>
+  !!v && typeof v === "object" && typeof (v as { lora_id?: unknown }).lora_id === "string";
 
 /** Whether a value is an Image (`{take_id}`). */
 export const isRef = (v: unknown): v is S<"ImageRef"> =>
@@ -256,13 +266,20 @@ export function graphOrder(w: Pick<S<"Workflow">, "nodes">): string[] {
 
 const rank = (f: Field) => (f.model ? 0 : f.param.type === "seed" ? 2 : 1);
 
-/** The inspector's sections: image inputs (References), the canvas node's params, label-over-value tiles,
- * switches, and the rest. */
+/** Whether a field is a LoRA stack's rows (its item has a `Lora` field). */
+export const isLoraRows = (f: Field) =>
+  f.param.type === "rows" && Object.values(f.param.item ?? {}).includes("Lora");
+
+/** The inspector's sections: image inputs (References), LoRA stacks, the canvas node's params, label-over-value
+ * tiles, switches, and the rest. */
 export function sections(fs: Field[]) {
   const rest = fs.filter((f) => f.param.type !== "text");
   const other = rest.filter((f) => !f.canvas);
   return {
-    refs: other.filter((f) => f.param.type === "rows" || f.param.type === "image"),
+    refs: other.filter(
+      (f) => (f.param.type === "rows" && !isLoraRows(f)) || f.param.type === "image",
+    ),
+    loras: other.filter(isLoraRows),
     canvas: rest.filter((f) => f.canvas),
     // the model node's first, then graph order, the seed last (its home is the composer's chip), as in the mock
     tiles: other

@@ -24,6 +24,8 @@ type MadeWith struct {
 	// the elements its prompt mentioned, first mention first; typed: each param the expansion changed, as set
 	Elements []MadeWithElement `json:"elements,omitempty"`
 	Typed    map[string]any    `json:"typed,omitempty"`
+	// every LoRA of every lora-stack node that ran, node id order then row order, as resolved when the run was made
+	Loras []MadeWithLora `json:"loras,omitempty"`
 	// a take made by a step of a pipeline batch
 	Pipeline *MadeWithPipeline `json:"pipeline,omitempty"`
 }
@@ -34,6 +36,24 @@ type MadeWithElement struct {
 	Handle  string `json:"handle"`
 	Name    string `json:"name"`
 	Version int    `json:"version"`
+}
+
+// MadeWithLora is a LoRA a take was made with.
+type MadeWithLora struct {
+	Node     string  `json:"node"`
+	ID       string  `json:"id"`
+	Source   string  `json:"source"` // shared | mine
+	Name     string  `json:"name"`
+	Strength float64 `json:"strength"`
+	Mode     string  `json:"mode"`
+	SHA256   string  `json:"sha256"`
+}
+
+// LoraStatus is whether a LoRA of made_with.loras can be used now: current, missing (shared, on no live host) or
+// deleted (own).
+type LoraStatus struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
 }
 
 // ElementStatus is how an element of made_with.elements compares now: current, changed or deleted.
@@ -138,6 +158,8 @@ type TakeReuse struct {
 	WorkflowStatus string `json:"workflow_status,omitempty"`
 	// reuse only: one per made_with.elements entry
 	ElementsStatus []ElementStatus `json:"elements_status,omitempty"`
+	// reuse only: one per made_with.loras entry
+	LorasStatus []LoraStatus `json:"loras_status,omitempty"`
 }
 
 // TakePatch renames or stars a take: at least one field, no others.

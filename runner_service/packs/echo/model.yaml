@@ -21,3 +21,33 @@ stages:
       refs: {type: rows, label: References, default: [], min: 0, max: 10, item: {image: Image},
              mention: "<image{n}>",
              help: "Images the fake runner reads (and checks) before it echoes; the PNG is unchanged."}
+  lora-stack:
+    title: LoRA Stack
+    help: "Fake LoRA stack: adds the LoRAs and strengths it received to the text. Empty: the text as it is."
+    inputs: {text: Text}
+    outputs: {text: Text}
+    params:
+      rows:
+        type: rows
+        label: LoRAs
+        default: []
+        min: 0
+        max: 8
+        item:
+          lora: Lora
+          strength: {type: float, label: Strength, default: 1, min: -4, max: 4, step: 0.05}
+          mode: {type: enum, label: Mode, default: adapter, enum: [adapter, bake]}
+        help: "Each row: a LoRA, its strength and mode; the fake runner applies nothing, it only names them."
+# The fake family takes LoRAs (registry models[].lora): exactly the modules the contract LoRA fixtures
+# (contracts/fixtures/loras) name, so they fit echo on a stack without a GPU. Family detection prefers a family a
+# non-fake env publishes, so a real Qwen LoRA is qwen-image wherever both are published. Model-free: no component is
+# patched and echo/lora-stack (a Text -> Text stand-in) is written by hand above, not generated.
+lora:
+  component: transformer
+  modules: ["img_in", "modulation.1", "proj_out", "time_text_embed.timestep_embedder.linear_1",
+            "transformer_blocks.0.attn.to_k", "transformer_blocks.0.attn.to_out.0", "transformer_blocks.0.attn.to_q",
+            "transformer_blocks.0.attn.to_v", "transformer_blocks.0.img_mlp.gate_layer",
+            "transformer_blocks.30.img_mlp.out", "transformer_blocks.31.img_mlp.proj",
+            "transformer_blocks.7.attn.to_out.0", "transformer_blocks.7.attn.to_q"]
+  renames: []
+  ignore: []

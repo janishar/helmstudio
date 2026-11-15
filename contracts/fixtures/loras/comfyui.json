@@ -1,0 +1,106 @@
+{
+  "description": "ComfyUI style: diffusion_model.<module>.lora_A|lora_B.weight and .alpha (shape [1]); scale = strength * 16 / 16",
+  "name": "comfyui",
+  "metadata": {
+    "license": "cc-by-4.0"
+  },
+  "tensors": {
+    "diffusion_model.transformer_blocks.7.attn.to_q.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        16,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.7.attn.to_q.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "diffusion_model.transformer_blocks.7.attn.to_q.alpha": {
+      "dtype": "BF16",
+      "shape": [
+        1
+      ]
+    },
+    "diffusion_model.transformer_blocks.7.attn.to_out.0.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        16,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.7.attn.to_out.0.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "diffusion_model.transformer_blocks.7.attn.to_out.0.alpha": {
+      "dtype": "BF16",
+      "shape": [
+        1
+      ]
+    },
+    "diffusion_model.transformer_blocks.30.img_mlp.out.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        16,
+        12288
+      ]
+    },
+    "diffusion_model.transformer_blocks.30.img_mlp.out.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "diffusion_model.transformer_blocks.30.img_mlp.out.alpha": {
+      "dtype": "BF16",
+      "shape": [
+        1
+      ]
+    },
+    "diffusion_model.proj_out.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        16,
+        4096
+      ]
+    },
+    "diffusion_model.proj_out.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        64,
+        16
+      ]
+    },
+    "diffusion_model.proj_out.alpha": {
+      "dtype": "BF16",
+      "shape": [
+        1
+      ]
+    }
+  },
+  "values": {
+    "diffusion_model.transformer_blocks.7.attn.to_q.alpha": 16.0,
+    "diffusion_model.transformer_blocks.7.attn.to_out.0.alpha": 16.0,
+    "diffusion_model.transformer_blocks.30.img_mlp.out.alpha": 16.0,
+    "diffusion_model.proj_out.alpha": 16.0
+  },
+  "expect": {
+    "key_style": "comfyui",
+    "rank": 16,
+    "total": 12,
+    "applied": 12,
+    "ignored": 0,
+    "unapplied": [],
+    "error": null,
+    "family": "qwen-image",
+    "licence": "cc-by-4.0"
+  }
+}

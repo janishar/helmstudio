@@ -5,6 +5,7 @@ package studio
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,7 @@ import (
 	"github.com/helmstudio/helmgo/storage"
 	"github.com/helmstudio/helmgo/utility"
 
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/common"
@@ -161,17 +163,52 @@ func sessionDTO(row model.Session) dto.Session {
 
 // ------------------------------------------------------------------ hosts
 
-// Hosts returns every runner's state, redacted: never the run or its owner.
-func (s *Service) Hosts() dto.HostList {
+// Hosts returns every runner's state, redacted: never the run or its owner, and a LoRA baked into a resident
+// component that is another user's own shows only as its size.
+func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList, error) {
 	out := dto.HostList{Hosts: []dto.Host{}}
 	now := time.Now()
-	for _, host := range s.registry.Hosts() {
+	hosts := s.registry.Hosts()
+	var ids []string
+	for _, host := range hosts {
+		for _, r := range host.Resident {
+			for _, l := range r.Loras {
+				if l.LoraID != nil && utility.IsUUID(*l.LoraID) {
+					ids = append(ids, *l.LoraID)
+				}
+			}
+		}
+	}
+	mine := map[string]bool{}
+	if len(ids) > 0 {
+		err := common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, func(tx pgx.Tx) (err error) {
+			mine, err = lora.Owned(ctx, tx, ids)
+			return err
+		})
+		if err != nil {
+			return out, err
+		}
+	}
+	for _, host := range hosts {
 		state := host.State
 		if !host.Live(now) {
 			state = "offline"
 		}
+		resident := slices.Clone(host.Resident)
+		for i, r := range resident {
+			if len(r.Loras) == 0 {
+				continue
+			}
+			r.Loras = slices.Clone(r.Loras)
+			for j, l := range r.Loras {
+				if l.LoraID == nil || (utility.IsUUID(*l.LoraID) && !mine[*l.LoraID]) {
+					r.Loras[j] = registry.ResidentLora{Bytes: l.Bytes}
+				}
+			}
+			resident[i] = r
+		}
 		out.Hosts = append(out.Hosts, dto.Host{Host: host.Host, Env: host.Env, State: state, UpdatedAt: host.UpdatedAt,
-			Memory: host.Memory, Resident: host.Resident})
+			Memory: host.Memory, Resident: resident})
 	}
-	return out
+	return out, nil
 }

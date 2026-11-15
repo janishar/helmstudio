@@ -8,7 +8,27 @@
     {
       "id": "echo",
       "family": "echo",
-      "title": "Echo (fake)"
+      "title": "Echo (fake)",
+      "lora": {
+        "component": "transformer",
+        "modules": [
+          "img_in",
+          "modulation.1",
+          "proj_out",
+          "time_text_embed.timestep_embedder.linear_1",
+          "transformer_blocks.0.attn.to_k",
+          "transformer_blocks.0.attn.to_out.0",
+          "transformer_blocks.0.attn.to_q",
+          "transformer_blocks.0.attn.to_v",
+          "transformer_blocks.0.img_mlp.gate_layer",
+          "transformer_blocks.30.img_mlp.out",
+          "transformer_blocks.31.img_mlp.proj",
+          "transformer_blocks.7.attn.to_out.0",
+          "transformer_blocks.7.attn.to_q"
+        ],
+        "renames": [],
+        "ignore": []
+      }
     }
   ]
 }

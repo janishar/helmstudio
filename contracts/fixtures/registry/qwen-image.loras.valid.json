@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "loras": [
+    {
+      "id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+      "name": "ink-wash",
+      "family": "qwen-image",
+      "rank": 16,
+      "bytes": 295698432,
+      "key_style": "comfyui",
+      "licence": "apache-2.0",
+      "modified_at": "2026-10-02T08:12:00Z"
+    },
+    {
+      "id": "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d",
+      "name": "flux-style",
+      "family": "unknown",
+      "rank": 32,
+      "bytes": 171966464,
+      "key_style": "peft",
+      "licence": null,
+      "modified_at": "2026-09-11T17:40:00Z"
+    }
+  ]
+}

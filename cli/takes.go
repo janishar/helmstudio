@@ -117,30 +117,38 @@ func (c *client) upload(file string) (take, error) {
 	if err := c.call(http.MethodPost, "/v1/studio/uploads", body, http.StatusCreated, &up); err != nil {
 		return t, err
 	}
-	base, err := url.Parse(c.cfg.URL + "/")
-	if err != nil {
+	if err := c.put(up.UploadURL, f, st.Size(), ct); err != nil {
 		return t, err
-	}
-	link, err := base.Parse(up.UploadURL)
-	if err != nil {
-		return t, err
-	}
-	req, err := http.NewRequest(http.MethodPut, link.String(), f) // the signature is the auth: no key, no token
-	if err != nil {
-		return t, err
-	}
-	req.ContentLength = st.Size()
-	req.Header.Set("Content-Type", ct)
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return t, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		return t, fmt.Errorf("upload: %w", readError(resp))
 	}
 	err = c.call(http.MethodPost, "/v1/studio/uploads/"+url.PathEscape(up.TakeID)+"/complete", nil, http.StatusOK, &t)
 	return t, err
+}
+
+// put sends a file's bytes to a signed files_service link (the signature is the auth: no key, no token).
+func (c *client) put(uploadURL string, body io.Reader, size int64, ct string) error {
+	base, err := url.Parse(c.cfg.URL + "/")
+	if err != nil {
+		return err
+	}
+	link, err := base.Parse(uploadURL)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPut, link.String(), body)
+	if err != nil {
+		return err
+	}
+	req.ContentLength = size
+	req.Header.Set("Content-Type", ct)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("upload: %w", readError(resp))
+	}
+	return nil
 }
 
 // use prints the helm run command that puts a take into a workflow's image input ("Use in…").

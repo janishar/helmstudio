@@ -1,0 +1,58 @@
+{
+  "description": "to_k's A and B ranks differ and to_v has no B: those modules' keys do not apply (studio rejects such an upload; the runner fails the load)",
+  "name": "broken",
+  "metadata": {},
+  "tensors": {
+    "transformer.transformer_blocks.0.attn.to_q.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_q.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_k.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_k.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_v.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    }
+  },
+  "values": {},
+  "expect": {
+    "key_style": "peft",
+    "rank": 4,
+    "total": 5,
+    "applied": 2,
+    "ignored": 0,
+    "unapplied": [
+      "transformer.transformer_blocks.0.attn.to_k.lora_A.weight",
+      "transformer.transformer_blocks.0.attn.to_k.lora_B.weight",
+      "transformer.transformer_blocks.0.attn.to_v.lora_A.weight"
+    ],
+    "error": "LoRA broken: 3 of 5 keys do not apply to qwen-image: transformer.transformer_blocks.0.attn.to_k.lora_A.weight, transformer.transformer_blocks.0.attn.to_k.lora_B.weight, transformer.transformer_blocks.0.attn.to_v.lora_A.weight",
+    "family": "unknown",
+    "licence": null
+  }
+}

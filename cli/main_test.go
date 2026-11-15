@@ -107,6 +107,8 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, echoWorkflow)
 	case "GET /v1/studio/workflows/" + mineID:
 		fmt.Fprint(w, mineWorkflow)
+	case "GET /v1/studio/workflows/w1":
+		fmt.Fprint(w, stackWorkflow)
 	case "POST /v1/studio/sessions":
 		w.WriteHeader(201)
 		fmt.Fprint(w, `{"id":"s1","title":"Echo"}`)

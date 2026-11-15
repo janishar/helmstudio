@@ -85,16 +85,17 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		}
 		graph, _ := json.Marshal(nodes)
 		status, failure := "queued", (*string)(nil)
-		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version}
+		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version,
+			Loras: lorasJSON(graphs[0].Loras)}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			status, failure = "failed", &reason
 		}
 		inputs, _ := json.Marshal(body.Inputs)
 		run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-			nodes, finished_at, workflow_version, workflow_title, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12)
+			nodes, finished_at, workflow_version, workflow_title, mentions, loras) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13)
 			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure,
-			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion))
+			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion), lorasJSON(graphs[0].Loras))
 		if err != nil {
 			return err
 		}

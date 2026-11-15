@@ -16,8 +16,10 @@ PALETTE = {
     for g in json.loads((GRAPHS / "palette.json").read_text())["groups"]
     for n in g["nodes"]
 }
-# a runner's palette is its own env (another env's kind is unknown to it) and it gets no studio block
-NOT_CHECKED = {"env_mismatch", "studio_unknown_path", "studio_duplicate", "preset_invalid"}
+# a runner's palette is its own env (another env's kind is unknown to it), it gets no studio block, and it has no
+# user's LoRA library (studio resolved every LoRA before the run reached it)
+NOT_CHECKED = {"env_mismatch", "studio_unknown_path", "studio_duplicate", "preset_invalid",
+               "lora_unknown", "lora_family"}  # fmt: skip
 
 
 def filled(nodes: dict) -> dict:

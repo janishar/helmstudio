@@ -268,7 +268,8 @@ export function resolveMentions(
       typed[path] = before;
       // element rows never change the output size: each auto canvas is pinned to what auto gives without them
       const last = before.at(-1)?.[field] as { take_id?: string } | null | undefined;
-      const size = last && typeof last === "object" && last.take_id ? sizes[last.take_id] : undefined;
+      const size =
+        last && typeof last === "object" && last.take_id ? sizes[last.take_id] : undefined;
       for (const { id, n, params } of known(nodes, schemas)) {
         const ps = Object.fromEntries(params.map((p) => [p.name, p]));
         if (n.kind !== "canvas" || val(n, ps.mode) !== "auto") continue;

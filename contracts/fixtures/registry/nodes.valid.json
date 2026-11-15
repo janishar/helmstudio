@@ -86,6 +86,55 @@
       ]
     },
     {
+      "kind": "echo/lora-stack",
+      "title": "LoRA Stack",
+      "family": "echo",
+      "help": "Fake LoRA stack: adds the LoRAs and strengths it received to the text. Empty: the text as it is.",
+      "params": [
+        {
+          "name": "rows",
+          "type": "rows",
+          "label": "LoRAs",
+          "default": [],
+          "min": 0,
+          "max": 8,
+          "item": {
+            "lora": "Lora",
+            "strength": {
+              "type": "float",
+              "label": "Strength",
+              "default": 1,
+              "min": -4,
+              "max": 4,
+              "step": 0.05
+            },
+            "mode": {
+              "type": "enum",
+              "label": "Mode",
+              "default": "adapter",
+              "enum": [
+                "adapter",
+                "bake"
+              ]
+            }
+          },
+          "help": "Each row: a LoRA, its strength and mode; the fake runner applies nothing, it only names them."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ]
+    },
+    {
       "kind": "output",
       "title": "Output",
       "family": null,

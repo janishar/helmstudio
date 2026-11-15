@@ -1,0 +1,105 @@
+{
+  "description": "PEFT / diffusers style: transformer.<module>.lora_A|lora_B.weight, no alpha (alpha = rank, scale = strength)",
+  "name": "peft",
+  "metadata": {
+    "modelspec.license": "apache-2.0"
+  },
+  "tensors": {
+    "transformer.transformer_blocks.0.attn.to_q.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_q.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_k.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_k.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_v.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_v.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_out.0.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "transformer.transformer_blocks.0.attn.to_out.0.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    },
+    "transformer.transformer_blocks.31.img_mlp.proj.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "transformer.transformer_blocks.31.img_mlp.proj.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        12288,
+        4
+      ]
+    },
+    "transformer.img_in.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        64
+      ]
+    },
+    "transformer.img_in.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    }
+  },
+  "values": {},
+  "expect": {
+    "key_style": "peft",
+    "rank": 4,
+    "total": 12,
+    "applied": 12,
+    "ignored": 0,
+    "unapplied": [],
+    "error": null,
+    "family": "qwen-image",
+    "licence": "apache-2.0"
+  }
+}

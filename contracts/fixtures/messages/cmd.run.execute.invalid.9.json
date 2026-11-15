@@ -1,0 +1,144 @@
+{
+  "type": "cmd.run.execute",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000005",
+  "job_id": "8a1d3f5b-7c9e-4b2d-a4f6-1e3c5a7b9d80",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-14T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "run_id": "8a1d3f5b-7c9e-4b2d-a4f6-1e3c5a7b9d80",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "attempt": 1,
+    "workflow": {
+      "id": "qwen-image",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "Place the fox from <image1> in the field from <image2> at dusk"
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": null
+          }
+        },
+        "canvas": {
+          "kind": "canvas",
+          "params": {
+            "mode": "auto",
+            "width": 1024,
+            "height": 1024
+          }
+        },
+        "model": {
+          "kind": "qwen-image/model",
+          "params": {
+            "variant": "turbo",
+            "precision": "int8"
+          }
+        },
+        "lora": {
+          "kind": "qwen-image/lora-stack",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {
+            "rows": [
+              {
+                "lora": {
+                  "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+                  "source": "shared",
+                  "name": "ink-wash",
+                  "sha256": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+                  "bytes": 295698432
+                },
+                "strength": 0.8,
+                "mode": "adapter"
+              },
+              {
+                "lora": {
+                  "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10",
+                  "source": "own",
+                  "name": "my-sketch-style",
+                  "sha256": "b7e15163a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8",
+                  "bytes": 18874368
+                },
+                "strength": 1,
+                "mode": "bake"
+              }
+            ]
+          }
+        },
+        "encode": {
+          "kind": "qwen-image/encode",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {
+            "transparent": false,
+            "refs": [
+              {
+                "image": {
+                  "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51",
+                  "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51.jpg",
+                  "content_type": "image/jpeg",
+                  "width": 1536,
+                  "height": 1024,
+                  "bytes": 734002,
+                  "etag": "a3f1c09e7b2d4e58"
+                }
+              },
+              {
+                "image": {
+                  "take_id": "4e6a8c0b-2d4f-4a6c-9e8b-1f3a5c7e9b62",
+                  "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.png",
+                  "content_type": "image/png",
+                  "width": 1024,
+                  "height": 1024,
+                  "bytes": 1834211,
+                  "etag": "5d41402abc4b2a76b9719d911017c592"
+                }
+              }
+            ]
+          }
+        },
+        "sample": {
+          "kind": "qwen-image/sample",
+          "in": {
+            "model": "lora.model",
+            "cond": "encode.cond",
+            "canvas": "canvas.canvas",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "steps": 40
+          }
+        },
+        "decode": {
+          "kind": "qwen-image/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample.latent"
+          },
+          "params": {
+            "tiled": "auto"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.image"
+          },
+          "params": {}
+        }
+      }
+    },
+    "output_prefix": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/8a1d3f5b-7c9e-4b2d-a4f6-1e3c5a7b9d80/1/"
+  }
+}

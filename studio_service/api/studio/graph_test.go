@@ -53,8 +53,9 @@ func TestGraphFixtures(t *testing.T) {
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			var fixture struct {
-				Workflow dto.WorkflowDoc `json:"workflow"`
-				Problems []dto.Problem   `json:"problems"`
+				Workflow dto.WorkflowDoc   `json:"workflow"`
+				Problems []dto.Problem     `json:"problems"`
+				Loras    map[string]string `json:"loras"`
 			}
 			data, _ := os.ReadFile(file)
 			if err := json.Unmarshal(data, &fixture); err != nil {
@@ -68,7 +69,10 @@ func TestGraphFixtures(t *testing.T) {
 			for _, p := range fixture.Problems {
 				want[key(p)] = true
 			}
-			problems := graphProblems(fixture.Workflow, palette)
+			if fixture.Loras == nil {
+				fixture.Loras = map[string]string{}
+			}
+			problems := graphProblems(fixture.Workflow, palette, fixture.Loras)
 			for _, p := range problems {
 				got[key(p)] = true
 				if p.Message == "" || (p.Blocks == "run") != runOnly[p.Code] {
@@ -89,7 +93,7 @@ func TestHugeGraphIsCheapToRefuse(t *testing.T) {
 		nodes[fmt.Sprintf("a%d", i)] = registry.Node{Kind: "x", In: map[string]string{"i": fmt.Sprintf("a%d.o", i-1)}}
 	}
 	start := time.Now()
-	problems := graphProblems(dto.WorkflowDoc{Title: "t", Family: "echo", Env: "fake", Nodes: nodes}, fixturePalette(t))
+	problems := graphProblems(dto.WorkflowDoc{Title: "t", Family: "echo", Env: "fake", Nodes: nodes}, fixturePalette(t), nil)
 	if len(problems) != 2 || problems[0].Code != "too_large" || problems[1].Code != "too_many_nodes" {
 		t.Errorf("problems %+v", problems)
 	}

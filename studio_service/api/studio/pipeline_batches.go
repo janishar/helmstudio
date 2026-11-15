@@ -17,6 +17,7 @@ import (
 	"github.com/helmstudio/helmgo/network"
 	"github.com/helmstudio/helmgo/utility"
 
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
@@ -297,7 +298,8 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 				return dto.Batch{}, unprocessable("row %d: %s: %s", i+1, step, detail)
 			}
 			if i%repeat == 0 {
-				graphs = append(graphs, stepGraph{fmt.Sprintf("row %d: %s", i/repeat+1, step), nodes, workflow.NodeSchemas})
+				graphs = append(graphs, stepGraph{fmt.Sprintf("row %d: %s", i/repeat+1, step), nodes, workflow.NodeSchemas,
+					workflow.Env})
 			}
 			if i > 0 {
 				continue
@@ -312,6 +314,11 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	lib, detail, err := s.pipelineMentions(ctx, tx, caller.ID, graphs)
 	if err != nil {
+		return dto.Batch{}, err
+	} else if detail != "" {
+		return dto.Batch{}, unprocessable("%s", detail)
+	}
+	if detail, err := s.pipelineLoras(ctx, tx, caller.ID, graphs); err != nil {
 		return dto.Batch{}, err
 	} else if detail != "" {
 		return dto.Batch{}, unprocessable("%s", detail)
@@ -378,6 +385,31 @@ type stepGraph struct {
 	Where   string
 	Nodes   map[string]registry.Node
 	Schemas map[string]registry.NodeSchema
+	Env     string
+}
+
+// pipelineLoras checks a pipeline batch's LoRA values at Submit as each step's run will (checkLoras, as the caller,
+// per env): the first bad one ("row 1: step_1: lora.rows[1].lora: LoRA <id> not found"). Each run checks again when
+// it is made.
+func (s *Service) pipelineLoras(ctx context.Context, tx pgx.Tx, ownerID string, graphs []stepGraph) (string, error) {
+	byEnv := map[string][]loraAt{}
+	for _, g := range graphs {
+		byEnv[g.Env] = append(byEnv[g.Env], eachLora(g.Nodes, g.Schemas)...)
+	}
+	usable := map[string]map[string]lora.Info{}
+	for env, values := range byEnv {
+		found, err := lora.Usable(ctx, tx, s.registry, ownerID, env, loraIDs(values))
+		if err != nil {
+			return "", err
+		}
+		usable[env] = found
+	}
+	for _, g := range graphs {
+		if _, detail := checkLoras(eachLora(g.Nodes, g.Schemas), nodeKinds(g.Nodes), usable[g.Env]); detail != "" {
+			return g.Where + ": " + detail, nil
+		}
+	}
+	return "", nil
 }
 
 // pipelineMentions checks a pipeline batch's mentions at Submit, unknown handles only (the rest is checked when each

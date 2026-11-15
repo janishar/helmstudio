@@ -30,6 +30,13 @@ components:
     precision: [bf16, int8]
     quantize: ["*.language_model.layers.*", "lm_head"]
   vae: {files: "vae/*.safetensors", dtype: bf16, precision: [bf16]}
+lora:                             # LoRAs: the generated qwen-image/lora-stack node and the registry lora block
+  component: transformer          # the component LoRAs patch; only stages that use it see the Model's LoRA set
+  renames: []                     # {from, to} prefix rewrites of a key's module part (most families: none)
+  ignore: []                      # fnmatch globs over raw keys counted as ignored, not unapplied
+  modes: [adapter, bake]          # [bake] for a runtime without adapters yet
+  max_rows: 8
+  strength: {min: -4, max: 4, default: 1}
 stages:
   encode:
     title: Encode prompt

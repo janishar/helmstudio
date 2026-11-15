@@ -91,7 +91,7 @@
                 "auto",
                 "fixed"
               ],
-              "help": "auto: with references, about 1 MP (1024 \u00d7 1024 area) at the last reference's aspect, sides rounded to 32; without, width \u00d7 height. fixed: always width \u00d7 height."
+              "help": "auto: with references, about 1 MP (1024 × 1024 area) at the last reference's aspect, sides rounded to 32; without, width × height. fixed: always width × height."
             },
             {
               "name": "width",
@@ -212,6 +212,58 @@
           "envs": [
             "fake"
           ]
+        },
+        {
+          "kind": "echo/lora-stack",
+          "title": "LoRA Stack",
+          "family": "echo",
+          "help": "Fake LoRA stack: adds the LoRAs and strengths it received to the text. Empty: the text as it is.",
+          "params": [
+            {
+              "name": "rows",
+              "type": "rows",
+              "label": "LoRAs",
+              "default": [],
+              "min": 0,
+              "max": 8,
+              "item": {
+                "lora": "Lora",
+                "strength": {
+                  "type": "float",
+                  "label": "Strength",
+                  "default": 1,
+                  "min": -4,
+                  "max": 4,
+                  "step": 0.05
+                },
+                "mode": {
+                  "type": "enum",
+                  "label": "Mode",
+                  "default": "adapter",
+                  "enum": [
+                    "adapter",
+                    "bake"
+                  ]
+                }
+              },
+              "help": "Each row: a LoRA, its strength and mode; the fake runner applies nothing, it only names them."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "envs": [
+            "fake"
+          ]
         }
       ]
     },
@@ -260,6 +312,59 @@
           ]
         },
         {
+          "kind": "qwen-image/lora-stack",
+          "title": "LoRA Stack",
+          "family": "qwen-image",
+          "help": "Applies LoRAs to the model's transformer, in order. Empty: the model as it is.",
+          "params": [
+            {
+              "name": "rows",
+              "type": "rows",
+              "label": "LoRAs",
+              "default": [],
+              "min": 0,
+              "max": 8,
+              "item": {
+                "lora": "Lora",
+                "strength": {
+                  "type": "float",
+                  "label": "Strength",
+                  "default": 1,
+                  "min": -4,
+                  "max": 4,
+                  "step": 0.05
+                },
+                "mode": {
+                  "type": "enum",
+                  "label": "Mode",
+                  "default": "adapter",
+                  "enum": [
+                    "adapter",
+                    "bake"
+                  ],
+                  "help": "Adapter: strength changes and swaps never reload the model. Bake: merged into the weights at load (its own copy in memory)."
+                }
+              },
+              "help": "Each row: a LoRA that fits this model, its strength and how it is applied."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "envs": [
+            "torch"
+          ]
+        },
+        {
           "kind": "qwen-image/encode",
           "title": "Encode prompt",
           "family": "qwen-image",
@@ -283,7 +388,7 @@
                 "image": "Image"
               },
               "mention": "<image{n}>",
-              "help": "Images to edit or combine, in order; the prompt names them <image1>, <image2>, \u2026"
+              "help": "Images to edit or combine, in order; the prompt names them <image1>, <image2>, …"
             }
           ],
           "inputs": [

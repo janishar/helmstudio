@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.8.0
+  version: 1.9.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), runs, the queue, events, hosts, takes (the gallery), uploads, batches'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -449,6 +449,127 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  # ------------------------------------------------------------------ studio: LoRAs (contracts/README.md, LoRAs)
+  /v1/studio/loras:
+    get:
+      tags: [studio]
+      operationId: studioListLoras
+      summary: The LoRAs the caller can use (shared ones of the live hosts, and the caller's own); not paginated
+      description: |
+        Shared LoRAs are the union of every live host's registry `<host>.<env>.loras` (one entry per id, `hosts` = the
+        live hosts that list it, sorted; `family` = the first not `unknown` over those hosts); own LoRAs are the
+        caller's rows in every `state` (owner-scoped; another user's never appear). Filters combine with AND:
+        `source`, `family` (exact, `unknown` included), `q` (every whitespace-separated word occurs, case-insensitively,
+        in `name`). Order: own first, newest `created_at` first; then shared by `name` (case-insensitive, code points),
+        then `id`. `thumb_url` is the caller's oldest take whose `made_with.loras` has the id (never another user's).
+      parameters:
+        - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/LoraSource'}}
+        - {name: family, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}, description: 'only LoRAs detected for this family (`unknown`: those that fit none)'}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 80}, description: words of the name; blank = no filter}
+      responses:
+        '200': {description: LoRAs, content: {application/json: {schema: {$ref: '#/components/schemas/LoraList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateLoraUpload
+      summary: Start uploading an own LoRA; answers a signed files_service URL to PUT the file to
+      description: |
+        Stores the caller's LoRA `pending` (`name` = the file name without `.safetensors`, trimmed, cut to 80) and signs
+        a single-use `PUT` link for `u/<caller>/loras/<lora_id>.safetensors` with `Content-Type:
+        application/octet-stream`, valid 15 minutes (`PUT /files/{path}`, the take upload's pattern). 422 `only
+        .safetensors files can be uploaded` (the name must end in `.safetensors`, any case; the bytes are checked at
+        complete), `file is larger than 2 GB` (over 2147483648 bytes). 409 `You have 50 LoRAs; delete some first.`
+        (every own LoRA counts, whatever its state) and 409 `Your LoRAs would use more than 20 GB; delete some first.`
+        (`size_bytes` of the pending and ready ones, deleted ones included until the sweep removes their object a day
+        later, plus this one, over 21474836480). A LoRA still `pending` an hour
+        after it was created is deleted (with its object).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/LoraUploadCreate'}}}
+      responses:
+        '201': {description: the upload, content: {application/json: {schema: {$ref: '#/components/schemas/LoraUpload'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/loras/{lora_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetLora
+      description: 'A shared LoRA a live host lists, or one of the caller''s own (any state); anything else is 404.'
+      parameters: [{$ref: '#/components/parameters/LoraId'}]
+      responses:
+        '200': {description: the LoRA, content: {application/json: {schema: {$ref: '#/components/schemas/Lora'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      tags: [studio]
+      operationId: studioRenameLora
+      summary: Rename an own LoRA
+      description: |
+        `name` trimmed, then 1-80 characters without control characters (422 `name must be 1-80 characters`, `name must
+        not contain control characters`). Takes made before keep the name they recorded. 409 `shared LoRAs are managed
+        on their host` for a shared id.
+      parameters: [{$ref: '#/components/parameters/LoraId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/LoraPatch'}}}
+      responses:
+        '200': {description: the LoRA, content: {application/json: {schema: {$ref: '#/components/schemas/Lora'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteLora
+      summary: Delete an own LoRA (never refused)
+      description: |
+        The LoRA is gone at once (404 from then on, in no list, it frees its count and bytes); a sweep deletes the object
+        a day later. Past takes keep `made_with.loras` (reuse answers it `deleted`). A run not yet released that names
+        it fails at dispatch (`LoRA <name> was deleted`); a released one may still finish. A batch row whose run is made
+        later fails `invalid` (`lora.rows[1].lora: LoRA <id> not found`). A workflow or preset that still names it gets
+        the `lora_unknown` problem. 409 `shared LoRAs are managed on their host` for a shared id.
+      parameters: [{$ref: '#/components/parameters/LoraId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/loras/{lora_id}/complete:
+    post:
+      tags: [studio]
+      operationId: studioCompleteLoraUpload
+      summary: Check the uploaded file and index it
+      description: |
+        Studio never trusts the client: it HEADs the object (size = the declared `size_bytes`), reads the safetensors
+        header with range GETs, then streams the whole object once to hash it (SHA-256; a 2 GB file takes seconds) and
+        checks it (contracts/README.md, LoRA upload checks). Success: `state: ready` with `sha256`, `rank`, `key_style`,
+        `family` (the first registry family by name the normaliser fits, else `unknown`) and `licence`. A failed check:
+        422 with the reason, and the LoRA stays listed `rejected` with that `reason` (until deleted; the sweep removes
+        its object): `size differs from the declared bytes`, `pickle checkpoints are not accepted; convert it to
+        safetensors`, `not a safetensors file`, `safetensors header is larger than 8 MB`, `tensor <key> lies outside
+        the file`, `tensor <key> has dtype <d>; LoRAs must be F32, F16 or BF16`, `no LoRA keys found (is it a full
+        model?)`, `<key> is not a LoRA weight`, `<module>: lora_A and lora_B ranks differ`, `<module>: lora_B is
+        missing`, `rank <r> is over 4096`, `more than 20000 tensors`. 409 `upload not received` while the object is
+        not there yet (PUT it, then call again). Calling again after it ended answers the same (200 ready, or the same
+        422). 404 for an id that is unknown, another user's or shared.
+      parameters: [{$ref: '#/components/parameters/LoraId'}]
+      responses:
+        '200': {description: 'the LoRA, ready', content: {application/json: {schema: {$ref: '#/components/schemas/Lora'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ studio: runs
   /v1/studio/sessions/{session_id}/runs:
     get:
@@ -493,6 +614,15 @@ paths:
         distinct one, joined by `; `), `encode.refs: at most 10 images; <n> used, @<handle> +<k>, … do not fit`,
         `prompt.text: at most 4000 characters once elements are added (<n>)`. The resolved graph is what is checked
         for a host, stored as the run's snapshot, sent and recorded in the take; `Run.inputs` stays as requested.
+
+        LoRA values (`LoraRef`, a Lora field of a `rows` item: the `<family>/lora-stack` node) are then resolved as the
+        caller (contracts/README.md, LoRAs), items numbered from 1: 422 `lora.rows[2].lora: LoRA <id> not found` (unknown,
+        another user's, deleted, pending or rejected, or a shared id no live host of the env lists: one message, nothing
+        leaks), `lora.rows[2].lora: LoRA <name> does not fit qwen-image (it is for <family>)` (or `(its model is
+        unknown)`), `lora.rows[2].lora: LoRA <name> is already in row 1`; strength and mode are checked by the run rules
+        (`lora.rows[1].strength: must be between -4 and 4`), the row count by `max` (`lora.rows: at most 8 items`). A
+        shared LoRA no live host of the env has at dispatch fails the run `no live host for env <env> has LoRA
+        <name>`.
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       requestBody:
         required: true
@@ -675,6 +805,9 @@ paths:
         typed (with its mentions) and the reference rows without the element images; `elements_status` says, per
         element of `made_with.elements`, whether running it again would resolve the same (`current`), differently
         (`changed`: edited since) or not at all (`deleted`).
+        With LoRAs: `inputs` hold them as recorded (`{lora_id}`); `loras_status` says, per `made_with.loras` entry,
+        `current` (the caller can use it now), `missing` (shared: no live host lists it now; it may come back) or
+        `deleted` (own: deleted since). Running a missing or deleted one is 422 (`… LoRA <id> not found`).
       parameters: [{$ref: '#/components/parameters/TakeId'}]
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/TakeReuse'}}}}
@@ -1115,7 +1248,8 @@ paths:
       operationId: filesPutFile
       summary: Upload the bytes of a signed upload link (the signature is the auth; no API key)
       description: |
-        Only reachable through an `upload_url` from `POST /v1/studio/uploads`. The signature is the lower-case hex
+        Only reachable through an `upload_url` from `POST /v1/studio/uploads` (images, at most 50 MB) or `POST
+        /v1/studio/loras` (`u/<owner>/loras/<lora_id>.safetensors`, `application/octet-stream`, at most 2 GiB). The signature is the lower-case hex
         HMAC-SHA256 (the `/files` secret) of `"PUT\n" + path + "\n" + exp + "\n" + bytes + "\n" + ct`; a GET link
         (`path + "\n" + exp`) never verifies as a PUT. The request must carry `Content-Type` equal to `ct` and
         `Content-Length` equal to `bytes` (no chunked body); the body is streamed to the object store under `path`
@@ -1364,6 +1498,7 @@ components:
     BatchId: {name: batch_id, in: path, required: true, schema: {type: string}, description: batch UUID (malformed = 404)}
     TakeId: {name: take_id, in: path, required: true, schema: {type: string}, description: take UUID (malformed = 404)}
     PipelineId: {name: pipeline_id, in: path, required: true, schema: {type: string}, description: pipeline UUID (malformed = 404)}
+    LoraId: {name: lora_id, in: path, required: true, schema: {type: string}, description: 'a shared LoRA''s SHA-256 (64 hex) or an own LoRA''s UUID (malformed = 404)'}
     LibraryItemId: {name: item_id, in: path, required: true, schema: {type: string}, description: library item UUID (malformed = 404)}
     BatchRowN: {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
@@ -1453,10 +1588,19 @@ components:
       additionalProperties: false
       properties:
         take_id: {type: string, format: uuid}
+    LoraRef:
+      type: object
+      description: |
+        A Lora value (a rows item field of ref kind `Lora`): a LoRA the caller can use, by id; never a path, key or URL.
+        Studio checks it when it creates the run (contracts/README.md, "LoRAs").
+      required: [lora_id]
+      additionalProperties: false
+      properties:
+        lora_id: {type: string, pattern: '^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'}
     RowItem:
       type: object
       description: 'one item of a rows value: field (the param''s `item`) → value'
-      additionalProperties: {anyOf: [{$ref: '#/components/schemas/ScalarValue'}, {$ref: '#/components/schemas/ImageRef'}]}
+      additionalProperties: {anyOf: [{$ref: '#/components/schemas/ScalarValue'}, {$ref: '#/components/schemas/ImageRef'}, {$ref: '#/components/schemas/LoraRef'}]}
     ParamValue:
       description: 'a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items'
       anyOf:
@@ -1471,8 +1615,8 @@ components:
         or -1 means random: the runner picks one and reports it (`Run.resolved.seed`, `RunOutput.seed`). `when`: a
         visibility expression over the graph (`model.variant != 'turbo'`), carried through, not evaluated yet.
         `image`: one take (`ImageRef`), default null; a run needs one. `rows` (the rows editor): an ordered list of
-        `RowItem`, default `[]`; `min`/`max` bound the count, `item` names each item's fields (a port type, only `Image`
-        in this version, or a param schema), `mention` is how the prompt refers to item n from 1 (`<image{n}>`: the
+        `RowItem`, default `[]`; `min`/`max` bound the count, `item` names each item's fields (a ref kind, `Image` or
+        `Lora`, required in every item, or a param schema), `mention` is how the prompt refers to item n from 1 (`<image{n}>`: the
         rows editor labels item n with it; the prompt is sent as typed).
       required: [name, type, default]
       properties:
@@ -1488,8 +1632,8 @@ components:
         when: {type: string, description: visibility expression; absent = always shown}
         item:
           type: object
-          description: 'rows only: field → a port type (`Image`) or a param schema without name'
-          additionalProperties: {anyOf: [{type: string, const: Image}, {type: object, description: 'a ParamSchema without name (registry.schema.json itemParam)'}]}
+          description: 'rows only: field → a ref kind (`Image`: a take, `Lora`: a LoRA; required in every item) or a param schema without name'
+          additionalProperties: {anyOf: [{type: string, const: Image}, {type: string, const: Lora}, {type: object, description: 'a ParamSchema without name (registry.schema.json itemParam)'}]}
         mention: {type: string, description: 'rows only: the prompt''s name for item n, with `{n}` from 1', examples: ['<image{n}>']}
     NodeSchema:
       type: object
@@ -1659,7 +1803,7 @@ components:
         title: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
     ProblemCode:
       type: string
-      enum: [too_many_nodes, too_large, too_many_outputs, too_many_seeds, wrong_family, unknown_kind, env_mismatch, unknown_param, param_invalid, unknown_input, unknown_source, type_mismatch, not_bypassable, required_input, cycle, no_output, studio_unknown_path, studio_duplicate, preset_invalid]
+      enum: [too_many_nodes, too_large, too_many_outputs, too_many_seeds, wrong_family, unknown_kind, env_mismatch, unknown_param, param_invalid, unknown_input, unknown_source, type_mismatch, not_bypassable, required_input, cycle, no_output, studio_unknown_path, studio_duplicate, preset_invalid, lora_duplicate, lora_unknown, lora_family]
       description: 'meaning and which ones block saving: contracts/README.md, Graph rules. May grow in a minor version; an unknown code blocks running'
     Problem:
       type: object
@@ -2078,6 +2222,17 @@ components:
               precision: {type: string, enum: [bf16, fp16, int8]}
               gb: {type: number}
               pinned: {type: boolean}
+              loras:
+                type: array
+                description: 'a component with LoRAs baked in is its own entry: those LoRAs in order; absent or empty = the plain component. Another user''s own LoRA shows only its size (`lora_id`, `name`, `strength` null)'
+                items:
+                  type: object
+                  required: [lora_id, name, strength, bytes]
+                  properties:
+                    lora_id: {type: [string, 'null']}
+                    name: {type: [string, 'null']}
+                    strength: {type: [number, 'null']}
+                    bytes: {type: integer, minimum: 1}
     HostList:
       type: object
       required: [hosts]
@@ -2135,6 +2290,11 @@ components:
           maxItems: 200
           items: {$ref: '#/components/schemas/MadeWithElement'}
           description: 'the elements its prompt mentioned, first mention first, as they were when the run was made; absent or empty = none'
+        loras:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/MadeWithLora'}
+          description: 'every LoRA of every lora-stack node that ran, node id order then row order, as resolved when the run was made; absent or empty = none'
         typed:
           $ref: '#/components/schemas/RunInputs'
           description: |
@@ -2205,6 +2365,28 @@ components:
           type: array
           items: {$ref: '#/components/schemas/ElementStatus'}
           description: 'reuse only: one per `made_with.elements` entry, same order; absent or empty when the take mentioned none'
+        loras_status:
+          type: array
+          items: {$ref: '#/components/schemas/LoraStatus'}
+          description: 'reuse only: one per `made_with.loras` entry, same order; absent or empty without LoRAs'
+    MadeWithLora:
+      type: object
+      required: [node, id, source, name, strength, mode, sha256]
+      additionalProperties: false
+      properties:
+        node: {type: string, description: 'the lora-stack node id'}
+        id: {type: string, description: 'the LoRA (an own one may be deleted since)'}
+        source: {$ref: '#/components/schemas/LoraSource'}
+        name: {type: string, description: 'as it was when the run was made'}
+        strength: {type: number}
+        mode: {type: string, enum: [adapter, bake]}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$', description: 'the file''s content hash: what exactly ran'}
+    LoraStatus:
+      type: object
+      required: [id, status]
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [current, missing, deleted], description: 'current: the caller can use it now; missing: shared, no live host lists it now; deleted: own, deleted since'}
     MadeWithElement:
       type: object
       required: [id, handle, name, version]
@@ -2307,6 +2489,67 @@ components:
         take_id: {type: string, format: uuid, description: 'pass to /v1/studio/uploads/{take_id}/complete; becomes the take''s id'}
         upload_url: {type: string, description: 'signed single-use link: PUT the bytes here with exactly this Content-Type and Content-Length', examples: ['/files/u/7d1e.../uploads/9b2f....png?exp=1767225600&bytes=48213&ct=image%2Fpng&sig=ab12']}
         content_type: {type: string}
+        bytes: {type: integer}
+        expires_at: {type: string, format: date-time}
+
+    # ---------------------------------------------------------- studio: LoRAs (contracts/README.md, LoRAs)
+    LoraSource:
+      type: string
+      enum: [shared, mine]
+      description: 'shared: a file on the GPU hosts (registry `<host>.<env>.loras`), usable by everyone; mine: the caller''s own upload'
+    LoraState:
+      type: string
+      enum: [pending, ready, rejected]
+      description: 'own LoRAs: pending (created, not completed), ready (checked and indexed), rejected (a check failed: `reason`); shared ones are always ready'
+    LoraKeyStyle:
+      type: string
+      enum: [peft, kohya, comfyui]
+      description: 'how the file names its tensors (detected, never configured; contracts/README.md, LoRA normaliser)'
+    Lora:
+      type: object
+      description: |
+        A LoRA in the library. Shared and own LoRAs have one shape; `hosts` is set only for shared ones, `reason` only
+        for a rejected one. `rank`, `key_style`, `sha256` are null until an own LoRA is ready.
+      required: [id, source, name, family, rank, size_bytes, key_style, licence, sha256, hosts, state, reason, thumb_url, created_at]
+      properties:
+        id: {type: string, pattern: '^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$', description: 'shared: the file''s SHA-256; mine: a UUID'}
+        source: {$ref: '#/components/schemas/LoraSource'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        family: {type: string, description: 'the model family it fits (`qwen-image`), or `unknown` (it fits no family published now, or not checked yet)', examples: [qwen-image, unknown]}
+        rank: {type: [integer, 'null'], minimum: 1, maximum: 4096, description: the largest A/B rank}
+        size_bytes: {type: integer, minimum: 1}
+        key_style: {oneOf: [{$ref: '#/components/schemas/LoraKeyStyle'}, {type: 'null'}]}
+        licence: {type: [string, 'null'], maxLength: 200, description: 'from the file''s metadata (`modelspec.license`, else `license`); null when it names none'}
+        sha256: {type: [string, 'null'], pattern: '^[0-9a-f]{64}$'}
+        hosts: {type: array, items: {type: string, pattern: '^[a-z0-9]{1,32}$'}, description: 'shared: the live hosts that have it (sorted); mine: [] (any host fetches it on first use)'}
+        state: {$ref: '#/components/schemas/LoraState'}
+        reason: {type: [string, 'null'], description: 'rejected: why (the complete call''s 422 detail); null otherwise'}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the caller''s oldest take made with it; null when none'}
+        created_at: {type: string, format: date-time, description: 'mine: the upload''s creation; shared: the file''s mtime (the oldest over its hosts)'}
+    LoraList:
+      type: object
+      required: [loras]
+      properties: {loras: {type: array, items: {$ref: '#/components/schemas/Lora'}}}
+    LoraPatch:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, maxLength: 200, description: 'trimmed; must then be 1-80 characters'}
+    LoraUploadCreate:
+      type: object
+      required: [filename, bytes]
+      additionalProperties: false
+      properties:
+        filename: {type: string, minLength: 1, maxLength: 255, description: 'must end in .safetensors; the name without it becomes the LoRA''s name'}
+        bytes: {type: integer, minimum: 1, maximum: 2147483648}
+    LoraUpload:
+      type: object
+      required: [lora, upload_url, content_type, bytes, expires_at]
+      properties:
+        lora: {$ref: '#/components/schemas/Lora', description: 'state pending; pass its id to /v1/studio/loras/{lora_id}/complete'}
+        upload_url: {type: string, description: 'signed single-use link: PUT the file here with exactly this Content-Type and Content-Length', examples: ['/files/u/7d1e.../loras/2c4e....safetensors?exp=1767225600&bytes=18874368&ct=application%2Foctet-stream&sig=ab12']}
+        content_type: {type: string, const: application/octet-stream}
         bytes: {type: integer}
         expires_at: {type: string, format: date-time}
 

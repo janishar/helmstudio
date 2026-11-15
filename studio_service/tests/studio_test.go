@@ -32,6 +32,7 @@ import (
 	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/api/gallery"
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/gen"
@@ -123,7 +124,8 @@ func setup(t *testing.T) *env {
 	}
 	e.service = studio.NewService(pool, signer, e.registry, cancel, e.store)
 	router.LoadControllers(studio.NewController(e.service, recheck, shutdown),
-		gallery.NewController(gallery.NewService(pool, signer, e.store, e.registry, e.service.FindWorkflow)))
+		gallery.NewController(gallery.NewService(pool, signer, e.store, e.registry, e.service.FindWorkflow)),
+		lora.NewController(lora.NewService(pool, signer, e.store, e.registry)))
 	e.srv = httptest.NewServer(router.Engine())
 	t.Cleanup(e.srv.Close)
 	return e

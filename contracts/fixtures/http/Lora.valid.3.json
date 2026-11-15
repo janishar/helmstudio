@@ -1,0 +1,16 @@
+{
+  "id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c12",
+  "source": "mine",
+  "name": "model-weights",
+  "family": "unknown",
+  "rank": null,
+  "size_bytes": 18874368,
+  "key_style": null,
+  "licence": null,
+  "sha256": null,
+  "hosts": [],
+  "state": "rejected",
+  "reason": "no LoRA keys found (is it a full model?)",
+  "thumb_url": null,
+  "created_at": "2026-11-14T09:00:00Z"
+}

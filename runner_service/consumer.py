@@ -48,10 +48,12 @@ class Consumer:
         residency=None,
         device: str = "cpu",
         after_run: str = "keep_warm",
+        loras=None,
     ) -> None:
         self.js, self.store, self.cancels_kv, self.host = js, store, cancels_kv, host
         self.impls, self.node_schemas = impls, node_schemas
         self.residency, self.device, self.after_run = residency, device, after_run
+        self.loras = loras  # the host's core.lora.Library
         self.cache = Cache()
         if residency is not None:
             residency.on_short.append(self.cache.clear)
@@ -135,6 +137,7 @@ class Consumer:
         )
         ctx.seed = resolved.get("seed")
         ctx.fetch = self.store.get
+        ctx.loras = self.loras
         beat = asyncio.create_task(self._in_progress(msg, events))
         try:
             if await cancels.requested(self.cancels_kv, run_id):

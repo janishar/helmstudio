@@ -40,7 +40,7 @@ describe("graph rules against contracts/fixtures/graphs", () => {
   for (const f of files.filter((x) => /^(valid|invalid)\./.test(x)))
     it(f, () => {
       const fx = load(f);
-      const got = graphProblems(fx.workflow, palette).map((p) => ({
+      const got = graphProblems(fx.workflow, palette, fx.loras ?? {}).map((p) => ({
         code: p.code,
         ...(p.node !== undefined && { node: p.node }),
         ...(p.port !== undefined && { port: p.port }),

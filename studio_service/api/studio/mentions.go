@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -338,12 +339,14 @@ func autoSize(width, height int) (int, int) {
 type built struct {
 	Nodes     map[string]registry.Node
 	Expansion expansion
+	Loras     []lora.Used // its Lora values as resolved (runs.loras)
 }
 
 // runGraphs is the one place a run's graph is made (Create, a batch's rows at Submit, studio.runs.create): each
 // inputs resolved with the workflow (resolve), then its mentions expanded against the owner's elements, read once for
-// all rows: now (copied nil, as the caller) or a batch's copy (images of takes deleted since left out). It returns per
-// row the graph or the 422 detail (errors joined by "; "), and the elements read (a batch keeps them as its copy).
+// all rows: now (copied nil, as the caller) or a batch's copy (images of takes deleted since left out), then its LoRA
+// values checked as the owner now (runLoras). It returns per row the graph or the 422 detail (errors joined by "; "),
+// and the elements read (a batch keeps them as its copy).
 func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, workflow registry.Workflow,
 	rows []map[string]any, copied *[]element) ([]built, []string, []element, error) {
 	out, details := make([]built, len(rows)), make([]string, len(rows))
@@ -407,6 +410,9 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 			continue
 		}
 		out[i].Expansion = exp
+	}
+	if err := runLoras(ctx, tx, s.registry, ownerID, workflow.Env, out, workflow.NodeSchemas, details); err != nil {
+		return nil, nil, nil, err
 	}
 	return out, details, lib, nil
 }

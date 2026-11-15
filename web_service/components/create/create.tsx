@@ -13,6 +13,8 @@ import { WorkflowPicker } from "@/components/create/workflows";
 import { ElementsButton, ElementsPicker } from "@/components/create/elements";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
 import { useLibrary } from "@/lib/library";
+import { useLoras } from "@/lib/lora-library";
+import { lorasNote, usable } from "@/lib/loras";
 import {
   fieldErrors,
   mentioned,
@@ -284,6 +286,16 @@ export function Create({
         setErrors({});
         setOpenKey(null);
         setReuseNote(elementsNote(r.elements_status ?? []));
+        if (r.loras_status?.some((x) => x.status !== "current"))
+          void ok(api.GET("/v1/studio/takes/{take_id}", { params: { path: { take_id: reuse } } }))
+            .then((t) =>
+              setReuseNote((n) =>
+                [n, lorasNote(r.loras_status ?? [], t.made_with?.loras ?? [])]
+                  .filter(Boolean)
+                  .join(" "),
+              ),
+            )
+            .catch(() => undefined);
       })
       .catch((e) => setError(message(e)));
   }, [reuse, workflows]);
@@ -366,10 +378,13 @@ export function Create({
   const palette = usePalette(
     view === "graph" ? `graph ${workflowId}` : workflow?.source === "mine" ? "mine" : null,
   );
+  const loras = useLoras();
   const own = useMemo(
     () =>
-      workflow?.source === "mine" && palette ? graphProblems(docOf(workflow), palette.map) : [],
-    [workflow, palette],
+      workflow?.source === "mine" && palette
+        ? graphProblems(docOf(workflow), palette.map, loras ? usable(loras) : undefined)
+        : [],
+    [workflow, palette, loras],
   );
   // a workflow of one's own runs only without problems (studio refuses it with 422); templates are not checked
   const problems = lifted && lifted.id === workflow?.id ? lifted.problems : own;
@@ -917,6 +932,10 @@ export function Create({
           open={openKey}
           setOpen={setOpenKey}
           uploads={uploads}
+          familyTitle={
+            palette?.groups.find((g) => g.family === workflow?.family)?.title ??
+            (workflow?.source === "mine" ? undefined : workflow?.title)
+          }
         />
       </aside>
     </>

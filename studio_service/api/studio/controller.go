@@ -212,7 +212,7 @@ func (c *controller) validateWorkflowHandler(ctx *gin.Context) {
 	body, err := strictBody[dto.WorkflowDoc](ctx, true)
 	var out dto.WorkflowValidation
 	if err == nil {
-		out, err = c.service.ValidateWorkflow(*body)
+		out, err = c.service.ValidateWorkflow(ctx.Request.Context(), common.MustCaller(ctx), *body)
 	}
 	reply(ctx, http.StatusOK, out, err)
 }
@@ -325,7 +325,8 @@ func (c *controller) queueHandler(ctx *gin.Context) {
 
 // listHostsHandler: GET /hosts.
 func (c *controller) listHostsHandler(ctx *gin.Context) {
-	network.SendJSON(ctx, http.StatusOK, c.service.Hosts())
+	out, err := c.service.Hosts(ctx.Request.Context(), common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
 }
 
 // ------------------------------------------------------------------ runs

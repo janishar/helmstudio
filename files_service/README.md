@@ -24,4 +24,4 @@ from `<NAME>`. A bad or expired signature, a key outside `u/`, a `..` or a missi
 | `cmd/main.go` | `files` (server), `files health` (container check) |
 | `startup/` | config → store → module (`network.NewRouter`: `/health`, `/files`) → serve |
 | `config/` | env (see `.env.example`) |
-| `api/file/` | `Signer.Verify` (the format studio_service's `common.Signer` makes; both tests hold the same vector), `GET` and `HEAD /files/*path` |
+| `api/file/` | `Signer.Verify` (the format studio_service's `common.Signer` makes; both tests hold the same vector), `GET` and `HEAD /files/*path`, `PUT /files/*path` (signed uploads: images at most 50 MB; a `u/<owner>/loras/<id>.safetensors` key `application/octet-stream` at most 2 GiB) |

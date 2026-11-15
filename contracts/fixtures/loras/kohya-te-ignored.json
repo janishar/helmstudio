@@ -1,0 +1,99 @@
+{
+  "description": "the same file when the family declares lora_te1_* ignorable: counted as ignored, the rest applies",
+  "name": "kohya-te",
+  "metadata": {},
+  "tensors": {
+    "lora_unet_transformer_blocks_0_attn_to_q.lora_down.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "lora_unet_transformer_blocks_0_attn_to_q.lora_up.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    },
+    "lora_unet_transformer_blocks_0_attn_to_q.alpha": {
+      "dtype": "F32",
+      "shape": []
+    },
+    "lora_unet_transformer_blocks_0_attn_to_k.lora_down.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        4096
+      ]
+    },
+    "lora_unet_transformer_blocks_0_attn_to_k.lora_up.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4
+      ]
+    },
+    "lora_unet_transformer_blocks_0_attn_to_k.alpha": {
+      "dtype": "F32",
+      "shape": []
+    },
+    "lora_te1_text_model_encoder_layers_0_self_attn_q_proj.lora_down.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        768
+      ]
+    },
+    "lora_te1_text_model_encoder_layers_0_self_attn_q_proj.lora_up.weight": {
+      "dtype": "BF16",
+      "shape": [
+        768,
+        4
+      ]
+    },
+    "lora_te1_text_model_encoder_layers_0_self_attn_q_proj.alpha": {
+      "dtype": "F32",
+      "shape": []
+    },
+    "lora_te1_text_model_encoder_layers_0_self_attn_k_proj.lora_down.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4,
+        768
+      ]
+    },
+    "lora_te1_text_model_encoder_layers_0_self_attn_k_proj.lora_up.weight": {
+      "dtype": "BF16",
+      "shape": [
+        768,
+        4
+      ]
+    },
+    "lora_te1_text_model_encoder_layers_0_self_attn_k_proj.alpha": {
+      "dtype": "F32",
+      "shape": []
+    }
+  },
+  "values": {
+    "lora_unet_transformer_blocks_0_attn_to_q.alpha": 4.0,
+    "lora_unet_transformer_blocks_0_attn_to_k.alpha": 4.0,
+    "lora_te1_text_model_encoder_layers_0_self_attn_q_proj.alpha": 4.0,
+    "lora_te1_text_model_encoder_layers_0_self_attn_k_proj.alpha": 4.0
+  },
+  "ignore": [
+    "lora_te1_*"
+  ],
+  "expect": {
+    "key_style": "kohya",
+    "rank": 4,
+    "total": 12,
+    "applied": 6,
+    "ignored": 6,
+    "unapplied": [],
+    "error": null,
+    "family": "qwen-image",
+    "licence": null
+  }
+}

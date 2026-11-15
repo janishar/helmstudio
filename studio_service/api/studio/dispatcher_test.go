@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -203,5 +204,60 @@ func TestHolds(t *testing.T) {
 	run.Attempt = 2
 	if !holds(value(later, `, "run_id": "r1", "attempt": 2`), run, later) {
 		t.Fatal("attempt 2 on its key")
+	}
+}
+
+// A run with shared LoRAs goes only to hosts that list them all (own LoRAs to any); resident needs the same baked
+// LoRAs in order, and an entry without LoRAs for a run that bakes none.
+func TestEligibleLoras(t *testing.T) {
+	reg := &registry.Registry{}
+	for _, host := range []string{"mac", "gpu"} {
+		_ = reg.SetRegistry(host+".torch.workflows", []byte(`{"workflows": [{"id": "qwen-image", "env": "torch", "nodes": {}}]}`))
+		_ = reg.SetRegistry(host+".torch.models", []byte(`{"models": [{"id": "qwen-2", "family": "qwen-image",
+			"variants": [{"id": "base", "presence": "present"}]}]}`))
+	}
+	_ = reg.SetRegistry("mac.torch.loras", []byte(`{"loras": [{"id": "ink", "name": "ink-wash"}, {"id": "oil", "name": "oil"}]}`))
+	_ = reg.SetRegistry("gpu.torch.loras", []byte(`{"loras": [{"id": "ink", "name": "ink-wash"}]}`))
+	_ = reg.SetHost("mac.torch", hostValue("mac", "torch", t0, `, "resident": [{"component": "transformer", "model": "qwen-2",
+		"variant": "base", "precision": "int8", "gb": 1, "pinned": false, "loras": [{"lora_id": "ink", "name": "ink-wash",
+		"strength": 0.5, "bytes": 1}]}]`))
+	_ = reg.SetHost("gpu.torch", hostValue("gpu", "torch", t0, `, "resident": [{"component": "transformer", "model": "qwen-2",
+		"variant": "base", "precision": "int8", "gb": 1, "pinned": false}]`))
+	graph, _ := json.Marshal(map[string]registry.Node{"model": {Kind: "qwen-image/model",
+		Params: map[string]any{"variant": "base", "precision": "int8"}}})
+	run := func(used ...lora.Used) model.Run {
+		return model.Run{WorkflowID: "qwen-image", Env: "torch", Nodes: graph, Loras: lorasJSON(used)}
+	}
+	ink := lora.Used{ID: "ink", Source: "shared", Name: "ink-wash", Strength: 0.5, Mode: "bake"}
+	oil := lora.Used{ID: "oil", Source: "shared", Name: "oil", Strength: 1, Mode: "adapter"}
+	mine := lora.Used{ID: "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10", Source: "mine", Name: "own", Strength: 1, Mode: "adapter"}
+
+	if slots, resident, _ := eligible(reg, reg.Hosts(), run(mine), t0); len(slots) != 2 || resident["mac"] || !resident["gpu"] {
+		t.Fatal("own LoRAs go anywhere; nothing baked: the plain entry", slots, resident)
+	}
+	if slots, resident, _ := eligible(reg, reg.Hosts(), run(ink, oil), t0); len(slots) != 1 || slots["mac"] == "" || !resident["mac"] {
+		t.Fatal("only mac has oil; ink baked at 0.5 is resident there", slots, resident)
+	}
+	ink.Strength = 1
+	if _, resident, _ := eligible(reg, reg.Hosts(), run(ink), t0); resident["mac"] || resident["gpu"] {
+		t.Fatal("another baked strength is another entry", resident)
+	}
+	_ = reg.SetRegistry("mac.torch.loras", nil)
+	if _, _, reason := eligible(reg, reg.Hosts(), run(ink, oil), t0); reason != "no live host for env torch has LoRA oil" {
+		t.Fatal(reason)
+	}
+}
+
+// resolveLoras puts the command form in place of each {lora_id}: the own one's key under the run owner's prefix.
+func TestResolveLoras(t *testing.T) {
+	nodes := map[string]registry.Node{"lora": {Kind: "qwen-image/lora-stack", Params: map[string]any{"rows": []any{
+		map[string]any{"lora": map[string]any{"lora_id": "aa"}, "strength": 1.0},
+		map[string]any{"lora": map[string]any{"lora_id": "bb"}, "strength": 1.0}}}}}
+	resolveLoras(nodes, []lora.Used{{Node: "lora", ID: "aa", Source: "mine", Name: "a", SHA256: "x", Bytes: 3},
+		{Node: "lora", ID: "bb", Source: "shared", Name: "b", SHA256: "bb", Bytes: 4}}, "owner")
+	rows := nodes["lora"].Params["rows"].([]any)
+	own, shared := rows[0].(map[string]any)["lora"].(map[string]any), rows[1].(map[string]any)["lora"].(map[string]any)
+	if own["key"] != "u/owner/loras/aa.safetensors" || own["source"] != "own" || shared["key"] != nil || shared["bytes"] != int64(4) {
+		t.Fatal(own, shared)
 	}
 }

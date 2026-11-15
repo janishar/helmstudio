@@ -68,6 +68,8 @@ import {
   removeWires,
 } from "@/lib/graph-edit";
 import { etaText, isActive, segments, type RunTrack, type Segment } from "@/lib/runs";
+import { useLoras } from "@/lib/lora-library";
+import { loraFieldOf, rowIds, strengthOf, usable } from "@/lib/loras";
 
 type Workflow = S<"Workflow">;
 type Schema = S<"NodeSchema">;
@@ -107,6 +109,10 @@ type Ctx = {
   problems: Problem[];
   overrides: Record<string, ParamValue>;
   short: Record<string, string>;
+  /** the library's names, for a stack's rows */
+  loras: S<"Lora">[] | null;
+  /** a card's Add LoRA: select the node and open its picker in the inspector */
+  addLora: (node: string) => void;
 };
 const GraphCtx = createContext<Ctx | null>(null);
 
@@ -231,7 +237,10 @@ function Graph({
   );
 
   // ---------------------------------------------------------------- check and save
-  const client = useMemo(() => graphProblems(doc, palette), [doc, palette]);
+  const loras = useLoras();
+  const library = useMemo(() => (loras ? usable(loras) : undefined), [loras]);
+  const [loraPick, setLoraPick] = useState<string | null>(null);
+  const client = useMemo(() => graphProblems(doc, palette, library), [doc, palette, library]);
   const problems = useMemo(
     () => (server?.doc === doc ? mergeProblems(client, server.problems) : client),
     [client, server, doc],
@@ -377,6 +386,8 @@ function Graph({
     problems,
     overrides,
     short,
+    loras,
+    addLora: setLoraPick,
   };
 
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -721,6 +732,8 @@ function Graph({
             groupTitle={groupTitle(doc.nodes[selected].kind)}
             edit={edit}
             onParamSet={onParamSet}
+            loraPick={loraPick === selected}
+            onLoraPicked={() => setLoraPick(null)}
           />
         ) : (
           <>
@@ -860,6 +873,38 @@ function Card({ id }: NodeProps) {
       {s.params
         .filter((x) => x !== merged)
         .map((x) => {
+          if (loraFieldOf(x) && !wires[x.name]) {
+            const v = g.overrides[`${id}.${x.name}`] ?? n.params?.[x.name] ?? x.default;
+            const rows = Array.isArray(v) ? v : [];
+            const st = strengthOf(x);
+            const bad = mine.some((q) => q.param === x.name);
+            return (
+              <div key={x.name}>
+                {rowIds(x, rows).map((lid, i) => (
+                  <div key={lid || i} className="gn-r">
+                    <span className="truncate">
+                      {g.loras?.find((l) => l.id === lid)?.name ??
+                        (lid ? lid.slice(0, 8) : "no LoRA")}
+                    </span>
+                    <b style={bad ? { color: "var(--bad)" } : undefined}>
+                      {st ? Number(rows[i][st[0]] ?? st[1].default).toFixed(2) : ""}
+                    </b>
+                  </div>
+                ))}
+                {rows.length < (x.max ?? 8) && (
+                  <div className="px-3.5 pt-1.5">
+                    <button
+                      type="button"
+                      className="nodrag h-[30px] w-full rounded-lg border border-dashed border-dash bg-transparent text-[12px]"
+                      onClick={() => g.addLora(id)}
+                    >
+                      Add LoRA
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          }
           const wireable = WIREABLE[x.type];
           const ref = wires[x.name];
           const text = x.type === "text" && !ref;

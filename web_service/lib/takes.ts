@@ -94,7 +94,12 @@ export type UploadIO = {
 };
 
 /** PUTs the bytes to a signed link with XHR (fetch has no upload progress); `onProgress` gets 0..1. */
-function xhrPut(url: string, file: Blob, contentType: string, onProgress: (f: number) => void) {
+export function xhrPut(
+  url: string,
+  file: Blob,
+  contentType: string,
+  onProgress: (f: number) => void,
+) {
   return new Promise<void>((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open("PUT", url);

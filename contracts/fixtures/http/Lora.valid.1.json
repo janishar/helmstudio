@@ -1,0 +1,18 @@
+{
+  "id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+  "source": "shared",
+  "name": "ink-wash",
+  "family": "qwen-image",
+  "rank": 16,
+  "size_bytes": 295698432,
+  "key_style": "comfyui",
+  "licence": "apache-2.0",
+  "sha256": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+  "hosts": [
+    "mac"
+  ],
+  "state": "ready",
+  "reason": null,
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.png?exp=1767225600&sig=ab12",
+  "created_at": "2026-10-02T08:12:00Z"
+}

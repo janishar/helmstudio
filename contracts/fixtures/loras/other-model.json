@@ -1,0 +1,52 @@
+{
+  "description": "a PEFT LoRA for another model (Flux module names): zero keys apply, which is an error; its family is unknown",
+  "name": "flux-style",
+  "metadata": {},
+  "tensors": {
+    "transformer.single_transformer_blocks.0.attn.to_q.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        32,
+        3072
+      ]
+    },
+    "transformer.single_transformer_blocks.0.attn.to_q.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        3072,
+        32
+      ]
+    },
+    "transformer.single_transformer_blocks.0.attn.to_k.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        32,
+        3072
+      ]
+    },
+    "transformer.single_transformer_blocks.0.attn.to_k.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        3072,
+        32
+      ]
+    }
+  },
+  "values": {},
+  "expect": {
+    "key_style": "peft",
+    "rank": 32,
+    "total": 4,
+    "applied": 0,
+    "ignored": 0,
+    "unapplied": [
+      "transformer.single_transformer_blocks.0.attn.to_k.lora_A.weight",
+      "transformer.single_transformer_blocks.0.attn.to_k.lora_B.weight",
+      "transformer.single_transformer_blocks.0.attn.to_q.lora_A.weight",
+      "transformer.single_transformer_blocks.0.attn.to_q.lora_B.weight"
+    ],
+    "error": "LoRA flux-style: 0 of 4 keys apply to qwen-image (peft keys); is it for another model?",
+    "family": "unknown",
+    "licence": null
+  }
+}

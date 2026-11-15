@@ -1,6 +1,7 @@
 """The object store (S3 API: SeaweedFS in compose, S3 in the cloud). boto3 is sync, so calls run in a thread."""
 
 import asyncio
+import hashlib
 
 import boto3
 from botocore.config import Config
@@ -52,5 +53,26 @@ class Store:
                 raise
             with r["Body"] as body:
                 return body.read(limit + 1)
+
+        return await asyncio.to_thread(read)
+
+    async def download(self, key: str, dest, limit: int) -> tuple[int, str] | None:
+        """Stream the object at `key` into the file `dest` (at most limit + 1 bytes): (bytes, SHA-256 hex), or None
+        when it is missing."""
+
+        def read() -> tuple[int, str] | None:
+            try:
+                r = self.s3.get_object(Bucket=config.S3_BUCKET, Key=key)
+            except ClientError as e:
+                if e.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
+                    return None
+                raise
+            h, n = hashlib.sha256(), 0
+            with r["Body"] as body, open(dest, "wb") as f:
+                while n <= limit and (chunk := body.read(min(1 << 22, limit + 1 - n))):
+                    h.update(chunk)
+                    f.write(chunk)
+                    n += len(chunk)
+            return n, h.hexdigest()
 
         return await asyncio.to_thread(read)

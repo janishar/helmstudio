@@ -1,0 +1,15 @@
+{
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "prompt.text": "a harbour at dawn",
+    "lora.rows": [
+      {
+        "lora": {
+          "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10"
+        },
+        "strength": 0.6,
+        "mode": "adapter"
+      }
+    ]
+  }
+}

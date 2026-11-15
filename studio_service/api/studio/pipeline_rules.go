@@ -266,7 +266,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("unknown_workflow", id, "", "", "%s: workflow %s is not a template or one of yours", id, n.Workflow)
 			continue
 		}
-		if problems := graphProblems(wf, palette); len(problems) > 0 {
+		if problems := graphProblems(wf, palette, nil); len(problems) > 0 {
 			add("workflow_cannot_run", id, "", "", "%s: workflow %s cannot run: %s", id, n.Workflow, problems[0].Message)
 		}
 		if n.Preset != nil {

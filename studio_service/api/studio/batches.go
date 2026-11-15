@@ -96,7 +96,8 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 			return network.NewUnprocessableError(detail, nil)
 		}
 		graph, _ := json.Marshal(graphs[0].Nodes)
-		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version}
+		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version,
+			Loras: lorasJSON(graphs[0].Loras)}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			return network.NewUnprocessableError(reason, nil)
 		}
@@ -731,15 +732,16 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	if control == "stop" || batchStatus == "stopped" {
 		status = "cancelled"
 	} else if _, _, reason := eligible(reg, reg.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph,
-		WorkflowVersion: version}, time.Now()); reason != "" {
+		WorkflowVersion: version, Loras: lorasJSON(built.Loras)}, time.Now()); reason != "" {
 		status, failure = "failed", &reason
 	}
 	inputs, _ := json.Marshal(req.Inputs)
 	run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions)
+		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions, loras)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
-		$13, $14, $15) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
-		failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion))
+		$13, $14, $15, $16) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
+		failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion),
+		lorasJSON(built.Loras))
 	if err != nil {
 		return run, err
 	}

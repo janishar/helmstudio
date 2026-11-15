@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
@@ -223,6 +224,7 @@ func release(ctx context.Context, tx pgx.Tx, next placed) error {
 		_, err := finish(ctx, tx, next.run, "failed", &reason)
 		return err
 	}
+	resolveLoras(nodes, runUsed(next.run.Loras), next.run.OwnerID)
 	run, err := one[model.Run](ctx, tx, `UPDATE runs SET host = $2, released_at = clock_timestamp(), updated_at = clock_timestamp()
 		WHERE id = $1 AND status = 'queued' AND released_at IS NULL RETURNING `+model.RunCols, next.run.ID, next.host)
 	if errors.Is(err, errNotFound) {
@@ -302,6 +304,10 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 	for _, id := range heldIDs {
 		held[id] = true
 	}
+	deleted, err := deletedLoras(ctx, tx, open)
+	if err != nil {
+		return snap, err
+	}
 	var owners []string
 	for _, run := range open {
 		if run.ReleasedAt != nil && run.Host != nil {
@@ -309,6 +315,9 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 			continue
 		}
 		slots, resident, reason := eligible(reg, snap.values, run, now)
+		if name, gone := deleted[run.ID]; gone {
+			reason = "LoRA " + name + " was deleted"
+		}
 		if reason != "" {
 			snap.stuck = append(snap.stuck, stuck{run, reason})
 			continue
@@ -355,15 +364,51 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 	return snap, nil
 }
 
+// deletedLoras names, per waiting run, the first own LoRA it was made with that is no longer the owner's ready LoRA
+// (deleted since): the run fails at this pass. One query per owner with such runs (as System, explicit owner check).
+func deletedLoras(ctx context.Context, tx pgx.Tx, open []model.Run) (map[string]string, error) {
+	out, byOwner := map[string]string{}, map[string][]string{}
+	for _, run := range open {
+		if run.ReleasedAt == nil {
+			for _, u := range runUsed(run.Loras) {
+				if u.Source == "mine" && !slices.Contains(byOwner[run.OwnerID], u.ID) {
+					byOwner[run.OwnerID] = append(byOwner[run.OwnerID], u.ID)
+				}
+			}
+		}
+	}
+	ready := map[string]bool{} // "<owner> <id>"
+	for owner, ids := range byOwner {
+		found, err := lora.Ready(ctx, tx, owner, ids)
+		if err != nil {
+			return nil, err
+		}
+		for id, ok := range found {
+			ready[owner+" "+id] = ok
+		}
+	}
+	for _, run := range open {
+		for _, u := range runUsed(run.Loras) {
+			if _, named := out[run.ID]; !named && run.ReleasedAt == nil && u.Source == "mine" && !ready[run.OwnerID+" "+u.ID] {
+				out[run.ID] = u.Name
+			}
+		}
+	}
+	return out, nil
+}
+
 // eligible returns where run may go now: each live host with the run's env whose runner publishes its workflow (a user
-// workflow's run: every kind of its graph) and, for every <family>/model node whose family its models key lists, has
-// that variant present (host name → env), and which of those hold every such model resident. With none, reason says
-// why.
+// workflow's run: every kind of its graph), lists every shared LoRA the run was made with and, for every
+// <family>/model node whose family its models key lists, has that variant present (host name → env), and which of
+// those hold every such model resident (with the run's baked LoRAs). With none, reason says why.
 func eligible(reg *registry.Registry, values []registry.Host, run model.Run, now time.Time) (map[string]string, map[string]bool, string) {
 	var graph map[string]registry.Node
 	_ = json.Unmarshal(run.Nodes, &graph)
 	models := runModels(graph)
+	used := runUsed(run.Loras)
+	bake := baked(used, graph)
 	slots, resident, missing := map[string]string{}, map[string]bool{}, ""
+	var lacking []string // the sources that would take the run but for a shared LoRA
 hosts:
 	for _, value := range values {
 		source := value.Host + "." + value.Env
@@ -375,6 +420,10 @@ hosts:
 		}
 		if run.WorkflowVersion != nil && !reg.PublishesKinds(source, kinds(graph)) {
 			continue // a user workflow: the runner must publish every kind of its snapshot
+		}
+		if slices.ContainsFunc(used, func(u lora.Used) bool { return u.Source == "shared" && !reg.HasLora(source, u.ID) }) {
+			lacking = append(lacking, source)
+			continue
 		}
 		all := len(models) > 0
 		for _, m := range models {
@@ -388,7 +437,7 @@ hosts:
 				continue hosts
 			}
 			all = all && slices.ContainsFunc(value.Resident, func(r registry.Resident) bool {
-				return r.Model == model.ID && r.Variant == m.variant && r.Precision == m.precision
+				return r.Model == model.ID && r.Variant == m.variant && r.Precision == m.precision && sameBaked(r.Loras, bake)
 			})
 		}
 		resident[value.Host] = all
@@ -399,6 +448,14 @@ hosts:
 		return slots, resident, ""
 	case missing != "":
 		return nil, nil, fmt.Sprintf("%s is not present on any live host for env %s", missing, run.Env)
+	case len(lacking) > 0: // name the first shared LoRA none of them has (else the first one some lack)
+		at := slices.IndexFunc(used, func(u lora.Used) bool {
+			return u.Source == "shared" && !slices.ContainsFunc(lacking, func(source string) bool { return reg.HasLora(source, u.ID) })
+		})
+		if at < 0 {
+			at = slices.IndexFunc(used, func(u lora.Used) bool { return u.Source == "shared" && !reg.HasLora(lacking[0], u.ID) })
+		}
+		return nil, nil, "no live host for env " + run.Env + " has LoRA " + used[at].Name
 	}
 	return nil, nil, "no live host for env " + run.Env
 }

@@ -10,7 +10,7 @@ import hashlib
 import importlib
 import json
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -44,6 +44,7 @@ class Pack:
     module: object  # the runtime module, or None for a pack without one
     code: str = ""  # hash of model.yaml and the runtime module
     workflows: list = field(default_factory=list)
+    cache: dict = field(default_factory=dict)  # values computed once (the lora block)
 
     @property
     def family(self) -> str:
@@ -54,12 +55,59 @@ class Pack:
 
 
 @dataclass(frozen=True)
+class LoraUse:
+    """One row of a LoRA Stack as it reached the runner: the resolved Lora value (cmd.run.execute `defs lora`) with
+    its strength and mode."""
+
+    lora_id: str
+    source: str  # shared | own
+    name: str
+    sha256: str
+    bytes: int
+    strength: float
+    mode: str  # adapter | bake
+    key: str | None = None  # own only: u/<owner_id>/loras/<lora_id>.safetensors
+
+    @classmethod
+    def of(cls, row: dict) -> LoraUse:
+        v = row["lora"]
+        return cls(v["lora_id"], v["source"], v["name"], v["sha256"], v["bytes"],
+                   float(row["strength"]), row["mode"], v.get("key"))  # fmt: skip
+
+
+@dataclass(frozen=True)
 class ModelRef:
-    """The Model handle: which weights (pack, variant) at which precision. Components load through ctx.component."""
+    """The Model handle: which weights (pack, variant) at which precision, and the ordered LoRA set the LoRA Stack
+    nodes upstream added. Components load through ctx.component."""
 
     pack: Pack
     variant: str
     precision: str
+    loras: tuple[LoraUse, ...] = ()
+
+    @property
+    def lora_component(self) -> str | None:
+        return (self.pack.spec.get("lora") or {}).get("component")
+
+    def baked(self, component: str) -> tuple[LoraUse, ...]:
+        """The rows of mode bake that patch `component`, in order, one file twice (chained stacks) merged into its
+        first row with the summed strength: each file's delta is held once at load."""
+        out: dict[str, LoraUse] = {}
+        for u in self.loras:
+            if component == self.lora_component and u.mode == "bake":
+                first = out.get(u.sha256)
+                out[u.sha256] = replace(first, strength=first.strength + u.strength) if first else u
+        return tuple(out.values())
+
+    def adapters(self, component: str) -> dict[str, tuple[LoraUse, float]]:
+        """sha256 → (the first row, the summed strength) of the adapter rows that patch `component`, in order (one
+        file twice in chained stacks is one adapter: the deltas add up)."""
+        out: dict[str, tuple[LoraUse, float]] = {}
+        for u in self.loras:
+            if component == self.lora_component and u.mode == "adapter":
+                first, s = out.get(u.sha256, (u, 0.0))
+                out[u.sha256] = (first, s + u.strength)
+        return out
 
     def owner(self, component: str) -> str:
         """The variant whose folder holds `component`'s files (the first variant when this one shares it)."""
@@ -73,12 +121,28 @@ class ModelRef:
 
     def key(self, component: str) -> tuple:
         """The residency key: (model id, owning variant, component, precision), one file set at one precision."""
-        return (
+        key = (
             self.pack.spec["id"],
             self.owner(component),
             component,
             self.precision_of(component),
         )
+        # a baked component is its own entry: + the baked (sha256, strength) in order (`resident_loras` is what the
+        # hosts value lists; a rename is not a new entry)
+        if baked := self.baked(component):
+            key += (tuple((u.sha256, u.strength) for u in baked),)
+        return key
+
+    def resident_loras(self, component: str) -> list[dict] | None:
+        """The hosts value's resident[].loras of `component`'s entry: its baked rows, or None."""
+        baked = self.baked(component)
+        return [{"lora_id": u.lora_id, "name": u.name, "strength": u.strength, "bytes": u.bytes} for u in baked] or None  # fmt: skip
+
+    @staticmethod
+    def lora_gb(uses, dtype_bytes: int) -> float:
+        """An upper bound of the device memory the LoRAs `uses` take at `dtype_bytes` per element: a LoRA file holds
+        at least 2 bytes per element (F16, BF16, F32), so its size / 2 bounds its element count."""
+        return sum(u.bytes for u in uses) / 2 * dtype_bytes / 2**30
 
     def files(self, component: str) -> list[Path]:
         return component_files(self.pack, self.owner(component), component)
@@ -94,7 +158,9 @@ class ModelRef:
         out = []
         for c in sorted(components):
             stats = [(str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in self.files(c)]
-            out.append([*self.key(c), stats])
+            out.append([*self.key(c)[:4], stats])
+            if c == self.lora_component and self.loras:  # an empty set adds nothing to any key
+                out[-1].append([[u.sha256, u.strength, u.mode] for u in self.loras])
         return out
 
     def load(self, component: str, ctx):
@@ -102,9 +168,17 @@ class ModelRef:
         loader = importlib.import_module(f"core.loaders_{self.pack.runtime}")
         return loader.load_component(self, component, ctx)
 
+    def activate(self, component: str, module, ctx) -> float:
+        """Make `module` (this handle's loaded `component`) carry exactly its adapter LoRAs at their strengths;
+        returns the adapters' GB (core/loaders_<runtime>.py `activate`)."""
+        loader = importlib.import_module(f"core.loaders_{self.pack.runtime}")
+        return loader.activate(self, component, module, ctx)
+
     def gb(self, component: str) -> tuple[float, float]:
-        """(resident size, load-time transient) in GB, from the safetensors headers and the target dtype."""
-        return size_gb(self.pack, self.key(component), tuple(self.files(component)))
+        """(resident size, load-time transient) in GB, from the safetensors headers and the target dtype; the
+        transient includes the baked LoRAs' deltas, held in fp32 on the device while it loads."""
+        gb, transient = size_gb(self.pack, self.key(component)[:4], tuple(self.files(component)))
+        return gb, transient + self.lora_gb(self.baked(component), 4)
 
 
 def models_root() -> Path:
@@ -237,6 +311,82 @@ def model_schema(pack: Pack) -> dict:
     return schema
 
 
+MODE_HELP = (
+    "Adapter: strength changes and swaps never reload the model. "
+    "Bake: merged into the weights at load (its own copy in memory)."
+)
+
+
+def lora_stack_schema(pack: Pack) -> dict:
+    """The generated <family>/lora-stack node (Model → Model, rows of {lora, strength, mode}) from model.yaml
+    `lora` (component, modes, max_rows, strength {min, max, default})."""
+    spec = pack.spec["lora"]
+    st = {"min": -4, "max": 4, "default": 1} | spec.get("strength", {})
+    modes = spec.get("modes", ["adapter", "bake"])
+    item = {
+        "lora": "Lora",
+        "strength": {"type": "float", "label": "Strength", "default": st["default"],
+                     "min": st["min"], "max": st["max"], "step": 0.05},
+        "mode": {"type": "enum", "label": "Mode", "default": modes[0], "enum": modes,
+                 "help": MODE_HELP},
+    }  # fmt: skip
+    return {
+        "kind": f"{pack.family}/lora-stack",
+        "title": "LoRA Stack",
+        "family": pack.family,
+        "help": f"Applies LoRAs to the model's {spec['component']}, in order. Empty: the model as it is.",
+        "params": [
+            {
+                "name": "rows",
+                "type": "rows",
+                "label": "LoRAs",
+                "default": [],
+                "min": 0,
+                "max": spec.get("max_rows", 8),
+                "item": item,
+                "help": "Each row: a LoRA that fits this model, its strength and how it is applied.",
+            }
+        ],
+        "inputs": [{"name": "model", "type": "Model"}],
+        "outputs": [{"name": "model", "type": "Model"}],
+    }
+
+
+def lora_stack(ctx, params: dict, inputs: dict) -> dict:
+    """The Model with this node's rows after the upstream set; no rows: the same handle (same cache identity)."""
+    model, rows = inputs["model"], params["rows"]
+    if not rows:
+        return {"model": model}
+    return {"model": replace(model, loras=model.loras + tuple(LoraUse.of(r) for r in rows))}
+
+
+def lora_block(pack: Pack) -> dict | None:
+    """The registry lora block {component, modules, renames, ignore}: modules are the Linear names of the
+    component built on the meta device (no weights) from the first present variant, compressed to `{a..b}` ranges.
+    None without a `lora` block, a `build()` or a present variant; a model-free pack may list `modules` itself.
+    Computed once per pack."""
+    if "lora_block" not in pack.cache:
+        spec, block = pack.spec.get("lora"), None
+        build = getattr(pack.module, "build", None)
+        present = [v for v in pack.spec.get("variants", {}) if all(
+            ModelRef(pack, v, "bf16").files(c) for c in pack.spec.get("components", {}))]  # fmt: skip
+        if spec and "modules" in spec:  # a model-free pack (the fake echo) names them itself
+            block = {k: spec.get(k, []) for k in ("component", "modules", "renames", "ignore")}
+        elif spec and build and present:
+            from core import lora
+
+            loader = importlib.import_module(f"core.loaders_{pack.runtime}")
+            meta = build(spec["component"], ModelRef(pack, present[0], "bf16"))
+            block = {
+                "component": spec["component"],
+                "modules": lora.compress(loader.linears(meta)),
+                "renames": spec.get("renames", []),
+                "ignore": spec.get("ignore", []),
+            }
+        pack.cache["lora_block"] = block
+    return pack.cache["lora_block"]
+
+
 def model_node(pack: Pack):
     def model(ctx, params: dict, inputs: dict) -> dict:
         return {"model": ModelRef(pack, params["variant"], params["precision"])}
@@ -250,6 +400,8 @@ def models_entry(pack: Pack) -> dict:
     spec = pack.spec
     entry = {"id": spec["id"], "family": pack.family, "title": spec["title"]}
     if "variants" not in spec:
+        if block := lora_block(pack):  # a model-free pack (echo) still publishes its own lora block
+            entry["lora"] = block
         return entry
     entry["variants"] = []
     offered = {p for c in spec.get("components", {}).values() for p in c.get("precision", ["bf16"])}
@@ -268,6 +420,8 @@ def models_entry(pack: Pack) -> dict:
             )
         variant["precisions"] = [p for p in PRECISIONS if p in offered]
         entry["variants"].append(variant)
+    if block := lora_block(pack):
+        entry["lora"] = block
     return entry
 
 
@@ -318,6 +472,9 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     if "variants" in spec:
         schema = model_schema(pack)
         nodes[schema["kind"]] = (schema, Node(model_node(pack), code=code, pack=pack))
+        if "lora" in spec:  # Model → Model: only a family with a model node
+            schema = lora_stack_schema(pack)
+            nodes[schema["kind"]] = (schema, Node(lora_stack, code=code, pack=pack))
     nodes |= _nodes(spec.get("stages", {}), pack.family, code, pack, module)
     return pack, nodes
 

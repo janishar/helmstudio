@@ -1,0 +1,76 @@
+{
+  "id": "5a7e0c11-2b3d-4e5f-8a9b-0c1d2e3f4a88",
+  "kind": "image",
+  "source": "create",
+  "title": "Fox at dusk, soft backlight",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png?exp=1767225600&sig=ab12",
+  "content_type": "image/png",
+  "width": 2752,
+  "height": 1536,
+  "bytes": 6291456,
+  "created_at": "2026-11-14T10:16:20Z",
+  "starred": true,
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "made_with": {
+    "workflow_id": "qwen-image",
+    "workflow_title": "Qwen Image",
+    "inputs": {
+      "prompt.text": "Fox at dusk, soft backlight",
+      "seed.seed": 43,
+      "canvas.width": 2752,
+      "canvas.height": 1536,
+      "model.variant": "base",
+      "model.precision": "int8",
+      "encode.transparent": false,
+      "sample.steps": 40,
+      "decode.tiled": "auto",
+      "lora.rows": [
+        {
+          "lora": {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+            "path": "/models/loras/ink.safetensors"
+          },
+          "strength": 0.8,
+          "mode": "adapter"
+        },
+        {
+          "lora": {
+            "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10"
+          },
+          "strength": 1,
+          "mode": "bake"
+        }
+      ]
+    },
+    "prompt": "Fox at dusk, soft backlight",
+    "seed": 43,
+    "model": {
+      "id": "qwen-image-2.1",
+      "variant": "base",
+      "precision": "int8"
+    },
+    "loras": [
+      {
+        "node": "lora",
+        "id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+        "source": "shared",
+        "name": "ink-wash",
+        "strength": 0.8,
+        "mode": "adapter",
+        "sha256": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+      },
+      {
+        "node": "lora",
+        "id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10",
+        "source": "mine",
+        "name": "my-sketch-style",
+        "strength": 1,
+        "mode": "bake",
+        "sha256": "b7e15163a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8"
+      }
+    ]
+  },
+  "parents": []
+}

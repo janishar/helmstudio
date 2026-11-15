@@ -1,0 +1,192 @@
+{
+  "description": "more than 8 rows in one stack is param_invalid (the row cap is the rows param's max); duplicates are not looked for in an invalid value",
+  "workflow": {
+    "title": "Qwen draft",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "canvas": {
+        "kind": "canvas",
+        "params": {
+          "mode": "auto",
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "model": {
+        "kind": "qwen-image/model",
+        "params": {
+          "variant": "base",
+          "precision": "int8"
+        }
+      },
+      "lora": {
+        "kind": "qwen-image/lora-stack",
+        "in": {
+          "model": "model.model"
+        },
+        "params": {
+          "rows": [
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 1,
+              "mode": "adapter"
+            }
+          ]
+        }
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "transparent": false,
+          "refs": []
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "lora.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        },
+        "params": {
+          "steps": 40
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        },
+        "params": {
+          "tiled": "auto"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    },
+    "studio": {
+      "composer": [
+        "prompt.text",
+        "encode.refs"
+      ],
+      "quick": [
+        "model.variant",
+        "canvas.mode",
+        "seed.seed"
+      ],
+      "inspector": [
+        {
+          "title": "Quality",
+          "items": [
+            "model.precision",
+            "sample.steps",
+            "decode.tiled"
+          ]
+        }
+      ],
+      "presets": {
+        "Draft": {
+          "model.variant": "turbo",
+          "model.precision": "int8"
+        },
+        "Final": {
+          "model.variant": "base",
+          "model.precision": "bf16"
+        }
+      }
+    }
+  },
+  "loras": {
+    "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+    "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+    "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown"
+  },
+  "problems": [
+    {
+      "code": "param_invalid",
+      "node": "lora",
+      "param": "rows"
+    }
+  ]
+}

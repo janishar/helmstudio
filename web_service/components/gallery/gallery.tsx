@@ -14,6 +14,8 @@ import { imageWorkflows, targetLabel } from "@/lib/refs";
 import { remember, useTakes } from "@/lib/take-cache";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import { useLoras } from "@/lib/lora-library";
+import { madeWithLine } from "@/lib/loras";
 import {
   UPLOAD_TYPES,
   appendPage,
@@ -624,6 +626,7 @@ function TakePanel({
 }) {
   const url = safeUrl(t.url);
   const m = t.made_with;
+  const loras = useLoras();
   const size = sizeSeed(t);
   // "Used in" is only on the take itself (GET /takes/{id}), not in lists
   const [children, setChildren] = useState<{ id: string; list: S<"TakeRef">[] } | null>(null);
@@ -675,6 +678,9 @@ function TakePanel({
         <h2 className="heading">{m ? "Made with" : "Uploaded"}</h2>
         {m?.prompt && <p className="m-0 text-[13px] break-words">{m.prompt}</p>}
         {m && <Row label="Template" value={templateLine(m)} />}
+        {!!m?.loras?.length && (
+          <Row label="LoRAs" value={m.loras.map((l) => madeWithLine(l, loras)).join("\n")} />
+        )}
         {!m && <Row label="File" value={`${t.content_type} · ${mb(t.bytes)}`} />}
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
       </div>
@@ -784,7 +790,9 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2.5 text-[13px]">
       <span>{label}</span>
-      <span className="mono text-right text-[12px] break-words text-t2">{value}</span>
+      <span className="mono text-right text-[12px] break-words whitespace-pre-line text-t2">
+        {value}
+      </span>
     </div>
   );
 }

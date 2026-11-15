@@ -5,11 +5,15 @@ A component is built on the meta device by the pack (`build(component, model)`),
 time: on MPS safetensors reads each tensor straight into a GPU buffer (safe_open(device="mps", backend="pread"),
 no CPU copy); elsewhere it goes through safetensors' own device path. Each tensor passes the hook chain
 rename (the pack's `rename(component, key)`, optional) → cast (floating tensors to the component's dtype) →
-quantize (a Linear matched by the component's `quantize` globs at precision int8 becomes an Int8Linear: int8
+LoRA bake (rows of mode bake: W + s * B @ A in fp32, cast back) → quantize (a Linear matched by the component's `quantize` globs at precision int8 becomes an Int8Linear: int8
 weight, one bf16 scale per output row, quantized on the device as the tensor arrives). The int8 technique is the
-streaming loader of the earlier studios, made generic."""
+streaming loader of the earlier studios, made generic.
+
+LoRA adapters (LoraLinear, `activate`) wrap plain and int8 Linears of a resident component: y = base(x) + s * B(A x)
+with s a tensor, so strength changes and swaps never reload the base."""
 
 import gc
+import logging
 import time
 
 import torch
@@ -19,6 +23,7 @@ from torch import nn
 from core import pack as packs
 from core.graph import RunError
 
+log = logging.getLogger("loader")
 DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}
 # Rows at or below this use torch's int8 kernel, which reads the int8 weight as is (token-at-a-time decoding);
 # bigger batches dequantize and use a bf16 matmul.
@@ -98,6 +103,131 @@ class Int8Linear(nn.Module):
         return F.linear(x, weight, None if self.bias is None else self.bias.to(x.dtype))
 
 
+class LoraLinear(nn.Module):
+    """A Linear (nn.Linear or Int8Linear) with LoRA adapters: y = base(x) + sum s * B(A x). Each adapter's scale `s`
+    is a 0-d tensor on the device, so a strength change is a write into it, never a reload. The base module is
+    untouched: removing the last adapter puts it back as it was (activate)."""
+
+    def __init__(self, base: nn.Module) -> None:
+        super().__init__()
+        self.base = base
+        self.in_features, self.out_features = base.in_features, base.out_features
+        self.adapters: dict[
+            str, list
+        ] = {}  # sha256 → [A [r, in], B [out, r], s]; not in the state dict
+
+    @property
+    def weight(
+        self,
+    ):  # code that reads a Linear's weight (its dtype, device) still finds the base's
+        return getattr(self.base, "weight", None)
+
+    @property
+    def bias(self):
+        return self.base.bias
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.base(x)
+        for a, b, s in self.adapters.values():
+            out = out + (s * F.linear(F.linear(x.to(a.dtype), a), b)).to(out.dtype)
+        return out
+
+
+def linears(module: nn.Module) -> list[str]:
+    """The names of the Linear layers of `module` a LoRA may patch (nn.Linear, Int8Linear, an adapted one)."""
+    return list(_linears(module))
+
+
+def _linears(module: nn.Module) -> dict[str, nn.Module]:
+    """name → the Linear (a LoraLinear, not its inner base)."""
+    out = {}
+    for name, m in module.named_modules():
+        if isinstance(m, (nn.Linear, Int8Linear, LoraLinear)) and not name.endswith(".base"):
+            out[name] = m
+    return out
+
+
+def lora_tensors(model, use, path, shapes: dict, dev: str, dtype: torch.dtype) -> dict:
+    """module → (A, B, alpha / rank) of one LoRA file normalised against the model's lora block, on `dev` at
+    `dtype`. RunError with the contract's text when a key does not apply (each unapplied key is logged)."""
+    from core import lora
+
+    block = model.pack.spec["lora"]
+    block = {"modules": list(shapes), "renames": block.get("renames", []), "ignore": block.get("ignore", [])}  # fmt: skip
+    try:
+        tensors, _ = lora.read_header(path, block["ignore"])
+    except lora.LoraFileError as e:
+        raise RunError(f"LoRA {use.name}: {e}") from e
+    res = lora.normalise(use.name, tensors, block, model.pack.family, shapes)
+    for k in res["unapplied"]:
+        log.warning("LoRA %s: %s does not apply to %s", use.name, k, model.pack.family)
+    if res["error"]:
+        raise RunError(res["error"])
+    log.info("LoRA %s (%s keys): %d of %d keys applied, %d ignored", use.name, res["key_style"], res["applied"],
+             res["total"], res["ignored"])  # fmt: skip
+    from safetensors import safe_open
+
+    out = {}
+    with safe_open(str(path), "pt", device="cpu") as f:
+        for module, g in res["groups"].items():
+            a, b = f.get_tensor(g["A"]), f.get_tensor(g["B"])
+            factor = float(f.get_tensor(g["alpha"]).float().reshape(-1)[0]) / a.shape[0] if g["alpha"] else 1.0  # fmt: skip
+            out[module] = (a.to(dev, dtype), b.to(dev, dtype), factor)
+    return out
+
+
+def _dtype(m: nn.Module) -> torch.dtype:
+    """The compute dtype of a Linear: its weight's, an Int8Linear's scale dtype (bf16)."""
+    m = m.base if isinstance(m, LoraLinear) else m
+    return m.scale.dtype if isinstance(m, Int8Linear) else m.weight.dtype
+
+
+def _device(m: nn.Module) -> torch.device:
+    m = m.base if isinstance(m, LoraLinear) else m
+    return m.scale.device if isinstance(m, Int8Linear) else m.weight.device
+
+
+def activate(model, component: str, module: nn.Module, ctx) -> float:
+    """Make `module` carry exactly `model`'s adapter LoRAs for `component`: detach the extra, attach the missing
+    (read from the LoRA's file, fetched for an own one), set every scale to strength * alpha / rank. Returns the
+    adapters' GB. The base weights are never written."""
+    want = model.adapters(component)
+    state = module.__dict__.setdefault("_lora_adapters", {})  # sha256 → {module name: factor}
+    lins = _linears(module)
+    for sha in [s for s in state if s not in want]:
+        for name in state.pop(sha):
+            wrapper = lins[name]
+            del wrapper.adapters[sha]
+            if not wrapper.adapters:  # the plain Linear again, exactly as it was
+                parent, _, child = name.rpartition(".")
+                setattr(module.get_submodule(parent) if parent else module, child, wrapper.base)
+    lins = _linears(module)
+    for sha, (use, _) in want.items():
+        if sha in state:
+            continue
+        ctx.check()
+        path = ctx.lora_path(use)
+        shapes = {n: (m.in_features, m.out_features) for n, m in lins.items()}
+        first = next(iter(lins.values()))
+        deltas = lora_tensors(model, use, path, shapes, _device(first), _dtype(first))
+        state[sha] = {}
+        for name, (a, b, factor) in deltas.items():
+            m = lins[name]
+            if not isinstance(m, LoraLinear):
+                parent, _, child = name.rpartition(".")
+                m = lins[name] = LoraLinear(m)
+                setattr(module.get_submodule(parent) if parent else module, child, m)
+            m.adapters[sha] = [a, b, torch.zeros((), dtype=torch.float32, device=a.device)]
+            state[sha][name] = factor
+    total = 0
+    for sha, (_, strength) in want.items():
+        for name, factor in state[sha].items():
+            a, b, s = lins[name].adapters[sha]
+            s.fill_(strength * factor)
+            total += a.numel() * a.element_size() + b.numel() * b.element_size()
+    return total / 2**30
+
+
 def tensors(path, dev: str):
     """(key, tensor on `dev`) for each tensor of one safetensors file, one at a time."""
     from safetensors import safe_open
@@ -116,12 +246,15 @@ def load(
     dtype: torch.dtype,
     quantize=lambda name: False,
     rename=lambda key: key,
+    bake=None,
     check=lambda: None,
     progress=lambda done, total: None,
 ) -> nn.Module:
     """Fill `module` (parameters on meta) from `files`. `quantize(module name)` picks the Linears stored int8;
-    `rename(key)` maps a checkpoint key to the module's name for it, or None to skip it. `check` runs before each
-    tensor (a cancel point); `progress(done, total)` after each."""
+    `rename(key)` maps a checkpoint key to the module's name for it, or None to skip it. `bake` (module name →
+    [(A, B, s)], LoRA bake) merges W + sum s * (B @ A) in fp32 into those Linears' weights after the cast and before
+    quantization. `check` runs before each tensor (a cancel point); `progress(done, total)` after each."""
+    bake, baked = bake or {}, set()
     for parent_name, parent in list(module.named_modules()):
         for child_name, child in list(parent.named_children()):
             name = f"{parent_name}.{child_name}" if parent_name else child_name
@@ -141,6 +274,12 @@ def load(
                     raise KeyError(f"{path.name}: {key} has no place in {type(module).__name__}")
                 if tensor.is_floating_point() and tensor.dtype != dtype:
                     tensor = tensor.to(dtype)
+                if attr == "weight" and owner_name in bake:
+                    merged = tensor.float()
+                    for a, b, s in bake[owner_name]:
+                        merged += s * (b.float() @ a.float())
+                    tensor = merged.to(dtype)
+                    baked.add(owner_name)
                 if isinstance(owner, Int8Linear) and attr == "weight":
                     owner.quantize(tensor)
                 elif attr in owner._parameters:
@@ -150,6 +289,10 @@ def load(
             del tensor
             done += 1
             progress(done, total)
+    if unbaked := sorted(bake.keys() - baked):
+        raise KeyError(
+            f"{type(module).__name__}: LoRA modules without a weight: {', '.join(unbaked[:8])}"
+        )
     missing = [n for n, p in module.named_parameters() if p.is_meta]
     missing += [n for n, b in module.named_buffers() if b.is_meta]
     if missing:
@@ -170,6 +313,16 @@ def load_component(model, component: str, ctx):
     if not files:
         raise RunError(f"{component}: no weights for {model.owner(component)} in the models folder")
     meta = model.pack.module.build(component, model)
+    bake: dict[str, list] = {}
+    if baked := model.baked(
+        component
+    ):  # LoRA bake: the deltas, on the device, before the first tensor
+        shapes = {n: (m.in_features, m.out_features) for n, m in _linears(meta).items()}
+        for use in baked:
+            path = ctx.lora_path(use)
+            deltas = lora_tensors(model, use, path, shapes, ctx.device, torch.float32)
+            for name, (a, b, factor) in deltas.items():
+                bake.setdefault(name, []).append((a, b, use.strength * factor))
     rename = getattr(model.pack.module, "rename", None)
     phase, last = f"loading {component}", [0.0]
 
@@ -186,6 +339,7 @@ def load_component(model, component: str, ctx):
         dtype=DTYPES[spec.get("dtype", "bf16")],
         quantize=lambda name: packs.quantized(spec, precision, name),
         rename=(lambda key: rename(component, key)) if rename else (lambda key: key),
+        bake=bake,
         check=ctx.check,
         progress=progress,
     )

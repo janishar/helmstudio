@@ -12,6 +12,7 @@ import (
 
 	"github.com/helmstudio/helmgo/utility"
 
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -26,6 +27,13 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 		for _, param := range workflow.NodeSchemas[node.Kind].Params {
 			params[param.Name] = param.Default
 			if value, ok := node.Params[param.Name]; ok {
+				if param.Type == "rows" { // items as the workflow keeps them: fill each item's defaults
+					filled, detail := checkRows(param, value)
+					if detail != "" {
+						return nil, join(id+"."+param.Name, detail)
+					}
+					value = filled
+				}
 				params[param.Name] = value
 			}
 		}
@@ -182,7 +190,17 @@ func imageRef(value any) (any, string) {
 	return map[string]any{"take_id": id}, ""
 }
 
-// checkRows returns a rows value with each item's fields checked against param.Item (an Image field required, an item
+// loraRef returns a Lora value as {"lora_id": id}, or why it is not one.
+func loraRef(value any) (any, string) {
+	ref, ok := value.(map[string]any)
+	id, isText := ref["lora_id"].(string)
+	if !ok || len(ref) != 1 || !isText || !lora.IsID(id) {
+		return nil, `must be {"lora_id": <id>}`
+	}
+	return map[string]any{"lora_id": id}, ""
+}
+
+// checkRows returns a rows value with each item's fields checked against param.Item (an Image or Lora field required, an item
 // param its default when left out), or why it is not one; an item's detail starts with [n] (from 1).
 func checkRows(param registry.Param, value any) (any, string) {
 	items, ok := value.([]any)
@@ -216,6 +234,17 @@ func checkRows(param registry.Param, value any) (any, string) {
 					return nil, at + "." + name + ": an image is required"
 				}
 				ref, detail := imageRef(field)
+				if detail != "" {
+					return nil, at + "." + name + ": " + detail
+				}
+				filled[name] = ref
+				continue
+			}
+			if registry.IsLoraField(raw) {
+				if !given || field == nil {
+					return nil, at + "." + name + ": a LoRA is required"
+				}
+				ref, detail := loraRef(field)
 				if detail != "" {
 					return nil, at + "." + name + ": " + detail
 				}

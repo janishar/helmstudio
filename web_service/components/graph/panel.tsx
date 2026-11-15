@@ -6,6 +6,8 @@ import { Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { Switch } from "@/components/create/form";
 import { PromptArea } from "@/components/create/prompt";
+import { LoraRows } from "@/components/create/loras";
+import { loraFieldOf } from "@/lib/loras";
 import type { S } from "@/lib/api";
 import {
   WIREABLE,
@@ -30,8 +32,9 @@ export function valueText(p: S<"ParamSchema">, v: unknown): string {
   if (p.type === "bool") return v ? "On" : "Off";
   if (p.type === "rows") {
     const n = Array.isArray(v) ? v.length : 0;
-    const img = Object.values(p.item ?? {}).includes("Image");
-    return `${n} ${img ? "image" : "item"}${n === 1 ? "" : "s"}`;
+    const item = Object.values(p.item ?? {});
+    const what = item.includes("Image") ? "image" : item.includes("Lora") ? "LoRA" : "item";
+    return `${n} ${what}${n === 1 ? "" : "s"}`;
   }
   if (p.type === "image") return v ? "an image" : "none";
   if (p.type === "enum") return pretty(String(v));
@@ -57,6 +60,8 @@ export function Panel({
   groupTitle,
   edit,
   onParamSet,
+  loraPick = false,
+  onLoraPicked,
 }: {
   doc: Doc;
   schemas: Schemas;
@@ -68,6 +73,9 @@ export function Panel({
   groupTitle?: string;
   edit: (f: (d: Doc) => Doc) => void;
   onParamSet: (key: string) => void;
+  /** open this node's LoRA picker (its card's Add LoRA) */
+  loraPick?: boolean;
+  onLoraPicked?: () => void;
 }) {
   const n = doc.nodes[id];
   const s = schemas[n.kind];
@@ -165,6 +173,27 @@ export function Panel({
             }
             const value = overrides[key] ?? n.params?.[p.name] ?? p.default;
             const bad = mine.find((x) => x.param === p.name);
+            if (loraFieldOf(p))
+              return (
+                <div key={p.name} className="flex flex-col gap-2">
+                  <span className="flex items-center">
+                    {p.label ?? p.name}
+                    {p.help && <Info>{p.help}</Info>}
+                  </span>
+                  <LoraRows
+                    param={p}
+                    family={s.family}
+                    rows={Array.isArray(value) ? value : []}
+                    onRows={(rows) => {
+                      edit((d) => setParam(d, id, p.name, rows));
+                      onParamSet(key);
+                    }}
+                    error={bad?.message}
+                    pick={loraPick}
+                    onPickClosed={onLoraPicked}
+                  />
+                </div>
+              );
             return (
               <ParamControl
                 key={p.name}

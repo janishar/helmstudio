@@ -29,7 +29,15 @@ const RUN_ONLY = new Set<Code>([
   "no_output",
   "too_many_outputs",
   "too_many_seeds",
+  "lora_unknown",
+  "lora_family",
 ]);
+/** a LoRA id: a shared one's SHA-256, an own one's UUID */
+const LORA_ID = /^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+/** A rows param's Lora field (the stack's `lora`), else undefined. */
+const loraField = (p: Param) =>
+  p.type === "rows" ? Object.keys(p.item ?? {}).find((k) => p.item?.[k] === "Lora") : undefined;
 export const MAX_NODES = 64;
 export const MAX_BYTES = 262144;
 /** the most output nodes a run may have: its work budget */
@@ -109,6 +117,16 @@ export function valueError(
       if (Object.keys(row).some((k) => !(k in item))) return `item ${i + 1}: unknown field`;
       for (const [f, spec] of Object.entries(item)) {
         if (spec === "Image") return `item ${i + 1}.${f}: a workflow cannot fill an image`;
+        if (spec === "Lora") {
+          const l = (row as Record<string, unknown>)[f] as Record<string, unknown> | undefined;
+          const ok =
+            !!l &&
+            typeof l === "object" &&
+            Object.keys(l).length === 1 &&
+            LORA_ID.test(String(l.lora_id));
+          if (!ok) return `item ${i + 1}.${f}: a LoRA is required`;
+          continue;
+        }
         const err =
           f in row ? valueError(spec as Param, (row as Record<string, unknown>)[f]) : null;
         if (err) return `item ${i + 1}.${f}: ${err}`;
@@ -161,8 +179,13 @@ function reaches(succ: Record<string, Set<string>>, from: string, to: string): b
 }
 
 /** Every problem of a document against the palette, sorted as the API sorts them (by node, whole-workflow ones
- * first, then code, port, param). */
-export function graphProblems(doc: Doc, palette: Palette): Problem[] {
+ * first, then code, port, param). `loras` is the caller's usable LoRAs (id → detected family); without it (the
+ * library not known yet) lora_unknown and lora_family are not looked for. */
+export function graphProblems(
+  doc: Doc,
+  palette: Palette,
+  loras?: Record<string, string>,
+): Problem[] {
   const out = new Map<string, Problem>();
   const add = (code: Code, message: string, node?: string, port?: string, param?: string) => {
     const key = [code, node, port, param].join("\u0000");
@@ -201,7 +224,35 @@ export function graphProblems(doc: Doc, palette: Palette): Problem[] {
       if (!p) add("unknown_param", `${id}.${k}: not a param of ${n.kind}`, id, undefined, k);
       else {
         const err = valueError(p, v);
+        const lf = loraField(p);
         if (err) add("param_invalid", `${id}.${k}: ${err}`, id, undefined, k);
+        else if (lf) {
+          const ids = (v as Record<string, { lora_id: string }>[]).map((r) => r[lf].lora_id);
+          const twice = ids.findIndex((x, i) => ids.indexOf(x) < i);
+          if (twice >= 0)
+            add(
+              "lora_duplicate",
+              `${id}.${k}: row ${twice + 1} has the LoRA of row ${ids.indexOf(ids[twice]) + 1}`,
+              id,
+              undefined,
+              k,
+            );
+          if (loras && !n.bypass) {
+            const f = family(n.kind);
+            const gone = ids.findIndex((x) => !(x in loras));
+            const off = ids.findIndex((x) => x in loras && loras[x] !== f);
+            if (gone >= 0)
+              add("lora_unknown", `${id}.${k}: row ${gone + 1}: LoRA not found`, id, undefined, k);
+            if (off >= 0)
+              add(
+                "lora_family",
+                `${id}.${k}: row ${off + 1}: the LoRA does not fit ${f}`,
+                id,
+                undefined,
+                k,
+              );
+          }
+        }
       }
     }
     for (const [port, ref] of Object.entries(wires)) {

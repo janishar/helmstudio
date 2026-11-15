@@ -57,6 +57,10 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 	var exp expansion // the prompt as typed, the elements it mentioned
 	_ = json.Unmarshal(run.Mentions, &exp)
 	out.Typed, out.Elements = exp.Typed, exp.Elements
+	for _, u := range runUsed(run.Loras) {
+		out.Loras = append(out.Loras, gallerydto.MadeWithLora{Node: u.Node, ID: u.ID, Source: u.Source, Name: u.Name,
+			Strength: u.Strength, Mode: u.Mode, SHA256: u.SHA256})
+	}
 	out.Inputs, out.Prompt = map[string]any{}, nil
 	for key, value := range inputs {
 		if strings.HasSuffix(key, ".bypass") {

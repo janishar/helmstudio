@@ -109,6 +109,16 @@ class FakeStore:
             return None
         return self.objects[key][0][: limit + 1] if key in self.objects else None
 
+    async def download(self, key: str, dest, limit: int):
+        import hashlib
+
+        self.reads.append(key)
+        if key not in self.objects:
+            return None
+        data = self.objects[key][0][: limit + 1]
+        Path(dest).write_bytes(data)
+        return len(data), hashlib.sha256(data).hexdigest()
+
 
 class FakeMsg:
     """A delivery: records ack/term in `log`, next to the publishes (via `js.sent`)."""
@@ -193,6 +203,9 @@ class FakeQwen:
                     safetensors_file(path, {name: ("BF16", shape)})
         self.calls: list[tuple[str, dict]] = []
         self.loads: list[tuple] = []
+        self.active: list[
+            tuple
+        ] = []  # (component, ((sha256, strength), ...)) per ctx.component activation
 
         def stage(name: str, out: str):
             def fn(ctx, params, inputs):
@@ -219,12 +232,21 @@ class FakeQwen:
         )
         self.pack = pack.Pack("qwen_image", models, spec, "torch", module, "c0de")
         monkeypatch.setattr(pack.ModelRef, "load", lambda ref, c, ctx: self._load(ref, c, ctx))
+        monkeypatch.setattr(
+            pack.ModelRef, "activate", lambda ref, c, m, ctx: self._activate(ref, c)
+        )
         core = pack.core_nodes()
         model = pack.model_schema(self.pack)
         stages = pack._nodes(spec["stages"], self.pack.family, "c0de", self.pack, module)
         every = (
             {k: core[k] for k in ("prompt", "seed", "canvas", "image")}
             | {model["kind"]: (model, pack.Node(pack.model_node(self.pack), code="c0de"))}
+            | {
+                f"{self.pack.family}/lora-stack": (
+                    pack.lora_stack_schema(self.pack),
+                    pack.Node(pack.lora_stack, code="c0de"),
+                )
+            }
             | stages
             | {"output": core["output"]}
         )
@@ -234,6 +256,11 @@ class FakeQwen:
     def _load(self, ref, component: str, ctx):
         self.loads.append(ref.key(component))
         return object()
+
+    def _activate(self, ref, component: str) -> float:
+        adapters = ref.adapters(component)
+        self.active.append((component, tuple((sha, s) for sha, (_, s) in adapters.items())))
+        return 0.001 * len(adapters)
 
     def ran(self) -> list[str]:
         out, self.calls = [c for c, _ in self.calls], []

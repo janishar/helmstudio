@@ -39,7 +39,10 @@ services:
       - name: files                           # HMAC-signed, expiring links: the signature is the auth (no key)
         paths: [/files/]
         strip_path: false
+        request_buffering: false              # a LoRA PUT (up to 2 GiB) streams to files, never spooled here
         plugins:
+          - name: request-size-limiting       # files enforces each key's own cap (images 50 MB, LoRAs 2 GiB)
+            config: {allowed_payload_size: 2048, size_unit: megabytes}
           - name: apikey-auth-plugin
             config:
               verification_urls: [http://auth:8080/verify/apikey]

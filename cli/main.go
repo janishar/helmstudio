@@ -17,7 +17,8 @@ import (
 
 const usage = `usage:
   helm login --url <base> --email <email> [--api-key-file <path>]   password: HELM_PASSWORD or a prompt
-  helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--out <dir>]
+  helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--lora <id>:<strength> ...] [--out <dir>]
+             --lora fills the rows of the workflow's LoRA stack, in order
   helm batch <workflow_id> (--lines <file|-> [--param node.param] | --csv <file> | --grid node.param=a,b,c ...)
              [-p node.param=value ...] [--seeds N] [--session <id>] [--title <t>]   exit 1 if any row failed
   helm batch --pipeline <pipeline_id> (--lines ... [--param inputs.name] | --csv ... | --grid inputs.name=a,b ...) [-p inputs.name=value ...]
@@ -45,6 +46,9 @@ An image input takes a comma list of take ids and @files (uploaded first): -p en
   helm element rm <id>
 
 A prompt may mention your elements as @handle (@@ is a literal @): helm sends it as typed, the server expands it.
+  helm loras [--source shared|mine] [--family f] [--q words]   LoRAs you can use (id, source, state, family, rank, size, name)
+  helm lora upload <file.safetensors>   your own LoRA: uploaded, checked and indexed
+  helm lora rm <id>
   helm whoami
   helm logout
 
@@ -93,6 +97,10 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = elements(args[1:], stdout, stderr)
 	case "element":
 		err = docCmd(elementKind, args[1:], stdout, stderr)
+	case "loras":
+		err = lorasCmd(args[1:], stdout, stderr)
+	case "lora":
+		err = loraCmd(args[1:], stdout)
 	case "whoami":
 		err = whoami(stdout)
 	case "logout":
