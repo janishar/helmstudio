@@ -7,10 +7,12 @@ fixtures/{messages,registry,http}/<name>.{valid,invalid}[.N].json: every valid o
 Registry fixtures may carry a family prefix (qwen-image.nodes.valid.json): <family>.<key>. HTTP fixtures are bodies
 checked against openapi.yaml components/schemas/<name>. fixtures/graphs/ run through the reference graph rules below
 (README, Graph rules) against fixtures/graphs/palette.json; fixtures/pipelines/ through the reference pipeline rules
-(README, Pipeline rules) against fixtures/pipelines/workflows.json and the same palette.
+(README, Pipeline rules) against fixtures/pipelines/workflows.json and the same palette; fixtures/mentions/ through
+the reference mention rules (README, Mentions) against the same palette.
 Exit code 1 on any failure."""
 
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -48,6 +50,7 @@ HTTP_SCHEMAS = [
     "Workflow", "WorkflowCreate", "WorkflowUpdate", "WorkflowPatch", "WorkflowValidation", "WorkflowError", "NodePalette",
     "Pipeline", "PipelineCreate", "PipelineUpdate", "PipelinePatch", "PipelineValidation", "PipelineError", "TakePipeline",
     "BatchPick", "BatchRowRetry", "BatchReview", "RowExecution", "RowState",
+    "LibraryItem", "LibraryItemList", "LibraryItemCreate", "LibraryItemUpdate",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -616,6 +619,151 @@ def check_pipelines(registry: Registry, palette: dict) -> None:
             print(f"ok   {name}")
 
 
+# ---------------------------------------------------------------- mention rules (README, "Mentions")
+HANDLE = re.compile(r"^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$")  # an element's handle
+WORD = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_")  # ASCII only: bytes, runes, UTF-16 agree
+
+
+def scan(text: str) -> list[dict]:
+    """The prompt as parts: {text} (raw, `@@` kept) and {mention: handle, raw}; the raw parts join to the text."""
+    parts, buf, i = [], "", 0
+    while i < len(text):
+        if text.startswith("@@", i):
+            buf, i = buf + "@@", i + 2
+            continue
+        if text[i] == "@" and (i == 0 or text[i - 1] not in WORD):
+            j = i + 1
+            while j < len(text) and (text[j] in WORD or text[j] == "-"):
+                j += 1
+            tok = text[i + 1:j].rstrip("-_")
+            if tok and tok[0].isascii() and tok[0].isalpha():
+                if buf:
+                    parts.append({"text": buf})
+                parts.append({"mention": tok.lower(), "raw": "@" + tok})
+                buf, i = "", i + 1 + len(tok)
+                continue
+        buf, i = buf + text[i], i + 1
+    return parts + ([{"text": buf}] if buf else [])
+
+
+def reference_rows(nodes: dict, palette: dict) -> tuple[str, dict] | None:
+    """Where element images go: the first (node id, then schema order) rows param with a `{n}` mention and one
+    Image field, on a known, not bypassed node; None = the family takes text only."""
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        for p in (s["params"] if s and not n.get("bypass") else []):
+            if p["type"] == "rows" and "{n}" in p.get("mention", "") and image_field(p) and p["name"] not in n.get("in", {}):
+                return nid, p
+    return None
+
+
+def auto_size(width: int, height: int) -> tuple[int, int]:
+    """Canvas `auto` with references: about 1 MP at the aspect of width x height, sides rounded (half to even, as
+    Python's round) to 32, as the runner sizes it."""
+    ratio = width / height
+    w = math.sqrt(1024 * 1024 * ratio)
+    return round(w / 32) * 32, round(w / ratio / 32) * 32
+
+
+def pin_canvases(nodes: dict, palette: dict, before: list, field: str, sizes: dict, changed: dict, typed: dict) -> None:
+    """Mentions step 2, Canvas: element rows must not change the output size. Each `canvas` on `auto` is pinned to
+    `fixed` at the size auto gives without them: its own width x height without user rows, else the auto size of the
+    last user row's take (clamped to the params' min and max; unknown size: mode only)."""
+    last = before[-1].get(field) if before else None
+    size = sizes.get(last["take_id"]) if isinstance(last, dict) else None
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        if n["kind"] != "canvas" or not s or n.get("bypass"):
+            continue
+        ps = {p["name"]: p for p in s["params"]}
+        val = {name: n.get("params", {}).get(name, p["default"]) for name, p in ps.items()}
+        if val["mode"] != "auto":
+            continue
+        changed[f"{nid}.mode"], typed[f"{nid}.mode"] = "fixed", "auto"
+        for name, v in zip(("width", "height"), auto_size(*size) if size else ()):
+            v = min(max(v, ps[name].get("min", v)), ps[name].get("max", v))
+            if v != val[name]:
+                changed[f"{nid}.{name}"], typed[f"{nid}.{name}"] = v, val[name]
+
+
+def resolve_mentions(nodes: dict, palette: dict, library: list[dict], sizes: dict | None = None) -> dict:
+    """Expand every mention of a graph whose params hold the merged values (defaults, workflow, preset, inputs).
+    `sizes` is take id → [width, height] of the user's own row takes, as studio knows them.
+    Answers {inputs: changed path → resolved value, typed: changed path → value as set, elements, errors}."""
+    lib = {e["handle"]: e for e in library}
+    val = lambda nid, p: nodes[nid].get("params", {}).get(p["name"], p["default"])
+    prompts = [(nid, f"{nid}.{p['name']}", p, scan(val(nid, p))) for nid in sorted(nodes)
+               if (s := palette.get(nodes[nid]["kind"])) and not nodes[nid].get("bypass")
+               for p in s["params"] if p["type"] == "text" and p["name"] not in nodes[nid].get("in", {})]
+    mentioned = lambda parts: list(dict.fromkeys(x["mention"] for x in parts if "mention" in x))
+    errors = [f"{path}: unknown element @{h}" for _, path, _, parts in prompts for h in mentioned(parts) if h not in lib]
+    if errors:
+        return {"errors": errors}
+    used = list(dict.fromkeys(h for *_, parts in prompts for h in mentioned(parts)))
+    tokens, changed, typed = {h: [] for h in used}, {}, {}
+    if (target := reference_rows(nodes, palette)) and used:
+        tid, tp = target
+        field, cap, path = image_field(tp), tp.get("max", 100), f"{tid}.{tp['name']}"
+        rows = list(val(tid, tp))
+        at = {}  # take id → its row number (the user's rows first)
+        for i, r in enumerate(rows, 1):
+            if isinstance(r.get(field), dict):
+                at.setdefault(r[field]["take_id"], i)
+        over, full = [], None
+        for h in used:
+            new = [t for t in lib[h]["images"] if t not in at]
+            if full is not None or len(rows) + len(new) > cap:
+                full = len(rows) if full is None else full
+                over += [f"@{h} +{len(new)}"] if new else []
+                continue
+            for t in new:
+                rows.append({field: {"take_id": t}})
+                at[t] = len(rows)
+            tokens[h] = [tp["mention"].replace("{n}", str(at[t])) for t in lib[h]["images"]]
+        if over:
+            return {"errors": [f"{path}: at most {cap} images; {full} used, {', '.join(over)} do not fit"]}
+        if len(rows) > len(val(tid, tp)):
+            changed[path], typed[path] = rows, val(tid, tp)
+            pin_canvases(nodes, palette, val(tid, tp), field, sizes or {}, changed, typed)
+    for nid, path, p, parts in prompts:
+        out = "".join(x["text"].replace("@@", "@") if "text" in x
+                      else " ".join([lib[x["mention"]]["name"]] + tokens[x["mention"]]) for x in parts)
+        notes = [f"{lib[h]['name']}: {lib[h]['text']}" for h in mentioned(parts) if lib[h]["text"]]
+        out += "\n\n" + "\n".join(notes) if notes else ""
+        if len(out) > p.get("max", len(out)):
+            errors.append(f"{path}: at most {p['max']} characters once elements are added ({len(out)})")
+        elif out != val(nid, p):
+            changed[path], typed[path] = out, val(nid, p)
+    if errors:
+        return {"errors": errors}
+    elements = [{k: lib[h][k] for k in ("id", "handle", "name", "version")} for h in used]
+    return {"inputs": changed, "typed": typed, "elements": elements, "errors": []}
+
+
+def check_mentions(registry: Registry, palette: dict) -> None:
+    g = HERE / "fixtures" / "mentions"
+    for case in json.loads((g / "scan.json").read_text())["cases"]:
+        got = scan(case["text"])
+        if got != case["parts"] or "".join(x.get("text") or x["raw"] for x in got) != case["text"]:
+            fail(f"fixtures/mentions/scan.json {case['text']!r}: got {got}, want {case['parts']}")
+    print("ok   fixtures/mentions/scan.json")
+    doc_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/WorkflowDoc"}, registry=registry)
+    for p in sorted(g.glob("resolve.*.json")):
+        fx, name = json.loads(p.read_text()), f"fixtures/mentions/{p.name}"
+        if errs := list(doc_v.iter_errors(fx["workflow"])):
+            fail(f"{name}: workflow is not a WorkflowDoc: {errs[0].json_path}: {errs[0].message}")
+            continue
+        # the library as studio reads it: images of deleted takes already left out (so 0 to 4)
+        bad = [e["handle"] for e in fx["library"] if not HANDLE.match(e["handle"]) or len(e["images"]) > 4]
+        if bad:
+            fail(f"{name}: library items break the element rules: {bad}")
+        got, want = resolve_mentions(fx["workflow"]["nodes"], palette, fx["library"], fx.get("sizes")), fx["expect"]
+        if got != (want if want.get("errors") else {"inputs": {}, "typed": {}, "elements": [], "errors": []} | want):
+            fail(f"{name}: got {json.dumps(got)}, want {json.dumps(want)}")
+        else:
+            print(f"ok   {name}")
+
+
 def check_names() -> None:
     for p in sorted(HERE.rglob("*")):
         if p.suffix in (".json", ".yaml", ".md") and not any(
@@ -719,7 +867,9 @@ def main() -> int:
     schemas, registry = load_schemas()
     check_fixtures(schemas, registry)
     check_canonical_registries()
-    check_pipelines(registry, check_graphs(registry))
+    palette = check_graphs(registry)
+    check_pipelines(registry, palette)
+    check_mentions(registry, palette)
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

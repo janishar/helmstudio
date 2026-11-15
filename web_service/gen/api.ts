@@ -252,6 +252,69 @@ export interface paths {
         patch: operations["studioRenamePipeline"];
         trace?: never;
     };
+    "/v1/studio/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's library items (at most 200, not paginated); the `@` menu searches it with `q`
+         * @description Filters combine with AND. `q` (trimmed, a leading `@` dropped, lower-cased; blank = no filter) matches an item
+         *     whose `handle` starts with it or whose `name`, lower-cased, starts with it. Order: with `q`, the item whose
+         *     handle equals it first, then by `handle` (code points); without `q`, newest `updated_at` first. `limit` cuts
+         *     the list (the `@` menu asks for 8). Images of deleted takes are left out of every item (contracts/README.md,
+         *     Elements).
+         */
+        get: operations["studioListLibrary"];
+        put?: never;
+        /**
+         * Make an element from 1 to 4 of the caller's gallery images
+         * @description `name` and `text` are trimmed. 422: `name must be 1-80 characters`, `handle must be a slug: a-z, 0-9, - and _,
+         *     starting with a letter, ending with a letter or digit, at most 40 characters`, `text must be at most 2000
+         *     characters` (code points), `images: an element has 1 to 4 images`, `images[2]: take <id> is listed twice`,
+         *     `images[2]: take <id> is not an image`, `images[2]: take <id> has no size` (items from 1). 404 `images[2]: take
+         *     <id> not found` for a take that is unknown, another user's, deleted or a pending upload. 409 `handle @<handle>
+         *     is already used` (unique per owner, over every kind), 409 `You have 200 library items; delete some first.`
+         *     201 with `version` 1.
+         */
+        post: operations["studioCreateLibraryItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/library/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["studioGetLibraryItem"];
+        /**
+         * Replace an item's group, name, handle, text and images
+         * @description Optimistic concurrency like workflows: `version` is the one the edit started from; stale = 409 `element changed
+         *     since you opened it (now version <n>)`, nothing changes. Checked like POST (the handle may stay its own). On
+         *     success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
+         *     element `changed`. `kind` never changes.
+         */
+        put: operations["studioReplaceLibraryItem"];
+        post?: never;
+        /**
+         * Delete an item (always allowed)
+         * @description Hard delete, never refused: past takes keep their resolved graph and `made_with.elements`; their reuse answers
+         *     this element `deleted`; a batch already submitted keeps its copy (contracts/README.md, Elements). A prompt that
+         *     still mentions the handle is 422 at its next run. Deleting again is 404.
+         */
+        delete: operations["studioDeleteLibraryItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/sessions/{session_id}/runs": {
         parameters: {
             query?: never;
@@ -285,6 +348,12 @@ export interface paths {
          *     resolved graph as its snapshot, which the dispatcher sends however the workflow changes later. `inputs` may
          *     also hold `<node>.bypass: true|false` for a bypassable node; an input naming a param that is wired from
          *     upstream is 422 (`sample.steps: wired from count.value; it cannot be set`).
+         *
+         *     `@handle` mentions in the prompt params (contracts/README.md, Mentions) are expanded after every value is
+         *     merged and checked, against the caller's elements now: 422 `prompt.text: unknown element @<handle>` (each
+         *     distinct one, joined by `; `), `encode.refs: at most 10 images; <n> used, @<handle> +<k>, … do not fit`,
+         *     `prompt.text: at most 4000 characters once elements are added (<n>)`. The resolved graph is what is checked
+         *     for a host, stored as the run's snapshot, sent and recorded in the take; `Run.inputs` stays as requested.
          */
         post: operations["studioCreateRun"];
         delete?: never;
@@ -439,7 +508,8 @@ export interface paths {
          * Delete a take (soft)
          * @description The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it, takes made from
          *     it leave it out of `parents`); a sweep removes the object later. Deleting again is 404. A run that already
-         *     references it and has not read it yet may fail (`input image <take_id> is gone`).
+         *     references it and has not read it yet may fail (`input image <take_id> is gone`). Never refused for an
+         *     element that uses it: the image drops out of that element (contracts/README.md, Elements).
          */
         delete: operations["studioDeleteTake"];
         options?: never;
@@ -466,6 +536,10 @@ export interface paths {
          *     published, or a user workflow at `made_with.workflow_version`), `changed` (a user workflow edited since: keys
          *     that are no longer a settable param of it are dropped from `inputs`, the rest kept), `deleted` (no longer
          *     published, or deleted: `inputs` as recorded; a run of it is 422).
+         *     With elements: `inputs` = `made_with.inputs` with `made_with.typed` laid over it, so the prompt comes back as
+         *     typed (with its mentions) and the reference rows without the element images; `elements_status` says, per
+         *     element of `made_with.elements`, whether running it again would resolve the same (`current`), differently
+         *     (`changed`: edited since) or not at all (`deleted`).
          */
         post: operations["studioReuseTake"];
         delete?: never;
@@ -617,6 +691,14 @@ export interface paths {
          *     - Each row's inputs = `inputs` (base), then the row's values, then its seed; checked with the same rules as
          *       `RunRequest.inputs`. The detail names the input row (a line, a table row or a grid combination, from 1,
          *       before seed repetition): `row 3: echo.steps: must be between 1 and 200`.
+         *     - Mentions (contracts/README.md, Mentions) resolve in every row against the caller's elements now; the rows
+         *       that cannot are all listed, in row order (at most 10, then `; and <n> more rows`), joined by `; `:
+         *       `row 3: prompt.text: unknown element @wolf; row 7: encode.refs: at most 10 images; 9 used, @fox +2 do not fit`.
+         *       A pipeline batch checks only unknown handles here, in every Text input value of its rows and every text
+         *       value of its steps' `inputs` (`row 3: inputs.prompt: unknown element @wolf`, `step_1: prompt.text: unknown
+         *       element @wolf`); the rest is checked when each run is made (that row fails `invalid`).
+         *       Studio keeps a copy of every element the batch mentions: its runs, Retry included, resolve against that
+         *       copy, never against later edits or deletes.
          *     - A live host has the workflow's env and publishes the workflow (`no live host for env <env>`).
          *     - The submit message fits NATS: the rows' inputs together at most 768 KB (`batch inputs are too large; use
          *       fewer or shorter rows`).
@@ -1915,10 +1997,18 @@ export interface components {
             workflow_version?: number | null;
             /** @description every param of every node (`<node id>.<param>`), resolved, with the seed the runner used in place of null / -1; image values as `{take_id}` (the references, in order), never keys */
             inputs: components["schemas"]["RunInputs"];
-            /** @description the text of the workflow's `prompt` node; null without one */
+            /** @description the text of the workflow's `prompt` node as typed (with its `@` mentions; `typed` has it too when it had any); null without one */
             prompt: string | null;
             /** @description the seed it was made with; null without one */
             seed: number | null;
+            /** @description the elements its prompt mentioned, first mention first, as they were when the run was made; absent or empty = none */
+            elements?: components["schemas"]["MadeWithElement"][];
+            /**
+             * @description for each param the mention expansion changed (prompt params, the reference rows), its value before it: the
+             *     prompt as typed, the rows without the element images. `inputs` holds the resolved values (what ran).
+             *     Absent or empty = nothing was expanded.
+             */
+            typed?: components["schemas"]["RunInputs"];
             /** @description a take made by a step of a pipeline batch (source pipeline): which pipeline, node and loop attempt; absent or null otherwise */
             pipeline?: components["schemas"]["MadeWithPipeline"] | null;
             /** @description from the workflow's `<family>/model` node; null without one (echo) */
@@ -1980,6 +2070,104 @@ export interface components {
              * @enum {string}
              */
             workflow_status?: "current" | "changed" | "deleted";
+            /** @description reuse only: one per `made_with.elements` entry, same order; absent or empty when the take mentioned none */
+            elements_status?: components["schemas"]["ElementStatus"][];
+        };
+        MadeWithElement: {
+            /**
+             * Format: uuid
+             * @description the library item (it may be deleted since)
+             */
+            id: string;
+            /** @description as mentioned */
+            handle: string;
+            name: string;
+            /** @description the version that was expanded */
+            version: number;
+        };
+        ElementStatus: {
+            /** Format: uuid */
+            id: string;
+            /** @description as recorded (the prompt that comes back mentions this one) */
+            handle: string;
+            /**
+             * @description current: same version now; changed: edited since (another version); deleted
+             * @enum {string}
+             */
+            status: "current" | "changed" | "deleted";
+            /** @description its handle now (differs from `handle` after a rename: the returned prompt then no longer names it); null when deleted */
+            current_handle: string | null;
+        };
+        /**
+         * @description element (character, location, prop; used with `@handle`). `look` comes later in a minor version; clients show an unknown kind as is
+         * @enum {string}
+         */
+        LibraryKind: "element";
+        /**
+         * @description an element's group; looks will add theirs (film, camera, colour, lighting) in a minor version
+         * @enum {string}
+         */
+        LibraryGroup: "character" | "location" | "prop";
+        LibraryImage: {
+            /** Format: uuid */
+            take_id: string;
+            url: components["schemas"]["SignedUrl"];
+            thumb_url: components["schemas"]["SignedUrl"];
+            width: number;
+            height: number;
+        };
+        /**
+         * @description A library item (plan 10-elements-and-looks.md, one record shape for elements and, later, looks; a LoRA and its
+         *     strength come later as optional fields). `images` are takes of the owner's gallery in order; one whose take
+         *     was deleted is left out, so a stored element may show 0 images.
+         */
+        LibraryItem: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["LibraryKind"];
+            group: components["schemas"]["LibraryGroup"];
+            name: string;
+            /** @description what `@` mentions; always set for an element (null is kept for looks, which are not mentioned) */
+            handle: string | null;
+            /** @description appended to the prompt where it is mentioned; empty = none */
+            text: string;
+            images: components["schemas"]["LibraryImage"][];
+            /** @description the first image's thumb_url; null with no image */
+            thumb_url: components["schemas"]["SignedUrl"] | null;
+            /** @description 1 on create, +1 on every PUT; send it back in LibraryItemUpdate */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        LibraryItemList: {
+            items: components["schemas"]["LibraryItem"][];
+        };
+        LibraryImageRef: {
+            /** Format: uuid */
+            take_id: string;
+        };
+        LibraryItemCreate: {
+            kind: components["schemas"]["LibraryKind"];
+            group: components["schemas"]["LibraryGroup"];
+            /** @description trimmed; must then be 1-80 characters */
+            name: string;
+            /** @description a slug (LibraryItem.handle), unique per owner; the client proposes one from the name */
+            handle: string;
+            /** @description trimmed; must then be at most 2000 characters; missing = "" */
+            text?: string;
+            /** @description takes of the caller, images, 1-4 distinct, in order (the first is the thumbnail) */
+            images: components["schemas"]["LibraryImageRef"][];
+        };
+        LibraryItemUpdate: {
+            group: components["schemas"]["LibraryGroup"];
+            name: string;
+            handle: string;
+            text: string;
+            images: components["schemas"]["LibraryImageRef"][];
+            /** @description the version the edit started from (409 when stale) */
+            version: number;
         };
         UploadCreate: {
             /** @description the file's name; only its base name (without extension) is kept, as the title */
@@ -2667,6 +2855,8 @@ export interface components {
         TakeId: string;
         /** @description pipeline UUID (malformed = 404) */
         PipelineId: string;
+        /** @description library item UUID (malformed = 404) */
+        LibraryItemId: string;
         /** @description row number, from 1 (unknown or malformed = 404) */
         BatchRowN: string;
         /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
@@ -3222,6 +3412,146 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListLibrary: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["LibraryKind"];
+                group?: components["schemas"]["LibraryGroup"];
+                /** @description prefix of a handle or a name */
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryItemList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateLibraryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryItemCreate"];
+            };
+        };
+        responses: {
+            /** @description the item */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetLibraryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description library item UUID (malformed = 404) */
+                item_id: components["parameters"]["LibraryItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioReplaceLibraryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description library item UUID (malformed = 404) */
+                item_id: components["parameters"]["LibraryItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryItemUpdate"];
+            };
+        };
+        responses: {
+            /** @description the item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteLibraryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description library item UUID (malformed = 404) */
+                item_id: components["parameters"]["LibraryItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["Unavailable"];
         };
     };

@@ -278,6 +278,11 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	// every row against every step, with seeds drawn per row and step
 	seeds := make([]map[string]int64, len(rows))
+	repeat := 1 // an input row is named once, as pipelineRows names it
+	if body.Seeds != nil {
+		repeat = body.Seeds.Count
+	}
+	var graphs []stepGraph
 	for i, inputs := range rows {
 		seeds[i] = map[string]int64{}
 		for _, step := range stored.steps() {
@@ -291,6 +296,9 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 			if detail != "" {
 				return dto.Batch{}, unprocessable("row %d: %s: %s", i+1, step, detail)
 			}
+			if i%repeat == 0 {
+				graphs = append(graphs, stepGraph{fmt.Sprintf("row %d: %s", i/repeat+1, step), nodes, workflow.NodeSchemas})
+			}
 			if i > 0 {
 				continue
 			}
@@ -301,6 +309,12 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 				return dto.Batch{}, unprocessable("%s", reason)
 			}
 		}
+	}
+	lib, detail, err := s.pipelineMentions(ctx, tx, caller.ID, graphs)
+	if err != nil {
+		return dto.Batch{}, err
+	} else if detail != "" {
+		return dto.Batch{}, unprocessable("%s", detail)
 	}
 	snapshot := stored.snapshot()
 	size, _ := json.Marshal(snapshot)
@@ -330,9 +344,10 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	batchID := utility.NewID()
 	if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
-		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`, batchID, caller.ID, sessionID, title,
-		first.ID, first.Title, first, base, stored.version(first.ID), row.ID, row.Title, row.Version, collection, stored); err != nil {
+		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`, batchID, caller.ID, sessionID, title,
+		first.ID, first.Title, first, base, stored.version(first.ID), row.ID, row.Title, row.Version, collection, stored,
+		lib); err != nil {
 		return dto.Batch{}, err
 	}
 	numbers := make([]int, len(rows))
@@ -356,6 +371,42 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 		return dto.Batch{}, err
 	}
 	return getBatch(ctx, tx, batchID, false)
+}
+
+// stepGraph is one input row's resolved graph of one step, named for the 422 detail ("row 3: step_1").
+type stepGraph struct {
+	Where   string
+	Nodes   map[string]registry.Node
+	Schemas map[string]registry.NodeSchema
+}
+
+// pipelineMentions checks a pipeline batch's mentions at Submit, unknown handles only (the rest is checked when each
+// run is made), in every step's resolved graph per input row, as the run will resolve it ("row 3: step_1: prompt.text:
+// unknown element @wolf"). The elements they mention are the batch's copy.
+func (s *Service) pipelineMentions(ctx context.Context, tx pgx.Tx, ownerID string, graphs []stepGraph) ([]element, string, error) {
+	var handles []string
+	for _, g := range graphs {
+		for _, handle := range mentionedHandles(g.Nodes, g.Schemas) {
+			if !slices.Contains(handles, handle) {
+				handles = append(handles, handle)
+			}
+		}
+	}
+	lib, err := readElements(ctx, tx, ownerID, handles, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	var failed []string
+	for _, g := range graphs {
+		for _, p := range prompts(g.Nodes, g.Schemas) {
+			for _, handle := range mentioned(p.Parts) {
+				if !slices.ContainsFunc(lib, func(e element) bool { return e.Handle == handle }) {
+					failed = append(failed, fmt.Sprintf("%s: %s.%s: unknown element @%s", g.Where, p.Node, p.Param.Name, handle))
+				}
+			}
+		}
+	}
+	return lib, joinRows(failed), nil
 }
 
 // inputParams are the param schemas the run rules check a pipeline input's value with.

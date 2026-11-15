@@ -44,12 +44,13 @@ type Run struct {
 	// a user workflow's run: the version it ran and the workflow's title then (nil for a template)
 	WorkflowVersion *int
 	WorkflowTitle   *string
+	Mentions        json.RawMessage // {typed, elements}: what the mention expansion did; null when nothing
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
-	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title`
+	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions`
 
 // Output is a run_outputs row.
 type Output struct {

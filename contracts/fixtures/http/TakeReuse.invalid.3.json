@@ -1,0 +1,25 @@
+{
+  "workflow_id": "echo",
+  "inputs": {
+    "prompt.text": "@fox in @snowfield at dusk",
+    "echo.steps": 10,
+    "echo.delay_ms": 300,
+    "echo.fail": false,
+    "echo.refs": []
+  },
+  "workflow_status": "current",
+  "elements_status": [
+    {
+      "id": "e1a2b3c4-5d6e-4f70-8a91-b2c3d4e5f601",
+      "handle": "fox",
+      "status": "edited",
+      "current_handle": "red-fox"
+    },
+    {
+      "id": "e1a2b3c4-5d6e-4f70-8a91-b2c3d4e5f603",
+      "handle": "snowfield",
+      "status": "deleted",
+      "current_handle": null
+    }
+  ]
+}

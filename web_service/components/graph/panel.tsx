@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { Switch } from "@/components/create/form";
+import { PromptArea } from "@/components/create/prompt";
 import type { S } from "@/lib/api";
 import {
   WIREABLE,
@@ -461,14 +462,15 @@ function ParamControl({
           {p.help && <Info>{p.help}</Info>}
         </label>
         {p.type === "text" ? (
-          <textarea
+          <PromptArea
             id={id}
             rows={3}
             maxLength={p.max}
             value={String(raw)}
             aria-invalid={!!err || undefined}
             aria-describedby={err ? id + "-err" : undefined}
-            onChange={(e) => put(e.target.value)}
+            onChange={put}
+            wrapClassName="flex flex-col"
             className="resize-y rounded-lg border border-line bg-s1 px-2.5 py-2 text-[13px] text-t1"
           />
         ) : (

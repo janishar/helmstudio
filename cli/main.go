@@ -39,6 +39,12 @@ An image input takes a comma list of take ids and @files (uploaded first): -p en
   helm workflow rm <id>
   helm pipelines                      your pipelines (id, version, last batch's status, title)
   helm pipeline get|save|validate|copy|rm ...   as helm workflow, for a pipeline file (title, nodes, edges)
+  helm elements [--q prefix] [--group character|location|prop]   your elements (id, group, @handle, images, version, name)
+  helm element get <id> > file.json   an element as a file (id, version, group, name, handle, text, images as take ids)
+  helm element save file.json         replace yours (id + version; stale = 409) or, without an id, make one
+  helm element rm <id>
+
+A prompt may mention your elements as @handle (@@ is a literal @): helm sends it as typed, the server expands it.
   helm whoami
   helm logout
 
@@ -83,6 +89,10 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = pipelines(stdout)
 	case "pipeline":
 		err = docCmd(pipelineKind, args[1:], stdout, stderr)
+	case "elements":
+		err = elements(args[1:], stdout, stderr)
+	case "element":
+		err = docCmd(elementKind, args[1:], stdout, stderr)
 	case "whoami":
 		err = whoami(stdout)
 	case "logout":

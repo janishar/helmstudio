@@ -1,0 +1,65 @@
+{
+  "id": "5a7e0c11-2b3d-4e5f-8a9b-0c1d2e3f4a77",
+  "kind": "image",
+  "source": "create",
+  "title": "@fox in @snowfield at dusk",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png?exp=1767225600&sig=ab12",
+  "content_type": "image/png",
+  "width": 512,
+  "height": 512,
+  "bytes": 6291456,
+  "created_at": "2026-11-14T10:16:20Z",
+  "starred": true,
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "made_with": {
+    "workflow_id": "echo",
+    "workflow_title": "Echo",
+    "inputs": {
+      "prompt.text": "Fox <image1> <image2> in Snowfield <image3> at dusk\n\nFox: a small red fox",
+      "echo.steps": 10,
+      "echo.delay_ms": 300,
+      "echo.fail": false,
+      "echo.refs": [
+        {
+          "image": {
+            "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+          }
+        },
+        {
+          "image": {
+            "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a52"
+          }
+        },
+        {
+          "image": {
+            "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a53"
+          }
+        }
+      ]
+    },
+    "typed": {
+      "prompt.text": "@fox in @snowfield at dusk",
+      "echo.refs": []
+    },
+    "elements": [
+      {
+        "id": "e1a2b3c4-5d6e-4f70-8a91-b2c3d4e5f601",
+        "handle": "fox",
+        "name": "Fox",
+        "version": 3
+      },
+      {
+        "id": "e1a2b3c4-5d6e-4f70-8a91-b2c3d4e5f603",
+        "handle": "snowfield",
+        "name": "Snowfield",
+        "version": 1
+      }
+    ],
+    "prompt": "@fox in @snowfield at dusk",
+    "seed": null,
+    "model": null
+  },
+  "parents": []
+}

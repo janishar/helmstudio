@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { ErrorNote, Modal } from "@/components/kit";
 import { Inspector, TextFields } from "@/components/create/form";
+import { MentionText, PromptArea } from "@/components/create/prompt";
 import { useRefUploads } from "@/components/create/refs";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { imageInputs } from "@/lib/refs";
@@ -347,14 +348,23 @@ export function NewBatch({
                       {built.count} row{built.count === 1 ? "" : "s"}
                     </span>
                   </span>
-                  <textarea
-                    className="in h-40 resize-y py-2 leading-5"
-                    placeholder={
-                      lineIsImage ? "a take id per line" : "a fox at dusk\na heron in the reeds"
-                    }
-                    value={lines}
-                    onChange={(e) => setLines(e.target.value)}
-                  />
+                  {lineField?.param.type === "text" ? (
+                    <PromptArea
+                      className="in h-40 resize-y py-2 leading-5"
+                      placeholder={"a fox at dusk\n@fox in @snowfield"}
+                      value={lines}
+                      onChange={setLines}
+                    />
+                  ) : (
+                    <textarea
+                      className="in h-40 resize-y py-2 leading-5"
+                      placeholder={
+                        lineIsImage ? "a take id per line" : "a fox at dusk\na heron in the reeds"
+                      }
+                      value={lines}
+                      onChange={(e) => setLines(e.target.value)}
+                    />
+                  )}
                 </label>
               </>
             )}
@@ -435,7 +445,11 @@ export function NewBatch({
                             <td className="m">{r + 1}</td>
                             {cells[0].map((_, i) => (
                               <td key={i} className="max-w-48 truncate" title={line[i]}>
-                                {line[i]}
+                                {byKey(columns[i])?.param.type === "text" ? (
+                                  <MentionText text={line[i] ?? ""} />
+                                ) : (
+                                  line[i]
+                                )}
                               </td>
                             ))}
                           </tr>
@@ -484,15 +498,29 @@ export function NewBatch({
                         </button>
                       )}
                     </div>
-                    <textarea
-                      aria-label={`Axis ${i + 1} values, one per line`}
-                      className="in h-20 resize-y py-2 leading-5"
-                      placeholder="One value per line"
-                      value={a.text}
-                      onChange={(e) =>
-                        setAxes(axes.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))
-                      }
-                    />
+                    {byKey(a.key)?.param.type === "text" ? (
+                      <PromptArea
+                        aria-label={`Axis ${i + 1} values, one per line`}
+                        className="in h-20 resize-y py-2 leading-5"
+                        placeholder="One value per line"
+                        value={a.text}
+                        onChange={(v) =>
+                          setAxes(axes.map((x, j) => (j === i ? { ...x, text: v } : x)))
+                        }
+                      />
+                    ) : (
+                      <textarea
+                        aria-label={`Axis ${i + 1} values, one per line`}
+                        className="in h-20 resize-y py-2 leading-5"
+                        placeholder="One value per line"
+                        value={a.text}
+                        onChange={(e) =>
+                          setAxes(
+                            axes.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)),
+                          )
+                        }
+                      />
+                    )}
                   </div>
                 ))}
                 <div className="flex items-center gap-2">

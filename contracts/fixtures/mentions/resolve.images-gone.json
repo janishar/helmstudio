@@ -1,0 +1,83 @@
+{
+  "description": "an element whose image takes were all deleted: its name and text only, no rows",
+  "workflow": {
+    "title": "Qwen Image",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@ghost at the door"
+        }
+      },
+      "seed": {
+        "kind": "seed"
+      },
+      "canvas": {
+        "kind": "canvas"
+      },
+      "model": {
+        "kind": "qwen-image/model"
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "refs": []
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000005",
+      "handle": "ghost",
+      "name": "Ghost",
+      "version": 4,
+      "text": "a pale figure",
+      "images": []
+    }
+  ],
+  "expect": {
+    "inputs": {
+      "prompt.text": "Ghost at the door\n\nGhost: a pale figure"
+    },
+    "typed": {
+      "prompt.text": "@ghost at the door"
+    },
+    "elements": [
+      {
+        "id": "e0000000-0000-4000-8000-000000000005",
+        "handle": "ghost",
+        "name": "Ghost",
+        "version": 4
+      }
+    ]
+  }
+}

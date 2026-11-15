@@ -113,6 +113,17 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
   `pipelines.state.get` (5 s; the caller's own batch only). Retry with `{from_step}` copies the steps before it to the
   new attempt and names the checkpoint of the step before. `save_pipeline.go`: Save as pipeline from a take's lineage.
 
+## Elements and @ mentions (API 1.8)
+
+- `library_items` (migration 00011, RLS) is one table for every library kind (elements now, looks in M3); images are
+  take ids, checked like reference rows (`vetTakes`), a deleted take left out when read. `library.go` serves
+  `/library` (200 per user, handle unique per owner, PUT with `version`, DELETE never refused).
+- `mentions.go` is the mention rules (`scan`, `referenceRows`, `expandMentions`), tested on every
+  `contracts/fixtures/mentions` fixture. `runGraphs` is the one place a run's graph is made: resolve, then the
+  mentions against the owner's elements now (Create, a workflow batch's rows at Submit) or the batch's copy
+  (`batches.elements`, `studio.runs.create`, Retry included). The resolved graph is stored, sent and recorded;
+  `runs.mentions` keeps `{typed, elements}` for `made_with`; lineage and Save as pipeline read the typed view.
+
 NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack) and
 `$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
 consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable `studio-pipelines`), publishes

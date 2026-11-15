@@ -21,8 +21,8 @@ import (
 // madeWith snapshots what made an output of run (Take.made_with): the workflow (a user workflow's title and version as
 // the run stored them), every settable param of every node of the graph the run was sent with (resolved again from
 // the registry for a run stored before it kept its graph; a wired param is not settable) with seed in place of a
-// random seed, the bypass switches the run asked for, the prompt node's text and the <family>/model node. With no
-// graph it keeps the inputs as requested.
+// random seed, the bypass switches the run asked for, the prompt node's text as typed and the <family>/model node, and
+// what the mention expansion did (typed, elements). With no graph it keeps the inputs as requested.
 func madeWith(workflows *registry.Registry, run model.Run, seed *int64) gallerydto.MadeWith {
 	inputs := map[string]any{}
 	_ = json.Unmarshal(run.Inputs, &inputs)
@@ -54,6 +54,9 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 	if len(nodes) == 0 {
 		return out
 	}
+	var exp expansion // the prompt as typed, the elements it mentioned
+	_ = json.Unmarshal(run.Mentions, &exp)
+	out.Typed, out.Elements = exp.Typed, exp.Elements
 	out.Inputs, out.Prompt = map[string]any{}, nil
 	for key, value := range inputs {
 		if strings.HasSuffix(key, ".bypass") {
@@ -75,7 +78,11 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 		switch {
 		case node.Kind == "prompt" && !prompted:
 			prompted = true
-			if text, ok := node.Params["text"].(string); ok {
+			value, typed := exp.Typed[id+".text"]
+			if !typed {
+				value = node.Params["text"]
+			}
+			if text, ok := value.(string); ok {
 				out.Prompt = &text
 			}
 		case strings.HasSuffix(node.Kind, "/model") && out.Model == nil:
@@ -176,7 +183,7 @@ func (p *Projector) Backfill(ctx context.Context) (int, error) {
 			takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 				Index: o.Index, Key: o.Key, Kind: o.Kind, Width: o.Width, Height: o.Height, Bytes: o.Bytes,
 				MadeWith: with, CreatedAt: cmp.Or(run.FinishedAt, &run.CreatedAt),
-				BatchID: run.BatchID, Parents: parents(run.Nodes)})
+				BatchID: run.BatchID, Parents: parents(typedView(run.Nodes, run.Mentions))})
 			if err != nil {
 				return err
 			}

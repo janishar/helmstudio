@@ -16,12 +16,14 @@ import (
 // `id` and `version` (one's own, from get) or `based_on` (a template, or a copy to make: saving it creates one).
 type docKind struct {
 	name, path string
-	keys       []string // the document's fields (WorkflowDoc, PipelineDoc)
+	keys       []string // the document's fields (WorkflowDoc, PipelineDoc, LibraryItemUpdate)
+	library    string   // a library item's kind (element): sent on create; its images are filed as take ids
 }
 
 var (
-	workflowKind = docKind{"workflow", "/v1/studio/workflows", []string{"title", "family", "env", "nodes", "studio"}}
-	pipelineKind = docKind{"pipeline", "/v1/studio/pipelines", []string{"title", "nodes", "edges"}}
+	workflowKind = docKind{"workflow", "/v1/studio/workflows", []string{"title", "family", "env", "nodes", "studio"}, ""}
+	pipelineKind = docKind{"pipeline", "/v1/studio/pipelines", []string{"title", "nodes", "edges"}, ""}
+	elementKind  = docKind{"element", "/v1/studio/library", []string{"group", "name", "handle", "text", "images"}, "element"}
 )
 
 type problem struct {
@@ -93,6 +95,44 @@ func pipelines(stdout io.Writer) error {
 	return nil
 }
 
+// elements lists the caller's elements (newest first; with --q the @ menu's prefix search on handle and name).
+func elements(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("elements", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	q := fs.String("q", "", "prefix of a handle or a name")
+	group := fs.String("group", "", "character, location or prop")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	query := url.Values{"kind": {"element"}}
+	for k, v := range map[string]string{"q": *q, "group": *group} {
+		if v != "" {
+			query.Set(k, v)
+		}
+	}
+	var list struct {
+		Items []struct {
+			ID      string            `json:"id"`
+			Group   string            `json:"group"`
+			Name    string            `json:"name"`
+			Handle  string            `json:"handle"`
+			Version int               `json:"version"`
+			Images  []json.RawMessage `json:"images"`
+		} `json:"items"`
+	}
+	if err := c.call(http.MethodGet, elementKind.path+"?"+query.Encode(), nil, http.StatusOK, &list); err != nil {
+		return err
+	}
+	for _, e := range list.Items {
+		fmt.Fprintf(stdout, "%-36s %-9s %-24s %d img v%-3d %s\n", e.ID, e.Group, "@"+e.Handle, len(e.Images), e.Version, e.Name)
+	}
+	return nil
+}
+
 // docCmd is helm workflow / helm pipeline: get, save, validate, copy, rm.
 func docCmd(k docKind, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet(k.name, flag.ContinueOnError)
@@ -117,8 +157,14 @@ func docCmd(k docKind, args []string, stdout, stderr io.Writer) error {
 	case "save":
 		return c.saveDoc(k, arg, stdout)
 	case "validate":
+		if k.library != "" {
+			break
+		}
 		return c.validateDoc(k, arg, stdout)
 	case "copy":
+		if k.library != "" {
+			break
+		}
 		body := map[string]string{"based_on": arg}
 		if *title != "" {
 			body["title"] = *title
@@ -156,6 +202,15 @@ func (c *client) getDoc(k docKind, path string, stdout io.Writer) error {
 		out["id"], out["version"] = w["id"], w["version"]
 	} else {
 		out["based_on"] = w["id"]
+	}
+	if k.library != "" { // LibraryImage → LibraryImageRef: the file saves back as is
+		var imgs []struct {
+			TakeID string `json:"take_id"`
+		}
+		if err := json.Unmarshal(w["images"], &imgs); err != nil {
+			return err
+		}
+		out["images"] = mustJSON(imgs)
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -206,6 +261,8 @@ func (c *client) saveDoc(k docKind, file string, stdout io.Writer) error {
 		return fmt.Errorf("%s: an id needs its version (helm %s get it again)", file, k.name)
 	case basedOn != "":
 		doc["based_on"] = mustJSON(basedOn)
+	case k.library != "":
+		doc["kind"] = mustJSON(k.library)
 	}
 	resp, err := c.do(context.Background(), method, path, doc, nil)
 	if err != nil {

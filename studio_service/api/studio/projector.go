@@ -182,7 +182,7 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	}
 	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
-		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: parents(run.Nodes)})
+		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: parents(typedView(run.Nodes, run.Mentions))})
 	if err != nil {
 		return nil, err
 	}

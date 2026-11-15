@@ -1,0 +1,40 @@
+{
+  "description": "no element, only an escaped @: the prompt changes, no element is recorded",
+  "workflow": {
+    "title": "Text only",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@@home"
+        }
+      },
+      "enhance": {
+        "kind": "test/enhance",
+        "in": {
+          "prompt": "prompt.text"
+        }
+      },
+      "noise": {
+        "kind": "test/noise"
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "noise.image"
+        }
+      }
+    }
+  },
+  "library": [],
+  "expect": {
+    "inputs": {
+      "prompt.text": "@home"
+    },
+    "typed": {
+      "prompt.text": "@@home"
+    }
+  }
+}

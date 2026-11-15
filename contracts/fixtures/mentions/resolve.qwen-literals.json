@@ -1,0 +1,127 @@
+{
+  "description": "case-insensitive mentions, a handle with - and _, `@@` is a literal @, an @ after a word character is not a mention (an email), an @ before a digit or a space is literal; the auto canvas is pinned to fixed (element rows never change the output size)",
+  "workflow": {
+    "title": "Qwen Image",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@OLD-BARN, @owl_1. Mail a@b.c at 9 @ 3pm, @3pm, @@fox"
+        }
+      },
+      "seed": {
+        "kind": "seed"
+      },
+      "canvas": {
+        "kind": "canvas"
+      },
+      "model": {
+        "kind": "qwen-image/model"
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "refs": []
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "handle": "fox",
+      "name": "Fox",
+      "version": 3,
+      "text": "a small red fox with a white-tipped tail",
+      "images": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "id": "e0000000-0000-4000-8000-000000000003",
+      "handle": "old-barn",
+      "name": "Old barn",
+      "version": 2,
+      "text": "a weathered red barn",
+      "images": [
+        "00000000-0000-4000-8000-000000000004"
+      ]
+    },
+    {
+      "id": "e0000000-0000-4000-8000-000000000004",
+      "handle": "owl_1",
+      "name": "Owl",
+      "version": 1,
+      "text": "a snowy owl",
+      "images": [
+        "00000000-0000-4000-8000-000000000011"
+      ]
+    }
+  ],
+  "expect": {
+    "inputs": {
+      "prompt.text": "Old barn <image1>, Owl <image2>. Mail a@b.c at 9 @ 3pm, @3pm, @fox\n\nOld barn: a weathered red barn\nOwl: a snowy owl",
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000004"
+          }
+        },
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000011"
+          }
+        }
+      ],
+      "canvas.mode": "fixed"
+    },
+    "typed": {
+      "prompt.text": "@OLD-BARN, @owl_1. Mail a@b.c at 9 @ 3pm, @3pm, @@fox",
+      "encode.refs": [],
+      "canvas.mode": "auto"
+    },
+    "elements": [
+      {
+        "id": "e0000000-0000-4000-8000-000000000003",
+        "handle": "old-barn",
+        "name": "Old barn",
+        "version": 2
+      },
+      {
+        "id": "e0000000-0000-4000-8000-000000000004",
+        "handle": "owl_1",
+        "name": "Owl",
+        "version": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "kind": "element",
+  "group": "lighting",
+  "name": "Fox",
+  "handle": "fox",
+  "images": [
+    {
+      "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+    }
+  ]
+}

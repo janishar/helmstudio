@@ -1,0 +1,128 @@
+{
+  "description": "element images go after the user's own rows; a take already in the rows keeps its number (t2 is the user's row 2); the same element twice adds its images and its text once; the auto canvas is pinned to fixed (element rows never change the output size)",
+  "workflow": {
+    "title": "Qwen Image",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "Put @fox into <image1>, then @Fox again"
+        }
+      },
+      "seed": {
+        "kind": "seed"
+      },
+      "canvas": {
+        "kind": "canvas"
+      },
+      "model": {
+        "kind": "qwen-image/model"
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "refs": [
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000009"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000002"
+              }
+            }
+          ]
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "handle": "fox",
+      "name": "Fox",
+      "version": 3,
+      "text": "a small red fox with a white-tipped tail",
+      "images": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002"
+      ]
+    }
+  ],
+  "expect": {
+    "inputs": {
+      "prompt.text": "Put Fox <image3> <image2> into <image1>, then Fox <image3> <image2> again\n\nFox: a small red fox with a white-tipped tail",
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000009"
+          }
+        },
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000002"
+          }
+        },
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "canvas.mode": "fixed"
+    },
+    "typed": {
+      "prompt.text": "Put @fox into <image1>, then @Fox again",
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000009"
+          }
+        },
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000002"
+          }
+        }
+      ],
+      "canvas.mode": "auto"
+    },
+    "elements": [
+      {
+        "id": "e0000000-0000-4000-8000-000000000001",
+        "handle": "fox",
+        "name": "Fox",
+        "version": 3
+      }
+    ]
+  }
+}

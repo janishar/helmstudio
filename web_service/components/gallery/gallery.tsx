@@ -9,6 +9,7 @@ import { Check, Maximize, Star, X } from "lucide-react";
 import { FullScreen, Media, useFullScreenKey } from "@/components/media";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { RefThumbs } from "@/components/create/refs";
+import { ElementEditor } from "@/components/create/elements";
 import { imageWorkflows, targetLabel } from "@/lib/refs";
 import { remember, useTakes } from "@/lib/take-cache";
 import { api, message, ok, type S } from "@/lib/api";
@@ -211,6 +212,8 @@ export function Gallery({
   const [dragging, setDragging] = useState(false);
   const [modal, setModal] = useState<"rename" | "delete" | "bulk-delete" | null>(null);
   const [actionError, setActionError] = useState("");
+  // the takes a new element is being made from (Save as element)
+  const [making, setMaking] = useState<Take[] | null>(null);
   const [full, setFull] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSeq = useRef(0);
@@ -223,6 +226,7 @@ export function Gallery({
     (currentId ? lookup(currentId) : null) ??
     (selecting ? undefined : takes?.[0]);
   useFullScreenKey(!!current && !modal && !full, () => setFull(true));
+  const madeFrom = takes?.filter((t) => picked.has(t.id) && t.kind === "image");
   const replace = (t: Take) => setTakes((list) => list && list.map((x) => (x.id === t.id ? t : x)));
   const remove = (ids: string[]) =>
     setTakes((list) => list && list.filter((x) => !ids.includes(x.id)));
@@ -397,6 +401,15 @@ export function Gallery({
             </button>
             <button
               type="button"
+              className="chip bevel"
+              title="An element takes 1 to 4 images"
+              disabled={!madeFrom || madeFrom.length !== picked.size || picked.size > 4}
+              onClick={() => setMaking(madeFrom ?? null)}
+            >
+              Save as element
+            </button>
+            <button
+              type="button"
               className="chip bevel text-bad"
               disabled={!picked.size}
               onClick={() => setModal("bulk-delete")}
@@ -505,6 +518,7 @@ export function Gallery({
             onRename={() => setModal("rename")}
             onDelete={() => setModal("delete")}
             onFull={() => setFull(true)}
+            onMakeElement={() => setMaking([current])}
             onPick={(t) => {
               if ("url" in t) remember([t]);
               setCurrentId(t.id);
@@ -530,6 +544,7 @@ export function Gallery({
         />
       )}
 
+      <ElementEditor open={!!making} onClose={() => setMaking(null)} takes={making ?? undefined} />
       <Modal
         open={modal === "rename" && !!current}
         onClose={() => setModal(null)}
@@ -591,6 +606,7 @@ function TakePanel({
   onRename,
   onDelete,
   onFull,
+  onMakeElement,
   onPick,
   workflows,
 }: {
@@ -599,6 +615,8 @@ function TakePanel({
   onRename: () => void;
   onDelete: () => void;
   onFull: () => void;
+  /** opens the element editor with this take */
+  onMakeElement: () => void;
   /** selects a take of its lineage */
   onPick: (t: Take | S<"TakeRef">) => void;
   /** the workflows that take an image ("Use in…") */
@@ -661,7 +679,7 @@ function TakePanel({
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
       </div>
 
-      {(t.parents.length > 0 || used.length > 0) && (
+      {(t.parents.length > 0 || used.length > 0 || !!m?.elements?.length) && (
         <div className="flex flex-col gap-1.5">
           <h2 className="heading">Lineage</h2>
           {t.parents.length > 0 && (
@@ -669,6 +687,12 @@ function TakePanel({
               <span>Made from</span>
               <RefThumbs ids={t.parents} onPick={onPick} />
             </div>
+          )}
+          {!!m?.elements?.length && (
+            <Row
+              label={t.parents.length ? "" : "Elements"}
+              value={m.elements.map((e) => `@${e.handle}`).join(" · ")}
+            />
           )}
           {used.length > 0 && (
             <div className="flex justify-between gap-2.5 text-[13px]">
@@ -725,6 +749,11 @@ function TakePanel({
         <button type="button" className="act" onClick={onRename}>
           Rename
         </button>
+        {t.kind === "image" && (
+          <button type="button" className="act" onClick={onMakeElement}>
+            Save as element
+          </button>
+        )}
         {m && (
           <button
             type="button"

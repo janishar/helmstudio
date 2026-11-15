@@ -1,0 +1,153 @@
+{
+  "description": "the mention grammar: a prompt split into raw text parts and mentions (README, Mentions)",
+  "cases": [
+    {
+      "text": "@fox in @snowfield at dusk",
+      "parts": [
+        {
+          "mention": "fox",
+          "raw": "@fox"
+        },
+        {
+          "text": " in "
+        },
+        {
+          "mention": "snowfield",
+          "raw": "@snowfield"
+        },
+        {
+          "text": " at dusk"
+        }
+      ]
+    },
+    {
+      "text": "mail me@fox.com",
+      "parts": [
+        {
+          "text": "mail me@fox.com"
+        }
+      ]
+    },
+    {
+      "text": "@@fox stays literal",
+      "parts": [
+        {
+          "text": "@@fox stays literal"
+        }
+      ]
+    },
+    {
+      "text": "@@@fox",
+      "parts": [
+        {
+          "text": "@@"
+        },
+        {
+          "mention": "fox",
+          "raw": "@fox"
+        }
+      ]
+    },
+    {
+      "text": "@Fox, @red-fox- and @x_1.",
+      "parts": [
+        {
+          "mention": "fox",
+          "raw": "@Fox"
+        },
+        {
+          "text": ", "
+        },
+        {
+          "mention": "red-fox",
+          "raw": "@red-fox"
+        },
+        {
+          "text": "- and "
+        },
+        {
+          "mention": "x_1",
+          "raw": "@x_1"
+        },
+        {
+          "text": "."
+        }
+      ]
+    },
+    {
+      "text": "price @ 3 @3pm (@fox)",
+      "parts": [
+        {
+          "text": "price @ 3 @3pm ("
+        },
+        {
+          "mention": "fox",
+          "raw": "@fox"
+        },
+        {
+          "text": ")"
+        }
+      ]
+    },
+    {
+      "text": "a_@fox a-@fox",
+      "parts": [
+        {
+          "text": "a_@fox a-"
+        },
+        {
+          "mention": "fox",
+          "raw": "@fox"
+        }
+      ]
+    },
+    {
+      "text": "@fox@owl",
+      "parts": [
+        {
+          "mention": "fox",
+          "raw": "@fox"
+        },
+        {
+          "text": "@owl"
+        }
+      ]
+    },
+    {
+      "text": "line one\n@fox",
+      "parts": [
+        {
+          "text": "line one\n"
+        },
+        {
+          "mention": "fox",
+          "raw": "@fox"
+        }
+      ]
+    },
+    {
+      "text": "café @fox",
+      "parts": [
+        {
+          "text": "café "
+        },
+        {
+          "mention": "fox",
+          "raw": "@fox"
+        }
+      ]
+    },
+    {
+      "text": "@",
+      "parts": [
+        {
+          "text": "@"
+        }
+      ]
+    },
+    {
+      "text": "",
+      "parts": []
+    }
+  ]
+}

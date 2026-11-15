@@ -83,6 +83,7 @@ export function RowsEditor({
   onChange,
   uploads,
   compact = false,
+  extra,
 }: {
   f: Field;
   raw: Raw | undefined;
@@ -90,6 +91,8 @@ export function RowsEditor({
   onChange: Change;
   uploads: RefUploads;
   compact?: boolean;
+  /** compact: shown between the references and "Add from gallery" (the composer's mention chips) */
+  extra?: React.ReactNode;
 }) {
   const ids = refIds(f, raw);
   const get = useTakes(ids);
@@ -275,6 +278,7 @@ export function RowsEditor({
             {items}
             {busy}
           </div>
+          {extra}
           {addButton}
         </>
       ) : (

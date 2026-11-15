@@ -327,7 +327,11 @@ func (s *Service) Reuse(ctx context.Context, caller common.Caller, id string) (d
 	if !s.registry.Ready() {
 		return dto.TakeReuse{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
 	}
+	maps.Copy(madeWith.Inputs, madeWith.Typed) // the prompt as typed, the rows without the element images
 	out := dto.TakeReuse{WorkflowID: madeWith.WorkflowID, Inputs: madeWith.Inputs, WorkflowStatus: "current"}
+	if out.ElementsStatus, err = s.elementsStatus(ctx, caller, madeWith.Elements); err != nil {
+		return dto.TakeReuse{}, err
+	}
 	workflow, version, err := s.find(ctx, caller, madeWith.WorkflowID)
 	var notFound *network.APIError
 	switch {
@@ -344,6 +348,41 @@ func (s *Service) Reuse(ctx context.Context, caller common.Caller, id string) (d
 		}
 	}
 	return out, nil
+}
+
+// elementsStatus compares each element a take mentioned with the caller's library now: current (same version), changed
+// or deleted.
+func (s *Service) elementsStatus(ctx context.Context, caller common.Caller, used []dto.MadeWithElement) ([]dto.ElementStatus, error) {
+	if len(used) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, len(used))
+	for i, e := range used {
+		ids[i] = e.ID
+	}
+	type now struct {
+		ID      string
+		Handle  *string
+		Version int
+	}
+	var rows []now
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		found, _ := tx.Query(ctx, `SELECT id::text, handle, version FROM library_items WHERE id = ANY($1::uuid[])`, ids)
+		var err error
+		rows, err = pgx.CollectRows(found, pgx.RowToStructByPos[now])
+		return err
+	})
+	out := make([]dto.ElementStatus, len(used))
+	for i, e := range used {
+		out[i] = dto.ElementStatus{ID: e.ID, Handle: e.Handle, Status: "deleted"}
+		if at := slices.IndexFunc(rows, func(r now) bool { return r.ID == e.ID }); at >= 0 {
+			out[i].Status, out[i].CurrentHandle = "changed", rows[at].Handle
+			if rows[at].Version == e.Version {
+				out[i].Status = "current"
+			}
+		}
+	}
+	return out, err
 }
 
 // settable reports whether a run of workflow may set the input key: "<node>.<param>" of an unwired param, or

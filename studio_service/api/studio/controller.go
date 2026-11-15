@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -86,6 +87,11 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PATCH("/pipelines/:id", c.renamePipelineHandler)
 	group.DELETE("/pipelines/:id", c.deletePipelineHandler)
 	group.POST("/takes/:id/pipeline", c.saveTakeAsPipelineHandler)
+	group.GET("/library", c.listLibraryHandler)
+	group.POST("/library", c.createLibraryItemHandler)
+	group.GET("/library/:id", c.getLibraryItemHandler)
+	group.PUT("/library/:id", c.replaceLibraryItemHandler)
+	group.DELETE("/library/:id", c.deleteLibraryItemHandler)
 }
 
 // MountNats registers studio.runs.create (the service's group is "studio"), pipelines_service's request for a batch
@@ -628,4 +634,73 @@ func (c *controller) batchEventsHandler(ctx *gin.Context) {
 		}
 		return page, events, page.LastSeq, err
 	})
+}
+
+// ------------------------------------------------------------------ the library
+
+// listLibraryHandler: GET /library?kind=&group=&q=&limit=.
+func (c *controller) listLibraryHandler(ctx *gin.Context) {
+	query, detail := ParseLibraryQuery(ctx.Query("kind"), ctx.Query("group"), ctx.Query("q"), ctx.Query("limit"))
+	if detail != "" {
+		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
+		return
+	}
+	out, err := c.service.ListLibrary(ctx.Request.Context(), common.MustCaller(ctx), query)
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// ParseLibraryQuery checks GET /library's query: q trimmed, a leading @ dropped, lower-cased; limit 1-200 (200).
+func ParseLibraryQuery(kind, group, q, limit string) (LibraryQuery, string) {
+	out := LibraryQuery{Kind: kind, Group: group, Q: strings.ToLower(strings.TrimPrefix(strings.TrimSpace(q), "@")), Limit: MaxLibraryItems}
+	switch {
+	case kind != "" && kind != "element":
+		return out, "kind must be element"
+	case group != "" && !slices.Contains(dto.LibraryGroups, group):
+		return out, "group must be one of " + strings.Join(dto.LibraryGroups, ", ")
+	case utf8.RuneCountInString(q) > 80:
+		return out, "q must be at most 80 characters"
+	}
+	if limit != "" {
+		n, err := strconv.Atoi(limit)
+		if err != nil || n < 1 || n > MaxLibraryItems {
+			return out, "limit must be a whole number from 1 to 200"
+		}
+		out.Limit = n
+	}
+	return out, ""
+}
+
+// createLibraryItemHandler: POST /library — 201 with the item.
+func (c *controller) createLibraryItemHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.LibraryItemCreate](ctx, false)
+	var out dto.LibraryItem
+	if err == nil {
+		out, err = c.service.CreateLibraryItem(ctx.Request.Context(), common.MustCaller(ctx), body)
+	}
+	reply(ctx, http.StatusCreated, out, err)
+}
+
+// getLibraryItemHandler: GET /library/{id}.
+func (c *controller) getLibraryItemHandler(ctx *gin.Context) {
+	out, err := c.service.GetLibraryItem(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// replaceLibraryItemHandler: PUT /library/{id}.
+func (c *controller) replaceLibraryItemHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.LibraryItemUpdate](ctx, false)
+	var out dto.LibraryItem
+	if err == nil {
+		out, err = c.service.ReplaceLibraryItem(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// deleteLibraryItemHandler: DELETE /library/{id} — 204.
+func (c *controller) deleteLibraryItemHandler(ctx *gin.Context) {
+	if err := c.service.DeleteLibraryItem(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	network.SendNoContent(ctx)
 }

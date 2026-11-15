@@ -1,0 +1,127 @@
+{
+  "description": "an element row on an auto canvas: the canvas is pinned to fixed at the size auto gives from the user's last row (1920x1080 -> 1376x768), not from the element's portrait image",
+  "workflow": {
+    "title": "Qwen Image",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "Put @owl into <image1>"
+        }
+      },
+      "seed": {
+        "kind": "seed"
+      },
+      "canvas": {
+        "kind": "canvas",
+        "params": {
+          "mode": "auto",
+          "width": 512,
+          "height": 512
+        }
+      },
+      "model": {
+        "kind": "qwen-image/model"
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "refs": [
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000009"
+              }
+            }
+          ]
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "sizes": {
+    "00000000-0000-4000-8000-000000000009": [
+      1920,
+      1080
+    ]
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000004",
+      "handle": "owl",
+      "name": "Owl",
+      "version": 1,
+      "text": "",
+      "images": [
+        "00000000-0000-4000-8000-000000000011"
+      ]
+    }
+  ],
+  "expect": {
+    "inputs": {
+      "prompt.text": "Put Owl <image2> into <image1>",
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000009"
+          }
+        },
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000011"
+          }
+        }
+      ],
+      "canvas.mode": "fixed",
+      "canvas.width": 1376,
+      "canvas.height": 768
+    },
+    "typed": {
+      "prompt.text": "Put @owl into <image1>",
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000009"
+          }
+        }
+      ],
+      "canvas.mode": "auto",
+      "canvas.width": 512,
+      "canvas.height": 512
+    },
+    "elements": [
+      {
+        "id": "e0000000-0000-4000-8000-000000000004",
+        "handle": "owl",
+        "name": "Owl",
+        "version": 1
+      }
+    ]
+  }
+}

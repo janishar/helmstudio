@@ -71,10 +71,13 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		if err != nil {
 			return err
 		}
-		nodes, detail := resolve(workflow, body.Inputs)
-		if detail != "" {
-			return network.NewUnprocessableError(detail, nil)
+		graphs, details, _, err := s.runGraphs(ctx, tx, caller.ID, workflow, []map[string]any{body.Inputs}, nil)
+		if err != nil {
+			return err
+		} else if details[0] != "" {
+			return network.NewUnprocessableError(details[0], nil)
 		}
+		nodes := graphs[0].Nodes
 		if detail, err := checkImages(ctx, tx, s.store, caller.ID, nodes); err != nil {
 			return err
 		} else if detail != "" {
@@ -88,10 +91,10 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		}
 		inputs, _ := json.Marshal(body.Inputs)
 		run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-			nodes, finished_at, workflow_version, workflow_title) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11)
+			nodes, finished_at, workflow_version, workflow_title, mentions) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12)
 			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure,
-			graph, version, workflow.Title)
+			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion))
 		if err != nil {
 			return err
 		}

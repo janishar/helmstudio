@@ -25,7 +25,8 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured) |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`. studio_service and the web editor both run them |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, lints `openapi.yaml` and the house rules |
+| `fixtures/mentions/` | the **shared mention-rule fixtures** (Mentions, below): `scan.json` (prompt → parts), `resolve.*.json` (a graph with merged values, a library → the expanded inputs, `typed`, `elements`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention fixtures through `scan` / `resolve_mentions`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -554,6 +555,109 @@ in lineage order); steps `step_1`…`step_n`, each `workflow` = `made_with.workf
 ← `$prompt`; the param that held the parent run take ← `step_<k−1>.takes`, a param that held an upload ← its
 `$image…` input (a rows param holding several takes: 422 `take <id> mixes several sources in <param>`); output `output` `{from: step_n.takes, collection: title}`;
 edges in a line. Title: `title`, else `<take title> pipeline` cut to 80. No gate is added; the editor adds them.
+
+## Elements (API 1.8, plan 10-elements-and-looks.md section 14)
+
+An element is a **library item** of the caller's: `kind: element`, `group` character | location | prop, `name`,
+a unique `handle` (what `@` mentions), optional `text`, 1–4 images picked from the caller's gallery. Elements and
+(in M3) looks are one record shape and one table (`LibraryItem`); a look will add `kind: look`, its groups and
+optional LoRA fields in a minor version, with `handle` null.
+
+- **Endpoints** (`/v1/studio/library`, owner-scoped by RLS, another user's id is 404): `GET` (filters `kind`,
+  `group`, `q`, `limit`; `q` is the `@` menu's prefix search on handle and name), `POST` (201; the gallery's "Make
+  element" is this call: pick takes, give a name), `GET /{id}`, `PUT /{id}` (`LibraryItemUpdate` = every field +
+  `version`; stale = 409 `element changed since you opened it (now version <n>)`; `version` + 1), `DELETE /{id}`
+  (204, always allowed). The full error texts are in openapi.yaml (`studioCreateLibraryItem`).
+- **Rules**: `name` 1–80 (trimmed), `handle` `^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$` unique per owner over every kind
+  (409 `handle @<h> is already used`), `text` ≤ 2000 code points (trimmed, `""` = none), images 1–4 distinct takes
+  that are the caller's, completed, not deleted (else 404 `images[<i>]: take <id> not found`), `kind: image` with a
+  size (else 422 `images[<i>]: take <id> is not an image` / `… has no size`); at most 200 items per user (409
+  `You have 200 library items; delete some first.`). An image is stored as its take id only: never a key or URL.
+- **A deleted take drops out**: deleting a take is never refused because an element uses it; from then on the
+  element is read and resolved without that image (it may end with 0 images: it still resolves, name and text
+  only; the next PUT needs 1–4 again). Takes already made are unaffected: they stored their resolved graph.
+- **Delete** is never refused: past takes keep their resolved graph and `made_with.elements`; reuse says `deleted`.
+- **Runs**: Create (`POST …/runs`) resolves mentions against the caller's elements at create time; the resolved
+  graph is what is checked for a host, hashed and cached, stored as the snapshot, sent in `cmd.run.execute` and
+  recorded in the take (`made_with.inputs`). `Run.inputs` stays as requested. No message schema changes: the runner
+  only ever sees an ordinary prompt and reference rows.
+- **Batches**: a workflow batch resolves every row at Submit (all failing rows listed in one 422, openapi
+  `studioCreateBatch`); a pipeline batch checks only unknown handles at Submit (in each step's graph as each input
+  row's run resolves it, the step workflow's own params included), the rest when each run is made (a failure fails the row, `invalid`). Studio keeps a copy of every
+  mentioned element with the batch (id, handle, name, version, text, image take ids) and resolves the batch's runs
+  (`studio.runs.create`, Retry included) against that copy; rows and messages still carry the prompt as typed.
+- **Takes**: `made_with.elements` = `[{id, handle, name, version}]` in first-mention order; `made_with.typed` = the
+  pre-expansion value of each param the expansion changed; `made_with.prompt` is the prompt as typed (the title and
+  the gallery's `q` see the mentions). Lineage (`parents`) and Save as pipeline read the **typed view**
+  (`inputs` with `typed` laid over it): element images are not parents and never become pipeline inputs; they come
+  back through the mentions when the pipeline runs.
+- **Reuse**: `inputs` = the typed view; `elements_status` per element: `current` (same version now), `changed`
+  (another version), `deleted`, with `current_handle` (null when deleted). A renamed element's old `@handle` in the
+  returned prompt is then unknown (422 at run) or names another element: the UI says so from `current_handle`.
+
+## Mentions (normative)
+
+studio_service (Go) and the web editor (TypeScript: highlighting, the `@` menu, the preview of what a mention adds)
+implement exactly these rules and test against `fixtures/mentions/`; `check.py` holds the reference implementation
+(`scan`, `reference_rows`, `resolve_mentions`).
+
+**Grammar** (`scan`). Word characters are ASCII `A-Z a-z 0-9 _` only (so bytes, runes and UTF-16 units agree). Left
+to right: `@@` is an escaped literal `@` (both characters consumed; resolves to one `@`). Otherwise an `@` that is at
+the start or not after a word character starts a token: the longest run of `A-Z a-z 0-9 _ -` after it, with trailing
+`-` and `_` removed. A token whose first character is an ASCII letter is a **mention** of handle = the token
+lower-cased (case-insensitive: `@Fox` = `@fox`); any other `@` is literal text (`a@b.c`, `@ 3pm`, `@3pm`, a lone `@`).
+A mention is never a partial handle: `@fox-cub` mentions `fox-cub`, not `fox`. The scan answers parts
+`{text}` (raw, `@@` kept) and `{mention, raw}`; adjacent text is one part; the raw parts join to the input.
+
+**Where.** Every param of type `text` (not `string`) of a known, not bypassed node, not wired: today exactly
+`prompt.text` (Create's composer, the graph view's prompt param, a batch row's or line's prompt, a pipeline input
+bound to it, a step's fixed `inputs`). Params are taken in node-id order (code points), then schema order.
+
+**When** (plan 14.2): values are merged first (schema defaults, the workflow's params, the preset, the user's
+inputs) and checked by the run rules; the expansion then runs on those values. The user's own edits are never
+overridden: their reference rows keep positions 1..k and their prompt text stays as typed except the mentions.
+
+**Reference rows** (`reference_rows`): the first (node id, then schema order) unwired `rows` param of a known, not
+bypassed node whose `mention` contains `{n}` and whose `item` has exactly one `Image` field (Qwen and echo:
+`encode.refs` / `echo.refs`, `<image{n}>`, max 10). None = the family takes text only.
+
+**Expansion** (`resolve_mentions`), with `used` = the distinct mentioned handles in first-mention order over all
+params:
+1. **Unknown handles**: one error per distinct unknown handle per param, first-appearance order:
+   `<node>.<param>: unknown element @<handle>`; when any, nothing else is checked.
+2. **Images** (only with reference rows): row numbers = the user's rows first (a take already in a row keeps the
+   first row that has it). For each element in `used`, its images (stored order) not yet in a row are appended as
+   `{<image field>: {take_id}}` (no other fields: they take their defaults), each element once however often it is
+   mentioned. If an element's new images exceed `max` (absent: 100), it and every later element that brings new
+   images do not fit: `<node>.<param>: at most <max> images; <rows before it> used, @<h> +<new>, … do not fit`.
+   An element's **tokens** = `mention` with `{n}` = the row number of each of its images, in its image order.
+   **Canvas**: element rows never change the output size. When this step appended rows, every known, not bypassed
+   `canvas` node whose `mode` is `auto` (with references, auto follows the *last* row) is pinned to the size auto
+   gives without them: `mode` → `fixed`; with no user rows its own `width` × `height` stay; with user rows, `width`
+   and `height` → the auto size of the last user row's take (r = its width / height, `w = √(1024²·r)`: `round(w/32)·32`
+   × `round(w/r/32)·32`, rounding half to even, as the runner), clamped to the params' `min` / `max`. A take whose
+   size studio does not know (it fails the image checks anyway) pins `mode` only. The pinned params are changed
+   paths like the others (`inputs` / `typed`).
+3. **Prompts**: each mention becomes `<name>` followed by its tokens, space-separated (`Fox <image3> <image4>`;
+   the name alone without reference rows or without live images); each text part becomes its raw text with every
+   `@@` (left to right) as `@`. Then, if any element mentioned **in that param** has non-empty text, append `
+
+`
+   and one line per such element, first-mention order: `<name>: <text>`, joined by `
+`.
+4. **Length**: the result over the param's `max` (code points) is `<node>.<param>: at most <max> characters once
+   elements are added (<length>)`.
+5. **Result**: `inputs` = each changed path → its resolved value (a prompt with only `@@` changes too); `typed` = the
+   same paths → their value before; `elements` = `used` as `{id, handle, name, version}`.
+
+Errors reach the API as 422 `detail` = the errors joined by `; ` (a batch row prefixes each with `row <n>: `). The
+take of a run stores `inputs` merged over every other param, `typed` and `elements` (Elements, above).
+
+**Fixtures**: `scan.json` `{cases: [{text, parts}]}`; `resolve.*.json` `{description, workflow (a WorkflowDoc whose
+params hold the merged values; missing params take the schema default), library: [{id, handle, name, version, text,
+images: [take id]}] (as studio reads it: deleted takes already left out), sizes (optional: take id → [width, height]
+of the user's row takes), expect: {inputs, typed, elements} or
+{errors}}` (missing keys of a success = empty).
 
 ## Rules
 

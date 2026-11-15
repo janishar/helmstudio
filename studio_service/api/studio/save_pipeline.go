@@ -113,6 +113,9 @@ func (s *Service) SaveTakeAsPipeline(ctx context.Context, caller common.Caller, 
 			if err := json.Unmarshal(link.MadeWith, &made); err != nil {
 				return err
 			}
+			if made.Inputs != nil {
+				maps.Copy(made.Inputs, made.Typed) // the typed view: element images come back through the mentions
+			}
 			var workflow dto.WorkflowDoc
 			if utility.IsUUID(made.WorkflowID) {
 				row, err := readWorkflow(ctx, tx, made.WorkflowID, false)

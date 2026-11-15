@@ -1,0 +1,141 @@
+{
+  "description": "9 user rows: @fox (2 new) does not fit, so it and every later element with new images is named; @owl_1's image is already a user row and fits",
+  "workflow": {
+    "title": "Qwen Image",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@fox, @old-barn and @owl_1"
+        }
+      },
+      "seed": {
+        "kind": "seed"
+      },
+      "canvas": {
+        "kind": "canvas"
+      },
+      "model": {
+        "kind": "qwen-image/model"
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "refs": [
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000011"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000020"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000021"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000022"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000023"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000024"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000025"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000026"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000027"
+              }
+            }
+          ]
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "handle": "fox",
+      "name": "Fox",
+      "version": 3,
+      "text": "a small red fox with a white-tipped tail",
+      "images": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "id": "e0000000-0000-4000-8000-000000000003",
+      "handle": "old-barn",
+      "name": "Old barn",
+      "version": 2,
+      "text": "a weathered red barn",
+      "images": [
+        "00000000-0000-4000-8000-000000000004"
+      ]
+    },
+    {
+      "id": "e0000000-0000-4000-8000-000000000004",
+      "handle": "owl_1",
+      "name": "Owl",
+      "version": 1,
+      "text": "a snowy owl",
+      "images": [
+        "00000000-0000-4000-8000-000000000011"
+      ]
+    }
+  ],
+  "expect": {
+    "errors": [
+      "encode.refs: at most 10 images; 9 used, @fox +2, @old-barn +1 do not fit"
+    ]
+  }
+}

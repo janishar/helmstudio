@@ -3,6 +3,7 @@ checks, row 1 first, pause / resume / stop, a failed row and Retry, the batch la
 events, isolation and the batch's takes. The fake runner is one host: runs go one at a time."""
 
 import time
+import uuid
 from datetime import datetime
 
 import pytest
@@ -25,6 +26,13 @@ BATCH_TIMEOUT = 180
 FAST = {"echo.steps": 2, "echo.delay_ms": 50}  # base inputs: a row takes ~0.1 s on the host
 SLOWER = {"echo.steps": 5, "echo.delay_ms": 300}  # ~1.5 s a row: long enough to act between rows
 PROMPTS = ["a red fox", "a blue heron", "a green frog", "a grey wolf", "a black cat", "a white owl"]
+
+
+def fresh(values: list[str]) -> list[str]:
+    """values made unique to this call: the runner caches a node's result by owner and params, so a row repeating an
+    earlier one's prompt and inputs is a cache hit that ends in milliseconds, however slow its inputs."""
+    tag = uuid.uuid4().hex[:8]
+    return [f"{v} {tag}" for v in values]
 
 
 def lines(values: list[str], param: str = "prompt.text") -> dict:
@@ -332,7 +340,7 @@ def test_submit_rejects_no_live_host(api):
 
 
 def test_pause_holds_and_resume_continues(api):
-    batch = submit(api, lines(PROMPTS), SLOWER)
+    batch = submit(api, lines(fresh(PROMPTS)), SLOWER)
     bid = batch["id"]
     try:
         wait_rows(api, bid, lambda rs: rs[0]["status"] in TERMINAL, "row 1 to end")
@@ -364,7 +372,7 @@ def test_pause_holds_and_resume_continues(api):
 
 
 def test_stop_cancels_the_rest(api):
-    batch = submit(api, lines(PROMPTS), SLOWER)
+    batch = submit(api, lines(fresh(PROMPTS)), SLOWER)
     bid = batch["id"]
     try:
         wait_rows(api, bid, lambda rs: rs[0]["status"] in TERMINAL, "row 1 to end")
@@ -428,7 +436,7 @@ def test_failed_row_and_retry(api):
 
 
 def test_interactive_before_batch_rows(api):
-    batch = submit(api, lines(PROMPTS[:5]), SLOWER)
+    batch = submit(api, lines(fresh(PROMPTS[:5])), SLOWER)
     bid = batch["id"]
     try:
         # rows are waiting in the batch lane: row 1 ended and another row runs
@@ -442,12 +450,18 @@ def test_interactive_before_batch_rows(api):
         run = wait_run(api, start_run(api, sid, FAST | {"prompt.text": "jump the line"})["id"])
         assert run["status"] == "succeeded"
         wait_batch(api, bid)
-        later = [r for r in rows_of(api, bid) if ts(r["started_at"]) > ts(run["created_at"])]
-        assert later, "the batch ended before the interactive run was created"
-        assert all(ts(run["started_at"]) <= ts(r["started_at"]) for r in later), (
+        rows = rows_of(api, bid)
+        later = sorted(
+            (r for r in rows if ts(r["started_at"]) > ts(run["created_at"])),
+            key=lambda r: ts(r["started_at"]),
+        )
+        assert len(later) >= 2, ("the rows ran too fast to queue behind the interactive run", rows)
+        # one host: the one row that may have been released (sent, not yet reported running) before the interactive
+        # run was created can start after it was created; every row released after that waits for it
+        assert all(ts(run["started_at"]) <= ts(r["started_at"]) for r in later[1:]), (
             run["created_at"],
             run["started_at"],
-            [(r["row"], r["started_at"]) for r in rows_of(api, bid)],
+            [(r["row"], r["started_at"]) for r in rows],
         )
     finally:
         finish(api, bid)

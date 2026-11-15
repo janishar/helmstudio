@@ -1,0 +1,76 @@
+{
+  "description": "a family without reference rows: the mention becomes the element's name, its text is appended, its images are not used; `@@` is unescaped",
+  "workflow": {
+    "title": "Text only",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@fox at @@home, with @snowfield"
+        }
+      },
+      "enhance": {
+        "kind": "test/enhance",
+        "in": {
+          "prompt": "prompt.text"
+        }
+      },
+      "noise": {
+        "kind": "test/noise"
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "noise.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "handle": "fox",
+      "name": "Fox",
+      "version": 3,
+      "text": "a small red fox with a white-tipped tail",
+      "images": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "id": "e0000000-0000-4000-8000-000000000002",
+      "handle": "snowfield",
+      "name": "Snowfield",
+      "version": 1,
+      "text": "",
+      "images": [
+        "00000000-0000-4000-8000-000000000003"
+      ]
+    }
+  ],
+  "expect": {
+    "inputs": {
+      "prompt.text": "Fox at @home, with Snowfield\n\nFox: a small red fox with a white-tipped tail"
+    },
+    "typed": {
+      "prompt.text": "@fox at @@home, with @snowfield"
+    },
+    "elements": [
+      {
+        "id": "e0000000-0000-4000-8000-000000000001",
+        "handle": "fox",
+        "name": "Fox",
+        "version": 3
+      },
+      {
+        "id": "e0000000-0000-4000-8000-000000000002",
+        "handle": "snowfield",
+        "name": "Snowfield",
+        "version": 1
+      }
+    ]
+  }
+}

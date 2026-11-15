@@ -10,9 +10,21 @@ import { ErrorNote } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { takeDrop, useRefUploads } from "@/components/create/refs";
 import { WorkflowPicker } from "@/components/create/workflows";
+import { ElementsButton, ElementsPicker } from "@/components/create/elements";
+import { MentionChips, insertAtCaret } from "@/components/create/prompt";
+import { useLibrary } from "@/lib/library";
+import {
+  fieldErrors,
+  mentioned,
+  mentionNote,
+  referenceRows,
+  resolvable,
+  resolveMentions,
+  withInputs,
+} from "@/lib/mentions";
 import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/lib/graph";
 import { studioView } from "@/lib/studio";
-import { api, message, ok, okOr, type S } from "@/lib/api";
+import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import {
   applyEvent,
@@ -47,6 +59,7 @@ import {
   nodeTitle,
   queueInputs,
   rawsFrom,
+  toRaw,
   visible,
   type Field,
   type Raw,
@@ -167,6 +180,9 @@ export function Create({
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(1);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [elementsOpen, setElementsOpen] = useState(false);
+  // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
+  const [reuseNote, setReuseNote] = useState("");
   const [view, setView] = useState<"studio" | "graph">("studio");
   // the graph's problems for the document it holds (its own check merged with studio's)
   const [lifted, setLifted] = useState<{ id: string; problems: Problem[] } | null>(null);
@@ -267,6 +283,7 @@ export function Create({
         setRaws(rawsFrom(fieldsOf(w), r.inputs));
         setErrors({});
         setOpenKey(null);
+        setReuseNote(elementsNote(r.elements_status ?? []));
       })
       .catch((e) => setError(message(e)));
   }, [reuse, workflows]);
@@ -396,6 +413,27 @@ export function Create({
       uploads,
     );
   const refs = refCount(fields, raws);
+  // the mentions: what they add for this workflow (the line under the prompt), checked as studio checks them
+  const library = useLibrary();
+  const mentionsOf = (w: S<"Workflow">, inputs: S<"RunInputs">) =>
+    library && resolveMentions(withInputs(w.nodes, inputs), w.node_schemas, resolvable(library));
+  const textFields = (layout ? fields.filter((f) => layout.text.includes(f)) : fields).filter(
+    (f) => f.param.type === "text",
+  );
+  const texts = textFields.map((f) => String(raws[f.key] ?? toRaw(f.initial, f.param)));
+  const handles = [...new Set(texts.flatMap(mentioned))];
+  const preview =
+    workflow && handles.length ? mentionsOf(workflow, buildInputs(fields, raws).inputs) : null;
+  const note =
+    preview && workflow
+      ? preview.errors.length
+        ? preview.errors.join("; ")
+        : mentionNote(
+            preview,
+            resolvable(library ?? []),
+            !referenceRows(workflow.nodes, workflow.node_schemas),
+          )
+      : null;
   /** Opens a field's inspector control (or the canvas picker) and moves focus to it. */
   const show = (key: string) => {
     if (key !== "canvas") setOpenKey(key);
@@ -433,6 +471,8 @@ export function Create({
       built.inputs,
       fields.some((f) => f.param.type === "seed") ? count : 1,
     );
+    // the mention preview (the note under the prompt) is advisory: this tab's element list may be stale, so studio
+    // decides and its 422 lands on the fields
     const errs = { ...built.errors, ...queued.errors };
     setErrors(errs);
     if (Object.keys(errs).length) {
@@ -461,8 +501,18 @@ export function Create({
         if (sid === sessionRef.current) put(mergeRuns(runsRef.current, [run]));
         setSelected(run.id);
       }
+      setReuseNote("");
     } catch (err) {
-      setError(message(err));
+      // a 422 naming the form's fields (an unknown @handle, the references cap) goes on them
+      const on =
+        err instanceof ApiError &&
+        err.status === 422 &&
+        fieldErrors(
+          err.message,
+          fields.map((f) => f.key),
+        );
+      if (on) setErrors(on);
+      else setError(message(err));
     } finally {
       sending.current = false;
       setBusy(false);
@@ -730,15 +780,23 @@ export function Create({
           aria-label="Composer"
           className="panel flex shrink-0 flex-col gap-3 bg-s2 px-4 py-3.5 [box-shadow:0_16px_40px_color-mix(in_srgb,var(--shd)_45%,transparent)]"
         >
-          {refField && (
+          {(refField || textFields.length > 0) && (
             <div className="flex flex-wrap items-center gap-2">
-              <RefChips
-                fields={fields}
-                raws={raws}
-                errors={errors}
-                onChange={change}
-                uploads={uploads}
-              />
+              {refField ? (
+                <RefChips
+                  fields={fields}
+                  raws={raws}
+                  errors={errors}
+                  onChange={change}
+                  uploads={uploads}
+                  extra={<MentionChips texts={texts} />}
+                />
+              ) : (
+                <MentionChips texts={texts} />
+              )}
+              {textFields.length > 0 && (
+                <ElementsButton count={handles.length} onClick={() => setElementsOpen(true)} />
+              )}
             </div>
           )}
           <TextFields
@@ -747,6 +805,19 @@ export function Create({
             errors={errors}
             onChange={change}
           />
+          {note && (
+            <p
+              role={preview?.errors.length ? "alert" : "status"}
+              className={`mono m-0 text-[12px] ${preview?.errors.length ? "text-bad" : "text-t2"}`}
+            >
+              {note}
+            </p>
+          )}
+          {reuseNote && (
+            <p role="status" className="m-0 text-[12px] text-t2">
+              {reuseNote}
+            </p>
+          )}
           {blocked > 0 && (
             <p role="status" className="text-[12px] text-bad">
               This workflow has {blocked} problem{blocked === 1 ? "" : "s"}: open Graph to fix{" "}
@@ -816,6 +887,18 @@ export function Create({
             </button>
           </div>
         </form>
+        {textFields[0] && (
+          <ElementsPicker
+            open={elementsOpen}
+            onClose={() => setElementsOpen(false)}
+            inPrompt={handles}
+            onInsert={(h) =>
+              insertAtCaret(idOf(textFields[0].key), texts[0], h, (v) =>
+                change(textFields[0].key, v),
+              )
+            }
+          />
+        )}
       </main>
 
       <aside
@@ -1315,4 +1398,20 @@ function UseIn({
       </div>
     </>
   );
+}
+
+/** Reuse's word on the take's elements: which changed, were renamed or deleted since (empty when all are current). */
+function elementsNote(st: S<"ElementStatus">[]) {
+  const said = st.flatMap((e) =>
+    e.status === "deleted"
+      ? [`@${e.handle} was deleted (the prompt's @${e.handle} is unknown now)`]
+      : e.current_handle && e.current_handle !== e.handle
+        ? [
+            `@${e.handle} is @${e.current_handle} now (the prompt's @${e.handle} no longer names it)`,
+          ]
+        : e.status === "changed"
+          ? [`@${e.handle} was edited: a new run uses it as it is now`]
+          : [],
+  );
+  return said.length ? `Since this take: ${said.join("; ")}.` : "";
 }

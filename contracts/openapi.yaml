@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.7.0
+  version: 1.8.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, runs, the queue, events, hosts, takes (the gallery), uploads, batches'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), runs, the queue, events, hosts, takes (the gallery), uploads, batches'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -358,6 +358,97 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  # ------------------------------------------------------------------ studio: the library (elements; looks later)
+  /v1/studio/library:
+    get:
+      tags: [studio]
+      operationId: studioListLibrary
+      summary: The caller's library items (at most 200, not paginated); the `@` menu searches it with `q`
+      description: |
+        Filters combine with AND. `q` (trimmed, a leading `@` dropped, lower-cased; blank = no filter) matches an item
+        whose `handle` starts with it or whose `name`, lower-cased, starts with it. Order: with `q`, the item whose
+        handle equals it first, then by `handle` (code points); without `q`, newest `updated_at` first. `limit` cuts
+        the list (the `@` menu asks for 8). Images of deleted takes are left out of every item (contracts/README.md,
+        Elements).
+      parameters:
+        - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryKind'}}
+        - {name: group, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryGroup'}}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 80}, description: 'prefix of a handle or a name'}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 200}}
+      responses:
+        '200': {description: items, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateLibraryItem
+      summary: Make an element from 1 to 4 of the caller's gallery images
+      description: |
+        `name` and `text` are trimmed. 422: `name must be 1-80 characters`, `handle must be a slug: a-z, 0-9, - and _,
+        starting with a letter, ending with a letter or digit, at most 40 characters`, `text must be at most 2000
+        characters` (code points), `name must not contain control characters`, `text must not contain control
+        characters other than newlines and tabs`, `images: an element has 1 to 4 images`, `images[2]: take <id> is listed twice`,
+        `images[2]: take <id> is not an image`, `images[2]: take <id> has no size` (items from 1). 404 `images[2]: take
+        <id> not found` for a take that is unknown, another user's, deleted or a pending upload. 409 `handle @<handle>
+        is already used` (unique per owner, over every kind), 409 `You have 200 library items; delete some first.`
+        201 with `version` 1.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemCreate'}}}
+      responses:
+        '201': {description: the item, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/library/{item_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetLibraryItem
+      parameters: [{$ref: '#/components/parameters/LibraryItemId'}]
+      responses:
+        '200': {description: the item, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioReplaceLibraryItem
+      summary: Replace an item's group, name, handle, text and images
+      description: |
+        Optimistic concurrency like workflows: `version` is the one the edit started from; stale = 409 `element changed
+        since you opened it (now version <n>)`, nothing changes. Checked like POST (the handle may stay its own). On
+        success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
+        element `changed`. `kind` never changes.
+      parameters: [{$ref: '#/components/parameters/LibraryItemId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemUpdate'}}}
+      responses:
+        '200': {description: the item, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteLibraryItem
+      summary: Delete an item (always allowed)
+      description: |
+        Hard delete, never refused: past takes keep their resolved graph and `made_with.elements`; their reuse answers
+        this element `deleted`; a batch already submitted keeps its copy (contracts/README.md, Elements). A prompt that
+        still mentions the handle is 422 at its next run. Deleting again is 404.
+      parameters: [{$ref: '#/components/parameters/LibraryItemId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ studio: runs
   /v1/studio/sessions/{session_id}/runs:
     get:
@@ -396,6 +487,12 @@ paths:
         resolved graph as its snapshot, which the dispatcher sends however the workflow changes later. `inputs` may
         also hold `<node>.bypass: true|false` for a bypassable node; an input naming a param that is wired from
         upstream is 422 (`sample.steps: wired from count.value; it cannot be set`).
+
+        `@handle` mentions in the prompt params (contracts/README.md, Mentions) are expanded after every value is
+        merged and checked, against the caller's elements now: 422 `prompt.text: unknown element @<handle>` (each
+        distinct one, joined by `; `), `encode.refs: at most 10 images; <n> used, @<handle> +<k>, … do not fit`,
+        `prompt.text: at most 4000 characters once elements are added (<n>)`. The resolved graph is what is checked
+        for a host, stored as the run's snapshot, sent and recorded in the take; `Run.inputs` stays as requested.
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       requestBody:
         required: true
@@ -552,7 +649,8 @@ paths:
       description: |
         The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it, takes made from
         it leave it out of `parents`); a sweep removes the object later. Deleting again is 404. A run that already
-        references it and has not read it yet may fail (`input image <take_id> is gone`).
+        references it and has not read it yet may fail (`input image <take_id> is gone`). Never refused for an
+        element that uses it: the image drops out of that element (contracts/README.md, Elements).
       parameters: [{$ref: '#/components/parameters/TakeId'}]
       responses:
         '204': {description: deleted}
@@ -573,6 +671,10 @@ paths:
         published, or a user workflow at `made_with.workflow_version`), `changed` (a user workflow edited since: keys
         that are no longer a settable param of it are dropped from `inputs`, the rest kept), `deleted` (no longer
         published, or deleted: `inputs` as recorded; a run of it is 422).
+        With elements: `inputs` = `made_with.inputs` with `made_with.typed` laid over it, so the prompt comes back as
+        typed (with its mentions) and the reference rows without the element images; `elements_status` says, per
+        element of `made_with.elements`, whether running it again would resolve the same (`current`), differently
+        (`changed`: edited since) or not at all (`deleted`).
       parameters: [{$ref: '#/components/parameters/TakeId'}]
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/TakeReuse'}}}}
@@ -718,6 +820,15 @@ paths:
         - Each row's inputs = `inputs` (base), then the row's values, then its seed; checked with the same rules as
           `RunRequest.inputs`. The detail names the input row (a line, a table row or a grid combination, from 1,
           before seed repetition): `row 3: echo.steps: must be between 1 and 200`.
+        - Mentions (contracts/README.md, Mentions) resolve in every row against the caller's elements now; the rows
+          that cannot are all listed, in row order (at most 10, then `; and <n> more rows`), joined by `; `:
+          `row 3: prompt.text: unknown element @wolf; row 7: encode.refs: at most 10 images; 9 used, @fox +2 do not fit`.
+          A pipeline batch checks only unknown handles here, in every step's graph as each input row's run will
+          resolve it (its row values, the step's `inputs` and preset, the step workflow's own params): `row 3:
+          step_1: prompt.text: unknown element @wolf`; the rest is checked when each run is made (that row fails
+          `invalid`).
+          Studio keeps a copy of every element the batch mentions: its runs, Retry included, resolve against that
+          copy, never against later edits or deletes.
         - A live host has the workflow's env and publishes the workflow (`no live host for env <env>`).
         - The submit message fits NATS: the rows' inputs together at most 768 KB (`batch inputs are too large; use
           fewer or shorter rows`).
@@ -1253,6 +1364,7 @@ components:
     BatchId: {name: batch_id, in: path, required: true, schema: {type: string}, description: batch UUID (malformed = 404)}
     TakeId: {name: take_id, in: path, required: true, schema: {type: string}, description: take UUID (malformed = 404)}
     PipelineId: {name: pipeline_id, in: path, required: true, schema: {type: string}, description: pipeline UUID (malformed = 404)}
+    LibraryItemId: {name: item_id, in: path, required: true, schema: {type: string}, description: library item UUID (malformed = 404)}
     BatchRowN: {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
@@ -2016,8 +2128,19 @@ components:
         workflow_title: {type: string, description: 'as it was when the run was created (a later rename or delete does not change it)'}
         workflow_version: {type: [integer, 'null'], minimum: 1, description: 'a user workflow: the version that made it; absent or null for a template'}
         inputs: {$ref: '#/components/schemas/RunInputs', description: 'every param of every node (`<node id>.<param>`), resolved, with the seed the runner used in place of null / -1; image values as `{take_id}` (the references, in order), never keys'}
-        prompt: {type: [string, 'null'], description: 'the text of the workflow''s `prompt` node; null without one'}
+        prompt: {type: [string, 'null'], description: 'the text of the workflow''s `prompt` node as typed (with its `@` mentions; `typed` has it too when it had any); null without one'}
         seed: {type: [integer, 'null'], minimum: 0, description: the seed it was made with; null without one}
+        elements:
+          type: array
+          maxItems: 200
+          items: {$ref: '#/components/schemas/MadeWithElement'}
+          description: 'the elements its prompt mentioned, first mention first, as they were when the run was made; absent or empty = none'
+        typed:
+          $ref: '#/components/schemas/RunInputs'
+          description: |
+            for each param the mention expansion changed (prompt params, the reference rows), its value before it: the
+            prompt as typed, the rows without the element images. `inputs` holds the resolved values (what ran).
+            Absent or empty = nothing was expanded.
         pipeline:
           description: 'a take made by a step of a pipeline batch (source pipeline): which pipeline, node and loop attempt; absent or null otherwise'
           oneOf:
@@ -2078,6 +2201,97 @@ components:
         workflow_id: {type: string}
         inputs: {$ref: '#/components/schemas/RunInputs'}
         workflow_status: {type: string, enum: [current, changed, deleted], description: 'reuse only (not use): how the workflow now compares with the one that made the take (studioReuseTake)'}
+        elements_status:
+          type: array
+          items: {$ref: '#/components/schemas/ElementStatus'}
+          description: 'reuse only: one per `made_with.elements` entry, same order; absent or empty when the take mentioned none'
+    MadeWithElement:
+      type: object
+      required: [id, handle, name, version]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid, description: 'the library item (it may be deleted since)'}
+        handle: {type: string, description: 'as mentioned'}
+        name: {type: string}
+        version: {type: integer, minimum: 1, description: 'the version that was expanded'}
+    ElementStatus:
+      type: object
+      required: [id, handle, status, current_handle]
+      properties:
+        id: {type: string, format: uuid}
+        handle: {type: string, description: 'as recorded (the prompt that comes back mentions this one)'}
+        status: {type: string, enum: [current, changed, deleted], description: 'current: same version now; changed: edited since (another version); deleted'}
+        current_handle: {type: [string, 'null'], description: 'its handle now (differs from `handle` after a rename: the returned prompt then no longer names it); null when deleted'}
+
+    # ---------------------------------------------------------- studio: the library (contracts/README.md, Elements)
+    LibraryKind:
+      type: string
+      enum: [element]
+      description: 'element (character, location, prop; used with `@handle`). `look` comes later in a minor version; clients show an unknown kind as is'
+    LibraryGroup:
+      type: string
+      enum: [character, location, prop]
+      description: 'an element''s group; looks will add theirs (film, camera, colour, lighting) in a minor version'
+    LibraryImage:
+      type: object
+      required: [take_id, url, thumb_url, width, height]
+      properties:
+        take_id: {type: string, format: uuid}
+        url: {$ref: '#/components/schemas/SignedUrl'}
+        thumb_url: {$ref: '#/components/schemas/SignedUrl'}
+        width: {type: integer, minimum: 1}
+        height: {type: integer, minimum: 1}
+    LibraryItem:
+      type: object
+      description: |
+        A library item (plan 10-elements-and-looks.md, one record shape for elements and, later, looks; a LoRA and its
+        strength come later as optional fields). `images` are takes of the owner's gallery in order; one whose take
+        was deleted is left out, so a stored element may show 0 images.
+      required: [id, kind, group, name, handle, text, images, thumb_url, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/LibraryKind'}
+        group: {$ref: '#/components/schemas/LibraryGroup'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        handle: {type: [string, 'null'], pattern: '^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$', description: 'what `@` mentions; always set for an element (null is kept for looks, which are not mentioned)'}
+        text: {type: string, maxLength: 2000, description: 'appended to the prompt where it is mentioned; empty = none'}
+        images: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/LibraryImage'}}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first image''s thumb_url; null with no image'}
+        version: {type: integer, minimum: 1, description: '1 on create, +1 on every PUT; send it back in LibraryItemUpdate'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    LibraryItemList:
+      type: object
+      required: [items]
+      properties: {items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/LibraryItem'}}}
+    LibraryImageRef:
+      type: object
+      required: [take_id]
+      additionalProperties: false
+      properties:
+        take_id: {type: string, format: uuid}
+    LibraryItemCreate:
+      type: object
+      required: [kind, group, name, handle, images]
+      additionalProperties: false
+      properties:
+        kind: {$ref: '#/components/schemas/LibraryKind'}
+        group: {$ref: '#/components/schemas/LibraryGroup'}
+        name: {type: string, maxLength: 200, description: 'trimmed; must then be 1-80 characters'}
+        handle: {type: string, maxLength: 200, description: 'a slug (LibraryItem.handle), unique per owner; the client proposes one from the name'}
+        text: {type: string, maxLength: 4000, description: 'trimmed; must then be at most 2000 characters; missing = ""'}
+        images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}, description: 'takes of the caller, images, 1-4 distinct, in order (the first is the thumbnail)'}
+    LibraryItemUpdate:
+      type: object
+      required: [group, name, handle, text, images, version]
+      additionalProperties: false
+      properties:
+        group: {$ref: '#/components/schemas/LibraryGroup'}
+        name: {type: string, maxLength: 200}
+        handle: {type: string, maxLength: 200}
+        text: {type: string, maxLength: 4000}
+        images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}}
+        version: {type: integer, minimum: 1, description: 'the version the edit started from (409 when stale)'}
     UploadCreate:
       type: object
       required: [filename, content_type, bytes]

@@ -21,8 +21,27 @@ type MadeWith struct {
 	Prompt          *string        `json:"prompt"`
 	Seed            *int64         `json:"seed"`
 	Model           *Model         `json:"model"`
+	// the elements its prompt mentioned, first mention first; typed: each param the expansion changed, as set
+	Elements []MadeWithElement `json:"elements,omitempty"`
+	Typed    map[string]any    `json:"typed,omitempty"`
 	// a take made by a step of a pipeline batch
 	Pipeline *MadeWithPipeline `json:"pipeline,omitempty"`
+}
+
+// MadeWithElement is an element a take's prompt mentioned, as it was expanded.
+type MadeWithElement struct {
+	ID      string `json:"id"`
+	Handle  string `json:"handle"`
+	Name    string `json:"name"`
+	Version int    `json:"version"`
+}
+
+// ElementStatus is how an element of made_with.elements compares now: current, changed or deleted.
+type ElementStatus struct {
+	ID            string  `json:"id"`
+	Handle        string  `json:"handle"`
+	Status        string  `json:"status"`
+	CurrentHandle *string `json:"current_handle"`
 }
 
 // MadeWithPipeline is which pipeline, step node and visit made a take.
@@ -117,6 +136,8 @@ type TakeReuse struct {
 	Inputs     map[string]any `json:"inputs"`
 	// reuse only: current | changed | deleted, how the workflow now compares with the one that made the take
 	WorkflowStatus string `json:"workflow_status,omitempty"`
+	// reuse only: one per made_with.elements entry
+	ElementsStatus []ElementStatus `json:"elements_status,omitempty"`
 }
 
 // TakePatch renames or stars a take: at least one field, no others.

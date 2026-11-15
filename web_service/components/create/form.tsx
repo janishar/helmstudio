@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
+import { PromptArea } from "@/components/create/prompt";
 import { RowsEditor, type RefUploads } from "@/components/create/refs";
 import { autoSize, imageInputs, mentionOf, refIds } from "@/lib/refs";
 import { useTakes } from "@/lib/take-cache";
@@ -54,7 +55,7 @@ export function TextFields({ fields, raws, errors, onChange }: FormProps) {
         <label htmlFor={idOf(f.key)} className="sr-only">
           {f.param.label ?? f.param.name}
         </label>
-        <textarea
+        <PromptArea
           id={idOf(f.key)}
           maxLength={f.param.max}
           placeholder={
@@ -69,7 +70,7 @@ export function TextFields({ fields, raws, errors, onChange }: FormProps) {
           value={String(rawOf(f, raws))}
           aria-invalid={!!errors[f.key] || undefined}
           aria-describedby={errors[f.key] ? idOf(f.key) + "-err" : undefined}
-          onChange={(e) => onChange(f.key, e.target.value)}
+          onChange={(v) => onChange(f.key, v)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
               e.currentTarget.form?.requestSubmit();
@@ -614,9 +615,11 @@ export function RefChips({
   errors,
   onChange,
   uploads,
-}: FormProps & { uploads: RefUploads }) {
-  return imageInputs(fields).map((f) => (
+  extra,
+}: FormProps & { uploads: RefUploads; extra?: React.ReactNode }) {
+  return imageInputs(fields).map((f, i) => (
     <RowsEditor
+      extra={i === 0 ? extra : undefined}
       key={f.key}
       f={f}
       raw={raws[f.key]}

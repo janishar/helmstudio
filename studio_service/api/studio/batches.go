@@ -73,13 +73,29 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		if detail != "" {
 			return network.NewUnprocessableError(detail, nil)
 		}
-		if detail, err := s.checkRowImages(ctx, tx, caller.ID, workflow, rows); err != nil {
+		graphs, details, lib, err := s.runGraphs(ctx, tx, caller.ID, workflow, rows, nil)
+		if err != nil {
+			return err
+		}
+		repeat := 1 // a failing input row is named once (its seed repeats fail alike)
+		if body.Seeds != nil {
+			repeat = body.Seeds.Count
+		}
+		var failed []string
+		for i, detail := range details {
+			if detail != "" && i%repeat == 0 {
+				failed = append(failed, fmt.Sprintf("row %d: %s", i/repeat+1, strings.ReplaceAll(detail, "; ", fmt.Sprintf("; row %d: ", i/repeat+1))))
+			}
+		}
+		if len(failed) > 0 {
+			return network.NewUnprocessableError(joinRows(failed), nil)
+		}
+		if detail, err := s.checkRowImages(ctx, tx, caller.ID, graphs); err != nil {
 			return err
 		} else if detail != "" {
 			return network.NewUnprocessableError(detail, nil)
 		}
-		nodes, _ := resolve(workflow, rows[0])
-		graph, _ := json.Marshal(nodes)
+		graph, _ := json.Marshal(graphs[0].Nodes)
 		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			return network.NewUnprocessableError(reason, nil)
@@ -94,8 +110,8 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		}
 		batchID := utility.NewID()
 		if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
-			inputs, workflow_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, batchID, caller.ID, sessionID, title,
-			workflow.ID, workflow.Title, workflow, base, version); err != nil {
+			inputs, workflow_version, elements) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, batchID, caller.ID, sessionID, title,
+			workflow.ID, workflow.Title, workflow, base, version, lib); err != nil {
 			return err
 		}
 		numbers := make([]int, len(rows))
@@ -618,9 +634,10 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			Snapshot  json.RawMessage
 			Version   *int            // a user workflow's version at Submit
 			Pipeline  json.RawMessage // a pipeline batch's storedPipeline
+			Elements  []element       // the copy of every element the batch mentions
 		}
 		batch, err := one[batchRecord](ctx, tx, `SELECT owner_id::text, session_id::text, status, control, snapshot,
-			workflow_version, pipeline FROM batches
+			workflow_version, pipeline, coalesce(elements, '[]') FROM batches
 			WHERE id = $1 FOR UPDATE`, req.BatchID) // serialises two asks under one key
 		var workflow registry.Workflow
 		var stored storedPipeline
@@ -671,9 +688,13 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE idempotency_key = $1`, req.IdempotencyKey)
 		created := errors.Is(err, errNotFound)
 		if created {
-			nodes, detail := resolve(workflow, req.Inputs)
+			graphs, details, _, err := s.runGraphs(ctx, tx, req.OwnerID, workflow, []map[string]any{req.Inputs}, &batch.Elements)
+			if err != nil {
+				return err
+			}
+			detail := details[0]
 			if detail == "" {
-				if detail, err = checkImages(ctx, tx, s.store, req.OwnerID, nodes); err != nil {
+				if detail, err = checkImages(ctx, tx, s.store, req.OwnerID, graphs[0].Nodes); err != nil {
 					return err
 				}
 			}
@@ -681,7 +702,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				refused = invalid(detail)
 				return nil
 			}
-			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, nodes, batch.Status, batch.Control, req); err != nil {
+			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, graphs[0], batch.Status, batch.Control, req); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -704,8 +725,8 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 // createBatchRun stores the run of a batch row's step: cancelled for a stopped batch, failed with no eligible host,
 // else queued (lane batch); its status event goes to the session's log, and a terminal one to pipelines.
 func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, workflow registry.Workflow, version *int,
-	nodes map[string]registry.Node, batchStatus, control string, req *message.RunsCreate) (model.Run, error) {
-	graph, _ := json.Marshal(nodes)
+	built built, batchStatus, control string, req *message.RunsCreate) (model.Run, error) {
+	graph, _ := json.Marshal(built.Nodes)
 	status, failure := "queued", (*string)(nil)
 	if control == "stop" || batchStatus == "stopped" {
 		status = "cancelled"
@@ -715,10 +736,10 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	}
 	inputs, _ := json.Marshal(req.Inputs)
 	run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title)
+		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
-		$13, $14) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
-		failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title)
+		$13, $14, $15) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
+		failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion))
 	if err != nil {
 		return run, err
 	}
@@ -741,15 +762,13 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	return run, nil
 }
 
-// checkRowImages checks the Image values of every row as Create does, each distinct take once: the detail of the first
-// bad one ("row 3: encode.refs[1].image: take <id> not found"), "" when all are good.
-func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string, workflow registry.Workflow,
-	rows []map[string]any) (string, error) {
-	perRow := make([][]imageAt, len(rows))
+// checkRowImages checks the Image values of every row's graph (element images included) as Create does, each distinct
+// take once: the detail of the first bad one ("row 3: encode.refs[1].image: take <id> not found"), "" when all are good.
+func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string, graphs []built) (string, error) {
+	perRow := make([][]imageAt, len(graphs))
 	var all []imageAt
-	for i, inputs := range rows {
-		nodes, _ := resolve(workflow, inputs) // expand checked them
-		perRow[i] = images(nodes)
+	for i, graph := range graphs {
+		perRow[i] = images(graph.Nodes)
 		all = append(all, perRow[i]...)
 	}
 	problems, err := vetTakes(ctx, tx, s.store, ownerID, all)
