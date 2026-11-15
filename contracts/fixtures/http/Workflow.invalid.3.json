@@ -1,0 +1,402 @@
+{
+  "id": "ltx-text-to-video",
+  "title": "LTX-2.5 Text to video",
+  "family": "ltx",
+  "env": "mlx",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "canvas": {
+      "kind": "ltx/canvas",
+      "params": {
+        "width": 704,
+        "height": 448
+      }
+    },
+    "duration": {
+      "kind": "ltx/duration",
+      "params": {
+        "frames": 49,
+        "fps": 24
+      }
+    },
+    "model": {
+      "kind": "ltx/model",
+      "params": {
+        "variant": "distilled",
+        "precision": "int8"
+      }
+    },
+    "encode": {
+      "kind": "ltx/encode",
+      "in": {
+        "model": "model.model",
+        "prompt": "prompt.text"
+      },
+      "params": {}
+    },
+    "sample1": {
+      "kind": "ltx/sample",
+      "in": {
+        "model": "model.model",
+        "cond": "encode.cond",
+        "seed": "seed.seed",
+        "canvas": "canvas.canvas",
+        "duration": "duration.duration"
+      },
+      "params": {
+        "role": "stage1",
+        "steps": 8
+      }
+    },
+    "upscale": {
+      "kind": "ltx/upscale",
+      "in": {
+        "model": "model.model",
+        "latent": "sample1.latent"
+      },
+      "params": {}
+    },
+    "sample2": {
+      "kind": "ltx/sample",
+      "in": {
+        "model": "model.model",
+        "cond": "encode.cond",
+        "seed": "seed.seed",
+        "latent": "upscale.latent"
+      },
+      "params": {
+        "role": "stage2",
+        "steps": 3
+      }
+    },
+    "decode": {
+      "kind": "ltx/decode",
+      "in": {
+        "model": "model.model",
+        "latent": "sample2.latent"
+      },
+      "params": {}
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "decode.video"
+      }
+    }
+  },
+  "node_schemas": {
+    "prompt": {
+      "kind": "prompt",
+      "title": "Prompt",
+      "family": null,
+      "help": "The text the workflow starts from.",
+      "params": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Prompt",
+          "default": "",
+          "min": 0,
+          "max": 4000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ]
+    },
+    "seed": {
+      "kind": "seed",
+      "title": "Seed",
+      "family": null,
+      "help": "The noise seed; -1 picks a random one, reported with the result.",
+      "params": [
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ]
+    },
+    "ltx/canvas": {
+      "kind": "ltx/canvas",
+      "title": "Canvas",
+      "family": "ltx",
+      "help": "The video size in pixels, on the 64 px grid of two-stage LTX (stage 1 runs at half of it). About 0.1 to 2.1 MP.",
+      "params": [
+        {
+          "name": "width",
+          "type": "int",
+          "label": "Width",
+          "default": 704,
+          "min": 128,
+          "max": 1920,
+          "step": 64
+        },
+        {
+          "name": "height",
+          "type": "int",
+          "label": "Height",
+          "default": 448,
+          "min": 128,
+          "max": 1920,
+          "step": 64
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        }
+      ]
+    },
+    "ltx/duration": {
+      "kind": "ltx/duration",
+      "title": "Duration",
+      "family": "ltx",
+      "help": "The clip's length in frames on LTX's 8k + 1 grid, and its frame rate (fps changes the generated motion, not only playback).",
+      "params": [
+        {
+          "name": "frames",
+          "type": "frames",
+          "label": "Length",
+          "default": 49,
+          "min": 9,
+          "max": 321,
+          "step": 8,
+          "fps": "fps"
+        },
+        {
+          "name": "fps",
+          "type": "int",
+          "label": "Frame rate",
+          "default": 24,
+          "min": 1,
+          "max": 60,
+          "step": 1,
+          "help": "LTX was trained at 24; values far from it drift."
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "duration",
+          "type": "Duration"
+        }
+      ]
+    },
+    "ltx/model": {
+      "kind": "ltx/model",
+      "title": "LTX-2.5",
+      "family": "ltx",
+      "help": "Which weights to load and at what precision.",
+      "params": [
+        {
+          "name": "variant",
+          "type": "enum",
+          "label": "Variant",
+          "default": "distilled",
+          "enum": [
+            "distilled"
+          ],
+          "help": "Distilled: few fixed steps, no guidance."
+        },
+        {
+          "name": "precision",
+          "type": "enum",
+          "label": "Precision",
+          "default": "int8",
+          "enum": [
+            "int8",
+            "int4",
+            "bf16"
+          ],
+          "help": "Quantized at load: int8 about 19 GB for the transformer, bf16 about 38 GB."
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ]
+    },
+    "ltx/encode": {
+      "kind": "ltx/encode",
+      "title": "Encode prompt",
+      "family": "ltx",
+      "help": "Encodes the prompt for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "prompt",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        }
+      ]
+    },
+    "ltx/sample": {
+      "kind": "ltx/sample",
+      "title": "Sample",
+      "family": "ltx",
+      "help": "Denoises video and audio together. Stage 1 starts from the seed's noise at half size (canvas and duration); stage 2 refines an upscaled latent at full size (latent).",
+      "params": [
+        {
+          "name": "role",
+          "type": "enum",
+          "label": "Stage",
+          "default": "stage1",
+          "enum": [
+            "stage1",
+            "stage2"
+          ],
+          "help": "stage1: half size, ancestral sampler, 8 steps. stage2: full size from latent, renoised at 0.909, 3 steps."
+        },
+        {
+          "name": "steps",
+          "type": "int",
+          "label": "Steps",
+          "default": 8,
+          "min": 1,
+          "max": 8,
+          "step": 1,
+          "help": "The first steps of the stage's fixed distilled schedule: stage 1 has 8, stage 2 has 3."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas",
+          "optional": true
+        },
+        {
+          "name": "duration",
+          "type": "Duration",
+          "optional": true
+        },
+        {
+          "name": "latent",
+          "type": "Latent",
+          "optional": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ]
+    },
+    "ltx/upscale": {
+      "kind": "ltx/upscale",
+      "title": "Upscale latent",
+      "family": "ltx",
+      "help": "Doubles the video latent's width and height with the spatial upsampler; the audio latent passes through.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ]
+    },
+    "ltx/decode": {
+      "kind": "ltx/decode",
+      "title": "Decode",
+      "family": "ltx",
+      "help": "Decodes video and audio and writes an MP4 (H.264 + AAC 48 kHz stereo) with a poster frame.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "Video"
+        }
+      ]
+    },
+    "output": {
+      "kind": "output",
+      "title": "Output",
+      "family": null,
+      "help": "Stores its input as a run output: an image or a video take.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "media",
+          "type": "Media"
+        }
+      ],
+      "outputs": []
+    }
+  },
+  "source": "template",
+  "problems": []
+}

@@ -55,20 +55,29 @@ make up
 
 For `helmstudio-test`, `.tools/test-db` does the same.
 
-## Native runner
+## Native runners
 
-Real models run outside Docker, natively on the GPU host. On Apple Silicon (PyTorch MPS):
+Real models run outside Docker, natively on the GPU host. On Apple Silicon there are two envs, each its own process
+and lockfile: `torch` (PyTorch MPS; the Qwen Image pack; uv project `runner_service/`) and `mlx` (MLX; the LTX pack;
+uv project `runner_service/envs/mlx`).
 
 ```sh
-make up        # the stack (the fake runner stays in it for the contract suite)
-make runners   # runner_service as host mac, env torch, in the foreground; Ctrl-C or `make runners-stop`
+make up                         # the stack (the fake runner stays in it for the contract suite)
+make runners                    # both, in the background (host mac, envs torch and mlx)
+make runner-torch / runner-mlx  # one of them
+make runners-stop               # stops both (only processes make started, by their pid files)
 ```
 
-It joins the stack through the loopback ports compose publishes for it: NATS on `4322` as user `runner_mac`
-(`deploy/secrets/nats_runner_mac_url`; it may only consume `cmd.run.mac.torch` and write the `mac.torch` registry and
-hosts keys) and the SeaweedFS S3 API on `8433`. Weights are read from `HELMSTUDIO_MODELS` (default `~/GenAI/models`)
-and never downloaded, built into an image or put in the object store. Its pid file is
-`runner_service/.run/runner-mac-torch.pid`.
+They join the stack through the loopback ports compose publishes for them: NATS on `4322` as user `runner_mac_<env>`
+(`deploy/secrets/nats_runner_mac_<env>_url`; each may only consume its `cmd.run.mac.<env>`, write its `mac.<env>`
+registry and hosts keys and answer its `runner.unload.mac.<env>`) and the SeaweedFS S3 API on `8433`. Weights are read from
+`HELMSTUDIO_MODELS` (default `~/GenAI/models`) and never downloaded, built into an image or put in the object store.
+Each has a pid file and a log, `runner_service/.run/runner-mac-<env>.{pid,log}`; a small sh supervisor restarts
+it after a stall (exit 70) or a SIGKILL (137).
+
+One GPU: the two never hold weights at once. Before studio releases a run to one env it asks every other env of the
+host that lists resident models to unload (`runner.unload`), and keeps the run queued until it has
+(contracts/README.md, Two envs on one host).
 
 ## Ports
 
@@ -86,7 +95,7 @@ kong/             gateway config + the API-key plugin
 auth_service/     Go: sign-in, users, roles, API keys
 studio_service/   Go: /v1/studio (sessions, workflows, runs, events, hosts, batches)
 files_service/    Go: signed /files links from the object store
-runner_service/   Python: runs workflows (M0: the fake runner)
+runner_service/   Python: runs workflows (the fake runner in Docker; native envs torch and mlx)
 pipelines_service/ Python, LangGraph: runs batches (NATS only, database pipelines, health on 8082)
 web_service/      Next.js app and its BFF
 cli/              Go: the `helm` command (login, run)

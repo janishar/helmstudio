@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json",
+  "title": "NATS request/reply runner.unload.<host>.<env> (studio's dispatcher → a runner)",
+  "description": "Core NATS request/reply on subject `runner.unload.<host>.<env>` (no queue group: one runner per host and env), bare JSON. One GPU per host (contracts/README.md, Two envs on one host): before the dispatcher releases a run to env E of host H it needs every other env of H to hold no weights; it asks each one whose hosts value lists `resident` components with this request. The runner, when idle, unloads every component (pinned ones included; adapters and cached handles too), frees its device memory (MLX: mx.clear_cache(); torch MPS: synchronize() then empty_cache()), rewrites its hosts key, then replies. While a run is in progress it does not unload and replies `busy`. Studio waits 60 s.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "for_env"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "for_env": {
+          "$ref": "defs.schema.json#/$defs/envName",
+          "description": "the env of the same host that is about to load (for the runner's log)"
+        },
+        "run_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "the run waiting for the GPU (for the log; never shown to users)"
+        }
+      }
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "required": [
+        "unloaded_gb",
+        "resident"
+      ],
+      "properties": {
+        "unloaded_gb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "what it freed (0 when it held nothing)"
+        },
+        "resident": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "always empty: the hosts key the runner rewrote before replying says the same"
+        }
+      },
+      "not": {
+        "required": [
+          "code"
+        ]
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error",
+        "code"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "enum": [
+            "busy",
+            "internal"
+          ],
+          "description": "busy: a run is in progress (the dispatcher asks again on a later pass); internal: unloading failed (logged by the runner)"
+        }
+      }
+    }
+  }
+}

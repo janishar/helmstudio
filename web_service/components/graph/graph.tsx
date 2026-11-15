@@ -32,9 +32,9 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { Check, Plus } from "lucide-react";
+import { Thumb } from "@/components/media";
 import { Head, Panel, Problems, nodeName, valueText } from "@/components/graph/panel";
 import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
 import {
   WIREABLE,
   canConnect,
@@ -685,12 +685,11 @@ function Graph({
               className="pointer-events-auto box-border w-[280px] shrink-0 rounded-xl border border-line bg-s2 p-2"
               style={{ boxShadow: "0 12px 32px color-mix(in srgb, var(--shd) 50%, transparent)" }}
             >
-              {out?.kind === "image" ? (
-                <img
-                  src={safeUrl("thumb_url" in out ? out.thumb_url : out.url)}
-                  alt="The latest take"
-                  className="aspect-video w-full rounded-lg object-contain"
-                  style={{ background: "var(--in)" }}
+              {out?.kind === "image" || out?.kind === "video" ? (
+                <Thumb
+                  take={out}
+                  imgClassName="aspect-video w-full rounded-lg object-contain"
+                  className="rounded-lg bg-inset"
                 />
               ) : (
                 <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-dash text-[12px] text-t2">

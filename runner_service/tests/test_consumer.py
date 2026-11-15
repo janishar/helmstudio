@@ -177,7 +177,7 @@ async def test_graph_that_does_not_fit_the_node_schemas_is_rejected_and_reported
         ),
         (
             lambda n: n["output"]["in"].update(media="prompt.text"),
-            "rejected: output.media: wants Image",
+            "rejected: output.media: wants Media",
         ),
     ],
 )
@@ -296,3 +296,97 @@ async def test_a_stalled_node_fails_the_run_acks_and_exits(monkeypatch):
     assert "echo: stalled" in js.events()[-1]["data"]["error"]
     assert msg.log == [("ack", 2)]  # acked once, by the watchdog
     assert "fake.fake" not in c.host.kv.data  # offline
+
+
+async def test_a_video_output_stores_the_mp4_and_its_poster_and_reports_the_video_block():
+    """A Video value ({mp4, poster, frames, fps, has_audio}) into the core output: <n>.poster.png first, then
+    <n>.mp4 (video/mp4), then evt.run.output kind video with the video block (contracts/README.md, Video)."""
+    poster = Image.new("RGB", (64, 32), "red")
+
+    def clip(ctx, params, inputs):
+        return {"video": {"mp4": b"\x00\x00\x00\x18ftypisom", "poster": poster, "frames": 49, "fps": 24,
+                          "has_audio": True}}  # fmt: skip
+
+    schema = {"kind": "t/clip", "title": "Clip", "family": "t", "params": [], "inputs": [],
+              "outputs": [{"name": "video", "type": "Video"}]}  # fmt: skip
+    from conftest import SCHEMAS
+
+    cmd = command()
+    cmd["data"]["workflow"]["nodes"] = {"clip": {"kind": "t/clip", "params": {}},
+                                        "output": {"kind": "output", "params": {}, "in": {"media": "clip.video"}}}  # fmt: skip
+    js = FakeJS()
+    c = consumer(
+        js, impls=IMPLS | {"t/clip": Node(clip)}, node_schemas=SCHEMAS | {"t/clip": schema}
+    )
+    await c.handle(FakeMsg(cmd, js))
+    assert kinds(js) == ["running", "output", "succeeded"]
+    check_events(js)
+    png, ct = c.store.objects[PREFIX + "0.poster.png"]
+    assert ct == "image/png" and Image.open(io.BytesIO(png)).size == (64, 32)
+    assert c.store.objects[PREFIX + "0.mp4"] == (b"\x00\x00\x00\x18ftypisom", "video/mp4")
+    assert list(c.store.objects) == [PREFIX + "0.poster.png", PREFIX + "0.mp4"]
+    out = js.events()[1]["data"]
+    assert (out["kind"], out["key"], out["width"], out["height"]) == (
+        "video",
+        PREFIX + "0.mp4",
+        64,
+        32,
+    )
+    assert out["video"] == {"duration_s": 49 / 24, "fps": 24, "frames": 49, "has_audio": True,
+                            "poster": {"key": PREFIX + "0.poster.png", "width": 64, "height": 32, "bytes": len(png)}}  # fmt: skip
+
+
+async def test_runner_unload_frees_everything_when_idle_and_is_busy_during_a_run():
+    import main
+
+    freed = []
+    res = Residency(48, free=lambda: freed.append(1), pins={"transformer"})
+    res.entries[("m", "v", "transformer", "int8")] = [
+        19.2,
+        object(),
+        None,
+    ]  # pinned: still unloaded
+    js = FakeJS()
+    c = consumer(js, residency=res)
+    c.host.extra = res.state
+    c.cache["k"] = {"x": 1}
+    reply = await main.unload_reply(c, c.host, {"for_env": "torch"})
+    assert (
+        reply == {"unloaded_gb": 19.2, "resident": []} and not res.entries and not c.cache and freed
+    )
+    assert (
+        schemas.errors(
+            "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json#/$defs/reply",
+            reply,
+        )
+        == []
+    )
+    assert (
+        json.loads(c.host.kv.data["fake.fake"])["resident"] == []
+    )  # the hosts key was rewritten first
+    c.ctx = object()  # a run in progress
+    assert await main.unload_reply(c, c.host, {"for_env": "torch"}) == {
+        "error": "a run is in progress",
+        "code": "busy",
+    }
+
+
+async def test_the_hosts_key_lists_the_loads_before_the_terminal_status(tmp_path, monkeypatch):
+    """studio frees the host on the terminal status and its GPU gate reads the key: by then it names what stays."""
+    seen = {}
+
+    def on_publish(subject, body):
+        if body["type"] == "evt.run.status" and body["data"]["status"] == "succeeded":
+            seen["value"] = json.loads(seen["host"].kv.data["fake.fake"])
+
+    q, js = FakeQwen(tmp_path, monkeypatch), FakeJS(on_publish)
+    c, host = qwen_consumer(q, js)
+    c.host = seen["host"] = host
+    await c.handle(FakeMsg(qwen_command(seed=3), js))
+    assert {r["component"] for r in seen["value"]["resident"]} == {
+        "text_encoder",
+        "transformer",
+        "vae",
+    }
+    assert seen["value"]["run_id"] == RUN  # still its lease
+    assert json.loads(host.kv.data["fake.fake"])["state"] == "idle"

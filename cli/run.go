@@ -98,7 +98,7 @@ func (w workflow) value(key, val string) (any, error) {
 	var v any = val
 	var err error
 	switch typ {
-	case "int":
+	case "int", "frames": // frames: a count on the family's frame grid (the server checks the grid)
 		v, err = strconv.ParseInt(val, 10, 64)
 	case "float":
 		v, err = strconv.ParseFloat(val, 64)
@@ -170,6 +170,7 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	fs.SetOutput(stderr)
 	sessionID := fs.String("session", "new", "session id, or new")
 	out := fs.String("out", ".", "directory for the outputs")
+	fs.StringVar(out, "o", ".", "directory for the outputs (as --out)")
 	var ps params
 	fs.Var(&ps, "p", "node.param=value (repeatable; a seed takes a number or random)")
 	var loras params

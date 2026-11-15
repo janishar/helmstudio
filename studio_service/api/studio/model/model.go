@@ -63,11 +63,12 @@ type Output struct {
 	Width  *int
 	Height *int
 	Seed   *int64
-	TakeID *string // the take it became; nil only for outputs stored before the gallery
+	TakeID *string         // the take it became; nil only for outputs stored before the gallery
+	Video  json.RawMessage // a video's metadata and poster (gallery dto.Video); null for an image
 }
 
 // OutputCols are the columns Output scans, in order.
-const OutputCols = `run_id::text, idx, key, kind, width, height, seed, take_id::text`
+const OutputCols = `run_id::text, idx, key, kind, width, height, seed, take_id::text, video`
 
 // Event is a run_events row.
 type Event struct {
@@ -129,7 +130,7 @@ type BatchRow struct {
 	Status     string
 	RunID      *string
 	TakeIDs    []string
-	TakeKeys   []string
+	TakeKeys   []string // each take's thumbnail key: a video's poster, else the image
 	Error      *string
 	StartedAt  *time.Time
 	FinishedAt *time.Time
@@ -145,7 +146,7 @@ const BatchRowFrom = `SELECT br.n, br.attempt, br.inputs, ` + RowShown + `, br.r
 	coalesce(tk.keys, '{}'), br.error, r.started_at, br.finished_at,
 	br.cells IS NOT NULL, br.node, br.parked, br.cells, br.looks
 	FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id
-	LEFT JOIN LATERAL (SELECT array_agg(t.id::text ORDER BY u.ord) ids, array_agg(t.key ORDER BY u.ord) keys
+	LEFT JOIN LATERAL (SELECT array_agg(t.id::text ORDER BY u.ord) ids, array_agg(coalesce(t.video->'poster'->>'key', t.key) ORDER BY u.ord) keys
 		FROM unnest(br.take_ids) WITH ORDINALITY u(id, ord) JOIN takes t ON t.id = u.id AND t.deleted_at IS NULL) tk ON true `
 
 // UserWorkflow is a user_workflows row.

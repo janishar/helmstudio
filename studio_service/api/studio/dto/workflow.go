@@ -17,6 +17,7 @@ type Workflow struct {
 	Title       string                         `json:"title"`
 	Family      string                         `json:"family"`
 	Env         string                         `json:"env"`
+	Media       string                         `json:"media"` // image | video
 	Nodes       map[string]registry.Node       `json:"nodes"`
 	NodeSchemas map[string]registry.NodeSchema `json:"node_schemas"`
 	Source      string                         `json:"source"`

@@ -9,8 +9,9 @@ for _k, _v in list(os.environ.items()):
     if _k.endswith("_FILE") and _v:
         os.environ[_k.removesuffix("_FILE")] = Path(_v).read_text().strip()
 
-VERSION = "0.2.0"
-# which runner this is: fake/fake is the compose fake runner (the echo pack); the native Mac runner is mac/torch.
+VERSION = "0.3.0"
+# which runner this is: fake/fake is the compose fake runner (the echo pack); the native Mac runners are mac/torch
+# and mac/mlx.
 # RUNNER_ENV picks the packs (those with a runtime of that env).
 HOST = os.environ.get("RUNNER_HOST", "fake")
 ENV = os.environ.get("RUNNER_ENV", "fake")

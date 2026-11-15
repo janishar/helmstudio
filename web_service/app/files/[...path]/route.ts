@@ -2,7 +2,7 @@
 import type { NextRequest } from "next/server";
 import { proxy } from "@/lib/proxy";
 
-/** Passes a signed file link (GET, or an upload's PUT) on without the app's key or a token; dot segments are refused
+/** Passes a signed file link (GET or HEAD, with a Range header for a video, or an upload's PUT) on without the app's key or a token; dot segments are refused
  * with a 403. */
 async function handle(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const segs = (await params).path;
@@ -11,4 +11,4 @@ async function handle(req: NextRequest, { params }: { params: Promise<{ path: st
   return proxy(req, "/files/" + segs.map(encodeURIComponent).join("/"), false);
 }
 
-export { handle as GET, handle as PUT };
+export { handle as GET, handle as HEAD, handle as PUT };

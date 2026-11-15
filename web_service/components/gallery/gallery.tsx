@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Maximize, Star, X } from "lucide-react";
-import { FullScreen, Media, useFullScreenKey } from "@/components/media";
+import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
+import { videoLine } from "@/lib/media";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { RefThumbs } from "@/components/create/refs";
 import { ElementEditor } from "@/components/create/elements";
@@ -158,13 +159,10 @@ export function TakeCard({
       className="bevel flex w-full flex-col gap-1.5 rounded-[10px] bg-transparent text-left disabled:opacity-50"
     >
       <span className="relative block w-full">
-        {t.kind === "image" ? (
-          <img
-            src={safeUrl(t.thumb_url)}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className={`block aspect-[16/10] w-full rounded-[10px] bg-s1 object-cover ${on ? "outline-2 -outline-offset-2 outline-a1" : ""}`}
+        {t.kind === "image" || t.kind === "video" ? (
+          <Thumb
+            take={t}
+            imgClassName={`block aspect-[16/10] w-full rounded-[10px] bg-s1 object-cover ${on ? "outline-2 -outline-offset-2 outline-a1" : ""}`}
           />
         ) : (
           <i
@@ -672,7 +670,12 @@ function TakePanel({
   return (
     <>
       <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
-        <Media take={t} url={url} className="max-h-full max-w-full rounded-[10px] object-contain" />
+        <Media
+          key={t.id}
+          take={t}
+          url={url}
+          className="max-h-full max-w-full rounded-[10px] object-contain"
+        />
         <button
           type="button"
           aria-label="Full screen"
@@ -704,6 +707,7 @@ function TakePanel({
         )}
         {!m && <Row label="File" value={`${t.content_type} · ${mb(t.bytes)}`} />}
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
+        {t.video && <Row label="Length" value={videoLine(t.video)} />}
       </div>
 
       {(t.parents.length > 0 || used.length > 0 || !!m?.elements?.length) && (

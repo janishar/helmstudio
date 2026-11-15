@@ -15,7 +15,7 @@ import (
 
 const mineID = "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88"
 
-const mineWorkflow = `{"id":"` + mineID + `","title":"My echo","family":"echo","env":"fake","source":"mine","version":3,
+const mineWorkflow = `{"id":"` + mineID + `","title":"My echo","family":"echo","env":"fake","media":"image","source":"mine","version":3,
  "based_on":"echo","created_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:00Z","problems":[],
  "nodes":{"prompt":{"kind":"prompt"},"echo":{"kind":"echo/echo","in":{"text":"prompt.text"},"position":{"x":1,"y":2}},"output":{"kind":"output","in":{"media":"echo.image"}}},
  "studio":{"composer":["prompt.text"]},
@@ -34,11 +34,15 @@ func (f *workflowAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	b, _ := io.ReadAll(r.Body)
 	route := r.Method + " " + r.URL.Path
-	f.reqs = append(f.reqs, strings.TrimSpace(route+" "+string(b)))
+	f.reqs = append(f.reqs, strings.TrimSpace(r.Method+" "+r.URL.RequestURI()+" "+string(b)))
 	var body map[string]any
 	_ = json.Unmarshal(b, &body)
 	switch route {
 	case "GET /v1/studio/workflows":
+		if r.URL.Query().Get("media") == "video" {
+			fmt.Fprint(w, `{"workflows":[{"id":"echo-video","title":"Echo video","env":"fake","media":"video","source":"template"}]}`)
+			return
+		}
 		fmt.Fprint(w, `{"workflows":[`+echoWorkflow[:len(echoWorkflow)-1]+`,"source":"template"},`+mineWorkflow+`]}`)
 	case "GET /v1/studio/workflows/echo":
 		fmt.Fprint(w, echoWorkflow[:len(echoWorkflow)-1]+`,"source":"template"}`)
@@ -105,7 +109,7 @@ func helmFails(t *testing.T, want string, args ...string) string {
 
 func TestWorkflowsList(t *testing.T) {
 	setupWorkflows(t)
-	want := fmt.Sprintf("%-36s template      fake     Echo\n%-36s mine     v3   fake     My echo\n", "echo", mineID)
+	want := fmt.Sprintf("%-36s template      fake     image Echo\n%-36s mine     v3   fake     image My echo\n", "echo", mineID)
 	if got := helmOK(t, "workflows"); got != want {
 		t.Fatalf("got\n%q\nwant\n%q", got, want)
 	}
@@ -190,4 +194,15 @@ func must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+func TestWorkflowsByMedia(t *testing.T) {
+	f := setupWorkflows(t)
+	want := fmt.Sprintf("%-36s template      fake     video Echo video\n", "echo-video")
+	if got := helmOK(t, "workflows", "--media", "video"); got != want {
+		t.Fatalf("got\n%q\nwant\n%q", got, want)
+	}
+	if f.reqs[0] != "GET /v1/studio/workflows?media=video" {
+		t.Fatalf("request %q", f.reqs[0])
+	}
 }

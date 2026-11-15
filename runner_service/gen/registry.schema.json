@@ -46,9 +46,12 @@
         "Canvas",
         "Model",
         "Conditioning",
-        "Latent"
+        "Latent",
+        "Video",
+        "Duration",
+        "Media"
       ],
-      "description": "a port's value type; an input accepts only an output of the same type. Text, Image, Int, Float, Seed, Canvas are plain values; Model, Conditioning, Latent are family-scoped handles: they only wire nodes of one family inside one workflow and never cross a process"
+      "description": "a port's value type; an input accepts an output of the same type, and an input of type Media also accepts Image and Video (contracts/README.md, Graph rules: fits). Text, Image, Video (an MP4, may carry audio), Int, Float, Seed, Canvas, Duration ({frames, fps}) are plain values; Media is an input type only (the output node's `media`), never an output or a param; Model, Conditioning, Latent are family-scoped handles: they only wire nodes of one family inside one workflow and never cross a process (Latent[ltx] carries the video and audio latents together)"
     },
     "port": {
       "type": "object",
@@ -73,7 +76,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1)",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k × step (k ≥ 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds)",
       "required": [
         "name",
         "type",
@@ -99,8 +102,14 @@
             "enum",
             "seed",
             "image",
-            "rows"
+            "rows",
+            "frames"
           ]
+        },
+        "fps": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "description": "frames only: the name of the same node's int or float param that holds frames per second; the UI shows the length as frames / fps seconds"
         },
         "label": {
           "type": "string",
@@ -336,7 +345,8 @@
                 "enum": [
                   "int",
                   "float",
-                  "seed"
+                  "seed",
+                  "frames"
                 ]
               }
             }
@@ -345,6 +355,47 @@
             "not": {
               "required": [
                 "step"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "frames"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "min",
+              "max",
+              "step",
+              "fps"
+            ],
+            "properties": {
+              "default": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "fps"
               ]
             }
           }
@@ -742,9 +793,20 @@
         "env": {
           "$ref": "messages/defs.schema.json#/$defs/envName"
         },
+        "media": {
+          "enum": [
+            "image",
+            "video"
+          ],
+          "description": "what its takes are: the Image / Video switch filters templates by it. Absent = image. Must equal what studio computes from the graph (contracts/README.md, Video: a workflow's media)"
+        },
         "nodes": {
           "$ref": "messages/defs.schema.json#/$defs/graph",
           "description": "params here override the node schema's defaults; the run's inputs override both"
+        },
+        "studio": {
+          "$ref": "#/$defs/studioLayout",
+          "description": "the Studio (Create) layout studio sends as the template's Workflow.studio; absent = the derived form. Its paths obey the graph rules for a user workflow's block (studio_unknown_path, studio_duplicate)"
         }
       }
     },
@@ -863,10 +925,11 @@
                             "enum": [
                               "bf16",
                               "fp16",
-                              "int8"
+                              "int8",
+                              "int4"
                             ]
                           },
-                          "description": "what it can load as, first = native. A full-precision variant lists its dtype then the load-time quantizations (bf16, int8); an already-quantized one lists only its own (int8): no choice, nothing quantized at load"
+                          "description": "what it can load as, first = native. A full-precision variant lists its dtype then the load-time quantizations (bf16, int8; MLX also int4); an already-quantized one lists only its own (int8): no choice, nothing quantized at load"
                         }
                       }
                     }
@@ -1062,7 +1125,8 @@
                 "enum": [
                   "bf16",
                   "fp16",
-                  "int8"
+                  "int8",
+                  "int4"
                 ]
               },
               "gb": {
@@ -1358,6 +1422,103 @@
           }
         }
       ]
+    },
+    "studioLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "openapi.yaml StudioLayout (check.py keeps the two equal): which params Create shows and where. Absent = the derived form",
+      "properties": {
+        "composer": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+          }
+        },
+        "quick": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "elements",
+                  "look:film",
+                  "look:camera",
+                  "look:colour",
+                  "look:lighting"
+                ]
+              }
+            ]
+          }
+        },
+        "inspector": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": [
+              "title",
+              "items"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "items": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+                }
+              }
+            }
+          }
+        },
+        "labels": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          }
+        },
+        "presets": {
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 32,
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "$ref": "messages/defs.schema.json#/$defs/paramValue"
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -1,6 +1,6 @@
 [project]
 name = "helmstudio-runner"
-version = "0.2.0"
+version = "0.3.0"
 description = "helmstudio runner_service: executes workflow runs from NATS (env fake: the echo pack; env torch: torch packs)"
 requires-python = ">=3.14,<3.15"
 dependencies = [
@@ -41,4 +41,4 @@ addopts = "-m 'not gpu'"
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-extend-exclude = ["gen"]
+extend-exclude = ["gen", "packs/ltx/vendor"]  # vendored unchanged (packs/ltx/vendor/VENDORED.md)

@@ -375,7 +375,11 @@ def test_save_as_look_from_a_take(uk, api_b, anon, sid, pics):
 
     assert uk.delete(f"{STUDIO}/takes/{take['id']}").status_code == 204
     got = ok(uk.get(f"{LIB}/{x['id']}"))
-    assert (got["from_take_id"], got["thumb_url"], got["text"]) == (None, None, "@sal-fox in mist, @kodak")
+    assert (got["from_take_id"], got["thumb_url"], got["text"]) == (
+        None,
+        None,
+        "@sal-fox in mist, @kodak",
+    )
     r = uk.post(LIB, json=base | {"from_take": src})
     assert detail(r, 404) == f"from_take: take {take['id']} not found"
 

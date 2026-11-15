@@ -1,6 +1,7 @@
 // The graph rules (contracts/README.md "Graph rules (normative)"), as contracts/check.py implements them: problems,
 // type compatibility, auto-wiring and wire-drop search. Tested against contracts/fixtures/graphs.
 import type { S } from "@/lib/api";
+import { frameError } from "@/lib/media";
 
 export type Doc = S<"WorkflowDoc">;
 export type DocNode = S<"EditorNode">;
@@ -59,6 +60,12 @@ export const paletteOf = (p: S<"NodePalette">): Palette =>
 /** A stand-in palette from a workflow's own node schemas (when /nodes can't answer): each kind in its env. */
 export const paletteFrom = (w: S<"Workflow">): Palette =>
   Object.fromEntries(Object.values(w.node_schemas).map((s) => [s.kind, { ...s, envs: [w.env] }]));
+
+/** What an input of type Media accepts (README, Graph rules: fits). */
+const MEDIA = new Set(["Image", "Video"]);
+/** Whether a wire of type `got` fits a key of type `want`: equal, or `want` is Media and `got` an Image or Video. */
+export const fits = (got: string | null | undefined, want: string | null | undefined) =>
+  !!got && !!want && (got === want || (want === "Media" && MEDIA.has(got)));
 
 /** The part of a kind before "/", null for a core kind. */
 export const family = (kind: string) => (kind.includes("/") ? kind.split("/")[0] : null);
@@ -134,6 +141,7 @@ export function valueError(
     }
     return null;
   }
+  if (t === "frames") return frameError(p as Param, v);
   if ((t === "int" || t === "seed") && !isInt(v)) return "not an integer";
   if (t === "float" && typeof v !== "number") return "not a number";
   if (t === "bool" && typeof v !== "boolean") return "not a bool";
@@ -268,7 +276,7 @@ export function graphProblems(
       const got = outType(ss, outName);
       if (!got)
         add("unknown_source", `${id}.${port}: ${ref} is not an output in this graph`, id, port);
-      else if (got !== want || (HANDLES.has(want) && family(src!.kind) !== family(n.kind)))
+      else if (!fits(got, want) || (HANDLES.has(want) && family(src!.kind) !== family(n.kind)))
         add("type_mismatch", `${id}.${port}: expects ${want}, got ${got} from ${ref}`, id, port);
     }
     if (n.bypass) {
@@ -372,7 +380,7 @@ export function canConnect(
   const ds = palette[doc.nodes[dst].kind];
   if (!ss || !ds) return false;
   const t = outType(ss, out);
-  if (!t || t !== portType(ds, key)) return false;
+  if (!t || !fits(t, portType(ds, key))) return false;
   if (HANDLES.has(t) && family(ss.kind) !== family(ds.kind)) return false;
   return !reaches(successors(doc), dst, src);
 }
@@ -403,7 +411,7 @@ export function autowire(
       const s = m !== id && doc.nodes[m] && !fed(m) ? palette[doc.nodes[m].kind] : undefined;
       if (!s) return [];
       if (HANDLES.has(t) && family(s.kind) !== family(kind)) return [];
-      return s.outputs.filter((o) => o.type === t).map((o) => `${m}.${o.name}`);
+      return s.outputs.filter((o) => fits(o.type, t)).map((o) => `${m}.${o.name}`);
     });
   for (const i of palette[kind].inputs) {
     if (i.optional) continue;
@@ -440,11 +448,13 @@ export function wireDrop(doc: Doc, palette: Palette, from: WireEnd): string[] {
     const f = family(k);
     if (f !== null && f !== doc.family) continue;
     if (HANDLES.has(t) && f !== family(srcKind)) continue;
-    const ports =
+    const hit =
       from.side === "input"
-        ? ks.outputs.map((o) => o.type)
-        : [...ks.inputs.map((i) => i.type), ...ks.params.map((p) => WIREABLE[p.type])];
-    if (ports.includes(t)) hits.push([f === doc.family ? 0 : 1, ks.title, k]);
+        ? ks.outputs.some((o) => fits(o.type, t))
+        : [...ks.inputs.map((i) => i.type), ...ks.params.map((p) => WIREABLE[p.type])].some((w) =>
+            fits(t, w),
+          );
+    if (hit) hits.push([f === doc.family ? 0 : 1, ks.title, k]);
   }
   const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
   hits.sort((a, b) => a[0] - b[0] || cmp(a[1], b[1]) || cmp(a[2], b[2]));
@@ -454,10 +464,10 @@ export function wireDrop(doc: Doc, palette: Palette, from: WireEnd): string[] {
 /** The new node's port a dropped wire connects to: for an output dragged, its first input (then wireable param) of
  * the type; for an input dragged, its first output of the type. */
 export function dropPort(s: S<"NodeSchema">, side: WireEnd["side"], t: string): string | null {
-  if (side === "input") return s.outputs.find((o) => o.type === t)?.name ?? null;
+  if (side === "input") return s.outputs.find((o) => fits(o.type, t))?.name ?? null;
   return (
-    s.inputs.find((i) => i.type === t)?.name ??
-    s.params.find((p) => WIREABLE[p.type] === t)?.name ??
+    s.inputs.find((i) => fits(t, i.type))?.name ??
+    s.params.find((p) => fits(t, WIREABLE[p.type]))?.name ??
     null
   );
 }

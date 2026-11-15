@@ -1,14 +1,17 @@
 """runner_service: `python main.py`. RUNNER_HOST / RUNNER_ENV say which runner: fake/fake (the compose fake
-runner, the echo pack) or mac/torch (native, `make runners`, the torch packs).
+runner, the echo pack), mac/torch or mac/mlx (native, `make runners`: the torch packs, the mlx packs).
 
 Loads the packs of its env, indexes the host's shared LoRAs, stores the starter looks' thumbnails, checks and publishes its registry values, keeps its hosts key fresh (with memory and
 resident components when it has a residency manager), then pulls cmd.run.<host>.<env> from CMD (durable
 runner-<host>-<env>) and runs one command at a time (consumer.Consumer). SIGINT/SIGTERM stop pulling, stop the
-current run at its next cancel point (reported failed), unload every component, delete the hosts key and exit."""
+current run at its next cancel point (reported failed), unload every component, delete the hosts key and exit.
+A native runner (one with weights) also answers runner.unload.<host>.<env> (contracts/README.md, Two envs on one
+host): idle, it unloads everything so the host's other env may use the GPU."""
 
 import asyncio
 import contextlib
 import importlib
+import json
 import logging
 import signal
 import time
@@ -60,6 +63,25 @@ async def idle_unload(consumer: Consumer, host: Host, stop: asyncio.Event) -> No
             log.info("idle %.0f s: unloading", idle)
             await loop.run_in_executor(GPU, res.unload, True)
             await host.put()
+
+
+async def unload_reply(consumer: Consumer, host: Host, request: dict) -> dict:
+    """runner.unload: idle → unload every component (pinned ones too) and cached handles, free the device memory,
+    rewrite the hosts key, then {unloaded_gb, resident: []}; a run in progress → busy; a failure → internal."""
+    log.info("unload asked for env %s (run %s)", request.get("for_env"), request.get("run_id"))
+    if consumer.ctx is not None:
+        return {"error": "a run is in progress", "code": "busy"}
+    res = consumer.residency
+    try:
+        gb = res.used_gb
+        await asyncio.get_running_loop().run_in_executor(GPU, res.unload)
+        consumer.cache.clear()
+        await asyncio.get_running_loop().run_in_executor(GPU, res.free)
+        await host.put()
+    except Exception:
+        log.exception("unload failed")
+        return {"error": "unloading failed", "code": "internal"}
+    return {"unloaded_gb": round(gb, 2), "resident": []}
 
 
 async def main() -> None:
@@ -121,6 +143,16 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, on_signal)
+    if residency:
+
+        async def on_unload(msg) -> None:
+            try:
+                request = json.loads(msg.data or b"{}")
+            except ValueError:
+                request = {}
+            await msg.respond(json.dumps(await unload_reply(consumer, host, request)).encode())
+
+        await nc.subscribe(f"runner.unload.{HOST}.{ENV}", cb=on_unload)
     beat = asyncio.create_task(host.beat(stop))
     idle = asyncio.create_task(idle_unload(consumer, host, stop)) if residency else None
     server = await health.serve(nc)

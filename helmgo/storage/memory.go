@@ -3,6 +3,8 @@ package storage
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"io"
 	"iter"
 	"sort"
@@ -34,7 +36,7 @@ func (m *Memory) Put(_ context.Context, key string, body io.Reader, _ int64, con
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	info := Info{Key: key, Size: int64(len(data)), ContentType: contentType, LastModified: time.Now()}
+	info := Info{Key: key, Size: int64(len(data)), ContentType: contentType, LastModified: time.Now(), ETag: etag(data)}
 	m.objects[key] = memoryObject{data, info}
 	return nil
 }
@@ -50,7 +52,7 @@ func (m *Memory) Create(_ context.Context, key string, body io.Reader, size int6
 	if _, ok := m.objects[key]; ok {
 		return ErrExists
 	}
-	m.objects[key] = memoryObject{data, Info{Key: key, Size: int64(len(data)), ContentType: contentType, LastModified: time.Now()}}
+	m.objects[key] = memoryObject{data, Info{Key: key, Size: int64(len(data)), ContentType: contentType, LastModified: time.Now(), ETag: etag(data)}}
 	return nil
 }
 
@@ -74,6 +76,18 @@ func (m *Memory) Stat(_ context.Context, key string) (Info, error) {
 		return Info{}, ErrNotFound
 	}
 	return object.info, nil
+}
+
+// GetRange returns length bytes of the object from offset (cut to its end), or ErrNotFound.
+func (m *Memory) GetRange(_ context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	object, ok := m.objects[key]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	data := object.data[min(offset, int64(len(object.data))):]
+	return io.NopCloser(bytes.NewReader(data[:min(length, int64(len(data)))])), nil
 }
 
 // Delete removes the keys; a missing key is not an error.
@@ -122,4 +136,10 @@ func (m *Memory) Copy(_ context.Context, src, dst string) error {
 // PresignGet returns a placeholder memory:// URL.
 func (m *Memory) PresignGet(_ context.Context, key string, _ time.Duration) (string, error) {
 	return "memory://" + key, nil
+}
+
+// etag is the quoted MD5 of data, as S3 sends for a single-part object.
+func etag(data []byte) string {
+	sum := md5.Sum(data)
+	return `"` + hex.EncodeToString(sum[:]) + `"`
 }

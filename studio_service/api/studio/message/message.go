@@ -4,6 +4,7 @@ package message
 import (
 	"encoding/json"
 
+	"github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -75,6 +76,21 @@ type Output struct {
 	Bytes  int64   `json:"bytes"`
 	Etag   *string `json:"etag"`
 	Seed   *int64  `json:"seed"`
+	// kind video: its metadata and poster (required then, absent for an image)
+	Video *dto.Video `json:"video"`
+}
+
+// Unload is req.runner.unload's request: the env about to load and the run waiting (both for the runner's log).
+type Unload struct {
+	ForEnv string `json:"for_env"`
+	RunID  string `json:"run_id,omitempty"`
+}
+
+// UnloadReply is req.runner.unload's reply: {unloaded_gb, resident: []}, or {error, code: busy | internal}.
+type UnloadReply struct {
+	UnloadedGB *float64 `json:"unloaded_gb"`
+	Error      string   `json:"error"`
+	Code       string   `json:"code"`
 }
 
 // ------------------------------------------------------------------ batches (pipelines_service)

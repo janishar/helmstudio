@@ -246,7 +246,7 @@ func (s *Service) Get(ctx context.Context, caller common.Caller, id string) (dto
 		}
 		out = s.takeDTO(row)
 		type child struct{ ID, Kind, Title, Key string }
-		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.kind, t.title, t.key FROM take_parents p JOIN takes t ON t.id = p.take_id
+		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.kind, t.title, `+model.ThumbKey+` FROM take_parents p JOIN takes t ON t.id = p.take_id
 			WHERE p.parent_id = $1 AND `+visible+` ORDER BY t.created_at DESC, t.id DESC LIMIT 50`, id)
 		children, err := pgx.CollectRows(rows, pgx.RowToStructByPos[child])
 		refs := make([]dto.TakeRef, len(children))
@@ -542,13 +542,18 @@ func imageInput(workflow registry.Workflow, want *string) (string, registry.Para
 	return keys[0], params[keys[0]], ""
 }
 
-// takeDTO maps a row, signing its key: the original is its own thumbnail in API 1.2.
+// takeDTO maps a row, signing its keys: an image is its own thumbnail (API 1.2), a video's is its poster.
 func (s *Service) takeDTO(row model.Take) dto.Take {
 	if row.ID == "" {
 		return dto.Take{}
 	}
 	link := s.signer.Sign(row.Key)
-	out := dto.Take{ID: row.ID, Kind: row.Kind, Source: row.Source, Title: row.Title, URL: link, ThumbURL: link,
+	video := dto.Info(row.Video, s.signer.Sign)
+	thumb := link
+	if video != nil {
+		thumb = video.PosterURL
+	}
+	out := dto.Take{ID: row.ID, Kind: row.Kind, Source: row.Source, Title: row.Title, URL: link, ThumbURL: thumb, Video: video,
 		ContentType: row.ContentType, Width: row.Width, Height: row.Height, Bytes: row.Bytes, CreatedAt: row.CreatedAt,
 		Starred: row.Starred, SessionID: row.SessionID, RunID: row.RunID, Parents: row.Parents, BatchID: row.BatchID}
 	_ = json.Unmarshal(row.MadeWith, &out.MadeWith)

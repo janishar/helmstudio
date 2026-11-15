@@ -1,5 +1,6 @@
 // The run form, derived from a workflow's node schemas (contracts/openapi.yaml `Workflow`).
 import type { S } from "@/lib/api";
+import { frameError } from "@/lib/media";
 
 type Param = S<"ParamSchema">;
 type Value = S<"ParamValue">;
@@ -197,6 +198,13 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
       return { error: `must be a whole number from 0 to ${p.max ?? Number.MAX_SAFE_INTEGER}` };
     return { value: n };
   }
+  if (p.type === "frames") {
+    const t = text.trim();
+    const n = Number(t);
+    if (t === "" || !Number.isInteger(n)) return { error: "must be a whole number" };
+    const err = frameError(p, n);
+    return err ? { error: err.replace(`${n} is not`, "must be") } : { value: n };
+  }
   if (p.type === "int" || p.type === "float") {
     const t = text.trim();
     const n = Number(t);
@@ -270,12 +278,16 @@ const rank = (f: Field) => (f.model ? 0 : f.param.type === "seed" ? 2 : 1);
 export const isLoraRows = (f: Field) =>
   f.param.type === "rows" && Object.values(f.param.item ?? {}).includes("Lora");
 
-/** The inspector's sections: image inputs (References), LoRA stacks, the canvas node's params, label-over-value
- * tiles, switches, and the rest. */
+/** The inspector's sections: image inputs (References), LoRA stacks, the canvas node's params, frame counts with
+ * their frame rates (Duration), label-over-value tiles, switches, and the rest. */
 export function sections(fs: Field[]) {
   const rest = fs.filter((f) => f.param.type !== "text");
-  const other = rest.filter((f) => !f.canvas);
+  const frames = rest.filter((f) => f.param.type === "frames");
+  const rates = frames.flatMap((f) => fs.filter((x) => x.key === fpsKey(f)));
+  const duration = rest.filter((f) => frames.includes(f) || rates.includes(f));
+  const other = rest.filter((f) => !f.canvas && !duration.includes(f));
   return {
+    duration,
     refs: other.filter(
       (f) => (f.param.type === "rows" && !isLoraRows(f)) || f.param.type === "image",
     ),
@@ -290,6 +302,9 @@ export function sections(fs: Field[]) {
   };
 }
 
+/** The key of a frames field's frame-rate field (`<node>.<fps>`), if it names one. */
+export const fpsKey = (f: Field) => (f.param.fps ? `${f.node}.${f.param.fps}` : undefined);
+
 /** The canvas aspect choices, as width / height. */
 export const ASPECTS: [string, number][] = [
   ["1:1", 1],
@@ -297,8 +312,20 @@ export const ASPECTS: [string, number][] = [
   ["16:9", 16 / 9],
   ["9:16", 9 / 16],
 ];
-/** The canvas size choices, in megapixels (10^6 pixels). */
-export const MEGAPIXELS = [1, 2, 4];
+/** The canvas size choices, in megapixels (10^6 pixels), before a canvas's bounds narrow them (megapixelChoices). */
+export const MEGAPIXELS = [0.25, 0.5, 1, 2, 4];
+
+/** The size choices a canvas with sides in [min, max] can reach (at least one). */
+export function megapixelChoices(min = 0, max = Infinity) {
+  const ok = MEGAPIXELS.filter((m) => m * 1e6 >= min * min && m * 1e6 <= max * max);
+  return ok.length
+    ? ok
+    : [
+        MEGAPIXELS.reduce((a, b) =>
+          Math.abs(b * 1e6 - max * max) < Math.abs(a * 1e6 - max * max) ? b : a,
+        ),
+      ];
+}
 
 /** Width and height for an aspect and a size in megapixels, each on the grid and within [min, max] (scaled down
  * to fit, keeping the aspect). The short side is snapped first and the long one derived from it, so the grid
@@ -320,13 +347,24 @@ export function sizeFor(ratio: number, mp: number, grid = 1, min = 0, max = Infi
   return ratio >= 1 ? { width: l, height: s } : { width: s, height: l };
 }
 
-/** The aspect choice a size is (within 2 %), else null. */
-export const aspectOf = (w: number, h: number) =>
-  ASPECTS.find(([, r]) => Math.abs(w / h / r - 1) < 0.02)?.[0] ?? null;
+/** The aspect choice a size is (within 2 %, or the width within half a grid step of it), else null. */
+export const aspectOf = (w: number, h: number, grid = 1) =>
+  ASPECTS.find(([, r]) => Math.abs(w / h / r - 1) < 0.02 || Math.abs(w - r * h) <= grid / 2)?.[0] ??
+  null;
 
-/** The megapixel choice nearest to a size. */
-export const megapixelsOf = (w: number, h: number) =>
-  MEGAPIXELS.reduce((a, b) => (Math.abs(b - (w * h) / 1e6) < Math.abs(a - (w * h) / 1e6) ? b : a));
+/** The size choice nearest to a size. */
+export const megapixelsOf = (w: number, h: number, choices = MEGAPIXELS) =>
+  choices.reduce((a, b) => (Math.abs(b - (w * h) / 1e6) < Math.abs(a - (w * h) / 1e6) ? b : a));
+
+/** The session rule (plan 01-concepts.md, Session) on a switch of workflow: what the controls hold carries over where
+ * the paths match and the value suits the new field (a canvas's width and height together); a value that does not
+ * suit goes, so the field starts from the workflow's own. Paths the new workflow lacks are kept for a switch back. */
+export function carry(raws: Record<string, Raw>, fs: Field[]): Record<string, Raw> {
+  const bad = (f: Field) => f.key in raws && "error" in readValue(f.param, raws[f.key]);
+  const canvasBad = fs.some((f) => f.canvas && bad(f));
+  const drop = new Set(fs.filter((f) => bad(f) || (f.canvas && canvasBad)).map((f) => f.key));
+  return Object.fromEntries(Object.entries(raws).filter(([k]) => !drop.has(k)));
+}
 
 /** One run's inputs per queued seed: n consecutive seeds from the one set, or n random ones (-1). Without a seed
  * param, n copies. `errors` (by field key) when the last seed would pass the seed's max: then nothing is queued. */

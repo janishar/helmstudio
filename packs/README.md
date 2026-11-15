@@ -6,13 +6,15 @@ Python identifier, e.g. `qwen_image`) holding:
 | File | What |
 |---|---|
 | `model.yaml` | the model: variants, weight components, stages (node kinds) and their params, ports, memory |
-| `<runtime>.py` | one module per runtime named in `runtimes` (`torch.py`; the fake echo pack has `fake.py`): one function per stage, plus `build()` / `rename()` for weight components |
+| `<runtime>.py` | one module per runtime named in `runtimes` (`torch.py`, `mlx.py`; the fake echo pack has `fake.py`): one function per stage, plus `build()` / `rename()` (and on MLX `convert()`) for weight components |
 | `workflows/*.json` | the workflows the runner publishes, one registry `workflow` object per file |
 | `looks/*.yaml` | (optional) starter looks, shown to every user read-only (below) |
 | `GOTCHAS.md` | (optional) hard-won notes |
 
 The runner (`RUNNER_ENV`) loads every pack with a runtime whose `env` equals it: `fake` → `echo`, `torch` → the
-torch packs. From each pack the core builds the registry values `<host>.<env>.{nodes,workflows,models}`
+torch packs (uv project `runner_service/`, extra `torch`), `mlx` → the mlx packs (`ltx`; uv project
+`runner_service/envs/mlx`, its own lockfile). A runner process imports only its own runtime: the core imports neither
+torch nor mlx (`tests/test_mlx.py`). From each pack the core builds the registry values `<host>.<env>.{nodes,workflows,models}`
 (`core/pack.py`, `core/registry.py`), plus `.loras` (the host's shared LoRA index) and `.looks` (the packs' starter
 looks, `core/looks.py`); they are checked against `contracts/registry.schema.json` and every
 workflow against the node schemas at start, so a broken pack stops the runner instead of reaching studio.
@@ -22,7 +24,8 @@ workflow against the node schemas at start, so a broken pack stops the runner in
 The core also provides five nodes in the same grammar (`runner_service/core/nodes.yaml`), published when a
 workflow uses them or a pack lists them in `publish`: `prompt` (→ `text: Text`), `seed` (→ `seed: Seed`), `canvas`
 (`mode` auto | fixed, `width`, `height` → `canvas: Canvas`), `image` (param `image: image` → `image: Image`) and
-`output` (`media: Image` in; stores it as the run's next output).
+`output` (`media: Media` in, an Image or a Video; stores it as the run's next output: a PNG, or an MP4 with its
+poster PNG).
 
 ## model.yaml
 
@@ -107,8 +110,10 @@ Keys the core understands; anything else is ignored:
   `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`, `lora`, `stages`. A pack without `variants` (echo) has no model node and its `models` entry is `{id, family, title}`.
 - **`variants.<id>`**: `dir`, `shares` (component names loaded from the first variant's folder, so they are one
   residency entry and one cache identity across variants).
-- **`components.<name>`**: `files`, `dtype` (`bf16` | `fp16` | `fp32`, default bf16), `precision` (default
-  `[bf16]`), `quantize` (fnmatch globs over module names, used only at int8).
+- **`components.<name>`**: `files` (a glob, or a list of globs: one component may take keys from several files),
+  `dtype` (`bf16` | `fp16` | `fp32`, default bf16; `stored` keeps each tensor's own dtype, MLX), `precision` (default
+  `[bf16]`; `int8`, and `int4` on MLX), `quantize` (fnmatch globs over module names, used only at a quantized
+  precision). Only the keys the module's `rename()` keeps count towards the component's size.
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
   `renames` (ordered `{from, to}` prefix rewrites of a key's module part), `ignore` (fnmatch globs over raw keys
   counted as ignored), `modes` (`[adapter, bake]`, or `[bake]` for a runtime without adapters), `max_rows` (8),
@@ -120,19 +125,24 @@ Keys the core understands; anything else is ignored:
   set. A key that does not apply fails the run with the contract's text: no key is silently dropped.
 - **`model`**: `help`, and `variant` / `precision`, merged over the generated params (`label`, `help`, `default`).
   The generated node is `<family>/model` with param `variant` (enum: the variant ids, default the first) and
-  `precision` (enum: every precision a component offers, in the order bf16, fp16, int8), output `model: Model`.
-- **`stages.<name>`**: `title`, `help`, `params`, `inputs`, `outputs`, `uses`, `peak_gb`, `stall_s`.
+  `precision` (enum: every precision a component offers, in the order bf16, fp16, int8, int4; `model.precision.enum`
+  may reorder it), output `model: Model`. A model pack's source stages (no inputs: `ltx/canvas`) come before it.
+- **`stages.<name>`**: `title`, `help`, `params`, `inputs`, `outputs`, `uses`, `unload_after` (components of `uses`
+  unloaded as soon as the stage has run: ltx's Gemma never sits beside its DiT), `peak_gb`, `stall_s`.
   - `params`: name → a registry `paramSchema` without `name`, copied verbatim (`type` int | float | bool |
-    string | text | enum | seed | image | rows; `label`, `default`, `min`, `max`, `step`, `enum`, `help`, `when`,
+    string | text | enum | seed | image | rows | frames (a frame count on `min + k × step`, `fps` naming the node's
+    frame-rate param); `label`, `default`, `min`, `max`, `step`, `enum`, `help`, `when`,
     and for rows `item` (field → `Image` or a param schema) and `mention` (`<image{n}>`)). Order is kept.
     **YAML 1.1 reads bare `on`, `off`, `yes`, `no` as booleans: quote them.**
   - `inputs` / `outputs`: port name → port type, in order. Types: `Text`, `Image`, `Int`, `Float`, `Seed`,
-    `Canvas` (plain values) and the family-scoped handles `Model`, `Conditioning`, `Latent`. An input that may be
+    `Canvas`, `Duration`, `Video` (plain values; `Media` is an input that takes Image or Video) and the
+    family-scoped handles `Model`, `Conditioning`, `Latent`. An input that may be
     left unwired is `name: {type: Image, optional: true}`. Param and input names are disjoint, and no param is named
     `bypass` (the runner refuses to start otherwise).
   - `title` and `help` are what the Graph view's palette and node cards show (the core publishes them as is).
   - `peak_gb`: a Python expression over `mp` (megapixels of the nearest upstream Canvas, 0 without one),
-    `images` (how many Image values the params of the stage and of every node upstream of it hold) and the
+    `images` (how many Image values the params of the stage and of every node upstream of it hold), `frames` (the
+    `frames` param of the nearest upstream node that has one, 0 without) and the
     stage's own params: numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
     `max()`. Anything else fails at start.
 
@@ -175,8 +185,11 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   `string`, `text`, `image`) wired from upstream in a user's graph arrives in `params` with the upstream value (an
   `image` param wired from an `image` node: a `PIL.Image`), so a stage reads params the same way either way.
   Port values: `Text`: `str`. `Seed`: `int`. `Canvas`: `{"width", "height", "mode"}`
-  (the stage applies `mode`: auto may size from the references). `Image`: a `PIL.Image` (the core `output` node
-  stores it as PNG; RGBA is fine). `Model`: a `core.pack.ModelRef`
+  (the stage applies `mode`: auto may size from the references; ltx's has no mode). `Duration`: `{"frames", "fps"}`.
+  `Image`: a `PIL.Image` (the core `output` node stores it as PNG; RGBA is fine). `Video`: the encoded clip
+  `{"mp4": bytes, "poster": PIL.Image (frame 0, the video's size), "frames", "fps", "has_audio"}`; the `output` node
+  stores `<prefix><n>.poster.png`, then `<prefix><n>.mp4` (H.264 + AAC, `+faststart`), and reports
+  `video {duration_s, fps, frames, has_audio, poster}`. `Model`: a `core.pack.ModelRef`
   (`variant`, `precision`, `loras` (the ordered LoRA rows of the stacks upstream), `pack.spec`, `folder(component=None)` → the variant's folder for configs, the
   tokenizer and the scheduler, which the pack reads itself). `Conditioning` / `Latent`: whatever object the
   pack returns. Handles never leave the process.
@@ -251,7 +264,22 @@ Starter looks (contracts/README.md "Looks"): each file is a list; files are read
 - The echo pack's looks are `contracts/fixtures/registry/looks.valid.json` exactly (`tests/test_looks.py`).
 - Write short, concrete phrases: no brand or film-stock trademarks, no living persons.
 
+## MLX packs (`mlx.py`)
+
+The same contract as `torch.py`, on `core/loaders_mlx.py`: `build(component, model)` returns the `mlx.nn` module
+(its arrays stay lazy, never evaluated); the loader reads the files with `mx.load` (lazy), maps each key through
+`rename(component, key)` (None skips it), then the optional `convert(component, name, value)` (conv weights to
+channels-last), casts only for an explicit `dtype`, quantizes the matching 2-D `.weight`s one at a time
+(`mx.quantize`, group 64, after the kept tensors are evaluated), applies `nn.quantize` to exactly those Linears and
+loads with `strict=True`. Phase `loading <component>` (underscores as spaces) is reported under the node that needs
+it. Memory: MLX active + cache; eviction runs `gc` + `mx.clear_cache()`; the Metal cache is capped at the budget.
+A stage that must refuse a wiring before anything runs defines `check_<stage>(params, wired) -> str | None` (the
+text after the node id, e.g. `": stage 2 needs latent, not canvas or duration"`). LoRA on MLX is not wired yet
+(`ltx` publishes no lora block).
+
 ## Checking a pack
 
 `cd runner_service && uv sync --extra torch && uv run pytest -q` (test_packs compares the generated values with
-the fixtures); `uv run pytest -m gpu` runs the tests that load real weights.
+the fixtures); `uv run pytest -m gpu` runs the tests that load real weights. The mlx env:
+`uv sync --project envs/mlx && uv run --project envs/mlx pytest -q`; the ltx goldens:
+`uv run --project envs/mlx python tests/test_ltx_golden.py [case ...] [--reseed]` (stop both runners first).

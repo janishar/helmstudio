@@ -176,8 +176,24 @@ func check(param registry.Param, value any) (any, string) {
 		return imageRef(value)
 	case "rows":
 		return checkRows(param, value)
+	case "frames":
+		return checkFrames(param, value)
 	}
 	return nil, "has an unknown type " + param.Type
+}
+
+// checkFrames returns a frame count on the param's grid, min + k × step up to max, or why it is not one.
+func checkFrames(param registry.Param, value any) (any, string) {
+	low, step, high := deref(param.Min), deref(param.Step), deref(param.Max)
+	number, ok := value.(float64)
+	if ok && number == math.Trunc(number) && number >= low && number <= high && step > 0 && math.Mod(number-low, step) == 0 {
+		return int64(number), ""
+	}
+	shown := fmt.Sprint(value)
+	if ok {
+		shown = format(number)
+	}
+	return nil, fmt.Sprintf("%s is not on the frame grid %s + %sk up to %s", shown, format(low), format(step), format(high))
 }
 
 // imageRef returns an Image value as {"take_id": id}, or why it is not one.

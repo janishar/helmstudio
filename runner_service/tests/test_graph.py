@@ -59,7 +59,7 @@ def broken(edit) -> list[str]:
         (lambda n: n.pop("output"), "the graph has no output node"),
         (
             lambda n: n["output"]["in"].update(media="prompt.text"),
-            "output.media: wants Image, prompt.text is Text",
+            "output.media: wants Media, prompt.text is Text",
         ),
     ],
 )

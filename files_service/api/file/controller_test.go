@@ -63,3 +63,75 @@ func TestServe(t *testing.T) {
 		}
 	}
 }
+
+// A video streams by ranges: 206 with Content-Range and just those bytes (HEAD the headers only), 416 past the end,
+// the whole file for no, several or malformed ranges; the stored Content-Type always. A link for one key never serves
+// another (the poster's link is not the MP4's).
+func TestServeRange(t *testing.T) {
+	signer := NewSigner("0123456789abcdef")
+	expiry := strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)
+	link := func(key string) string {
+		exp, _ := strconv.ParseInt(expiry, 10, 64)
+		return "/files/" + key + "?exp=" + expiry + "&sig=" + signer.signature(key, exp)
+	}
+	store := storage.NewMemory()
+	video, poster := "u/a/runs/r/1/0.mp4", "u/a/runs/r/1/0.poster.png"
+	_ = store.Put(context.Background(), video, strings.NewReader("0123456789"), 10, "video/mp4")
+	_ = store.Put(context.Background(), poster, strings.NewReader("png"), 3, "image/png")
+	router, err := network.NewRouter(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router.LoadControllers(NewController(store, signer))
+	serve := func(method, target, ranges string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		request := httptest.NewRequest(method, target, nil)
+		if ranges != "" {
+			request.Header.Set("Range", ranges)
+		}
+		router.Engine().ServeHTTP(w, request)
+		return w
+	}
+	for ranges, want := range map[string]string{
+		"bytes=0-3":     "206 0123 bytes 0-3/10",
+		"bytes=4-":      "206 456789 bytes 4-9/10",
+		"bytes=-3":      "206 789 bytes 7-9/10",
+		"bytes=-30":     "206 0123456789 bytes 0-9/10",
+		"bytes=8-100":   "206 89 bytes 8-9/10",
+		"bytes=9-9":     "206 9 bytes 9-9/10",
+		"bytes=10-":     "416  bytes */10",
+		"bytes=-0":      "416  bytes */10",
+		"":              "200 0123456789 ",
+		"bytes=0-1,4-5": "200 0123456789 ",
+		"bytes=5-2":     "200 0123456789 ",
+		"items=0-3":     "200 0123456789 ",
+		"bytes=x-3":     "200 0123456789 ",
+	} {
+		w := serve(http.MethodGet, link(video), ranges)
+		body := w.Body.String()
+		if w.Code == 416 {
+			body = ""
+			if !strings.Contains(w.Body.String(), `"detail"`) {
+				t.Errorf("%q: 416 body %q", ranges, w.Body)
+			}
+		}
+		got := strconv.Itoa(w.Code) + " " + body + " " + w.Header().Get("Content-Range")
+		if got != want || w.Header().Get("Accept-Ranges") != "bytes" {
+			t.Errorf("%q: %q, want %q (%v)", ranges, got, want, w.Header())
+		}
+		if w.Code != 416 && (w.Header().Get("Content-Type") != "video/mp4" || w.Header().Get("Content-Length") != strconv.Itoa(len(body))) {
+			t.Errorf("%q: headers %v", ranges, w.Header())
+		}
+	}
+	if w := serve(http.MethodHead, link(video), "bytes=2-5"); w.Code != 206 || w.Body.Len() != 0 ||
+		w.Header().Get("Content-Range") != "bytes 2-5/10" || w.Header().Get("Content-Length") != "4" {
+		t.Fatalf("HEAD: %d %q %v", w.Code, w.Body, w.Header())
+	}
+	if w := serve(http.MethodGet, link(poster), ""); w.Code != 200 || w.Body.String() != "png" || w.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("poster: %d %v", w.Code, w.Header())
+	}
+	swapped := strings.Replace(link(poster), poster, video, 1) // the poster's signature on the MP4's key
+	if w := serve(http.MethodGet, swapped, "bytes=0-3"); w.Code != 403 {
+		t.Fatalf("one key's link served another: %d", w.Code)
+	}
+}

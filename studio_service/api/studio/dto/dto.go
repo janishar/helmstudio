@@ -12,6 +12,7 @@ import (
 
 	"github.com/helmstudio/helmgo/utility"
 
+	gallery "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -120,6 +121,8 @@ type RunOutput struct {
 	Height *int    `json:"height"`
 	Seed   *int64  `json:"seed,omitempty"`
 	TakeID *string `json:"take_id,omitempty"`
+	// kind video only: its metadata and signed poster
+	Video *gallery.VideoInfo `json:"video,omitempty"`
 }
 
 // Run is one run of a workflow.

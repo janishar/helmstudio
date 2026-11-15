@@ -18,8 +18,21 @@ import yaml
 from core import looks
 
 PACKS = Path(__file__).resolve().parent.parent / "packs"
-PRECISIONS = ("bf16", "fp16", "int8")
+PRECISIONS = ("bf16", "fp16", "int8", "int4")
 BYTES = {"bf16": 2, "fp16": 2, "fp32": 4, "int8": 1}
+STORED = {
+    "BF16": 2,
+    "F16": 2,
+    "F32": 4,
+    "F64": 8,
+    "U8": 1,
+    "I8": 1,
+    "I16": 2,
+    "I32": 4,
+    "I64": 8,
+    "BOOL": 1,
+}
+QUANT_GROUP = 64  # the MLX loader's quantization group
 STALL_S = 600  # a stage's default stall limit: seconds without a cancel point
 
 
@@ -35,6 +48,10 @@ class Node:
     stall_s: float = STALL_S
     code: str = "core"
     pack: Pack | None = None
+    check: object = (
+        None  # the pack's check_<stage>(params, wired) -> problem text or None, run before anything
+    )
+    unload_after: tuple[str, ...] = ()  # components unloaded once the stage has run
 
 
 @dataclass(eq=False)
@@ -191,9 +208,11 @@ def models_root() -> Path:
 
 
 def component_files(pack: Pack, variant: str, component: str) -> list[Path]:
-    """The files of a component in a variant's folder (model.yaml `files` glob), sorted."""
+    """The files of a component in a variant's folder (model.yaml `files`: a glob or a list of globs), sorted per
+    glob."""
     root = models_root() / pack.spec["variants"][variant]["dir"]
-    return sorted(root.glob(pack.component(component)["files"]))
+    globs = pack.component(component)["files"]
+    return [p for g in ([globs] if isinstance(globs, str) else globs) for p in sorted(root.glob(g))]
 
 
 def header(path: Path) -> dict:
@@ -206,8 +225,9 @@ def header(path: Path) -> dict:
 
 
 def quantized(spec: dict, precision: str, module_name: str) -> bool:
-    """Whether a Linear named `module_name` is stored int8 (precision int8 and a `quantize` glob matches)."""
-    return precision == "int8" and any(
+    """Whether a Linear named `module_name` is stored quantized (precision int8 or int4 and a `quantize` glob
+    matches)."""
+    return precision in ("int8", "int4") and any(
         fnmatch.fnmatchcase(module_name, g) for g in spec.get("quantize", [])
     )
 
@@ -216,23 +236,37 @@ _sizes: dict = {}
 
 
 def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, float]:
-    """Resident GB at the target dtype (an int8 weight: 1 byte + a bf16 scale per row) and the transient: the
-    largest tensor in fp32."""
+    """Resident GB at the target dtype and the transient: the largest tensor in fp32. Only the keys the pack's
+    `rename(component, key)` keeps count, under their new names; `dtype: stored` counts each tensor's own dtype. A
+    quantized weight: torch int8 is 1 byte + a bf16 scale per row; MLX is bits / 8 per value + a bf16 scale and
+    bias per group of 64."""
     if (key, files) not in _sizes:
-        spec, precision = pack.component(key[2]), key[3]
-        dtype_bytes = BYTES[spec.get("dtype", "bf16")]
+        component, precision = key[2], key[3]
+        spec, rename = pack.component(component), getattr(pack.module, "rename", None)
+        dtype = spec.get("dtype", "bf16")
         total = largest = 0
         for p in files:
-            for name, t in header(p).items():
+            for raw, t in header(p).items():
+                name = rename(component, raw) if rename else raw
+                if name is None:
+                    continue
                 numel = 1
                 for d in t["shape"]:
                     numel *= d
                 largest = max(largest, numel * 4)
                 module, _, attr = name.rpartition(".")
                 if attr == "weight" and len(t["shape"]) == 2 and quantized(spec, precision, module):
-                    total += numel + t["shape"][0] * 2
+                    if pack.runtime == "mlx":
+                        total += (
+                            numel * (8 if precision == "int8" else 4) // 8
+                            + numel // QUANT_GROUP * 4
+                        )
+                    else:
+                        total += numel + t["shape"][0] * 2
                 else:
-                    total += numel * dtype_bytes
+                    total += numel * (
+                        STORED.get(t["dtype"], 2) if dtype == "stored" else BYTES[dtype]
+                    )
         _sizes[(key, files)] = (total / 2**30, largest / 2**30)
     return _sizes[(key, files)]
 
@@ -440,7 +474,7 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             raise ValueError(
                 f"{schema['kind']}: params and inputs share the names {sorted(shared)}"
             )
-        names = {"mp", "images"} | set(stage.get("params") or {})
+        names = {"mp", "images", "frames"} | set(stage.get("params") or {})
         peak = compile_formula(stage["peak_gb"], names) if "peak_gb" in stage else None
         fn = getattr(module, name, None)
         if fn is None:
@@ -448,9 +482,15 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
         uses = tuple(stage.get("uses", ()))
         if pack and (unknown := set(uses) - set(pack.spec.get("components", {}))):
             raise ValueError(f"{schema['kind']}: uses unknown components {sorted(unknown)}")
+        unload = tuple(stage.get("unload_after", ()))
+        if unknown := set(unload) - set(uses):
+            raise ValueError(
+                f"{schema['kind']}: unload_after names components outside its uses {sorted(unknown)}"
+            )
+        check = getattr(module, f"check_{name}", None)
         out[schema["kind"]] = (
             schema,
-            Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack),
+            Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack, check, unload),
         )
     return out
 
@@ -472,15 +512,18 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     pack = Pack(dir.name, dir, spec, runtime, module, code)
     pack.workflows = [json.loads(p.read_text()) for p in sorted(dir.glob("workflows/*.json"))]
     pack.looks = looks.load(pack)
-    nodes = {}
-    if "variants" in spec:
-        schema = model_schema(pack)
-        nodes[schema["kind"]] = (schema, Node(model_node(pack), code=code, pack=pack))
-        if "lora" in spec:  # Model → Model: only a family with a model node
-            schema = lora_stack_schema(pack)
-            nodes[schema["kind"]] = (schema, Node(lora_stack, code=code, pack=pack))
-    nodes |= _nodes(spec.get("stages", {}), pack.family, code, pack, module)
-    return pack, nodes
+    stages = _nodes(spec.get("stages", {}), pack.family, code, pack, module)
+    if "variants" not in spec:
+        return pack, stages
+    nodes = {
+        k: v for k, v in stages.items() if not v[0]["inputs"]
+    }  # sources (canvas, ...) first, then the model
+    schema = model_schema(pack)
+    nodes[schema["kind"]] = (schema, Node(model_node(pack), code=code, pack=pack))
+    if "lora" in spec:  # Model → Model: only a family with a model node
+        schema = lora_stack_schema(pack)
+        nodes[schema["kind"]] = (schema, Node(lora_stack, code=code, pack=pack))
+    return pack, nodes | stages
 
 
 def for_env(env: str, root: Path = PACKS) -> list[tuple[Pack, dict]]:

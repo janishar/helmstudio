@@ -121,13 +121,25 @@ export function track(t: Record<string, RunTrack>, e: S<"SessionEvent">): Record
   };
 }
 
-/** One piece of the run's progress strip. `seconds`: how long a done node took, when its events say. */
+/** One piece of the run's progress strip. `seconds`: how long a done node took, when its events say; `steps`: the
+ * node's `steps` param as the run set it, shown while it waits. */
 export type Segment = {
   node: string;
   title: string;
   state: "done" | "active" | "stopped" | "pending";
   seconds?: number;
+  steps?: number;
 };
+
+/** A node's name in the strip and on the stage: its schema's title, numbered in graph order when the graph has
+ * several nodes of its kind ("Sample 1", "Sample 2"). */
+export function nodeLabel(w: S<"Workflow"> | undefined, node: string): string {
+  const kind = w?.nodes[node]?.kind;
+  const title = nodeTitle(w, node);
+  if (!w || !kind) return title;
+  const twins = graphOrder(w).filter((id) => w.nodes[id].kind === kind);
+  return twins.length > 1 ? `${title} ${twins.indexOf(node) + 1}` : title;
+}
 
 /** The progress strip: the nodes that do work (take inputs and give outputs, and are not an empty LoRA stack, or
  * reported progress), in graph order;
@@ -157,10 +169,13 @@ export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
     const seconds = n ? (n.last - (prevEnd ?? n.first)) / 1000 : undefined;
     // a silent node's time is not known: don't add it to the next node's
     prevEnd = n?.last;
-    const title = nodeTitle(w, node);
+    const title = nodeLabel(w, node);
+    const p = w.nodes[node]?.params?.steps;
+    const asked = run.inputs[`${node}.steps`] ?? p;
+    const steps = typeof asked === "number" ? asked : undefined;
     if (i === cur) return { node, title, state: isActive(run.status) ? "active" : "stopped" };
     if (i < cur || i <= seen) return { node, title, state: "done", seconds };
-    return { node, title, state: "pending" };
+    return { node, title, state: "pending", steps };
   });
 }
 

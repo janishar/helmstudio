@@ -13,6 +13,7 @@ import (
 	"github.com/helmstudio/helmgo/network"
 	"github.com/helmstudio/helmgo/utility"
 
+	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/common"
@@ -287,7 +288,8 @@ func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 	}
 	for _, output := range outputs {
 		out.Outputs = append(out.Outputs, dto.RunOutput{Index: output.Index, Key: output.Key, Kind: output.Kind,
-			URL: s.signer.Sign(output.Key), Width: output.Width, Height: output.Height, Seed: output.Seed, TakeID: output.TakeID})
+			URL: s.signer.Sign(output.Key), Width: output.Width, Height: output.Height, Seed: output.Seed, TakeID: output.TakeID,
+			Video: gallerydto.Info(output.Video, s.signer.Sign)})
 	}
 	return out
 }

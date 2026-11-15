@@ -17,17 +17,19 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/evt.studio.run_finished.schema.json` | studio → pipelines_service: a batch run ended (any terminal status) |
 | `messages/req.studio.runs.create.schema.json` | NATS request/reply pipelines → studio (not enveloped): create a batch-lane run, idempotent on its key |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
+| `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload every component now (Two envs on one host) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks` (bucket `registry`), `$defs/host` (bucket `hosts`) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
 | `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
+| `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflow `ltx-text-to-video`): published verbatim; `ltx.models.valid.json` and `host.valid.6.json` are examples (sizes measured) |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them). studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical qwen-image lora block (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, lints `openapi.yaml` and the house rules |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -50,12 +52,15 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `studio.runs.create` | core request/reply, queue group `studio` | bare JSON (`req.studio.runs.create`) | pipelines → studio |
 | `pipelines.state.get` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.state.get`) | studio → pipelines (5 s) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
+| `runner.unload.<host>.<env>` | core request/reply, no queue group | bare JSON (`req.runner.unload`) | studio's dispatcher → the runner of that host and env (60 s) |
 | KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras`, `.looks` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras`, `looks` | the runner writes its own keys once at start; studio reads |
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s; studio reads (older than 30 s = offline) |
 | KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step |
 
 Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
-env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`). The envelope `type` is the kind of message, never the subject.
+env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`);
+the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subject `cmd.run.mac.mlx`, registry keys
+`mac.mlx.*`, hosts key `mac.mlx`, unload subject `runner.unload.mac.mlx`): two processes, one GPU (Two envs on one host). The envelope `type` is the kind of message, never the subject.
 
 ## How the pieces meet
 
@@ -64,10 +69,11 @@ env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-
   the run is created `failed` (`no live host for env <env>`) and nothing is sent.
 - **Workflows.** A workflow (registry `workflows`) is `{id, title, family, env, nodes}`; `nodes` maps a node id to
   `{kind, params, in}`, `in` wires an input port to `<node id>.<output>`. A node schema (registry `nodes`) gives a
-  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed`, `image`, `rows` with `default`,
-  `min`, `max`, `step`, `enum`, `item`, `mention`, `help`, `when`; see Image inputs) and typed `inputs` / `outputs`. Port types: `Text`, `Image`, `Int`, `Float`, `Seed`,
-  `Canvas`, and the family-scoped handles `Model`, `Conditioning`, `Latent` (they wire nodes of one family inside one
-  workflow and never cross a process). `when` is a visibility expression (`model.variant != 'turbo'`), carried
+  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed`, `image`, `rows`, `frames` with
+  `default`, `min`, `max`, `step`, `enum`, `item`, `mention`, `fps`, `help`, `when`; see Image inputs, Video) and typed
+  `inputs` / `outputs`. Port types: `Text`, `Image`, `Video`, `Int`, `Float`, `Seed`, `Canvas`, `Duration`, the
+  input-only `Media` (accepts `Image` or `Video`: the output node's input), and the family-scoped handles `Model`,
+  `Conditioning`, `Latent` (they wire nodes of one family inside one workflow and never cross a process). `when` is a visibility expression (`model.variant != 'turbo'`), carried
   through as is: studio evaluates it in a later stage, the runner ignores it. `GET /v1/studio/workflows/{id}` serves the workflow with
   `node_schemas` for its kinds; the UI derives the form from them.
 - **Resolving a run.** Values come from the node schema `default`, then the workflow's `params`, then
@@ -81,7 +87,8 @@ env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-
   `failed` after the last step. Cancel is checked before each step. The family's LoRA stand-in `echo/lora-stack`
   (title `LoRA Stack`, not in the `echo` workflow): input `text`: Text, output `text`: Text, param `rows` as
   `<family>/lora-stack`'s (LoRAs, below); it writes `<text> [LoRA <name> x<strength>, …]` (no rows: the text as it
-  is) and applies nothing. Its models entry carries a `lora` block (`component` `transformer`, `modules` = exactly the
+  is) and applies nothing. The core `output` kind's input is `media: Media` (from API 1.11; it was `Image`), so one
+  `output` kind serves image and video families on every env. Its models entry carries a `lora` block (`component` `transformer`, `modules` = exactly the
   modules the qwen-image fixtures of `fixtures/loras/` name, `renames` and `ignore` `[]`), so those files fit echo on
   a stack without a GPU.
 - **Seeds.** A `seed` param is an integer (≤ 2^53−1); `null` or `-1` means random: the runner picks one and reports it
@@ -105,7 +112,7 @@ env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-
   `qwen-image` in this version.
 - **Models and memory.** The registry `models` value lists, per model id, `variants` with `presence`
   (`present` | `missing`), `bytes` on disk and the `precisions` it can load as: a full-precision variant offers
-  load-time quantization (`[bf16, int8]`), an already-quantized one only its own (`[int8]`). The hosts value adds
+  load-time quantization (`[bf16, int8]`; MLX also `int4`), an already-quantized one only its own (`[int8]`). The hosts value adds
   `memory {budget_gb, used_gb}` and `resident` components (`component, model, variant, precision, gb, pinned`).
 - **Events to the browser.** The projector applies each `evt.run.*` to the run row and appends it to the
   session's event log (per-session `seq`); studio appends its own `queued` and the `failed` / `cancelled` it decides
@@ -159,7 +166,37 @@ create, terminal status and cancel, and every few seconds.
   `Nats-Msg-Id` is `<run_id>:<attempt>:<seq>`. The projector dedupes on `(job_id, attempt, seq)` and drops events of an
   attempt that is not the run's current one. The runner sets `attempt` in its hosts value while busy.
 - **Cancel** of a run not yet released: `cancelled` at once, never sent. Of a released one: KV `cancels`, as before.
-- Not in API 1.4: evict hand-over between two envs of one host, memory admission.
+- Not yet: the evict hand-over between two envs of one host (stage C; until then Two envs on one host, below),
+  memory admission.
+
+## Two envs on one host (API 1.11, M4 stage A)
+
+Host `mac` runs two native runners, env `torch` (Qwen) and env `mlx` (LTX): two processes, **one GPU** (64 GB unified
+memory). Rule: never two processes holding model weights at once. Until the stage C evict hand-over, studio's
+dispatcher enforces it:
+
+- **One run per host** across its envs (The dispatcher, above) already holds: the other env is never running a run.
+- **GPU gate.** Before releasing a run to env E of host H, every *other* env E' of H whose hosts key is fresh must
+  report no weights: its hosts value's `resident` empty or absent. An E' with `resident` entries is asked to unload:
+  the dispatcher sends `runner.unload.<H>.<E'>` `{for_env: E, run_id}` (`req.runner.unload`; at most one request in
+  flight per (H, E'), repeated at most every 10 s while the run waits) and leaves the run queued (its `host` stays H,
+  `position` as usual). A later pass releases it once E' shows no `resident` (the hosts watch) or E' replied `ok`
+  (`resident: []`; the runner rewrote its hosts key before replying). `busy`, `internal` or no reply in 60 s: ask
+  again; an `ok` to a request sent before a run was released to E' opens nothing (that run may have loaded since:
+  the next pass asks again). An E' whose key is gone (`make runners-stop` deletes it) counts as holding nothing; a
+  key that is offline (older than 30 s) but still lists `resident` entries holds them (fail closed: the runner may be
+  cut off from NATS with its weights mapped) until it is deleted or rewritten. If the gate is still shut 120 s after the first request, the run fails: `env <E'> on host <H> did not
+  unload its models in 120 s` (studio keeps the first-request time in memory; a restart starts the 120 s again).
+- **The runner** (both native runners; the fake runner, alone on its host, never gets one) answers
+  `runner.unload.<host>.<env>`: idle, it unloads every component (pinned ones, adapters and cached handles too),
+  frees the device cache (MLX `mx.clear_cache()`; torch MPS `synchronize()` then `empty_cache()`), rewrites its hosts
+  key with `resident: []`, then replies `{unloaded_gb, resident: []}` (`unloaded_gb` 0 when it held nothing); while a
+  run is in progress, `{error: "a run is in progress", code: busy}`; if unloading fails, `code: internal` (logged).
+  It loads nothing again until its next `cmd.run.execute`. After a run it writes its hosts key (still naming the run,
+  `resident` as its after-run policy left it) before it publishes the terminal status. `RUNNER_AFTER_RUN=keep_warm` stays the default: an env keeps
+  its weights between its own runs and gives them up only when the other env needs the GPU.
+- **By hand** (goldens, debugging): stop the other runner first (`make runners-stop` stops both); never run a model
+  outside a runner while either runner holds weights.
 
 ## Takes, the gallery and uploads (plan 9.1, 17.2)
 
@@ -182,6 +219,63 @@ create, terminal status and cancel, and every few seconds.
   - `PUT /files/<key>?exp=&bytes=&ct=&sig=`: `sig = HMAC("PUT\n" + key + "\n" + exp + "\n" + bytes + "\n" + ct)`
     (`ct` URL-encoded in the query, raw in the HMAC). A GET signature never verifies as a PUT. Answers: 204 stored,
     403 bad / expired / path, 409 exists, 411 `Content-Length` not the signed bytes, 415 `Content-Type` not `ct`.
+
+## Video (API 1.11, M4 stage A)
+
+Takes are `image` or `video` (`audio` is in `TakeKind` for later). A video take is one MP4 (H.264, may carry an AAC
+audio track) plus a poster image; uploads stay images.
+
+- **A workflow's media.** `video` when some node of kind `output` has its `media` input wired from an output of type
+  `Video` (by the palette's schemas), else `image`. A registry workflow publishes it as `media` (absent = `image`;
+  `check.py` checks the canonical ones against the rule); studio serves `Workflow.media` on every workflow (a
+  template's as published, a user workflow's computed on read) and filters `GET /v1/studio/workflows?media=`. Create's
+  Image / Video switch is that filter on the templates the model chip offers (and the caller's own workflows).
+- **Params.** `frames` (registry paramSchema): a frame count on the family's grid, `min + k × step` up to `max`, with
+  `fps` = the name of the same node's int / float frame-rate param. Studio's run rules (and `param_invalid`): an integer
+  on the grid, else 422 `<node>.<param>: <v> is not on the frame grid <min> + <step>k up to <max>`. It takes no wire.
+  The UI draws the **Duration slider** for any `frames` param (a notch per `step`, labelled `<frames> frames · <s> s`,
+  s = frames / fps, one decimal) and the **size picker** (aspect + megapixels) for any node whose output is `Canvas`,
+  from its `width` / `height` int params (`step` = the grid, `min` / `max` the bounds): no model-specific code.
+- **The ltx family (mlx).** Workflow `ltx-text-to-video` (title `LTX-2.5 Text to video`, env `mlx`, `media: video`),
+  LTX-2.5 distilled two-stage text-to-video with audio (docs/reference-notes/ltx.md):
+  `prompt` (`text`) · `seed` (`seed` -1) · `canvas` (`ltx/canvas`: `width` 704, `height` 448, 128–1920 step 64) ·
+  `duration` (`ltx/duration`: `frames` 49, 9–321 step 8, `fps` = `fps`; `fps` 24, 1–60) · `model` (`ltx/model`:
+  `variant` distilled, `precision` int8 | int4 | bf16 default int8) → `encode` (`ltx/encode`, in `model`, `prompt`; no
+  params) → `sample1` (`ltx/sample`, `role` stage1, `steps` 8; in `model`, `cond`, `seed`, `canvas`, `duration`) →
+  `upscale` (`ltx/upscale`, in `model`, `latent`) → `sample2` (`ltx/sample`, `role` stage2, `steps` 3; in `model`,
+  `cond`, `seed`, `latent`) → `decode` (`ltx/decode`, in `model`, `latent`; output `video`: Video) → `output`.
+  `ltx/sample`'s `canvas`, `duration` and `latent` are optional inputs; its `role` fixes grid, sigma table, sampler and
+  seed offsets (stage1: half size, ancestral, noise seeds `seed` / `seed+1`, loop `seed+10000`; stage2: full size,
+  Euler from σ 0.909375, renoise `seed+2` for video and audio). `Latent` of ltx carries video and audio latents
+  together; `upscale` doubles the video latent and passes audio through. The runner checks the graph before it loads
+  anything and fails the run with: `<node>: stage 1 needs canvas and duration, not latent`, `<node>: stage 2 needs
+  latent, not canvas or duration`, `<node>.steps: stage 2 has 3 steps at most`. A `width` / `height` off the 64 grid
+  is floored to it (as the old studio did); the take reports the real size. The pack publishes no LoRA stack and no
+  lora block in this stage.
+- **Progress** (the run strip). The strip's cells are the run graph's nodes that have inputs, except `output`, in
+  topological order (ties by node id): `encode`, `sample1`, `upscale`, `sample2`, `decode`. A `progress` event names one
+  of them (`node`), and every cell before it is done. The ltx runner sends: `encode` `encoding` 1/1; `sample1`
+  `stage 1` 1..steps; `upscale` `upscaling` 1/1; `sample2` `stage 2` 1..steps; `decode` `decoding audio` 1/1,
+  `decoding video` 1/1, `writing mp4` 1/1; `eta_s` once it can estimate. Before those, `loading <component>` 1/1 for
+  each component it loads (`text encoder`, `connector`, `transformer`, `upscaler`, `vae`, `audio vae`, `vocoder`),
+  reported under the node that needs it.
+- **Outputs.** The runner writes `<output_prefix><n>.mp4` (H.264 High, yuv420p, CRF 18, constant frame rate = fps;
+  AAC-LC 48 kHz stereo; `-movflags +faststart`; `Content-Type: video/mp4`) and its poster
+  `<output_prefix><n>.poster.png` (frame 0 at the video's size, `image/png`), both under the command's `output_prefix`,
+  then one `evt.run.output`: `kind: video`, `key` (the MP4), `width`, `height`, `bytes`, `etag` (optional, the MP4's
+  md5) and `video {duration_s = frames / fps, fps, frames, has_audio, poster {key, width, height, bytes}}` (required
+  for video, absent for an image). Never bytes or URLs.
+- **Takes.** The projector stores the take `kind: video`, `content_type` from the key (`.mp4` → `video/mp4`),
+  `width`, `height`, `bytes`, and the `video` fields with the poster's key and size. `Take.video` /
+  `RunOutput.video` (`VideoInfo`: `duration_s`, `fps`, `frames`, `has_audio`, `poster_url`); a video take's
+  `thumb_url` is its poster (signed, as `poster_url` in 1.11); `url` is the MP4. `GET /v1/studio/takes?kind=video`
+  filters. The sweep deletes both objects. Lineage, `made_with`, reuse, delete and star are as for images. A gate's
+  `ReviewCandidate` carries the take's `kind` and, for a video, `video` (its `thumb_url` the poster, `url` the MP4).
+- **Playback.** `GET /files/<key>` answers `Range` requests (206, `Accept-Ranges: bytes`, 416; openapi
+  `filesGetFile`) with the stored `Content-Type`, so `<video src=url poster=poster_url controls>` streams and seeks.
+- **Where a take goes in.** Image params, reference rows, element and look images and "Use in…" take images only: a
+  video take is 422 `… take <id> is not an image` (Image inputs). A pipeline that binds a video step's takes into an
+  image param fails that row when the run is made (no pipeline rule checks media in 1.11).
 
 ## Batches and the pipeline engine (plan 7.2, 16.3)
 
@@ -265,7 +359,8 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
   object (it must exist) and takes its ETag (a run output's comes from `evt.run.output` `etag`; one recorded without it
   is hashed on first use). Errors are 422 naming the param and item from 1:
   `encode.refs[2].image: take <id> not found` (unknown, another user's, deleted, pending, object missing: one
-  message, nothing leaks), `… take <id> is not an image`, `… take <id> has no size` (an output recorded without
+  message, nothing leaks), `… take <id> is not an image` (a video take included: reference rows, `image` params,
+  element and look images and "Use in…" stay image-only; a video's poster is never used in its place), `… take <id> has no size` (an output recorded without
   `width` / `height`), `encode.refs: at most 10 items`, `encode.refs[1]: unknown field <f>`. A batch row: the same text in the 422 (`row 3: …`) or the `invalid` reply.
 - **In `cmd.run.execute`** every Image is resolved (`defs image`): `{take_id, key, content_type, width, height, bytes,
   etag}`, `key` under `u/<owner_id>/` (the take's object: `…/runs/<run_id>/<attempt>/<n>.<ext>` or
@@ -345,8 +440,9 @@ disjoint and no param is named `bypass` (registry.schema.json).
 
 **Types.** A wire `in[key] = "<src>.<out>"` carries the type of `src`'s output `out`. `key` is an input port (its
 type) or a **wireable value param** — values are both parameter and port: `int`→`Int`, `float`→`Float`,
-`seed`→`Seed`, `string`/`text`→`Text`, `image`→`Image` (`bool`, `enum`, `rows` take no wire). The types must be
-equal. The handles `Model`, `Conditioning`, `Latent` must also join two kinds of the same family (`Model[f]` is not
+`seed`→`Seed`, `string`/`text`→`Text`, `image`→`Image` (`bool`, `enum`, `rows`, `frames` take no wire). The wire's
+type must **fit** the key's: `fits(got, want)` = `got == want`, or `want` is `Media` and `got` is `Image` or `Video`
+(`Media` is only ever an input type). Everywhere below "of type T" for a port that receives means "that T fits". The handles `Model`, `Conditioning`, `Latent` must also join two kinds of the same family (`Model[f]` is not
 `Model[g]`). One wire per key (the `in` map has one value per key; connecting to a wired key replaces the wire); an
 output may feed any number of keys.
 
@@ -391,7 +487,7 @@ makes a new node's id from its kind's last segment with `-` → `_` (`qwen-image
 `_3`, … for the first free one; a deleted id may be reused.
 
 **Auto-wiring** (client). When node N of kind K is added, for each required input I of K in schema order: the
-candidates in a scope are the outputs `<m>.<out>` of known-kind nodes m ≠ N in the scope whose type is I's type (a
+candidates in a scope are the outputs `<m>.<out>` of known-kind nodes m ≠ N in the scope whose type fits I's type (a
 handle: of K's family). If a node is selected and it offers exactly one candidate, wire it; else if the whole graph
 offers exactly one, wire it; else leave I unwired. Optional inputs and params are never auto-wired. A candidate the new node already reaches (a
 wire-drop from an input gives it an outgoing wire) is left out, so this never makes a cycle.
@@ -399,10 +495,10 @@ wire-drop from an input gives it an outgoing wire) is left out, so this never ma
 **Wire-drop search** (client). A wire dragged from port P of node m (`side: output`, or `side: input` where P may be
 a wireable param) and dropped on empty canvas offers the palette kinds k with the workflow's `env` in `envs` and
 `family(k)` equal to the workflow's family or none, that have — for an output P of type T — an input or a wireable
-param of type T, or — for an input P of type T — an output of type T; for a handle T only kinds of `family(m.kind)`.
+param that T fits, or — for an input P of type T — an output that fits T; for a handle T only kinds of `family(m.kind)`.
 Order: the workflow's family first, then core kinds, each by `title`, then `kind` (code-point order, not locale).
-Picking one adds the node and wires P to its first port of type T (inputs before params, schema order; for an
-input P, P is wired from the new node's first output of type T), then auto-wires its other inputs with m selected
+Picking one adds the node and wires P to its first port that T fits (inputs before params, schema order; for an
+input P, P is wired from the new node's first output that fits T), then auto-wires its other inputs with m selected
 for an output P and nothing selected for an input P (m consumes the new node; it is not its source).
 
 The `lora_*` codes need the caller's LoRA library (studio: as the caller, at read time; the editor: from `GET
@@ -410,7 +506,7 @@ The `lora_*` codes need the caller's LoRA library (studio: as the caller, at rea
 may carry `loras` (id → detected family: the library), absent = empty.
 
 **Fixtures** (`fixtures/graphs/`, all against `palette.json`, which adds a fictional `test` family to the canonical
-echo and qwen-image kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
+echo, qwen-image and ltx kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
 and `float` params), `count` (an Int source), `model`, `lora` (bypassable Model → Model), `upscale` (torch only)):
 `valid.*.json` / `invalid.*.json` `{description, workflow, problems: [{code, node?, port?, param?}]}`;
 `autowire.*.json` `{description, workflow, selected, add: {id, kind}, expect_in}`; `wiredrop.*.json`

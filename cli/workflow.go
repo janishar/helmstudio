@@ -42,7 +42,13 @@ type savedWorkflow struct {
 	Problems []problem `json:"problems"`
 }
 
-func workflows(stdout io.Writer) error {
+func workflows(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("workflows", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	media := fs.String("media", "", "only image or video workflows")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	c, err := loggedIn()
 	if err != nil {
 		return err
@@ -52,11 +58,16 @@ func workflows(stdout io.Writer) error {
 			ID      string `json:"id"`
 			Title   string `json:"title"`
 			Env     string `json:"env"`
+			Media   string `json:"media"`
 			Source  string `json:"source"`
 			Version int    `json:"version"`
 		} `json:"workflows"`
 	}
-	if err := c.call(http.MethodGet, "/v1/studio/workflows", nil, http.StatusOK, &list); err != nil {
+	path := "/v1/studio/workflows"
+	if *media != "" {
+		path += "?media=" + url.QueryEscape(*media)
+	}
+	if err := c.call(http.MethodGet, path, nil, http.StatusOK, &list); err != nil {
 		return err
 	}
 	for _, w := range list.Workflows {
@@ -64,7 +75,7 @@ func workflows(stdout io.Writer) error {
 		if w.Source == "mine" {
 			v = fmt.Sprintf("v%d", w.Version)
 		}
-		fmt.Fprintf(stdout, "%-36s %-8s %-4s %-8s %s\n", w.ID, w.Source, v, w.Env, w.Title)
+		fmt.Fprintf(stdout, "%-36s %-8s %-4s %-8s %-5s %s\n", w.ID, w.Source, v, w.Env, w.Media, w.Title)
 	}
 	return nil
 }

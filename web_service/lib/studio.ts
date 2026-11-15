@@ -11,7 +11,7 @@ type Schemas = Record<string, S<"NodeSchema">>;
 const MAX_ITEMS = 32; // StudioLayout inspector section items
 
 /** The block Create's derived form amounts to: text params in the composer; the inspector's References, Canvas,
- * Quality, Options and More sections as Create draws them (an over-long section goes on as "<title> 2"). */
+ * Duration, Quality, Options and More sections as Create draws them (an over-long section goes on as "<title> 2"). */
 export function deriveStudio(doc: Pick<Doc, "nodes">, schemas: Schemas): Layout {
   const fs = fields({ nodes: doc.nodes, node_schemas: schemas });
   const s = sections(fs);
@@ -22,6 +22,7 @@ export function deriveStudio(doc: Pick<Doc, "nodes">, schemas: Schemas): Layout 
       [f.key],
     ]),
     ["Canvas", keys(s.canvas)],
+    ["Duration", keys(s.duration)],
     ["Quality", keys(s.tiles)],
     ["Options", keys(s.switches)],
     ["More", keys(s.more)],

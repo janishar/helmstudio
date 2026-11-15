@@ -117,6 +117,43 @@ type Take struct {
 	Parents     []string   `json:"parents"`
 	Children    *[]TakeRef `json:"children,omitempty"` // only GET /takes/{id}
 	BatchID     *string    `json:"batch_id,omitempty"`
+	Video       *VideoInfo `json:"video,omitempty"` // kind video only
+}
+
+// VideoInfo is a video take's or run output's metadata with its signed poster (contracts VideoInfo).
+type VideoInfo struct {
+	DurationS float64 `json:"duration_s"`
+	FPS       float64 `json:"fps"`
+	Frames    int     `json:"frames"`
+	HasAudio  bool    `json:"has_audio"`
+	PosterURL string  `json:"poster_url"`
+}
+
+// Video is a video's metadata as evt.run.output carries it and takes.video / run_outputs.video store it.
+type Video struct {
+	DurationS float64 `json:"duration_s"`
+	FPS       float64 `json:"fps"`
+	Frames    int     `json:"frames"`
+	HasAudio  bool    `json:"has_audio"`
+	Poster    Poster  `json:"poster"`
+}
+
+// Poster is a video's frame 0 as PNG: the take's thumbnail.
+type Poster struct {
+	Key    string `json:"key"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Bytes  int64  `json:"bytes"`
+}
+
+// Info is the stored video (JSON, null or empty for an image) with its poster signed by sign; nil for an image.
+func Info(stored []byte, sign func(key string) string) *VideoInfo {
+	var video *Video
+	if json.Unmarshal(stored, &video) != nil || video == nil {
+		return nil
+	}
+	return &VideoInfo{DurationS: video.DurationS, FPS: video.FPS, Frames: video.Frames, HasAudio: video.HasAudio,
+		PosterURL: sign(video.Poster.Key)}
 }
 
 // TakeRef is a take in a take's children ("Used in").

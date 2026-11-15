@@ -15,6 +15,7 @@ type Info struct {
 	Size         int64
 	ContentType  string
 	LastModified time.Time
+	ETag         string // quoted, as the store sends it; empty in S3 listings
 }
 
 // Store is an object store. It treats keys as opaque: the key layout belongs to the service using it.

@@ -33,9 +33,11 @@ def test_real_qwen_pack_matches_the_fixtures_when_present():
     )
 
 
-def test_echo_pack_is_published_for_env_fake_only():
+@pytest.mark.parametrize("env", ["torch", "mlx"])
+def test_echo_pack_is_published_for_env_fake_only(env):
+    pytest.importorskip(env)
     assert [p.name for p, _ in pack.for_env("fake")] == ["echo"]
-    assert all(p.name != "echo" for p, _ in pack.for_env("torch"))
+    assert all(p.name != "echo" for p, _ in pack.for_env(env))
 
 
 def test_models_entry_measures_presence_and_own_bytes(tmp_path, monkeypatch):
@@ -104,13 +106,13 @@ def test_readme_yaml_quotes_on_and_off():
     assert tiled["enum"] == ["auto", "on", "off"]
 
 
-@pytest.mark.parametrize("env", ["fake", "torch"])
+@pytest.mark.parametrize("env", ["fake", "torch", "mlx"])
 def test_published_nodes_equal_the_canonical_palette(env):
     """Each env's node schemas (title and help from model.yaml / nodes.yaml included) are the canonical palette's
     kinds of that env (contracts/fixtures/graphs/palette.json, without its fictional `test` family), and each
     family's group title is the model's title."""
-    if env == "torch":
-        pytest.importorskip("torch")
+    if env != "fake":
+        pytest.importorskip(env)
     palette = json.loads((CONTRACTS / "fixtures/graphs/palette.json").read_text())["groups"]
     want = {
         n["kind"]: {k: v for k, v in n.items() if k != "envs"}

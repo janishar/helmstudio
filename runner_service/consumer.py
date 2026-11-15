@@ -7,6 +7,8 @@
   resolved seed), failed with a plain error, or cancelled;
 - a node that passes no cancel point for its stage's stall limit is reported failed, the command acked, and the
   process exits (a GPU thread cannot be stopped; its supervisor restarts it);
+- the terminal status goes after the after-run policy and a hosts key listing what stays resident (studio's GPU
+  gate frees the host on that status and reads the key: it must not see a run end before its loads);
 - the command is always acked after the terminal status (a run is delivered once: studio, not redelivery,
   retries it). A shutdown stops the run at its next cancel point and reports it failed."""
 
@@ -139,6 +141,7 @@ class Consumer:
         ctx.fetch = self.store.get
         ctx.loras = self.loras
         beat = asyncio.create_task(self._in_progress(msg, events))
+        end = None  # the terminal status (status, error, resolved), sent in `finally` once the hosts key is current
         try:
             if await cancels.requested(self.cancels_kv, run_id):
                 await events.status("cancelled")
@@ -147,8 +150,15 @@ class Consumer:
             await events.status("running")
             log.info("run %s: running (seed %s)", run_id, ctx.seed)
 
-            async def output(index: int, body: bytes, *, ext: str, **meta) -> None:
+            async def output(index: int, body: bytes, *, ext: str, poster=None, **meta) -> None:
                 key = f"{data['output_prefix']}{index}.{ext}"
+                if (
+                    poster is not None
+                ):  # a video: its poster first, <prefix><n>.poster.png at the video's size
+                    pkey = f"{data['output_prefix']}{index}.poster.png"
+                    await self.store.put(pkey, poster, "image/png")
+                    meta["video"] = meta["video"] | {"poster": {"key": pkey, "width": meta["width"],
+                                                                "height": meta["height"], "bytes": len(poster)}}  # fmt: skip
                 await self.store.put(key, body, mimetypes.types_map[f".{ext}"])
                 etag = hashlib.md5(body).hexdigest()  # the S3 ETag of this single-part PUT
                 await events.output(
@@ -159,22 +169,17 @@ class Consumer:
             try:
                 await graph.run(nodes, self.impls, self.node_schemas, ctx, self.cache)
             except Cancelled:
-                await self._end(events, "cancelled")
-                return
+                end = ("cancelled", None, None)
             except RunError as e:
-                await self._end(events, "failed", str(e))
-                return
+                end = ("failed", str(e), None)
             except Exception as e:
                 log.exception("run %s: node %s failed", run_id, ctx.node)
-                await self._end(
-                    events, "failed", f"{ctx.node}: internal error ({type(e).__name__})"
-                )
-                return
-            await self._end(events, "succeeded", resolved=resolved)
+                end = ("failed", f"{ctx.node}: internal error ({type(e).__name__})", None)
+            else:
+                end = ("succeeded", None, resolved)
         except Exception as e:  # the cancels KV or a publish broke: still try to end the run
             log.exception("run %s: runner error", run_id)
-            with contextlib.suppress(Exception):
-                await events.status("failed", f"runner error ({type(e).__name__})")
+            end = ("failed", f"runner error ({type(e).__name__})", None)
         finally:
             beat.cancel()
             if stop_watch:
@@ -188,8 +193,17 @@ class Consumer:
                 except Exception:
                     log.exception("after-run unload failed")
             self.ctx, self.idle_since = None, time.monotonic()
+            if end and not self.stalled:  # a stalled runner stays offline until it restarts
+                # still naming the run (its lease), resident as after_run left it
+                await self.host.put()
+                try:
+                    await self._end(events, *end)
+                except Exception as e:
+                    log.exception("run %s: could not publish %s", run_id, end[0])
+                    with contextlib.suppress(Exception):
+                        await events.status("failed", f"runner error ({type(e).__name__})")
             self.host.run_id = None
-            if not self.stalled:  # a stalled runner stays offline until it restarts
+            if not self.stalled:
                 await self.host.put()
 
     async def _end(self, events, status: str, error=None, resolved=None) -> None:

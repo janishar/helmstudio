@@ -31,5 +31,5 @@ stages:
     outputs: {image: Image}
   output:
     title: Output
-    help: Stores its input as a run output.
-    inputs: {media: Image}
+    help: "Stores its input as a run output: an image or a video take."
+    inputs: {media: Media}

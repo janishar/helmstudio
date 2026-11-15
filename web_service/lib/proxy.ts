@@ -54,6 +54,9 @@ export async function proxy(req: NextRequest, path: string, withAuth: boolean): 
   upstream.headers.forEach(
     (v, k) => !DROP_RESPONSE.has(k) && !k.startsWith("x-kong-") && out.set(k, v),
   );
+  // an uncompressed body arrives as sent, so its length holds (a <video>'s Range answers want it)
+  const length = upstream.headers.get("content-length");
+  if (length && !upstream.headers.has("content-encoding")) out.set("content-length", length);
   // the user's own data: no browser or shared cache keeps it unless the API says otherwise
   if (withAuth && !out.has("cache-control")) out.set("cache-control", "private, no-store");
   return new Response(upstream.body, {

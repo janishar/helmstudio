@@ -22,7 +22,7 @@ const Stale = 30 * time.Second
 // Param is one param of a node schema.
 type Param struct {
 	Name    string   `json:"name"`
-	Type    string   `json:"type"` // int | float | bool | string | text | enum | seed | image | rows
+	Type    string   `json:"type"` // int | float | bool | string | text | enum | seed | image | rows | frames
 	Label   string   `json:"label,omitempty"`
 	Default any      `json:"default"`
 	Min     *float64 `json:"min,omitempty"`
@@ -34,6 +34,7 @@ type Param struct {
 	// rows only: field → "Image" (a port type) or an item param (a Param without name), kept raw so it round-trips
 	Item    map[string]json.RawMessage `json:"item,omitempty"`
 	Mention string                     `json:"mention,omitempty"` // rows only: how the prompt names item n, e.g. <image{n}>
+	FPS     string                     `json:"fps,omitempty"`     // frames only: the same node's frame-rate param
 }
 
 // IsImageField reports whether a rows item field holds an Image.
@@ -145,7 +146,9 @@ type Workflow struct {
 	Title       string                `json:"title"`
 	Family      string                `json:"family"`
 	Env         string                `json:"env"`
+	Media       string                `json:"media,omitempty"` // image | video as published; "" = image
 	Nodes       map[string]Node       `json:"nodes"`
+	Studio      json.RawMessage       `json:"studio,omitempty"` // a StudioLayout as published; absent = the derived form
 	NodeSchemas map[string]NodeSchema `json:"node_schemas"`
 }
 

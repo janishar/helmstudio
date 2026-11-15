@@ -1,0 +1,42 @@
+{
+  "id": "5a7e0c11-2b3d-4e5f-8a9b-0c1d2e3f4a6c",
+  "kind": "video",
+  "source": "create",
+  "title": "A puppy runs across a park",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.mp4?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.poster.png?exp=1767225600&sig=cd34",
+  "content_type": "video/mp4",
+  "width": 448,
+  "height": 256,
+  "bytes": 412907,
+  "created_at": "2026-11-14T10:16:20Z",
+  "starred": false,
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "made_with": {
+    "workflow_id": "ltx-text-to-video",
+    "workflow_title": "LTX-2.5 Text to video",
+    "inputs": {
+      "prompt.text": "A puppy runs across a park",
+      "seed.seed": 42,
+      "canvas.width": 448,
+      "canvas.height": 256,
+      "duration.frames": 49,
+      "duration.fps": 24,
+      "model.variant": "distilled",
+      "model.precision": "int8",
+      "sample1.role": "stage1",
+      "sample1.steps": 8,
+      "sample2.role": "stage2",
+      "sample2.steps": 3
+    },
+    "prompt": "A puppy runs across a park",
+    "seed": 42,
+    "model": {
+      "id": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8"
+    }
+  },
+  "parents": []
+}

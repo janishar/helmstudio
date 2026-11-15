@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const echoWorkflow = `{"id":"echo","title":"Echo","family":"echo","env":"fake",
+const echoWorkflow = `{"id":"echo","title":"Echo","family":"echo","env":"fake","media":"image",
  "nodes":{"prompt":{"kind":"prompt"},"echo":{"kind":"echo/echo","in":{"text":"prompt.text"}},"output":{"kind":"output"}},
  "node_schemas":{"prompt":{"params":[{"name":"text","type":"text","default":""}]},
   "echo/echo":{"params":[{"name":"steps","type":"int","default":10},{"name":"delay_ms","type":"int","default":300},{"name":"fail","type":"bool","default":false},
@@ -72,6 +72,10 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"rt%d","user":{}}`, f.access, f.refreshes+1)
 		f.mu.Unlock()
 		return
+	case "GET /files/u/o1/runs/r1/0.mp4":
+		w.Header().Set("Content-Type", "video/mp4")
+		_, _ = w.Write(mp4)
+		return
 	case "GET /files/u/o1/runs/r1/0.png":
 		if r.URL.Query().Get("sig") != "ok" {
 			http.Error(w, `{"detail":"invalid link"}`, 403)
@@ -105,6 +109,8 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 	case "GET /v1/studio/workflows/echo":
 		fmt.Fprint(w, echoWorkflow)
+	case "GET /v1/studio/workflows/echo-video":
+		fmt.Fprint(w, videoWorkflow)
 	case "GET /v1/studio/workflows/" + mineID:
 		fmt.Fprint(w, mineWorkflow)
 	case "GET /v1/studio/workflows/w1":
@@ -139,10 +145,15 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.positions = f.positions[1:]
 			return
 		}
+		if f.workflowID == "echo-video" {
+			fmt.Fprint(w, `{"id":"r1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.mp4","kind":"video","url":"/files/u/o1/runs/r1/0.mp4?exp=1&sig=ok","take_id":"t9",
+			 "width":256,"height":128,"video":{"duration_s":2.125,"fps":8,"frames":17,"has_audio":true,"poster_url":"/files/u/o1/runs/r1/0.poster.png?exp=1&sig=ok"}}]}`)
+			return
+		}
 		fmt.Fprint(w, `{"id":"r1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.png","kind":"image","url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok","take_id":"t9"}]}`)
 	case "GET /v1/studio/takes":
 		f.query = r.URL.RawQuery
-		fmt.Fprint(w, `{"takes":[`+takeJSON+`],"next_cursor":"c2"}`)
+		fmt.Fprint(w, `{"takes":[`+takeJSON+`,`+videoTakeJSON+`],"next_cursor":"c2"}`)
 	case "POST /v1/studio/uploads":
 		var b struct {
 			Filename    string `json:"filename"`
@@ -395,7 +406,9 @@ func TestTakesFilters(t *testing.T) {
 	if f.query != "kind=image&limit=2&q=red+fox&session_id=s1&source=upload&starred=true" {
 		t.Fatalf("query %q", f.query)
 	}
-	if want := "t1 * image upload 3x2       2026-11-14T10:00:00Z pic\nmore: --cursor c2\n"; out.String() != want {
+	want := "t1 * image upload 3x2       -      2026-11-14T10:00:00Z pic\n" +
+		"t2   video create 256x128   2.1s   2026-11-14T11:00:00Z a fox\nmore: --cursor c2\n"
+	if out.String() != want {
 		t.Fatalf("got %q want %q", out.String(), want)
 	}
 }

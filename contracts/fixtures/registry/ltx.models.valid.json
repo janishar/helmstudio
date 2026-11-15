@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "published_at": "2026-11-15T10:00:00Z",
+  "published_by": "runner mlx 0.3.0",
+  "models": [
+    {
+      "id": "ltx-2.5",
+      "family": "ltx",
+      "title": "LTX-2.5",
+      "variants": [
+        {
+          "id": "distilled",
+          "presence": "present",
+          "bytes": 76350000000,
+          "precisions": [
+            "bf16",
+            "int8",
+            "int4"
+          ]
+        }
+      ]
+    }
+  ]
+}

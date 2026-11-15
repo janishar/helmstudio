@@ -1,7 +1,7 @@
 "use client";
 // Form controls rendered from node schemas: text params go in the composer, the rest in the inspector, grouped
 // generically (the canvas node, label-over-value tiles, switches, the rest); the composer's chips summarise them.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
@@ -9,11 +9,13 @@ import { RowsEditor, type RefUploads } from "@/components/create/refs";
 import { LoraRows } from "@/components/create/loras";
 import { autoSize, imageInputs, mentionOf, refIds } from "@/lib/refs";
 import { useTakes } from "@/lib/take-cache";
+import { durationText, gridOf, secondsText, seconds } from "@/lib/media";
 import {
   ASPECTS,
-  MEGAPIXELS,
   aspectOf,
   display,
+  fpsKey,
+  megapixelChoices,
   megapixelsOf,
   pretty,
   sections,
@@ -98,7 +100,8 @@ export function canvasOf(
   if (!width || !height) return null;
   const w = Number(rawOf(width, raws));
   const h = Number(rawOf(height, raws));
-  const auto = mode ? rawOf(mode, raws) === "auto" : w === width.initial && h === height.initial;
+  // without a mode param there is no Auto: the size is what it reads
+  const auto = !!mode && rawOf(mode, raws) === "auto";
   const fromRef = auto && !!mode && !!ref;
   const size = fromRef ? autoSize(ref.width, ref.height) : { width: w, height: h };
   return { width, height, mode, w: size.width, h: size.height, auto, fromRef };
@@ -114,8 +117,19 @@ function useLastRef(fs: Field[], raws: Record<string, Raw>) {
 }
 
 /** "16:9 · 4 MP", else "1000 × 700 · 0.7 MP". */
-const sizeText = (w: number, h: number) =>
-  `${aspectOf(w, h) ?? `${w} × ${h}`} · ${+((w * h) / 1e6).toFixed(1)} MP`;
+const sizeText = (w: number, h: number, grid = 1) =>
+  `${aspectOf(w, h, grid) ?? `${w} × ${h}`} · ${mpText(w, h)}`;
+/** "0.3 MP"; under 0.1 MP two significant digits ("0.033 MP"), never "0 MP". */
+const mpText = (w: number, h: number) => {
+  const mp = (w * h) / 1e6;
+  return `${+(mp < 0.1 ? mp.toPrecision(2) : mp.toFixed(1))} MP`;
+};
+
+/** A frames field's frame rate now (its `fps` field's value), 0 when it names none. */
+const fpsOf = (f: Field, fs: Field[], raws: Record<string, Raw>) => {
+  const r = fs.find((x) => x.key === fpsKey(f));
+  return r ? Number(rawOf(r, raws)) || 0 : 0;
+};
 
 /** Which inspector editor is open (a field key), and how to open or close one. */
 type OpenProps = { open: string | null; setOpen: (key: string | null) => void };
@@ -151,11 +165,14 @@ export function Inspector({
   uploads,
   groups,
   familyTitle,
+  compact,
 }: FormProps &
   OpenProps & {
     uploads: RefUploads;
     groups?: { title: string; fields: Field[] }[];
     familyTitle?: string;
+    /** the canvas as Aspect and Size tiles (a video workflow, docs/mock/TextToVideo.dc.html) */
+    compact?: boolean;
   }) {
   const s = sections(fields);
   const c = canvasOf(fields, raws, useLastRef(fields, raws));
@@ -164,6 +181,7 @@ export function Inspector({
     !s.refs.length &&
     !s.loras.length &&
     !s.canvas.length &&
+    !s.duration.length &&
     !s.tiles.length &&
     !s.switches.length &&
     !s.more.length
@@ -172,6 +190,17 @@ export function Inspector({
   const control = (f: Field) => {
     const raw = rawOf(f, raws);
     if (f.param.type === "bool") return <Switch key={f.key} f={f} raw={raw} onChange={onChange} />;
+    if (f.param.type === "frames")
+      return (
+        <Duration
+          key={f.key}
+          f={f}
+          raw={raw}
+          fps={fpsOf(f, fields, raws)}
+          error={errors[f.key]}
+          onChange={onChange}
+        />
+      );
     if (f.param.type === "string" || f.param.type === "text")
       return <Line key={f.key} f={f} raw={raw} errors={errors} onChange={onChange} />;
     return (
@@ -236,7 +265,7 @@ export function Inspector({
                 uploads={uploads}
               />
             ))}
-            {canvas && <CanvasPicker c={c} errors={errors} onChange={onChange} />}
+            {canvas && <CanvasPicker c={c} errors={errors} onChange={onChange} compact={compact} />}
           </>
         ),
       );
@@ -262,9 +291,10 @@ export function Inspector({
         "sec-canvas",
         "Canvas",
         extra,
-        c && <CanvasPicker c={c} errors={errors} onChange={onChange} />,
+        c && <CanvasPicker c={c} errors={errors} onChange={onChange} compact={compact} />,
         s.canvas[0]?.nodeHelp,
       )}
+      {section("sec-duration", "Duration", s.duration, undefined, s.duration[0]?.nodeHelp)}
       {section("sec-quality", "Quality", s.tiles, undefined, undefined, "gap-3")}
       {s.loras.map((f, i) =>
         section(
@@ -286,51 +316,72 @@ function CanvasPicker({
   c,
   errors,
   onChange,
+  compact,
 }: {
   c: NonNullable<ReturnType<typeof canvasOf>>;
   errors: Record<string, string>;
   onChange: (key: string, raw: Raw) => void;
+  compact?: boolean;
 }) {
   const { width, height, mode, w, h } = c;
+  // compact: which tile's choices are open
+  const [opened, setOpened] = useState<"aspect" | "size" | null>(null);
   const grid = width.param.step ?? 1;
-  const fit = (ratio: number, mp: number) =>
-    sizeFor(
-      ratio,
-      mp,
-      grid,
-      Math.max(width.param.min ?? 0, height.param.min ?? 0),
-      Math.min(width.param.max ?? Infinity, height.param.max ?? Infinity),
-    );
+  const min = Math.max(width.param.min ?? 0, height.param.min ?? 0);
+  const max = Math.min(width.param.max ?? Infinity, height.param.max ?? Infinity);
+  const choices = megapixelChoices(min, max);
+  const fit = (ratio: number, mp: number) => sizeFor(ratio, mp, grid, min, max);
   // a size picked is fixed: in an edit, Auto would follow the last reference instead
   const set = (s: { width: number; height: number }) => {
     if (mode) onChange(mode.key, "fixed");
     onChange(width.key, String(s.width));
     onChange(height.key, String(s.height));
   };
-  const aspect = c.auto ? "Auto" : aspectOf(w, h);
-  const mp = megapixelsOf(w, h);
+  const aspect = c.auto ? "Auto" : aspectOf(w, h, grid);
+  const mp = megapixelsOf(w, h, choices);
   // the exact ratio of the aspect it is, so a size change keeps it (the grid rounds w / h)
-  const ratio = ASPECTS.find(([l]) => l === aspectOf(w, h))?.[1] ?? w / h;
+  const ratio = ASPECTS.find(([l]) => l === aspectOf(w, h, grid))?.[1] ?? w / h;
+  const tile = (k: "aspect" | "size", label: string, value: string) => (
+    <button
+      type="button"
+      className="set bevel"
+      aria-expanded={opened === k}
+      onClick={() => setOpened(opened === k ? null : k)}
+    >
+      <small className="text-[12px] text-t2">{label}</small>
+      <b className="font-semibold">{value}</b>
+    </button>
+  );
   return (
     <>
-      <div id="canvas-pick" role="group" aria-label="Aspect" className="grid grid-cols-5 gap-1.5">
-        <button
-          type="button"
-          className="opt bevel"
-          aria-pressed={aspect === "Auto"}
-          title={
-            mode
-              ? "The workflow's own size; with references, about 1 MP at the last one's aspect"
-              : "The workflow's own size"
-          }
-          onClick={() => {
-            if (mode) onChange(mode.key, "auto");
-            onChange(width.key, toRaw(width.initial, width.param));
-            onChange(height.key, toRaw(height.initial, height.param));
-          }}
-        >
-          Auto
-        </button>
+      {compact && (
+        <div className="grid grid-cols-2 gap-2">
+          {tile("aspect", "Aspect", aspect ?? `${w} × ${h}`)}
+          {tile("size", "Size", mpText(w, h))}
+        </div>
+      )}
+      <div
+        id="canvas-pick"
+        role="group"
+        aria-label="Aspect"
+        className={`grid gap-1.5 ${mode ? "grid-cols-5" : "grid-cols-4"}`}
+        hidden={compact && opened !== "aspect"}
+      >
+        {mode && (
+          <button
+            type="button"
+            className="opt bevel"
+            aria-pressed={aspect === "Auto"}
+            title="The workflow's own size; with references, about 1 MP at the last one's aspect"
+            onClick={() => {
+              onChange(mode.key, "auto");
+              onChange(width.key, toRaw(width.initial, width.param));
+              onChange(height.key, toRaw(height.initial, height.param));
+            }}
+          >
+            Auto
+          </button>
+        )}
         {ASPECTS.map(([label, ratio]) => (
           <button
             key={label}
@@ -343,8 +394,13 @@ function CanvasPicker({
           </button>
         ))}
       </div>
-      <div role="group" aria-label="Size" className="grid grid-cols-3 gap-1.5">
-        {MEGAPIXELS.map((m) => (
+      <div
+        role="group"
+        aria-label="Size"
+        className="grid grid-flow-col gap-1.5"
+        hidden={compact && opened !== "size"}
+      >
+        {choices.map((m) => (
           <button
             key={m}
             type="button"
@@ -357,12 +413,59 @@ function CanvasPicker({
         ))}
       </div>
       <span className="mono text-[12px] text-t2">
-        {w} × {h} · {+((w * h) / 1e6).toFixed(1)} MP
+        {w} × {h} · {mpText(w, h)}
         {c.fromRef ? " · from the last reference" : grid > 1 && ` · on the ${grid} px grid`}
       </span>
       <FieldError k={width.key} errors={errors} />
       <FieldError k={height.key} errors={errors} />
     </>
+  );
+}
+
+/** The Duration slider (plan 05-ui.md 8.4): a frames param on its grid, one notch per step, read as frames and
+ * seconds at the node's frame rate. */
+function Duration({
+  f,
+  raw,
+  fps,
+  error,
+  onChange,
+}: {
+  f: Field;
+  raw: Raw;
+  fps: number;
+  error?: string;
+  onChange: (key: string, raw: Raw) => void;
+}) {
+  const id = idOf(f.key);
+  const g = gridOf(f.param);
+  const n = Number(raw);
+  return (
+    <div id={id + "-ed"} className="col-span-2 flex flex-col gap-2">
+      <label htmlFor={id} className="flex justify-between gap-2">
+        <span className="flex items-center">
+          {f.param.label ?? f.param.name}
+          {f.param.help && <Info>{f.param.help}</Info>}
+        </span>
+        <span className="mono text-[12px] text-t2">
+          {Number.isFinite(n) ? durationText(n, fps) : String(raw)}
+        </span>
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={g.min}
+        max={g.max}
+        step={g.step}
+        value={Number.isFinite(n) ? n : g.min}
+        aria-valuetext={Number.isFinite(n) ? durationText(n, fps) : undefined}
+        aria-invalid={!!error || undefined}
+        aria-describedby={error ? id + "-err" : undefined}
+        onChange={(e) => onChange(f.key, e.target.value)}
+        className="w-full accent-a1"
+      />
+      <FieldError k={f.key} errors={error ? { [f.key]: error } : {}} />
+    </div>
   );
 }
 
@@ -603,12 +706,18 @@ export function Chips({
   raws,
   onChange,
   show,
-}: Omit<FormProps, "errors"> & { show: (key: string) => void }) {
+  compact,
+}: Omit<FormProps, "errors"> & {
+  show: (key: string) => void;
+  /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
+  compact?: boolean;
+}) {
   const s = sections(fields);
   const model = s.tiles.filter((f) => f.model && f.param.type === "enum");
   const first = model[0];
   const c = canvasOf(fields, raws, useLastRef(fields, raws));
-  const seed = s.tiles.find((f) => f.param.type === "seed");
+  const seed = compact ? undefined : s.tiles.find((f) => f.param.type === "seed");
+  const frames = s.duration.filter((f) => f.param.type === "frames");
   const chip = "chip bevel rounded-[10px] bg-s4";
   const random = seed && rawOf(seed, raws) === "";
   return (
@@ -625,9 +734,29 @@ export function Chips({
       )}
       {c && (
         <button type="button" className={chip} onClick={() => show("canvas")}>
-          {c.fromRef ? `Auto · ${sizeText(c.w, c.h)}` : sizeText(c.w, c.h)}
+          {compact
+            ? `${c.w} × ${c.h}`
+            : c.fromRef
+              ? `Auto · ${sizeText(c.w, c.h, c.width.param.step)}`
+              : sizeText(c.w, c.h, c.width.param.step)}
         </button>
       )}
+      {frames.map((f) => {
+        const fps = fpsOf(f, fields, raws);
+        return (
+          <button
+            key={f.key}
+            type="button"
+            className={chip}
+            title={f.param.label ?? f.param.name}
+            onClick={() => show(f.key)}
+          >
+            {[secondsText(seconds(Number(rawOf(f, raws)), fps)), fps && `${fps} fps`]
+              .filter(Boolean)
+              .join(" · ")}
+          </button>
+        );
+      })}
       {seed && (
         <div
           role="group"

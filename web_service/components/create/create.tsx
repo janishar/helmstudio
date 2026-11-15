@@ -4,8 +4,8 @@
 // can't be held).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Check, ChevronDown, Cpu, Maximize, Minus, Plus, Star } from "lucide-react";
-import { FullScreen, useFullScreenKey } from "@/components/media";
+import { Check, ChevronDown, Cpu, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
+import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { takeDrop, useRefUploads } from "@/components/create/refs";
@@ -40,6 +40,7 @@ import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/l
 import { studioView } from "@/lib/studio";
 import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import { mediaKinds, mediaOf, secondsText, workflowFor, type MediaKind } from "@/lib/media";
 import {
   applyEvent,
   clock,
@@ -49,6 +50,7 @@ import {
   isActive,
   lastDuration,
   mergeRuns,
+  nodeLabel,
   seedOf,
   segments,
   track,
@@ -69,8 +71,8 @@ import {
 import type { GraphProps } from "@/components/graph/graph";
 import {
   buildInputs,
+  carry,
   fields as fieldsOf,
-  nodeTitle,
   queueInputs,
   rawsFrom,
   toRaw,
@@ -440,6 +442,17 @@ export function Create({
     });
   };
   const uploads = useRefUploads(change);
+  /** Opens another workflow of the session (the picker, the Image / Video switch): what the form holds carries over
+   * where the paths match (the session rule, lib/workflow.ts carry). */
+  const switchTo = (id: string) => {
+    const w = workflows?.find((x) => x.id === id);
+    if (w) setRaws((r) => carry(r, fieldsOf(w)));
+    setChosen(id);
+    setOpenKey(null);
+  };
+  const media = workflow ? mediaOf(workflow) : "image";
+  const kinds = workflows ? mediaKinds(workflows) : [];
+  const video = media === "video";
   // a drop or paste on the stage or the composer goes to the first image input
   const refField = imageInputs(fields)[0];
   const intoRefs = (dt: DataTransfer) =>
@@ -515,7 +528,9 @@ export function Create({
       const q = (s: string) => document.querySelector<HTMLElement>(s);
       const el =
         key === "canvas"
-          ? (q("#canvas-pick [aria-pressed=true]") ?? q("#canvas-pick button"))
+          ? (q("#canvas-pick:not([hidden]) [aria-pressed=true]") ??
+            q("#canvas-pick:not([hidden]) button") ??
+            q("section:has(#canvas-pick) .set"))
           : q(`#${idOf(key)}-ed :is(input, .opt)`);
       el?.scrollIntoView({ block: "nearest" });
       el?.focus();
@@ -680,13 +695,11 @@ export function Create({
       </div>
       {workflows && workflows.length > 0 && (
         <WorkflowPicker
-          workflows={workflows}
+          // the Image / Video switch is a filter on what the chip offers
+          workflows={workflows.filter((w) => mediaOf(w) === media)}
           current={workflow}
           label={badge ?? (workflow ? editLabel(workflow.title, refs) : "Workflow")}
-          onPick={(id) => {
-            setChosen(id);
-            setOpenKey(null);
-          }}
+          onPick={switchTo}
           onChanged={(w) => onWorkflow(w, false)}
           onDeleted={(id) => {
             setWorkflows((list) => list?.filter((x) => x.id !== id) ?? null);
@@ -845,126 +858,143 @@ export function Create({
           </div>
         )}
 
-        <form
-          onSubmit={generate}
-          onPaste={(e) => {
-            if (!e.defaultPrevented && intoRefs(e.clipboardData)) e.preventDefault();
-          }}
-          noValidate
-          aria-label="Composer"
-          className="panel flex shrink-0 flex-col gap-3 bg-s2 px-4 py-3.5 [box-shadow:0_16px_40px_color-mix(in_srgb,var(--shd)_45%,transparent)]"
-        >
-          {(refField || textFields.length > 0 || tiles.length > 0) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {refField ? (
-                <RefChips
-                  fields={fields}
-                  raws={raws}
-                  errors={errors}
-                  onChange={change}
-                  uploads={uploads}
-                  extra={<MentionChips texts={texts} />}
+        <div className="flex shrink-0 flex-wrap items-stretch gap-2.5">
+          {kinds.length > 1 && (
+            <MediaSwitch
+              kinds={kinds}
+              media={media}
+              onPick={(m) => {
+                const id = workflows && workflowFor(workflows, runs ?? [], m, workflow?.id);
+                if (id) switchTo(id);
+              }}
+            />
+          )}
+          <form
+            onSubmit={generate}
+            onPaste={(e) => {
+              if (!e.defaultPrevented && intoRefs(e.clipboardData)) e.preventDefault();
+            }}
+            noValidate
+            aria-label="Composer"
+            className="panel flex min-w-0 flex-[1_1_520px] flex-col gap-3 bg-s2 px-4 py-3.5 [box-shadow:0_16px_40px_color-mix(in_srgb,var(--shd)_45%,transparent)]"
+          >
+            {(refField || textFields.length > 0 || tiles.length > 0) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {refField ? (
+                  <RefChips
+                    fields={fields}
+                    raws={raws}
+                    errors={errors}
+                    onChange={change}
+                    uploads={uploads}
+                    extra={<MentionChips texts={texts} />}
+                  />
+                ) : (
+                  <MentionChips texts={texts} />
+                )}
+                <QuickTiles
+                  tiles={tiles}
+                  chosen={looksChosen}
+                  mentioned={handles.length}
+                  onElements={() => setElementsOpen(true)}
+                  onLook={setLookGroup}
                 />
-              ) : (
-                <MentionChips texts={texts} />
-              )}
-              <QuickTiles
-                tiles={tiles}
-                chosen={looksChosen}
-                mentioned={handles.length}
-                onElements={() => setElementsOpen(true)}
-                onLook={setLookGroup}
-              />
-            </div>
-          )}
-          <TextFields
-            fields={layout ? fields.filter((f) => layout.text.includes(f)) : fields}
-            raws={raws}
-            errors={errors}
-            onChange={change}
-          />
-          {note && (
-            <p
-              role={preview?.errors.length ? "alert" : "status"}
-              className={`mono m-0 text-[12px] whitespace-pre-line ${preview?.errors.length ? "text-bad" : "text-t2"}`}
-            >
-              {note}
-            </p>
-          )}
-          {reuseNote && (
-            <p role="status" className="m-0 text-[12px] text-t2">
-              {reuseNote}
-            </p>
-          )}
-          {blocked > 0 && (
-            <p role="status" className="text-[12px] text-bad">
-              This workflow has {blocked} problem{blocked === 1 ? "" : "s"}: open Graph to fix{" "}
-              {blocked === 1 ? "it" : "them"}.
-            </p>
-          )}
-          {fields.some((f) => f.param.type !== "text" && errors[f.key]) && (
-            <ErrorNote>Some settings are not valid: see the Inspector.</ErrorNote>
-          )}
-          {workflow &&
-            hosts &&
-            !hosts.some((h) => h.env === workflow.env && h.state !== "offline") && (
-              <p role="status" className="text-[12px] text-t2">
-                No runner for {workflow.env} is online; runs wait until one is.
-              </p>
-            )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Chips fields={fields} raws={raws} onChange={change} show={show} />
-            <div className="grow" />
-            {seedField && (
-              <div
-                role="group"
-                aria-label="Seeds to queue"
-                className="bevel flex h-9 items-center rounded-[10px] bg-s4 text-[13px] font-medium"
-              >
-                <button
-                  type="button"
-                  aria-label="Fewer seeds"
-                  disabled={count <= 1}
-                  onClick={() => setCount((n) => n - 1)}
-                  className="grid size-9 place-items-center rounded-[10px] disabled:text-t2 disabled:opacity-60"
-                >
-                  <Minus size={14} aria-hidden />
-                </button>
-                <span className="mono" aria-live="polite">
-                  {count} / {MAX_QUEUE}
-                </span>
-                <button
-                  type="button"
-                  aria-label="More seeds"
-                  disabled={count >= MAX_QUEUE}
-                  onClick={() => setCount((n) => n + 1)}
-                  className="grid size-9 place-items-center rounded-[10px] disabled:text-t2 disabled:opacity-60"
-                >
-                  <Plus size={14} aria-hidden />
-                </button>
               </div>
             )}
-            <button
-              type="submit"
-              title="Generate (⌘ or Ctrl + Enter)"
-              className="key flex h-14 flex-col items-center justify-center gap-px px-6"
-              disabled={!workflow || busy || blocked > 0}
-            >
-              <span className="text-sm">
-                {busy
-                  ? "Sending…"
-                  : blocked
-                    ? `${blocked} problem${blocked === 1 ? "" : "s"}`
-                    : anyActive
-                      ? "Add to queue"
-                      : "Generate"}
-              </span>
-              {took != null && !busy && (
-                <span className="mono text-[11px] font-medium">last took {clock(took)}</span>
+            <TextFields
+              fields={layout ? fields.filter((f) => layout.text.includes(f)) : fields}
+              raws={raws}
+              errors={errors}
+              onChange={change}
+            />
+            {note && (
+              <p
+                role={preview?.errors.length ? "alert" : "status"}
+                className={`mono m-0 text-[12px] whitespace-pre-line ${preview?.errors.length ? "text-bad" : "text-t2"}`}
+              >
+                {note}
+              </p>
+            )}
+            {reuseNote && (
+              <p role="status" className="m-0 text-[12px] text-t2">
+                {reuseNote}
+              </p>
+            )}
+            {blocked > 0 && (
+              <p role="status" className="text-[12px] text-bad">
+                This workflow has {blocked} problem{blocked === 1 ? "" : "s"}: open Graph to fix{" "}
+                {blocked === 1 ? "it" : "them"}.
+              </p>
+            )}
+            {fields.some((f) => f.param.type !== "text" && errors[f.key]) && (
+              <ErrorNote>Some settings are not valid: see the Inspector.</ErrorNote>
+            )}
+            {workflow &&
+              hosts &&
+              !hosts.some((h) => h.env === workflow.env && h.state !== "offline") && (
+                <p role="status" className="text-[12px] text-t2">
+                  No runner for {workflow.env} is online; runs wait until one is.
+                </p>
               )}
-            </button>
-          </div>
-        </form>
+            <div className="flex flex-wrap items-center gap-2">
+              <Chips fields={fields} raws={raws} onChange={change} show={show} compact={video} />
+              <div className="grow" />
+              {seedField && (
+                <div
+                  role="group"
+                  aria-label="Seeds to queue"
+                  className="bevel flex h-9 items-center rounded-[10px] bg-s4 text-[13px] font-medium"
+                >
+                  <button
+                    type="button"
+                    aria-label="Fewer seeds"
+                    disabled={count <= 1}
+                    onClick={() => setCount((n) => n - 1)}
+                    className="grid size-9 place-items-center rounded-[10px] disabled:text-t2 disabled:opacity-60"
+                  >
+                    <Minus size={14} aria-hidden />
+                  </button>
+                  <span className="mono" aria-live="polite">
+                    {count} / {MAX_QUEUE}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="More seeds"
+                    disabled={count >= MAX_QUEUE}
+                    onClick={() => setCount((n) => n + 1)}
+                    className="grid size-9 place-items-center rounded-[10px] disabled:text-t2 disabled:opacity-60"
+                  >
+                    <Plus size={14} aria-hidden />
+                  </button>
+                </div>
+              )}
+              <button
+                type="submit"
+                title="Generate (⌘ or Ctrl + Enter)"
+                className="key flex h-14 flex-col items-center justify-center gap-px px-6"
+                disabled={!workflow || busy || blocked > 0}
+              >
+                <span className="text-sm">
+                  {busy
+                    ? "Sending…"
+                    : blocked
+                      ? `${blocked} problem${blocked === 1 ? "" : "s"}`
+                      : anyActive
+                        ? "Add to queue"
+                        : "Generate"}
+                </span>
+                {took != null && !busy && (
+                  <span
+                    className="mono text-[11px] font-medium"
+                    title={`The last run of this workflow took ${clock(took)}`}
+                  >
+                    ≈ {clock(took)}
+                  </span>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
         {textFields[0] && (
           <ElementsPicker
             open={elementsOpen}
@@ -1004,6 +1034,7 @@ export function Create({
           open={openKey}
           setOpen={setOpenKey}
           uploads={uploads}
+          compact={video}
           familyTitle={
             palette?.groups.find((g) => g.family === workflow?.family)?.title ??
             (workflow?.source === "mine" ? undefined : workflow?.title)
@@ -1113,7 +1144,12 @@ function Stage({
   const size =
     take?.width && take.height ? { w: take.width, h: take.height } : run && sizeOf(run, workflow);
   const p = run?.progress;
-  const node = run?.status === "running" && p ? nodeTitle(workflow, p.node) : "";
+  const node = run?.status === "running" && p ? nodeLabel(workflow, p.node) : "";
+  // which output's video is playing (a new take shown starts paused)
+  const outKey = out && ("key" in out ? out.key : out.id);
+  const [playingKey, setPlayingKey] = useState<string | undefined>();
+  const playing = !!outKey && playingKey === outKey;
+  const videoRef = useRef<HTMLVideoElement>(null);
   const label = !run
     ? take
       ? "Take"
@@ -1161,6 +1197,24 @@ function Stage({
             {label}
           </span>
           <span className="flex items-center gap-2">
+            {out?.kind === "video" && (
+              <button
+                type="button"
+                aria-label={playing ? "Pause" : "Play"}
+                title={playing ? "Pause" : "Play"}
+                onClick={() => {
+                  const v = videoRef.current;
+                  if (v) void (v.paused ? v.play() : v.pause());
+                }}
+                className="bevel grid size-9 place-items-center rounded-lg border border-s5 bg-s2/90"
+              >
+                {playing ? (
+                  <Pause size={16} aria-hidden className="fill-current" />
+                ) : (
+                  <Play size={16} aria-hidden className="fill-current" />
+                )}
+              </button>
+            )}
             {take && (
               <button
                 type="button"
@@ -1203,14 +1257,15 @@ function Stage({
           <h1 className="text-center font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
             What will you <span className="text-a1">make?</span>
           </h1>
-        ) : out?.kind === "image" ? (
-          <img
-            src={safeUrl(out.url)}
+        ) : out?.kind === "image" || out?.kind === "video" ? (
+          <Media
+            key={outKey}
+            take={out}
+            url={safeUrl(out.url)}
             alt={take?.title || (prompt ? String(prompt) : "The take")}
-            width={out.width ?? undefined}
-            height={out.height ?? undefined}
-            fetchPriority="high"
-            className="rounded-[10px] object-cover"
+            videoRef={videoRef}
+            onPlaying={(on) => setPlayingKey(on ? outKey : undefined)}
+            className={`rounded-[10px] object-cover ${out.kind === "video" ? "bg-black" : ""}`}
             // as large as fits the stage, keeping its aspect, so the corners round the picture itself
             style={
               size
@@ -1306,6 +1361,9 @@ function RunStrip({
             className={`step text-t2 ${s.state === "stopped" ? "line-through" : ""}`}
           >
             {s.title}
+            {s.state === "pending" && s.steps != null && (
+              <span className="mono">{s.steps} steps</span>
+            )}
           </span>
         ),
       )}
@@ -1339,6 +1397,7 @@ function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onP
       type="button"
       aria-label={[
         seed != null ? `Take, seed ${seed}` : `Take, ${take.title}`,
+        take.video && secondsText(take.video.duration_s),
         take.starred && "starred",
       ]
         .filter(Boolean)
@@ -1352,19 +1411,9 @@ function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onP
         current ? "border-2 border-a1" : "border border-s5"
       }`}
     >
-      {take.kind === "image" ? (
-        <img
-          src={safeUrl(take.thumb_url)}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="size-full object-cover"
-        />
-      ) : (
-        <span>{take.kind}</span>
-      )}
+      <Thumb take={take} badge={false} className="size-full" />
       <span className="absolute bottom-1 left-1 max-w-[calc(100%-8px)] truncate rounded bg-s2/90 px-1 text-t1">
-        {label}
+        {take.video ? `${label} · ${secondsText(take.video.duration_s)}` : label}
       </span>
       {take.starred && (
         <Star size={12} aria-hidden className="absolute top-1 right-1 fill-a1 text-a1" />
@@ -1415,16 +1464,22 @@ function RunTile({
         current ? "border-2 border-a1" : "border border-s5"
       } ${run.status === "failed" ? "text-bad" : "text-t2"}`}
     >
-      {out?.kind === "image" ? (
+      {out ? (
         <>
-          <img
-            src={safeUrl(thumb ?? out.url)}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="size-full object-cover"
-          />
-          <span className="absolute bottom-1 left-1 rounded bg-s2/90 px-1 text-t1">{label}</span>
+          {thumb ? (
+            <img
+              src={safeUrl(thumb)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="size-full object-cover"
+            />
+          ) : (
+            <Thumb take={out} badge={false} className="size-full" />
+          )}
+          <span className="absolute bottom-1 left-1 rounded bg-s2/90 px-1 text-t1">
+            {out.video ? `${label} · ${secondsText(out.video.duration_s)}` : label}
+          </span>
         </>
       ) : (
         <span className="flex flex-col items-center">
@@ -1433,6 +1488,39 @@ function RunTile({
         </span>
       )}
     </button>
+  );
+}
+
+/** The Image / Video switch beside the composer (docs/mock/TextToVideo.dc.html "Output kind"): which media's
+ * workflows the model chip offers. */
+function MediaSwitch({
+  kinds,
+  media,
+  onPick,
+}: {
+  kinds: MediaKind[];
+  media: MediaKind;
+  onPick: (m: MediaKind) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Output kind"
+      className="flex shrink-0 flex-col gap-1.5 rounded-2xl bg-s1 p-1.5"
+    >
+      {kinds.map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={m === media}
+          onClick={() => m !== media && onPick(m)}
+          className="min-h-11 w-16 flex-1 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
+        >
+          {m === "image" ? "Image" : "Video"}
+        </button>
+      ))}
+    </div>
   );
 }
 

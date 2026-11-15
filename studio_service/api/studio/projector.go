@@ -165,14 +165,14 @@ func applyProgress(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Mes
 	return progress, err
 }
 
-// applyOutput records an output stored under the run's own prefix; a key outside it, or a run already ended, is
-// dropped. Every output is a take, stored in the same transaction (gallery.Record). The stored event keeps the key: it
-// is signed when read.
+// applyOutput records an output stored under the run's own prefix; a key outside it, a video without its metadata or
+// with a poster outside it, or a run already ended, is dropped. Every output is a take, stored in the same transaction
+// (gallery.Record). The stored event keeps the keys: they are signed when read.
 func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Message[message.Output]) (any, error) {
 	data := event.Data
 	prefix := common.OwnerPrefix(run.OwnerID) + "runs/" + run.ID + "/"
 	if terminal[run.Status] || !common.Owns(run.OwnerID, data.Key) || !strings.HasPrefix(data.Key, prefix) ||
-		(data.Kind != "image" && data.Kind != "video") || data.Index < 0 {
+		(data.Kind != "image" && data.Kind != "video") || data.Index < 0 || badVideo(data, prefix) {
 		log.Printf("projector: dropping output %d of run %s (%s)", data.Index, run.ID, data.Key)
 		return nil, nil
 	}
@@ -182,13 +182,14 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	}
 	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
-		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: parents(typedView(run.Nodes, run.Mentions))})
+		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: parents(typedView(run.Nodes, run.Mentions)),
+		Video: data.Video})
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO run_outputs (run_id, owner_id, idx, key, kind, width, height, bytes, seed, take_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (run_id, idx) DO NOTHING`,
-		run.ID, run.OwnerID, data.Index, data.Key, data.Kind, data.Width, data.Height, data.Bytes, data.Seed, takeID)
+	_, err = tx.Exec(ctx, `INSERT INTO run_outputs (run_id, owner_id, idx, key, kind, width, height, bytes, seed, take_id, video)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) ON CONFLICT (run_id, idx) DO NOTHING`,
+		run.ID, run.OwnerID, data.Index, data.Key, data.Kind, data.Width, data.Height, data.Bytes, data.Seed, takeID, data.Video)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +201,23 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	if data.Seed != nil {
 		stored["seed"] = *data.Seed
 	}
+	if data.Video != nil {
+		stored["video"] = data.Video
+	}
 	return stored, nil
+}
+
+// badVideo reports whether an output's video part breaks evt.run.output: a video needs its MP4 key, size and metadata
+// with a poster under the run's prefix; an image has no video part.
+func badVideo(data message.Output, prefix string) bool {
+	video := data.Video
+	if data.Kind != "video" {
+		return video != nil
+	}
+	return video == nil || !strings.HasSuffix(data.Key, ".mp4") || data.Width == nil || data.Height == nil ||
+		video.Frames < 1 || video.FPS <= 0 || video.DurationS <= 0 || !strings.HasPrefix(video.Poster.Key, prefix) ||
+		!strings.HasSuffix(video.Poster.Key, ".poster.png") || strings.Contains(video.Poster.Key, "..") ||
+		strings.Contains(video.Poster.Key, "//")
 }
 
 // eventTime is when a stored event happened; the zero time (a malformed envelope) is now.

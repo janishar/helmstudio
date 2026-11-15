@@ -188,9 +188,9 @@ func (c *controller) deleteSessionHandler(ctx *gin.Context) {
 
 // ------------------------------------------------------------------ workflows and hosts
 
-// listWorkflowsHandler: GET /workflows?source=.
+// listWorkflowsHandler: GET /workflows?source=&media=.
 func (c *controller) listWorkflowsHandler(ctx *gin.Context) {
-	out, err := c.service.ListWorkflows(ctx.Request.Context(), common.MustCaller(ctx), ctx.Query("source"))
+	out, err := c.service.ListWorkflows(ctx.Request.Context(), common.MustCaller(ctx), ctx.Query("source"), ctx.Query("media"))
 	reply(ctx, http.StatusOK, out, err)
 }
 

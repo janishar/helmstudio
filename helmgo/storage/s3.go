@@ -8,6 +8,7 @@ import (
 	"iter"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,7 +149,18 @@ func (s *S3) Stat(ctx context.Context, key string) (Info, error) {
 		Size:         aws.ToInt64(output.ContentLength),
 		ContentType:  aws.ToString(output.ContentType),
 		LastModified: aws.ToTime(output.LastModified),
+		ETag:         aws.ToString(output.ETag),
 	}, nil
+}
+
+// GetRange opens length bytes of the object from offset (GetObject with Range), or returns ErrNotFound.
+func (s *S3) GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+	byteRange := "bytes=" + strconv.FormatInt(offset, 10) + "-" + strconv.FormatInt(offset+length-1, 10)
+	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: &s.bucket, Key: &key, Range: &byteRange})
+	if err != nil {
+		return nil, notFound(err)
+	}
+	return output.Body, nil
 }
 
 // Delete removes the keys in batches. A failed request stops it. Keys the store refuses don't, so the rest still go,

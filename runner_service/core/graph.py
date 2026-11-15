@@ -66,7 +66,7 @@ class Ctx:
     - `check()`: a cancel point (raises Cancelled, or RunError when the runner shuts down); also feeds the stall
       watchdog;
     - `progress(step, of, phase=None)`: step `step` of `of` of the running node is done;
-    - `output(data, ext=, kind=, width=, height=)`: store the run's next output;
+    - `output(data, ext=, kind=, width=, height=[, video=, poster=])`: store the run's next output;
     - `component(model, name)`: the loaded component of a Model handle, through the residency manager;
     - `device`, `owner`, `seed` (the run's resolved seed or None), `node` (the running node id);
     - `fetch(key, limit, etag)`: the core's object-store read for Image params (core.images), set by the consumer."""
@@ -112,9 +112,15 @@ class Ctx:
         eta = round(elapsed / step * (of - step), 1) if step and elapsed > 0 else None
         self._call(self._progress(self.node, step, of, phase, eta))
 
-    def output(self, data: bytes, *, ext: str, kind: str, width: int, height: int) -> None:
+    def output(
+        self, data: bytes, *, ext: str, kind: str, width: int, height: int, video=None, poster=None
+    ) -> None:
+        """A video also passes `video` ({duration_s, fps, frames, has_audio}) and `poster` (PNG bytes)."""
         index, self.outputs = self.outputs, self.outputs + 1
-        self._call(self._output(index, data, ext=ext, kind=kind, width=width, height=height))
+        extra = {"video": video, "poster": poster} if video is not None else {}
+        self._call(
+            self._output(index, data, ext=ext, kind=kind, width=width, height=height, **extra)
+        )
 
     def component(self, model, name: str):
         """The component `name` of the Model handle `model`, loaded (to self.device) if it is not resident."""
@@ -161,6 +167,16 @@ def _check_param(spec: dict, value) -> str | None:
         return _check_rows(spec, value)
     if t == "bool":
         return None if isinstance(value, bool) else "must be a bool"
+    if t == "frames":  # contracts/README.md, Video: Params
+        lo, step, hi = spec["min"], spec["step"], spec["max"]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not lo <= value <= hi
+            or (value - lo) % step
+        ):
+            return f": {value!r} is not on the frame grid {lo} + {step}k up to {hi}"
+        return None
     if t == "enum":
         return None if value in spec["enum"] else f"must be one of {spec['enum']}"
     if t in ("string", "text"):
@@ -208,6 +224,7 @@ LORA_ID = re.compile(
     r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
 )
 HANDLES = {"Model", "Conditioning", "Latent"}  # family-scoped: Model[f] is not Model[g]
+MEDIA = {"Image", "Video"}  # what an input of type Media takes
 WIREABLE = {
     "int": "Int",
     "float": "Float",
@@ -247,6 +264,11 @@ def port_type(schema: dict, name: str) -> str | None:
     t = next((i["type"] for i in schema["inputs"] if i["name"] == name), None)
     p = next((p for p in schema["params"] if p["name"] == name), None)
     return t or (WIREABLE.get(p["type"]) if p else None)
+
+
+def fits(got: str | None, want: str) -> bool:
+    """A wire of type `got` may feed a port of type `want` (contracts/README.md, Graph rules: fits)."""
+    return got is not None and (got == want or (want == "Media" and got in MEDIA))
 
 
 def _typed(t: str, kind: str) -> str:
@@ -299,7 +321,8 @@ def problems(
             if name not in params:
                 add("param_missing", nid, param=name, message=f"{nid}.{name}: missing")
             elif why := _check_param(spec, params[name]):
-                add("param_invalid", nid, param=name, message=f"{nid}.{name} {why}")
+                sep = "" if why.startswith(":") else " "
+                add("param_invalid", nid, param=name, message=f"{nid}.{name}{sep}{why}")
             elif spec["type"] == "rows" and (gap := next(((i, f) for i, r in enumerate(params[name], 1)
                                                           for f in spec["item"] if f not in r), None)):  # fmt: skip
                 add(
@@ -339,7 +362,7 @@ def problems(
                     port,
                     message=f"{nid}.{port}: {src_id} has no output {out_name!r}",
                 )
-            elif got != want or (want in HANDLES and family(src["kind"]) != family(kind)):
+            elif not fits(got, want) or (want in HANDLES and family(src["kind"]) != family(kind)):
                 add("type_mismatch", nid, port,
                     message=f"{nid}.{port}: wants {_typed(want, kind)}, {ref} is {_typed(got, src['kind'])}")  # fmt: skip
         if n.get("bypass"):
@@ -489,6 +512,22 @@ def _canvas_mp(nodes: dict, schemas: dict, nid: str) -> float:
     return 0.0
 
 
+def _frames(nodes: dict, schemas: dict, nid: str) -> int:
+    """The `frames` param of the node nearest upstream of `nid` (breadth first) that has one, or 0."""
+    queue, seen = [nid], set()
+    while queue:
+        cur = queue.pop(0)
+        if cur in seen:
+            continue
+        seen.add(cur)
+        node = nodes[cur]
+        for p in schemas[node["kind"]]["params"]:
+            if p["type"] == "frames":
+                return node.get("params", {}).get(p["name"], 0)
+        queue += [ref.partition(".")[0] for ref in node.get("in", {}).values()]
+    return 0
+
+
 def _components(nodes: dict, impls: dict, schemas: dict, nid: str) -> dict[tuple, object]:
     """residency key → Model handle, for the components the stage at `nid` uses."""
     node, impl = nodes[nid], impls[nodes[nid]["kind"]]
@@ -525,9 +564,16 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
                 from core.pack import evaluate
 
                 mp, n = _canvas_mp(nodes, schemas, nid), _images(nodes, schemas, nid)
-                peak = evaluate(impl.peak, params | {"mp": mp, "images": n})
+                frames = _frames(nodes, schemas, nid)
+                peak = evaluate(impl.peak, params | {"mp": mp, "images": n, "frames": frames})
             ctx.residency.admit(needs, peak, later() - set(needs))
-        return impl.fn(ctx, params, inputs)
+        outs = impl.fn(ctx, params, inputs)
+        if (
+            impl.unload_after and ctx.residency is not None
+        ):  # model.yaml: the stage's components go now
+            comps = _components(nodes, impls, schemas, nid)
+            ctx.residency.release({k for k in comps if k[2] in impl.unload_after})
+        return outs
 
     async def get(nid: str) -> dict:
         if nid in done:
@@ -561,5 +607,9 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         done[nid] = outs
         return outs
 
+    for nid in upstream(nodes, sinks):  # a pack's own checks, before anything loads or runs
+        impl, node = impls[nodes[nid]["kind"]], nodes[nid]
+        if impl.check and (why := impl.check(node.get("params", {}), set(node.get("in", {})))):
+            raise RunError(f"{nid}{why}")
     for nid in sinks:
         await get(nid)

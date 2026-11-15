@@ -134,9 +134,11 @@ export function Review({
           take={
             {
               id: full.item.candidates[full.i].take_id,
-              kind: "image",
+              kind: full.item.candidates[full.i].kind,
               title: `Row ${full.item.row}${full.item.candidates[full.i].seed != null ? ` · seed ${full.item.candidates[full.i].seed}` : ""}`,
               url: full.item.candidates[full.i].url,
+              thumb_url: full.item.candidates[full.i].thumb_url,
+              video: full.item.candidates[full.i].video,
             } as S<"Take">
           }
           onClose={() => setFull(null)}

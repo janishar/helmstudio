@@ -126,6 +126,15 @@ class Residency:
         log.info("unloaded %s", "/".join(map(str, key)))
         entry.clear()  # drop the reference to the loaded module here, so free() can return its memory
 
+    def release(self, keys: set[tuple]) -> None:
+        """Unload these components now (a stage's model.yaml `unload_after`), pinned ones excepted."""
+        victims = [k for k in self.entries if k in keys and k[2] not in self.pins]
+        for k in victims:
+            self.in_use.discard(k)
+            self._evict(k)
+        if victims:
+            self.free()
+
     def unload(self, keep_pins: bool = False) -> None:
         """Unload every component (keep_pins: but RUNNER_PIN ones) and give the memory back."""
         victims = [k for k in self.entries if not (keep_pins and k[2] in self.pins)]

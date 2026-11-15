@@ -9,12 +9,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ChevronLeft } from "lucide-react";
+import { Thumb } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { StateChip, followBatch } from "@/components/pipelines/pipelines";
 import type { CanvasProps } from "@/components/pipelines/canvas";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
 import { nodeLabel } from "@/lib/pipeline";
 import { asRun, canRetryFrom, stepDetail, stepLines } from "@/lib/pipeline-run";
 import { useTakes } from "@/lib/take-cache";
@@ -337,15 +337,7 @@ export function Execution({
                         className={`grid aspect-square place-items-center overflow-hidden rounded-lg p-0 text-[10px] text-t2 ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
                         onClick={() => setFull({ ids: takeIds, i })}
                       >
-                        {tk ? (
-                          <img
-                            src={safeUrl(tk.thumb_url)}
-                            alt=""
-                            className="size-full object-cover"
-                          />
-                        ) : (
-                          `take ${i + 1}`
-                        )}
+                        {tk ? <Thumb take={tk} className="size-full" /> : `take ${i + 1}`}
                       </button>
                     );
                   })}

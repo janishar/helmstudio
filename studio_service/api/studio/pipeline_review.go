@@ -13,6 +13,7 @@ import (
 
 	"github.com/helmstudio/helmgo/network"
 
+	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
@@ -97,12 +98,15 @@ func (s *Service) BatchReview(ctx context.Context, caller common.Caller, batchID
 		}
 		type candidate struct {
 			ID     string
+			Kind   string
 			Key    string
+			Thumb  string // a video's poster, else the image itself
+			Video  []byte
 			Width  *int
 			Height *int
 			Seed   *int64
 		}
-		found, err := collect[candidate](ctx, tx, `SELECT t.id::text, t.key, t.width, t.height,
+		found, err := collect[candidate](ctx, tx, `SELECT t.id::text, t.kind, t.key, coalesce(t.video->'poster'->>'key', t.key), t.video, t.width, t.height,
 			(SELECT o.seed FROM run_outputs o WHERE o.take_id = t.id LIMIT 1)
 			FROM takes t WHERE t.id = ANY($1::uuid[]) AND t.deleted_at IS NULL AND t.ready`, uuids(ids))
 		if err != nil {
@@ -120,8 +124,8 @@ func (s *Service) BatchReview(ctx context.Context, caller common.Caller, batchID
 			item.OnReject, item.RejectsLeft = onReject(stored, p.Gate, row.Cells)
 			for _, id := range p.Candidates {
 				if c, ok := byID[id]; ok {
-					link := s.signer.Sign(c.Key) // the original is its own thumbnail
-					item.Candidates = append(item.Candidates, dto.ReviewCandidate{TakeID: id, URL: link, ThumbURL: link,
+					item.Candidates = append(item.Candidates, dto.ReviewCandidate{TakeID: id, Kind: c.Kind, URL: s.signer.Sign(c.Key),
+						ThumbURL: s.signer.Sign(c.Thumb), Video: gallerydto.Info(c.Video, s.signer.Sign),
 						Width: c.Width, Height: c.Height, Seed: c.Seed})
 				}
 			}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/helmstudio/helmgo/utility"
 
+	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/common"
@@ -75,8 +76,8 @@ func liveKeys(ctx context.Context, tx pgx.Tx, events []model.Event) (map[string]
 	return live, err
 }
 
-// eventDTO maps one stored event; an output's key is signed now, so the link is fresh. An output that is gone (not in
-// live) is left out: false.
+// eventDTO maps one stored event; an output's key (and a video's poster key) is signed now, so the link is fresh. An
+// output that is gone (not in live) is left out: false.
 func (s *Service) eventDTO(event model.Event, live map[string]bool) (dto.SessionEvent, bool) {
 	var data map[string]any
 	_ = json.Unmarshal(event.Data, &data)
@@ -86,6 +87,10 @@ func (s *Service) eventDTO(event model.Event, live map[string]bool) (dto.Session
 			return dto.SessionEvent{}, false
 		}
 		data["url"] = s.signer.Sign(key)
+		if video, ok := data["video"]; ok {
+			raw, _ := json.Marshal(video)
+			data["video"] = gallerydto.Info(raw, s.signer.Sign)
+		}
 	}
 	return dto.SessionEvent{Seq: event.Seq, Type: event.Type, RunID: event.RunID, TS: event.TS, Data: data}, true
 }

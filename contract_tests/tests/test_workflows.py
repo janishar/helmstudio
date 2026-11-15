@@ -37,7 +37,9 @@ def test_echo_with_node_schemas(api):
     assert echo["inputs"] == [{"name": "text", "type": "Text"}]
     assert echo["outputs"] == [{"name": "image", "type": "Image"}]
     assert [p["name"] for p in schemas["prompt"]["params"]] == ["text"]
-    assert schemas["output"]["inputs"] == [{"name": "media", "type": "Image"}]
+    assert schemas["output"]["inputs"] == [
+        {"name": "media", "type": "Media"}
+    ]  # Image or Video (API 1.11)
 
 
 def test_unknown_workflow(api):

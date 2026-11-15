@@ -36,6 +36,55 @@
           }
         }
       }
+    },
+    {
+      "id": "echo-video",
+      "title": "Echo video",
+      "family": "echo",
+      "env": "fake",
+      "media": "video",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "canvas": {
+          "kind": "echo/canvas",
+          "params": {
+            "width": 256,
+            "height": 128
+          }
+        },
+        "duration": {
+          "kind": "echo/duration",
+          "params": {
+            "frames": 25,
+            "fps": 24
+          }
+        },
+        "video": {
+          "kind": "echo/video",
+          "in": {
+            "text": "prompt.text",
+            "canvas": "canvas.canvas",
+            "duration": "duration.duration"
+          },
+          "params": {
+            "steps": 10,
+            "delay_ms": 300,
+            "fail": false,
+            "refs": []
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "video.video"
+          }
+        }
+      }
     }
   ]
 }

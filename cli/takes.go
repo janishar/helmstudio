@@ -21,17 +21,23 @@ type take struct {
 	Height    *int   `json:"height"`
 	CreatedAt string `json:"created_at"`
 	Starred   bool   `json:"starred"`
+	Video     *struct {
+		DurationS float64 `json:"duration_s"`
+	} `json:"video"` // a video take only
 }
 
 func (t take) line() string {
-	size, star := "-", " "
+	size, star, length := "-", " ", "-"
 	if t.Width != nil && t.Height != nil {
 		size = fmt.Sprintf("%dx%d", *t.Width, *t.Height)
 	}
 	if t.Starred {
 		star = "*"
 	}
-	return fmt.Sprintf("%s %s %-5s %-6s %-9s %s %s", t.ID, star, t.Kind, t.Source, size, t.CreatedAt, t.Title)
+	if t.Video != nil {
+		length = fmt.Sprintf("%.1fs", t.Video.DurationS)
+	}
+	return fmt.Sprintf("%s %s %-5s %-6s %-9s %-6s %s %s", t.ID, star, t.Kind, t.Source, size, length, t.CreatedAt, t.Title)
 }
 
 // takes lists one page of the caller's gallery, newest first.

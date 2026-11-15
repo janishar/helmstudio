@@ -114,8 +114,9 @@ func (c *counter) Read(p []byte) (int, error) {
 // lookThumb is a starter look thumbnail's key (contracts/registry.schema.json, looks: thumb.key).
 var lookThumb = regexp.MustCompile(`^packs/[a-z0-9][a-z0-9_-]{0,63}/looks/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\.(png|jpg|webp)$`)
 
-// serveHandler streams one object. A bad link, a key outside u/ and the starter look thumbnails (packs/<family>/looks/) or a missing object is 403; a Stat that fails for any
-// other reason is 500.
+// serveHandler streams one object, or one byte range of it (Range: 206 with Content-Range; past the end: 416), so a
+// <video> can seek. A bad link, a key outside u/ and the starter look thumbnails (packs/<family>/looks/) or a missing
+// object is 403; a Stat that fails for any other reason is 500. HEAD answers the headers only.
 func (c *controller) serveHandler(ctx *gin.Context) {
 	key := strings.TrimPrefix(ctx.Param("path"), "/") // Gin keeps the leading slash of a *path value
 	// u/<owner>/… and the packs' starter look thumbnails (packs/<family>/looks/…, PUT by the runners, never by a link)
@@ -133,24 +134,98 @@ func (c *controller) serveHandler(ctx *gin.Context) {
 		network.SendError(ctx, http.StatusForbidden, "invalid or expired link")
 		return
 	}
-	body, err := c.store.Get(ctx.Request.Context(), key)
-	if err != nil {
-		network.SendError(ctx, http.StatusForbidden, "invalid or expired link")
-		return
-	}
-	defer body.Close()
 	// uploaded documents bring arbitrary files (.html, .svg): never run them as active content on this origin
 	ctx.Header("Content-Security-Policy", "sandbox")
+	ctx.Header("X-Content-Type-Options", "nosniff")
+	ctx.Header("Accept-Ranges", "bytes")
+	first, last, ranged := byteRange(ctx.GetHeader("Range"), info.Size)
+	if ranged && first > last {
+		ctx.Header("Content-Range", "bytes */"+strconv.FormatInt(info.Size, 10))
+		network.SendError(ctx, http.StatusRequestedRangeNotSatisfiable, "the range starts past the end of the file")
+		return
+	}
 	// a key never changes content (a new run or upload gets a new key) and studio's links stay the same for
 	// up to a day: the browser keeps it as long as it likes (a year) without asking again; private, so no shared
 	// cache holds it. The URL is the cache key, so a link re-signed the next day is a new entry.
 	ctx.Header("Cache-Control", "private, max-age=31536000, immutable")
-	ctx.Header("X-Content-Type-Options", "nosniff")
 	contentType := info.ContentType
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 	ctx.Header("Content-Type", contentType)
-	ctx.Header("Content-Length", strconv.FormatInt(info.Size, 10))
+	if info.ETag != "" {
+		ctx.Header("ETag", info.ETag)
+	}
+	ctx.Header("Content-Length", strconv.FormatInt(last-first+1, 10))
+	status := http.StatusOK
+	if ranged {
+		status = http.StatusPartialContent
+		ctx.Header("Content-Range", "bytes "+strconv.FormatInt(first, 10)+"-"+strconv.FormatInt(last, 10)+"/"+
+			strconv.FormatInt(info.Size, 10))
+	}
+	if ctx.Request.Method == http.MethodHead {
+		ctx.Status(status)
+		return
+	}
+	body, err := c.open(ctx.Request.Context(), key, first, last-first+1)
+	if err != nil {
+		network.SendError(ctx, http.StatusForbidden, "invalid or expired link")
+		return
+	}
+	defer body.Close()
+	ctx.Status(status)
 	_, _ = io.Copy(ctx.Writer, body)
+}
+
+// rangeReader is a store that reads part of an object itself (S3 GetObject with Range).
+type rangeReader interface {
+	GetRange(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error)
+}
+
+// open reads length bytes of the object from offset: the store's own range read (helmgo's S3 and Memory have one),
+// else its stream with the bytes before offset skipped.
+func (c *controller) open(ctx context.Context, key string, offset, length int64) (io.ReadCloser, error) {
+	if store, ok := c.store.(rangeReader); ok {
+		return store.GetRange(ctx, key, offset, length)
+	}
+	body, err := c.store.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.CopyN(io.Discard, body, offset); err != nil {
+		body.Close()
+		return nil, err
+	}
+	return struct {
+		io.Reader
+		io.Closer
+	}{io.LimitReader(body, length), body}, nil
+}
+
+// byteRange reads a Range header (RFC 9110, one range of bytes) against an object of size bytes: the first and last
+// byte to send and whether it is a range answer (206). No header, another unit, several ranges or a malformed one is
+// the whole object (200). A range starting past the end (or a suffix of 0 bytes, or any range of an empty object)
+// returns first > last: 416.
+func byteRange(header string, size int64) (first, last int64, ranged bool) {
+	spec, found := strings.CutPrefix(header, "bytes=")
+	from, to, dash := strings.Cut(strings.TrimSpace(spec), "-")
+	if !found || !dash || strings.Contains(spec, ",") {
+		return 0, size - 1, false
+	}
+	a, errA := strconv.ParseInt(from, 10, 64)
+	b, errB := strconv.ParseInt(to, 10, 64)
+	switch {
+	case from == "" && errB == nil && b >= 0: // the last b bytes
+		if b == 0 || size == 0 {
+			return 1, 0, true
+		}
+		return max(size-b, 0), size - 1, true
+	case errA != nil || a < 0 || (to != "" && (errB != nil || b < a)):
+		return 0, size - 1, false
+	case a >= size:
+		return 1, 0, true
+	case to == "" || b >= size:
+		return a, size - 1, true
+	}
+	return a, b, true
 }

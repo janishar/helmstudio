@@ -732,7 +732,8 @@ export interface paths {
          *     param whose `item` has an `Image` field) set to this take: `{take_id}` for an `image` param, a one-item list
          *     `[{<field>: {take_id}}]` (the take as reference 1) for a rows param. The client merges it over the form; nothing
          *     is created. 404 for a take that is unknown, another user's, deleted or a pending upload. 422 when the take is
-         *     not an image (`take <id> is not an image`) or has no size (`take <id> has no size`), the workflow is unknown (`unknown workflow <id>`), it has no such
+         *     not an image (`take <id> is not an image`: a video take too, in 1.11 no workflow takes a video input; the
+         *     client offers "Use in…" per media type, so a video take offers none yet) or has no size (`take <id> has no size`), the workflow is unknown (`unknown workflow <id>`), it has no such
          *     param (`workflow <id> takes no image input`), several and no `param` (`workflow <id> has several image inputs;
          *     name one in param`), or `param` is not one of them. The client lists the workflows to offer from
          *     `GET /v1/studio/workflows` (those with such a param).
@@ -1166,7 +1167,12 @@ export interface paths {
         /**
          * A signed file (the signature is the auth; no API key)
          * @description Only reachable through a `url` the API returned. Served with `Content-Security-Policy: sandbox` and
-         *     `X-Content-Type-Options: nosniff`.
+         *     `X-Content-Type-Options: nosniff`, the object's stored `Content-Type` (`image/png`, `video/mp4`, …), its
+         *     `Content-Length` and `ETag`, and `Accept-Ranges: bytes`. A `Range: bytes=<a>-<b>` / `<a>-` / `-<n>` header (one
+         *     range; a multi-range header is answered as if absent, 200) gets 206 with `Content-Range: bytes <a>-<b>/<size>`
+         *     and just those bytes, streamed from the object store's own range read, so a `<video>` can seek; a range that
+         *     starts past the end is 416 with `Content-Range: bytes *\/<size>`. `HEAD` answers the same headers without a body.
+         *     Kong passes `Range` through and buffers nothing.
          */
         get: operations["filesGetFile"];
         /**
@@ -1182,7 +1188,8 @@ export interface paths {
         post?: never;
         delete?: never;
         options?: never;
-        head?: never;
+        /** The headers `GET` would answer for a signed file, without a body */
+        head: operations["filesHeadFile"];
         patch?: never;
         trace?: never;
     };
@@ -1421,11 +1428,14 @@ export interface components {
             title: string;
         };
         /**
-         * @description An input accepts only an output of the same type. Model, Conditioning and Latent are family-scoped handles: they
-         *     wire nodes of one family inside one workflow and never cross a process.
+         * @description An input accepts an output of the same type; an input of type `Media` (the output node's `media`; never an
+         *     output) also accepts `Image` and `Video` (contracts/README.md, Graph rules: fits). `Video` is an MP4 that may
+         *     carry an audio track; `Duration` is `{frames, fps}`. Model, Conditioning and Latent are family-scoped handles:
+         *     they wire nodes of one family inside one workflow and never cross a process (`Latent` of ltx carries video and
+         *     audio latents together).
          * @enum {string}
          */
-        PortType: "Text" | "Image" | "Int" | "Float" | "Seed" | "Canvas" | "Model" | "Conditioning" | "Latent";
+        PortType: "Text" | "Image" | "Int" | "Float" | "Seed" | "Canvas" | "Model" | "Conditioning" | "Latent" | "Video" | "Duration" | "Media";
         Port: {
             name: string;
             type: components["schemas"]["PortType"];
@@ -1463,12 +1473,19 @@ export interface components {
          *     `image`: one take (`ImageRef`), default null; a run needs one. `rows` (the rows editor): an ordered list of
          *     `RowItem`, default `[]`; `min`/`max` bound the count, `item` names each item's fields (a ref kind, `Image` or
          *     `Lora`, required in every item, or a param schema), `mention` is how the prompt refers to item n from 1 (`<image{n}>`: the
-         *     rows editor labels item n with it; the prompt is sent as typed).
+         *     rows editor labels item n with it; the prompt is sent as typed). `frames`: a frame count on the family's frame
+         *     grid, `min + k × step` up to `max` (LTX: 9 + 8k up to 321); `fps` names the same node's frame-rate param; the
+         *     UI renders it as the Duration slider (one notch per `step`, labelled `<frames> frames · <frames / fps> s`); a
+         *     value off the grid is 422 (`<node>.<param>: <v> is not on the frame grid <min> + <step>k up to <max>`). The size
+         *     picker (aspect + megapixels) is drawn for a node whose output is `Canvas` from its `width` and `height` int
+         *     params: `step` is the grid, `min` / `max` the bounds.
          */
         ParamSchema: {
             name: string;
             /** @enum {string} */
-            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows";
+            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows" | "frames";
+            /** @description frames only: the name of the same node's int or float param holding frames per second */
+            fps?: string;
             /** @description absent = the name */
             label?: string;
             default: components["schemas"]["ParamValue"];
@@ -1541,6 +1558,8 @@ export interface components {
             family: string;
             /** @description the runner env that executes it */
             env: string;
+            /** @description always sent from API 1.11: a template's as published (registry `media`, absent = image), a user workflow's computed from its graph (contracts/README.md, Video) */
+            media?: components["schemas"]["WorkflowMedia"];
             /** @description node id → node */
             nodes: {
                 [key: string]: components["schemas"]["GraphNode"];
@@ -1568,6 +1587,11 @@ export interface components {
             /** @description only from GET /v1/studio/workflows/{workflow_id}, POST and PUT: the graph rules against the live palette now; empty = it can run */
             problems?: components["schemas"]["Problem"][];
         };
+        /**
+         * @description what a workflow's takes are; video when an `output` node's `media` is wired from a `Video` output, else image
+         * @enum {string}
+         */
+        WorkflowMedia: "image" | "video";
         WorkflowList: {
             workflows: components["schemas"]["Workflow"][];
         };
@@ -1971,9 +1995,12 @@ export interface components {
             key: string;
             /** @enum {string} */
             kind: "image" | "video";
+            /** @description the image, or the MP4 of a video (served with Range) */
             url: components["schemas"]["SignedUrl"];
             width: number | null;
             height: number | null;
+            /** @description kind video only (absent for an image) */
+            video?: components["schemas"]["VideoInfo"];
             /** @description the seed it was made with; absent when the workflow has none */
             seed?: number;
             /**
@@ -2131,7 +2158,7 @@ export interface components {
                 model: string;
                 variant: string;
                 /** @enum {string} */
-                precision: "bf16" | "fp16" | "int8";
+                precision: "bf16" | "fp16" | "int8" | "int4";
                 gb: number;
                 pinned: boolean;
                 /** @description a component with LoRAs baked in is its own entry: those LoRAs in order; absent or empty = the plain component. Another user's own LoRA shows only its size (`lora_id`, `name`, `strength` null) */
@@ -2164,10 +2191,14 @@ export interface components {
             kind: components["schemas"]["TakeKind"];
             source: components["schemas"]["TakeSource"];
             title: string;
+            /** @description the file: an image, or a video's MP4 (GET /files serves Range requests) */
             url: components["schemas"]["SignedUrl"];
-            /** @description a small preview; in 1.2 the original itself */
+            /** @description a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0) */
             thumb_url: components["schemas"]["SignedUrl"];
-            /** @example image/png */
+            /**
+             * @example image/png
+             * @example video/mp4
+             */
             content_type: string;
             /** @description null for audio */
             width: number | null;
@@ -2197,6 +2228,27 @@ export interface components {
              * @description with source pipeline: the batch that made it (its collection); absent or null otherwise
              */
             batch_id?: string | null;
+            /** @description kind video only (absent for an image): length, frame rate, audio and the poster */
+            video?: components["schemas"]["VideoInfo"];
+        };
+        /**
+         * @description A video take's or output's metadata, from the runner's `evt.run.output` `video`. `url` / `thumb_url` of the take
+         *     stay the MP4 and the poster's thumbnail; `poster_url` is the full-size poster (frame 0, the video's size; in
+         *     1.11 the same object as the thumbnail).
+         */
+        VideoInfo: {
+            /**
+             * @description frames / fps
+             * @example 2.0416666666666665
+             */
+            duration_s: number;
+            /** @example 24 */
+            fps: number;
+            /** @example 49 */
+            frames: number;
+            /** @description the MP4 has an audio track (LTX: AAC 48 kHz stereo) */
+            has_audio: boolean;
+            poster_url: components["schemas"]["SignedUrl"];
         };
         /** @description a snapshot taken when the take was stored: it survives the run and the session */
         MadeWith: {
@@ -2857,8 +2909,13 @@ export interface components {
         ReviewCandidate: {
             /** Format: uuid */
             take_id: string;
+            kind: components["schemas"]["TakeKind"];
+            /** @description the file: an image, or a video's MP4 */
             url: components["schemas"]["SignedUrl"];
+            /** @description an image itself, a video's poster */
             thumb_url: components["schemas"]["SignedUrl"];
+            /** @description kind video only (absent for an image) */
+            video?: components["schemas"]["VideoInfo"];
             width: number | null;
             height: number | null;
             seed: number | null;
@@ -3204,6 +3261,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description the range starts past the end of the file (`Content-Range: bytes *\/<size>`) */
+        RangeNotSatisfiable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description "Content-Length must be the signed bytes": missing, chunked, or another size */
         LengthRequired: {
             headers: {
@@ -3421,6 +3487,8 @@ export interface operations {
             query?: {
                 /** @description only templates or only the caller's own; absent = both */
                 source?: components["schemas"]["WorkflowSource"];
+                /** @description only workflows whose takes are images, or videos (the Image / Video switch); absent = both. Another value is 422 */
+                media?: components["schemas"]["WorkflowMedia"];
             };
             header?: never;
             path?: never;
@@ -5105,7 +5173,10 @@ export interface operations {
                 /** @description HMAC signature of path and exp (missing = 403, not 422) */
                 sig?: string;
             };
-            header?: never;
+            header?: {
+                /** @description one byte range (RFC 9110); absent = the whole file */
+                Range?: string;
+            };
             path: {
                 /** @description storage-relative path (may contain slashes) */
                 path: string;
@@ -5119,6 +5190,20 @@ export interface operations {
                 headers: {
                     "Content-Security-Policy"?: "sandbox";
                     "X-Content-Type-Options"?: "nosniff";
+                    "Accept-Ranges"?: "bytes";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description the requested range of the file */
+            206: {
+                headers: {
+                    "Content-Range"?: string;
+                    "Content-Security-Policy"?: "sandbox";
+                    "X-Content-Type-Options"?: "nosniff";
+                    "Accept-Ranges"?: "bytes";
                     [name: string]: unknown;
                 };
                 content: {
@@ -5128,6 +5213,7 @@ export interface operations {
             400: components["responses"]["GatewayBadPath"];
             /** @description bad or missing signature, expired link, a path that escapes the store, or no such file (never 404) */
             403: components["responses"]["Forbidden"];
+            416: components["responses"]["RangeNotSatisfiable"];
         };
     };
     filesPutFile: {
@@ -5169,6 +5255,51 @@ export interface operations {
             409: components["responses"]["Conflict"];
             411: components["responses"]["LengthRequired"];
             415: components["responses"]["WrongContentType"];
+        };
+    };
+    filesHeadFile: {
+        parameters: {
+            query?: {
+                /** @description expiry, unix seconds (missing = 403, not 422) */
+                exp?: number;
+                /** @description HMAC signature of path and exp (missing = 403, not 422) */
+                sig?: string;
+            };
+            header?: {
+                /** @description one byte range (RFC 9110); absent = the whole file */
+                Range?: string;
+            };
+            path: {
+                /** @description storage-relative path (may contain slashes) */
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the file's headers */
+            200: {
+                headers: {
+                    "Content-Security-Policy"?: "sandbox";
+                    "X-Content-Type-Options"?: "nosniff";
+                    "Accept-Ranges"?: "bytes";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description the headers of the requested range */
+            206: {
+                headers: {
+                    "Content-Range"?: string;
+                    "Accept-Ranges"?: "bytes";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["GatewayBadPath"];
+            /** @description bad or missing signature, expired link, a path that escapes the store, or no such file (never 404) */
+            403: components["responses"]["Forbidden"];
+            416: components["responses"]["RangeNotSatisfiable"];
         };
     };
     authSignin: {

@@ -53,7 +53,7 @@ const libraryCols = `l.id::text, l.kind, l.item_group, l.name, l.handle, l.text,
 		ORDER BY u.o) FROM unnest(l.images) WITH ORDINALITY AS u(i, o) JOIN takes t ON t.id = u.i AND t.owner_id = l.owner_id
 		AND t.deleted_at IS NULL AND t.ready AND t.width IS NOT NULL AND t.height IS NOT NULL), '[]'), l.loras,
 	(SELECT t.id::text FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready),
-	(SELECT t.key FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready)`
+	(SELECT coalesce(t.video->'poster'->>'key', t.key) FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready)`
 
 // itemDTO maps a row, signing its images' keys (the original is its own thumbnail, as in the gallery); names are the
 // LoRA names now (a LoRA gone keeps the name it was saved with).

@@ -73,20 +73,24 @@ func rowDoc(row model.UserWorkflow) dto.WorkflowDoc {
 
 // templateDoc is a registry workflow as a document.
 func templateDoc(workflow registry.Workflow) dto.WorkflowDoc {
-	return dto.WorkflowDoc{Title: workflow.Title, Family: workflow.Family, Env: workflow.Env, Nodes: workflow.Nodes}
+	doc := dto.WorkflowDoc{Title: workflow.Title, Family: workflow.Family, Env: workflow.Env, Nodes: workflow.Nodes}
+	_ = json.Unmarshal(workflow.Studio, &doc.Studio) // absent leaves it nil
+	return doc
 }
 
-// templateDTO maps a template; problems nil leaves them out.
+// templateDTO maps a template (its media as published); problems nil leaves them out.
 func (s *Service) templateDTO(workflow registry.Workflow, problems *[]dto.Problem) dto.Workflow {
 	return dto.Workflow{ID: workflow.ID, Title: workflow.Title, Family: workflow.Family, Env: workflow.Env,
-		Nodes: workflow.Nodes, NodeSchemas: workflow.NodeSchemas, Source: "template", Problems: problems}
+		Media: cmp.Or(workflow.Media, "image"), Nodes: workflow.Nodes, NodeSchemas: workflow.NodeSchemas, Source: "template",
+		Studio: templateDoc(workflow).Studio, Problems: problems}
 }
 
-// mineDTO maps a stored workflow; problems nil leaves them out.
+// mineDTO maps a stored workflow (its media computed from its graph); problems nil leaves them out.
 func (s *Service) mineDTO(row model.UserWorkflow, problems *[]dto.Problem) dto.Workflow {
 	doc := rowDoc(row)
+	schemas := s.schemasOf(doc.Nodes)
 	return dto.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env, Nodes: doc.Nodes,
-		NodeSchemas: s.schemasOf(doc.Nodes), Source: "mine", Studio: doc.Studio, BasedOn: row.BasedOn,
+		Media: workflowMedia(doc.Nodes, schemas), NodeSchemas: schemas, Source: "mine", Studio: doc.Studio, BasedOn: row.BasedOn,
 		Version: &row.Version, CreatedAt: &row.CreatedAt, UpdatedAt: &row.UpdatedAt, Problems: problems}
 }
 
@@ -171,11 +175,20 @@ func kinds(nodes map[string]registry.Node) []string {
 
 // ------------------------------------------------------------------ the endpoints
 
-// ListWorkflows returns the templates by title, then the caller's own newest first; source keeps one kind.
-func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, source string) (dto.WorkflowList, error) {
+// ListWorkflows returns the templates by title, then the caller's own newest first; source keeps one kind, media
+// those whose takes are images or videos.
+func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, source, media string) (dto.WorkflowList, error) {
 	out := dto.WorkflowList{Workflows: []dto.Workflow{}}
 	if source != "" && source != "template" && source != "mine" {
 		return out, network.NewUnprocessableError("source must be template or mine", nil)
+	}
+	if media != "" && media != "image" && media != "video" {
+		return out, network.NewUnprocessableError("media must be image or video", nil)
+	}
+	keep := func(workflow dto.Workflow) {
+		if media == "" || workflow.Media == media {
+			out.Workflows = append(out.Workflows, workflow)
+		}
 	}
 	if err := s.ready(); err != nil {
 		return out, err
@@ -184,7 +197,7 @@ func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, sourc
 		templates := s.registry.Workflows()
 		slices.SortStableFunc(templates, func(a, b registry.Workflow) int { return strings.Compare(a.Title, b.Title) })
 		for _, workflow := range templates {
-			out.Workflows = append(out.Workflows, s.templateDTO(workflow, nil))
+			keep(s.templateDTO(workflow, nil))
 		}
 	}
 	if source == "template" {
@@ -194,7 +207,7 @@ func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, sourc
 		rows, err := collect[model.UserWorkflow](ctx, tx, `SELECT `+model.UserWorkflowCols+` FROM user_workflows
 			ORDER BY updated_at DESC, id LIMIT $1`, MaxWorkflows)
 		for _, row := range rows {
-			out.Workflows = append(out.Workflows, s.mineDTO(row, nil))
+			keep(s.mineDTO(row, nil))
 		}
 		return err
 	})

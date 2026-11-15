@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "published_at": "2026-11-15T10:00:00Z",
+  "published_by": "runner mlx 0.3.0",
+  "workflows": [
+    {
+      "id": "ltx-text-to-video",
+      "title": "LTX-2.5 Text to video",
+      "family": "ltx",
+      "env": "mlx",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "canvas": {
+          "kind": "ltx/canvas",
+          "params": {
+            "width": 704,
+            "height": 448
+          }
+        },
+        "duration": {
+          "kind": "ltx/duration",
+          "params": {
+            "frames": 49,
+            "fps": 24
+          }
+        },
+        "model": {
+          "kind": "ltx/model",
+          "params": {
+            "variant": "distilled",
+            "precision": "int8"
+          }
+        },
+        "encode": {
+          "kind": "ltx/encode",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {}
+        },
+        "sample1": {
+          "kind": "ltx/sample",
+          "in": {
+            "model": "model.model",
+            "cond": "encode.cond",
+            "seed": "seed.seed",
+            "canvas": "canvas.canvas",
+            "duration": "duration.duration"
+          },
+          "params": {
+            "role": "stage1",
+            "steps": 8
+          }
+        },
+        "upscale": {
+          "kind": "ltx/upscale",
+          "in": {
+            "model": "model.model",
+            "latent": "sample1.latent"
+          },
+          "params": {}
+        },
+        "sample2": {
+          "kind": "ltx/sample",
+          "in": {
+            "model": "model.model",
+            "cond": "encode.cond",
+            "seed": "seed.seed",
+            "latent": "upscale.latent"
+          },
+          "params": {
+            "role": "stage2",
+            "steps": 3
+          }
+        },
+        "decode": {
+          "kind": "ltx/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample2.latent"
+          },
+          "params": {}
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.video"
+          }
+        }
+      }
+    }
+  ]
+}

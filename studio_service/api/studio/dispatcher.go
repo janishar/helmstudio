@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -38,6 +39,12 @@ const (
 	// Tick is how often the dispatcher passes. ponytail: polling; NOTIFY from create, cancel and the projector if
 	// half a second of queue latency ever matters.
 	Tick = 500 * time.Millisecond
+
+	// The GPU gate (contracts/README.md "Two envs on one host"): an env holding weights is asked to unload at most every
+	// AskEvery, each ask waits UnloadWait for its reply, and a run the gate keeps shut for GateTimeout fails.
+	AskEvery    = 10 * time.Second
+	UnloadWait  = 60 * time.Second
+	GateTimeout = 120 * time.Second
 )
 
 // Dispatcher releases queued runs and watches the leases of released ones. purge drops the messages of a CMD subject
@@ -49,13 +56,33 @@ type Dispatcher struct {
 	purge    func(ctx context.Context, subject string) error
 	backlog  func(ctx context.Context) (int, error)
 	lost     map[string]time.Time
+	// Unload sends a core NATS request (runner.unload.<host>.<env>) and returns the reply; nil: never asked (a gate
+	// shut by another env's weights then waits for the hosts watch, and fails after GateTimeout).
+	Unload func(ctx context.Context, subject string, body []byte) ([]byte, error)
+	gated  map[string]time.Time // run id → when the gate first kept it (in memory: a restart starts over)
+	mu     sync.Mutex           // guards asks: the replies arrive on their own goroutines
+	asks   map[string]*ask      // "<host>.<env>" asked to unload → the state of its asks
+	asking sync.WaitGroup       // the asks in flight (tests wait for them)
+}
+
+// ask is the state of the unload requests to one env: whether one is in flight, when the last went, whether it
+// answered ok since the last run released to it (it loads nothing again before its next command), and gen, bumped by
+// every release to it: a reply to a request sent before a release says nothing about what that run loads.
+type ask struct {
+	inFlight, ok bool
+	sent         time.Time
+	gen          int
 }
 
 // NewDispatcher returns the dispatcher.
 func NewDispatcher(pool *pgxpool.Pool, registry *registry.Registry, purge func(ctx context.Context, subject string) error,
 	backlog func(ctx context.Context) (int, error)) *Dispatcher {
-	return &Dispatcher{pool: pool, registry: registry, purge: purge, backlog: backlog, lost: map[string]time.Time{}}
+	return &Dispatcher{pool: pool, registry: registry, purge: purge, backlog: backlog, lost: map[string]time.Time{},
+		gated: map[string]time.Time{}, asks: map[string]*ask{}}
 }
+
+// Settle waits for the unload requests in flight (tests).
+func (d *Dispatcher) Settle() { d.asking.Wait() }
 
 // Run passes every Tick until ctx ends.
 func (d *Dispatcher) Run(ctx context.Context) {
@@ -81,7 +108,7 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 	if !d.registry.Ready() { // an empty view would read every host as gone: nothing to decide yet
 		return nil
 	}
-	lost := map[string]time.Time{}
+	lost, gated := map[string]time.Time{}, map[string]time.Time{}
 	err := common.System(ctx, d.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('studio.dispatcher'))`); err != nil {
 			return err
@@ -143,16 +170,105 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 			}
 		}
 		for _, next := range lineup(free, snap.queue, snap.last, nil, 1) {
-			if err := release(ctx, tx, next); err != nil {
+			holder := d.gate(ctx, snap.values, next, now)
+			if holder == "" {
+				if err := release(ctx, tx, next); err != nil {
+					return err
+				}
+				d.loads(next.host + "." + next.env)
+				continue
+			}
+			first, seen := d.gated[next.run.ID]
+			if !seen {
+				first = now
+			}
+			if now.Sub(first) < GateTimeout {
+				gated[next.run.ID] = first // stays queued: the host waits for it
+				continue
+			}
+			reason := fmt.Sprintf("env %s on host %s did not unload its models in %d s", holder, next.host, int(GateTimeout.Seconds()))
+			if _, err := finish(ctx, tx, next.run, "failed", &reason); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
 	if err == nil {
-		d.lost = lost // runs held again start over
+		d.lost, d.gated = lost, gated // runs held again start over
 	}
 	return err
+}
+
+// gate returns the first other env (by name) of next's host that still holds weights, asking it to unload, or "" when
+// the GPU is free for next: every other env's key is gone, lists nothing resident, or answered an unload ok since its
+// last run (the hosts watch may lag behind the reply). A stale key still listing resident weights holds them (fails
+// closed: a runner cut off from NATS may still have them mapped) until it is deleted or rewritten. One GPU per host;
+// the dispatcher's one run per host means the other env is idle.
+func (d *Dispatcher) gate(ctx context.Context, values []registry.Host, next placed, now time.Time) string {
+	holders := []string{}
+	for _, value := range values {
+		if value.Host == next.host && value.Env != next.env && len(value.Resident) > 0 {
+			holders = append(holders, value.Env)
+		}
+	}
+	slices.Sort(holders)
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	shut := ""
+	for _, env := range holders {
+		source := next.host + "." + env
+		state := d.asks[source]
+		if state == nil {
+			state = &ask{}
+			d.asks[source] = state
+		}
+		if state.ok {
+			continue
+		}
+		shut = cmp.Or(shut, env)
+		if d.Unload == nil || state.inFlight || now.Sub(state.sent) < AskEvery {
+			continue
+		}
+		state.inFlight, state.sent = true, now
+		body, _ := json.Marshal(message.Unload{ForEnv: next.env, RunID: next.run.ID})
+		log.Printf("dispatcher: asking %s to unload for run %s (env %s)", source, next.run.ID, next.env)
+		d.asking.Add(1)
+		go d.ask(ctx, source, body, state.gen)
+	}
+	return shut
+}
+
+// loads says a run was released to source: an unload ok it gave before, or gives to a request sent before, no longer
+// holds.
+func (d *Dispatcher) loads(source string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if state := d.asks[source]; state != nil {
+		state.ok = false
+		state.gen++
+	}
+}
+
+// ask sends one unload request to source and records the answer: ok opens its gate until a run is released to it
+// (an ok to a request sent before such a release, gen, is ignored); busy, internal, a malformed reply or none within
+// UnloadWait leave it shut until the next ask.
+func (d *Dispatcher) ask(ctx context.Context, source string, body []byte, gen int) {
+	defer d.asking.Done()
+	ctx, cancel := context.WithTimeout(ctx, UnloadWait)
+	defer cancel()
+	raw, err := d.Unload(ctx, "runner.unload."+source, body)
+	var reply message.UnloadReply
+	if err == nil {
+		err = json.Unmarshal(raw, &reply)
+	}
+	ok := err == nil && reply.UnloadedGB != nil && reply.Code == ""
+	if !ok {
+		log.Printf("dispatcher: %s did not unload: %v %s %s", source, err, reply.Code, reply.Error)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	state := d.asks[source]
+	state.inFlight, state.ok = false, ok && state.gen == gen
 }
 
 // holds reports whether a released run still holds its host: the host's key is fresh and, from Lease after the

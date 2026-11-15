@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.10.0
+  version: 1.11.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -108,6 +108,7 @@ paths:
         `updated_at` first. `problems` is never in a list (only `GET /v1/studio/workflows/{workflow_id}`).
       parameters:
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowSource'}, description: 'only templates or only the caller''s own; absent = both'}
+        - {name: media, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowMedia'}, description: 'only workflows whose takes are images, or videos (the Image / Video switch); absent = both. Another value is 422'}
       responses:
         '200': {description: workflows, content: {application/json: {schema: {$ref: '#/components/schemas/WorkflowList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -895,7 +896,8 @@ paths:
         param whose `item` has an `Image` field) set to this take: `{take_id}` for an `image` param, a one-item list
         `[{<field>: {take_id}}]` (the take as reference 1) for a rows param. The client merges it over the form; nothing
         is created. 404 for a take that is unknown, another user's, deleted or a pending upload. 422 when the take is
-        not an image (`take <id> is not an image`) or has no size (`take <id> has no size`), the workflow is unknown (`unknown workflow <id>`), it has no such
+        not an image (`take <id> is not an image`: a video take too, in 1.11 no workflow takes a video input; the
+        client offers "Use in…" per media type, so a video take offers none yet) or has no size (`take <id> has no size`), the workflow is unknown (`unknown workflow <id>`), it has no such
         param (`workflow <id> takes no image input`), several and no `param` (`workflow <id> has several image inputs;
         name one in param`), or `param` is not one of them. The client lists the workflows to offer from
         `GET /v1/studio/workflows` (those with such a param).
@@ -1301,19 +1303,65 @@ paths:
       summary: A signed file (the signature is the auth; no API key)
       description: |
         Only reachable through a `url` the API returned. Served with `Content-Security-Policy: sandbox` and
-        `X-Content-Type-Options: nosniff`.
+        `X-Content-Type-Options: nosniff`, the object's stored `Content-Type` (`image/png`, `video/mp4`, …), its
+        `Content-Length` and `ETag`, and `Accept-Ranges: bytes`. A `Range: bytes=<a>-<b>` / `<a>-` / `-<n>` header (one
+        range; a multi-range header is answered as if absent, 200) gets 206 with `Content-Range: bytes <a>-<b>/<size>`
+        and just those bytes, streamed from the object store's own range read, so a `<video>` can seek; a range that
+        starts past the end is 416 with `Content-Range: bytes */<size>`. `HEAD` answers the same headers without a body.
+        Kong passes `Range` through and buffers nothing.
       security: []
       parameters:
         - {name: path, in: path, required: true, schema: {type: string}, description: storage-relative path (may contain slashes)}
         - {name: exp, in: query, required: false, schema: {type: integer}, description: 'expiry, unix seconds (missing = 403, not 422)'}
         - {name: sig, in: query, required: false, schema: {type: string}, description: 'HMAC signature of path and exp (missing = 403, not 422)'}
+        - {name: Range, in: header, required: false, schema: {type: string, pattern: '^bytes=', examples: ['bytes=0-1048575']}, description: 'one byte range (RFC 9110); absent = the whole file'}
       responses:
         '200':
           description: the file
           headers:
             Content-Security-Policy: {schema: {type: string, const: sandbox}}
             X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+            Accept-Ranges: {schema: {type: string, const: bytes}}
           content: {application/octet-stream: {schema: {type: string, contentMediaType: application/octet-stream}}}
+        '206':
+          description: the requested range of the file
+          headers:
+            Content-Range: {schema: {type: string, examples: ['bytes 0-1048575/4129070']}}
+            Content-Security-Policy: {schema: {type: string, const: sandbox}}
+            X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+            Accept-Ranges: {schema: {type: string, const: bytes}}
+          content: {application/octet-stream: {schema: {type: string, contentMediaType: application/octet-stream}}}
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+          description: bad or missing signature, expired link, a path that escapes the store, or no such file (never 404)
+        '400':
+          $ref: '#/components/responses/GatewayBadPath'
+    head:
+      tags: [files]
+      operationId: filesHeadFile
+      summary: The headers `GET` would answer for a signed file, without a body
+      security: []
+      parameters:
+        - {name: path, in: path, required: true, schema: {type: string}, description: storage-relative path (may contain slashes)}
+        - {name: exp, in: query, required: false, schema: {type: integer}, description: 'expiry, unix seconds (missing = 403, not 422)'}
+        - {name: sig, in: query, required: false, schema: {type: string}, description: 'HMAC signature of path and exp (missing = 403, not 422)'}
+        - {name: Range, in: header, required: false, schema: {type: string, pattern: '^bytes=', examples: ['bytes=0-1048575']}, description: 'one byte range (RFC 9110); absent = the whole file'}
+      responses:
+        '200':
+          description: the file's headers
+          headers:
+            Content-Security-Policy: {schema: {type: string, const: sandbox}}
+            X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+            Accept-Ranges: {schema: {type: string, const: bytes}}
+        '206':
+          description: the headers of the requested range
+          headers:
+            Content-Range: {schema: {type: string, examples: ['bytes 0-1048575/4129070']}}
+            Accept-Ranges: {schema: {type: string, const: bytes}}
+        '416':
+          $ref: '#/components/responses/RangeNotSatisfiable'
         '403':
           $ref: '#/components/responses/Forbidden'
           description: bad or missing signature, expired link, a path that escapes the store, or no such file (never 404)
@@ -1595,6 +1643,7 @@ components:
     EmailTaken: {description: '"email already registered"', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     AdminRequired: {description: 'valid token without the admin role: "admin role required"', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     AuthUnprocessable: {description: 'invalid input: "invalid JSON body", or the failed rule ("invalid email", "name must be 1-200 characters", "password must be at least 10 characters", "password is too common", "roles must not be empty", …)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    RangeNotSatisfiable: {description: 'the range starts past the end of the file (`Content-Range: bytes */<size>`)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     LengthRequired: {description: '"Content-Length must be the signed bytes": missing, chunked, or another size', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     WrongContentType: {description: '"Content-Type must be the signed type"', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     Unprocessable:
@@ -1645,10 +1694,13 @@ components:
     # The registry shapes (contracts/registry.schema.json nodeSchema, workflow), served as published.
     PortType:
       type: string
-      enum: [Text, Image, Int, Float, Seed, Canvas, Model, Conditioning, Latent]
+      enum: [Text, Image, Int, Float, Seed, Canvas, Model, Conditioning, Latent, Video, Duration, Media]
       description: |
-        An input accepts only an output of the same type. Model, Conditioning and Latent are family-scoped handles: they
-        wire nodes of one family inside one workflow and never cross a process.
+        An input accepts an output of the same type; an input of type `Media` (the output node's `media`; never an
+        output) also accepts `Image` and `Video` (contracts/README.md, Graph rules: fits). `Video` is an MP4 that may
+        carry an audio track; `Duration` is `{frames, fps}`. Model, Conditioning and Latent are family-scoped handles:
+        they wire nodes of one family inside one workflow and never cross a process (`Latent` of ltx carries video and
+        audio latents together).
     Port:
       type: object
       required: [name, type]
@@ -1695,11 +1747,17 @@ components:
         `image`: one take (`ImageRef`), default null; a run needs one. `rows` (the rows editor): an ordered list of
         `RowItem`, default `[]`; `min`/`max` bound the count, `item` names each item's fields (a ref kind, `Image` or
         `Lora`, required in every item, or a param schema), `mention` is how the prompt refers to item n from 1 (`<image{n}>`: the
-        rows editor labels item n with it; the prompt is sent as typed).
+        rows editor labels item n with it; the prompt is sent as typed). `frames`: a frame count on the family's frame
+        grid, `min + k × step` up to `max` (LTX: 9 + 8k up to 321); `fps` names the same node's frame-rate param; the
+        UI renders it as the Duration slider (one notch per `step`, labelled `<frames> frames · <frames / fps> s`); a
+        value off the grid is 422 (`<node>.<param>: <v> is not on the frame grid <min> + <step>k up to <max>`). The size
+        picker (aspect + megapixels) is drawn for a node whose output is `Canvas` from its `width` and `height` int
+        params: `step` is the grid, `min` / `max` the bounds.
       required: [name, type, default]
       properties:
         name: {type: string}
-        type: {type: string, enum: [int, float, bool, string, text, enum, seed, image, rows]}
+        type: {type: string, enum: [int, float, bool, string, text, enum, seed, image, rows, frames]}
+        fps: {type: string, description: 'frames only: the name of the same node''s int or float param holding frames per second'}
         label: {type: string, description: absent = the name}
         default: {$ref: '#/components/schemas/ParamValue'}
         min: {type: number}
@@ -1758,6 +1816,7 @@ components:
         title: {type: string}
         family: {type: string}
         env: {type: string, description: the runner env that executes it}
+        media: {$ref: '#/components/schemas/WorkflowMedia', description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video)'}
         nodes: {type: object, additionalProperties: {$ref: '#/components/schemas/GraphNode'}, description: node id → node}
         node_schemas: {type: object, additionalProperties: {$ref: '#/components/schemas/NodeSchema'}, description: 'kind → schema, for every kind in nodes the registry has (a kind no runner publishes is left out)'}
         source: {$ref: '#/components/schemas/WorkflowSource'}
@@ -1767,6 +1826,10 @@ components:
         created_at: {type: string, format: date-time, description: mine only}
         updated_at: {type: string, format: date-time, description: mine only}
         problems: {type: array, items: {$ref: '#/components/schemas/Problem'}, description: 'only from GET /v1/studio/workflows/{workflow_id}, POST and PUT: the graph rules against the live palette now; empty = it can run'}
+    WorkflowMedia:
+      type: string
+      enum: [image, video]
+      description: 'what a workflow''s takes are; video when an `output` node''s `media` is wired from a `Video` output, else image'
     WorkflowList:
       type: object
       required: [workflows]
@@ -2175,13 +2238,16 @@ components:
     RunOutput:
       type: object
       required: [index, key, kind, url, width, height]
+      if: {properties: {kind: {const: video}}, required: [kind]}
+      then: {required: [video]}
       properties:
         index: {type: integer, minimum: 0}
         key: {type: string, description: 'object key, u/<owner_id>/runs/<run_id>/<attempt>/<index>.<ext>'}
         kind: {type: string, enum: [image, video]}
-        url: {$ref: '#/components/schemas/SignedUrl'}
+        url: {$ref: '#/components/schemas/SignedUrl', description: 'the image, or the MP4 of a video (served with Range)'}
         width: {type: [integer, 'null']}
         height: {type: [integer, 'null']}
+        video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image)'}
         seed: {type: integer, minimum: 0, description: 'the seed it was made with; absent when the workflow has none'}
         take_id: {type: string, format: uuid, description: 'the take this output became (every output is a take); absent only on events stored before API 1.2'}
     RunLane:
@@ -2318,7 +2384,7 @@ components:
               component: {type: string}
               model: {type: string}
               variant: {type: string}
-              precision: {type: string, enum: [bf16, fp16, int8]}
+              precision: {type: string, enum: [bf16, fp16, int8, int4]}
               gb: {type: number}
               pinned: {type: boolean}
               loras:
@@ -2350,14 +2416,16 @@ components:
         shown). `title` starts as the first line of the prompt (at most 80 characters; the workflow title when the
         prompt is empty) for a run output, the file name without its extension for an upload.
       required: [id, kind, source, title, url, thumb_url, content_type, width, height, bytes, created_at, starred, session_id, run_id, made_with, parents]
+      if: {properties: {kind: {const: video}}, required: [kind]}
+      then: {required: [video]}
       properties:
         id: {type: string, format: uuid}
         kind: {$ref: '#/components/schemas/TakeKind'}
         source: {$ref: '#/components/schemas/TakeSource'}
         title: {type: string, maxLength: 200}
-        url: {$ref: '#/components/schemas/SignedUrl'}
-        thumb_url: {$ref: '#/components/schemas/SignedUrl', description: 'a small preview; in 1.2 the original itself'}
-        content_type: {type: string, examples: [image/png]}
+        url: {$ref: '#/components/schemas/SignedUrl', description: 'the file: an image, or a video''s MP4 (GET /files serves Range requests)'}
+        thumb_url: {$ref: '#/components/schemas/SignedUrl', description: 'a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0)'}
+        content_type: {type: string, examples: [image/png, video/mp4]}
         width: {type: [integer, 'null'], minimum: 1, description: null for audio}
         height: {type: [integer, 'null'], minimum: 1}
         bytes: {type: integer, minimum: 0}
@@ -2373,6 +2441,20 @@ components:
           items: {$ref: '#/components/schemas/TakeRef'}
           description: 'only in `GET /v1/studio/takes/{take_id}`: the takes made from this one ("Used in"), newest first, at most 50, deleted ones left out'
         batch_id: {type: [string, 'null'], format: uuid, description: 'with source pipeline: the batch that made it (its collection); absent or null otherwise'}
+        video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image): length, frame rate, audio and the poster'}
+    VideoInfo:
+      type: object
+      description: |
+        A video take's or output's metadata, from the runner's `evt.run.output` `video`. `url` / `thumb_url` of the take
+        stay the MP4 and the poster's thumbnail; `poster_url` is the full-size poster (frame 0, the video's size; in
+        1.11 the same object as the thumbnail).
+      required: [duration_s, fps, frames, has_audio, poster_url]
+      properties:
+        duration_s: {type: number, exclusiveMinimum: 0, description: 'frames / fps', examples: [2.0416666666666665]}
+        fps: {type: number, exclusiveMinimum: 0, examples: [24]}
+        frames: {type: integer, minimum: 1, examples: [49]}
+        has_audio: {type: boolean, description: 'the MP4 has an audio track (LTX: AAC 48 kHz stereo)'}
+        poster_url: {$ref: '#/components/schemas/SignedUrl'}
     MadeWith:
       type: object
       description: 'a snapshot taken when the take was stored: it survives the run and the session'
@@ -2968,11 +3050,15 @@ components:
             reject: {type: boolean, const: true}
     ReviewCandidate:
       type: object
-      required: [take_id, url, thumb_url, width, height, seed]
+      required: [take_id, kind, url, thumb_url, width, height, seed]
+      if: {properties: {kind: {const: video}}, required: [kind]}
+      then: {required: [video]}
       properties:
         take_id: {type: string, format: uuid}
-        url: {$ref: '#/components/schemas/SignedUrl'}
-        thumb_url: {$ref: '#/components/schemas/SignedUrl'}
+        kind: {$ref: '#/components/schemas/TakeKind'}
+        url: {$ref: '#/components/schemas/SignedUrl', description: 'the file: an image, or a video''s MP4'}
+        thumb_url: {$ref: '#/components/schemas/SignedUrl', description: 'an image itself, a video''s poster'}
+        video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image)'}
         width: {type: [integer, 'null']}
         height: {type: [integer, 'null']}
         seed: {type: [integer, 'null'], minimum: 0}

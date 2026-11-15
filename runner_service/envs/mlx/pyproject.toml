@@ -1,0 +1,26 @@
+# The mlx runner env (docs/plan/14-dependencies.md: one lockfile per runner env): the runner core's dependencies
+# (as ../../pyproject.toml) plus MLX for the mlx packs (ltx). No torch. Used from runner_service/:
+#   uv sync --project envs/mlx   ·   uv run --project envs/mlx python main.py   (RUNNER_ENV=mlx)
+[project]
+name = "helmstudio-runner-mlx"
+version = "0.3.0"
+description = "helmstudio runner_service, env mlx (host mac): the mlx packs"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "nats-py>=2.16.0",
+    "jsonschema>=4.26.0",
+    "boto3>=1.44.3",
+    "pillow>=13.0.0",
+    "pyyaml>=6.0.3",
+    "mlx>=0.32.4",
+    "mlx-arsenal==0.2.4",  # the version ltx-2-studio's lockfile (and the goldens) used
+    "transformers>=5.23.0,<6",  # the Gemma tokenizer only
+    "numpy>=2.5.4",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.2.0", "pytest-asyncio>=1.5.0", "ruff==0.17.5"]
+
+[tool.uv]
+package = false
+required-version = "==0.13.8"

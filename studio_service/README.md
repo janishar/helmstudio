@@ -137,8 +137,23 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
   applied `looks` (made_with); a batch keeps a copy in `batches.looks`, a row its ids in `batch_rows.looks`. Reuse
   answers `looks` and `looks_status`; pipeline problems `unknown_look` / `look_fit` (`pipelineLooks`).
 
-NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack) and
-`$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
+## Video and two envs on one host (API 1.11, M4 stage A)
+
+- Video takes (migration 00014): `takes.video` / `run_outputs.video` keep `evt.run.output`'s `video` block
+  (`{duration_s, fps, frames, has_audio, poster {key, width, height, bytes}}`); the projector drops a video output
+  without it or with a poster outside the run's prefix. `Take.video` / `RunOutput.video` sign the poster; a video's
+  `thumb_url` (gallery, children, review candidates, a look saved from it) is its poster. The sweep deletes both
+  objects. Image-only inputs (`vetTakes`, "Use in…") refuse a video take: `take <id> is not an image`.
+- `Workflow.media`: a template's as published, a user workflow's from its graph (`workflowMedia`); `GET /workflows?media=`.
+  Graph rules use `fits` (an input of type `Media` takes `Image` or `Video`); a `frames` param is on its grid
+  (`checkFrames`).
+- GPU gate (`dispatcher.go` `gate`): before releasing a run to env E of a host, every other live env of that host must
+  show no `resident`; one that does is asked `runner.unload.<host>.<env>` (one in flight, at most every 10 s, 60 s
+  wait). An ok reply opens the gate until a run is released to that env; 120 s shut fails the run. The one-run-per-host
+  rule already keeps the other env idle.
+
+NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack),
+`runner.unload.>` (the GPU gate's requests) and `$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
 consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable `studio-pipelines`), publishes
 `cmd.pipeline.>` and `evt.studio.>`, serves `studio.runs.create`, requests `pipelines.state.get`, watches the KV `registry` and `hosts`, requests
 `auth.validate.token`, subscribes to `evt.auth.revoked`.

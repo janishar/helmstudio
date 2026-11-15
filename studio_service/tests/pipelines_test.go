@@ -292,7 +292,8 @@ func TestPipelineRowFlow(t *testing.T) {
 	review := e.call(userA, "GET", path+"/review", nil, 200)["items"].([]any)
 	item := review[0].(map[string]any)
 	if len(review) != 1 || item["on_reject"] != "retry" || item["rejects_left"] != float64(2) || item["gate_title"] != "Pick one" ||
-		item["candidates"].([]any)[0].(map[string]any)["take_id"] != takeID {
+		item["candidates"].([]any)[0].(map[string]any)["take_id"] != takeID ||
+		item["candidates"].([]any)[0].(map[string]any)["kind"] != "image" {
 		t.Fatal(review)
 	}
 

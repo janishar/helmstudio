@@ -3,28 +3,89 @@
 // through the list it was opened from, video plays with the native controls.
 
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { Play, X } from "lucide-react";
 import { safeUrl } from "@/lib/format";
+import { thumbOf } from "@/lib/media";
 import type { S } from "@/lib/api";
 
 type Take = S<"Take">;
 
-/** A take's image, video (native controls) or audio. */
+/** A take's (or a run output's) image, video (native controls, its poster until it plays, fetched with Range
+ * requests and only its metadata until then) or audio. */
 export function Media({
   take: t,
   url,
+  alt,
   className,
+  style,
+  videoRef,
+  autoPlay,
+  onPlaying,
 }: {
-  take: Take;
+  take: Take | S<"RunOutput">;
   url?: string;
+  alt?: string;
   className: string;
+  style?: React.CSSProperties;
+  videoRef?: React.Ref<HTMLVideoElement>;
+  autoPlay?: boolean;
+  /** the video started (true) or stopped (false) playing */
+  onPlaying?: (on: boolean) => void;
 }) {
-  if (t.kind === "image") return <img src={url} alt={t.title} className={className} />;
-  if (t.kind === "video") return <video src={url} controls className={className} />;
+  const label = alt ?? ("title" in t ? t.title : "The take");
+  if (t.kind === "image")
+    return <img src={url} alt={label} className={className} style={style} fetchPriority="high" />;
+  if (t.kind === "video")
+    return (
+      <video
+        ref={videoRef}
+        src={url}
+        poster={safeUrl(thumbOf(t).src)}
+        aria-label={label}
+        controls
+        playsInline
+        preload="metadata"
+        autoPlay={autoPlay}
+        onPlay={() => onPlaying?.(true)}
+        onPause={() => onPlaying?.(false)}
+        className={className}
+        style={style}
+      />
+    );
   return <audio src={url} controls className="w-full" />;
 }
 
-/** The media viewer's full screen (plan 5 "Media viewer"): Esc closes, the arrow keys step through the list. */
+/** A take's or run output's picture in a list: an image's thumbnail, a video's poster with its length and a play
+ * mark (the video itself is never fetched here), else its kind. */
+export function Thumb({
+  take: t,
+  className,
+  imgClassName = "size-full object-cover",
+  badge = true,
+}: {
+  take: Take | S<"RunOutput">;
+  className?: string;
+  imgClassName?: string;
+  /** a video's length and play mark over the poster (false: the caller's label says it) */
+  badge?: boolean;
+}) {
+  const { src, length } = thumbOf(t);
+  if (!src) return <span className={className}>{t.kind}</span>;
+  return (
+    <span className={`relative block ${className ?? ""}`}>
+      <img src={safeUrl(src)} alt="" loading="lazy" decoding="async" className={imgClassName} />
+      {badge && length && (
+        <span className="mono absolute top-1 left-1 flex items-center gap-0.5 rounded bg-s2/90 px-1 text-[10px] leading-4 text-t1">
+          <Play size={9} aria-hidden className="fill-current" />
+          {length}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** The media viewer's full screen (plan 5 "Media viewer"): Esc closes, the arrow keys step through the list; a video
+ * plays at once. */
 export function FullScreen({
   take,
   onClose,
@@ -37,6 +98,10 @@ export function FullScreen({
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     ref.current?.showModal();
+    // the stage or preview copy behind the dialog stops: one copy of the clip (and its audio) plays
+    document.querySelectorAll("video").forEach((v) => {
+      if (!ref.current?.contains(v)) v.pause();
+    });
   }, []);
   return (
     <dialog
@@ -52,7 +117,18 @@ export function FullScreen({
       onClick={(e) => e.target === e.currentTarget && ref.current?.close()}
       className="m-0 h-dvh max-h-none w-dvw max-w-none place-items-center bg-black p-0 open:grid backdrop:bg-black"
     >
-      <Media take={take} url={safeUrl(take.url)} className="max-h-dvh max-w-dvw object-contain" />
+      <Media
+        key={take.id}
+        take={take}
+        url={safeUrl(take.url)}
+        autoPlay
+        // a video fills the screen (a 448 × 256 clip would play postage-stamp size); an image keeps its own size
+        className={
+          take.kind === "video"
+            ? "h-dvh w-dvw object-contain"
+            : "max-h-dvh max-w-dvw object-contain"
+        }
+      />
       <button
         type="button"
         aria-label="Close full screen"

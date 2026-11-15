@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	gallery "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -461,12 +462,14 @@ func (b *BatchRowRetry) Validate() string {
 
 // ReviewCandidate is one take a gate offers.
 type ReviewCandidate struct {
-	TakeID   string `json:"take_id"`
-	URL      string `json:"url"`
-	ThumbURL string `json:"thumb_url"`
-	Width    *int   `json:"width"`
-	Height   *int   `json:"height"`
-	Seed     *int64 `json:"seed"`
+	TakeID   string             `json:"take_id"`
+	Kind     string             `json:"kind"`
+	URL      string             `json:"url"`
+	ThumbURL string             `json:"thumb_url"`
+	Video    *gallery.VideoInfo `json:"video,omitempty"` // kind video only
+	Width    *int               `json:"width"`
+	Height   *int               `json:"height"`
+	Seed     *int64             `json:"seed"`
 }
 
 // BatchReviewItem is one parked row.

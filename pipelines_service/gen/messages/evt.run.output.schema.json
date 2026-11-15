@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.run.output.schema.json",
   "title": "runner → studio: one output object written",
-  "description": "Subject evt.run.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix.",
+  "description": "Subject evt.run.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event.",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -71,8 +71,109 @@
         "attempt": {
           "$ref": "defs.schema.json#/$defs/attempt",
           "description": "the attempt of cmd.run.execute this event belongs to; absent = 1. seq restarts at 1 for each attempt; the projector dedupes on (job_id, attempt, seq) and drops events of an attempt that is not the run's current one"
+        },
+        "video": {
+          "type": "object",
+          "description": "kind video only (required then, absent for an image): the clip's metadata, from the file the runner wrote",
+          "required": [
+            "duration_s",
+            "fps",
+            "frames",
+            "has_audio",
+            "poster"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "duration_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "frames / fps, the video stream's length in seconds"
+            },
+            "fps": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 240
+            },
+            "frames": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "has_audio": {
+              "type": "boolean",
+              "description": "true when the MP4 has an audio track (LTX: AAC 48 kHz stereo)"
+            },
+            "poster": {
+              "type": "object",
+              "required": [
+                "key",
+                "width",
+                "height",
+                "bytes"
+              ],
+              "additionalProperties": false,
+              "description": "the poster image: frame 0 as PNG, the take's thumbnail",
+              "properties": {
+                "key": {
+                  "allOf": [
+                    {
+                      "$ref": "defs.schema.json#/$defs/objectKey"
+                    },
+                    {
+                      "pattern": "\\.poster\\.png$"
+                    }
+                  ],
+                  "description": "<output_prefix><index>.poster.png"
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "video"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "video",
+              "width",
+              "height"
+            ],
+            "properties": {
+              "key": {
+                "pattern": "\\.mp4$"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "video"
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }

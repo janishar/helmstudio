@@ -17,7 +17,8 @@ import (
 
 const usage = `usage:
   helm login --url <base> --email <email> [--api-key-file <path>]   password: HELM_PASSWORD or a prompt
-  helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--lora <id>:<strength> ...] [--out <dir>]
+  helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--lora <id>:<strength> ...] [-o|--out <dir>]
+             saves each output (a PNG, or a video's MP4) as <dir>/<run_id>_<n>.<ext>
              --lora fills the rows of the workflow's LoRA stack, in order
   helm batch <workflow_id> (--lines <file|-> [--param node.param] | --csv <file> | --grid node.param=a,b,c ...)
              [-p node.param=value ...] [--seeds N] [--session <id>] [--title <t>]   exit 1 if any row failed
@@ -32,7 +33,7 @@ const usage = `usage:
   helm use [--param node.param] <take_id> <workflow_id>   print the helm run command with the take as reference 1
 
 An image input takes a comma list of take ids and @files (uploaded first): -p encode.refs=@a.png,<take_id>
-  helm workflows                      templates, then your own (id, source, version, env, title)
+  helm workflows [--media image|video]   templates, then your own (id, source, version, env, media, title)
   helm workflow get <id> > file.json  a workflow as a file (yours: with id and version; a template: based_on)
   helm workflow save file.json        replace yours (id + version; stale = 409) or create one; prints problems
   helm workflow validate file.json    print every problem; exit 1 if it cannot run
@@ -91,7 +92,7 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 	case "use":
 		err = useCmd(args[1:], stdout, stderr)
 	case "workflows":
-		err = workflows(stdout)
+		err = workflows(args[1:], stdout, stderr)
 	case "workflow":
 		err = docCmd(workflowKind, args[1:], stdout, stderr)
 	case "pipelines":

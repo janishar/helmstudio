@@ -32,6 +32,29 @@ var runOnly = map[string]bool{"unknown_kind": true, "env_mismatch": true, "requi
 // handles are the family-scoped port types.
 var handles = map[string]bool{"Model": true, "Conditioning": true, "Latent": true}
 
+// fits reports whether a wire of type got may feed a port of type want: the same type, or Media taking Image or Video.
+func fits(got, want string) bool {
+	return got == want || want == "Media" && (got == "Image" || got == "Video")
+}
+
+// workflowMedia is what a graph's takes are: video when an output node's media is wired from a Video output, else
+// image (contracts/README.md, Video).
+func workflowMedia(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) string {
+	for _, node := range nodes {
+		ref, ok := node.In["media"]
+		if node.Kind != "output" || !ok {
+			continue
+		}
+		srcID, out, _ := strings.Cut(ref, ".")
+		for _, port := range schemas[nodes[srcID].Kind].Outputs {
+			if port.Name == out && port.Type == "Video" {
+				return "video"
+			}
+		}
+	}
+	return "image"
+}
+
 // wireable maps a value param's type to the port type a wire into it carries.
 var wireable = map[string]string{"int": "Int", "float": "Float", "seed": "Seed", "string": "Text", "text": "Text", "image": "Image"}
 
@@ -156,7 +179,7 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode,
 			switch {
 			case !exists || i < 0:
 				add("unknown_source", id, key, "", "%s.%s: %s is not an output in this workflow", id, key, node.In[key])
-			case srcKind.Outputs[i].Type != want:
+			case !fits(srcKind.Outputs[i].Type, want):
 				add("type_mismatch", id, key, "", "%s.%s: expects %s, got %s from %s", id, key, want, srcKind.Outputs[i].Type, node.In[key])
 			case handles[want] && registry.Family(src.Kind) != registry.Family(node.Kind):
 				add("type_mismatch", id, key, "", "%s.%s: a %s handle cannot join %s to %s", id, key, want, src.Kind, node.Kind)

@@ -1,6 +1,7 @@
 # The fake model family `echo` (env fake, no GPU, no weights): node echo/echo reports one progress step per
 # `steps` (each after `delay_ms`, a cancel point before each), then draws its text on a gradient, or fails when
-# `fail` is true. Its `refs` are read and checked by the core before the first step (contract tests, no GPU).
+# `fail` is true; echo/video does the same, then writes a still MP4 of its text (mp4.py) at its canvas size and
+# duration. Their `refs` are read and checked by the core before the first step (contract tests, no GPU).
 # Its registry values equal the canonical contract fixtures (tests/test_packs.py).
 id: echo
 family: echo
@@ -38,6 +39,33 @@ stages:
           strength: {type: float, label: Strength, default: 1, min: -4, max: 4, step: 0.05}
           mode: {type: enum, label: Mode, default: adapter, enum: [adapter, bake]}
         help: "Each row: a LoRA, its strength and mode; the fake runner applies nothing, it only names them."
+  canvas:
+    title: Canvas
+    help: "The fake video's size in pixels, on a 64 px grid."
+    params:
+      width: {type: int, label: Width, default: 256, min: 64, max: 1024, step: 64}
+      height: {type: int, label: Height, default: 128, min: 64, max: 1024, step: 64}
+    outputs: {canvas: Canvas}
+  duration:
+    title: Duration
+    help: "The fake video's length in frames on an 8k + 1 grid, and its frame rate."
+    params:
+      frames: {type: frames, label: Length, default: 25, min: 9, max: 121, step: 8, fps: fps}
+      fps: {type: int, label: Frame rate, default: 24, min: 1, max: 60, step: 1}
+    outputs: {duration: Duration}
+  video:
+    title: Echo video
+    help: "Fake video model: as Echo, then a still MP4 of its text (H.264, silent AAC stereo) and a poster."
+    inputs: {text: Text, canvas: Canvas, duration: Duration}
+    outputs: {video: Video}
+    params:
+      steps: {type: int, label: Steps, default: 10, min: 1, max: 200, help: Progress steps to report.}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
+      fail: {type: bool, label: Fail, default: false,
+             help: "Fail after the last step, without an output, to test errors."}
+      refs: {type: rows, label: References, default: [], min: 0, max: 10, item: {image: Image},
+             mention: "<image{n}>",
+             help: "Images the fake runner reads (and checks) before it renders; the video is unchanged."}
 # The fake family takes LoRAs (registry models[].lora): exactly the modules the contract LoRA fixtures
 # (contracts/fixtures/loras) name, so they fit echo on a stack without a GPU. Family detection prefers a family a
 # non-fake env publishes, so a real Qwen LoRA is qwen-image wherever both are published. Model-free: no component is

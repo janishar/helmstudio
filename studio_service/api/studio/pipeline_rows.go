@@ -117,15 +117,15 @@ func (s *Service) rowsDTO(ctx context.Context, tx pgx.Tx, rows []model.BatchRow)
 	return out, nil
 }
 
-// takeKeys maps each of ids that is the caller's undeleted take to its object key.
+// takeKeys maps each of ids that is the caller's undeleted take to its thumbnail's key (a video's poster).
 func takeKeys(ctx context.Context, tx pgx.Tx, ids []string) (map[string]string, error) {
 	out := map[string]string{}
 	if len(ids) == 0 {
 		return out, nil
 	}
 	type found struct{ ID, Key string }
-	rows, err := collect[found](ctx, tx, `SELECT id::text, key FROM takes WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL
-		AND ready`, uuids(ids))
+	rows, err := collect[found](ctx, tx, `SELECT t.id::text, coalesce(t.video->'poster'->>'key', t.key) FROM takes t
+		WHERE t.id = ANY($1::uuid[]) AND t.deleted_at IS NULL AND t.ready`, uuids(ids))
 	for _, row := range rows {
 		out[row.ID] = row.Key
 	}

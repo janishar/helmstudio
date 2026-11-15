@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -259,5 +260,70 @@ func TestResolveLoras(t *testing.T) {
 	own, shared := rows[0].(map[string]any)["lora"].(map[string]any), rows[1].(map[string]any)["lora"].(map[string]any)
 	if own["key"] != "u/owner/loras/aa.safetensors" || own["source"] != "own" || shared["key"] != nil || shared["bytes"] != int64(4) {
 		t.Fatal(own, shared)
+	}
+}
+
+// macHosts is host mac's two env keys as the registry holds them: torch refreshed at torchAt holding a transformer,
+// mlx live and empty.
+func macHosts(t *testing.T, torchAt time.Time) []registry.Host {
+	t.Helper()
+	reg := &registry.Registry{}
+	resident := `, "resident": [{"component": "transformer", "model": "qwen-image-2.1", "variant": "base",
+		"precision": "bf16", "gb": 38.1, "pinned": false}]`
+	for key, value := range map[string][]byte{"mac.torch": hostValue("mac", "torch", torchAt, resident),
+		"mac.mlx": hostValue("mac", "mlx", t0, "")} {
+		if err := reg.SetHost(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return reg.Hosts()
+}
+
+// An unload ok that answers a request sent before a run was released to that env opens nothing: the next gate asks
+// again (the run released meanwhile may have loaded weights the hosts watch does not show yet).
+func TestGateIgnoresAnOkSentBeforeARelease(t *testing.T) {
+	d := NewDispatcher(nil, nil, nil, nil)
+	reply := make(chan struct{})
+	asked := 0
+	d.Unload = func(_ context.Context, _ string, _ []byte) ([]byte, error) {
+		asked++
+		<-reply
+		return []byte(`{"unloaded_gb": 38.1, "resident": []}`), nil
+	}
+	next := placed{run: model.Run{ID: "m"}, host: "mac", env: "mlx"}
+	if got := d.gate(context.Background(), macHosts(t, t0), next, t0); got != "torch" {
+		t.Fatal("torch holds weights:", got)
+	}
+	d.loads("mac.torch") // a torch run released while the ask is in flight
+	close(reply)
+	d.Settle()
+	at := t0.Add(AskEvery)
+	if got := d.gate(context.Background(), macHosts(t, at), next, at); got != "torch" {
+		t.Fatal("the late ok must not open the gate:", got)
+	}
+	d.Settle()
+	if asked != 2 {
+		t.Fatal("asked again:", asked)
+	}
+	if got := d.gate(context.Background(), macHosts(t, at), next, at); got != "" {
+		t.Fatal("an ok with no release in between opens it:", got)
+	}
+}
+
+// A stale key that still lists resident weights holds them (the runner may be cut off from NATS, not gone); a
+// deleted key holds nothing.
+func TestGateFailsClosedOnAStaleHolder(t *testing.T) {
+	d := NewDispatcher(nil, nil, nil, nil)
+	next := placed{run: model.Run{ID: "m"}, host: "mac", env: "mlx"}
+	later := t0.Add(10 * registry.Stale)
+	if got := d.gate(context.Background(), macHosts(t, t0), next, later); got != "torch" {
+		t.Fatal("stale with weights holds:", got)
+	}
+	reg := &registry.Registry{}
+	if err := reg.SetHost("mac.mlx", hostValue("mac", "mlx", later, "")); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.gate(context.Background(), reg.Hosts(), next, later); got != "" {
+		t.Fatal("no torch key holds nothing:", got)
 	}
 }

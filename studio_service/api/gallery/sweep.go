@@ -34,26 +34,34 @@ func NewSweeper(pool *pgxpool.Pool, store storage.Store) *Sweeper {
 
 // Sweep removes one batch as System and returns how many takes it removed. It only ever deletes a key under its own
 // take's owner prefix u/<owner_id>/ (anything else is logged and left, row included) and never a key another live
-// take still points at. The objects go first: a failure keeps the rows for the next sweep.
+// take still points at. A video's poster goes with its MP4. The objects go first: a failure keeps the rows for the next
+// sweep.
 func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 	removed := 0
 	err := common.System(ctx, s.pool, func(tx pgx.Tx) error {
-		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.owner_id::text, t.key FROM takes t
+		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.owner_id::text, t.key, t.video->'poster'->>'key' FROM takes t
 			WHERE (t.deleted_at < clock_timestamp() - make_interval(secs => $1)
 				OR (NOT t.ready AND t.created_at < clock_timestamp() - make_interval(secs => $2)))
 			AND NOT EXISTS (SELECT 1 FROM takes o WHERE o.key = t.key AND o.id <> t.id AND o.deleted_at IS NULL)
 			ORDER BY t.created_at LIMIT $3 FOR UPDATE SKIP LOCKED`, Grace.Seconds(), UploadTTL.Seconds(), sweepBatch)
-		found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct{ ID, Owner, Key string }])
+		found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct {
+			ID, Owner, Key string
+			Poster         *string
+		}])
 		if err != nil {
 			return err
 		}
 		var ids, keys []string
 		for _, row := range found {
-			if !common.Owns(row.Owner, row.Key) || strings.HasSuffix(row.Key, "/") {
+			bad := func(key string) bool { return !common.Owns(row.Owner, key) || strings.HasSuffix(key, "/") }
+			if bad(row.Key) || (row.Poster != nil && bad(*row.Poster)) {
 				log.Printf("take sweep: take %s key outside u/%s/, left alone", row.ID, row.Owner)
 				continue
 			}
 			ids, keys = append(ids, row.ID), append(keys, row.Key)
+			if row.Poster != nil {
+				keys = append(keys, *row.Poster)
+			}
 		}
 		if len(ids) == 0 {
 			return nil

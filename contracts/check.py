@@ -38,7 +38,7 @@ REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
 # Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
-CANONICAL = ["", "qwen-image."]
+CANONICAL = ["", "qwen-image.", "ltx."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",
@@ -132,7 +132,7 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
             outputs = {p["name"]: p["type"] for p in src["outputs"]} if src else {}
             if port not in inputs:
                 out.append(f"{nid}.in.{port}: not an input of {node['kind']}")
-            elif outputs.get(src_port) != inputs[port]:
+            elif not fits(outputs.get(src_port), inputs[port]):
                 out.append(f"{nid}.in.{port}: {ref} is not an output of type {inputs[port]}")
     return out
 
@@ -163,6 +163,12 @@ def value_error(param: dict, v) -> str | None:
                 if f in row and (err := value_error(spec, row[f])):
                     return f"item {i}.{f}: {err}"
         return None
+    if t == "frames":  # on the frame grid min + k·step (README, Video: Params)
+        if not isinstance(v, int) or isinstance(v, bool):
+            return f"{v!r} is not an integer"
+        if not param["min"] <= v <= param["max"] or (v - param["min"]) % param["step"]:
+            return f"{v!r} is not on the grid {param['min']} + {param['step']}k up to {param['max']}"
+        return None
     if t in ("int", "seed") and (not isinstance(v, int) or isinstance(v, bool)):
         return f"{v!r} is not an integer"
     if t == "float" and (not isinstance(v, (int, float)) or isinstance(v, bool)):
@@ -191,8 +197,19 @@ def check_canonical_registries() -> None:
                     fail(
                         f"fixtures/registry/{prefix}nodes.valid.json {n['kind']}.{p['name']} default: {err}"
                     )
+            for p in n["params"]:
+                if p["type"] == "int" and "step" in p and (p["default"] - p.get("min", 0)) % p["step"]:
+                    fail(f"fixtures/registry/{prefix}nodes.valid.json {n['kind']}.{p['name']} default: off its step grid")
+                fps = next((q for q in n["params"] if q["name"] == p.get("fps")), None)
+                if p["type"] == "frames" and (not fps or fps["type"] not in ("int", "float")):
+                    fail(f"fixtures/registry/{prefix}nodes.valid.json {n['kind']}.{p['name']}: fps names no int/float param")
         for wf in json.loads((reg / f"{prefix}workflows.valid.json").read_text())["workflows"]:
             errs = graph_errors(wf, kinds)
+            if wf.get("media", "image") != workflow_media(wf["nodes"], kinds):
+                errs.append(f"media {wf.get('media', 'image')!r} is not what its graph makes")
+            # a template's studio block obeys the rules of a user workflow's (README, User workflows)
+            errs += [f"studio: {p}" for p in graph_problems(wf, {k: v | {"envs": [wf["env"]]} for k, v in kinds.items()})
+                     if p[0].startswith(("studio_", "preset_"))]
             for e in errs:
                 fail(f"fixtures/registry/{prefix}workflows.valid.json {wf['id']}: {e}")
             if not errs:
@@ -201,6 +218,23 @@ def check_canonical_registries() -> None:
 
 # ---------------------------------------------------------------- graph rules (README, "Graph rules")
 HANDLES = {"Model", "Conditioning", "Latent"}
+MEDIA = {"Image", "Video"}  # what an input of type Media accepts (Audio later)
+
+
+def fits(got: str | None, want: str) -> bool:
+    """A wire of type `got` may feed a port of type `want` (README, Graph rules: fits); handles also need one family."""
+    return got is not None and (got == want or (want == "Media" and got in MEDIA))
+
+
+def workflow_media(nodes: dict, kinds: dict) -> str:
+    """video when an output node's media is wired from a Video output, else image (README, Video)."""
+    for n in nodes.values():
+        ref = n.get("in", {}).get("media") if n["kind"] == "output" else None
+        src = nodes.get(ref.split(".")[0]) if ref else None
+        ks = kinds.get(src["kind"]) if src else None
+        if ks and any(o["name"] == ref.split(".")[1] and o["type"] == "Video" for o in ks["outputs"]):
+            return "video"
+    return "image"
 LORA_ID = re.compile(r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
 WIREABLE = {"int": "Int", "float": "Float", "seed": "Seed", "string": "Text", "text": "Text", "image": "Image"}
 RUN_ONLY = {"unknown_kind", "env_mismatch", "required_input", "no_output", "too_many_outputs", "too_many_seeds",
@@ -290,7 +324,7 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
             got = next((o["type"] for o in ss["outputs"] if o["name"] == out_name), None) if ss else None
             if not got:
                 add("unknown_source", nid, port)
-            elif got != want or (want in HANDLES and family(src["kind"]) != family(kind)):
+            elif not fits(got, want) or (want in HANDLES and family(src["kind"]) != family(kind)):
                 add("type_mismatch", nid, port)
         if n.get("bypass"):
             through = passthrough(s)
@@ -361,7 +395,7 @@ def autowire(doc: dict, palette: dict, selected: str | None, new_id: str, kind: 
     def candidates(ids: list[str], t: str) -> list[str]:
         return [f"{m}.{o['name']}" for m in ids if m != new_id and nodes[m]["kind"] in palette
                 for o in palette[nodes[m]["kind"]]["outputs"]
-                if o["type"] == t and (t not in HANDLES or family(nodes[m]["kind"]) == family(kind))]
+                if fits(o["type"], t) and (t not in HANDLES or family(nodes[m]["kind"]) == family(kind))]
 
     succ = {}
     for nid, n in nodes.items():
@@ -394,9 +428,11 @@ def wire_drop(doc: dict, palette: dict, node: str, port: str, side: str) -> list
             continue
         if t in HANDLES and family(k) != family(src_kind):
             continue
-        ports = [o["type"] for o in ks["outputs"]] if side == "input" else (
-            [i["type"] for i in ks["inputs"]] + [WIREABLE.get(p["type"]) for p in ks["params"]])
-        if t in ports:
+        if side == "input":
+            hit = any(fits(o["type"], t) for o in ks["outputs"])
+        else:
+            hit = any(fits(t, x) for x in [i["type"] for i in ks["inputs"]] + [WIREABLE.get(p["type"]) for p in ks["params"]])
+        if hit:
             hits.append((family(k) != doc["family"], ks["title"], k))
     return [k for *_, k in sorted(hits)]
 
@@ -407,11 +443,11 @@ def drop_pick(doc: dict, palette: dict, node: str, port: str, side: str, new_id:
     t = next(o["type"] for o in s["outputs"] if o["name"] == port) if side == "output" else port_type(s, port)
     nodes, wired = json.loads(json.dumps(doc["nodes"])), {}
     if side == "output":
-        key = next((i["name"] for i in ks["inputs"] if i["type"] == t), None) or next(
+        key = next((i["name"] for i in ks["inputs"] if fits(t, i["type"])), None) or next(
             (p["name"] for p in ks["params"] if WIREABLE.get(p["type"]) == t), None)
         if key:
             wired[key] = f"{node}.{port}"
-    elif out := next((o["name"] for o in ks["outputs"] if o["type"] == t), None):
+    elif out := next((o["name"] for o in ks["outputs"] if fits(o["type"], t)), None):
         nodes[node].setdefault("in", {})[port] = f"{new_id}.{out}"
     nodes[new_id] = {"kind": kind, "in": dict(wired)}
     auto = autowire(doc | {"nodes": nodes}, palette, node if side == "output" else None, new_id, kind)
@@ -1136,8 +1172,27 @@ def check_fixtures(schemas: dict[str, dict], registry: Registry) -> None:
                 fail(f"no {kind} fixture for {name}")
 
 
+def openapi_inline(node, components: dict):
+    """node with every #/components/schemas $ref replaced by its schema, and descriptions/examples dropped."""
+    if isinstance(node, list):
+        return [openapi_inline(x, components) for x in node]
+    if not isinstance(node, dict):
+        return node
+    if "$ref" in node and node["$ref"].startswith("#/components/schemas/"):
+        return openapi_inline(components[node["$ref"].rsplit("/", 1)[1]], components)
+    return {k: openapi_inline(v, components) for k, v in node.items() if k not in ("description", "examples")}
+
+
 def check_openapi() -> None:
     spec = yaml.safe_load((HERE / "openapi.yaml").read_text())
+    # the registry's copy of StudioLayout (a template's studio block) is the API's, ParamValue aside
+    registry = json.loads((HERE / "registry.schema.json").read_text())["$defs"]["studioLayout"]
+    paramvalue = {"$ref": "messages/defs.schema.json#/$defs/paramValue"}
+    components = spec["components"]["schemas"] | {"ParamValue": paramvalue}
+    if openapi_inline(registry, {}) != openapi_inline({"$ref": "#/components/schemas/StudioLayout"}, components):
+        fail("registry.schema.json $defs/studioLayout differs from openapi.yaml StudioLayout")
+    else:
+        print("ok   registry.schema.json studioLayout = openapi.yaml StudioLayout")
     try:
         validate_openapi(spec)
         print("ok   openapi.yaml is a valid OpenAPI", spec["openapi"], "document")
