@@ -215,10 +215,15 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
   (no models key, no `memory` item for that precision): P = B. A run larger than its plan (the item's `planned_at`:
   some node's `width` × `height` / 10^6 above its `mp`, or a numeric `frames` above its `frames`), or one with two
   `<family>/model` nodes: P = B, its needs still reused. Fixtures give P directly.
-- **Measured**: a present key of another env than X's whose `memory.used_gb` exceeds Σ `gb` of its entries holds one
-  more entry of that excess (device caches, cached node results, activations), counted like an offline entry: never a
-  victim (a runner frees its device cache and cached node results after every unload and every run). Not for a key an
-  `ok` reply stands for (its `resident` is newer than the key's `used_gb`). X's own env reuses its caches inside P.
+- **Measured**: a present key whose `memory.used_gb` exceeds Σ `gb` of its entries holds one more entry of that excess
+  (the runtime, device caches, cached node results, a quantized module's real footprint), counted like an offline
+  entry: never a victim (a runner frees its device cache and cached node results after every unload and every run).
+  Not for a key an `ok` reply stands for (its `resident` is newer than the key's `used_gb`). **X's own env counts too**
+  (from M4b stage A): P is planned above the declared sizes, while X's runner holds itself to what it measures (Runners,
+  below), so leaving its excess out let a release "fit" that the runner then met by evicting inside the run (M4b: torch
+  capped to 52 − 22.4 = 29.6 GB, plan 29.25, its own excess ≥ 0.6 GB idle and about 2.8 with Qwen loaded: the text
+  encoder evicted and reloaded around every still). Its own excess may make room in other envs (victims) but never
+  makes X wait: when no victim is taken and X fits without it, X is released (its runner drops its own caches).
 - **Reused** entries: entries of X's env equal to one of its needs (they are inside P). **Counted** C = Σ `gb` of every
   entry of every present key that is not reused (measured excess included). **Pinned** Pn = Σ `gb` of counted entries with `pinned: true` in fresh
   keys (an idle runner marks only its setting's pins, RUNNER_PIN).
@@ -308,8 +313,11 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   still → LTX clip, ten rows, from cold) expects **Qwen loaded twice and LTX once**, with exactly the unloads of
   `order.two-family-mac.json`: torch `text_encoder` and `transformer` before row 1's clip and before row 2's clip,
   nothing else. `order.two-family-batch.json` is the same
-  pipeline at B = 48, where neither fits: each loads twice. These plans hold with 0.75 GB to spare: an idle mlx
-  measuring more than 22.75 GB (its caches; Measured) makes Qwen's runs evict LTX components too.
+  pipeline at B = 48, where neither fits: each loads twice. These plans hold with 0.75 GB to spare, in declared sizes
+  only: an idle mlx measuring more than 22.75 GB, or torch measuring more than its entries (it always does on the real
+  host: 0.6 GB idle, about 2.8 GB with Qwen loaded; Measured), makes Qwen's first still after a clip evict LTX's least
+  recently used components (`admit.measured-own-env.json`), so on the real host LTX loads once per burst of clips like
+  Qwen (1 + ⌈(n − 1) / W⌉), and no still reloads the text encoder.
 
 **Runners** (both native runners):
 - **Hosts value**: every resident entry with `gb` (at the target dtype), `last_used` (UTC: its last use by a stage; a
@@ -326,8 +334,8 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   written: on macOS the process's physical footprint (`phys_footprint`: Metal buffers, the allocators' caches and the
   CPU side alike; MLX's own active + cache missed none of it but was read only at that instant), elsewhere what the
   device measures (CUDA reserved); every resident `gb` stays the declared size. A stage's `peak_gb` is the same
-  measure's peak above the components resident after it, so the instants between keys are planned, not reported. Studio counts a key
-  of another env at max(Σ `gb`, `used_gb`) (Measured, `budget_gb`, `host_memory`). The runner counts itself the same
+  measure's peak above the components resident after it, so the instants between keys are planned, not reported. Studio counts every
+  key at max(Σ `gb`, `used_gb`), the run's own env's included (Measured, `budget_gb`, `host_memory`). The runner counts itself the same
   way: before each stage's admission and each load it holds Σ `gb` + max(0, measured − Σ `gb`) against its budget;
   when that is short it first drops cached node results and frees the device cache, then measures again, and only
   then evicts or fails. A load gives the allocator's cache back as it goes (torch: at least every 1 GB of tensors
@@ -1500,6 +1508,11 @@ lora_B ranks differ`; a rank over 4096: `rank <r> is over 4096`. The first faili
 - **Idempotency:** commands use `Nats-Msg-Id = <job_id>:<attempt>`; every `evt.run.*` carries `attempt` and a
   per-attempt `seq` (from 1, over all three kinds) and publishes with `Nats-Msg-Id = <job_id>:<attempt>:<seq>`; the
   projector dedupes on `(job_id, attempt, seq)`. A runner publishes the terminal status and waits for its ack before it acks the command.
+- **Outputs before the end:** a runner publishes `succeeded` only after JetStream acked every `evt.run.output` of the
+  attempt (an output that cannot be published fails the run); the projector (one message at a time, stream order)
+  therefore sees a run's outputs before its terminal status, and drops an output that arrives after it. A runner
+  retries each NATS call of a run (every publish, the `cancels` key's read and its watch) for up to 10 s, so a NATS
+  restart while a run starts or runs does not fail it.
 - **Ownership:** every message has `owner_id`; cross-user reads answer 404 (not 403).
 - **Change process:** edit the schema, add or adjust a valid **and** an invalid fixture, run `check.py`, regenerate
   each service's `gen/`.

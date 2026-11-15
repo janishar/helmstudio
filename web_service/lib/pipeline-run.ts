@@ -60,6 +60,21 @@ export type CellLine = {
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /** A cell's attempts, oldest first. */
+/** A cell as its row shows it: a row that ended while parked (cancelled, stopped) keeps its gate's or judge's
+ * attempt `waiting`, which was never picked and now never will be: cancelled. */
+export function settledCell(
+  cell: Cell | undefined,
+  row: S<"BatchRow">["status"],
+): Cell | undefined {
+  if (!cell || row === "waiting" || !cell.attempts.some((a) => a.status === "waiting")) return cell;
+  return {
+    ...cell,
+    attempts: cell.attempts.map((a) =>
+      a.status === "waiting" ? { ...a, status: "cancelled" as const } : a,
+    ),
+  };
+}
+
 export function cellLines(cell: Cell | undefined): CellLine[] {
   if (!cell) return [];
   return cell.attempts.map((a) => lineOf(cell, a));
@@ -114,6 +129,7 @@ function lineOf(cell: Cell, a: Attempt): CellLine {
 /** A judge attempt in words: "picked take 3 · all checks pass", "failed · extra limb", "suggests take 2". */
 export function judgeLine(a: Attempt): Pick<CellLine, "text" | "tone"> {
   const j = a.judged;
+  if (a.status === "cancelled") return { text: "cancelled", tone: "" };
   if (a.status === "queued" || a.status === "running" || !j)
     return a.status === "failed"
       ? { text: a.error ? `failed · ${a.error}` : "failed", tone: "warn" }
@@ -134,7 +150,11 @@ export function judgeLine(a: Attempt): Pick<CellLine, "text" | "tone"> {
   if (j.verdict === "fail" || a.status === "rejected")
     return { text: j.first_failed ? `failed · ${j.first_failed}` : "none passed", tone: "warn" };
   const kept = a.take_ids.length ? a.take_ids : j.suggested;
-  const clean = j.takes.filter((t) => kept.includes(t.take_id)).every((t) => t.passes);
+  // every check, nice ones too: `passes` is only the musts, and a kept take that missed a nice one is not "all"
+  // (`checks` is absent in rows recorded before it: then the musts are all there is to go on)
+  const clean = j.takes
+    .filter((t) => kept.includes(t.take_id))
+    .every((t) => t.passes && (t.checks ?? []).every(Boolean));
   return {
     text: `picked ${which(kept)}${clean ? " · all checks pass" : ""}`,
     tone: "ok",

@@ -113,7 +113,9 @@ async def test_cancel_key_written_before_start_runs_nothing():
     assert msg.log == [("ack", 1)]
 
 
-async def test_runner_error_outside_the_graph_still_ends_the_run():
+async def test_runner_error_outside_the_graph_still_ends_the_run(monkeypatch):
+    monkeypatch.setattr("messaging.publisher.RETRY_FOR", 0)
+
     async def broken_watch(key, ignore_deletes=False):
         raise TimeoutError
 
@@ -214,6 +216,36 @@ async def test_a_publish_that_fails_once_is_retried_with_the_same_msg_id(monkeyp
     assert kinds(js) == ["running", "progress", "progress", "output", "succeeded"]
     check_events(js)
     assert failed == [{"Nats-Msg-Id": f"{RUN}:1:2"}]
+
+
+async def test_nats_away_as_a_run_starts_does_not_fail_it(monkeypatch):
+    """resilience batch-nats: NATS restarting between the delivery and the cancel watch (its read and its consumer
+    create time out) once failed the run, `runner error (TimeoutError)`; both calls are retried as a publish is."""
+    monkeypatch.setattr("messaging.publisher.RETRY_EVERY", 0)
+    failed = []
+
+    def setup(c):
+        get, watch = c.cancels_kv.get, c.cancels_kv.watch
+
+        async def flaky_get(key):
+            if "get" not in failed:
+                failed.append("get")
+                raise TimeoutError
+            return await get(key)
+
+        async def flaky_watch(key, ignore_deletes=False):
+            if "watch" not in failed:
+                failed.append("watch")
+                raise TimeoutError
+            return await watch(key, ignore_deletes=ignore_deletes)
+
+        c.cancels_kv.get, c.cancels_kv.watch = flaky_get, flaky_watch
+
+    js, _, msg = await run(command(steps=2), setup=setup)
+    assert failed == ["get", "watch"]
+    assert kinds(js) == ["running", "progress", "progress", "output", "succeeded"]
+    check_events(js)
+    assert msg.log == [("ack", len(js.sent))]
 
 
 def qwen_command(seed=None) -> dict:

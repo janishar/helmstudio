@@ -843,6 +843,7 @@ def _verdict_node(plan, nid, spec):
                 "passes": v["passes"][i],
                 "first_failed": firsts[i],
                 "reason": a["reason"],
+                "checks": a["checks"],
             }
             for i, (t, a) in enumerate(zip(cands, answers))
         ]
@@ -855,8 +856,10 @@ def _verdict_node(plan, nid, spec):
         info |= {"suggested": v["picked"], "decision_id": dec["id"], "on_reject": on_reject}
         reasons = "\n".join(f"take {i}: {a['reason']}" for i, a in enumerate(answers, 1))
         kept = ", ".join(f"take {cands.index(t) + 1}" for t in v["picked"])
+        clean = all(all(answers[cands.index(t)]["checks"]) for t in v["picked"])  # nice ones too
         what = (
-            f"Kept {kept} of {len(cands)}: all checks pass" if v["verdict"] == "pass"
+            f"Kept {kept} of {len(cands)}: {'all checks pass' if clean else 'every must passes'}"
+            if v["verdict"] == "pass"
             else f"{sum(v['passes'])} of {len(cands)} passed, {keep} needed"
             + (f"; first failed: {first}" if first else "")
         ) + (" (suggested for review)" if park else "")  # fmt: skip

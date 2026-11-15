@@ -1287,6 +1287,14 @@
                   "reason": {
                     "type": "string",
                     "maxLength": 300
+                  },
+                  "checks": {
+                    "type": "array",
+                    "maxItems": 12,
+                    "items": {
+                      "type": "boolean"
+                    },
+                    "description": "every criterion's answer, musts then nices (additive in 1.14)"
                   }
                 }
               },

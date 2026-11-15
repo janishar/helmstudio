@@ -98,7 +98,7 @@ func TestAdmitFixtures(t *testing.T) {
 				budget = hundredths(*key.BudgetGB)
 			}
 			measured := -1
-			if key.UsedGB != nil && env != fx.Run.Env {
+			if key.UsedGB != nil {
 				measured = hundredths(*key.UsedGB)
 			}
 			entries = append(entries, keyEntries(env, key.Resident, key.State == "fresh" && key.RunID == nil, measured)...)

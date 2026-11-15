@@ -363,6 +363,7 @@ def test_best_of_4_auto(api, api_b, auto_batch, ask_live):
                 "passes": want["passes"][i],
                 "first_failed": None if want["passes"][i] else "Shows the subject",
                 "reason": ans["takes"][i]["reason"],
+                "checks": ans["takes"][i]["checks"],
             }
             for i, t in enumerate(cands)
         ]

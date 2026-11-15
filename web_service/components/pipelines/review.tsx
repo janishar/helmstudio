@@ -57,12 +57,16 @@ export function Review({
     itemsRef.current = items;
   });
   const reload = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [picks, setPicks] = useState(0);
+  const picked = useRef(new Set<number>()); // rows picked here whose pick pipelines has not taken yet
   useEffect(
     () =>
       followBatch(id, ["batch", "row"], (e) => {
         if (e.type === "batch") return setBatch(e.data);
         const r = e.data;
         const have = itemsRef.current?.find((x) => x.row === r.row);
+        // pipelines took a pick (and wrote its judge example) only now: the memory reads again
+        if (r.status !== "waiting" && picked.current.delete(r.row)) setPicks((n) => n + 1);
         if (r.status !== "waiting") {
           if (have) setItems((l) => l?.filter((x) => x.row !== r.row) ?? l);
         } else if (!have || have.visit !== r.parked?.visit || have.attempt !== r.attempt) {
@@ -73,8 +77,8 @@ export function Review({
     [id, load],
   );
 
-  const [picks, setPicks] = useState(0);
   const done = (row: number) => {
+    picked.current.add(row);
     setPicks((n) => n + 1);
     // keyboard review goes on: focus moves to the next waiting row's first take
     const next =
@@ -89,7 +93,10 @@ export function Review({
     (items ?? []).map((x) => ({ inputs: x.inputs }) as unknown as S<"BatchRow">),
   );
 
-  const judges = !!items?.some((x) => x.kind === "judge");
+  // the memory stays once a judge's row was here: the last pick's example shows after its row has gone
+  const judging = !!items?.some((x) => x.kind === "judge");
+  const [judges, setJudges] = useState(judging);
+  if (judging && !judges) setJudges(true);
   return (
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">

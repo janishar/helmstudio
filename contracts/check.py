@@ -1392,6 +1392,7 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
     p = budget if peak is None else peak
     counted = [x for x in entries if not (x[0] == env and x[1] in needs)]
     c = sum(x[2] for x in counted)
+    own = sum(x[2] for x in counted if x[0] == env and x[1][0] == "(measured)")  # the run's own runner's excess
     pinned = sum(x[2] for x in counted if x[3] and x[4])
     if p + pinned > budget:
         error = f"needs {p / 100:.1f} GB at its peak; host {host} has {budget / 100:.1f} GB"
@@ -1400,9 +1401,10 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
         return {"decision": "fail", "unload": {}, "budget_gb": None, "error": error}
     if running:
         return {"decision": "wait", "unload": {}, "budget_gb": None, "error": None}
+    others = sum(x[2] for x in entries if x[0] != env)
+    released = {"decision": "release", "unload": {}, "budget_gb": (budget - others) / 100, "error": None}
     if c + p <= budget:
-        others = sum(x[2] for x in entries if x[0] != env)
-        return {"decision": "release", "unload": {}, "budget_gb": (budget - others) / 100, "error": None}
+        return released
     tier = lambda x: 0 if x[1][4] and (x[0], x[1]) not in referenced else 1  # an unreferenced baked set first
     victims = sorted((x for x in counted if x[4] and not x[3]),
                      key=lambda x: (tier(x), x[5] is not None, x[5] or 0, -x[2], x[0], x[1][:4]))
@@ -1412,6 +1414,8 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
             break
         unload.setdefault(x[0], []).append(x[1])
         c -= x[2]
+    if not unload and c - own + p <= budget:  # only its own excess is in the way: its runner drops its caches itself
+        return released
     return {"decision": "unload" if unload else "wait", "unload": unload, "budget_gb": None, "error": None}
 
 
@@ -1436,7 +1440,7 @@ def admit_fixture(fx: dict) -> dict:
             used = datetime.fromisoformat(e["last_used"].replace("Z", "+00:00")).timestamp() if "last_used" in e else None
             entries.append((env, entry_key(e), cgb(e["gb"]), e["pinned"], fresh, used))
         extra = cgb(k["used_gb"]) - sum(cgb(e["gb"]) for e in k.get("resident", [])) if "used_gb" in k else 0
-        if env != run["env"] and extra > 0:  # measured beyond the entries: counted, never a victim
+        if extra > 0:  # measured beyond the entries: counted (the run's own env too), never a victim
             entries.append((env, ("(measured)", "", "", "", ()), extra, False, False, None))
     running = next((env for env, k in sorted(fx["keys"].items()) if k["state"] != "gone" and k.get("run_id")), None)
     peak = None if run["peak_gb"] is None else cgb(run["peak_gb"])

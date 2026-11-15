@@ -26,6 +26,7 @@ import {
   togglePick,
   rowTakes,
   runColumns,
+  settledCell,
   stepDetail,
   stepLines,
   unreached,
@@ -173,6 +174,14 @@ describe("agent nodes in the run table, execution view and review", () => {
     const a = cell.attempts[0];
     const picked = { ...a, status: "picked" as const, take_ids: [a.judged!.suggested[0]] };
     expect(judgeLine(picked)).toEqual({ text: "picked take 3 · all checks pass", tone: "ok" });
+    const missedNice = {
+      ...picked,
+      judged: {
+        ...a.judged!,
+        takes: a.judged!.takes.map((t) => ({ ...t, checks: [true, true, true, false] })),
+      },
+    };
+    expect(judgeLine(missedNice)).toEqual({ text: "picked take 3", tone: "ok" }); // a nice one missed
     const failed = {
       ...a,
       visit: 1,
@@ -263,5 +272,15 @@ describe("agent nodes in the run table, execution view and review", () => {
     const x = exec2 as unknown as S<"RowExecution">;
     const s = x.steps.find((t) => t.decision)!;
     expect(stepDetail(x, s.step)).toMatchObject({ kind: s.decision!.kind, decision: s.decision });
+  });
+});
+
+describe("a row that ended while parked", () => {
+  it("shows its never-picked judge attempt cancelled", () => {
+    const cell = (row5 as unknown as S<"BatchRow">).cells!.find((c) => c.kind === "judge")!;
+    expect(settledCell(cell, "waiting")).toBe(cell);
+    const ended = settledCell(cell, "cancelled")!;
+    expect(ended.attempts.map((a) => a.status)).toEqual(cell.attempts.map(() => "cancelled"));
+    expect(judgeSummary(ended)).toEqual({ text: "cancelled", tone: "" });
   });
 });

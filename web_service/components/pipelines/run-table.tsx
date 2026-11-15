@@ -18,6 +18,7 @@ import {
   judgeSummary,
   rowTakes,
   runColumns,
+  settledCell,
   unreached,
   type CellLine,
 } from "@/lib/pipeline-run";
@@ -86,7 +87,10 @@ export function RunTable({
                   {inputs || "—"}
                 </td>
                 {cols.map((c) => {
-                  const cell = r.cells?.find((x) => x.node === c.node);
+                  const cell = settledCell(
+                    r.cells?.find((x) => x.node === c.node),
+                    r.status,
+                  );
                   if (cell?.kind === "judge" && cell.attempts.length) {
                     const j = judgeSummary(cell, name);
                     return (

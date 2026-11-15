@@ -536,3 +536,16 @@ async def test_a_judge_short_of_keep_names_the_counts_and_a_failed_criterion(poo
         v["decision"]["judge"]["first_failed"] is None
     )  # the best take passes (fixtures/decisions)
     assert cell(js, "judge")["attempts"][0]["judged"]["first_failed"] == MUST[0]
+
+
+@pytest.mark.parametrize("nice", [True, False])
+async def test_a_kept_take_is_all_checks_pass_only_with_its_nice_ones(pool, nice):
+    """'all checks pass' names every check; a kept take that missed a nice one passed every must only."""
+    studio, js, b = FakeStudio(), FakeJS(), str(uuid.uuid4())
+    studio.answer_for = Script(judge=[judged([[True, True, nice]] + [[False, True, True]] * 3)])
+    judge = doc()["nodes"]["judge"] | {"mode": "auto"}
+    e = engine(pool, studio, js)
+    await run_to_judge(e, studio, js, b, doc("auto", judge=judge))
+    await finish(e, studio, "judge")
+    v = next(x for x in steps(js) if x["part"] == "verdict")
+    assert v["what"] == f"Kept take 1 of 4: {'all checks pass' if nice else 'every must passes'}"

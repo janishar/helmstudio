@@ -250,7 +250,7 @@ func (d *Dispatcher) handover(ctx context.Context, snap snapshot, next placed, n
 			}
 		}
 		entries = append(entries, keyEntries(value.Env, resident, value.Live(now) && value.RunID == nil,
-			measured(value, standing, next.env))...)
+			measured(value, standing))...)
 	}
 	if budget < 0 {
 		return admission{decision: "release"} // no key reports memory (the fake host): no admission
@@ -400,11 +400,12 @@ func keyEntries(env string, resident []registry.Resident, fresh bool, measured i
 	return out
 }
 
-// measured is the key's memory.used_gb in hundredths when it counts beyond its entries: a key of another env than
-// forEnv's, not stood for by an ok reply (whose resident is newer than the key's used_gb); else -1. The run's own env
-// reuses its own caches inside its peak.
-func measured(value registry.Host, standing bool, forEnv string) int {
-	if value.Memory == nil || standing || value.Env == forEnv {
+// measured is the key's memory.used_gb in hundredths when it counts beyond its entries: a key not stood for by an ok
+// reply (whose resident is newer than the key's used_gb); else -1. The run's own env counts too (admit: it may make
+// room in other envs, never make the run wait): a plan's peak is above its components' declared sizes, not above
+// what its runner measures holding them.
+func measured(value registry.Host, standing bool) int {
+	if value.Memory == nil || standing {
 		return -1
 	}
 	return hundredths(value.Memory.UsedGB)
@@ -519,7 +520,7 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 		p = budget
 	}
 	var counted []entry
-	c, pinned := 0, 0
+	c, pinned, own := 0, 0, 0
 	for _, e := range entries {
 		if e.env == env && slices.Contains(needs, e.key) {
 			continue // reused: inside the peak
@@ -528,6 +529,9 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 		c += e.gb
 		if e.res.Pinned && e.fresh {
 			pinned += e.gb
+		}
+		if e.env == env && e.key == "(measured)" {
+			own += e.gb // the run's own runner measured beyond its entries
 		}
 	}
 	if p+pinned > budget {
@@ -540,7 +544,7 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 	if running != "" {
 		return admission{decision: "wait", holder: running}
 	}
-	if c+p <= budget {
+	released := func() admission {
 		others := 0
 		for _, e := range entries {
 			if e.env != env {
@@ -549,6 +553,9 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 		}
 		left := float64(budget-others) / 100
 		return admission{decision: "release", budget: &left}
+	}
+	if c+p <= budget {
+		return released()
 	}
 	tier := func(e entry) int { // an unreferenced baked set first
 		if len(e.res.Loras) > 0 && !referenced[e.env+" "+e.key] {
@@ -561,7 +568,7 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 	for _, e := range counted {
 		if e.fresh && !e.res.Pinned {
 			victims = append(victims, e)
-		} else if !e.fresh && !slices.Contains(holders, e.env) {
+		} else if !e.fresh && !slices.Contains(holders, e.env) && (e.env != env || e.key != "(measured)") {
 			holders = append(holders, e.env)
 		}
 	}
@@ -581,6 +588,9 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 		if !slices.Contains(holders, v.env) {
 			holders = append(holders, v.env)
 		}
+	}
+	if len(unload) == 0 && c-own+p <= budget {
+		return released() // only the run's own measured excess is in the way: its runner drops its caches itself
 	}
 	slices.Sort(holders)
 	got := admission{decision: "wait"}

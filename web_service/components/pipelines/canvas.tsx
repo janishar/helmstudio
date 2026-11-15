@@ -154,15 +154,28 @@ function Canvas({
   const add = (kind: Kind) => {
     if (!menu) return;
     const from = menu.from;
+    let added = "";
     change((d) => {
       const r = addPipelineNode(d, kind, menu.at, {
         workflow: defaultWorkflow,
         selected: from?.[0] ?? selected,
       });
+      added = r.id;
       onSelect(r.id);
       return from ? connectNodes(r.doc, from[0], from[1], r.id) : r.doc;
     });
     setMenu(null);
+    // a card dropped near the edge, or stepped right of a taken spot, can land outside the view: show the graph
+    setTimeout(() => {
+      const n = rf.getNode(added);
+      const r = box.current?.getBoundingClientRect();
+      if (!n || !r) return;
+      const p = rf.flowToScreenPosition(n.position);
+      const z = rf.getZoom();
+      const [w, h] = [(n.measured?.width ?? 176) * z, (n.measured?.height ?? 80) * z];
+      if (p.x < r.left || p.y < r.top || p.x + w > r.right || p.y + h > r.bottom)
+        void rf.fitView({ ...FIT, duration: 200 });
+    }, 50);
   };
 
   const steps = useMemo(

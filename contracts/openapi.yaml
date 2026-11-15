@@ -3271,6 +3271,7 @@ components:
               passes: {type: boolean}
               first_failed: {type: [string, 'null']}
               reason: {type: string, maxLength: 300}
+              checks: {type: array, maxItems: 12, items: {type: boolean}, description: 'every criterion''s answer, musts then nices (additive in 1.14: "all checks pass" only when every one is true; absent in rows recorded before)'}
     BatchPage:
       type: object
       required: [batches, next_cursor]

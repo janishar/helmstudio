@@ -3,7 +3,8 @@ lives in memory because a run command is delivered once (studio, not redelivery,
 is checked against the contract before it leaves and is published with Nats-Msg-Id <run_id>:<attempt>:<seq>
 (seq restarts at 1 for each attempt; data.attempt is the command's attempt); the publish
 waits for JetStream's ack, and is retried for up to RETRY_FOR seconds (JetStream drops a duplicate by its id), so a
-broker hiccup does not fail the run."""
+broker hiccup does not fail the run. `retried` gives a run's other NATS calls (the cancel key's read and watch) the
+same grace."""
 
 import asyncio
 import json
@@ -15,6 +16,20 @@ from messaging import schemas
 
 RETRY_FOR = 10.0  # seconds a publish is retried
 RETRY_EVERY = 0.5  # seconds between tries
+
+
+async def retried(call):
+    """`await call()`, tried again every RETRY_EVERY seconds for up to RETRY_FOR seconds while it raises (NATS
+    restarting or reconnecting); the last error is raised."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + RETRY_FOR
+    while True:
+        try:
+            return await call()
+        except Exception:
+            if loop.time() + RETRY_EVERY > deadline:
+                raise
+            await asyncio.sleep(RETRY_EVERY)
 
 
 def now() -> str:
@@ -60,16 +75,8 @@ class RunEvents:
             json.dumps(msg).encode(),
             {"Nats-Msg-Id": f"{msg['job_id']}:{msg['data']['attempt']}:{msg['data']['seq']}"},
         )
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + RETRY_FOR
-        while True:
-            try:
-                await self.js.publish(subject, body, headers=headers)
-                return msg
-            except Exception:
-                if loop.time() + RETRY_EVERY > deadline:
-                    raise
-                await asyncio.sleep(RETRY_EVERY)
+        await retried(lambda: self.js.publish(subject, body, headers=headers))
+        return msg
 
     async def status(
         self,

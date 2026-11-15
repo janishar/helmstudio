@@ -97,25 +97,49 @@
                   "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
                   "passes": false,
                   "first_failed": "No extra or missing limbs",
-                  "reason": "Extra hand on the left."
+                  "reason": "Extra hand on the left.",
+                  "checks": [
+                    false,
+                    true,
+                    true,
+                    true
+                  ]
                 },
                 {
                   "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
                   "passes": true,
                   "first_failed": null,
-                  "reason": "Clean but soft."
+                  "reason": "Clean but soft.",
+                  "checks": [
+                    true,
+                    true,
+                    true,
+                    false
+                  ]
                 },
                 {
                   "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
                   "passes": true,
                   "first_failed": null,
-                  "reason": "Clean and sharp."
+                  "reason": "Clean and sharp.",
+                  "checks": [
+                    true,
+                    true,
+                    true,
+                    true
+                  ]
                 },
                 {
                   "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
                   "passes": false,
                   "first_failed": "No text or watermarks",
-                  "reason": "Watermark bottom right."
+                  "reason": "Watermark bottom right.",
+                  "checks": [
+                    true,
+                    false,
+                    true,
+                    true
+                  ]
                 }
               ]
             }

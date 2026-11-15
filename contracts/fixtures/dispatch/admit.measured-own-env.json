@@ -1,0 +1,146 @@
+{
+  "description": "M4b: LTX resident (22.0 GB declared, 22.4 measured) and Qwen's runner measuring 19.5 GB for its 16.67 declared: Qwen's still plans 29.25 GB above its declared sizes, so its own 2.83 GB excess counts too (54.48 > 52) and LTX's least recently used entries make room, instead of torch evicting its text encoder inside every still",
+  "host": "mac",
+  "keys": {
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "used_gb": 22.4,
+      "resident": [
+        {
+          "component": "vae_encoder",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.59,
+          "pinned": false,
+          "last_used": "2026-11-15T10:01:00Z"
+        },
+        {
+          "component": "upscaler",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.93,
+          "pinned": false,
+          "last_used": "2026-11-15T10:01:40Z"
+        },
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 19.18,
+          "pinned": false,
+          "last_used": "2026-11-15T10:01:30Z"
+        },
+        {
+          "component": "vae",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.76,
+          "pinned": false,
+          "last_used": "2026-11-15T10:01:50Z"
+        },
+        {
+          "component": "audio_vae",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.06,
+          "pinned": false,
+          "last_used": "2026-11-15T10:02:00Z"
+        },
+        {
+          "component": "vocoder",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.48,
+          "pinned": false,
+          "last_used": "2026-11-15T10:02:05Z"
+        }
+      ]
+    },
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "used_gb": 19.5,
+      "resident": [
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8",
+          "gb": 9.28,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:10Z"
+        },
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 6.76,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:20Z"
+        },
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 0.63,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:30Z"
+        }
+      ]
+    }
+  },
+  "run": {
+    "env": "torch",
+    "peak_gb": 29.25,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "turbo",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "unload",
+    "unload": {
+      "mlx": [
+        {
+          "component": "vae_encoder",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16"
+        },
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8"
+        }
+      ]
+    },
+    "budget_gb": null,
+    "error": null
+  }
+}

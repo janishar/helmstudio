@@ -3218,6 +3218,8 @@ export interface components {
                 passes: boolean;
                 first_failed: string | null;
                 reason: string;
+                /** @description every criterion's answer, musts then nices (additive in 1.14: "all checks pass" only when every one is true; absent in rows recorded before) */
+                checks?: boolean[];
             }[];
         };
         BatchPage: {
