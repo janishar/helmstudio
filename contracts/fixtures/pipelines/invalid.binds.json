@@ -1,0 +1,196 @@
+{
+  "description": "every step problem: unknown and unrunnable workflows, an unknown preset, fixed inputs that are not settable or invalid (a take, a wired param), bind keys and sources that are wrong, a type that does not fit, an image param left unbound, seeds without a seed param",
+  "pipeline": {
+    "title": "Binds",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "edit",
+            "type": "Text"
+          }
+        ]
+      },
+      "s1": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "seeds": 4,
+        "preset": "Final",
+        "inputs": {
+          "canvas.width": "big",
+          "encode.prompt": "x",
+          "nope.x": 1,
+          "encode.refs": [
+            {
+              "image": {
+                "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+              }
+            }
+          ]
+        },
+        "bind": {
+          "prompt.text": "$prompt",
+          "canvas.width": "$edit",
+          "sample.cond": "$prompt",
+          "canvas.height": "$ghost"
+        }
+      },
+      "s2": {
+        "kind": "step",
+        "workflow": "7a2d3b5f-1c8e-4d9a-8b62-4e3f2a1b0c99",
+        "seeds": 2,
+        "bind": {}
+      },
+      "s3": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "bind": {
+          "prompt.text": "s3.takes",
+          "encode.refs": "g.takes",
+          "canvas.width": "s1.picked"
+        }
+      },
+      "s4": {
+        "kind": "step",
+        "workflow": "missing-template"
+      },
+      "s5": {
+        "kind": "step",
+        "workflow": "8b3e4c6a-2d9f-4e0b-9c73-5f4a3b2c1d00"
+      },
+      "s6": {
+        "kind": "step",
+        "workflow": "7a2d3b5f-1c8e-4d9a-8b62-4e3f2a1b0c99",
+        "bind": {
+          "image.image": "s1.takes"
+        }
+      },
+      "g": {
+        "kind": "gate",
+        "takes": "s1"
+      },
+      "out": {
+        "kind": "output",
+        "from": "s6.takes",
+        "collection": "x"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "s1"
+      ],
+      [
+        "s1",
+        "g"
+      ],
+      [
+        "g",
+        "s2"
+      ],
+      [
+        "s2",
+        "s3"
+      ],
+      [
+        "s3",
+        "s4"
+      ],
+      [
+        "s4",
+        "s5"
+      ],
+      [
+        "s5",
+        "s6"
+      ],
+      [
+        "s6",
+        "out"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "unknown_preset",
+      "node": "s1"
+    },
+    {
+      "code": "step_input_invalid",
+      "node": "s1",
+      "param": "canvas.width"
+    },
+    {
+      "code": "step_input_invalid",
+      "node": "s1",
+      "param": "encode.prompt"
+    },
+    {
+      "code": "step_input_invalid",
+      "node": "s1",
+      "param": "nope.x"
+    },
+    {
+      "code": "step_input_invalid",
+      "node": "s1",
+      "param": "encode.refs"
+    },
+    {
+      "code": "bind_type",
+      "node": "s1",
+      "port": "canvas.width"
+    },
+    {
+      "code": "bind_unknown",
+      "node": "s1",
+      "port": "sample.cond"
+    },
+    {
+      "code": "bind_source",
+      "node": "s1",
+      "port": "canvas.height"
+    },
+    {
+      "code": "unbound_input",
+      "node": "s2",
+      "port": "image.image"
+    },
+    {
+      "code": "step_seeds",
+      "node": "s2"
+    },
+    {
+      "code": "bind_source",
+      "node": "s3",
+      "port": "prompt.text"
+    },
+    {
+      "code": "bind_source",
+      "node": "s3",
+      "port": "encode.refs"
+    },
+    {
+      "code": "bind_source",
+      "node": "s3",
+      "port": "canvas.width"
+    },
+    {
+      "code": "unknown_workflow",
+      "node": "s4"
+    },
+    {
+      "code": "workflow_cannot_run",
+      "node": "s5"
+    },
+    {
+      "code": "bind_type",
+      "node": "s6",
+      "port": "image.image"
+    }
+  ]
+}

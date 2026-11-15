@@ -1,0 +1,279 @@
+{
+  "type": "cmd.pipeline.submit",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000201",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "snapshot": {
+      "workflow_id": "qwen-image",
+      "workflow": {
+        "id": "qwen-image",
+        "title": "Qwen Image",
+        "family": "qwen-image",
+        "env": "torch",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "canvas",
+            "params": {
+              "mode": "auto",
+              "width": 1024,
+              "height": 1024
+            }
+          },
+          "model": {
+            "kind": "qwen-image/model",
+            "params": {
+              "variant": "base",
+              "precision": "int8"
+            }
+          },
+          "encode": {
+            "kind": "qwen-image/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "transparent": false,
+              "refs": []
+            }
+          },
+          "sample": {
+            "kind": "qwen-image/sample",
+            "in": {
+              "model": "model.model",
+              "cond": "encode.cond",
+              "canvas": "canvas.canvas",
+              "seed": "seed.seed"
+            },
+            "params": {
+              "steps": 40
+            }
+          },
+          "decode": {
+            "kind": "qwen-image/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample.latent"
+            },
+            "params": {
+              "tiled": "auto"
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.image"
+            }
+          }
+        }
+      },
+      "pipeline": {
+        "id": "2c4e6a8b-0d1f-4a3c-8e5b-7d9f1a3c5e70",
+        "title": "Fox at night",
+        "version": 3,
+        "nodes": {
+          "inputs": {
+            "kind": "inputs",
+            "inputs": [
+              {
+                "name": "prompt",
+                "type": "Text"
+              },
+              {
+                "name": "edit",
+                "type": "Text"
+              }
+            ],
+            "position": {
+              "x": 0,
+              "y": 0
+            }
+          },
+          "still": {
+            "kind": "step",
+            "title": "Qwen Image",
+            "workflow": "qwen-image",
+            "seeds": 4,
+            "inputs": {
+              "model.variant": "turbo",
+              "canvas.width": 1024
+            },
+            "bind": {
+              "prompt.text": "$prompt"
+            },
+            "seed_param": "seed.seed"
+          },
+          "review": {
+            "kind": "gate",
+            "title": "Pick one still to edit",
+            "takes": "still",
+            "keep": 1
+          },
+          "edit": {
+            "kind": "step",
+            "title": "Qwen edit",
+            "workflow": "qwen-image",
+            "bind": {
+              "prompt.text": "$edit",
+              "encode.refs": "review.picked"
+            },
+            "seeds": 1,
+            "inputs": {},
+            "seed_param": "seed.seed"
+          },
+          "out": {
+            "kind": "output",
+            "from": "edit.takes",
+            "collection": "Fox at night"
+          }
+        },
+        "edges": [
+          [
+            "inputs",
+            "still"
+          ],
+          [
+            "still",
+            "review"
+          ],
+          [
+            "review",
+            {
+              "pass": "edit",
+              "fail": "still",
+              "max": 2,
+              "then": "out"
+            }
+          ],
+          [
+            "edit",
+            "out"
+          ]
+        ],
+        "workflows": {
+          "qwen-image": {
+            "id": "qwen-image",
+            "title": "Qwen Image",
+            "family": "qwen-image",
+            "env": "torch",
+            "nodes": {
+              "prompt": {
+                "kind": "prompt",
+                "params": {
+                  "text": ""
+                }
+              },
+              "seed": {
+                "kind": "seed",
+                "params": {
+                  "seed": -1
+                }
+              },
+              "canvas": {
+                "kind": "canvas",
+                "params": {
+                  "mode": "auto",
+                  "width": 1024,
+                  "height": 1024
+                }
+              },
+              "model": {
+                "kind": "qwen-image/model",
+                "params": {
+                  "variant": "base",
+                  "precision": "int8"
+                }
+              },
+              "encode": {
+                "kind": "qwen-image/encode",
+                "in": {
+                  "model": "model.model",
+                  "prompt": "prompt.text"
+                },
+                "params": {
+                  "transparent": false,
+                  "refs": []
+                }
+              },
+              "sample": {
+                "kind": "qwen-image/sample",
+                "in": {
+                  "model": "model.model",
+                  "cond": "encode.cond",
+                  "canvas": "canvas.canvas",
+                  "seed": "seed.seed"
+                },
+                "params": {
+                  "steps": 40
+                }
+              },
+              "decode": {
+                "kind": "qwen-image/decode",
+                "in": {
+                  "model": "model.model",
+                  "latent": "sample.latent"
+                },
+                "params": {
+                  "tiled": "auto"
+                }
+              },
+              "output": {
+                "kind": "output",
+                "in": {
+                  "media": "decode.image"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "inputs": {
+      "inputs.edit": "make it night"
+    },
+    "rows": [
+      {
+        "row": 1,
+        "inputs": {
+          "inputs.prompt": "a red fox",
+          "inputs.edit": "make it night"
+        },
+        "seeds": {
+          "still": 1000,
+          "edit": 5000
+        }
+      },
+      {
+        "row": 2,
+        "inputs": {
+          "inputs.prompt": "a blue heron",
+          "inputs.edit": "make it night"
+        },
+        "seeds": {
+          "still": 1010,
+          "edit": 5001
+        }
+      }
+    ]
+  }
+}

@@ -20,6 +20,10 @@ const usage = `usage:
   helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--out <dir>]
   helm batch <workflow_id> (--lines <file|-> [--param node.param] | --csv <file> | --grid node.param=a,b,c ...)
              [-p node.param=value ...] [--seeds N] [--session <id>] [--title <t>]   exit 1 if any row failed
+  helm batch --pipeline <pipeline_id> (--lines ... [--param inputs.name] | --csv ... | --grid inputs.name=a,b ...) [-p inputs.name=value ...]
+             the pipeline's inputs are the columns; --lines sets its first Text or Image input by default
+  helm batch review <batch_id>        rows waiting at a gate, with their candidate takes
+  helm batch pick <batch_id> <row> (<take_id>... | --reject)   answer the gate the row waits at
   helm batches [--limit n] [--cursor c]
   helm batch-stop <batch_id>
   helm takes [--kind image|video|audio] [--source create|upload] [--starred] [--session <id>] [--q <text>] [--limit n] [--cursor c]
@@ -33,6 +37,8 @@ An image input takes a comma list of take ids and @files (uploaded first): -p en
   helm workflow validate file.json    print every problem; exit 1 if it cannot run
   helm workflow copy <id> [--title t] a copy of a template or of yours; prints the new id
   helm workflow rm <id>
+  helm pipelines                      your pipelines (id, version, last batch's status, title)
+  helm pipeline get|save|validate|copy|rm ...   as helm workflow, for a pipeline file (title, nodes, edges)
   helm whoami
   helm logout
 
@@ -72,7 +78,11 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 	case "workflows":
 		err = workflows(stdout)
 	case "workflow":
-		err = workflowCmd(args[1:], stdout, stderr)
+		err = docCmd(workflowKind, args[1:], stdout, stderr)
+	case "pipelines":
+		err = pipelines(stdout)
+	case "pipeline":
+		err = docCmd(pipelineKind, args[1:], stdout, stderr)
 	case "whoami":
 		err = whoami(stdout)
 	case "logout":

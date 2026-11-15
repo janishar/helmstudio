@@ -1,13 +1,16 @@
 "use client";
 // The batch run view (plan 8.3, docs/mock/PipelineGraph.dc.html's table): the header with the batch's state, counts
-// and Pause / Resume / Stop, and one table line per row, live from the batch's events. The graph part of the board
-// arrives with pipelines of several steps (M2).
+// and Pause / Resume / Stop, and one table line per row, live from the batch's events. A pipeline batch shows the
+// run table (a cell per step and gate, loop attempts stacked) and adds Pick, Retry failed and Run again; its graph is
+// the pipeline's editor and each row's execution view.
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import { ErrorNote, Modal } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { RowsDone, StateChip, controlBatch, followBatch } from "@/components/pipelines/pipelines";
+import { RunTable } from "@/components/pipelines/run-table";
 import { api, message, ok, type S } from "@/lib/api";
 import {
   appendRows,
@@ -21,7 +24,10 @@ import {
   type BatchView,
 } from "@/lib/batches";
 import { safeUrl, when } from "@/lib/format";
+import { useHydrated } from "@/lib/hydrated";
 import { clock } from "@/lib/runs";
+import { canPick, countFacts } from "@/lib/pipeline-run";
+import type { PDoc } from "@/lib/pipeline";
 
 type Row = S<"BatchRow">;
 
@@ -43,6 +49,21 @@ export function BatchRun({
   const [busy, setBusy] = useState("");
   const [stopping, setStopping] = useState(false);
   const [viewer, setViewer] = useState<{ takes: S<"Take">[]; i: number } | null>(null);
+  const router = useRouter();
+  // a pipeline batch: the pipeline now, for its node and workflow titles (cells name nodes the snapshot had)
+  const pipelineId = view?.batch.pipeline_id ?? null;
+  const [pipeline, setPipeline] = useState<S<"Pipeline"> | null>(null);
+  useEffect(() => {
+    if (!pipelineId) return;
+    let stop = false;
+    api
+      .GET("/v1/studio/pipelines/{pipeline_id}", { params: { path: { pipeline_id: pipelineId } } })
+      .then((r) => !stop && r.data && setPipeline(r.data as S<"Pipeline">))
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [pipelineId]);
 
   const load = useCallback(async () => {
     setError("");
@@ -123,14 +144,54 @@ export function BatchRun({
     }
   }
 
+  /** Retry failed: each failed row loaded, one after another. */
+  async function retryFailed() {
+    for (const r of view?.rows.filter((x) => view && canRetry(view.batch, x)) ?? []) await retry(r);
+  }
+
+  /** Run again: a new batch of the same pipeline with every row's inputs as a table (all pages read first). */
+  async function runAgain() {
+    if (!view?.batch.pipeline_id) return;
+    setBusy("again");
+    setError("");
+    try {
+      let rows = view.rows;
+      let next = cursor;
+      while (next) {
+        const p = await ok(
+          api.GET("/v1/studio/batches/{batch_id}/rows", {
+            params: { path: { batch_id: id }, query: { limit: 200, cursor: next } },
+          }),
+        );
+        rows = appendRows(rows, p.rows);
+        next = p.next_cursor;
+      }
+      const columns = [...new Set(rows.flatMap((r) => Object.keys(r.inputs)))];
+      const batch = await ok(
+        api.POST("/v1/studio/batches", {
+          body: {
+            pipeline_id: view.batch.pipeline_id,
+            rows: {
+              table: { columns, rows: rows.map((r) => columns.map((c) => r.inputs[c] ?? null)) },
+            },
+          },
+        }),
+      );
+      router.push(`/pipelines/batches/${batch.id}`);
+    } catch (e) {
+      setError(message(e));
+      setBusy("");
+    }
+  }
+
   // the row's takes, fetched when its thumbnail is opened; the arrow keys step through them
   const opening = useRef(false);
-  async function openTakes(r: Row) {
+  async function openTakes(r: Row | string[]) {
     if (opening.current) return;
     opening.current = true;
     try {
       const takes = await Promise.all(
-        r.take_ids.map((t) =>
+        (Array.isArray(r) ? r : r.take_ids).map((t) =>
           ok(api.GET("/v1/studio/takes/{take_id}", { params: { path: { take_id: t } } })),
         ),
       );
@@ -142,6 +203,7 @@ export function BatchRun({
     }
   }
 
+  const hydrated = useHydrated();
   if (!view)
     return (
       <main id="main" className="flex min-w-0 flex-1 flex-col gap-4 px-5 pt-4 pb-6">
@@ -160,14 +222,13 @@ export function BatchRun({
     b.started_at && b.finished_at
       ? clock((Date.parse(b.finished_at) - Date.parse(b.started_at)) / 1000)
       : null;
+  const isPipeline = !!b.pipeline_id;
+  const ended = ["done", "failed", "stopped"].includes(b.status);
+  const failedRows = rows.filter((r) => canRetry(b, r)).length;
   const facts = [
-    `${c.succeeded} done`,
-    c.failed && `${c.failed} failed`,
-    c.running && `${c.running} running`,
-    c.queued && `${c.queued} queued`,
-    c.cancelled && `${c.cancelled} cancelled`,
-    b.started_at && `started ${when(b.started_at)}`,
-    b.finished_at && `finished ${when(b.finished_at)}`,
+    ...countFacts(c),
+    hydrated && b.started_at && `started ${when(b.started_at)}`,
+    hydrated && b.finished_at && `finished ${when(b.finished_at)}`,
     took && `took ${took}`,
   ].filter(Boolean);
 
@@ -183,10 +244,30 @@ export function BatchRun({
         </Link>
         <h1 className="m-0 font-display text-[18px] font-bold tracking-[0.01em]">{b.title}</h1>
         <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
-          Unattended · {b.workflow_title} · {c.total} row{c.total === 1 ? "" : "s"}
+          Unattended ·{" "}
+          {isPipeline ? `${b.pipeline_title} · v${b.pipeline_version}` : b.workflow_title} ·{" "}
+          {c.total} row{c.total === 1 ? "" : "s"}
         </span>
         <StateChip batch={b} />
         <div className="grow" />
+        {isPipeline && canPick(b) && (
+          <Link
+            href={`/pipelines/batches/${b.id}/review`}
+            className="chip bevel bg-a1 font-semibold text-on1"
+          >
+            Pick · {c.waiting}
+          </Link>
+        )}
+        {isPipeline && failedRows > 0 && (
+          <button
+            type="button"
+            className="chip bevel"
+            disabled={!!busy}
+            onClick={() => void retryFailed()}
+          >
+            Retry failed
+          </button>
+        )}
         {canPause(b) && (
           <button
             type="button"
@@ -214,7 +295,17 @@ export function BatchRun({
             disabled={!!busy}
             onClick={() => setStopping(true)}
           >
-            Stop
+            {isPipeline ? "Cancel remaining" : "Stop"}
+          </button>
+        )}
+        {isPipeline && ended && (
+          <button
+            type="button"
+            className="chip bevel"
+            disabled={!!busy}
+            onClick={() => void runAgain()}
+          >
+            Run again
           </button>
         )}
       </div>
@@ -233,78 +324,92 @@ export function BatchRun({
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <div className="panel overflow-x-auto px-2 py-1.5">
-        <table className="grid-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Inputs</th>
-              <th>Step 1 · {b.workflow_title}</th>
-              <th>Takes</th>
-              <th>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const inputs = summarise(r);
-              return (
-                <tr key={r.row}>
-                  <td className="m">{r.row}</td>
-                  <td className="max-w-[420px] truncate" title={inputs}>
-                    {inputs || "—"}
-                  </td>
-                  <td
-                    className={
-                      r.status === "failed"
-                        ? "max-w-[360px] truncate text-[#f2c14e]"
-                        : r.status === "running"
-                          ? "font-medium text-a2"
-                          : "m"
-                    }
-                    title={r.error ?? undefined}
-                  >
-                    {rowState(r)}
-                    {r.attempt > 1 && ` · attempt ${r.attempt}`}
-                  </td>
-                  <td>
-                    {r.thumb_url ? (
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 p-0"
-                        aria-label={`Open row ${r.row}'s takes full screen`}
-                        onClick={() => void openTakes(r)}
-                      >
-                        <img
-                          src={safeUrl(r.thumb_url)}
-                          alt=""
-                          className="h-10 w-16 rounded-md bg-s3 object-cover"
-                        />
-                        {r.take_ids.length > 1 && (
-                          <span className="mono text-[11px] text-t2">+{r.take_ids.length - 1}</span>
-                        )}
-                      </button>
-                    ) : (
-                      <span className="mono text-[12px] text-t2">—</span>
-                    )}
-                  </td>
-                  <td>
-                    {canRetry(b, r) && (
-                      <button
-                        type="button"
-                        className="chip bevel h-[30px]"
-                        disabled={busy === `row${r.row}`}
-                        onClick={() => void retry(r)}
-                      >
-                        Retry
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        {isPipeline ? (
+          <RunTable
+            batch={b}
+            rows={rows}
+            doc={(pipeline as PDoc | null) ?? null}
+            titles={pipeline?.workflow_titles ?? {}}
+            busy={busy}
+            onRetry={(r) => void retry(r)}
+            onOpen={(ids) => void openTakes(ids)}
+          />
+        ) : (
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Inputs</th>
+                <th>Step 1 · {b.workflow_title}</th>
+                <th>Takes</th>
+                <th>
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const inputs = summarise(r);
+                return (
+                  <tr key={r.row}>
+                    <td className="m">{r.row}</td>
+                    <td className="max-w-[420px] truncate" title={inputs}>
+                      {inputs || "—"}
+                    </td>
+                    <td
+                      className={
+                        r.status === "failed"
+                          ? "max-w-[360px] truncate text-[#f2c14e]"
+                          : r.status === "running"
+                            ? "font-medium text-a2"
+                            : "m"
+                      }
+                      title={r.error ?? undefined}
+                    >
+                      {rowState(r)}
+                      {r.attempt > 1 && ` · attempt ${r.attempt}`}
+                    </td>
+                    <td>
+                      {r.thumb_url ? (
+                        <button
+                          type="button"
+                          className="flex items-center gap-1.5 p-0"
+                          aria-label={`Open row ${r.row}'s takes full screen`}
+                          onClick={() => void openTakes(r)}
+                        >
+                          <img
+                            src={safeUrl(r.thumb_url)}
+                            alt=""
+                            className="h-10 w-16 rounded-md bg-s3 object-cover"
+                          />
+                          {r.take_ids.length > 1 && (
+                            <span className="mono text-[11px] text-t2">
+                              +{r.take_ids.length - 1}
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="mono text-[12px] text-t2">—</span>
+                      )}
+                    </td>
+                    <td>
+                      {canRetry(b, r) && (
+                        <button
+                          type="button"
+                          className="chip bevel h-[30px]"
+                          disabled={busy === `row${r.row}`}
+                          onClick={() => void retry(r)}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
         {cursor && (
           <div className="flex justify-center p-2">
             <button
@@ -319,9 +424,14 @@ export function BatchRun({
         )}
       </div>
 
-      <Modal open={stopping} onClose={() => setStopping(false)} title="Stop this batch?">
+      <Modal
+        open={stopping}
+        onClose={() => setStopping(false)}
+        title={isPipeline ? "Cancel the remaining rows?" : "Stop this batch?"}
+      >
         <p className="mb-4 text-[13px] text-t2">
-          Rows not finished are cancelled. Finished rows and their takes stay.
+          Rows not finished are cancelled, rows waiting for a pick too. Finished rows and their
+          takes stay.
         </p>
         <div className="flex justify-end gap-2">
           <button type="button" className="chip bevel" onClick={() => setStopping(false)}>
@@ -333,7 +443,7 @@ export function BatchRun({
             disabled={busy === "stop"}
             onClick={() => void control("stop")}
           >
-            Stop
+            {isPipeline ? "Cancel remaining" : "Stop"}
           </button>
         </div>
       </Modal>

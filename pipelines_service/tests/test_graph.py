@@ -1,37 +1,44 @@
-"""The row graph on LangGraph's in-memory saver: no database, no NATS."""
+"""The row graph on LangGraph's in-memory saver (no database, no NATS), and the pipeline rules against
+contracts/fixtures/pipelines."""
+
+import copy
+import json
 
 import pytest
-from conftest import OWNER, SESSION, FakeStudio
+from conftest import CONTRACTS, OWNER, SESSION, FakeStudio, fixture
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
 import graph
+import pipeline
 
 BATCH = "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47"
 CFG = {"configurable": {"thread_id": f"{BATCH}:1"}}
+ECHO = {"id": "echo", "title": "Echo", "family": "fake", "env": "fake", "nodes": {}}
 
 
-def setup(studio):
-    g = graph.build().compile(checkpointer=InMemorySaver())
-    ctx = graph.Context(studio.create_run, OWNER, SESSION, "echo")
-    return g, ctx, graph.initial(BATCH, 1, 1, {"prompt.text": "a fox"})
+def setup(studio, snapshot=None):
+    plan = pipeline.plan(snapshot or {"workflow_id": "echo", "workflow": ECHO})
+    g = graph.build(plan).compile(checkpointer=InMemorySaver())
+    ctx = graph.Context(studio.create_run, OWNER, SESSION)
+    return g, ctx
+
+
+def result(d):
+    return {d["run_id"]: {k: d[k] for k in ("status", "take_ids", "error")}}
 
 
 async def test_parks_on_its_run_and_resumes_with_the_result():
     studio = FakeStudio()
-    g, ctx, init = setup(studio)
-    await g.ainvoke(init, CFG, context=ctx, durability="sync")
+    g, ctx = setup(studio)
+    await g.ainvoke(graph.initial(BATCH, 1, 1, {"prompt.text": "a fox"}), CFG, context=ctx)
     snap = await g.aget_state(CFG)
     run_id = studio.run(1)["run_id"]
-    assert snap.next == ("wait",) and snap.values["run_id"] == run_id
+    assert snap.next == ("step.wait",) and snap.interrupts[0].value == {"runs": [run_id]}
     assert studio.asked == [f"{BATCH}:1:1:step:0:0"]
+    assert studio.run(1)["req"]["inputs"] == {"prompt.text": "a fox"}  # the row's, as they are
     d = studio.finish(1)
-    out = await g.ainvoke(
-        Command(resume={k: d[k] for k in ("status", "take_ids", "error")}),
-        CFG,
-        context=ctx,
-        durability="sync",
-    )
+    out = await g.ainvoke(Command(resume=result(d)), CFG, context=ctx)
     assert out["status"] == "succeeded" and out["take_ids"] == d["take_ids"]
     assert (await g.aget_state(CFG)).next == ()
     assert len(studio.asked) == 1  # resuming re-ran wait, not submit
@@ -40,8 +47,8 @@ async def test_parks_on_its_run_and_resumes_with_the_result():
 async def test_a_terminal_reply_ends_the_row_without_parking():
     studio = FakeStudio()
     studio.create_status = "failed"
-    g, ctx, init = setup(studio)
-    out = await g.ainvoke(init, CFG, context=ctx, durability="sync")
+    g, ctx = setup(studio)
+    out = await g.ainvoke(graph.initial(BATCH, 1, 1, {}), CFG, context=ctx)
     assert out["status"] == "failed" and out["error"] == "no live host for env fake"
     assert (await g.aget_state(CFG)).next == ()
 
@@ -49,15 +56,15 @@ async def test_a_terminal_reply_ends_the_row_without_parking():
 async def test_a_final_error_reply_fails_the_row():
     studio = FakeStudio()
     studio.reply_error = {"error": "echo.steps: must be between 1 and 200", "code": "invalid"}
-    g, ctx, init = setup(studio)
-    out = await g.ainvoke(init, CFG, context=ctx, durability="sync")
+    g, ctx = setup(studio)
+    out = await g.ainvoke(graph.initial(BATCH, 1, 1, {}), CFG, context=ctx)
     assert out["status"] == "failed" and out["run_id"] is None
     assert out["error"].startswith("echo.steps")
 
 
 async def test_a_crash_inside_submit_asks_again_under_the_same_key():
     studio = FakeStudio()
-    g, ctx, init = setup(studio)
+    g, ctx = setup(studio)
     calls = 0
 
     async def crash_once(req):
@@ -70,8 +77,69 @@ async def test_a_crash_inside_submit_asks_again_under_the_same_key():
 
     ctx.create_run = crash_once
     with pytest.raises(RuntimeError):
-        await g.ainvoke(init, CFG, context=ctx, durability="sync")
-    assert (await g.aget_state(CFG)).next == ("submit",)
+        await g.ainvoke(graph.initial(BATCH, 1, 1, {}), CFG, context=ctx, durability="sync")
+    assert (await g.aget_state(CFG)).next == ("step.submit",)
     await g.ainvoke(None, CFG, context=ctx, durability="sync")
-    assert (await g.aget_state(CFG)).next == ("wait",)
+    assert (await g.aget_state(CFG)).next == ("step.wait",)
     assert studio.asked == [f"{BATCH}:1:1:step:0:0"] * 2 and len(studio.runs) == 1
+
+
+async def test_binds_seeds_and_a_gate_in_the_demo_pipeline():
+    """still (4 seeds) → review (pick 1) → edit (the pick as refs, $edit as its prompt) → out."""
+    studio = FakeStudio()
+    sub = fixture("cmd.pipeline.submit.valid.2")["data"]
+    g, ctx = setup(studio, sub["snapshot"])
+    row = sub["rows"][0]
+    await g.ainvoke(graph.initial(BATCH, 1, 1, row["inputs"], row["seeds"]), CFG, context=ctx)
+    keys = [f"{BATCH}:1:1:still:0:{i}" for i in range(4)]
+    assert studio.asked == keys
+    req = studio.runs[keys[2]]["req"]
+    assert req["workflow_id"] == "qwen-image"
+    assert req["inputs"] == {"model.variant": "turbo", "canvas.width": 1024,
+                             "prompt.text": "a red fox", "seed.seed": 1002}  # fmt: skip
+    res = {}
+    for k in keys:
+        res |= result(studio.finish(1, key=k))
+    await g.ainvoke(Command(resume=res), CFG, context=ctx)
+    snap = await g.aget_state(CFG)
+    parked = snap.interrupts[0].value
+    assert snap.next == ("review.gate",) and parked["visit"] == 1 and len(parked["candidates"]) == 4
+    pick = parked["candidates"][2]
+    await g.ainvoke(Command(resume={"take_ids": [pick]}), CFG, context=ctx)
+    edit = studio.runs[f"{BATCH}:1:1:edit:0:0"]["req"]["inputs"]
+    assert edit["encode.refs"] == [{"image": {"take_id": pick}}]
+    assert edit["prompt.text"] == "make it night" and edit["seed.seed"] == 5000
+    d = studio.finish(1, key=f"{BATCH}:1:1:edit:0:0")
+    out = await g.ainvoke(Command(resume=result(d)), CFG, context=ctx)
+    assert out["status"] == "succeeded" and out["take_ids"] == d["take_ids"]
+    assert out["collection"] == "Fox at night" and out["picked"] == {"review": [pick]}
+    assert [c["node"] for c in out["cells"]] == ["still", "review", "edit", "out"]
+    assert (
+        out["n"] == 8
+    )  # inputs, still.submit, still.wait, review.gate, review.route, edit ×2, out
+
+
+def fx_problems(name):
+    fx = json.loads((CONTRACTS / "fixtures/pipelines" / name).read_text())
+    want = {(p["code"], p.get("node"), p.get("port"), p.get("param")) for p in fx["problems"]}
+    return fx["pipeline"], {p for p in want if p[0] in pipeline.CODES}
+
+
+@pytest.mark.parametrize(
+    "name",
+    sorted(
+        p.name
+        for p in (CONTRACTS / "fixtures/pipelines").glob("*.json")
+        if p.name != "workflows.json"
+    ),
+)
+def test_pipeline_rules_match_the_fixtures(name):
+    doc, want = fx_problems(name)
+    assert pipeline.problems(doc) == want
+
+
+def test_an_uncapped_loop_does_not_validate():
+    doc, _ = fx_problems("valid.text-to-edit.json")
+    doc = copy.deepcopy(doc)
+    doc["edges"] = [e for e in doc["edges"] if e[0] != "review"] + [["review", "still"]]
+    assert ("uncapped_cycle", "still", None, None) in pipeline.problems(doc)

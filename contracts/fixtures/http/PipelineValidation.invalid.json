@@ -1,0 +1,12 @@
+{
+  "problems": [
+    {
+      "code": "nope",
+      "message": "edit: workflow qwen-edit is not one you can run",
+      "blocks": "run",
+      "node": "edit"
+    }
+  ],
+  "can_save": true,
+  "can_run": false
+}

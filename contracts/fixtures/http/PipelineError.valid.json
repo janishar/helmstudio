@@ -1,0 +1,11 @@
+{
+  "detail": "pipeline has 1 problems: still, review, fix: a loop without a cap",
+  "problems": [
+    {
+      "code": "uncapped_cycle",
+      "message": "a loop without a cap",
+      "blocks": "save",
+      "node": "still"
+    }
+  ]
+}

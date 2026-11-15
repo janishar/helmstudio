@@ -3,6 +3,7 @@
 // ANDs them), pages load as the grid scrolls, images upload from the picker or by dropping them on the grid, and the
 // side panel shows the selected take with the actions that exist so far.
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Maximize, Star, X } from "lucide-react";
 import { FullScreen, Media, useFullScreenKey } from "@/components/media";
@@ -619,6 +620,24 @@ function TakePanel({
   }, [t.id]);
   const used = children?.id === t.id ? children.list : [];
   const session = t.session_id ? `s=${encodeURIComponent(t.session_id)}&` : "";
+  // Save as pipeline: the lineage as a chain of steps; the new pipeline opens, or the 422 says why not
+  const router = useRouter();
+  const [saving, setSaving] = useState<{ id: string; error: string } | null>(null);
+  async function saveAsPipeline() {
+    setSaving({ id: t.id, error: "" });
+    try {
+      const p = await ok(
+        api.POST("/v1/studio/takes/{take_id}/pipeline", {
+          params: { path: { take_id: t.id } },
+          body: {},
+        }),
+      );
+      router.push(`/pipelines/${p.id}`);
+    } catch (e) {
+      setSaving({ id: t.id, error: message(e) });
+    }
+  }
+  const saveError = saving?.id === t.id ? saving.error : "";
   return (
     <>
       <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
@@ -706,6 +725,16 @@ function TakePanel({
         <button type="button" className="act" onClick={onRename}>
           Rename
         </button>
+        {m && (
+          <button
+            type="button"
+            className="act"
+            disabled={saving?.id === t.id && !saving.error}
+            onClick={() => void saveAsPipeline()}
+          >
+            Save as pipeline
+          </button>
+        )}
         <a href={url} download={t.title} className="act">
           Export file
         </a>
@@ -713,6 +742,7 @@ function TakePanel({
           Delete
         </button>
       </div>
+      {saveError && <ErrorNote>{saveError}</ErrorNote>}
     </>
   );
 }

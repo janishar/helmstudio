@@ -48,3 +48,8 @@ def message_errors(msg) -> list[str]:
 def runs_create_errors(part: str, value) -> list[str]:
     """Errors of a studio.runs.create `request` or `reply`."""
     return errors(f"{BASE}req.studio.runs.create.schema.json#/$defs/{part}", value)
+
+
+def state_get_errors(part: str, value) -> list[str]:
+    """Errors of a pipelines.state.get `request` or `reply`."""
+    return errors(f"{BASE}req.pipelines.state.get.schema.json#/$defs/{part}", value)

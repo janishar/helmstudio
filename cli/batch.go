@@ -18,6 +18,7 @@ import (
 
 type batchCounts struct {
 	Total     int `json:"total"`
+	Waiting   int `json:"waiting"`
 	Succeeded int `json:"succeeded"`
 	Failed    int `json:"failed"`
 	Cancelled int `json:"cancelled"`
@@ -41,10 +42,17 @@ type batchRow struct {
 	Error   *string  `json:"error"`
 }
 
-// batchCmd submits a batch of one workflow (rows from --lines, --csv or --grid) and prints each row as it ends.
-// Exit 1 when any row failed or the batch did not end done.
+// batchCmd submits a batch of one workflow or of a pipeline (rows from --lines, --csv or --grid) and prints each
+// row as it ends. Exit 1 when any row failed or the batch did not end done. helm batch review|pick answer gates.
 func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan os.Signal) error {
+	if len(args) > 0 && args[0] == "review" {
+		return batchReview(args[1:], stdout)
+	}
+	if len(args) > 0 && args[0] == "pick" {
+		return batchPick(args[1:], stdout)
+	}
 	fs := flag.NewFlagSet("batch", flag.ContinueOnError)
+	pipelineID := fs.String("pipeline", "", "run one of your pipelines instead of a workflow; its inputs are the columns (inputs.<name>)")
 	fs.SetOutput(stderr)
 	linesFile := fs.String("lines", "", "file with one value per line (- = stdin); blank lines are dropped")
 	param := fs.String("param", "prompt.text", "the node.param --lines sets")
@@ -58,13 +66,16 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() == 0 {
+	wfID := ""
+	if fs.NArg() > 0 {
+		wfID = fs.Arg(0)
+		if err := fs.Parse(fs.Args()[1:]); err != nil { // flags may follow the workflow id
+			return err
+		}
+	}
+	if (wfID == "") == (*pipelineID == "") {
 		fs.Usage()
 		return flag.ErrHelp
-	}
-	wfID := fs.Arg(0)
-	if err := fs.Parse(fs.Args()[1:]); err != nil { // flags may follow the workflow id
-		return err
 	}
 	if n := btoi(*linesFile != "") + btoi(*csvFile != "") + btoi(len(grid) > 0); n != 1 {
 		return errors.New("give exactly one of --lines, --csv, --grid")
@@ -74,7 +85,19 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 		return err
 	}
 	var wf workflow
-	if err := c.call(http.MethodGet, "/v1/studio/workflows/"+url.PathEscape(wfID), nil, http.StatusOK, &wf); err != nil {
+	body := map[string]any{"workflow_id": wfID}
+	if *pipelineID != "" {
+		col := ""
+		if wf, col, err = c.pipelineColumns(*pipelineID); err != nil {
+			return fmt.Errorf("pipeline %s: %w", *pipelineID, err)
+		}
+		paramSet := false
+		fs.Visit(func(f *flag.Flag) { paramSet = paramSet || f.Name == "param" })
+		if !paramSet {
+			*param = col
+		}
+		body = map[string]any{"pipeline_id": *pipelineID}
+	} else if err := c.call(http.MethodGet, "/v1/studio/workflows/"+url.PathEscape(wfID), nil, http.StatusOK, &wf); err != nil {
 		return fmt.Errorf("workflow %s: %w", wfID, err)
 	}
 	inputs, err := wf.inputs(ps)
@@ -93,7 +116,7 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 	if err != nil {
 		return err
 	}
-	body := map[string]any{"workflow_id": wfID, "inputs": inputs, "rows": rows}
+	body["inputs"], body["rows"] = inputs, rows
 	if *seeds > 0 {
 		body["seeds"] = map[string]int{"count": *seeds}
 	}
@@ -109,6 +132,146 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 	}
 	fmt.Fprintf(stdout, "batch %s: %s, %d rows\n", b.ID, b.Title, b.Counts.Total)
 	return c.followBatch(b.ID, stdout, stop)
+}
+
+// pipelineColumns describes a pipeline's inputs as a workflow of one node (the inputs node), so the batch columns
+// `<inputs node>.<name>` are typed like workflow params; col is the first Text or Image input (the --lines default).
+func (c *client) pipelineColumns(id string) (wf workflow, col string, err error) {
+	var p struct {
+		Title string `json:"title"`
+		Nodes map[string]struct {
+			Kind   string `json:"kind"`
+			Inputs []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"inputs"`
+		} `json:"nodes"`
+	}
+	if err := c.call(http.MethodGet, pipelineKind.path+"/"+url.PathEscape(id), nil, http.StatusOK, &p); err != nil {
+		return wf, "", err
+	}
+	nodes, schemas := map[string]any{}, map[string]any{}
+	for nid, n := range p.Nodes {
+		if n.Kind != "inputs" {
+			continue
+		}
+		ps := []map[string]any{}
+		for _, in := range n.Inputs {
+			typ := strings.ToLower(in.Type) // Text Int Float Seed Image -> the param types that parse them
+			if col == "" && (typ == "text" || typ == "image") {
+				col = nid + "." + in.Name
+			}
+			ps = append(ps, map[string]any{"name": in.Name, "type": typ})
+		}
+		nodes[nid], schemas["inputs:"+nid] = map[string]string{"kind": "inputs:" + nid}, map[string]any{"params": ps}
+	}
+	err = json.Unmarshal(mustJSON(map[string]any{"id": id, "title": p.Title, "nodes": nodes, "node_schemas": schemas}), &wf)
+	return wf, col, err
+}
+
+type reviewItem struct {
+	Row         int    `json:"row"`
+	Gate        string `json:"gate"`
+	Visit       int    `json:"visit"`
+	Keep        int    `json:"keep"`
+	OnReject    string `json:"on_reject"`
+	RejectsLeft int    `json:"rejects_left"`
+	Candidates  []struct {
+		TakeID string `json:"take_id"`
+		Seed   *int64 `json:"seed"`
+	} `json:"candidates"`
+}
+
+func (c *client) review(id string) ([]reviewItem, error) {
+	var r struct {
+		Items []reviewItem `json:"items"`
+	}
+	err := c.call(http.MethodGet, "/v1/studio/batches/"+url.PathEscape(id)+"/review", nil, http.StatusOK, &r)
+	return r.Items, err
+}
+
+// batchReview prints every row parked on a gate with its candidates.
+func batchReview(args []string, stdout io.Writer) error {
+	if len(args) != 1 {
+		return errors.New("usage: helm batch review <batch_id>")
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	items, err := c.review(args[0])
+	if err != nil {
+		return err
+	}
+	if len(items) == 0 {
+		fmt.Fprintln(stdout, "no row is waiting for a pick")
+	}
+	for _, it := range items {
+		left := ""
+		if it.OnReject == "retry" {
+			left = fmt.Sprintf(", %d left", it.RejectsLeft)
+		}
+		fmt.Fprintf(stdout, "row %d at %s (visit %d): pick 1 to %d; reject = %s%s\n", it.Row, it.Gate, it.Visit, it.Keep, it.OnReject, left)
+		for _, cand := range it.Candidates {
+			seed := "-"
+			if cand.Seed != nil {
+				seed = strconv.FormatInt(*cand.Seed, 10)
+			}
+			fmt.Fprintf(stdout, "  %s seed %s\n", cand.TakeID, seed)
+		}
+	}
+	return nil
+}
+
+// batchPick answers the gate a row is parked on: the picked takes, or --reject.
+func batchPick(args []string, stdout io.Writer) error {
+	reject, rest := false, []string{}
+	for _, a := range args {
+		if a == "--reject" || a == "-reject" {
+			reject = true
+		} else {
+			rest = append(rest, a)
+		}
+	}
+	if len(rest) < 2 || reject == (len(rest) > 2) {
+		return errors.New("usage: helm batch pick <batch_id> <row> (<take_id>... | --reject)")
+	}
+	row, err := strconv.Atoi(rest[1])
+	if err != nil {
+		return fmt.Errorf("row %q: not a number", rest[1])
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	items, err := c.review(rest[0])
+	if err != nil {
+		return err
+	}
+	gate := ""
+	for _, it := range items {
+		if it.Row == row {
+			gate = it.Gate
+		}
+	}
+	if gate == "" {
+		return fmt.Errorf("row %d is not waiting for a pick", row)
+	}
+	body := map[string]any{"gate": gate, "take_ids": rest[2:]}
+	if reject {
+		body = map[string]any{"gate": gate, "reject": true}
+	}
+	var r batchRow
+	path := fmt.Sprintf("/v1/studio/batches/%s/rows/%d/pick", url.PathEscape(rest[0]), row)
+	if err := c.call(http.MethodPost, path, body, http.StatusAccepted, &r); err != nil {
+		return err
+	}
+	what := "picked " + strings.Join(rest[2:], ",")
+	if reject {
+		what = "rejected all"
+	}
+	fmt.Fprintf(stdout, "row %d at %s: %s; row %s\n", row, gate, what, r.Status)
+	return nil
 }
 
 func btoi(b bool) int {
@@ -237,6 +400,8 @@ func (c *client) followBatch(id string, stdout io.Writer, stop <-chan os.Signal)
 				return nil
 			case "paused":
 				fmt.Fprintf(stdout, "paused: %s\n", deref(b.Reason))
+			case "waiting":
+				fmt.Fprintf(stdout, "waiting: %d rows wait for a pick (helm batch review %s)\n", b.Counts.Waiting, id)
 			default:
 				fmt.Fprintln(stdout, status)
 			}

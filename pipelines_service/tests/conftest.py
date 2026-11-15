@@ -25,7 +25,8 @@ TRACE = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
 
 
 def fixture(name: str) -> dict:
-    return json.loads((CONTRACTS / "fixtures/messages" / f"{name}.json").read_text())
+    p = CONTRACTS / "fixtures/messages" / f"{name}.json"
+    return json.loads((p if p.exists() else p.with_name(f"{name}.1.json")).read_text())
 
 
 def command(kind: str, batch_id: str, n: int = 2, **data) -> dict:
@@ -113,9 +114,15 @@ class FakeStudio:
             r for k, r in self.runs.items() if k.split(":")[1:3] == [str(row), str(attempt)]
         )
 
-    def finish(self, row: int, status: str = "succeeded", error: str | None = None, attempt=1):
-        """The run of `row` ends: its evt.studio.run_finished data (checked against the contract)."""
-        run = self.run(row, attempt)
+    def open_keys(self, row: int) -> list[str]:
+        """Keys of the row's runs that have not ended, in the order asked."""
+        return [k for k, r in self.runs.items() if k.split(":")[1] == str(row)
+                and r["status"] not in ("succeeded", "failed", "cancelled")]  # fmt: skip
+
+    def finish(self, row: int, status: str = "succeeded", error: str | None = None, attempt=1,
+               key: str | None = None):  # fmt: skip
+        """The run of `row` (or under `key`) ends: its evt.studio.run_finished data (on contract)."""
+        run = self.runs[key] if key else self.run(row, attempt)
         run["status"] = status
         run["take_ids"] = [str(uuid.uuid4())] if status == "succeeded" else []
         run["error"] = error or ("boom" if status == "failed" else None)
@@ -160,6 +167,13 @@ async def idle(e: Engine) -> None:
     """Wait until the engine drives no row."""
     while e.tasks:
         await asyncio.gather(*list(e.tasks.values()), return_exceptions=True)
+
+
+async def fin(e: Engine, data: dict) -> bool:
+    """Deliver a run_finished and wait for the drive it pokes."""
+    ok = await e.on_run_finished(data)
+    await idle(e)
+    return ok
 
 
 @pytest.fixture

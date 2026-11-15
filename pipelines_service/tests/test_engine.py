@@ -5,7 +5,7 @@ import gc
 import uuid
 
 import pytest
-from conftest import FakeJS, FakeStudio, command, engine, idle, until
+from conftest import FakeJS, FakeStudio, command, engine, fin, idle, until
 
 from engine import RESTARTED, thread_id
 from messaging import publisher
@@ -18,8 +18,7 @@ def key(b: str, row: int, attempt: int = 1) -> str:
 async def threads_left(e, b: str, n: int) -> list[int]:
     out = []
     for row in range(1, n + 1):
-        snap = await e.graph.aget_state({"configurable": {"thread_id": thread_id(b, row)}})
-        if snap.values:
+        if await e.saver.aget_tuple({"configurable": {"thread_id": thread_id(b, row)}}):
             out.append(row)
     return out
 
@@ -31,11 +30,11 @@ async def test_row_1_first_then_every_row_and_done(pool):
     await idle(e)
     assert studio.asked == [key(b, 1)]
     assert js.rows()[1]["status"] == "running" and js.batch_status() == "running"
-    assert await e.on_run_finished(studio.finish(1))
+    assert await fin(e, studio.finish(1))
     await idle(e)
     assert sorted(studio.asked) == [key(b, r) for r in (1, 2, 3)]
     for row in (2, 3):
-        assert await e.on_run_finished(studio.finish(row))
+        assert await fin(e, studio.finish(row))
     rows = js.rows()
     assert [rows[r]["status"] for r in (1, 2, 3)] == ["succeeded"] * 3
     assert rows[2]["take_ids"] == studio.run(2)["take_ids"]
@@ -51,10 +50,10 @@ async def test_a_failed_row_does_not_stop_the_others(pool):
     e = engine(pool, studio, js)
     await e.submit(command("submit", b, 3))
     await idle(e)
-    await e.on_run_finished(studio.finish(1, "failed", "out of memory"))
+    await fin(e, studio.finish(1, "failed", "out of memory"))
     await idle(e)
-    await e.on_run_finished(studio.finish(2))
-    await e.on_run_finished(studio.finish(3))
+    await fin(e, studio.finish(2))
+    await fin(e, studio.finish(3))
     rows = js.rows()
     assert rows[1]["status"] == "failed" and rows[1]["error"] == "out of memory"
     assert rows[2]["status"] == rows[3]["status"] == "succeeded"
@@ -67,7 +66,7 @@ async def test_three_failures_in_a_row_with_one_error_pause(pool):
     await e.submit(command("submit", b, 5))
     await idle(e)
     for row in (1, 2, 3):
-        await e.on_run_finished(studio.finish(row, "failed", "no VAE"))
+        await fin(e, studio.finish(row, "failed", "no VAE"))
         await idle(e)
     batch = max(js.events("batch"), key=lambda m: m["data"]["seq"])["data"]
     assert batch == {
@@ -84,7 +83,7 @@ async def test_pause_holds_unreleased_rows_and_resume_releases_them(pool):
     await idle(e)
     await e.pause(b)
     assert js.batch_status() == "paused"
-    assert await e.on_run_finished(studio.finish(1))  # a parked thread still resumes while paused
+    assert await fin(e, studio.finish(1))  # a parked thread still resumes while paused
     await idle(e)
     assert studio.asked == [key(b, 1)] and js.rows()[1]["status"] == "succeeded"
     await e.resume(b)
@@ -102,7 +101,7 @@ async def test_stop_cancels_rows_never_started_and_ends_with_the_runs(pool):
     rows = js.rows()
     assert rows[2]["status"] == rows[3]["status"] == "cancelled" and rows[1]["status"] == "running"
     assert js.batch_status() == "running"  # until every row is final
-    await e.on_run_finished(studio.finish(1, "cancelled"))  # studio cancelled the run
+    await fin(e, studio.finish(1, "cancelled"))  # studio cancelled the run
     await idle(e)
     assert js.rows()[1]["status"] == "cancelled" and js.batch_status() == "stopped"
     assert studio.asked == [key(b, 1)]
@@ -125,9 +124,10 @@ async def test_run_finished_twice_or_before_the_thread_parks(pool):
     await e.submit(command("submit", b, 2))
     await until(lambda: early)
     assert await early[0]  # it waited for the park, then resumed the thread
+    await idle(e)
     assert js.rows()[1]["status"] == "succeeded"
     before = js.rows()[1]
-    assert not await e.on_run_finished(studio.finish(1))  # a second delivery is dropped
+    assert not await fin(e, studio.finish(1))  # a second delivery is dropped
     assert js.rows()[1] | {"seq": 0} == before | {"seq": 0}  # (its end is only published again)
     await idle(e)
     assert studio.asked == [key(b, 1), key(b, 2)]
@@ -140,7 +140,7 @@ async def test_a_terminal_reply_ends_the_row_and_the_later_event_is_dropped(pool
     await e.submit(command("submit", b, 1))
     await idle(e)
     assert js.rows()[1]["status"] == "failed" and js.batch_status() == "done"
-    assert not await e.on_run_finished(studio.finish(1, "failed", "no live host for env fake"))
+    assert not await fin(e, studio.finish(1, "failed", "no live host for env fake"))
 
 
 async def test_retry_runs_the_row_again_under_a_new_key(pool):
@@ -148,16 +148,16 @@ async def test_retry_runs_the_row_again_under_a_new_key(pool):
     e = engine(pool, studio, js)
     await e.submit(command("submit", b, 2))
     await idle(e)
-    await e.on_run_finished(studio.finish(1))
+    await fin(e, studio.finish(1))
     await idle(e)
-    await e.on_run_finished(studio.finish(2, "failed"))
+    await fin(e, studio.finish(2, "failed"))
     assert js.batch_status() == "done"
     await e.retry(b, 2, 2)
     await e.retry(b, 2, 2)  # a redelivery changes nothing
     await idle(e)
     assert js.batch_status() == "running"
     assert studio.asked[-1] == key(b, 2, 2) and len(studio.runs) == 3
-    await e.on_run_finished(studio.finish(2, attempt=2))
+    await fin(e, studio.finish(2, attempt=2))
     rows = js.rows()
     assert rows[2]["status"] == "succeeded" and rows[2]["attempt"] == 2
     assert js.batch_status() == "done"
@@ -187,11 +187,11 @@ async def test_a_crash_mid_batch_continues_without_a_second_run(pool):
     assert batch["status"] == "paused" and batch["reason"] == RESTARTED
     await idle(e2)
     assert len(studio.asked) == 4  # nothing new until Resume
-    assert await e2.on_run_finished(studio.finish(2))  # the parked thread resumes while paused
+    assert await fin(e2, studio.finish(2))  # the parked thread resumes while paused
     await e2.resume(b)
     await idle(e2)
     for row in (3, 4, 5):
-        assert await e2.on_run_finished(studio.finish(row))
+        assert await fin(e2, studio.finish(row))
     assert js.batch_status() == "done"
     assert [js.rows()[r]["status"] for r in range(1, 6)] == ["succeeded"] * 5
     # one run per row, each under its row's key; row 3 asked again and got the run it created before the crash
@@ -213,7 +213,7 @@ async def test_a_redelivered_submit_continues_the_batch_it_has(pool):
     assert studio.asked == [key(b, 1)] and len(studio.runs) == 1
 
 
-async def test_an_end_whose_publish_failed_is_followed_up_on_redelivery(pool, monkeypatch):
+async def test_an_end_whose_publish_failed_is_followed_up(pool, monkeypatch):
     monkeypatch.setattr(publisher, "RETRY_FOR", 0.05)
     studio, js, b = FakeStudio(), FakeJS(), str(uuid.uuid4())
     e = engine(pool, studio, js)
@@ -221,13 +221,14 @@ async def test_an_end_whose_publish_failed_is_followed_up_on_redelivery(pool, mo
     await idle(e)
     done = studio.finish(1)
     js.down = True  # NATS down past the publisher's retries: the row is final, nothing published
-    with pytest.raises(ConnectionError):
-        await e.on_run_finished(done)
+    assert await e.on_run_finished(done)
+    await until(lambda: e.tasks)
+    await asyncio.sleep(0.3)  # the drive failed and waits to try again
+    assert js.rows()[1]["status"] == "running"
     js.down = False
-    assert not await e.on_run_finished(
-        done
-    )  # the redelivery: no thread waits, the end is followed up
+    await idle(e)  # its next try follows the end up
     assert js.rows()[1]["status"] == "succeeded" and js.batch_status() == "done"
+    assert not await fin(e, done)  # a redelivery: no thread waits
     assert await threads_left(e, b, 1) == []
 
 
@@ -277,7 +278,7 @@ async def test_pause_then_resume_or_stop_while_rows_wait_for_a_slot(pool, then):
     if then == "resume":
         assert sorted(studio.asked) == [key(b, r) for r in (1, 2, 3, 4)]
     else:
-        await e.on_run_finished(studio.finish(2, "cancelled"))
+        await fin(e, studio.finish(2, "cancelled"))
         assert [js.rows()[r]["status"] for r in (3, 4)] == ["cancelled"] * 2
         assert js.batch_status() == "stopped"
 
@@ -288,7 +289,7 @@ async def test_a_redelivered_retry_drives_the_row(pool, monkeypatch):
     e = engine(pool, studio, js)
     await e.submit(command("submit", b, 1))
     await idle(e)
-    await e.on_run_finished(studio.finish(1, "failed"))
+    await fin(e, studio.finish(1, "failed"))
     assert js.batch_status() == "done"
     js.down = True
     with pytest.raises(ConnectionError):
@@ -305,11 +306,11 @@ async def test_at_most_window_rows_wait_on_studio_and_locks_are_not_kept(pool):
     e = engine(pool, studio, js, window=2)
     await e.submit(command("submit", b, 5))
     await idle(e)
-    await e.on_run_finished(studio.finish(1))
+    await fin(e, studio.finish(1))
     await idle(e)
     assert sorted(studio.asked) == [key(b, r) for r in (1, 2, 3)]
     for row in (2, 3, 4, 5):
-        await e.on_run_finished(studio.finish(row))
+        await fin(e, studio.finish(row))
         await idle(e)
     assert sorted(studio.asked) == [key(b, r) for r in (1, 2, 3, 4, 5)]
     assert js.batch_status() == "done"

@@ -90,24 +90,31 @@ type Batch struct {
 	CreatedAt     time.Time
 	StartedAt     *time.Time
 	FinishedAt    *time.Time
-	Total         int
-	Queued        int
-	Running       int
-	Succeeded     int
-	Failed        int
-	Cancelled     int
+	// a batch of a pipeline
+	PipelineID      *string
+	PipelineTitle   *string
+	PipelineVersion *int
+	Collection      *string
+	Total           int
+	Queued          int
+	Running         int
+	Waiting         int
+	Succeeded       int
+	Failed          int
+	Cancelled       int
 }
 
 // RowShown is a row's status as the API shows it (br: batch_rows, r: its run): its end once pipelines reported one,
-// else running once its run left the queue, else queued.
-const RowShown = `CASE WHEN br.status IN ('succeeded', 'failed', 'cancelled') THEN br.status
+// waiting while parked on a gate, else running once its run left the queue, else queued.
+const RowShown = `CASE WHEN br.status IN ('succeeded', 'failed', 'cancelled', 'waiting') THEN br.status
 	WHEN r.status IS NOT NULL AND r.status <> 'queued' THEN 'running' ELSE 'queued' END`
 
 // BatchFrom selects Batch's columns, in order, from batches aliased b; append WHERE … to it.
 const BatchFrom = `SELECT b.id::text, b.owner_id::text, b.session_id::text, b.title, b.workflow_id, b.workflow_title, b.status,
-	b.control, b.reason, b.commands, b.created_at, b.started_at, b.finished_at, c.* FROM batches b, LATERAL (
+	b.control, b.reason, b.commands, b.created_at, b.started_at, b.finished_at, b.pipeline_id::text, b.pipeline_title,
+	b.pipeline_version, b.collection, c.* FROM batches b, LATERAL (
 	SELECT count(*)::int, count(*) FILTER (WHERE s = 'queued')::int, count(*) FILTER (WHERE s = 'running')::int,
-	count(*) FILTER (WHERE s = 'succeeded')::int, count(*) FILTER (WHERE s = 'failed')::int,
+	count(*) FILTER (WHERE s = 'waiting')::int, count(*) FILTER (WHERE s = 'succeeded')::int, count(*) FILTER (WHERE s = 'failed')::int,
 	count(*) FILTER (WHERE s = 'cancelled')::int
 	FROM (SELECT ` + RowShown + ` AS s FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id WHERE br.batch_id = b.id) x) c `
 
@@ -123,11 +130,16 @@ type BatchRow struct {
 	Error      *string
 	StartedAt  *time.Time
 	FinishedAt *time.Time
+	Pipeline   bool            // a row of a pipeline batch (its cells are never null)
+	Node       *string         // pipeline rows: where it is now
+	Parked     json.RawMessage // pipeline rows: {gate, visit, keep, candidates} while waiting
+	Cells      json.RawMessage // pipeline rows: pipelines' cells
 }
 
 // BatchRowFrom selects BatchRow's columns, in order, from batch_rows aliased br; append WHERE … to it.
 const BatchRowFrom = `SELECT br.n, br.attempt, br.inputs, ` + RowShown + `, br.run_id::text, coalesce(tk.ids, '{}'),
-	coalesce(tk.keys, '{}'), br.error, r.started_at, br.finished_at
+	coalesce(tk.keys, '{}'), br.error, r.started_at, br.finished_at,
+	br.cells IS NOT NULL, br.node, br.parked, br.cells
 	FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id
 	LEFT JOIN LATERAL (SELECT array_agg(t.id::text ORDER BY u.ord) ids, array_agg(t.key ORDER BY u.ord) keys
 		FROM unnest(br.take_ids) WITH ORDINALITY u(id, ord) JOIN takes t ON t.id = u.id AND t.deleted_at IS NULL) tk ON true `
@@ -148,3 +160,40 @@ type UserWorkflow struct {
 
 // UserWorkflowCols are the columns UserWorkflow scans, in order.
 const UserWorkflowCols = `id::text, title, family, env, nodes, studio, based_on, version, created_at, updated_at`
+
+// UserPipeline is a user_pipelines row.
+type UserPipeline struct {
+	ID        string
+	Title     string
+	Nodes     json.RawMessage
+	Edges     json.RawMessage
+	BasedOn   *string
+	Version   int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// UserPipelineCols are the columns UserPipeline scans, in order.
+const UserPipelineCols = `id::text, title, nodes, edges, based_on, version, created_at, updated_at`
+
+// BatchStep is a batch_steps row: one graph step of a pipeline row attempt.
+type BatchStep struct {
+	Step         int
+	Node         string
+	Part         string
+	Visit        int
+	Status       string
+	What         string
+	Changed      json.RawMessage
+	Edge         json.RawMessage
+	Loops        json.RawMessage
+	RunIDs       []string
+	TakeIDs      []string
+	Error        *string
+	CheckpointID *string
+	At           time.Time
+}
+
+// BatchStepCols are the columns BatchStep scans, in order.
+const BatchStepCols = `step, node, part, visit, status, what, changed, edge, loops, run_ids::text[], take_ids::text[], error,
+	checkpoint_id, at`

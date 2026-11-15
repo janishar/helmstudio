@@ -5,10 +5,14 @@
 #   make resilience                (from the repo root: brings the test stack up and runs this)
 #   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats
-# batch-postgres batch-kill; studio-queued restarts studio while a second run is still queued behind the first (not yet
+# batch-postgres batch-kill pipeline-parked; studio-queued restarts studio while a second run is still queued behind the first (not yet
 # released) and requires that it then succeeds. batch-<svc> restarts <svc> during a 12-row slow echo batch (batch-kill:
 # SIGKILL the pipelines container, then start it), presses Resume whenever the batch is paused (pipelines pauses its
 # batches after a restart) and requires the batch to end done with exactly 12 runs (one per row) and 12 takes.
+# pipeline-parked runs a 3-row echo pipeline with a gate (still -> review -> edit -> out), picks row 1 and restarts
+# pipelines and studio while row 1's edit runs and rows 2 and 3 are parked, then presses Resume whenever the batch is
+# paused and picks every parked row; the batch must end done with exactly 6 runs and 6 distinct takes (a still and an
+# edit per row) and every row succeeded with one take.
 # Needs curl and python3. Exit 1 when any service fails.
 set -eu
 cd "$(dirname "$0")"
@@ -102,11 +106,78 @@ print(len(t), len({x["id"] for x in t}))' "$bid" 2>/dev/null) || takes="? ?"
   api DELETE "/v1/studio/sessions/$bsid" >/dev/null || true
 }
 
+# pick_parked BID: pick the first candidate of every row parked on a gate
+pick_parked() {
+  api GET "/v1/studio/batches/$1/review" | python3 -c 'import json,sys
+for i in json.load(sys.stdin)["items"]:
+    print(i["row"], json.dumps({"gate": i["gate"], "take_ids": [i["candidates"][0]["take_id"]]}))' 2>/dev/null |
+    while read -r n pick; do api POST "/v1/studio/batches/$1/rows/$n/pick" "$pick" >/dev/null || true; done
+}
+
+# pipeline_check: restarts while two rows are parked and one is running (see the header)
+pipeline_check() {
+  doc=$(python3 -c 'import json
+step = lambda bind, steps: {"kind": "step", "workflow": "echo", "bind": bind,
+                            "inputs": {"echo.steps": steps, "echo.delay_ms": 300}}
+print(json.dumps({"title": "resilience pipeline", "nodes": {
+  "inputs": {"kind": "inputs", "inputs": [{"name": "prompt", "type": "Text"}]},
+  "still": step({"prompt.text": "$prompt"}, 2),
+  "review": {"kind": "gate", "takes": "still"},
+  "edit": step({"prompt.text": "$prompt", "echo.refs": "review.picked"}, 40),
+  "out": {"kind": "output", "from": "edit.takes", "collection": "resilience"}},
+  "edges": [["inputs", "still"], ["still", "review"], ["review", "edit"], ["edit", "out"]]}))')
+  pid=$(api POST /v1/studio/pipelines "$doc" | field id) || pid=""
+  bsid=$(api POST /v1/studio/sessions '{"title":"resilience pipeline"}' | field id)
+  body=$(python3 -c 'import json,sys; print(json.dumps({"pipeline_id": sys.argv[1], "session_id": sys.argv[2],
+    "rows": {"lines": {"param": "inputs.prompt", "values": ["row 1", "row 2", "row 3"]}}}))' "$pid" "$bsid")
+  bid=$(api POST /v1/studio/batches "$body" | field id) || bid=""
+  [ -n "$bid" ] || { fails=$((fails + 1)); echo "FAIL $1: the pipeline batch was not accepted"; return; }
+  for _ in $(seq 60); do                     # every row parked at the gate
+    [ "$(api GET "/v1/studio/batches/$bid" | field counts waiting || echo 0)" -ge 3 ] 2>/dev/null && break
+    sleep 1
+  done
+  api POST "/v1/studio/batches/$bid/rows/1/pick" "$(api GET "/v1/studio/batches/$bid/review" | python3 -c 'import json,sys
+i = json.load(sys.stdin)["items"][0]; print(json.dumps({"gate": i["gate"], "take_ids": [i["candidates"][0]["take_id"]]}))')" \
+    >/dev/null || true
+  sleep 4                                    # row 1's edit (40 x 300 ms) is running; rows 2 and 3 are parked
+  dc restart pipelines studio >/dev/null 2>&1
+  dc up -d --wait >/dev/null 2>&1
+  signin
+  status=unknown
+  for _ in $(seq $((END_TIMEOUT * 2))); do
+    status=$(api GET "/v1/studio/batches/$bid" | field status) || status=unreachable
+    case $status in
+      done | failed | stopped) break ;;
+      paused) api POST "/v1/studio/batches/$bid/resume" >/dev/null || true ;;
+      waiting) pick_parked "$bid" ;;
+    esac
+    sleep 1
+  done
+  runs=$(api GET "/v1/studio/sessions/$bsid/runs" | python3 -c 'import json,sys
+r=[x for x in json.load(sys.stdin)["runs"] if x.get("batch_id")==sys.argv[1]]
+print(len(r), len({x["id"] for x in r}))' "$bid" 2>/dev/null) || runs="? ?"
+  takes=$(api GET "/v1/studio/sessions/$bsid/takes?limit=200" | python3 -c 'import json,sys
+t=[x for x in json.load(sys.stdin)["takes"] if x.get("batch_id")==sys.argv[1]]
+print(len(t), len({x["id"] for x in t}))' "$bid" 2>/dev/null) || takes="? ?"
+  rows=$(api GET "/v1/studio/batches/$bid/rows" | python3 -c 'import json,sys
+print(" ".join(r["status"] + ":" + str(len(r["take_ids"])) for r in json.load(sys.stdin)["rows"]))' 2>/dev/null) || rows="?"
+  verdict=PASS
+  [ "$status" = done ] && [ "$runs" = "6 6" ] && [ "$takes" = "6 6" ] &&
+    [ "$rows" = "succeeded:1 succeeded:1 succeeded:1" ] || verdict=FAIL
+  [ $verdict = PASS ] || fails=$((fails + 1))
+  echo "$verdict $1: batch -> $status; runs (distinct) $runs; takes (distinct) $takes; rows $rows"
+  api DELETE "/v1/studio/sessions/$bsid" >/dev/null || true
+  api DELETE "/v1/studio/pipelines/$pid" >/dev/null || true
+}
+
 signin
 SID=$(api POST /v1/studio/sessions '{"title":"resilience"}' | field id)
 fails=0
-for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill}; do
-  case $svc in batch-*) batch_check "$svc"; continue ;; esac
+for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked}; do
+  case $svc in
+    batch-*) batch_check "$svc"; continue ;;
+    pipeline-parked) pipeline_check "$svc"; continue ;;
+  esac
   rid=$(run "$SID" 40)                       # 40 steps x 300 ms: ~12 s of work
   wait_status "$rid" "running" 30 >/dev/null || true
   sleep 2

@@ -24,7 +24,9 @@ GRAPHS = sorted((CONTRACTS / "fixtures" / "graphs").glob("*valid.*.json"))  # va
 
 def doc(w: dict) -> dict:
     """The WorkflowDoc part of a Workflow (a deep copy: callers edit it)."""
-    return json.loads(json.dumps({k: w[k] for k in ("title", "family", "env", "nodes", "studio") if k in w}))
+    return json.loads(
+        json.dumps({k: w[k] for k in ("title", "family", "env", "nodes", "studio") if k in w})
+    )
 
 
 def keys(problems: list[dict]) -> set[tuple]:
@@ -207,12 +209,19 @@ def test_save_fixture(api, palette, path):
 
 def test_a_huge_graph_is_refused_fast(api):
     """A ~0.8 MB chain of 18k nodes gets the size problems only, without the per-node rules (bounded work)."""
-    nodes = {"a0": {"kind": "x"}} | {f"a{i}": {"kind": "x", "in": {"i": f"a{i - 1}.o"}} for i in range(1, 18000)}
+    nodes = {"a0": {"kind": "x"}} | {
+        f"a{i}": {"kind": "x", "in": {"i": f"a{i - 1}.o"}} for i in range(1, 18000)
+    }
     body = {"title": "Huge", "family": "echo", "env": "fake", "nodes": nodes}
     r = api.post(f"{WF}/validate", json=body, timeout=10)
-    assert keys(ok(r)["problems"]) == {("too_large", None, None, None), ("too_many_nodes", None, None, None)}
+    assert keys(ok(r)["problems"]) == {
+        ("too_large", None, None, None),
+        ("too_many_nodes", None, None, None),
+    }
     assert r.elapsed.total_seconds() < 5
-    assert ok(api.post(WF, json=body, timeout=10), 422)["detail"].startswith("workflow has 2 problems")
+    assert ok(api.post(WF, json=body, timeout=10), 422)["detail"].startswith(
+        "workflow has 2 problems"
+    )
 
 
 def test_unknown_kind_blocks_running(api):

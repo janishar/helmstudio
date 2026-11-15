@@ -1,0 +1,123 @@
+{
+  "description": "25 nodes: only too_many_nodes is reported (nothing else is checked)",
+  "pipeline": {
+    "title": "Big",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "edit",
+            "type": "Text"
+          }
+        ]
+      },
+      "s0": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s1": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s2": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s3": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s4": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s5": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s6": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s7": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s8": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s9": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s10": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s11": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s12": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s13": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s14": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s15": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s16": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s17": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s18": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s19": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s20": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s21": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s22": {
+        "kind": "step",
+        "workflow": "echo"
+      },
+      "s23": {
+        "kind": "step",
+        "workflow": "echo"
+      }
+    },
+    "edges": []
+  },
+  "problems": [
+    {
+      "code": "too_many_nodes"
+    }
+  ]
+}

@@ -95,10 +95,28 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
   stream's code) sends the batch or row as it is when read, the last event per row and batch in a page.
 - A row's shown status: pipelines' end once reported, else `running` once its run left the queue, else `queued`.
 
+## Saved pipelines (API 1.7)
+
+- `user_pipelines` (migration 00010, RLS) holds a user's pipeline documents; `pipelines.go` serves `/pipelines` like
+  `/workflows` (the same 422 shape, 100 per user, delete 409 while a batch of it is unfinished). `pipeline_rules.go`
+  is the pipeline rules, tested on every `contracts/fixtures/pipelines` fixture (`pipeline_rules_test.go`).
+- `POST /batches {pipeline_id}` (`pipeline_batches.go`): rows over `<inputs node>.<name>`, every row checked against
+  every step (takes from earlier steps stand in as placeholders), a base seed drawn per row and step (`batch_rows.seeds`),
+  the document and each workflow with its schemas stored in `batches.pipeline`, `snapshot.pipeline` in the submit.
+- `studio.runs.create` for a pipeline batch takes the step's inputs from the request (pipelines fills the binds),
+  checks the key's step, seed index, workflow and the row's attempt; the take's `made_with.pipeline` comes from the key.
+- The projector stores `waiting`, `parked`, `cells` (`evt.pipeline.row`) and every `evt.pipeline.step` (`batch_steps`,
+  newest seq per row, attempt and step). A batch is shown `waiting` when pipelines says running and every unended row
+  waits. Parked rows hold no run, so the dispatcher never counts them.
+- `pipeline_review.go`: review grid, pick (recorded in `batch_rows.picks` and on the gate cell, `cmd.pipeline.pick`
+  in one transaction; the same pick again sends nothing), the execution view, a step's state over
+  `pipelines.state.get` (5 s; the caller's own batch only). Retry with `{from_step}` copies the steps before it to the
+  new attempt and names the checkpoint of the step before. `save_pipeline.go`: Save as pipeline from a take's lineage.
+
 NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack) and
 `$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
 consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable `studio-pipelines`), publishes
-`cmd.pipeline.>` and `evt.studio.>`, serves `studio.runs.create`, watches the KV `registry` and `hosts`, requests
+`cmd.pipeline.>` and `evt.studio.>`, serves `studio.runs.create`, requests `pipelines.state.get`, watches the KV `registry` and `hosts`, requests
 `auth.validate.token`, subscribes to `evt.auth.revoked`.
 
 ## Layout

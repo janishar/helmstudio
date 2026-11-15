@@ -1,0 +1,221 @@
+{
+  "description": "the workflows the caller can run in these fixtures: the canonical templates qwen-image and echo, and three of the caller's own (a qwen-image copy with a Draft preset, an upscale with a required image param, one that cannot run); checked against fixtures/graphs/palette.json",
+  "workflows": {
+    "qwen-image": {
+      "title": "Qwen Image",
+      "family": "qwen-image",
+      "env": "torch",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "canvas": {
+          "kind": "canvas",
+          "params": {
+            "mode": "auto",
+            "width": 1024,
+            "height": 1024
+          }
+        },
+        "model": {
+          "kind": "qwen-image/model",
+          "params": {
+            "variant": "base",
+            "precision": "int8"
+          }
+        },
+        "encode": {
+          "kind": "qwen-image/encode",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {
+            "transparent": false,
+            "refs": []
+          }
+        },
+        "sample": {
+          "kind": "qwen-image/sample",
+          "in": {
+            "model": "model.model",
+            "cond": "encode.cond",
+            "canvas": "canvas.canvas",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "steps": 40
+          }
+        },
+        "decode": {
+          "kind": "qwen-image/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample.latent"
+          },
+          "params": {
+            "tiled": "auto"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.image"
+          }
+        }
+      }
+    },
+    "echo": {
+      "title": "Echo",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "steps": 10,
+            "delay_ms": 300,
+            "fail": false,
+            "refs": []
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    },
+    "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88": {
+      "title": "Qwen draft",
+      "family": "qwen-image",
+      "env": "torch",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "canvas": {
+          "kind": "canvas",
+          "params": {
+            "mode": "auto",
+            "width": 1024,
+            "height": 1024
+          }
+        },
+        "model": {
+          "kind": "qwen-image/model",
+          "params": {
+            "variant": "base",
+            "precision": "int8"
+          }
+        },
+        "encode": {
+          "kind": "qwen-image/encode",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {
+            "transparent": false,
+            "refs": []
+          }
+        },
+        "sample": {
+          "kind": "qwen-image/sample",
+          "in": {
+            "model": "model.model",
+            "cond": "encode.cond",
+            "canvas": "canvas.canvas",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "steps": 40
+          }
+        },
+        "decode": {
+          "kind": "qwen-image/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample.latent"
+          },
+          "params": {
+            "tiled": "auto"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.image"
+          }
+        }
+      },
+      "studio": {
+        "presets": {
+          "Draft": {
+            "model.variant": "turbo"
+          }
+        }
+      }
+    },
+    "7a2d3b5f-1c8e-4d9a-8b62-4e3f2a1b0c99": {
+      "title": "Upscale",
+      "family": "test",
+      "env": "torch",
+      "nodes": {
+        "image": {
+          "kind": "image"
+        },
+        "upscale": {
+          "kind": "test/upscale",
+          "in": {
+            "image": "image.image"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "upscale.image"
+          }
+        }
+      }
+    },
+    "8b3e4c6a-2d9f-4e0b-9c73-5f4a3b2c1d00": {
+      "title": "No output",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt"
+        }
+      }
+    }
+  }
+}

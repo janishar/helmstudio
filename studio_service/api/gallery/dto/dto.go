@@ -21,6 +21,18 @@ type MadeWith struct {
 	Prompt          *string        `json:"prompt"`
 	Seed            *int64         `json:"seed"`
 	Model           *Model         `json:"model"`
+	// a take made by a step of a pipeline batch
+	Pipeline *MadeWithPipeline `json:"pipeline,omitempty"`
+}
+
+// MadeWithPipeline is which pipeline, step node and visit made a take.
+type MadeWithPipeline struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Version int    `json:"version"`
+	Node    string `json:"node"`
+	Attempt int    `json:"attempt"` // the step's visit in the row, from 1
+	Row     int    `json:"row"`
 }
 
 // Model is the workflow's <family>/model node as it ran.

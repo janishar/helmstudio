@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.pipeline.step.schema.json",
+  "title": "pipelines → studio's projector: one graph step of a pipeline row (the execution view)",
+  "description": "Subject evt.pipeline.<batch_id>.step (stream EVT), Nats-Msg-Id <batch_id>:<seq> (seq shared with evt.pipeline.batch and .row). Published for pipeline batches when a graph step finishes, parks (status current) and is resumed (resumed, same step number). Whole state of (row, attempt, step): the projector keeps the newest seq per key and ignores older ones. Studio stores them with the batch; the execution view (GET …/rows/{row}/execution) is built from them.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.pipeline.step"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "row",
+        "attempt",
+        "step",
+        "node",
+        "part",
+        "visit",
+        "status",
+        "what",
+        "changed",
+        "loops",
+        "checkpoint_id"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/rowAttempt"
+        },
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000,
+          "description": "the graph step's number in this row attempt, from 1, in order"
+        },
+        "node": {
+          "$ref": "defs.schema.json#/$defs/nodeId",
+          "description": "the pipeline node"
+        },
+        "part": {
+          "enum": [
+            "inputs",
+            "submit",
+            "wait",
+            "gate",
+            "route",
+            "output"
+          ],
+          "description": "which graph node of it: inputs, a step's submit / wait, a gate's gate (parked) / route (pick applied, edge chosen), output"
+        },
+        "visit": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the node's visit in the row, from 1"
+        },
+        "status": {
+          "enum": [
+            "finished",
+            "resumed",
+            "current"
+          ],
+          "description": "finished; resumed after waiting; current = parked here now"
+        },
+        "what": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "what happened, in plain words"
+        },
+        "changed": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "description": "which part of the state changed (`takes.still = 4`)"
+        },
+        "edge": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "to",
+                "via"
+              ],
+              "properties": {
+                "to": {
+                  "$ref": "defs.schema.json#/$defs/nodeId"
+                },
+                "via": {
+                  "enum": [
+                    "next",
+                    "pass",
+                    "fail",
+                    "then"
+                  ]
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the edge taken out of the node (on its last part)"
+        },
+        "loops": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "defs.schema.json#/$defs/nodeId"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "gate id → fail-edge turns so far, after this step"
+        },
+        "run_ids": {
+          "$ref": "defs.schema.json#/$defs/takeIdList"
+        },
+        "take_ids": {
+          "$ref": "defs.schema.json#/$defs/takeIdList"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        },
+        "checkpoint_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200,
+          "description": "LangGraph's checkpoint id after this step (the state request and retry-from-step name it); null while current"
+        }
+      }
+    }
+  }
+}

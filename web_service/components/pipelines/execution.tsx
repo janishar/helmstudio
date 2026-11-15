@@ -1,0 +1,462 @@
+"use client";
+// The execution view of one row (docs/mock/Execution.dc.html, plan 16.8): the pipeline's graph as the row ran it
+// (passed nodes marked, edges not taken faint, the loop's count, the node it is at now outlined), the step list, and
+// the chosen step's details: a step's runs and takes, a gate's candidates and pick, the state after it (read on
+// demand; gone once the batch has finished) and Retry row from here. Live from the batch's events. The mock's
+// judge verdict, model and memory tiles belong to later milestones and are left out.
+import dynamic from "next/dynamic";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Activity, ChevronLeft } from "lucide-react";
+import { ErrorNote } from "@/components/kit";
+import { FullScreen } from "@/components/media";
+import { StateChip, followBatch } from "@/components/pipelines/pipelines";
+import type { CanvasProps } from "@/components/pipelines/canvas";
+import { api, ApiError, message, ok, type S } from "@/lib/api";
+import { safeUrl } from "@/lib/format";
+import { nodeLabel } from "@/lib/pipeline";
+import { asRun, canRetryFrom, stepDetail, stepLines } from "@/lib/pipeline-run";
+import { useTakes } from "@/lib/take-cache";
+
+type Exec = S<"RowExecution">;
+
+const PipelineCanvas = dynamic<CanvasProps>(
+  () => import("@/components/pipelines/canvas").then((m) => m.PipelineCanvas),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center text-t2">Loading the graph…</div>
+    ),
+  },
+);
+
+const STATUS: Record<string, string> = {
+  queued: "queued",
+  running: "running",
+  waiting: "parked",
+  succeeded: "done",
+  failed: "failed",
+  cancelled: "cancelled",
+};
+
+export function Execution({
+  batch: initialBatch,
+  initial,
+  attempt,
+  titles = {},
+}: {
+  batch: S<"Batch">;
+  initial: Exec;
+  /** workflow id → title, for steps without a title of their own */
+  titles?: Record<string, string>;
+  /** the attempt asked for in the URL (absent: the current one) */
+  attempt?: number;
+}) {
+  const router = useRouter();
+  const [batch, setBatch] = useState(initialBatch);
+  const [x, setX] = useState(initial);
+  const [step, setStep] = useState(
+    () =>
+      initial.steps.find((s) => s.status === "current")?.step ?? initial.steps.at(-1)?.step ?? 1,
+  );
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [state, setState] = useState<{ key: string; text: string; gone?: boolean } | null>(null);
+  const [full, setFull] = useState<{ ids: string[]; i: number } | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const e = await ok(
+        api.GET("/v1/studio/batches/{batch_id}/rows/{row}/execution", {
+          params: {
+            path: { batch_id: x.batch_id, row: String(x.row) },
+            query: attempt ? { attempt } : {},
+          },
+        }),
+      );
+      setX(e as Exec);
+    } catch (err) {
+      setError(message(err));
+    }
+  }, [x.batch_id, x.row, attempt]);
+
+  // live: this row's events reload the execution (steps arrive as it runs)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(
+    () =>
+      followBatch(x.batch_id, ["batch", "row"], (e) => {
+        if (e.type === "batch") return setBatch(e.data);
+        if (e.data.row !== x.row) return;
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => void load(), 300);
+      }),
+    [x.batch_id, x.row, load],
+  );
+
+  const lines = stepLines(x, titles);
+  const marks = useMemo(() => asRun(x), [x]);
+  const detail = stepDetail(x, step);
+  const s = detail?.step;
+  const takeIds =
+    detail?.kind === "gate"
+      ? detail.candidates
+      : (detail && "takes" in detail && detail.takes) || [];
+  const take = useTakes(takeIds);
+
+  async function showState() {
+    if (!s) return;
+    const key = `${x.attempt}:${s.step}`;
+    setState({ key, text: "Reading…" });
+    try {
+      const r = await ok(
+        api.GET("/v1/studio/batches/{batch_id}/rows/{row}/execution/{step}/state", {
+          params: {
+            path: { batch_id: x.batch_id, row: String(x.row), step: String(s.step) },
+            query: { attempt: x.attempt },
+          },
+        }),
+      );
+      setState({ key, text: JSON.stringify(r.state, null, 2) });
+    } catch (e) {
+      const gone = e instanceof ApiError && e.status === 404;
+      setState({
+        key,
+        gone,
+        text: gone
+          ? "This row's state is gone: the batch has finished, so its checkpoints were deleted. The steps above remain."
+          : e instanceof ApiError && e.status === 503
+            ? "The pipeline service did not answer in time. Try again."
+            : message(e),
+      });
+    }
+  }
+  // as the mock draws it: the selected step's state shows without asking (one read per step chosen)
+  const wantState = s?.has_state ? `${x.attempt}:${s.step}` : null;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the read's own "Reading…" placeholder
+    if (wantState !== null && state?.key !== wantState) void showState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per step chosen
+  }, [wantState]);
+
+  async function retryFrom() {
+    if (!s) return;
+    setBusy(true);
+    setError("");
+    try {
+      await ok(
+        api.POST("/v1/studio/batches/{batch_id}/rows/{row}/retry", {
+          params: { path: { batch_id: x.batch_id, row: String(x.row) } },
+          body: { from_step: s.step },
+        }),
+      );
+      // the new attempt: the current one again
+      router.replace(`/pipelines/batches/${x.batch_id}/rows/${x.row}`);
+      await load();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const doc = x.pipeline;
+  const where = x.current
+    ? `${STATUS[x.status] ?? x.status} on ${nodeLabel(doc, x.current, titles)}`
+    : (STATUS[x.status] ?? x.status);
+  const rowsTotal = batch.counts.total;
+  const picked = detail?.kind === "gate" ? detail.picked : null;
+
+  return (
+    <>
+      <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href={`/pipelines/batches/${x.batch_id}`}
+            aria-label="Back to the batch"
+            className="grid size-9 place-items-center rounded-[10px] text-t2 hover:bg-s2"
+          >
+            <ChevronLeft size={18} aria-hidden />
+          </Link>
+          <h1 className="m-0 font-display text-[18px] font-bold tracking-[0.01em]">{doc.title}</h1>
+          <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
+            Row {x.row} of {rowsTotal} · {where}
+          </span>
+          <label className="sr-only" htmlFor="ex-row">
+            Row
+          </label>
+          <select
+            id="ex-row"
+            className="chip bevel bg-s4"
+            value={x.row}
+            onChange={(e) => router.push(`/pipelines/batches/${x.batch_id}/rows/${e.target.value}`)}
+          >
+            {Array.from({ length: rowsTotal }, (_, i) => i + 1).map((r) => (
+              <option key={r} value={r}>
+                Row {r}
+              </option>
+            ))}
+          </select>
+          {x.attempts > 1 && (
+            <select
+              aria-label="Attempt"
+              className="chip bevel bg-s4"
+              value={x.attempt}
+              onChange={(e) =>
+                router.push(
+                  `/pipelines/batches/${x.batch_id}/rows/${x.row}?attempt=${e.target.value}`,
+                )
+              }
+            >
+              {Array.from({ length: x.attempts }, (_, i) => i + 1).map((a) => (
+                <option key={a} value={a}>
+                  Attempt {a}
+                </option>
+              ))}
+            </select>
+          )}
+          {batch.pipeline_id && (
+            <Link
+              href={`/pipelines/${batch.pipeline_id}`}
+              aria-label="Back to the pipeline graph"
+              title="Back to the pipeline graph"
+              className="grid h-9 w-10 place-items-center rounded-[10px] bg-s4 text-t1 outline-2 outline-a2"
+            >
+              <Activity size={18} aria-hidden />
+            </Link>
+          )}
+          <div className="grow" />
+          <StateChip batch={batch} />
+        </div>
+        {x.retried_from && (
+          <p className="m-0 text-[12px] text-t2">
+            This attempt re-ran attempt {x.retried_from.attempt} from step {x.retried_from.step};
+            the steps before it are reused.
+          </p>
+        )}
+        {error && <ErrorNote>{error}</ErrorNote>}
+        <div
+          className="panel relative h-[400px] overflow-hidden"
+          style={{ background: "var(--in)" }}
+        >
+          <PipelineCanvas
+            doc={doc}
+            titles={titles}
+            marks={marks}
+            selected={s?.node ?? null}
+            onSelect={(id) => {
+              const last = x.steps.filter((t) => t.node === id).at(-1);
+              if (last) setStep(last.step);
+            }}
+          />
+        </div>
+        <div className="panel overflow-x-auto px-2 py-1.5">
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>Step</th>
+                <th>Node</th>
+                <th>What happened</th>
+                <th>State change</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l) => {
+                const on = l.step === step;
+                return (
+                  <tr
+                    key={l.step}
+                    className="cursor-pointer"
+                    style={on ? { background: "var(--s3)" } : undefined}
+                    onClick={() => setStep(l.step)}
+                  >
+                    <td className="m">
+                      <button
+                        type="button"
+                        className="p-0 font-mono"
+                        aria-pressed={on}
+                        aria-label={`Step ${l.step}: ${l.label}`}
+                        onClick={() => setStep(l.step)}
+                      >
+                        {l.step}
+                      </button>
+                    </td>
+                    <td className={on ? "font-semibold" : undefined}>{l.label}</td>
+                    <td
+                      className={`max-w-[360px] truncate ${l.error ? "text-[#f2c14e]" : l.status === "now" ? "font-medium text-a2" : ""}`}
+                      title={l.error ?? l.what}
+                    >
+                      {l.what}
+                    </td>
+                    <td className="m max-w-[280px] truncate" title={l.changed}>
+                      {l.changed}
+                    </td>
+                    <td className={l.status === "now" ? "text-a2" : "m"}>{l.status}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </main>
+
+      <aside
+        aria-label="Step details"
+        className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[18px] px-[18px] pt-4 pb-6 md:ml-0"
+      >
+        {s ? (
+          <>
+            <div className="flex flex-col gap-1">
+              <h2 className="m-0 font-display text-base font-bold">
+                {lines.find((l) => l.step === s.step)?.label} · step {s.step}
+              </h2>
+              <span className="text-[12px] text-t2">
+                Row {x.row} · attempt {x.attempt} · checkpoint {s.step} of {x.steps.length}
+              </span>
+            </div>
+            {s.error && <p className="m-0 text-[13px] text-[#f2c14e]">{s.error}</p>}
+            <div className="flex flex-col gap-2">
+              <h3 className="heading">
+                {detail?.kind === "gate"
+                  ? "Candidates"
+                  : s.run_ids.length
+                    ? "Takes"
+                    : "What it did"}
+              </h3>
+              {takeIds.length > 0 ? (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {takeIds.map((t, i) => {
+                    const tk = take(t);
+                    const on = picked?.includes(t);
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        aria-label={`Take ${i + 1}${on ? ", picked" : ""}`}
+                        className={`grid aspect-square place-items-center overflow-hidden rounded-lg p-0 text-[10px] text-t2 ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
+                        onClick={() => setFull({ ids: takeIds, i })}
+                      >
+                        {tk ? (
+                          <img
+                            src={safeUrl(tk.thumb_url)}
+                            alt=""
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          `take ${i + 1}`
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="m-0 text-[13px] text-t2">{s.what}</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {detail?.kind === "gate" ? (
+                <div className="set flex flex-col gap-0.5">
+                  <small className="text-[12px] text-t2">Picked</small>
+                  <b className="font-semibold">
+                    {picked === null
+                      ? "not yet"
+                      : picked.length
+                        ? `${picked.length} take${picked.length === 1 ? "" : "s"}`
+                        : "none: rejected all"}
+                  </b>
+                </div>
+              ) : (
+                <div className="set flex flex-col gap-0.5">
+                  <small className="text-[12px] text-t2">Runs</small>
+                  <b className="font-semibold">{s.run_ids.length || "none"}</b>
+                </div>
+              )}
+              <div className="set flex flex-col gap-0.5">
+                <small className="text-[12px] text-t2">Then</small>
+                <b className="truncate font-semibold">
+                  {s.edge
+                    ? `${s.edge.via === "next" ? "" : `${s.edge.via} → `}${nodeLabel(doc, s.edge.to, titles)}`
+                    : s.status === "current"
+                      ? "here now"
+                      : "—"}
+                </b>
+              </div>
+              {Object.entries(s.loops).map(([g, n]) => (
+                <div key={g} className="set flex flex-col gap-0.5">
+                  <small className="text-[12px] text-t2">Loop at {nodeLabel(doc, g, titles)}</small>
+                  <b className="font-semibold">
+                    {n} time{n === 1 ? "" : "s"}
+                  </b>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-col gap-2">
+              <h3 className="heading">State after this step</h3>
+              {state?.key === `${x.attempt}:${s.step}` ? (
+                <pre
+                  className={`m-0 max-h-72 overflow-auto rounded-xl px-3 py-2.5 font-mono text-[11px] leading-4 break-words whitespace-pre-wrap ${state.gone ? "text-t2" : "text-[var(--t1b)]"}`}
+                  style={{ background: "var(--in)" }}
+                >
+                  {state.text}
+                </pre>
+              ) : s.has_state ? (
+                <button
+                  type="button"
+                  className="chip bevel self-start bg-s4"
+                  onClick={() => void showState()}
+                >
+                  Show state
+                </button>
+              ) : (
+                <p className="m-0 text-[12px] text-t2">
+                  {s.status === "current"
+                    ? "The row is here now: there is no state after this step yet."
+                    : "This step's state can't be read: the batch's checkpoints are gone."}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {canRetryFrom(x, s.step, batch) && (
+                <button
+                  type="button"
+                  className="chip bevel bg-s4"
+                  disabled={busy}
+                  onClick={() => void retryFrom()}
+                >
+                  Retry row from here
+                </button>
+              )}
+              {state?.key === `${x.attempt}:${s.step}` &&
+                !state.gone &&
+                state.text.startsWith("{") && (
+                  <button
+                    type="button"
+                    className="chip bevel bg-s4"
+                    onClick={() => void navigator.clipboard?.writeText(state.text)}
+                  >
+                    Copy state
+                  </button>
+                )}
+            </div>
+          </>
+        ) : (
+          <p className="m-0 text-[13px] text-t2">This row has not started yet.</p>
+        )}
+      </aside>
+      {full &&
+        (() => {
+          const t = take(full.ids[full.i]);
+          return t ? (
+            <FullScreen
+              take={t}
+              onClose={() => setFull(null)}
+              onStep={(d) =>
+                setFull((f) => f && { ...f, i: (f.i + d + f.ids.length) % f.ids.length })
+              }
+            />
+          ) : null;
+        })()}
+    </>
+  );
+}

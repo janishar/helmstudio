@@ -117,7 +117,7 @@ func TestWorkflowGetSaveRoundTrip(t *testing.T) {
 	if err := os.WriteFile(file, []byte(helmOK(t, "workflow", "get", mineID)), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	doc, id, version, basedOn, err := readWorkflowFile(file)
+	doc, id, version, basedOn, err := workflowKind.readFile(file)
 	if err != nil || id != mineID || version != 3 || basedOn != "" || len(doc) != 5 {
 		t.Fatalf("file: %v %q %d %q %v", doc, id, version, basedOn, err)
 	}

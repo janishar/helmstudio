@@ -131,9 +131,14 @@ export const gridSize = (axes: { values: unknown[] }[]) =>
   axes.length ? axes.reduce((n, a) => n * a.values.length, 1) : 0;
 
 /** "12 rows × 2 seeds = 24 runs" (one run per row and seed); "12 rows = 12 runs" for a workflow without a seed
- * (`seeds` null). */
-export function summary(rows: number, seeds: number | null) {
+ * (`seeds` null). A pipeline counts rows (seed repeats are rows): its runs per row depend on its steps and loops. */
+export function summary(rows: number, seeds: number | null, pipeline = false) {
   const s = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  // a pipeline row makes as many runs as its steps, seeds and loops take
+  if (pipeline)
+    return seeds === null
+      ? s(rows, "row")
+      : `${s(rows, "row")} × ${seeds} = ${s(rows * seeds, "row")}`;
   if (seeds === null) return `${s(rows, "row")} = ${s(rows, "run")}`;
   return `${s(rows, "row")} × ${s(seeds, "seed")} = ${s(rows * seeds, "run")}`;
 }
@@ -178,16 +183,18 @@ export function appendRows(rows: Row[], page: Row[]): Row[] {
 export const doneRows = (c: S<"BatchCounts">) => c.succeeded + c.failed;
 
 /** The batch's state chip: its words and tone (the mock's .st classes: run, ok, bad, or plain). */
-export function batchState(b: Batch): { label: string; tone: "" | "run" | "ok" | "bad" } {
+export function batchState(b: Batch): { label: string; tone: "" | "run" | "ok" | "bad" | "wait" } {
   if (b.control === "stop" && !["done", "failed", "stopped"].includes(b.status))
     return { label: "Stopping", tone: "" };
-  if (b.control === "pause" && (b.status === "running" || b.status === "queued"))
+  if (b.control === "pause" && ["running", "queued", "waiting"].includes(b.status))
     return { label: "Pausing", tone: "" };
   switch (b.status) {
     case "queued":
       return { label: "Queued", tone: "" };
     case "running":
       return { label: "Running", tone: "run" };
+    case "waiting":
+      return { label: `Waiting for your pick · ${b.counts.waiting ?? 0}`, tone: "wait" };
     case "paused":
       return { label: "Paused", tone: "" };
     case "done":
@@ -207,7 +214,7 @@ export function batchState(b: Batch): { label: string; tone: "" | "run" | "ok" |
 const ended = (b: Batch) => ["done", "failed", "stopped"].includes(b.status);
 /** Which controls the contract allows now (else 409). */
 export const canPause = (b: Batch) =>
-  (b.status === "queued" || b.status === "running") && b.control === "run";
+  ["queued", "running", "waiting"].includes(b.status) && b.control === "run";
 export const canResume = (b: Batch) =>
   (b.status === "paused" || b.control === "pause") && b.control !== "stop";
 export const canStop = (b: Batch) => !ended(b) && b.control !== "stop";

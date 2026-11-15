@@ -167,6 +167,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/pipelines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's pipelines, newest `updated_at` first (at most 100, not paginated)
+         * @description Each with `workflow_titles` and `last_batch`; `problems` is never in a list (only `GET /v1/studio/pipelines/{pipeline_id}`).
+         */
+        get: operations["studioListPipelines"];
+        put?: never;
+        /**
+         * Save a pipeline, from a whole document or as a copy of one of the caller's pipelines
+         * @description Mirrors `POST /v1/studio/workflows`. Two forms (`PipelineCreate`): a whole document (optional `based_on`), or
+         *     `{based_on, title?}` to copy one of the caller's pipelines ("Duplicate"; `title` absent = `<source title> copy`,
+         *     cut to 80 characters). The new pipeline's id is a UUID, `version` 1. Checked with the pipeline rules
+         *     (contracts/README.md, Pipeline rules) as the caller: any save-blocking problem is 422 `PipelineError` with every
+         *     problem; run-blocking problems are saved and returned in `problems`. 404 when `based_on` is unknown or another
+         *     user's. 409 when the caller already has 100 pipelines (`You have 100 pipelines; delete some first.`). 503 while
+         *     studio's registry watches have not delivered yet.
+         */
+        post: operations["studioCreatePipeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/pipelines/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a pipeline document with the pipeline rules without saving it
+         * @description Every pipeline rule (contracts/README.md, Pipeline rules), as the caller (the workflows it names are looked up
+         *     among the templates and the caller's workflows, each checked with the graph rules against the live palette).
+         *     A body that does not fit `PipelineDoc` is a plain 422 `{detail}`; pipeline problems are never a 422 here.
+         *     503 while studio's registry watches have not delivered yet.
+         */
+        post: operations["studioValidatePipeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/pipelines/{pipeline_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description One of the caller's pipelines (another user's is 404) with `problems` against the workflows and the live palette now. */
+        get: operations["studioGetPipeline"];
+        /**
+         * Replace one of the caller's pipelines with an edited document
+         * @description Like `PUT /v1/studio/workflows/{workflow_id}`: `version` is the version the edit started from; stale = 409
+         *     `pipeline changed since you opened it (now version <n>)` and nothing changes. On success `version` + 1 and
+         *     `updated_at` now. Save-blocking problems are 422 `PipelineError`. Batches made before keep their snapshot.
+         */
+        put: operations["studioReplacePipeline"];
+        post?: never;
+        /**
+         * Delete one of the caller's pipelines
+         * @description 409 while a batch of it is `queued`, `running`, `waiting` or `paused` (`a batch of this pipeline is
+         *     unfinished; stop it or wait`). Past batches and takes keep their snapshots. Deleting again is 404.
+         */
+        delete: operations["studioDeletePipeline"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename one of the caller's pipelines
+         * @description `version` + 1 (an editor holding the old version gets 409 on its next PUT).
+         */
+        patch: operations["studioRenamePipeline"];
+        trace?: never;
+    };
     "/v1/studio/sessions/{session_id}/runs": {
         parameters: {
             query?: never;
@@ -416,6 +501,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/takes/{take_id}/pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "Save as pipeline": a new pipeline of the caller's from the chain of runs that made this take
+         * @description Walks the take's lineage (contracts/README.md, Save as pipeline) and saves the pipeline it builds: inputs node
+         *     `inputs` → `step_1` … `step_n` (oldest first) → output `output`; 201 with `problems` like POST
+         *     `/v1/studio/pipelines`, `version` 1, `based_on` null. 404 for a take that is unknown, another user's or
+         *     deleted. 409 at 100 pipelines. 422 with the reason when the lineage is not a chain it can save: `an upload has
+         *     no lineage to save`, `take <id> was made from several runs' takes; a pipeline is a chain`, `take <id> in the
+         *     lineage was deleted`, `workflow <id> no longer exists`, `the lineage is longer than 8 steps`, `take <id> mixes several sources in
+         *     <param>`.
+         */
+        post: operations["studioSaveTakeAsPipeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/sessions/{session_id}/takes": {
         parameters: {
             query?: never;
@@ -515,6 +626,14 @@ export interface paths {
          *
          *     `workflow_id` may name one of the caller's workflows: it must pass the graph rules (else 422 `workflow cannot
          *     run: …`) and the snapshot is its version now (nodes with `bypass`, no positions, no `studio`).
+         *
+         *     `pipeline_id` (instead of `workflow_id`) runs one of the caller's pipelines (contracts/README.md, Batches of a
+         *     pipeline): unknown or another user's is 422 `unknown pipeline <id>`; any pipeline problem is 422 `pipeline
+         *     cannot run: <first problem's message>`. The columns are the pipeline's inputs, addressed `<inputs node>.<name>`
+         *     in `inputs`, `lines.param`, `table.columns` and `grid.axes[].param`; every input needs a value in each row
+         *     (`row 3: inputs.prompt: a value is required`) except a Seed (drawn); `seeds` repeats rows over the pipeline's
+         *     one Seed input. The snapshot is the pipeline document now plus every workflow it uses; a live host is needed
+         *     for every step's env; the 768 KB limit counts the snapshot too.
          *
          *     On success studio stores the batch (`queued`, `control: run`) with its snapshot (the workflow as published
          *     now: the batch never runs a later version), every row (`queued`, attempt 1, seeds drawn), a new session titled
@@ -642,13 +761,111 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Run one failed row again
+         * Run one failed row again, or any row from one step of its execution ("Retry row from here")
          * @description Sets the row `queued` with `attempt` + 1 (error, run and takes cleared from the row; the old run and its takes
          *     stay) and writes `cmd.pipeline.retry` in one transaction. The row gets a new run (its idempotency key carries
          *     the attempt). A `done` batch becomes `running` again until the row ends. 409 unless the row is `failed`, the
          *     batch's `status` is not `failed` or `stopped` and its `control` is not `stop`.
+         *
+         *     With a body `{from_step}` (a pipeline batch): the row re-runs from that step of its current attempt's
+         *     execution, reusing the state before it (contracts/README.md, Execution view). Allowed when the row is
+         *     `failed`, `succeeded`, `cancelled` or `waiting` (a pending pick is dropped) and the batch is `queued`,
+         *     `running`, `waiting` or `paused` with `control` not `stop`; else 409 (a `done` batch: `this batch has
+         *     finished; its checkpoints are gone`). 422 when the step is not in the row's execution or has no state
+         *     (`row <n> has no step <s>`). `from_step: 1` is the same as no body, for any of those row states.
          */
         post: operations["studioRetryBatchRow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every row parked on a gate with its candidate takes, for the review grid
+         * @description Rows with status `waiting`, by row number (at most 500, not paginated); a workflow batch has none.
+         */
+        get: operations["studioGetBatchReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/rows/{row}/pick": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer a gate for one parked row (pick 1..keep of its candidates, or reject them all)
+         * @description In one transaction: records the pick on the row's gate cell (`picked` / `rejected`), sets the row `running`
+         *     with `parked` null, and writes `cmd.pipeline.pick`; pipelines resumes the row's thread with it. Rows can be
+         *     picked in any order. The same pick again for the same gate visit answers 202 with the row and sends nothing.
+         *     409 when the row is not parked on `gate` (`row <n> is not waiting at <gate>`), a different pick for that
+         *     visit was already sent, or the batch is `stopped`/`failed` or its `control` is `stop`. 422 when `take_ids`
+         *     are not among the candidates, repeat one, or are more than the gate's `keep` (`pick 1 to <keep> of the
+         *     candidates`).
+         */
+        post: operations["studioPickBatchRow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/rows/{row}/execution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The execution view of one row (plan 16.8) — the step list and the graph as run
+         * @description Built from the stored `evt.pipeline.step` events (contracts/README.md, Execution view); available for the
+         *     batch's lifetime and after (only `has_state` turns false when its threads are deleted). 404 for a workflow
+         *     batch or an `attempt` the row never had.
+         */
+        get: operations["studioGetRowExecution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/rows/{row}/execution/{step}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The row's state at the checkpoint after one step (read-only), for its owner
+         * @description Studio asks pipelines_service over NATS request/reply `pipelines.state.get` (owner, batch, row, the step's
+         *     checkpoint id) and passes the state through. 404 when the step is unknown or has no checkpoint, or the
+         *     batch's threads are gone (`this row's state is gone; the batch has finished`). 503 when pipelines does not
+         *     answer within 5 s.
+         */
+        get: operations["studioGetRowStepState"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1227,6 +1444,217 @@ export interface components {
                 nodes: components["schemas"]["PaletteNode"][];
             }[];
         };
+        /**
+         * @description a pipeline input's type: Text fills a string/text param, Int an int, Float a float, Seed a seed, Image an image param (or a rows param with one Image field, as a one-item list)
+         * @enum {string}
+         */
+        PipelineInputType: "Text" | "Image" | "Int" | "Float" | "Seed";
+        PipelineInput: {
+            /** @description unique in the node; a batch column is `<inputs node id>.<name>`; a step binds it as `$<name>` */
+            name: string;
+            type: components["schemas"]["PipelineInputType"];
+            /** @description absent = the name */
+            label?: string;
+        };
+        /**
+         * @description `$<input>` (a pipeline input), `<step>.takes` (that step's takes from its latest visit), `<gate>.picked` (that gate's latest pick)
+         * @example $prompt
+         * @example still.takes
+         * @example review.picked
+         */
+        PipelineSource: string;
+        PipelineInputsNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "inputs";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /** @description the batch's columns, in order */
+            inputs: components["schemas"]["PipelineInput"][];
+            position?: components["schemas"]["NodePosition"];
+        };
+        PipelineStepNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "step";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /** @description a template slug or one of the caller's workflow UUIDs */
+            workflow: string;
+            /**
+             * @description runs per visit, with consecutive seeds in the workflow's seed param (README, Pipeline rules: seeds)
+             * @default 1
+             */
+            seeds?: number;
+            /** @description a preset of the workflow's `studio.presets`, applied first */
+            preset?: string;
+            /** @description fixed values (`<node>.<param>`, as RunRequest.inputs), after the preset; never a take */
+            inputs?: components["schemas"]["RunInputs"];
+            /**
+             * @description workflow param `<node>.<param>` ← a source, applied last
+             * @example {
+             *       "prompt.text": "$prompt",
+             *       "encode.refs": "review.picked"
+             *     }
+             */
+            bind?: {
+                [key: string]: components["schemas"]["PipelineSource"];
+            };
+            position?: components["schemas"]["NodePosition"];
+        };
+        PipelineGateNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "gate";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /** @description the step whose latest takes are the candidates */
+            takes: string;
+            /**
+             * @description a pick is 1 to keep of the candidates
+             * @default 1
+             */
+            keep?: number;
+            position?: components["schemas"]["NodePosition"];
+        };
+        PipelineOutputNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "output";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /**
+             * @description the takes the row ends with
+             * @example edit.takes
+             */
+            from: string;
+            /** @description names the collection (Batch.collection) */
+            collection: string;
+            position?: components["schemas"]["NodePosition"];
+        };
+        /** @description the card's title; absent = derived by the client */
+        PipelineNodeTitle: string;
+        PipelineNode: components["schemas"]["PipelineInputsNode"] | components["schemas"]["PipelineStepNode"] | components["schemas"]["PipelineGateNode"] | components["schemas"]["PipelineOutputNode"];
+        /** @description a gate's branch: pass = a pick was made; fail = every candidate rejected, taken at most `max` times per row; on the next reject the row goes to `then` */
+        PipelineBranch: {
+            pass: string;
+            fail: string;
+            /** @description the loop cap */
+            max: number;
+            then: string;
+        };
+        /**
+         * @example [
+         *       "still",
+         *       "review"
+         *     ]
+         * @example [
+         *       "review",
+         *       {
+         *         "pass": "edit",
+         *         "fail": "still",
+         *         "max": 2,
+         *         "then": "out"
+         *       }
+         *     ]
+         */
+        PipelineEdge: [
+            string,
+            string | components["schemas"]["PipelineBranch"]
+        ];
+        /**
+         * @description A pipeline as the editor saves or validates it (plan 16.2, restricted to inputs, step, gate and output).
+         *     Node ids are stable slugs. At most 24 nodes and 64 KB (problems, not the schema). Other top-level keys are
+         *     ignored by validate; PipelineCreate and PipelineUpdate are closed.
+         */
+        PipelineDoc: {
+            /** @description trimmed; blank = 422 */
+            title: string;
+            nodes: {
+                [key: string]: components["schemas"]["PipelineNode"];
+            };
+            edges: components["schemas"]["PipelineEdge"][];
+        };
+        Pipeline: {
+            /** Format: uuid */
+            id: string;
+            /** @description the pipeline it was copied or saved from (it may be gone since); null otherwise */
+            based_on: string | null;
+            /** @description 1 on create, +1 on every PUT and PATCH */
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description every step's workflow id → its title now (an unknown one left out), for the cards */
+            workflow_titles: {
+                [key: string]: string;
+            };
+            /** @description the newest batch of it; null when it never ran */
+            last_batch: components["schemas"]["Batch"] | null;
+            /** @description only from GET /v1/studio/pipelines/{pipeline_id}, POST and PUT; empty = it can run */
+            problems?: components["schemas"]["PipelineProblem"][];
+        } & components["schemas"]["PipelineDoc"];
+        PipelineList: {
+            pipelines: components["schemas"]["Pipeline"][];
+        };
+        /** @description a whole document (based_on optional), or `{based_on, title?}` to copy one of the caller's pipelines */
+        PipelineCreate: ({
+            /**
+             * Format: uuid
+             * @description the pipeline it was made from; must be the caller's (404)
+             */
+            based_on?: string;
+        } & components["schemas"]["PipelineDoc"]) | {
+            /** Format: uuid */
+            based_on: string;
+            /** @description absent = `<source title> copy` */
+            title?: string;
+        };
+        PipelineUpdate: {
+            /** @description the version the edit started from (409 when stale) */
+            version: number;
+        } & components["schemas"]["PipelineDoc"];
+        PipelinePatch: {
+            /** @description trimmed; blank = 422 */
+            title: string;
+        };
+        /**
+         * @description meaning and which block saving: contracts/README.md, Pipeline rules. May grow in a minor version; an unknown code blocks running
+         * @enum {string}
+         */
+        PipelineProblemCode: "too_many_nodes" | "too_large" | "inputs_node" | "duplicate_input" | "unknown_node" | "edge_invalid" | "branch_not_gate" | "uncapped_cycle" | "too_many_runs" | "unreachable" | "dead_end" | "no_output" | "gate_takes" | "gate_keep" | "bind_source" | "unknown_workflow" | "workflow_cannot_run" | "unknown_preset" | "step_input_invalid" | "bind_unknown" | "bind_type" | "unbound_input" | "step_seeds";
+        /** @description one broken pipeline rule, the same shape as Problem: `node` the pipeline node, `port` a bind key (`<node>.<param>` of the step's workflow) or `from` for an output, `param` an input name or a step input key */
+        PipelineProblem: {
+            code: components["schemas"]["PipelineProblemCode"];
+            /** @description human text; not stable */
+            message: string;
+            /** @enum {string} */
+            blocks: "save" | "run";
+            node?: string;
+            port?: string;
+            param?: string;
+        };
+        PipelineValidation: {
+            /** @description sorted by node (whole-pipeline ones first), then code, port, param */
+            problems: components["schemas"]["PipelineProblem"][];
+            can_save: boolean;
+            can_run: boolean;
+        };
+        PipelineError: {
+            /** @description `pipeline has <n> problems: <first message>` for pipeline problems */
+            detail: string;
+            /** @description every problem; absent for a schema error */
+            problems?: components["schemas"]["PipelineProblem"][];
+        };
+        TakePipeline: {
+            /** @description absent = `<take title> pipeline`, cut to 80 characters */
+            title?: string;
+        };
         /** @enum {string} */
         RunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
         /**
@@ -1491,6 +1919,8 @@ export interface components {
             prompt: string | null;
             /** @description the seed it was made with; null without one */
             seed: number | null;
+            /** @description a take made by a step of a pipeline batch (source pipeline): which pipeline, node and loop attempt; absent or null otherwise */
+            pipeline?: components["schemas"]["MadeWithPipeline"] | null;
             /** @description from the workflow's `<family>/model` node; null without one (echo) */
             model: {
                 /** @description the model id of the registry models key for the family; null when unknown */
@@ -1500,6 +1930,22 @@ export interface components {
                 /** @example int8 */
                 precision: string | null;
             } | null;
+        };
+        MadeWithPipeline: {
+            /**
+             * Format: uuid
+             * @description the pipeline (it may be deleted since)
+             */
+            id: string;
+            /** @description as in the batch's snapshot */
+            title: string;
+            version: number;
+            /** @description the step node id that made it */
+            node: string;
+            /** @description the step's visit in that row (1 + times a loop brought the row back to it) */
+            attempt: number;
+            /** @description the batch row */
+            row: number;
         };
         TakePage: {
             takes: components["schemas"]["Take"][];
@@ -1559,23 +2005,26 @@ export interface components {
             expires_at: string;
         };
         /**
-         * @description queued: stored, the engine has not started it; running; paused (`reason` says why: by you, three rows in a
+         * @description queued: stored, the engine has not started it; running; waiting (API 1.7, computed by studio): the engine
+         *     reports running but every row that has not ended is `waiting` on a gate (pick to continue); paused (`reason` says why: by you, three rows in a
          *     row failed with one error, or the engine restarted: press Resume); done: every row ended (some may have
          *     failed); failed: the engine could not run it at all (`reason`); stopped: by Stop. Set by pipelines_service
          *     events, except `queued`.
          * @enum {string}
          */
-        BatchStatus: "queued" | "running" | "paused" | "done" | "failed" | "stopped";
+        BatchStatus: "queued" | "running" | "waiting" | "paused" | "done" | "failed" | "stopped";
         /**
          * @description what the owner asked for last (Pause, Resume, Stop); `status` follows once the engine confirms. While `pause` or `paused`, the dispatcher holds the batch's queued runs
          * @enum {string}
          */
         BatchControl: "run" | "pause" | "stop";
-        /** @description rows by `BatchRow.status`; the five add up to total */
+        /** @description rows by `BatchRow.status`; queued, running, waiting, succeeded, failed and cancelled add up to total */
         BatchCounts: {
             total: number;
             queued: number;
             running: number;
+            /** @description rows parked on a gate ("waiting for a pick"); always sent from API 1.7, absent = 0 */
+            waiting?: number;
             succeeded: number;
             failed: number;
             cancelled: number;
@@ -1609,21 +2058,37 @@ export interface components {
              * @description done, failed or stopped
              */
             finished_at: string | null;
+            /**
+             * Format: uuid
+             * @description a batch of a pipeline: the pipeline (it may be deleted since); absent or null for a batch of one workflow, whose `workflow_*` then describe it. For a pipeline batch `workflow_id` / `workflow_title` are its first step's
+             */
+            pipeline_id?: string | null;
+            /** @description with pipeline_id: the title in the batch's snapshot */
+            pipeline_title?: string | null;
+            /** @description with pipeline_id: the version it was submitted with */
+            pipeline_version?: number | null;
+            /** @description with pipeline_id: the collection its output node names (the first output, by node id) */
+            collection?: string | null;
         };
+        /**
+         * @description a run's statuses plus waiting: parked on a gate for a pick (pipeline batches only)
+         * @enum {string}
+         */
+        BatchRowStatus: "queued" | "running" | "waiting" | "succeeded" | "failed" | "cancelled";
         BatchRow: {
             row: number;
             /** @description 1; +1 on every Retry */
             attempt: number;
-            /** @description what the row runs with: the base inputs, then its own values, then its seed */
+            /** @description what the row runs with: the base inputs, then its own values, then its seed (a pipeline batch: `<inputs node>.<input>` keys) */
             inputs: components["schemas"]["RunInputs"];
-            /** @description queued until its run starts (also while the run waits in the queue or is held), running while it runs, then the row's end */
-            status: components["schemas"]["RunStatus"];
+            /** @description queued until its run starts (also while the run waits in the queue or is held), running while it runs, waiting while parked on a gate, then the row's end */
+            status: components["schemas"]["BatchRowStatus"];
             /**
              * Format: uuid
-             * @description the current attempt's run; null before it has one
+             * @description the current attempt's run (a pipeline row: its latest run); null before it has one
              */
             run_id: string | null;
-            /** @description the current attempt's takes (deleted ones left out) */
+            /** @description the current attempt's takes (deleted ones left out); a pipeline row: the takes its output received, once it succeeded */
             take_ids: string[];
             /** @description the first take's thumbnail; null without one */
             thumb_url: components["schemas"]["SignedUrl"] | null;
@@ -1636,6 +2101,52 @@ export interface components {
             started_at: string | null;
             /** Format: date-time */
             finished_at: string | null;
+            /** @description pipeline batches: the node the row is at now (parked on, or running); null when ended or not started */
+            node?: string | null;
+            /** @description pipeline batches: set while status is waiting */
+            parked?: components["schemas"]["BatchRowParked"] | null;
+            /** @description pipeline batches: the run table's cells, one per node the row reached, in the order first reached; absent for a batch of one workflow */
+            cells?: components["schemas"]["BatchCell"][];
+        };
+        BatchRowParked: {
+            /** @description the gate node id */
+            gate: string;
+            /** @description which visit of the gate (1 + times its loop went round) */
+            visit: number;
+            /** @description pick 1 to keep of the candidates */
+            keep: number;
+            /** @description the takes to pick from (the gate's step's latest takes) */
+            candidates: string[];
+        };
+        /**
+         * @description a step attempt: its runs' state (queued while none of them has started); a gate attempt: waiting, picked or rejected; an output: succeeded
+         * @enum {string}
+         */
+        CellStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "waiting" | "picked" | "rejected";
+        BatchCell: {
+            /** @description the pipeline node id */
+            node: string;
+            /** @enum {string} */
+            kind: "step" | "gate" | "output";
+            /** @description one per visit (loop attempts stacked), oldest first */
+            attempts: components["schemas"]["BatchCellAttempt"][];
+        };
+        BatchCellAttempt: {
+            visit: number;
+            status: components["schemas"]["CellStatus"];
+            /** @description a step: its runs, by seed index */
+            run_ids: string[];
+            /** @description a step: its takes; a gate: the picked ones; an output: what it received */
+            take_ids: string[];
+            /** @description a gate: the takes it offered */
+            candidates?: string[];
+            /** @description a step: the seed of each run, by seed index */
+            seeds: number[];
+            /** @description a step: the runs' time on their hosts, summed (started to finished); null until one finished */
+            seconds: number | null;
+            error: string | null;
+            /** @description the first of take_ids (else candidates) */
+            thumb_url: components["schemas"]["SignedUrl"] | null;
         };
         BatchPage: {
             batches: components["schemas"]["Batch"][];
@@ -1675,14 +2186,20 @@ export interface components {
             /** @description absent = drawn at random at Submit and stored */
             start?: number;
         };
+        /** @description exactly one of workflow_id (a batch of one workflow) or pipeline_id (a batch of a saved pipeline) */
         BatchCreate: {
-            workflow_id: string;
+            workflow_id?: string;
+            /**
+             * Format: uuid
+             * @description one of the caller's pipelines; its inputs are the columns
+             */
+            pipeline_id?: string;
             /**
              * Format: uuid
              * @description absent = a new session titled like the batch
              */
             session_id?: string;
-            /** @description trimmed; empty or missing = "<workflow title> × <row count>" */
+            /** @description trimmed; empty or missing = "<workflow or pipeline title> × <row count>" */
             title?: string;
             /** @description base inputs for every row; missing = {} */
             inputs?: components["schemas"]["RunInputs"];
@@ -1695,7 +2212,7 @@ export interface components {
                 grid: components["schemas"]["BatchGrid"];
             };
             seeds?: components["schemas"]["BatchSeeds"];
-        };
+        } & (unknown | unknown);
         /** @description one stored event of the batch: the whole batch, or one whole row */
         BatchEvent: components["schemas"]["BatchStatusEvent"] | components["schemas"]["BatchRowEvent"];
         BatchStatusEvent: {
@@ -1725,6 +2242,142 @@ export interface components {
             events: components["schemas"]["BatchEvent"][];
             /** @description next `since` (unchanged when the page is empty) */
             last_seq: number;
+        };
+        BatchRowRetry: {
+            /** @description a step number of the row's current attempt (RowExecution.steps[].step) */
+            from_step: number;
+        };
+        /** @description pick 1 to keep of the candidates, or reject them all */
+        BatchPick: {
+            gate: string;
+            take_ids: string[];
+        } | {
+            gate: string;
+            /** @constant */
+            reject: true;
+        };
+        ReviewCandidate: {
+            /** Format: uuid */
+            take_id: string;
+            url: components["schemas"]["SignedUrl"];
+            thumb_url: components["schemas"]["SignedUrl"];
+            width: number | null;
+            height: number | null;
+            seed: number | null;
+        };
+        BatchReviewItem: {
+            row: number;
+            attempt: number;
+            inputs: components["schemas"]["RunInputs"];
+            gate: string;
+            /** @description the gate node's title; null without one */
+            gate_title: string | null;
+            visit: number;
+            keep: number;
+            /**
+             * @description what rejecting all does now: retry (the fail edge, loops left), then (cap reached: the branch's then), fail (a plain edge: the row fails, `rejected at <gate>`)
+             * @enum {string}
+             */
+            on_reject: "retry" | "then" | "fail";
+            /** @description fail-edge turns left before then (0 for a plain edge) */
+            rejects_left: number;
+            candidates: components["schemas"]["ReviewCandidate"][];
+        };
+        BatchReview: {
+            /** Format: uuid */
+            batch_id: string;
+            /** @description every waiting row, by row number */
+            items: components["schemas"]["BatchReviewItem"][];
+        };
+        /**
+         * @description which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step's two halves), gate (parked for a pick), route (the pick applied, the edge chosen), output (the row ends)
+         * @enum {string}
+         */
+        ExecutionPart: "inputs" | "submit" | "wait" | "gate" | "route" | "output";
+        ExecutionEdge: {
+            to: string;
+            /**
+             * @description next: a plain edge
+             * @enum {string}
+             */
+            via: "next" | "pass" | "fail" | "then";
+        };
+        ExecutionStep: {
+            /** @description graph step number in the row's attempt, from 1 */
+            step: number;
+            node: string;
+            part: components["schemas"]["ExecutionPart"];
+            visit: number;
+            /** @description what happened, in plain words (`Run queued for Qwen Image`, `Parked, then resumed with 4 takes`) */
+            what: string;
+            /** @description the state that changed (`takes.still = 4`, `loops.review = 1`) */
+            changed: string[];
+            /**
+             * @description finished; resumed after waiting (a run, a pick); current = where the row is now
+             * @enum {string}
+             */
+            status: "finished" | "resumed" | "current";
+            /** @description the edge it took when it left the node */
+            edge: components["schemas"]["ExecutionEdge"] | null;
+            /** @description gate id → times its fail edge was taken, after this step */
+            loops: {
+                [key: string]: number;
+            };
+            run_ids: string[];
+            take_ids: string[];
+            error: string | null;
+            /** Format: date-time */
+            at: string;
+            /** @description its checkpoint can be read (GET …/execution/{step}/state) and retried from */
+            has_state: boolean;
+        };
+        RowExecution: {
+            /** Format: uuid */
+            batch_id: string;
+            row: number;
+            /** @description the attempt shown */
+            attempt: number;
+            /** @description the row's current attempt */
+            attempts: number;
+            status: components["schemas"]["BatchRowStatus"];
+            /** @description the node the row is at now (highlighted); null when ended */
+            current: string | null;
+            /** @description the batch's snapshot of the pipeline, to draw the graph */
+            pipeline: components["schemas"]["PipelineDoc"];
+            /** @description in order; a retried-from-step attempt starts with the earlier attempt's steps it reused */
+            steps: components["schemas"]["ExecutionStep"][];
+            /** @description every node the row passed: visits and its last attempt's status */
+            nodes: {
+                [key: string]: {
+                    visits: number;
+                    status: components["schemas"]["CellStatus"];
+                };
+            };
+            /** @description the edges taken, with how many times */
+            edges: {
+                from: string;
+                to: string;
+                /** @enum {string} */
+                via: "next" | "pass" | "fail" | "then";
+                count: number;
+            }[];
+            /** @description gate id → times its loop went round */
+            loops: {
+                [key: string]: number;
+            };
+            /** @description this attempt re-ran the earlier attempt from that step */
+            retried_from: {
+                attempt: number;
+                step: number;
+            } | null;
+        };
+        RowState: {
+            row: number;
+            attempt: number;
+            step: number;
+            node: string;
+            /** @description the thread's state after the step, read-only plain JSON (row inputs, run and take ids, picks, loop counters; never media) */
+            state: Record<string, never>;
         };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
@@ -1989,6 +2642,15 @@ export interface components {
                 "application/json": components["schemas"]["WorkflowError"];
             };
         };
+        /** @description the body does not fit the schema (`{detail}` only), or the pipeline has problems that block saving (`problems`: every problem) */
+        PipelineUnprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PipelineError"];
+            };
+        };
     };
     parameters: {
         /** @description session UUID (malformed = 404) */
@@ -2003,6 +2665,10 @@ export interface components {
         BatchId: string;
         /** @description take UUID (malformed = 404) */
         TakeId: string;
+        /** @description pipeline UUID (malformed = 404) */
+        PipelineId: string;
+        /** @description row number, from 1 (unknown or malformed = 404) */
+        BatchRowN: string;
         /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
         Cursor: string;
         Limit: number;
@@ -2363,6 +3029,198 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListPipelines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description pipelines */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreatePipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineCreate"];
+            };
+        };
+        responses: {
+            /** @description the pipeline, with problems */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pipeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["PipelineUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioValidatePipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineDoc"];
+            };
+        };
+        responses: {
+            /** @description the problems */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineValidation"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetPipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description pipeline UUID (malformed = 404) */
+                pipeline_id: components["parameters"]["PipelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the pipeline */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pipeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioReplacePipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description pipeline UUID (malformed = 404) */
+                pipeline_id: components["parameters"]["PipelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineUpdate"];
+            };
+        };
+        responses: {
+            /** @description the pipeline, with problems */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pipeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["PipelineUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeletePipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description pipeline UUID (malformed = 404) */
+                pipeline_id: components["parameters"]["PipelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRenamePipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description pipeline UUID (malformed = 404) */
+                pipeline_id: components["parameters"]["PipelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelinePatch"];
+            };
+        };
+        responses: {
+            /** @description the pipeline */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pipeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
@@ -2730,6 +3588,38 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioSaveTakeAsPipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TakePipeline"];
+            };
+        };
+        responses: {
+            /** @description the pipeline, with problems */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pipeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     studioListSessionTakes: {
         parameters: {
             query?: {
@@ -3018,11 +3908,15 @@ export interface operations {
                 /** @description batch UUID (malformed = 404) */
                 batch_id: components["parameters"]["BatchId"];
                 /** @description row number, from 1 (unknown or malformed = 404) */
-                row: string;
+                row: components["parameters"]["BatchRowN"];
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["BatchRowRetry"];
+            };
+        };
         responses: {
             /** @description the row, queued again */
             202: {
@@ -3036,6 +3930,133 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetBatchReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the parked rows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchReview"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPickBatchRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+                /** @description row number, from 1 (unknown or malformed = 404) */
+                row: components["parameters"]["BatchRowN"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchPick"];
+            };
+        };
+        responses: {
+            /** @description the row, moving on */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchRow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetRowExecution: {
+        parameters: {
+            query?: {
+                /** @description which attempt of the row; absent = the current one */
+                attempt?: number;
+            };
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+                /** @description row number, from 1 (unknown or malformed = 404) */
+                row: components["parameters"]["BatchRowN"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the execution */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RowExecution"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetRowStepState: {
+        parameters: {
+            query?: {
+                /** @description absent = the current attempt */
+                attempt?: number;
+            };
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+                /** @description row number, from 1 (unknown or malformed = 404) */
+                row: components["parameters"]["BatchRowN"];
+                /** @description the step number in the execution, from 1 (unknown or malformed = 404) */
+                step: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RowState"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

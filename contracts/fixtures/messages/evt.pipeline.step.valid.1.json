@@ -1,0 +1,46 @@
+{
+  "type": "evt.pipeline.step",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000201",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 7,
+    "row": 6,
+    "attempt": 1,
+    "step": 3,
+    "node": "still",
+    "part": "wait",
+    "visit": 1,
+    "status": "resumed",
+    "what": "Parked, then resumed with 4 takes",
+    "changed": [
+      "takes.still = 4"
+    ],
+    "edge": {
+      "to": "review",
+      "via": "next"
+    },
+    "loops": {
+      "review": 0
+    },
+    "run_ids": [
+      "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30",
+      "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b31",
+      "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b32",
+      "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b33"
+    ],
+    "take_ids": [
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+      "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+    ],
+    "error": null,
+    "checkpoint_id": "1efa2b3c-0000-6000-8000-0000000003"
+  }
+}

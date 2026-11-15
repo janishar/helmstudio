@@ -4,6 +4,7 @@ package startup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -22,6 +23,7 @@ import (
 	authmiddleware "github.com/helmstudio/studio_service/api/auth/middleware"
 	"github.com/helmstudio/studio_service/api/gallery"
 	"github.com/helmstudio/studio_service/api/studio"
+	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/config"
 	"github.com/helmstudio/studio_service/messaging"
@@ -82,6 +84,18 @@ func Run() error {
 			}},
 		),
 		maxBody: env.MaxBodyMB << 20,
+		// pipelines answers within 5 s or the state endpoint is a 503 (the client's 2 s Timeout is for token checks)
+		stateGet: func(ctx context.Context, req message.StateGet) (message.StateReply, error) {
+			var reply message.StateReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectStateGet, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	if module.store, err = objectStore(ctx, env); err != nil {
 		return err

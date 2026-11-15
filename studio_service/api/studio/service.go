@@ -34,6 +34,7 @@ type Service struct {
 	registry *registry.Registry
 	cancel   Cancel
 	store    storage.Store
+	stateGet StateGet // pipelines.state.get; nil answers 503
 }
 
 // NewService returns the service.

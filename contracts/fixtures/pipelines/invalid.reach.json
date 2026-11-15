@@ -1,0 +1,50 @@
+{
+  "description": "no output: no_output alone (dead_end is only checked when an output exists); a node no edge reaches",
+  "pipeline": {
+    "title": "Reach",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "edit",
+            "type": "Text"
+          }
+        ]
+      },
+      "a": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "b": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "a"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "no_output"
+    },
+    {
+      "code": "unreachable",
+      "node": "b"
+    }
+  ]
+}

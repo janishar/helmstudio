@@ -27,6 +27,22 @@ import (
 // Batches (contracts/README.md "Batches and the pipeline engine"): studio owns the API and the record; pipelines_service
 // runs them. Submit and every control write the batch and its cmd.pipeline.* command in one transaction.
 
+// openBatchCap is the 409 when the user has MaxOpenBatches unfinished batches. It holds a per-user lock until commit,
+// one Submit (or reopening Retry) at a time, so concurrent ones can't all count the same open batches.
+func openBatchCap(ctx context.Context, tx pgx.Tx, ownerID string) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('batches:' || $1::text))`, ownerID); err != nil {
+		return err
+	}
+	var open int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM batches WHERE owner_id = $1 AND status IN ('queued', 'running', 'paused')`,
+		ownerID).Scan(&open); err != nil {
+		return err
+	} else if open >= MaxOpenBatches {
+		return network.NewConflictError(fmt.Sprintf("You have %d unfinished batches; wait for one to finish.", MaxOpenBatches), nil)
+	}
+	return nil
+}
+
 // CreateBatch checks the whole batch and stores it queued with its snapshot, its rows and cmd.pipeline.submit.
 func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *dto.BatchCreate) (dto.Batch, error) {
 	if !s.registry.Ready() {
@@ -41,16 +57,13 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 				return errNotFound
 			}
 		}
-		// one Submit at a time per user, so concurrent Submits can't all count the same open batches
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('batches:' || $1::text))`, caller.ID); err != nil {
+		if err := openBatchCap(ctx, tx, caller.ID); err != nil {
 			return err
 		}
-		var open int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM batches WHERE owner_id = $1 AND status IN ('queued', 'running', 'paused')`,
-			caller.ID).Scan(&open); err != nil {
+		if body.PipelineID != "" {
+			var err error
+			out, err = s.createPipelineBatch(ctx, tx, caller, body)
 			return err
-		} else if open >= MaxOpenBatches {
-			return network.NewConflictError(fmt.Sprintf("You have %d unfinished batches; wait for one to finish.", MaxOpenBatches), nil)
 		}
 		workflow, version, err := s.runnable(ctx, tx, body.WorkflowID)
 		if err != nil {
@@ -71,22 +84,9 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			return network.NewUnprocessableError(reason, nil)
 		}
-		title := ""
-		if body.Title != nil {
-			title = strings.TrimSpace(*body.Title)
-		}
-		if title == "" {
-			title = fmt.Sprintf("%s × %d", workflow.Title, len(rows))
-		}
-		sessionID := ""
-		if body.SessionID != nil {
-			sessionID = *body.SessionID
-		} else {
-			sessionID = utility.NewID()
-			if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`,
-				sessionID, caller.ID, title); err != nil {
-				return err
-			}
+		title, sessionID, err := batchSession(ctx, tx, caller, body, workflow.Title, len(rows))
+		if err != nil {
+			return err
 		}
 		base := body.Inputs
 		if base == nil {
@@ -124,6 +124,24 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 	return out, err
 }
 
+// batchSession returns the batch's title (the body's, else "<what> × <rows>") and session: the body's, else a new one
+// titled like the batch.
+func batchSession(ctx context.Context, tx pgx.Tx, caller common.Caller, body *dto.BatchCreate, what string, rows int) (string, string, error) {
+	title := ""
+	if body.Title != nil {
+		title = strings.TrimSpace(*body.Title)
+	}
+	if title == "" {
+		title = fmt.Sprintf("%s × %d", what, rows)
+	}
+	if body.SessionID != nil {
+		return title, *body.SessionID, nil
+	}
+	sessionID := utility.NewID()
+	_, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, caller.ID, title)
+	return title, sessionID, err
+}
+
 // getBatch reads one batch (locked with lock) as its DTO.
 func getBatch(ctx context.Context, tx pgx.Tx, batchID string, lock bool) (dto.Batch, error) {
 	if lock { // FOR UPDATE can't go with the counts' aggregate: lock the row first
@@ -135,12 +153,19 @@ func getBatch(ctx context.Context, tx pgx.Tx, batchID string, lock bool) (dto.Ba
 	return batchDTO(row), err
 }
 
-// batchDTO maps a row.
+// batchDTO maps a row. A running batch whose every unended row waits on a gate is waiting (computed: pipelines still
+// reports running).
 func batchDTO(row model.Batch) dto.Batch {
+	status := row.Status
+	if status == "running" && row.Waiting > 0 && row.Queued+row.Running == 0 {
+		status = "waiting"
+	}
 	return dto.Batch{ID: row.ID, Title: row.Title, WorkflowID: row.WorkflowID, WorkflowTitle: row.WorkflowTitle,
-		SessionID: row.SessionID, Status: row.Status, Control: row.Control, Reason: row.Reason, CreatedAt: row.CreatedAt,
+		SessionID: row.SessionID, Status: status, Control: row.Control, Reason: row.Reason, CreatedAt: row.CreatedAt,
 		StartedAt: row.StartedAt, FinishedAt: row.FinishedAt, Counts: dto.BatchCounts{Total: row.Total, Queued: row.Queued,
-			Running: row.Running, Succeeded: row.Succeeded, Failed: row.Failed, Cancelled: row.Cancelled}}
+			Running: row.Running, Waiting: row.Waiting, Succeeded: row.Succeeded, Failed: row.Failed, Cancelled: row.Cancelled},
+		PipelineID: row.PipelineID, PipelineTitle: row.PipelineTitle, PipelineVersion: row.PipelineVersion,
+		Collection: row.Collection}
 }
 
 // rowDTO maps a row, signing its first take's key for the thumbnail.
@@ -152,6 +177,19 @@ func (s *Service) rowDTO(row model.BatchRow) dto.BatchRow {
 		out.ThumbURL = s.signer.SignPtr(&row.TakeKeys[0])
 	}
 	return out
+}
+
+// readRow reads one row as shown.
+func (s *Service) readRow(ctx context.Context, tx pgx.Tx, batchID string, n int) (dto.BatchRow, error) {
+	row, err := one[model.BatchRow](ctx, tx, model.BatchRowFrom+`WHERE br.batch_id = $1 AND br.n = $2`, batchID, n)
+	if err != nil {
+		return dto.BatchRow{}, err
+	}
+	shown, err := s.rowsDTO(ctx, tx, []model.BatchRow{row})
+	if err != nil {
+		return dto.BatchRow{}, err
+	}
+	return shown[0], nil
 }
 
 // GetBatch returns one batch.
@@ -247,9 +285,10 @@ func (s *Service) ListBatchRows(ctx context.Context, caller common.Caller, batch
 			next := base64.RawURLEncoding.EncodeToString([]byte("row " + strconv.Itoa(rows[len(rows)-1].Row)))
 			out.NextCursor = &next
 		}
-		for _, row := range rows {
-			out.Rows = append(out.Rows, s.rowDTO(row))
+		if err != nil {
+			return err
 		}
+		out.Rows, err = s.rowsDTO(ctx, tx, rows)
 		return err
 	})
 	return out, err
@@ -289,7 +328,7 @@ func (s *Service) control(ctx context.Context, caller common.Caller, batchID, ki
 }
 
 // command writes a cmd.pipeline.* for the batch with Nats-Msg-Id <batch_id>:<n>, n its next command number.
-func (s *Service) command(ctx context.Context, tx pgx.Tx, batchID, ownerID string, data message.Control) error {
+func (s *Service) command(ctx context.Context, tx pgx.Tx, batchID, ownerID string, data messaging.Data) error {
 	var n int
 	if err := tx.QueryRow(ctx, `UPDATE batches SET commands = commands + 1 WHERE id = $1 RETURNING commands`, batchID).Scan(&n); err != nil {
 		return err
@@ -311,7 +350,7 @@ func ended(status string) bool { return status == "done" || status == "failed" |
 // PauseBatch holds the batch's queued runs (the dispatcher skips them) and asks pipelines to start no new rows.
 func (s *Service) PauseBatch(ctx context.Context, caller common.Caller, batchID string) (dto.Batch, error) {
 	return s.control(ctx, caller, batchID, "pause", func(b dto.Batch) string {
-		if (b.Status != "queued" && b.Status != "running") || b.Control != "run" {
+		if (b.Status != "queued" && b.Status != "running" && b.Status != "waiting") || b.Control != "run" {
 			return "Only a queued or running batch can be paused."
 		}
 		return ""
@@ -360,15 +399,35 @@ func (s *Service) StopBatch(ctx context.Context, caller common.Caller, batchID s
 	})
 }
 
-// RetryBatchRow queues a failed row again under attempt + 1 (a new run; the old one and its takes stay).
-func (s *Service) RetryBatchRow(ctx context.Context, caller common.Caller, batchID, rowText string) (dto.BatchRow, error) {
+// parseRow reads a row number from the path; anything else is a 404.
+func parseRow(batchID, rowText string) (int, error) {
 	row, err := strconv.Atoi(rowText)
 	if !utility.IsUUID(batchID) || err != nil || row < 1 || row > MaxRows || strconv.Itoa(row) != rowText {
-		return dto.BatchRow{}, errNotFound
+		return 0, errNotFound
+	}
+	return row, nil
+}
+
+// RetryBatchRow queues a failed row again under attempt + 1 (a new run; the old one and its takes stay). With
+// body.FromStep (a pipeline batch: "Retry row from here") any ended or waiting row of a batch whose threads still exist
+// re-runs from that step of its current attempt, reusing the state before it: the steps before it are copied to the
+// new attempt and the retry names the checkpoint of the step before.
+func (s *Service) RetryBatchRow(ctx context.Context, caller common.Caller, batchID, rowText string, body *dto.BatchRowRetry) (dto.BatchRow, error) {
+	row, err := parseRow(batchID, rowText)
+	if err != nil {
+		return dto.BatchRow{}, err
+	}
+	fromStep := 0
+	if body != nil && body.FromStep != nil {
+		fromStep = *body.FromStep
 	}
 	var out dto.BatchRow
 	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
 		batch, err := getBatch(ctx, tx, batchID, true)
+		if err != nil {
+			return err
+		}
+		_, isPipeline, err := readStoredPipeline(ctx, tx, batchID)
 		if err != nil {
 			return err
 		}
@@ -380,23 +439,75 @@ func (s *Service) RetryBatchRow(ctx context.Context, caller common.Caller, batch
 		} else if err != nil {
 			return err
 		}
-		if status != "failed" || batch.Status == "failed" || batch.Status == "stopped" || batch.Control == "stop" {
+		noStep := network.NewUnprocessableError(fmt.Sprintf("row %d has no step %d", row, fromStep), nil)
+		if fromStep > 1 && !isPipeline {
+			return noStep
+		}
+		checkpoint := (*string)(nil)
+		if fromStep > 0 && isPipeline {
+			switch {
+			case batch.Status == "done":
+				return network.NewConflictError("this batch has finished; its checkpoints are gone", nil)
+			case ended(batch.Status) || batch.Control == "stop":
+				return network.NewConflictError("Only a row of a batch that has not ended or stopped can be retried.", nil)
+			case status != "failed" && status != "succeeded" && status != "cancelled" && status != "waiting":
+				return network.NewConflictError("Only a row that has ended or waits at a gate can be retried from a step.", nil)
+			}
+			if fromStep > 1 {
+				var exists bool
+				if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM batch_steps WHERE batch_id = $1 AND n = $2
+					AND attempt = $3 AND step = $4), (SELECT checkpoint_id FROM batch_steps WHERE batch_id = $1 AND n = $2
+					AND attempt = $3 AND step = $4 - 1)`, batchID, row, attempt, fromStep).Scan(&exists, &checkpoint); err != nil {
+					return err
+				}
+				if !exists || checkpoint == nil {
+					return noStep
+				}
+			}
+		} else if status != "failed" || batch.Status == "failed" || batch.Status == "stopped" || batch.Control == "stop" {
 			return network.NewConflictError("Only a failed row of a batch that has not failed or stopped can be retried.", nil)
+		} else if batch.Status == "done" { // it is unfinished again: the same cap and lock as Submit
+			if err := openBatchCap(ctx, tx, caller.ID); err != nil {
+				return err
+			}
+			// counted as unfinished now, before pipelines reports it running
+			if _, err := tx.Exec(ctx, `UPDATE batches SET status = 'running', finished_at = NULL WHERE id = $1`, batchID); err != nil {
+				return err
+			}
 		}
 		attempt++
+		retried := any(nil)
+		if checkpoint != nil {
+			retried = dto.RetriedFrom{Attempt: attempt - 1, Step: fromStep}
+		}
 		if _, err := tx.Exec(ctx, `UPDATE batch_rows SET status = 'queued', attempt = $3, run_id = NULL, take_ids = '{}',
-			error = NULL, finished_at = NULL WHERE batch_id = $1 AND n = $2`, batchID, row, attempt); err != nil {
+			error = NULL, finished_at = NULL, node = NULL, parked = NULL,
+			cells = CASE WHEN cells IS NULL THEN NULL ELSE '[]'::jsonb END,
+			retried_from = CASE WHEN $4::jsonb IS NULL THEN retried_from ELSE retried_from || jsonb_build_object($5::text, $4::jsonb) END
+			WHERE batch_id = $1 AND n = $2`, batchID, row, attempt, retried, strconv.Itoa(attempt)); err != nil {
 			return err
 		}
-		if err := s.command(ctx, tx, batchID, caller.ID, message.Control{Kind: "retry", BatchID: batchID, Row: &row,
-			Attempt: &attempt}); err != nil {
+		command := message.Control{Kind: "retry", BatchID: batchID, Row: &row, Attempt: &attempt}
+		if fromStep > 0 && isPipeline {
+			command.FromStep = &fromStep
+		}
+		if checkpoint != nil {
+			command.CheckpointID = checkpoint
+			if _, err := tx.Exec(ctx, `INSERT INTO batch_steps (batch_id, n, attempt, step, owner_id, seq, node, part, visit,
+				status, what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, at)
+				SELECT batch_id, n, $3, step, owner_id, 0, node, part, visit, status, what, changed, edge, loops, run_ids,
+				take_ids, error, checkpoint_id, at FROM batch_steps WHERE batch_id = $1 AND n = $2 AND attempt = $3 - 1
+				AND step < $4`, batchID, row, attempt, fromStep); err != nil {
+				return err
+			}
+		}
+		if err := s.command(ctx, tx, batchID, caller.ID, command); err != nil {
 			return err
 		}
 		if err := batchChanged(ctx, tx, batchID, row); err != nil {
 			return err
 		}
-		read, err := one[model.BatchRow](ctx, tx, model.BatchRowFrom+`WHERE br.batch_id = $1 AND br.n = $2`, batchID, row)
-		out = s.rowDTO(read)
+		out, err = s.readRow(ctx, tx, batchID, row)
 		return err
 	})
 	return out, err
@@ -449,9 +560,13 @@ func (s *Service) BatchEvents(ctx context.Context, caller common.Caller, batchID
 		if err != nil {
 			return err
 		}
+		shown, err := s.rowsDTO(ctx, tx, rows)
+		if err != nil {
+			return err
+		}
 		byRow := map[int]dto.BatchRow{}
-		for _, row := range rows {
-			byRow[row.Row] = s.rowDTO(row)
+		for _, row := range shown {
+			byRow[row.Row] = row
 		}
 		for _, e := range events {
 			n, data := 0, any(batch)
@@ -501,14 +616,24 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			Status    string
 			Control   string
 			Snapshot  json.RawMessage
-			Version   *int // a user workflow's version at Submit
+			Version   *int            // a user workflow's version at Submit
+			Pipeline  json.RawMessage // a pipeline batch's storedPipeline
 		}
 		batch, err := one[batchRecord](ctx, tx, `SELECT owner_id::text, session_id::text, status, control, snapshot,
-			workflow_version FROM batches
+			workflow_version, pipeline FROM batches
 			WHERE id = $1 FOR UPDATE`, req.BatchID) // serialises two asks under one key
 		var workflow registry.Workflow
+		var stored storedPipeline
+		isPipeline := err == nil && batch.Pipeline != nil
 		if err == nil {
 			err = json.Unmarshal(batch.Snapshot, &workflow)
+		}
+		if err == nil && isPipeline {
+			err = json.Unmarshal(batch.Pipeline, &stored)
+			workflow.ID = req.WorkflowID // checked against the key's step below
+			if _, ok := stored.Workflows[req.WorkflowID]; !ok {
+				workflow.ID = ""
+			}
 		}
 		if errors.Is(err, errNotFound) || (err == nil && (batch.OwnerID != req.OwnerID || batch.SessionID == nil ||
 			*batch.SessionID != req.SessionID || workflow.ID != req.WorkflowID)) {
@@ -518,20 +643,31 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			return err
 		}
 		// the row's current attempt and the inputs stored at Submit: the run is made from those, never from the request
+		// (a pipeline step's from the request: pipelines fills its binds from earlier steps' takes)
 		var attempt int
-		var stored map[string]any
+		var stored0 map[string]any
 		if err := tx.QueryRow(ctx, `SELECT attempt, inputs FROM batch_rows WHERE batch_id = $1 AND n = $2`, req.BatchID,
-			req.Row).Scan(&attempt, &stored); errors.Is(err, pgx.ErrNoRows) {
+			req.Row).Scan(&attempt, &stored0); errors.Is(err, pgx.ErrNoRows) {
 			refused = notFound
 			return nil
 		} else if err != nil {
 			return err
 		}
-		if !strings.HasSuffix(req.IdempotencyKey, fmt.Sprintf(":%d:step:0:0", attempt)) { // M1: one step, no loops or branches
-			refused = invalid(fmt.Sprintf("idempotency_key must be <batch_id>:<row>:%d:step:0:0 (the row's attempt)", attempt))
-			return nil
+		version := batch.Version
+		if isPipeline {
+			var detail string
+			if workflow, detail = pipelineStepRun(stored, req, attempt); detail != "" {
+				refused = invalid(detail)
+				return nil
+			}
+			version = stored.version(workflow.ID)
+		} else {
+			if !strings.HasSuffix(req.IdempotencyKey, fmt.Sprintf(":%d:step:0:0", attempt)) { // one step, no loops or branches
+				refused = invalid(fmt.Sprintf("idempotency_key must be <batch_id>:<row>:%d:step:0:0 (the row's attempt)", attempt))
+				return nil
+			}
+			req.Inputs = stored0
 		}
-		req.Inputs = stored
 		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE idempotency_key = $1`, req.IdempotencyKey)
 		created := errors.Is(err, errNotFound)
 		if created {
@@ -545,7 +681,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				refused = invalid(detail)
 				return nil
 			}
-			if run, err = createBatchRun(ctx, tx, s.registry, workflow, batch.Version, nodes, batch.Status, batch.Control, req); err != nil {
+			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, nodes, batch.Status, batch.Control, req); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -591,8 +727,9 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	}
 	// the row shows its run at once (running once it leaves the queue); pipelines reports the same run later
 	attempt := strings.Split(req.IdempotencyKey, ":")[2]
+	// (a pipeline row shows its latest run)
 	if _, err := tx.Exec(ctx, `UPDATE batch_rows SET run_id = $3 WHERE batch_id = $1 AND n = $2 AND attempt::text = $4
-		AND run_id IS NULL`, req.BatchID, req.Row, run.ID, attempt); err != nil {
+		AND (run_id IS NULL OR cells IS NOT NULL)`, req.BatchID, req.Row, run.ID, attempt); err != nil {
 		return run, err
 	}
 	if err := appendEvent(ctx, tx, run, "status", time.Now(), statusData(status, failure, nil, run.Attempt)); err != nil {

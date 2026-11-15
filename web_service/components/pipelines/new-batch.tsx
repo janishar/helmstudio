@@ -1,6 +1,7 @@
 "use client";
-// New batch (plan 7.2): a workflow, its base settings (Create's inspector), the rows as pasted lines, a CSV table or
-// a grid, seeds per row, and Submit. Rows are built and checked here; the server's 422 is shown against its row.
+// New batch (plan 7.2): a workflow (or a saved pipeline, whose inputs are the columns), its base settings (Create's
+// inspector), the rows as pasted lines, a CSV table or a grid, seeds per row, and Submit. Rows are built and checked
+// here; the server's 422 is shown against its row.
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
@@ -10,6 +11,7 @@ import { useRefUploads } from "@/components/create/refs";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { imageInputs } from "@/lib/refs";
 import { remember } from "@/lib/take-cache";
+import { inputParam, pipelineColumns } from "@/lib/pipeline";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   MAX_AXES,
@@ -53,14 +55,32 @@ const label = (f: Field) => {
   return p.toLowerCase() === f.nodeTitle.toLowerCase() ? p : `${f.nodeTitle} · ${p}`;
 };
 
+/** A pipeline's inputs as the batch form's fields: `<inputs node>.<name>`, typed as the param it fills. */
+export const pipelineFields = (p: S<"PipelineDoc">): Field[] =>
+  pipelineColumns(p).map((c) => {
+    const param = inputParam(c.input);
+    return {
+      key: c.key,
+      node: c.node,
+      nodeTitle: param.label ?? c.input.name,
+      param,
+      initial: param.default ?? null,
+      canvas: false,
+      model: false,
+    };
+  });
+
 export function NewBatch({
   open,
   onClose,
   workflows: given,
+  pipeline,
 }: {
   open: boolean;
   onClose: () => void;
   workflows?: S<"Workflow">[];
+  /** a batch of this saved pipeline instead of a workflow */
+  pipeline?: S<"Pipeline">;
 }) {
   const router = useRouter();
   const [workflows, setWorkflows] = useState(given ?? null);
@@ -83,17 +103,21 @@ export function NewBatch({
   const [serverRow, setServerRow] = useState<RowError | null>(null);
 
   useEffect(() => {
-    if (!open || workflows) return;
+    if (!open || workflows || pipeline) return;
     ok(api.GET("/v1/studio/workflows"))
       .then((w) => {
         setWorkflows(w.workflows);
         setWorkflowId((id) => id || (w.workflows[0]?.id ?? ""));
       })
       .catch((e) => setLoadError(message(e)));
-  }, [open, workflows]);
+  }, [open, workflows, pipeline]);
 
-  const workflow = workflows?.find((w) => w.id === workflowId);
-  const all = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  const workflow = pipeline ? undefined : workflows?.find((w) => w.id === workflowId);
+  const all = useMemo(
+    () => (pipeline ? pipelineFields(pipeline) : workflow ? fieldsOf(workflow) : []),
+    [workflow, pipeline],
+  );
+  const sourceTitle = pipeline?.title ?? workflow?.title;
   const seeds = all.filter((f) => f.param.type === "seed");
   const seedField = seeds.length === 1 ? seeds[0] : undefined;
   const byKey = (k: string) => all.find((f) => f.key === k);
@@ -176,7 +200,7 @@ export function NewBatch({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!workflow || !built.rows || busy) return;
+    if (!(workflow || pipeline) || !built.rows || busy) return;
     const b = buildInputs(base, raws);
     setErrors(b.errors);
     setError("");
@@ -192,7 +216,7 @@ export function NewBatch({
       const batch = await ok(
         api.POST("/v1/studio/batches", {
           body: {
-            workflow_id: workflow.id,
+            ...(pipeline ? { pipeline_id: pipeline.id } : { workflow_id: workflow!.id }),
             ...(title.trim() && { title: title.trim() }),
             inputs: b.inputs,
             rows: built.rows,
@@ -218,31 +242,40 @@ export function NewBatch({
     <Modal open={open} onClose={onClose} title="New batch" width="w-[min(94vw,920px)]">
       <form onSubmit={submit} className="flex max-h-[78dvh] flex-col gap-4 overflow-y-auto">
         {loadError && <ErrorNote>{loadError}</ErrorNote>}
-        {workflows?.length === 0 && (
+        {!pipeline && workflows?.length === 0 && (
           <ErrorNote>No workflows yet: no runner has published any.</ErrorNote>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5">
-            <span className="label">Workflow</span>
-            <select
-              className="in"
-              value={workflowId}
-              onChange={(e) => pickWorkflow(e.target.value)}
-            >
-              {workflows?.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.title}
-                </option>
-              ))}
-            </select>
-          </label>
+          {pipeline ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="label">Pipeline</span>
+              <span className="in flex items-center truncate">
+                {pipeline.title} · v{pipeline.version}
+              </span>
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1.5">
+              <span className="label">Workflow</span>
+              <select
+                className="in"
+                value={workflowId}
+                onChange={(e) => pickWorkflow(e.target.value)}
+              >
+                {workflows?.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="flex flex-col gap-1.5">
             <span className="label">Title</span>
             <input
               className="in"
               maxLength={200}
               value={title}
-              placeholder={workflow ? `${workflow.title} × ${built.count * seedsPer}` : ""}
+              placeholder={sourceTitle ? `${sourceTitle} × ${built.count * seedsPer}` : ""}
               onChange={(e) => setTitle(e.target.value)}
             />
           </label>
@@ -546,7 +579,7 @@ export function NewBatch({
             {tooBig && built.count ? (
               <span className="text-bad">{tooBig}</span>
             ) : (
-              summary(built.count, seedField ? seedCount : null)
+              summary(built.count, seedField ? seedCount : null, !!pipeline)
             )}
           </span>
           <button type="button" className="chip bevel" onClick={onClose}>

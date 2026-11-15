@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.pipelines.state.get.schema.json",
+  "title": "NATS request/reply pipelines.state.get (studio → pipelines)",
+  "description": "Core NATS request/reply on subject `pipelines.state.get` (queue group `pipelines`), bare JSON. One row's state at one checkpoint, for GET …/rows/{row}/execution/{step}/state (plan 16.8): the only place a checkpoint is read. Pipelines answers only when the batch is the owner's and the checkpoint belongs to that row's thread; anything else, and threads already deleted, is `not_found`. Studio waits 5 s.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "owner_id",
+        "batch_id",
+        "row",
+        "checkpoint_id"
+      ],
+      "properties": {
+        "owner_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "checkpoint_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "from the step's evt.pipeline.step"
+        }
+      }
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "required": [
+        "checkpoint_id",
+        "state"
+      ],
+      "properties": {
+        "checkpoint_id": {
+          "type": "string"
+        },
+        "state": {
+          "type": "object",
+          "description": "the thread's channel values: plain JSON, never media"
+        }
+      },
+      "not": {
+        "required": [
+          "code"
+        ]
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error",
+        "code"
+      ],
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "enum": [
+            "not_found",
+            "internal"
+          ]
+        }
+      }
+    }
+  }
+}

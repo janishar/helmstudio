@@ -1,0 +1,110 @@
+{
+  "description": "a gate over a gate, a gate keeping more than its step's seeds, a gate over a step that is not on every path to it, and a gate (and output) left with no way to an output",
+  "pipeline": {
+    "title": "Gates",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "edit",
+            "type": "Text"
+          }
+        ]
+      },
+      "a": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "b": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "g1": {
+        "kind": "gate",
+        "takes": "a",
+        "keep": 2
+      },
+      "g2": {
+        "kind": "gate",
+        "takes": "g1"
+      },
+      "g3": {
+        "kind": "gate",
+        "takes": "b"
+      },
+      "lost": {
+        "kind": "gate",
+        "takes": "a"
+      },
+      "out": {
+        "kind": "output",
+        "from": "a.takes",
+        "collection": "x"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "a"
+      ],
+      [
+        "a",
+        "g1"
+      ],
+      [
+        "g1",
+        {
+          "pass": "g2",
+          "fail": "b",
+          "max": 1,
+          "then": "g3"
+        }
+      ],
+      [
+        "b",
+        "g3"
+      ],
+      [
+        "g2",
+        "out"
+      ],
+      [
+        "g3",
+        "out"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "gate_keep",
+      "node": "g1"
+    },
+    {
+      "code": "gate_takes",
+      "node": "g2"
+    },
+    {
+      "code": "gate_takes",
+      "node": "g3"
+    },
+    {
+      "code": "unreachable",
+      "node": "lost"
+    },
+    {
+      "code": "dead_end",
+      "node": "lost"
+    }
+  ]
+}

@@ -4,6 +4,8 @@ import type { NextConfig } from "next";
 // fetch caching stay off; pages are dynamic because the (app) layout reads cookies().
 const nextConfig: NextConfig = {
   output: "standalone",
+  // a second build to look at (NEXT_DIST_DIR=.next-look) leaves the usual .next alone
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // no next/image anywhere (plain <img> of signed links), so the optimizer and sharp's ~18 MB of libraries stay out
   // of the standalone image
   images: { unoptimized: true },

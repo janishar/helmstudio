@@ -180,6 +180,7 @@ type BatchCounts struct {
 	Total     int `json:"total"`
 	Queued    int `json:"queued"`
 	Running   int `json:"running"`
+	Waiting   int `json:"waiting"`
 	Succeeded int `json:"succeeded"`
 	Failed    int `json:"failed"`
 	Cancelled int `json:"cancelled"`
@@ -199,6 +200,11 @@ type Batch struct {
 	CreatedAt     time.Time   `json:"created_at"`
 	StartedAt     *time.Time  `json:"started_at"`
 	FinishedAt    *time.Time  `json:"finished_at"`
+	// a batch of a pipeline (absent for a batch of one workflow)
+	PipelineID      *string `json:"pipeline_id,omitempty"`
+	PipelineTitle   *string `json:"pipeline_title,omitempty"`
+	PipelineVersion *int    `json:"pipeline_version,omitempty"`
+	Collection      *string `json:"collection,omitempty"`
 }
 
 // BatchRow is one row of a batch.
@@ -213,6 +219,10 @@ type BatchRow struct {
 	Error      *string        `json:"error"`
 	StartedAt  *time.Time     `json:"started_at"`
 	FinishedAt *time.Time     `json:"finished_at"`
+	// pipeline batches only (a nil interface is left out; a typed nil is null): *string, *BatchRowParked, []BatchCell
+	Node   any `json:"node,omitempty"`
+	Parked any `json:"parked,omitempty"`
+	Cells  any `json:"cells,omitempty"`
 }
 
 // BatchPage is a page of the caller's batches, newest first.
@@ -280,6 +290,7 @@ type BatchSeeds struct {
 // BatchCreate is POST /batches.
 type BatchCreate struct {
 	WorkflowID string         `json:"workflow_id"`
+	PipelineID string         `json:"pipeline_id"`
 	SessionID  *string        `json:"session_id"`
 	Title      *string        `json:"title"`
 	Inputs     map[string]any `json:"inputs"`
@@ -287,7 +298,7 @@ type BatchCreate struct {
 	Seeds      *BatchSeeds    `json:"seeds"`
 }
 
-// paramKey is "<node id>.<param>".
+// paramKey is "<node id>.<param>" (a pipeline batch: "<inputs node>.<input>").
 var paramKey = regexp.MustCompile(`^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`)
 
 // Validate checks the body's shape; the rows against the workflow are checked at Submit.
@@ -300,8 +311,10 @@ func (b *BatchCreate) Validate() string {
 		}
 	}
 	switch {
-	case b.WorkflowID == "":
-		return "workflow_id is required"
+	case (b.WorkflowID == "") == (b.PipelineID == ""):
+		return "give exactly one of workflow_id or pipeline_id"
+	case b.PipelineID != "" && !utility.IsUUID(b.PipelineID):
+		return "pipeline_id must be a uuid"
 	case b.SessionID != nil && !utility.IsUUID(*b.SessionID):
 		return "session_id must be a uuid"
 	case b.Title != nil && utf8.RuneCountInString(strings.TrimSpace(*b.Title)) > 200:

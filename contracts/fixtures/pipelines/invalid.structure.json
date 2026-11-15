@@ -1,0 +1,130 @@
+{
+  "description": "two inputs nodes (one repeats a name), an edge to an unknown node, a branch out of a step, an edge out of an output, a second edge out of a node, an edge into the inputs node (refused edges count for nothing, so b and the second inputs node reach no output)",
+  "pipeline": {
+    "title": "Structure",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "edit",
+            "type": "Text"
+          }
+        ]
+      },
+      "more": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "x",
+            "type": "Int"
+          },
+          {
+            "name": "x",
+            "type": "Float"
+          }
+        ]
+      },
+      "a": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "b": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "a.takes",
+        "collection": "x"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "a"
+      ],
+      [
+        "more",
+        "b"
+      ],
+      [
+        "a",
+        "out"
+      ],
+      [
+        "a",
+        "b"
+      ],
+      [
+        "b",
+        "ghost"
+      ],
+      [
+        "b",
+        {
+          "pass": "out",
+          "fail": "a",
+          "max": 1,
+          "then": "out"
+        }
+      ],
+      [
+        "out",
+        "a"
+      ],
+      [
+        "b",
+        "inputs"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "inputs_node"
+    },
+    {
+      "code": "duplicate_input",
+      "node": "more",
+      "param": "x"
+    },
+    {
+      "code": "edge_invalid",
+      "node": "a"
+    },
+    {
+      "code": "unknown_node",
+      "node": "b"
+    },
+    {
+      "code": "branch_not_gate",
+      "node": "b"
+    },
+    {
+      "code": "edge_invalid",
+      "node": "out"
+    },
+    {
+      "code": "edge_invalid",
+      "node": "b"
+    },
+    {
+      "code": "dead_end",
+      "node": "b"
+    },
+    {
+      "code": "dead_end",
+      "node": "more"
+    }
+  ]
+}

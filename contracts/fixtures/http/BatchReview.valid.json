@@ -1,0 +1,53 @@
+{
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "items": [
+    {
+      "row": 6,
+      "attempt": 1,
+      "inputs": {
+        "inputs.prompt": "a red fox in snow",
+        "inputs.edit": "make it night"
+      },
+      "gate": "review",
+      "gate_title": "Pick one still to edit",
+      "visit": 1,
+      "keep": 1,
+      "on_reject": "retry",
+      "rejects_left": 2,
+      "candidates": [
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 42
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 43
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 44
+        },
+        {
+          "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63",
+          "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30/1/0.png?exp=1767225600&sig=ab12",
+          "width": 1024,
+          "height": 1024,
+          "seed": 45
+        }
+      ]
+    }
+  ]
+}

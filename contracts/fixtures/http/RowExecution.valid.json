@@ -1,0 +1,212 @@
+{
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "row": 6,
+  "attempt": 1,
+  "attempts": 1,
+  "status": "waiting",
+  "current": "review",
+  "pipeline": {
+    "title": "Fox at night",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "edit",
+            "type": "Text"
+          }
+        ],
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "still": {
+        "kind": "step",
+        "title": "Qwen Image",
+        "workflow": "qwen-image",
+        "seeds": 4,
+        "inputs": {
+          "model.variant": "turbo",
+          "canvas.width": 1024
+        },
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "review": {
+        "kind": "gate",
+        "title": "Pick one still to edit",
+        "takes": "still",
+        "keep": 1
+      },
+      "edit": {
+        "kind": "step",
+        "title": "Qwen edit",
+        "workflow": "qwen-image",
+        "bind": {
+          "prompt.text": "$edit",
+          "encode.refs": "review.picked"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "edit.takes",
+        "collection": "Fox at night"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "still"
+      ],
+      [
+        "still",
+        "review"
+      ],
+      [
+        "review",
+        {
+          "pass": "edit",
+          "fail": "still",
+          "max": 2,
+          "then": "out"
+        }
+      ],
+      [
+        "edit",
+        "out"
+      ]
+    ]
+  },
+  "steps": [
+    {
+      "step": 1,
+      "node": "inputs",
+      "part": "inputs",
+      "visit": 1,
+      "what": "Row 6 loaded",
+      "changed": [
+        "inputs.prompt",
+        "inputs.edit"
+      ],
+      "status": "finished",
+      "edge": {
+        "to": "still",
+        "via": "next"
+      },
+      "loops": {},
+      "run_ids": [],
+      "take_ids": [],
+      "error": null,
+      "at": "2026-11-15T10:15:37Z",
+      "has_state": true
+    },
+    {
+      "step": 2,
+      "node": "still",
+      "part": "submit",
+      "visit": 1,
+      "what": "4 runs queued for Qwen Image",
+      "changed": [
+        "runs.still = 4"
+      ],
+      "status": "finished",
+      "edge": null,
+      "loops": {},
+      "run_ids": [
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30",
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b31",
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b32",
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b33"
+      ],
+      "take_ids": [],
+      "error": null,
+      "at": "2026-11-15T10:15:37Z",
+      "has_state": true
+    },
+    {
+      "step": 3,
+      "node": "still",
+      "part": "wait",
+      "visit": 1,
+      "what": "Parked, then resumed with 4 takes",
+      "changed": [
+        "takes.still = 4"
+      ],
+      "status": "resumed",
+      "edge": {
+        "to": "review",
+        "via": "next"
+      },
+      "loops": {},
+      "run_ids": [
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b30",
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b31",
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b32",
+        "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b33"
+      ],
+      "take_ids": [
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+      ],
+      "error": null,
+      "at": "2026-11-15T10:15:37Z",
+      "has_state": true
+    },
+    {
+      "step": 4,
+      "node": "review",
+      "part": "gate",
+      "visit": 1,
+      "what": "Waiting for you to pick 1 of 4",
+      "changed": [],
+      "status": "current",
+      "edge": null,
+      "loops": {},
+      "run_ids": [],
+      "take_ids": [],
+      "error": null,
+      "at": "2026-11-15T10:15:37Z",
+      "has_state": false
+    }
+  ],
+  "nodes": {
+    "inputs": {
+      "visits": 1,
+      "status": "succeeded"
+    },
+    "still": {
+      "visits": 1,
+      "status": "succeeded"
+    },
+    "review": {
+      "visits": 1,
+      "status": "waiting"
+    }
+  },
+  "edges": [
+    {
+      "from": "inputs",
+      "to": "still",
+      "via": "next",
+      "count": 1
+    },
+    {
+      "from": "still",
+      "to": "review",
+      "via": "next",
+      "count": 1
+    }
+  ],
+  "loops": {
+    "review": 0
+  },
+  "retried_from": null
+}

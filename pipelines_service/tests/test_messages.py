@@ -132,7 +132,13 @@ async def test_commands_dispatch_once_and_reject_off_contract():
     assert eng.calls == [("pause", (BATCH["batch_id"],))]
     retry = command("retry", BATCH["batch_id"])
     await c.handle(FakeMsg(retry, "cmd.pipeline.retry"))
-    assert eng.calls[-1] == ("retry", (BATCH["batch_id"], 4, 2))
+    assert eng.calls[-1] == ("retry", (BATCH["batch_id"], 4, 2, None, None))
+    retry2 = command("retry", BATCH["batch_id"], from_step=3, checkpoint_id="1ef-abc")
+    await c.handle(FakeMsg(retry2, "cmd.pipeline.retry"))
+    assert eng.calls[-1] == ("retry", (BATCH["batch_id"], 4, 2, 3, "1ef-abc"))
+    pick = command("pick", BATCH["batch_id"])
+    await c.handle(FakeMsg(pick, "cmd.pipeline.pick"))
+    assert eng.calls[-1] == ("pick", (pick["data"],))
     bad = FakeMsg({"type": "cmd.pipeline.pause", "data": {}})
     await c.handle(bad)
     assert bad.log == ["term"] and js.sent == ["dlq.cmd.pipeline.pause"]

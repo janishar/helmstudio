@@ -6,7 +6,8 @@ Needs jsonschema (+ rfc3339-validator for date-time), PyYAML, openapi-spec-valid
 fixtures/{messages,registry,http}/<name>.{valid,invalid}[.N].json: every valid one must pass, every invalid one must fail.
 Registry fixtures may carry a family prefix (qwen-image.nodes.valid.json): <family>.<key>. HTTP fixtures are bodies
 checked against openapi.yaml components/schemas/<name>. fixtures/graphs/ run through the reference graph rules below
-(README, Graph rules) against fixtures/graphs/palette.json.
+(README, Graph rules) against fixtures/graphs/palette.json; fixtures/pipelines/ through the reference pipeline rules
+(README, Pipeline rules) against fixtures/pipelines/workflows.json and the same palette.
 Exit code 1 on any failure."""
 
 import json
@@ -45,6 +46,8 @@ HTTP_SCHEMAS = [
     "Run", "RunRequest", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "TakeUse", "UploadCreate", "Upload",
     "Batch", "BatchCreate", "BatchRow", "BatchEvent",
     "Workflow", "WorkflowCreate", "WorkflowUpdate", "WorkflowPatch", "WorkflowValidation", "WorkflowError", "NodePalette",
+    "Pipeline", "PipelineCreate", "PipelineUpdate", "PipelinePatch", "PipelineValidation", "PipelineError", "TakePipeline",
+    "BatchPick", "BatchRowRetry", "BatchReview", "RowExecution", "RowState",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -384,7 +387,7 @@ def drop_pick(doc: dict, palette: dict, node: str, port: str, side: str, new_id:
     return wired | {k: v for k, v in auto.items() if k not in wired}
 
 
-def check_graphs(registry: Registry) -> None:
+def check_graphs(registry: Registry) -> dict:
     g = HERE / "fixtures" / "graphs"
     ref = lambda n: Draft202012Validator(
         {"$ref": f"{OPENAPI}#/components/schemas/{n}"}, registry=registry, format_checker=FormatChecker())
@@ -431,6 +434,184 @@ def check_graphs(registry: Registry) -> None:
             continue
         if got != want:
             fail(f"{name}: got {sorted(got) if isinstance(got, set) else got}, want {want}")
+        else:
+            print(f"ok   {name}")
+    return palette
+
+
+# ---------------------------------------------------------------- pipeline rules (README, "Pipeline rules")
+P_MAX_NODES, P_MAX_BYTES, P_MAX_RUNS = 24, 65536, 64
+P_RUN_ONLY = {"unreachable", "dead_end", "no_output", "unknown_workflow", "workflow_cannot_run", "unknown_preset",
+              "step_input_invalid", "bind_unknown", "bind_type", "unbound_input", "step_seeds"}
+INPUT_FITS = {"Text": {"string", "text"}, "Int": {"int"}, "Float": {"float"}, "Seed": {"seed"}, "Image": {"image"}}
+
+
+def image_field(param: dict) -> str | None:
+    """A rows param's one Image field (a list of takes binds to it), else None."""
+    fields = [k for k, v in param.get("item", {}).items() if v == "Image"] if param["type"] == "rows" else []
+    return fields[0] if len(fields) == 1 else None
+
+
+def settable(wf: dict, palette: dict) -> dict[str, dict]:
+    """`<node>.<param>` → param schema for every unwired param of a known kind: what a step may set or bind."""
+    return {f"{nid}.{p['name']}": p for nid, n in wf["nodes"].items() if n["kind"] in palette
+            for p in palette[n["kind"]]["params"] if p["name"] not in n.get("in", {})}
+
+
+def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict) -> set[tuple]:
+    """Every problem as (code, node, port, param); workflows: the id → WorkflowDoc the caller can run."""
+    out, nodes = set(), doc["nodes"]
+    add = lambda code, node=None, port=None, param=None: out.add((code, node, port, param))
+    if len(nodes) > P_MAX_NODES:
+        add("too_many_nodes")
+    if len(json.dumps(doc, separators=(",", ":"), ensure_ascii=False).encode()) > P_MAX_BYTES:
+        add("too_large")
+    if out:
+        return out
+    of = lambda kind: [nid for nid, n in nodes.items() if n["kind"] == kind]
+    roots, inputs = of("inputs"), {}
+    if len(roots) != 1:
+        add("inputs_node")
+    for nid in roots:
+        names = [i["name"] for i in nodes[nid]["inputs"]]
+        for name in {x for x in names if names.count(x) > 1}:
+            add("duplicate_input", nid, param=name)
+        inputs |= {i["name"]: i["type"] for i in nodes[nid]["inputs"]}
+    succ, outdeg, capped = {nid: [] for nid in nodes}, {}, []  # succ: node → [(to, capped)]
+    for frm, to in doc["edges"]:
+        targets = [to] if isinstance(to, str) else [to["pass"], to["fail"], to["then"]]
+        if frm not in nodes or any(t not in nodes for t in targets):
+            add("unknown_node", frm)
+            continue
+        if not isinstance(to, str) and nodes[frm]["kind"] != "gate":
+            add("branch_not_gate", frm)
+            continue
+        outdeg[frm] = outdeg.get(frm, 0) + 1
+        if outdeg[frm] > 1 or nodes[frm]["kind"] == "output" or any(nodes[t]["kind"] == "inputs" for t in targets):
+            add("edge_invalid", frm)
+            continue
+        if isinstance(to, str):
+            succ[frm].append((to, False))
+        else:
+            succ[frm] += [(to["pass"], False), (to["fail"], True), (to["then"], False)]
+            capped.append((frm, to["fail"], to["max"]))
+
+    def reach(src: str, avoid: str | None = None, uncapped_only: bool = False) -> set[str]:
+        """Nodes reachable from src in one edge or more (never through `avoid`)."""
+        seen, todo = set(), [src]
+        while todo:
+            for t, cap in succ[todo.pop()]:
+                if t != avoid and t not in seen and not (uncapped_only and cap):
+                    seen.add(t)
+                    todo.append(t)
+        return seen
+
+    for nid in nodes:  # ponytail: O(n·e) per node, fine at 24 nodes
+        if nid in reach(nid, uncapped_only=True):
+            add("uncapped_cycle", nid)
+    runs = sum(n.get("seeds", 1) * (1 + sum(m for g, f, m in capped if (nid == f or nid in reach(f)) and g in reach(nid)))
+               for nid, n in nodes.items() if n["kind"] == "step")
+    if runs > P_MAX_RUNS:
+        add("too_many_runs")
+    root = roots[0] if len(roots) == 1 else None
+    if root:
+        for nid in set(nodes) - reach(root) - {root}:
+            add("unreachable", nid)
+    outputs = of("output")
+    if not outputs:
+        add("no_output")
+    for nid in nodes:
+        if outputs and nodes[nid]["kind"] != "output" and not reach(nid) & set(outputs):
+            add("dead_end", nid)
+    # a before b on every path from the inputs node (unchecked without exactly one inputs node)
+    dominates = lambda a, b: root is None or a == root or (a != b and b not in reach(root, avoid=a))
+
+    def source(src: str) -> tuple[str, str | int] | None:
+        """('input', type) or ('takes', how many at most), None when it names nothing of the right kind."""
+        if src.startswith("$"):
+            return ("input", inputs[src[1:]]) if src[1:] in inputs else None
+        nid, what = src.split(".")
+        n = nodes.get(nid)
+        if not n or n["kind"] != ("step" if what == "takes" else "gate"):
+            return None
+        return "takes", n.get("seeds", 1) if what == "takes" else n.get("keep", 1)
+
+    for nid in of("gate"):
+        g = nodes[nid]
+        t = nodes.get(g["takes"])
+        if not t or t["kind"] != "step" or not dominates(g["takes"], nid):
+            add("gate_takes", nid)
+        elif g.get("keep", 1) > t.get("seeds", 1):
+            add("gate_keep", nid)
+    for nid in outputs:
+        src = nodes[nid]["from"]
+        if not source(src) or (root and nid not in reach(src.split(".")[0])):
+            add("bind_source", nid, "from")
+    for nid in of("step"):
+        n = nodes[nid]
+        binds = {k: source(v) for k, v in n.get("bind", {}).items()}
+        for k, v in n.get("bind", {}).items():
+            if not binds[k] or (not v.startswith("$") and not dominates(v.split(".")[0], nid)):
+                add("bind_source", nid, k)
+                binds[k] = None
+        wf = workflows.get(n["workflow"])
+        if not wf:
+            add("unknown_workflow", nid)
+            continue
+        if graph_problems(wf, palette):
+            add("workflow_cannot_run", nid)
+        if "preset" in n and n["preset"] not in wf.get("studio", {}).get("presets", {}):
+            add("unknown_preset", nid)
+        params = settable(wf, palette)
+        for k, v in n.get("inputs", {}).items():
+            wn, p = k.split(".")
+            if p == "bypass":
+                kind = wf["nodes"].get(wn, {}).get("kind")
+                if kind not in palette or passthrough(palette[kind]) is None or not isinstance(v, bool):
+                    add("step_input_invalid", nid, param=k)
+            elif k not in params or value_error(params[k], v):
+                add("step_input_invalid", nid, param=k)
+        for k, src in binds.items():
+            if k not in params:
+                add("bind_unknown", nid, k)
+                continue
+            p = params[k]
+            if src and src[0] == "input":
+                fits = p["type"] in INPUT_FITS[src[1]] or (src[1] == "Image" and image_field(p) is not None)
+            elif src:
+                fits = (p["type"] == "image" and src[1] == 1) or (image_field(p) is not None and src[1] <= p["max"])
+            if src and not fits:
+                add("bind_type", nid, k)
+        for k, p in params.items():
+            if (p["type"] == "image" or (image_field(p) and p.get("min", 0) >= 1)) and k not in binds:
+                add("unbound_input", nid, k)
+        if n.get("seeds", 1) > 1 and not any(p["type"] == "seed" for p in params.values()):
+            add("step_seeds", nid)
+    return out
+
+
+def check_pipelines(registry: Registry, palette: dict) -> None:
+    g = HERE / "fixtures" / "pipelines"
+    ref = lambda n: Draft202012Validator(
+        {"$ref": f"{OPENAPI}#/components/schemas/{n}"}, registry=registry, format_checker=FormatChecker())
+    workflows = json.loads((g / "workflows.json").read_text())["workflows"]
+    for wid, wf in workflows.items():
+        for e in ref("WorkflowDoc").iter_errors(wf):
+            fail(f"fixtures/pipelines/workflows.json {wid}: {e.json_path}: {e.message}")
+    doc_v = ref("PipelineDoc")
+    for p in sorted(g.glob("*.json")):
+        if p.name == "workflows.json":
+            continue
+        fx, name = json.loads(p.read_text()), f"fixtures/pipelines/{p.name}"
+        if errs := list(doc_v.iter_errors(fx["pipeline"])):
+            fail(f"{name}: pipeline is not a PipelineDoc: {errs[0].json_path}: {errs[0].message}")
+            continue
+        got = pipeline_problems(fx["pipeline"], workflows, palette)
+        want = {(x["code"], x.get("node"), x.get("port"), x.get("param")) for x in fx["problems"]}
+        if not p.name.startswith(("valid.", "invalid.")) or p.name.startswith("valid.") != (not want):
+            fail(f"{name}: valid.* has no problems, invalid.* has some")
+        if got != want:
+            fail(f"{name}: got {sorted(got, key=str)}, want {sorted(want, key=str)}")
         else:
             print(f"ok   {name}")
 
@@ -538,7 +719,7 @@ def main() -> int:
     schemas, registry = load_schemas()
     check_fixtures(schemas, registry)
     check_canonical_registries()
-    check_graphs(registry)
+    check_pipelines(registry, check_graphs(registry))
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

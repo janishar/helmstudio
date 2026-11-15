@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,9 +12,17 @@ import (
 	"strings"
 )
 
-// docKeys are the WorkflowDoc fields; a workflow file is a WorkflowDoc plus `id` and `version` (one's own, from
-// helm workflow get) or `based_on` (a template: saving it creates a copy).
-var docKeys = []string{"title", "family", "env", "nodes", "studio"}
+// docKind is a kind of user document helm workflow and helm pipeline edit as files. A file is the document plus
+// `id` and `version` (one's own, from get) or `based_on` (a template, or a copy to make: saving it creates one).
+type docKind struct {
+	name, path string
+	keys       []string // the document's fields (WorkflowDoc, PipelineDoc)
+}
+
+var (
+	workflowKind = docKind{"workflow", "/v1/studio/workflows", []string{"title", "family", "env", "nodes", "studio"}}
+	pipelineKind = docKind{"pipeline", "/v1/studio/pipelines", []string{"title", "nodes", "edges"}}
+)
 
 type problem struct {
 	Code    string `json:"code"`
@@ -59,8 +66,36 @@ func workflows(stdout io.Writer) error {
 	return nil
 }
 
-func workflowCmd(args []string, stdout, stderr io.Writer) error {
-	fs := flag.NewFlagSet("workflow", flag.ContinueOnError)
+// pipelines lists the caller's pipelines, newest first, with the status of each one's last batch.
+func pipelines(stdout io.Writer) error {
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	var list struct {
+		Pipelines []struct {
+			ID        string `json:"id"`
+			Title     string `json:"title"`
+			Version   int    `json:"version"`
+			LastBatch *batch `json:"last_batch"`
+		} `json:"pipelines"`
+	}
+	if err := c.call(http.MethodGet, pipelineKind.path, nil, http.StatusOK, &list); err != nil {
+		return err
+	}
+	for _, p := range list.Pipelines {
+		last := "-"
+		if p.LastBatch != nil {
+			last = p.LastBatch.Status
+		}
+		fmt.Fprintf(stdout, "%-36s v%-3d %-8s %s\n", p.ID, p.Version, last, p.Title)
+	}
+	return nil
+}
+
+// docCmd is helm workflow / helm pipeline: get, save, validate, copy, rm.
+func docCmd(k docKind, args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet(k.name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	title := fs.String("title", "", "copy: the new title (default: <title> copy)")
 	if len(args) < 2 {
@@ -75,21 +110,21 @@ func workflowCmd(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	path := "/v1/studio/workflows/" + url.PathEscape(arg)
+	path := k.path + "/" + url.PathEscape(arg)
 	switch sub {
 	case "get":
-		return c.getWorkflow(path, stdout)
+		return c.getDoc(k, path, stdout)
 	case "save":
-		return c.saveWorkflow(arg, stdout)
+		return c.saveDoc(k, arg, stdout)
 	case "validate":
-		return c.validateWorkflow(arg, stdout)
+		return c.validateDoc(k, arg, stdout)
 	case "copy":
 		body := map[string]string{"based_on": arg}
 		if *title != "" {
 			body["title"] = *title
 		}
 		var w savedWorkflow
-		if err := c.call(http.MethodPost, "/v1/studio/workflows", body, http.StatusCreated, &w); err != nil {
+		if err := c.call(http.MethodPost, k.path, body, http.StatusCreated, &w); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "%s\n", w.ID)
@@ -101,23 +136,23 @@ func workflowCmd(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stdout, "deleted %s\n", arg)
 		return nil
 	}
-	fmt.Fprintf(stderr, "unknown workflow command %q\n%s", sub, usage)
+	fmt.Fprintf(stderr, "unknown %s command %q\n%s", k.name, sub, usage)
 	return flag.ErrHelp
 }
 
-// getWorkflow prints the workflow as a file helm workflow save takes back.
-func (c *client) getWorkflow(path string, stdout io.Writer) error {
+// getDoc prints the document as a file save takes back.
+func (c *client) getDoc(k docKind, path string, stdout io.Writer) error {
 	var w map[string]json.RawMessage
 	if err := c.call(http.MethodGet, path, nil, http.StatusOK, &w); err != nil {
 		return err
 	}
 	out := map[string]json.RawMessage{}
-	for _, k := range docKeys {
-		if v, ok := w[k]; ok {
-			out[k] = v
+	for _, key := range k.keys {
+		if v, ok := w[key]; ok {
+			out[key] = v
 		}
 	}
-	if string(w["source"]) == `"mine"` {
+	if src, ok := w["source"]; !ok || string(src) == `"mine"` { // a pipeline is always one's own
 		out["id"], out["version"] = w["id"], w["version"]
 	} else {
 		out["based_on"] = w["id"]
@@ -130,8 +165,8 @@ func (c *client) getWorkflow(path string, stdout io.Writer) error {
 	return err
 }
 
-// readWorkflowFile splits a workflow file into its document and its id, version and based_on.
-func readWorkflowFile(file string) (doc map[string]json.RawMessage, id string, version int, basedOn string, err error) {
+// readFile splits a document file into its document and its id, version and based_on.
+func (k docKind) readFile(file string) (doc map[string]json.RawMessage, id string, version int, basedOn string, err error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, "", 0, "", err
@@ -141,34 +176,34 @@ func readWorkflowFile(file string) (doc map[string]json.RawMessage, id string, v
 		return nil, "", 0, "", fmt.Errorf("%s: %w", file, err)
 	}
 	doc = map[string]json.RawMessage{}
-	for _, k := range docKeys {
-		if v, ok := all[k]; ok {
-			doc[k] = v
+	for _, key := range k.keys {
+		if v, ok := all[key]; ok {
+			doc[key] = v
 		}
 	}
-	for k, dst := range map[string]any{"id": &id, "version": &version, "based_on": &basedOn} {
-		if v, ok := all[k]; ok {
+	for key, dst := range map[string]any{"id": &id, "version": &version, "based_on": &basedOn} {
+		if v, ok := all[key]; ok {
 			if err := json.Unmarshal(v, dst); err != nil {
-				return nil, "", 0, "", fmt.Errorf("%s: %s: %w", file, k, err)
+				return nil, "", 0, "", fmt.Errorf("%s: %s: %w", file, key, err)
 			}
 		}
 	}
 	return doc, id, version, basedOn, nil
 }
 
-// saveWorkflow replaces one's own workflow (the file has id and version) or creates one (based_on kept).
-func (c *client) saveWorkflow(file string, stdout io.Writer) error {
-	doc, id, version, basedOn, err := readWorkflowFile(file)
+// saveDoc replaces one's own document (the file has id and version) or creates one (based_on kept).
+func (c *client) saveDoc(k docKind, file string, stdout io.Writer) error {
+	doc, id, version, basedOn, err := k.readFile(file)
 	if err != nil {
 		return err
 	}
-	method, path, want := http.MethodPost, "/v1/studio/workflows", http.StatusCreated
+	method, path, want := http.MethodPost, k.path, http.StatusCreated
 	switch {
 	case id != "" && version > 0:
 		method, path, want = http.MethodPut, path+"/"+url.PathEscape(id), http.StatusOK
 		doc["version"] = mustJSON(version)
 	case id != "":
-		return errors.New(file + ": an id needs its version (helm workflow get it again)")
+		return fmt.Errorf("%s: an id needs its version (helm %s get it again)", file, k.name)
 	case basedOn != "":
 		doc["based_on"] = mustJSON(basedOn)
 	}
@@ -196,14 +231,14 @@ func (c *client) saveWorkflow(file string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "saved %s version %d\n", w.ID, w.Version)
 	printProblems(w.Problems, stdout)
 	if method == http.MethodPost {
-		fmt.Fprintf(stdout, "to keep editing it: helm workflow get %s > %s\n", w.ID, file)
+		fmt.Fprintf(stdout, "to keep editing it: helm %s get %s > %s\n", k.name, w.ID, file)
 	}
 	return nil
 }
 
-// validateWorkflow prints every problem; an error when there is any.
-func (c *client) validateWorkflow(file string, stdout io.Writer) error {
-	doc, _, _, _, err := readWorkflowFile(file)
+// validateDoc prints every problem; an error when there is any.
+func (c *client) validateDoc(k docKind, file string, stdout io.Writer) error {
+	doc, _, _, _, err := k.readFile(file)
 	if err != nil {
 		return err
 	}
@@ -212,7 +247,7 @@ func (c *client) validateWorkflow(file string, stdout io.Writer) error {
 		CanSave  bool      `json:"can_save"`
 		CanRun   bool      `json:"can_run"`
 	}
-	if err := c.call(http.MethodPost, "/v1/studio/workflows/validate", doc, http.StatusOK, &v); err != nil {
+	if err := c.call(http.MethodPost, k.path+"/validate", doc, http.StatusOK, &v); err != nil {
 		return err
 	}
 	printProblems(v.Problems, stdout)

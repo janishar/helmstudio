@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 	"strings"
@@ -89,6 +90,26 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 	return out
 }
 
+// withPipeline adds made_with.pipeline to a pipeline batch run's take: the batch's pipeline as snapshot, and the step
+// node and visit its idempotency key names.
+func withPipeline(ctx context.Context, tx pgx.Tx, run model.Run, made gallerydto.MadeWith) (gallerydto.MadeWith, error) {
+	if run.BatchID == nil || run.BatchRow == nil || run.Key == nil {
+		return made, nil
+	}
+	key, ok := parsePipelineKey(*run.Key)
+	var pipeline gallerydto.MadeWithPipeline
+	err := tx.QueryRow(ctx, `SELECT pipeline_id::text, pipeline_title, pipeline_version FROM batches WHERE id = $1
+		AND pipeline_id IS NOT NULL`, *run.BatchID).Scan(&pipeline.ID, &pipeline.Title, &pipeline.Version)
+	if errors.Is(err, pgx.ErrNoRows) || !ok {
+		return made, nil
+	} else if err != nil {
+		return made, err
+	}
+	pipeline.Node, pipeline.Attempt, pipeline.Row = key.Step, key.Visit+1, *run.BatchRow
+	made.Pipeline = &pipeline
+	return made, nil
+}
+
 // isSeed reports whether param name of a node of kind is a seed: its schema says so, or, without a schema, it is
 // named seed.
 func isSeed(schemas map[string]registry.NodeSchema, kind, name string) bool {
@@ -148,9 +169,13 @@ func (p *Projector) Backfill(ctx context.Context) (int, error) {
 			if err != nil {
 				return err
 			}
+			with, err := withPipeline(ctx, tx, run, madeWith(p.Workflows, run, o.Seed))
+			if err != nil {
+				return err
+			}
 			takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 				Index: o.Index, Key: o.Key, Kind: o.Kind, Width: o.Width, Height: o.Height, Bytes: o.Bytes,
-				MadeWith: madeWith(p.Workflows, run, o.Seed), CreatedAt: cmp.Or(run.FinishedAt, &run.CreatedAt),
+				MadeWith: with, CreatedAt: cmp.Or(run.FinishedAt, &run.CreatedAt),
 				BatchID: run.BatchID, Parents: parents(run.Nodes)})
 			if err != nil {
 				return err

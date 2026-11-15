@@ -1,0 +1,63 @@
+{
+  "description": "a plain chain across families and envs (what Save as pipeline makes): a user workflow with its Draft preset and a seed input, then echo over every take of the first step (a list into a rows param)",
+  "pipeline": {
+    "title": "Chain",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text",
+            "label": "Prompt"
+          },
+          {
+            "name": "seed",
+            "type": "Seed"
+          }
+        ]
+      },
+      "step_1": {
+        "kind": "step",
+        "workflow": "6f1c2a4e-0b7d-4c8e-9a51-3d2e1f0a9b88",
+        "preset": "Draft",
+        "seeds": 2,
+        "bind": {
+          "prompt.text": "$prompt",
+          "seed.seed": "$seed"
+        }
+      },
+      "step_2": {
+        "kind": "step",
+        "workflow": "echo",
+        "inputs": {
+          "echo.steps": 3
+        },
+        "bind": {
+          "prompt.text": "$prompt",
+          "echo.refs": "step_1.takes"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "from": "step_2.takes",
+        "collection": "Chain"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "step_1"
+      ],
+      [
+        "step_1",
+        "step_2"
+      ],
+      [
+        "step_2",
+        "output"
+      ]
+    ]
+  },
+  "problems": []
+}

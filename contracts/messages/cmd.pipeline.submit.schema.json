@@ -49,9 +49,13 @@
             },
             "workflow": {
               "$ref": "defs.schema.json#/$defs/workflowSnapshot"
+            },
+            "pipeline": {
+              "$ref": "defs.schema.json#/$defs/pipelineSnapshot",
+              "description": "present for a batch of a saved pipeline (API 1.7): what the batch runs. workflow_id / workflow are then its first step's (one of pipeline.workflows)"
             }
           },
-          "description": "what the batch runs: one workflow (graph node `step`), as it was at Submit"
+          "description": "what the batch runs, as it was at Submit: one workflow (graph node `step`), or with `pipeline` a saved pipeline"
         },
         "inputs": {
           "$ref": "defs.schema.json#/$defs/inputs",
@@ -74,7 +78,17 @@
               },
               "inputs": {
                 "$ref": "defs.schema.json#/$defs/inputs",
-                "description": "the row's full inputs: base inputs, then the row's values, then its seed; sent as is to studio.runs.create"
+                "description": "the row's full inputs: base inputs, then the row's values, then its seed; sent as is to studio.runs.create; a pipeline batch: `<inputs node>.<input>` → value, every input set"
+              },
+              "seeds": {
+                "type": "object",
+                "propertyNames": {
+                  "$ref": "defs.schema.json#/$defs/nodeId"
+                },
+                "additionalProperties": {
+                  "$ref": "defs.schema.json#/$defs/seed"
+                },
+                "description": "pipeline batches: step node id → the row's base seed for that step (every step with a seed_param); run i of visit v of row attempt a uses (base + (a − 1) × 64 + v × seeds + i) mod 2^53"
               }
             }
           }

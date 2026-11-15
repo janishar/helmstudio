@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.retry.schema.json",
   "title": "studio → pipelines: run one failed row again",
-  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.retry` (stream CMD) in the transaction that changes the batch; Nats-Msg-Id `<batch_id>:<n>`, n = the batch's command counter (submit = 1, +1 per later command). pipelines_service consumes it (durable `pipelines`, filter `cmd.pipeline.>`, one message at a time, in order). Sent on POST /v1/studio/batches/{id}/rows/{n}/retry; studio has set the row `queued` with this attempt. Pipelines runs the row's thread again from its start with `attempt` in its idempotency keys (so a new run).",
+  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.retry` (stream CMD) in the transaction that changes the batch; Nats-Msg-Id `<batch_id>:<n>`, n = the batch's command counter (submit = 1, +1 per later command). pipelines_service consumes it (durable `pipelines`, filter `cmd.pipeline.>`, one message at a time, in order). Sent on POST /v1/studio/batches/{id}/rows/{n}/retry; studio has set the row `queued` with this attempt. Pipelines runs the row's thread again from its start with `attempt` in its idempotency keys (so a new run). With `from_step` > 1 (Retry row from here) the new attempt forks the row's thread from `checkpoint_id` instead: steps before it are reused, steps from it get the new attempt in their keys (new runs).",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -38,7 +38,34 @@
           "$ref": "defs.schema.json#/$defs/rowAttempt",
           "minimum": 2,
           "description": "the row's new attempt"
+        },
+        "from_step": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000,
+          "description": "pipeline batches, optional: re-run from this step of attempt `attempt` − 1, reusing the state before it; absent or 1 = from the start (as before)"
+        },
+        "checkpoint_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "with from_step > 1: the checkpoint of step from_step − 1 (from its evt.pipeline.step), the state the new attempt starts from"
         }
+      },
+      "if": {
+        "required": [
+          "from_step"
+        ],
+        "properties": {
+          "from_step": {
+            "minimum": 2
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "checkpoint_id"
+        ]
       }
     }
   }

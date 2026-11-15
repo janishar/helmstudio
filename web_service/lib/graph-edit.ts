@@ -142,18 +142,18 @@ export const placed = (doc: Doc) => Object.values(doc.nodes).every((n) => n.posi
 
 // ---------------------------------------------------------------- undo
 
-/** The document and its undo / redo stacks. */
-export type History = { past: Doc[]; present: Doc; future: Doc[] };
-export type HistoryAction =
-  { type: "edit"; doc: Doc } | { type: "undo" } | { type: "redo" } | { type: "reset"; doc: Doc };
+/** The document (a workflow's, or a pipeline's) and its undo / redo stacks. */
+export type History<D = Doc> = { past: D[]; present: D; future: D[] };
+export type HistoryAction<D = Doc> =
+  { type: "edit"; doc: D } | { type: "undo" } | { type: "redo" } | { type: "reset"; doc: D };
 
 const DEPTH = 100;
 
-export const historyOf = (doc: Doc): History => ({ past: [], present: doc, future: [] });
+export const historyOf = <D = Doc>(doc: D): History<D> => ({ past: [], present: doc, future: [] });
 
 /** The history after an action: an edit pushes the present (and clears redo), undo and redo step, reset starts
  * over. An edit that changes nothing is no step. */
-export function history(h: History, a: HistoryAction): History {
+export function history<D = Doc>(h: History<D>, a: HistoryAction<D>): History<D> {
   switch (a.type) {
     case "edit":
       if (a.doc === h.present) return h;

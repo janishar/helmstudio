@@ -2,7 +2,7 @@
 
 Opens the `pipelines` database (migrations, then LangGraph's checkpoint tables), reports every batch it had
 running as paused (engine.start), then pulls cmd.pipeline.> from CMD (durable `pipelines`, one at a time, in
-order) and evt.studio.> from EVT (durable `pipelines-runs`). SIGINT/SIGTERM stop pulling and exit; threads
+order) and evt.studio.> from EVT (durable `pipelines-runs`), and answers pipelines.state.get. SIGINT/SIGTERM stop pulling and exit; threads
 continue from their checkpoints on the next start (after the user's Resume)."""
 
 import asyncio
@@ -23,6 +23,7 @@ import config
 import consumer
 import events
 import health
+import states
 from engine import Engine
 from messaging.publisher import Publisher
 from messaging.studio import Studio
@@ -125,6 +126,7 @@ async def main() -> None:
         )
         runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
         server = await health.serve(nc, pool)
+        state_sub = await states.serve(nc, engine)
 
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
@@ -137,6 +139,7 @@ async def main() -> None:
         )
         log.info("shutting down")
         server.close()
+        await state_sub.unsubscribe()
         await engine.close()
     finally:
         # close, not drain: every publish was awaited; draining pull subscriptions is slow

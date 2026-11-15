@@ -103,6 +103,7 @@ def test_lines_batch_completes(api, lines_batch):
         "total": 6,
         "queued": 0,
         "running": 0,
+        "waiting": 0,
         "succeeded": 6,
         "failed": 0,
         "cancelled": 0,
@@ -443,6 +444,10 @@ def test_interactive_before_batch_rows(api):
         wait_batch(api, bid)
         later = [r for r in rows_of(api, bid) if ts(r["started_at"]) > ts(run["created_at"])]
         assert later, "the batch ended before the interactive run was created"
-        assert all(ts(run["started_at"]) <= ts(r["started_at"]) for r in later), (run, later)
+        assert all(ts(run["started_at"]) <= ts(r["started_at"]) for r in later), (
+            run["created_at"],
+            run["started_at"],
+            [(r["row"], r["started_at"]) for r in rows_of(api, bid)],
+        )
     finally:
         finish(api, bid)

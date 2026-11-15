@@ -1,0 +1,21 @@
+{
+  "checkpoint_id": "1efa2b3c-0000-6000-8000-0000000003",
+  "state": {
+    "row": 6,
+    "inputs": {
+      "inputs.prompt": "a red fox in snow",
+      "inputs.edit": "make it night"
+    },
+    "takes": {
+      "still": [
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b62",
+        "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b63"
+      ]
+    },
+    "loops": {
+      "review": 0
+    }
+  }
+}

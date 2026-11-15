@@ -176,9 +176,13 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 		log.Printf("projector: dropping output %d of run %s (%s)", data.Index, run.ID, data.Key)
 		return nil, nil
 	}
+	made, err := withPipeline(ctx, tx, run, madeWith(p.Workflows, run, data.Seed))
+	if err != nil {
+		return nil, err
+	}
 	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
-		Etag: data.Etag, MadeWith: madeWith(p.Workflows, run, data.Seed), BatchID: run.BatchID, Parents: parents(run.Nodes)})
+		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: parents(run.Nodes)})
 	if err != nil {
 		return nil, err
 	}

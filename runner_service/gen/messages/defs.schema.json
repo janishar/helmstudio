@@ -363,7 +363,7 @@
     "idempotencyKey": {
       "type": "string",
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$",
-      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key"
+      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key. A pipeline batch: <graph node> = the step node id, <loop count> = its visit in the row attempt from 0, <branch> = the seed index from 0"
     },
     "takeIds": {
       "type": "array",
@@ -383,11 +383,12 @@
       "enum": [
         "queued",
         "running",
+        "waiting",
         "succeeded",
         "failed",
         "cancelled"
       ],
-      "description": "pipelines' view of a row: queued = not started; running = its run was requested and has not finished"
+      "description": "pipelines' view of a row: queued = not started; running = its run was requested and has not finished (a pipeline row: anywhere between its steps); waiting = parked on a gate for a pick (pipeline batches only)"
     },
     "batchStatus": {
       "enum": [
@@ -398,6 +399,428 @@
         "stopped"
       ],
       "description": "set by pipelines_service (queued exists only in studio's record, before the first event)"
+    },
+    "takeIdList": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/uuid"
+      },
+      "description": "at most 8 take ids (a step's seeds, a gate's candidates or pick)"
+    },
+    "pipelineSource": {
+      "type": "string",
+      "pattern": "^(\\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\\.(takes|picked))$",
+      "description": "`$<input>`, `<step>.takes` or `<gate>.picked` (contracts/README.md, Pipeline rules)"
+    },
+    "pipelineNode": {
+      "description": "a node of a pipeline snapshot: the document's node, a step's `inputs` already merged over its preset by studio at Submit, plus `seed_param`",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "inputs"
+          ],
+          "properties": {
+            "kind": {
+              "const": "inputs"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "inputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "type"
+                ],
+                "properties": {
+                  "name": {
+                    "$ref": "#/$defs/nodeId"
+                  },
+                  "type": {
+                    "enum": [
+                      "Text",
+                      "Image",
+                      "Int",
+                      "Float",
+                      "Seed"
+                    ]
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "workflow",
+            "seeds",
+            "inputs",
+            "bind",
+            "seed_param"
+          ],
+          "properties": {
+            "kind": {
+              "const": "step"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "workflow": {
+              "$ref": "#/$defs/workflowId"
+            },
+            "seeds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "preset": {
+              "type": "string",
+              "description": "for display: already merged into inputs"
+            },
+            "inputs": {
+              "$ref": "#/$defs/inputs",
+              "description": "the fixed values: the preset's, then the document's step inputs"
+            },
+            "bind": {
+              "type": "object",
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/pipelineSource"
+              }
+            },
+            "seed_param": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the workflow's one unwired seed param that seeds vary; null without one"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "takes",
+            "keep"
+          ],
+          "properties": {
+            "kind": {
+              "const": "gate"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "takes": {
+              "$ref": "#/$defs/nodeId"
+            },
+            "keep": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "from",
+            "collection"
+          ],
+          "properties": {
+            "kind": {
+              "const": "output"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "position": {
+              "type": "object",
+              "description": "the node's place in the Graph view (canvas pixels, top-left of the card); absent = laid out by the client. Never in cmd.run.execute",
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                }
+              }
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.(takes|picked)$"
+            },
+            "collection": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        }
+      ]
+    },
+    "pipelineEdge": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/nodeId"
+        },
+        {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nodeId"
+            },
+            {
+              "type": "object",
+              "required": [
+                "pass",
+                "fail",
+                "max",
+                "then"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "pass": {
+                  "$ref": "#/$defs/nodeId"
+                },
+                "fail": {
+                  "$ref": "#/$defs/nodeId"
+                },
+                "then": {
+                  "$ref": "#/$defs/nodeId"
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "description": "[from, to] or [gate, {pass, fail, max, then}]"
+    },
+    "pipelineSnapshot": {
+      "type": "object",
+      "description": "a saved pipeline as it was at Submit, with every workflow its steps use; the batch runs this, never the live documents",
+      "required": [
+        "id",
+        "title",
+        "version",
+        "nodes",
+        "edges",
+        "workflows"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nodes": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 24,
+          "propertyNames": {
+            "$ref": "#/$defs/nodeId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/pipelineNode"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/pipelineEdge"
+          }
+        },
+        "workflows": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/workflowId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/workflowSnapshot"
+          },
+          "description": "workflow id → its snapshot (as for a batch of one workflow)"
+        }
+      }
+    },
+    "cellAttempt": {
+      "type": "object",
+      "required": [
+        "visit",
+        "status",
+        "run_ids",
+        "take_ids"
+      ],
+      "properties": {
+        "visit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "waiting",
+            "picked",
+            "rejected"
+          ],
+          "description": "a step: running (runs requested) then its end; a gate: waiting, picked, rejected; an output: succeeded"
+        },
+        "run_ids": {
+          "$ref": "#/$defs/takeIdList",
+          "description": "a step's runs, by seed index"
+        },
+        "take_ids": {
+          "$ref": "#/$defs/takeIdList",
+          "description": "a step: its takes; a gate: the pick; an output: what it received"
+        },
+        "candidates": {
+          "$ref": "#/$defs/takeIdList",
+          "description": "a gate: what it offered"
+        },
+        "seeds": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/seed"
+          }
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      }
+    },
+    "rowCell": {
+      "type": "object",
+      "required": [
+        "node",
+        "kind",
+        "attempts"
+      ],
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/nodeId"
+        },
+        "kind": {
+          "enum": [
+            "step",
+            "gate",
+            "output"
+          ]
+        },
+        "attempts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/cellAttempt"
+          }
+        }
+      }
     }
   }
 }

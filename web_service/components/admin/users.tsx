@@ -1,10 +1,11 @@
 "use client";
 // Admin > Users: every account, add one, set roles, reset a password, disable or enable. The root admin's row is
 // locked: its roles, password and state come from ADMIN_EMAIL / ADMIN_PASSWORD in auth_service's .env.
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
+import { useHydrated } from "@/lib/hydrated";
 
 type User = S<"User">;
 type Role = S<"GrantableRole">;
@@ -25,15 +26,6 @@ function randomPassword(): string {
 
 /** The path parameter of a user route. */
 const uid = (id: string) => ({ params: { path: { id } } });
-
-/** False in the server render and while hydrating, true after: the viewer's locale and time zone aren't the server's. */
-const noSubscribe = () => () => {};
-const useHydrated = () =>
-  useSyncExternalStore(
-    noSubscribe,
-    () => true,
-    () => false,
-  );
 
 /** The Admin screen with its Users table and the Add a user panel; `initialUsers` is the list read on the server. */
 export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {

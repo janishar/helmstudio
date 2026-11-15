@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.6.0
+  version: 1.7.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, runs, the queue, events, hosts, takes (the gallery), uploads, batches'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, runs, the queue, events, hosts, takes (the gallery), uploads, batches'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -243,6 +243,119 @@ paths:
         '200': {description: the palette, content: {application/json: {schema: {$ref: '#/components/schemas/NodePalette'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  # ------------------------------------------------------------------ studio: pipelines (API 1.7)
+  /v1/studio/pipelines:
+    get:
+      tags: [studio]
+      operationId: studioListPipelines
+      summary: The caller's pipelines, newest `updated_at` first (at most 100, not paginated)
+      description: 'Each with `workflow_titles` and `last_batch`; `problems` is never in a list (only `GET /v1/studio/pipelines/{pipeline_id}`).'
+      responses:
+        '200': {description: pipelines, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreatePipeline
+      summary: Save a pipeline, from a whole document or as a copy of one of the caller's pipelines
+      description: |
+        Mirrors `POST /v1/studio/workflows`. Two forms (`PipelineCreate`): a whole document (optional `based_on`), or
+        `{based_on, title?}` to copy one of the caller's pipelines ("Duplicate"; `title` absent = `<source title> copy`,
+        cut to 80 characters). The new pipeline's id is a UUID, `version` 1. Checked with the pipeline rules
+        (contracts/README.md, Pipeline rules) as the caller: any save-blocking problem is 422 `PipelineError` with every
+        problem; run-blocking problems are saved and returned in `problems`. 404 when `based_on` is unknown or another
+        user's. 409 when the caller already has 100 pipelines (`You have 100 pipelines; delete some first.`). 503 while
+        studio's registry watches have not delivered yet.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PipelineCreate'}}}
+      responses:
+        '201': {description: 'the pipeline, with problems', content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/PipelineUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/pipelines/validate:
+    post:
+      tags: [studio]
+      operationId: studioValidatePipeline
+      summary: Check a pipeline document with the pipeline rules without saving it
+      description: |
+        Every pipeline rule (contracts/README.md, Pipeline rules), as the caller (the workflows it names are looked up
+        among the templates and the caller's workflows, each checked with the graph rules against the live palette).
+        A body that does not fit `PipelineDoc` is a plain 422 `{detail}`; pipeline problems are never a 422 here.
+        503 while studio's registry watches have not delivered yet.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PipelineDoc'}}}
+      responses:
+        '200': {description: the problems, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineValidation'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/pipelines/{pipeline_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetPipeline
+      description: 'One of the caller''s pipelines (another user''s is 404) with `problems` against the workflows and the live palette now.'
+      parameters: [{$ref: '#/components/parameters/PipelineId'}]
+      responses:
+        '200': {description: the pipeline, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioReplacePipeline
+      summary: Replace one of the caller's pipelines with an edited document
+      description: |
+        Like `PUT /v1/studio/workflows/{workflow_id}`: `version` is the version the edit started from; stale = 409
+        `pipeline changed since you opened it (now version <n>)` and nothing changes. On success `version` + 1 and
+        `updated_at` now. Save-blocking problems are 422 `PipelineError`. Batches made before keep their snapshot.
+      parameters: [{$ref: '#/components/parameters/PipelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PipelineUpdate'}}}
+      responses:
+        '200': {description: 'the pipeline, with problems', content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/PipelineUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      tags: [studio]
+      operationId: studioRenamePipeline
+      summary: Rename one of the caller's pipelines
+      description: '`version` + 1 (an editor holding the old version gets 409 on its next PUT).'
+      parameters: [{$ref: '#/components/parameters/PipelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PipelinePatch'}}}
+      responses:
+        '200': {description: the pipeline, content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeletePipeline
+      summary: Delete one of the caller's pipelines
+      description: |
+        409 while a batch of it is `queued`, `running`, `waiting` or `paused` (`a batch of this pipeline is
+        unfinished; stop it or wait`). Past batches and takes keep their snapshots. Deleting again is 404.
+      parameters: [{$ref: '#/components/parameters/PipelineId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
   # ------------------------------------------------------------------ studio: runs
@@ -493,6 +606,31 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/takes/{take_id}/pipeline:
+    post:
+      tags: [studio]
+      operationId: studioSaveTakeAsPipeline
+      summary: '"Save as pipeline": a new pipeline of the caller''s from the chain of runs that made this take'
+      description: |
+        Walks the take's lineage (contracts/README.md, Save as pipeline) and saves the pipeline it builds: inputs node
+        `inputs` → `step_1` … `step_n` (oldest first) → output `output`; 201 with `problems` like POST
+        `/v1/studio/pipelines`, `version` 1, `based_on` null. 404 for a take that is unknown, another user's or
+        deleted. 409 at 100 pipelines. 422 with the reason when the lineage is not a chain it can save: `an upload has
+        no lineage to save`, `take <id> was made from several runs' takes; a pipeline is a chain`, `take <id> in the
+        lineage was deleted`, `workflow <id> no longer exists`, `the lineage is longer than 8 steps`, `take <id> mixes several sources in
+        <param>`.
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/TakePipeline'}}}
+      responses:
+        '201': {description: 'the pipeline, with problems', content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   /v1/studio/sessions/{session_id}/takes:
     get:
       tags: [studio]
@@ -589,6 +727,14 @@ paths:
 
         `workflow_id` may name one of the caller's workflows: it must pass the graph rules (else 422 `workflow cannot
         run: …`) and the snapshot is its version now (nodes with `bypass`, no positions, no `studio`).
+
+        `pipeline_id` (instead of `workflow_id`) runs one of the caller's pipelines (contracts/README.md, Batches of a
+        pipeline): unknown or another user's is 422 `unknown pipeline <id>`; any pipeline problem is 422 `pipeline
+        cannot run: <first problem's message>`. The columns are the pipeline's inputs, addressed `<inputs node>.<name>`
+        in `inputs`, `lines.param`, `table.columns` and `grid.axes[].param`; every input needs a value in each row
+        (`row 3: inputs.prompt: a value is required`) except a Seed (drawn); `seeds` repeats rows over the pipeline's
+        one Seed input. The snapshot is the pipeline document now plus every workflow it uses; a live host is needed
+        for every step's env; the 768 KB limit counts the snapshot too.
 
         On success studio stores the batch (`queued`, `control: run`) with its snapshot (the workflow as published
         now: the batch never runs a later version), every row (`queued`, attempt 1, seeds drawn), a new session titled
@@ -692,20 +838,113 @@ paths:
     post:
       tags: [studio]
       operationId: studioRetryBatchRow
-      summary: Run one failed row again
+      summary: Run one failed row again, or any row from one step of its execution ("Retry row from here")
       description: |
         Sets the row `queued` with `attempt` + 1 (error, run and takes cleared from the row; the old run and its takes
         stay) and writes `cmd.pipeline.retry` in one transaction. The row gets a new run (its idempotency key carries
         the attempt). A `done` batch becomes `running` again until the row ends. 409 unless the row is `failed`, the
         batch's `status` is not `failed` or `stopped` and its `control` is not `stop`.
+
+        With a body `{from_step}` (a pipeline batch): the row re-runs from that step of its current attempt's
+        execution, reusing the state before it (contracts/README.md, Execution view). Allowed when the row is
+        `failed`, `succeeded`, `cancelled` or `waiting` (a pending pick is dropped) and the batch is `queued`,
+        `running`, `waiting` or `paused` with `control` not `stop`; else 409 (a `done` batch: `this batch has
+        finished; its checkpoints are gone`). 422 when the step is not in the row's execution or has no state
+        (`row <n> has no step <s>`). `from_step: 1` is the same as no body, for any of those row states.
       parameters:
         - {$ref: '#/components/parameters/BatchId'}
-        - {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
+        - {$ref: '#/components/parameters/BatchRowN'}
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/BatchRowRetry'}}}
       responses:
         '202': {description: 'the row, queued again', content: {application/json: {schema: {$ref: '#/components/schemas/BatchRow'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/review:
+    get:
+      tags: [studio]
+      operationId: studioGetBatchReview
+      summary: Every row parked on a gate with its candidate takes, for the review grid
+      description: 'Rows with status `waiting`, by row number (at most 500, not paginated); a workflow batch has none.'
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      responses:
+        '200': {description: the parked rows, content: {application/json: {schema: {$ref: '#/components/schemas/BatchReview'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/rows/{row}/pick:
+    post:
+      tags: [studio]
+      operationId: studioPickBatchRow
+      summary: Answer a gate for one parked row (pick 1..keep of its candidates, or reject them all)
+      description: |
+        In one transaction: records the pick on the row's gate cell (`picked` / `rejected`), sets the row `running`
+        with `parked` null, and writes `cmd.pipeline.pick`; pipelines resumes the row's thread with it. Rows can be
+        picked in any order. The same pick again for the same gate visit answers 202 with the row and sends nothing.
+        409 when the row is not parked on `gate` (`row <n> is not waiting at <gate>`), a different pick for that
+        visit was already sent, or the batch is `stopped`/`failed` or its `control` is `stop`. 422 when `take_ids`
+        are not among the candidates, repeat one, or are more than the gate's `keep` (`pick 1 to <keep> of the
+        candidates`).
+      parameters:
+        - {$ref: '#/components/parameters/BatchId'}
+        - {$ref: '#/components/parameters/BatchRowN'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/BatchPick'}}}
+      responses:
+        '202': {description: 'the row, moving on', content: {application/json: {schema: {$ref: '#/components/schemas/BatchRow'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/rows/{row}/execution:
+    get:
+      tags: [studio]
+      operationId: studioGetRowExecution
+      summary: The execution view of one row (plan 16.8) — the step list and the graph as run
+      description: |
+        Built from the stored `evt.pipeline.step` events (contracts/README.md, Execution view); available for the
+        batch's lifetime and after (only `has_state` turns false when its threads are deleted). 404 for a workflow
+        batch or an `attempt` the row never had.
+      parameters:
+        - {$ref: '#/components/parameters/BatchId'}
+        - {$ref: '#/components/parameters/BatchRowN'}
+        - {name: attempt, in: query, required: false, schema: {type: integer, minimum: 1}, description: 'which attempt of the row; absent = the current one'}
+      responses:
+        '200': {description: the execution, content: {application/json: {schema: {$ref: '#/components/schemas/RowExecution'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/batches/{batch_id}/rows/{row}/execution/{step}/state:
+    get:
+      tags: [studio]
+      operationId: studioGetRowStepState
+      summary: The row's state at the checkpoint after one step (read-only), for its owner
+      description: |
+        Studio asks pipelines_service over NATS request/reply `pipelines.state.get` (owner, batch, row, the step's
+        checkpoint id) and passes the state through. 404 when the step is unknown or has no checkpoint, or the
+        batch's threads are gone (`this row's state is gone; the batch has finished`). 503 when pipelines does not
+        answer within 5 s.
+      parameters:
+        - {$ref: '#/components/parameters/BatchId'}
+        - {$ref: '#/components/parameters/BatchRowN'}
+        - {name: step, in: path, required: true, schema: {type: string}, description: 'the step number in the execution, from 1 (unknown or malformed = 404)'}
+        - {name: attempt, in: query, required: false, schema: {type: integer, minimum: 1}, description: 'absent = the current attempt'}
+      responses:
+        '200': {description: the state, content: {application/json: {schema: {$ref: '#/components/schemas/RowState'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
   /v1/studio/batches/{batch_id}/events:
@@ -1013,6 +1252,8 @@ components:
     UserId: {name: id, in: path, required: true, schema: {type: string}, description: user UUID (malformed = 404)}
     BatchId: {name: batch_id, in: path, required: true, schema: {type: string}, description: batch UUID (malformed = 404)}
     TakeId: {name: take_id, in: path, required: true, schema: {type: string}, description: take UUID (malformed = 404)}
+    PipelineId: {name: pipeline_id, in: path, required: true, schema: {type: string}, description: pipeline UUID (malformed = 404)}
+    BatchRowN: {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
 
@@ -1037,6 +1278,9 @@ components:
     WorkflowUnprocessable:
       description: 'the body does not fit the schema (`{detail}` only), or the graph has problems that block saving (`problems`: every problem, save- and run-blocking)'
       content: {application/json: {schema: {$ref: '#/components/schemas/WorkflowError'}}}
+    PipelineUnprocessable:
+      description: 'the body does not fit the schema (`{detail}` only), or the pipeline has problems that block saving (`problems`: every problem)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/PipelineError'}}}
 
   schemas:
     # ---------------------------------------------------------- errors
@@ -1352,6 +1596,204 @@ components:
               title: {type: string, examples: [Core, Qwen Image 2.1]}
               nodes: {type: array, minItems: 1, items: {$ref: '#/components/schemas/PaletteNode'}}
 
+    # ---------------------------------------------------------- studio: pipelines (API 1.7; README, Pipeline rules)
+    PipelineInputType:
+      type: string
+      enum: [Text, Image, Int, Float, Seed]
+      description: 'a pipeline input''s type: Text fills a string/text param, Int an int, Float a float, Seed a seed, Image an image param (or a rows param with one Image field, as a one-item list)'
+    PipelineInput:
+      type: object
+      required: [name, type]
+      additionalProperties: false
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'unique in the node; a batch column is `<inputs node id>.<name>`; a step binds it as `$<name>`'}
+        type: {$ref: '#/components/schemas/PipelineInputType'}
+        label: {type: string, minLength: 1, maxLength: 60, description: absent = the name}
+    PipelineSource:
+      type: string
+      pattern: '^(\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\.(takes|picked))$'
+      description: '`$<input>` (a pipeline input), `<step>.takes` (that step''s takes from its latest visit), `<gate>.picked` (that gate''s latest pick)'
+      examples: [$prompt, still.takes, review.picked]
+    PipelineInputsNode:
+      type: object
+      required: [kind, inputs]
+      additionalProperties: false
+      properties:
+        kind: {type: string, const: inputs}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        inputs: {type: array, minItems: 1, maxItems: 16, items: {$ref: '#/components/schemas/PipelineInput'}, description: 'the batch''s columns, in order'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineStepNode:
+      type: object
+      required: [kind, workflow]
+      additionalProperties: false
+      properties:
+        kind: {type: string, const: step}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        workflow: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'a template slug or one of the caller''s workflow UUIDs'}
+        seeds: {type: integer, minimum: 1, maximum: 8, default: 1, description: 'runs per visit, with consecutive seeds in the workflow''s seed param (README, Pipeline rules: seeds)'}
+        preset: {type: string, minLength: 1, maxLength: 40, description: 'a preset of the workflow''s `studio.presets`, applied first'}
+        inputs: {$ref: '#/components/schemas/RunInputs', description: 'fixed values (`<node>.<param>`, as RunRequest.inputs), after the preset; never a take'}
+        bind:
+          type: object
+          maxProperties: 16
+          propertyNames: {pattern: '^[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}$'}
+          additionalProperties: {$ref: '#/components/schemas/PipelineSource'}
+          description: 'workflow param `<node>.<param>` ← a source, applied last'
+          examples: [{prompt.text: $prompt, encode.refs: review.picked}]
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineGateNode:
+      type: object
+      required: [kind, takes]
+      additionalProperties: false
+      properties:
+        kind: {type: string, const: gate}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        takes: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'the step whose latest takes are the candidates'}
+        keep: {type: integer, minimum: 1, maximum: 8, default: 1, description: 'a pick is 1 to keep of the candidates'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineOutputNode:
+      type: object
+      required: [kind, from, collection]
+      additionalProperties: false
+      properties:
+        kind: {type: string, const: output}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        from: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}\.(takes|picked)$', description: 'the takes the row ends with', examples: [edit.takes]}
+        collection: {type: string, minLength: 1, maxLength: 80, description: 'names the collection (Batch.collection)'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineNodeTitle: {type: string, minLength: 1, maxLength: 60, description: 'the card''s title; absent = derived by the client'}
+    PipelineNode:
+      oneOf:
+        - {$ref: '#/components/schemas/PipelineInputsNode'}
+        - {$ref: '#/components/schemas/PipelineStepNode'}
+        - {$ref: '#/components/schemas/PipelineGateNode'}
+        - {$ref: '#/components/schemas/PipelineOutputNode'}
+      discriminator:
+        propertyName: kind
+        mapping:
+          inputs: '#/components/schemas/PipelineInputsNode'
+          step: '#/components/schemas/PipelineStepNode'
+          gate: '#/components/schemas/PipelineGateNode'
+          output: '#/components/schemas/PipelineOutputNode'
+    PipelineBranch:
+      type: object
+      required: [pass, fail, max, then]
+      additionalProperties: false
+      description: 'a gate''s branch: pass = a pick was made; fail = every candidate rejected, taken at most `max` times per row; on the next reject the row goes to `then`'
+      properties:
+        pass: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+        fail: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+        max: {type: integer, minimum: 1, maximum: 10, description: 'the loop cap'}
+        then: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+    PipelineEdge:
+      type: array
+      minItems: 2
+      maxItems: 2
+      prefixItems:
+        - {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: from}
+        - oneOf:
+            - {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'to (plain edge)'}
+            - {$ref: '#/components/schemas/PipelineBranch'}
+      examples: [[still, review], [review, {pass: edit, fail: still, max: 2, then: out}]]
+    PipelineDoc:
+      type: object
+      required: [title, nodes, edges]
+      description: |
+        A pipeline as the editor saves or validates it (plan 16.2, restricted to inputs, step, gate and output).
+        Node ids are stable slugs. At most 24 nodes and 64 KB (problems, not the schema). Other top-level keys are
+        ignored by validate; PipelineCreate and PipelineUpdate are closed.
+      properties:
+        title: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
+        nodes:
+          type: object
+          minProperties: 1
+          propertyNames: {pattern: '^[a-z][a-z0-9_]{0,63}$'}
+          additionalProperties: {$ref: '#/components/schemas/PipelineNode'}
+        edges: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/PipelineEdge'}}
+    Pipeline:
+      allOf:
+        - {$ref: '#/components/schemas/PipelineDoc'}
+      type: object
+      required: [id, based_on, version, created_at, updated_at, workflow_titles, last_batch]
+      properties:
+        id: {type: string, format: uuid}
+        based_on: {type: [string, 'null'], description: 'the pipeline it was copied or saved from (it may be gone since); null otherwise'}
+        version: {type: integer, minimum: 1, description: '1 on create, +1 on every PUT and PATCH'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        workflow_titles: {type: object, additionalProperties: {type: string}, description: 'every step''s workflow id → its title now (an unknown one left out), for the cards'}
+        last_batch: {oneOf: [{$ref: '#/components/schemas/Batch'}, {type: 'null'}], description: 'the newest batch of it; null when it never ran'}
+        problems: {type: array, items: {$ref: '#/components/schemas/PipelineProblem'}, description: 'only from GET /v1/studio/pipelines/{pipeline_id}, POST and PUT; empty = it can run'}
+    PipelineList:
+      type: object
+      required: [pipelines]
+      properties: {pipelines: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Pipeline'}}}
+    PipelineCreate:
+      description: 'a whole document (based_on optional), or `{based_on, title?}` to copy one of the caller''s pipelines'
+      oneOf:
+        - allOf:
+            - {$ref: '#/components/schemas/PipelineDoc'}
+          type: object
+          properties:
+            based_on: {type: string, format: uuid, description: 'the pipeline it was made from; must be the caller''s (404)'}
+          unevaluatedProperties: false
+        - type: object
+          required: [based_on]
+          additionalProperties: false
+          properties:
+            based_on: {type: string, format: uuid}
+            title: {type: string, minLength: 1, maxLength: 80, description: 'absent = `<source title> copy`'}
+    PipelineUpdate:
+      allOf:
+        - {$ref: '#/components/schemas/PipelineDoc'}
+      type: object
+      required: [version]
+      properties:
+        version: {type: integer, minimum: 1, description: 'the version the edit started from (409 when stale)'}
+      unevaluatedProperties: false
+    PipelinePatch:
+      type: object
+      required: [title]
+      additionalProperties: false
+      properties:
+        title: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
+    PipelineProblemCode:
+      type: string
+      enum: [too_many_nodes, too_large, inputs_node, duplicate_input, unknown_node, edge_invalid, branch_not_gate, uncapped_cycle, too_many_runs, unreachable, dead_end, no_output, gate_takes, gate_keep, bind_source, unknown_workflow, workflow_cannot_run, unknown_preset, step_input_invalid, bind_unknown, bind_type, unbound_input, step_seeds]
+      description: 'meaning and which block saving: contracts/README.md, Pipeline rules. May grow in a minor version; an unknown code blocks running'
+    PipelineProblem:
+      type: object
+      required: [code, message, blocks]
+      additionalProperties: false
+      description: 'one broken pipeline rule, the same shape as Problem: `node` the pipeline node, `port` a bind key (`<node>.<param>` of the step''s workflow) or `from` for an output, `param` an input name or a step input key'
+      properties:
+        code: {$ref: '#/components/schemas/PipelineProblemCode'}
+        message: {type: string, minLength: 1, description: human text; not stable}
+        blocks: {type: string, enum: [save, run]}
+        node: {type: string}
+        port: {type: string}
+        param: {type: string}
+    PipelineValidation:
+      type: object
+      required: [problems, can_save, can_run]
+      additionalProperties: false
+      properties:
+        problems: {type: array, items: {$ref: '#/components/schemas/PipelineProblem'}, description: 'sorted by node (whole-pipeline ones first), then code, port, param'}
+        can_save: {type: boolean}
+        can_run: {type: boolean}
+    PipelineError:
+      type: object
+      required: [detail]
+      properties:
+        detail: {type: string, description: '`pipeline has <n> problems: <first message>` for pipeline problems'}
+        problems: {type: array, items: {$ref: '#/components/schemas/PipelineProblem'}, description: 'every problem; absent for a schema error'}
+    TakePipeline:
+      type: object
+      additionalProperties: false
+      properties:
+        title: {type: string, minLength: 1, maxLength: 80, description: 'absent = `<take title> pipeline`, cut to 80 characters'}
+
     # ---------------------------------------------------------- studio: runs
     RunStatus: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
     RunInputs:
@@ -1576,6 +2018,11 @@ components:
         inputs: {$ref: '#/components/schemas/RunInputs', description: 'every param of every node (`<node id>.<param>`), resolved, with the seed the runner used in place of null / -1; image values as `{take_id}` (the references, in order), never keys'}
         prompt: {type: [string, 'null'], description: 'the text of the workflow''s `prompt` node; null without one'}
         seed: {type: [integer, 'null'], minimum: 0, description: the seed it was made with; null without one}
+        pipeline:
+          description: 'a take made by a step of a pipeline batch (source pipeline): which pipeline, node and loop attempt; absent or null otherwise'
+          oneOf:
+            - $ref: '#/components/schemas/MadeWithPipeline'
+            - {type: 'null'}
         model:
           description: 'from the workflow''s `<family>/model` node; null without one (echo)'
           oneOf:
@@ -1586,6 +2033,16 @@ components:
                 variant: {type: [string, 'null'], examples: [base]}
                 precision: {type: [string, 'null'], examples: [int8]}
             - {type: 'null'}
+    MadeWithPipeline:
+      type: object
+      required: [id, title, version, node, attempt, row]
+      properties:
+        id: {type: string, format: uuid, description: 'the pipeline (it may be deleted since)'}
+        title: {type: string, description: 'as in the batch''s snapshot'}
+        version: {type: integer, minimum: 1}
+        node: {type: string, description: 'the step node id that made it'}
+        attempt: {type: integer, minimum: 1, description: 'the step''s visit in that row (1 + times a loop brought the row back to it)'}
+        row: {type: integer, minimum: 1, maximum: 500, description: 'the batch row'}
     TakePage:
       type: object
       required: [takes, next_cursor]
@@ -1642,9 +2099,10 @@ components:
     # ---------------------------------------------------------- studio: batches
     BatchStatus:
       type: string
-      enum: [queued, running, paused, done, failed, stopped]
+      enum: [queued, running, waiting, paused, done, failed, stopped]
       description: |
-        queued: stored, the engine has not started it; running; paused (`reason` says why: by you, three rows in a
+        queued: stored, the engine has not started it; running; waiting (API 1.7, computed by studio): the engine
+        reports running but every row that has not ended is `waiting` on a gate (pick to continue); paused (`reason` says why: by you, three rows in a
         row failed with one error, or the engine restarted: press Resume); done: every row ended (some may have
         failed); failed: the engine could not run it at all (`reason`); stopped: by Stop. Set by pipelines_service
         events, except `queued`.
@@ -1655,11 +2113,12 @@ components:
     BatchCounts:
       type: object
       required: [total, queued, running, succeeded, failed, cancelled]
-      description: rows by `BatchRow.status`; the five add up to total
+      description: rows by `BatchRow.status`; queued, running, waiting, succeeded, failed and cancelled add up to total
       properties:
         total: {type: integer, minimum: 1, maximum: 500}
         queued: {type: integer, minimum: 0}
         running: {type: integer, minimum: 0}
+        waiting: {type: integer, minimum: 0, description: 'rows parked on a gate ("waiting for a pick"); always sent from API 1.7, absent = 0'}
         succeeded: {type: integer, minimum: 0}
         failed: {type: integer, minimum: 0}
         cancelled: {type: integer, minimum: 0}
@@ -1679,20 +2138,63 @@ components:
         created_at: {type: string, format: date-time}
         started_at: {type: [string, 'null'], format: date-time, description: 'the engine first reported running'}
         finished_at: {type: [string, 'null'], format: date-time, description: 'done, failed or stopped'}
+        pipeline_id: {type: [string, 'null'], format: uuid, description: 'a batch of a pipeline: the pipeline (it may be deleted since); absent or null for a batch of one workflow, whose `workflow_*` then describe it. For a pipeline batch `workflow_id` / `workflow_title` are its first step''s'}
+        pipeline_title: {type: [string, 'null'], description: 'with pipeline_id: the title in the batch''s snapshot'}
+        pipeline_version: {type: [integer, 'null'], minimum: 1, description: 'with pipeline_id: the version it was submitted with'}
+        collection: {type: [string, 'null'], description: 'with pipeline_id: the collection its output node names (the first output, by node id)'}
+    BatchRowStatus:
+      type: string
+      enum: [queued, running, waiting, succeeded, failed, cancelled]
+      description: 'a run''s statuses plus waiting: parked on a gate for a pick (pipeline batches only)'
     BatchRow:
       type: object
       required: [row, attempt, inputs, status, run_id, take_ids, thumb_url, error, started_at, finished_at]
       properties:
         row: {type: integer, minimum: 1, maximum: 500}
         attempt: {type: integer, minimum: 1, description: '1; +1 on every Retry'}
-        inputs: {$ref: '#/components/schemas/RunInputs', description: 'what the row runs with: the base inputs, then its own values, then its seed'}
-        status: {$ref: '#/components/schemas/RunStatus', description: 'queued until its run starts (also while the run waits in the queue or is held), running while it runs, then the row''s end'}
-        run_id: {type: [string, 'null'], format: uuid, description: 'the current attempt''s run; null before it has one'}
-        take_ids: {type: array, items: {type: string, format: uuid}, description: 'the current attempt''s takes (deleted ones left out)'}
+        inputs: {$ref: '#/components/schemas/RunInputs', description: 'what the row runs with: the base inputs, then its own values, then its seed (a pipeline batch: `<inputs node>.<input>` keys)'}
+        status: {$ref: '#/components/schemas/BatchRowStatus', description: 'queued until its run starts (also while the run waits in the queue or is held), running while it runs, waiting while parked on a gate, then the row''s end'}
+        run_id: {type: [string, 'null'], format: uuid, description: 'the current attempt''s run (a pipeline row: its latest run); null before it has one'}
+        take_ids: {type: array, items: {type: string, format: uuid}, description: 'the current attempt''s takes (deleted ones left out); a pipeline row: the takes its output received, once it succeeded'}
         thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first take''s thumbnail; null without one'}
         error: {type: [string, 'null'], description: 'set when failed'}
         started_at: {type: [string, 'null'], format: date-time, description: 'its run reported running'}
         finished_at: {type: [string, 'null'], format: date-time}
+        node: {type: [string, 'null'], description: 'pipeline batches: the node the row is at now (parked on, or running); null when ended or not started'}
+        parked: {oneOf: [{$ref: '#/components/schemas/BatchRowParked'}, {type: 'null'}], description: 'pipeline batches: set while status is waiting'}
+        cells: {type: array, maxItems: 24, items: {$ref: '#/components/schemas/BatchCell'}, description: 'pipeline batches: the run table''s cells, one per node the row reached, in the order first reached; absent for a batch of one workflow'}
+    BatchRowParked:
+      type: object
+      required: [gate, visit, keep, candidates]
+      properties:
+        gate: {type: string, description: the gate node id}
+        visit: {type: integer, minimum: 1, description: 'which visit of the gate (1 + times its loop went round)'}
+        keep: {type: integer, minimum: 1, maximum: 8, description: 'pick 1 to keep of the candidates'}
+        candidates: {type: array, minItems: 1, maxItems: 8, items: {type: string, format: uuid}, description: 'the takes to pick from (the gate''s step''s latest takes)'}
+    CellStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled, waiting, picked, rejected]
+      description: 'a step attempt: its runs'' state (queued while none of them has started); a gate attempt: waiting, picked or rejected; an output: succeeded'
+    BatchCell:
+      type: object
+      required: [node, kind, attempts]
+      properties:
+        node: {type: string, description: the pipeline node id}
+        kind: {type: string, enum: [step, gate, output]}
+        attempts: {type: array, minItems: 1, maxItems: 64, items: {$ref: '#/components/schemas/BatchCellAttempt'}, description: 'one per visit (loop attempts stacked), oldest first'}
+    BatchCellAttempt:
+      type: object
+      required: [visit, status, run_ids, take_ids, seeds, seconds, error, thumb_url]
+      properties:
+        visit: {type: integer, minimum: 1}
+        status: {$ref: '#/components/schemas/CellStatus'}
+        run_ids: {type: array, maxItems: 8, items: {type: string, format: uuid}, description: 'a step: its runs, by seed index'}
+        take_ids: {type: array, maxItems: 8, items: {type: string, format: uuid}, description: 'a step: its takes; a gate: the picked ones; an output: what it received'}
+        candidates: {type: array, maxItems: 8, items: {type: string, format: uuid}, description: 'a gate: the takes it offered'}
+        seeds: {type: array, maxItems: 8, items: {type: integer, minimum: 0}, description: 'a step: the seed of each run, by seed index'}
+        seconds: {type: [number, 'null'], minimum: 0, description: 'a step: the runs'' time on their hosts, summed (started to finished); null until one finished'}
+        error: {type: [string, 'null']}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first of take_ids (else candidates)'}
     BatchPage:
       type: object
       required: [batches, next_cursor]
@@ -1751,12 +2253,17 @@ components:
         start: {type: integer, minimum: 0, maximum: 9007199254740991, description: 'absent = drawn at random at Submit and stored'}
     BatchCreate:
       type: object
-      required: [workflow_id, rows]
+      required: [rows]
       additionalProperties: false
+      description: 'exactly one of workflow_id (a batch of one workflow) or pipeline_id (a batch of a saved pipeline)'
+      oneOf:
+        - {required: [workflow_id]}
+        - {required: [pipeline_id]}
       properties:
         workflow_id: {type: string}
+        pipeline_id: {type: string, format: uuid, description: 'one of the caller''s pipelines; its inputs are the columns'}
         session_id: {type: string, format: uuid, description: 'absent = a new session titled like the batch'}
-        title: {type: string, maxLength: 200, description: 'trimmed; empty or missing = "<workflow title> × <row count>"'}
+        title: {type: string, maxLength: 200, description: 'trimmed; empty or missing = "<workflow or pipeline title> × <row count>"'}
         inputs: {$ref: '#/components/schemas/RunInputs', description: 'base inputs for every row; missing = {}'}
         rows:
           description: exactly one of lines, table, grid
@@ -1797,6 +2304,111 @@ components:
       properties:
         events: {type: array, items: {$ref: '#/components/schemas/BatchEvent'}}
         last_seq: {type: integer, minimum: 0, description: next `since` (unchanged when the page is empty)}
+
+    BatchRowRetry:
+      type: object
+      required: [from_step]
+      additionalProperties: false
+      properties:
+        from_step: {type: integer, minimum: 1, maximum: 2000, description: 'a step number of the row''s current attempt (RowExecution.steps[].step)'}
+    BatchPick:
+      description: 'pick 1 to keep of the candidates, or reject them all'
+      oneOf:
+        - type: object
+          required: [gate, take_ids]
+          additionalProperties: false
+          properties:
+            gate: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+            take_ids: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string, format: uuid}}
+        - type: object
+          required: [gate, reject]
+          additionalProperties: false
+          properties:
+            gate: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+            reject: {type: boolean, const: true}
+    ReviewCandidate:
+      type: object
+      required: [take_id, url, thumb_url, width, height, seed]
+      properties:
+        take_id: {type: string, format: uuid}
+        url: {$ref: '#/components/schemas/SignedUrl'}
+        thumb_url: {$ref: '#/components/schemas/SignedUrl'}
+        width: {type: [integer, 'null']}
+        height: {type: [integer, 'null']}
+        seed: {type: [integer, 'null'], minimum: 0}
+    BatchReviewItem:
+      type: object
+      required: [row, attempt, inputs, gate, gate_title, visit, keep, on_reject, rejects_left, candidates]
+      properties:
+        row: {type: integer, minimum: 1, maximum: 500}
+        attempt: {type: integer, minimum: 1}
+        inputs: {$ref: '#/components/schemas/RunInputs'}
+        gate: {type: string}
+        gate_title: {type: [string, 'null'], description: 'the gate node''s title; null without one'}
+        visit: {type: integer, minimum: 1}
+        keep: {type: integer, minimum: 1, maximum: 8}
+        on_reject: {type: string, enum: [retry, then, fail], description: 'what rejecting all does now: retry (the fail edge, loops left), then (cap reached: the branch''s then), fail (a plain edge: the row fails, `rejected at <gate>`)'}
+        rejects_left: {type: integer, minimum: 0, description: 'fail-edge turns left before then (0 for a plain edge)'}
+        candidates: {type: array, minItems: 1, maxItems: 8, items: {$ref: '#/components/schemas/ReviewCandidate'}}
+    BatchReview:
+      type: object
+      required: [batch_id, items]
+      properties:
+        batch_id: {type: string, format: uuid}
+        items: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/BatchReviewItem'}, description: 'every waiting row, by row number'}
+    ExecutionPart:
+      type: string
+      enum: [inputs, submit, wait, gate, route, output]
+      description: 'which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step''s two halves), gate (parked for a pick), route (the pick applied, the edge chosen), output (the row ends)'
+    ExecutionEdge:
+      type: object
+      required: [to, via]
+      properties:
+        to: {type: string}
+        via: {type: string, enum: [next, pass, fail, then], description: 'next: a plain edge'}
+    ExecutionStep:
+      type: object
+      required: [step, node, part, visit, what, changed, status, edge, loops, run_ids, take_ids, error, at, has_state]
+      properties:
+        step: {type: integer, minimum: 1, description: 'graph step number in the row''s attempt, from 1'}
+        node: {type: string}
+        part: {$ref: '#/components/schemas/ExecutionPart'}
+        visit: {type: integer, minimum: 1}
+        what: {type: string, description: 'what happened, in plain words (`Run queued for Qwen Image`, `Parked, then resumed with 4 takes`)'}
+        changed: {type: array, items: {type: string}, description: 'the state that changed (`takes.still = 4`, `loops.review = 1`)'}
+        status: {type: string, enum: [finished, resumed, current], description: 'finished; resumed after waiting (a run, a pick); current = where the row is now'}
+        edge: {oneOf: [{$ref: '#/components/schemas/ExecutionEdge'}, {type: 'null'}], description: 'the edge it took when it left the node'}
+        loops: {type: object, additionalProperties: {type: integer, minimum: 0}, description: 'gate id → times its fail edge was taken, after this step'}
+        run_ids: {type: array, items: {type: string, format: uuid}}
+        take_ids: {type: array, items: {type: string, format: uuid}}
+        error: {type: [string, 'null']}
+        at: {type: string, format: date-time}
+        has_state: {type: boolean, description: 'its checkpoint can be read (GET …/execution/{step}/state) and retried from'}
+    RowExecution:
+      type: object
+      required: [batch_id, row, attempt, attempts, status, current, pipeline, steps, nodes, edges, loops, retried_from]
+      properties:
+        batch_id: {type: string, format: uuid}
+        row: {type: integer, minimum: 1, maximum: 500}
+        attempt: {type: integer, minimum: 1, description: the attempt shown}
+        attempts: {type: integer, minimum: 1, description: the row's current attempt}
+        status: {$ref: '#/components/schemas/BatchRowStatus'}
+        current: {type: [string, 'null'], description: 'the node the row is at now (highlighted); null when ended'}
+        pipeline: {$ref: '#/components/schemas/PipelineDoc', description: 'the batch''s snapshot of the pipeline, to draw the graph'}
+        steps: {type: array, maxItems: 2000, items: {$ref: '#/components/schemas/ExecutionStep'}, description: 'in order; a retried-from-step attempt starts with the earlier attempt''s steps it reused'}
+        nodes: {type: object, additionalProperties: {type: object, required: [visits, status], properties: {visits: {type: integer, minimum: 1}, status: {$ref: '#/components/schemas/CellStatus'}}}, description: 'every node the row passed: visits and its last attempt''s status'}
+        edges: {type: array, items: {type: object, required: [from, to, via, count], properties: {from: {type: string}, to: {type: string}, via: {type: string, enum: [next, pass, fail, then]}, count: {type: integer, minimum: 1}}}, description: 'the edges taken, with how many times'}
+        loops: {type: object, additionalProperties: {type: integer, minimum: 0}, description: 'gate id → times its loop went round'}
+        retried_from: {oneOf: [{type: object, required: [attempt, step], properties: {attempt: {type: integer, minimum: 1}, step: {type: integer, minimum: 1}}}, {type: 'null'}], description: 'this attempt re-ran the earlier attempt from that step'}
+    RowState:
+      type: object
+      required: [row, attempt, step, node, state]
+      properties:
+        row: {type: integer, minimum: 1, maximum: 500}
+        attempt: {type: integer, minimum: 1}
+        step: {type: integer, minimum: 1}
+        node: {type: string}
+        state: {type: object, description: 'the thread''s state after the step, read-only plain JSON (row inputs, run and take ids, picks, loop counters; never media)'}
 
     # ---------------------------------------------------------- auth_service
     SigninRequest:

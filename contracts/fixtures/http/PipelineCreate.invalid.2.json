@@ -1,0 +1,78 @@
+{
+  "title": "Fox at night",
+  "nodes": {
+    "inputs": {
+      "kind": "inputs",
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "Text"
+        },
+        {
+          "name": "edit",
+          "type": "Text"
+        }
+      ],
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    "still": {
+      "kind": "step",
+      "title": "Qwen Image",
+      "workflow": "qwen-image",
+      "seeds": 4,
+      "inputs": {
+        "model.variant": "turbo",
+        "canvas.width": 1024
+      },
+      "bind": {
+        "prompt.text": "$prompt"
+      }
+    },
+    "review": {
+      "kind": "judge",
+      "title": "Pick one still to edit",
+      "takes": "still",
+      "keep": 1
+    },
+    "edit": {
+      "kind": "step",
+      "title": "Qwen edit",
+      "workflow": "qwen-image",
+      "bind": {
+        "prompt.text": "$edit",
+        "encode.refs": "review.picked"
+      }
+    },
+    "out": {
+      "kind": "output",
+      "from": "edit.takes",
+      "collection": "Fox at night"
+    }
+  },
+  "edges": [
+    [
+      "inputs",
+      "still"
+    ],
+    [
+      "still",
+      "review"
+    ],
+    [
+      "review",
+      {
+        "pass": "edit",
+        "fail": "still",
+        "max": 2,
+        "then": "out"
+      }
+    ],
+    [
+      "edit",
+      "out"
+    ]
+  ]
+}

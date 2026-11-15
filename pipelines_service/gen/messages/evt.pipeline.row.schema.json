@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.pipeline.row.schema.json",
   "title": "pipelines → studio's projector: a row's state",
-  "description": "Subject evt.pipeline.<batch_id>.row (stream EVT), Nats-Msg-Id <batch_id>:<seq> (seq as in evt.pipeline.batch). Always the row's whole state, so the latest wins: the projector ignores a row event whose seq is not above the last one it applied to that row, or whose attempt is below the row's current attempt.",
+  "description": "Subject evt.pipeline.<batch_id>.row (stream EVT), Nats-Msg-Id <batch_id>:<seq> (seq as in evt.pipeline.batch). Always the row's whole state, so the latest wins: the projector ignores a row event whose seq is not above the last one it applied to that row, or whose attempt is below the row's current attempt. A pipeline row adds `node`, `cells` and, while `waiting` on a gate, `parked` (the row-parked event).",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -50,11 +50,11 @@
               "type": "null"
             }
           ],
-          "description": "the row's run (from studio.runs.create); absent / null before it has one, or when cancelled before it started"
+          "description": "the row's run (from studio.runs.create); absent / null before it has one, or when cancelled before it started; a pipeline row: its latest run"
         },
         "take_ids": {
           "$ref": "defs.schema.json#/$defs/takeIds",
-          "description": "with succeeded: the run's takes"
+          "description": "with succeeded: the run's takes (a pipeline row: what its output received)"
         },
         "error": {
           "type": [
@@ -63,6 +63,60 @@
           ],
           "maxLength": 2000,
           "description": "required (non-empty) when failed: the run's error, or why the row could not get a run"
+        },
+        "node": {
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/nodeId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "pipeline batches: the node the row is at now; null when ended"
+        },
+        "parked": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "gate",
+                "visit",
+                "keep",
+                "candidates"
+              ],
+              "properties": {
+                "gate": {
+                  "$ref": "defs.schema.json#/$defs/nodeId"
+                },
+                "visit": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "keep": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8
+                },
+                "candidates": {
+                  "$ref": "defs.schema.json#/$defs/takeIdList",
+                  "minItems": 1
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "required with waiting (the row-parked event): which gate visit, how many to keep, the candidates"
+        },
+        "cells": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "$ref": "defs.schema.json#/$defs/rowCell"
+          },
+          "description": "pipeline batches: one cell per node reached, in the order first reached, attempts stacked (studio adds seconds and queued from its runs)"
         }
       },
       "allOf": [
@@ -104,6 +158,26 @@
             "properties": {
               "run_id": {
                 "$ref": "defs.schema.json#/$defs/uuid"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "waiting"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "parked",
+              "node"
+            ],
+            "properties": {
+              "parked": {
+                "type": "object"
               }
             }
           }

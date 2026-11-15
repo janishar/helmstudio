@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.pick.schema.json",
+  "title": "studio → pipelines: a gate's answer for one parked row",
+  "description": "Studio's outbox relay publishes it on subject `cmd.pipeline.pick` (stream CMD) in the transaction that records the pick; Nats-Msg-Id `<batch_id>:<n>` (the batch's command counter). pipelines consumes it with the other cmd.pipeline.* (durable `pipelines`, in order) and resumes the row's thread parked on that gate visit with it (`take_ids`: pass, `reject`: the fail edge, the cap's `then`, or a plain edge's failure). A pick for a thread not parked on that gate visit and attempt is acked and dropped.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.pipeline.pick"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "batch_id",
+        "row",
+        "attempt",
+        "gate",
+        "visit"
+      ],
+      "properties": {
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "= envelope job_id"
+        },
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "attempt": {
+          "$ref": "defs.schema.json#/$defs/rowAttempt"
+        },
+        "gate": {
+          "$ref": "defs.schema.json#/$defs/nodeId"
+        },
+        "visit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "take_ids": {
+          "$ref": "defs.schema.json#/$defs/takeIdList",
+          "minItems": 1,
+          "description": "the picked takes, 1 to keep of the candidates"
+        },
+        "reject": {
+          "const": true,
+          "description": "every candidate rejected"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "take_ids"
+          ],
+          "not": {
+            "required": [
+              "reject"
+            ]
+          }
+        },
+        {
+          "required": [
+            "reject"
+          ],
+          "not": {
+            "required": [
+              "take_ids"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -74,6 +74,18 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/batches/:id/stop", c.controlBatchHandler(c.service.StopBatch))
 	group.POST("/batches/:id/rows/:row/retry", c.retryBatchRowHandler)
 	group.GET("/batches/:id/events", c.batchEventsHandler)
+	group.GET("/batches/:id/review", c.batchReviewHandler)
+	group.POST("/batches/:id/rows/:row/pick", c.pickBatchRowHandler)
+	group.GET("/batches/:id/rows/:row/execution", c.rowExecutionHandler)
+	group.GET("/batches/:id/rows/:row/execution/:step/state", c.rowStepStateHandler)
+	group.GET("/pipelines", c.listPipelinesHandler)
+	group.POST("/pipelines", c.createPipelineHandler)
+	group.POST("/pipelines/validate", c.validatePipelineHandler)
+	group.GET("/pipelines/:id", c.getPipelineHandler)
+	group.PUT("/pipelines/:id", c.replacePipelineHandler)
+	group.PATCH("/pipelines/:id", c.renamePipelineHandler)
+	group.DELETE("/pipelines/:id", c.deletePipelineHandler)
+	group.POST("/takes/:id/pipeline", c.saveTakeAsPipelineHandler)
 }
 
 // MountNats registers studio.runs.create (the service's group is "studio"), pipelines_service's request for a batch
@@ -245,6 +257,15 @@ var envPattern = regexp.MustCompile(`^[a-z0-9]{1,32}$`)
 // strictBody decodes a closed JSON body (an unknown field is 422; openTop ignores unknown top-level keys only) and
 // validates it. The module's body limit caps it; a document is larger than helmgo's 64 KiB JSON cap allows.
 func strictBody[B any](ctx *gin.Context, openTop bool) (*B, error) {
+	if openTop {
+		return strictBodyKeeping[B](ctx, "title", "family", "env", "nodes", "studio")
+	}
+	return strictBodyKeeping[B](ctx)
+}
+
+// strictBodyKeeping is strictBody; with keep given, top-level keys not in keep are ignored.
+func strictBodyKeeping[B any](ctx *gin.Context, keep ...string) (*B, error) {
+	openTop := len(keep) > 0
 	invalid := func(err error) error { return network.NewUnprocessableError("invalid JSON body", err) }
 	raw, err := io.ReadAll(ctx.Request.Body)
 	if err != nil {
@@ -256,7 +277,7 @@ func strictBody[B any](ctx *gin.Context, openTop bool) (*B, error) {
 			return nil, invalid(err)
 		}
 		for key := range top {
-			if !slices.Contains([]string{"title", "family", "env", "nodes", "studio"}, key) {
+			if !slices.Contains(keep, key) {
 				delete(top, key)
 			}
 		}
@@ -472,10 +493,129 @@ func (c *controller) controlBatchHandler(fn func(context.Context, common.Caller,
 	}
 }
 
-// retryBatchRowHandler: POST /batches/{id}/rows/{row}/retry — 202 with the row, queued again.
+// retryBatchRowHandler: POST /batches/{id}/rows/{row}/retry — 202 with the row, queued again; the optional body
+// {from_step} retries a pipeline row from a step.
 func (c *controller) retryBatchRowHandler(ctx *gin.Context) {
-	out, err := c.service.RetryBatchRow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("row"))
+	body, err := optionalBody[dto.BatchRowRetry](ctx)
+	var out dto.BatchRow
+	if err == nil {
+		out, err = c.service.RetryBatchRow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("row"), body)
+	}
 	reply(ctx, http.StatusAccepted, out, err)
+}
+
+// optionalBody decodes a closed JSON body that may be absent (nil) and validates it.
+func optionalBody[B any](ctx *gin.Context) (*B, error) {
+	if ctx.Request.ContentLength == 0 {
+		return nil, nil
+	}
+	return strictBody[B](ctx, false)
+}
+
+// batchReviewHandler: GET /batches/{id}/review.
+func (c *controller) batchReviewHandler(ctx *gin.Context) {
+	out, err := c.service.BatchReview(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// pickBatchRowHandler: POST /batches/{id}/rows/{row}/pick — 202 with the row, moving on.
+func (c *controller) pickBatchRowHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.BatchPick](ctx, false)
+	var out dto.BatchRow
+	if err == nil {
+		out, err = c.service.PickBatchRow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("row"), body)
+	}
+	reply(ctx, http.StatusAccepted, out, err)
+}
+
+// rowExecutionHandler: GET /batches/{id}/rows/{row}/execution[?attempt=].
+func (c *controller) rowExecutionHandler(ctx *gin.Context) {
+	out, err := c.service.RowExecution(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("row"),
+		ctx.Query("attempt"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// rowStepStateHandler: GET /batches/{id}/rows/{row}/execution/{step}/state[?attempt=].
+func (c *controller) rowStepStateHandler(ctx *gin.Context) {
+	out, err := c.service.RowStepState(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("row"),
+		ctx.Param("step"), ctx.Query("attempt"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// ------------------------------------------------------------------ pipelines
+
+// listPipelinesHandler: GET /pipelines.
+func (c *controller) listPipelinesHandler(ctx *gin.Context) {
+	out, err := c.service.ListPipelines(ctx.Request.Context(), common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getPipelineHandler: GET /pipelines/{id}.
+func (c *controller) getPipelineHandler(ctx *gin.Context) {
+	out, err := c.service.GetPipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// createPipelineHandler: POST /pipelines — 201 with the pipeline and its problems.
+func (c *controller) createPipelineHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.PipelineCreate](ctx, false)
+	var out dto.Pipeline
+	if err == nil {
+		out, err = c.service.CreatePipeline(ctx.Request.Context(), common.MustCaller(ctx), body)
+	}
+	replyWorkflow(ctx, http.StatusCreated, out, err)
+}
+
+// validatePipelineHandler: POST /pipelines/validate — other top-level keys are ignored.
+func (c *controller) validatePipelineHandler(ctx *gin.Context) {
+	body, err := strictBodyKeeping[dto.PipelineDoc](ctx, "title", "nodes", "edges")
+	var out dto.WorkflowValidation
+	if err == nil {
+		out, err = c.service.ValidatePipeline(ctx.Request.Context(), common.MustCaller(ctx), *body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// replacePipelineHandler: PUT /pipelines/{id}.
+func (c *controller) replacePipelineHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.PipelineUpdate](ctx, false)
+	var out dto.Pipeline
+	if err == nil {
+		out, err = c.service.ReplacePipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	replyWorkflow(ctx, http.StatusOK, out, err)
+}
+
+// renamePipelineHandler: PATCH /pipelines/{id}.
+func (c *controller) renamePipelineHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.PipelinePatch](ctx, false)
+	var out dto.Pipeline
+	if err == nil {
+		out, err = c.service.RenamePipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// deletePipelineHandler: DELETE /pipelines/{id}.
+func (c *controller) deletePipelineHandler(ctx *gin.Context) {
+	if err := c.service.DeletePipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	network.SendNoContent(ctx)
+}
+
+// saveTakeAsPipelineHandler: POST /takes/{id}/pipeline — 201 with the new pipeline; the body is optional.
+func (c *controller) saveTakeAsPipelineHandler(ctx *gin.Context) {
+	body, err := optionalBody[dto.TakePipeline](ctx)
+	var out dto.Pipeline
+	if err == nil {
+		if body == nil {
+			body = &dto.TakePipeline{}
+		}
+		out, err = c.service.SaveTakeAsPipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	replyWorkflow(ctx, http.StatusCreated, out, err)
 }
 
 // batchEventsHandler: GET /batches/{id}/events — like the session events, per-batch seq.

@@ -11,8 +11,9 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/cmd.run.execute.schema.json` | studio → runner: run one resolved graph (every param filled), write outputs under `output_prefix` |
 | `messages/evt.run.{status,progress,output}.schema.json` | runner → studio's projector: lifecycle (`running`, then one of `succeeded`, `failed`, `cancelled`), one event per step, one per stored output |
 | `messages/req.auth.validate.{token,role}.schema.json` | NATS request/reply with auth_service (not enveloped): `$defs/request`, `$defs/reply` |
-| `messages/cmd.pipeline.{submit,resume,pause,stop,retry}.schema.json` | studio → pipelines_service: start, continue, pause, stop a batch; retry one row |
-| `messages/evt.pipeline.{batch,row}.schema.json` | pipelines_service → studio's projector: a batch's status, a row's whole state |
+| `messages/cmd.pipeline.{submit,resume,pause,stop,retry,pick}.schema.json` | studio → pipelines_service: start, continue, pause, stop a batch; retry one row (optionally from a step); a gate's pick |
+| `messages/evt.pipeline.{batch,row,step}.schema.json` | pipelines_service → studio's projector: a batch's status, a row's whole state (parked on a gate: `waiting`), one graph step of a pipeline row |
+| `messages/req.pipelines.state.get.schema.json` | NATS request/reply studio → pipelines (not enveloped): a row's state at one checkpoint |
 | `messages/evt.studio.run_finished.schema.json` | studio → pipelines_service: a batch run ended (any terminal status) |
 | `messages/req.studio.runs.create.schema.json` | NATS request/reply pipelines → studio (not enveloped): create a batch-lane run, idempotent on its key |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
@@ -23,7 +24,8 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/{nodes,workflows,models}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured) |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), lints `openapi.yaml` and the house rules |
+| `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`. studio_service and the web editor both run them |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -40,10 +42,11 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `evt.run.<session_id>.output` | stream `EVT` | `evt.run.output`, same | runner → studio projector |
 | `dlq.<original subject>` | stream `DLQ` (30 days) | the original command, unchanged | runner, for a command that fails its schema |
 | `auth.validate.token`, `auth.validate.role` | core request/reply, queue group `auth` | bare JSON (see the schemas) | studio → auth |
-| `cmd.pipeline.submit`, `.resume`, `.pause`, `.stop`, `.retry` | stream `CMD` (work queue) | `cmd.pipeline.<same>`, `Nats-Msg-Id <batch_id>:<n>` (n = the batch's command counter, submit = 1) | studio outbox relay → pipelines (durable `pipelines`, filter `cmd.pipeline.>`, one at a time, in order) |
-| `evt.pipeline.<batch_id>.batch`, `.row` | stream `EVT` | `evt.pipeline.batch`, `evt.pipeline.row`, `Nats-Msg-Id <batch_id>:<seq>` | pipelines → studio projector (durable `studio-pipelines`, filter `evt.pipeline.>`) |
+| `cmd.pipeline.submit`, `.resume`, `.pause`, `.stop`, `.retry`, `.pick` | stream `CMD` (work queue) | `cmd.pipeline.<same>`, `Nats-Msg-Id <batch_id>:<n>` (n = the batch's command counter, submit = 1) | studio outbox relay → pipelines (durable `pipelines`, filter `cmd.pipeline.>`, one at a time, in order) |
+| `evt.pipeline.<batch_id>.batch`, `.row`, `.step` | stream `EVT` | `evt.pipeline.batch`, `.row`, `.step`, `Nats-Msg-Id <batch_id>:<seq>` | pipelines → studio projector (durable `studio-pipelines`, filter `evt.pipeline.>`) |
 | `evt.studio.<session_id>.run_finished` | stream `EVT` | `evt.studio.run_finished`, `Nats-Msg-Id <run_id>:finished` | studio outbox relay → pipelines (durable `pipelines-runs`, filter `evt.studio.>`) |
 | `studio.runs.create` | core request/reply, queue group `studio` | bare JSON (`req.studio.runs.create`) | pipelines → studio |
+| `pipelines.state.get` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.state.get`) | studio → pipelines (5 s) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
 | KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models` | the runner writes its own keys once at start; studio reads |
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s; studio reads (older than 30 s = offline) |
@@ -196,7 +199,8 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
   released. Ordering between rows and users is the dispatcher's job (batch lane after interactive, round-robin
   between users, loaded models first); pipelines never paces runs itself.
 - **Failures**: a failed row is marked with its error and the batch continues. Three rows in a row (by finish
-  order) failing with the same error pause the batch (`reason: 3 rows in a row failed: <error>`).
+  order) failing with the same error pause the batch (`reason: 3 rows in a row failed: <error>`). A row a gate's reject
+  decided (`rejected at <gate>`, or any end after its `then`) is a reviewer's answer and never counts.
 - **Two records.** LangGraph's checkpoints resume threads and nothing else reads them. The batch record the UI reads
   (batch, rows, counts, batch events) lives in the `studio` database, built by studio's projector from
   `evt.pipeline.*` (pipelines is the only writer of `status`; studio writes `queued`, `control` and a retried row).
@@ -220,7 +224,8 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
     `cancels` (takes already stored stay); runs asked for later are created `cancelled`; pipelines marks rows never
     started `cancelled` and reports `stopped` when every row is final. Stop is final.
   - **Retry** (failed rows only): studio sets the row `queued`, attempt + 1; pipelines reruns the row's thread from
-    its start; the new attempt in the key makes a new run. A `done` batch reports `running` until the row ends.
+    its start; the new attempt in the key makes a new run. A `done` batch reports `running` until the row ends: it is
+    unfinished again, so the retry is refused (409, as Submit) while the user has 5 unfinished batches.
 - **Resume after a crash**: when pipelines_service starts, every batch it had running is reported `paused`
   (`reason: the pipeline service restarted; press Resume`) and waits for the user's Resume (held as above; runs
   already released keep running). Their `run_finished` events wait in `EVT` and resume their threads when consumed,
@@ -391,6 +396,164 @@ and `float` params), `count` (an Int source), `model`, `lora` (bypassable Model 
 `autowire.*.json` `{description, workflow, selected, add: {id, kind}, expect_in}`; `wiredrop.*.json`
 `{description, workflow, from: {node, port, side}, expect: [kind, …]}`, optionally `pick: {id, kind}` and
 `expect_in`: the picked node's `in` after the drop and its auto-wiring.
+
+## Saved pipelines (API 1.7, plan 16.2, 7.2)
+
+A user's own pipeline document runs a chain of workflows with gates and capped loops over a batch's rows. This
+version has four node kinds: `inputs`, `step`, `gate`, `output` (judge, write, decide, agent, memory and custom come
+later).
+
+- **Document** (`PipelineDoc`): `title`, `nodes` (id → node, ids `^[a-z][a-z0-9_]{0,63}$`, stable), `edges`. Every node
+  may carry `title` (the card's) and `position` (as workflows).
+  - `inputs`: `inputs` = ordered `[{name, type, label?}]`, type `Text | Image | Int | Float | Seed`; the batch's columns.
+    A batch addresses input `prompt` of inputs node `inputs` as `inputs.prompt`; a step binds it as `$prompt`.
+  - `step`: `workflow` (a template slug or one of the caller's workflow UUIDs), `seeds` (1–8, default 1), `preset`
+    (a name in the workflow's `studio.presets`), `inputs` (fixed `<node>.<param>` values as `RunRequest.inputs`; never a
+    take), `bind` (`<node>.<param>` of the workflow ← a source). A run's inputs = the preset, then `inputs`, then the
+    binds, then its seed.
+  - `gate`: `takes` (a step id: its latest takes are the candidates), `keep` (1–8, default 1): a pick is 1..`keep` of
+    the candidates, or reject all.
+  - `output`: `from` (`<step>.takes` or `<gate>.picked`: what the row ends with), `collection` (its name).
+- **Sources**: `$<input>`; `<step>.takes` (that step's takes from its latest visit, up to `seeds`); `<gate>.picked` (the
+  gate's latest pick, up to `keep`). A source not set yet at run time fails the row (`nothing from <node> yet`), except
+  an output's `from`, which then ends the row with no takes.
+- **Edges**: `[from, to]` (plain) or `[gate, {pass, fail, max, then}]` (the only branch in this version). A plain edge
+  out of a gate = pass; rejecting at such a gate fails the row (`rejected at <gate>`). With a branch, a pick goes to
+  `pass`; a reject goes to `fail` while the gate's fail count (per row attempt, never reset) is below `max` (1–10),
+  then +1; once it is `max`, a reject goes to `then`. Every node but an output has exactly one outgoing edge (no
+  fan-out yet); reaching an output ends the row.
+- **Seeds**: a step's runs on visit `v` (from 0) of row attempt `a` are `seeds` runs with seed
+  `(base + (a−1) × 64 + v × seeds + i) mod 2^53`, `i` = 0..seeds−1 (so a fail edge back to a step, or a Retry, means
+  new seeds; 64 = the run bound of a row). `base` = the bound `$<Seed input>` value, else a step `inputs` seed
+  ≥ 0, else a seed studio draws per row and step at Submit. The seed param is the workflow's one unwired `seed` param
+  (`seed_param` in the snapshot).
+- **Endpoints** (`/v1/studio`, mirroring `/workflows`): `GET /pipelines` (mine, newest `updated_at` first, no
+  `problems`, each with `workflow_titles` and `last_batch`); `GET /pipelines/{id}` (with `problems`, as the caller,
+  against the live palette); `POST /pipelines` (a whole doc with optional `based_on`, or `{based_on, title?}` to
+  copy: 201); `PUT /pipelines/{id}` (`PipelineUpdate` = doc + `version`; stale = 409 `pipeline changed since you opened
+  it (now version <n>)`); `PATCH` (`{title}`, `version` + 1); `DELETE` (204; 409 while a batch of it is queued, running,
+  waiting or paused); `POST /pipelines/validate` (`PipelineValidation`). Save-blocking problems on POST/PUT are 422
+  `PipelineError {detail: "pipeline has <n> problems: <first message>", problems}`. Owner-scoped by RLS (another
+  user's id is 404); at most 100 per user (409 `You have 100 pipelines; delete some first.`); 503 before studio's
+  registry watches have delivered.
+
+## Pipeline rules (normative)
+
+studio_service (Go) and the web editor (TypeScript) implement exactly these rules and test against
+`fixtures/pipelines/` (`workflows.json` holds the workflows the caller can run, checked with the graph rules against
+`fixtures/graphs/palette.json`); `check.py` holds the reference implementation (`pipeline_problems`). Problems have the
+`Problem` shape (`PipelineProblem`: `node` = the pipeline node, `port` = a bind key or `from`, `param` = an input name
+or a step `inputs` key), are compared and sorted the same way, and block `save` or only `run` as below. A document with
+`too_many_nodes` or `too_large` gets only those.
+
+Terms: **reach(a)** = the nodes reachable from `a` along one edge or more (a branch counts as three edges: pass,
+fail, then; a refused edge counts for nothing). **a dominates b**: a ≠ b and every path from the inputs node to b passes
+through a (b not reachable from the inputs node with a removed); the inputs node dominates every node; unchecked (true)
+without exactly one inputs node. A **capped edge** is a branch's fail edge.
+
+| Code | Blocks | Where | When |
+|---|---|---|---|
+| `too_many_nodes` | save | — | more than 24 nodes |
+| `too_large` | save | — | over 65536 bytes as compact JSON |
+| `inputs_node` | save | — | not exactly one node of kind `inputs` |
+| `duplicate_input` | save | node, param | an input name twice in one inputs node |
+| `unknown_node` | save | node (the edge's from) | an edge names a node not in the document (from, to, pass, fail or then); the edge is refused |
+| `branch_not_gate` | save | node | a `{pass, fail, max, then}` edge out of a node that is not a gate; refused |
+| `edge_invalid` | save | node | a second outgoing edge of a node, an edge out of an output, or an edge into the inputs node; refused (edges are taken in document order) |
+| `uncapped_cycle` | save | node | the node reaches itself along edges that are not capped (every cycle must pass through a capped edge; one problem per node on such a cycle) |
+| `too_many_runs` | save | — | Σ over steps of `seeds × visits` > 64, where `visits(s) = 1 + Σ max(e)` over the capped edges e = g→f with s on a cycle through e (s = f or s ∈ reach(f), and g ∈ reach(s)) |
+| `gate_takes` | save | node | `takes` is not a step, or that step does not dominate the gate |
+| `gate_keep` | save | node | `keep` > that step's `seeds` |
+| `bind_source` | save | node, port | a source naming no input (`$x`), `<n>.takes` where n is not a step, `<n>.picked` where n is not a gate; for a step: n is the step itself or does not dominate it; for an output (`port: from`): the output is not in reach(n) |
+| `unreachable` | run | node | not reachable from the inputs node (checked with exactly one) |
+| `dead_end` | run | node | a node other than an output whose reach holds no output (checked only when there is an output) |
+| `no_output` | run | — | no node of kind `output` |
+| `unknown_workflow` | run | node | the step's workflow is neither a published template nor one of the caller's (nothing else about it is checked) |
+| `workflow_cannot_run` | run | node | the workflow has any graph-rule problem now (message: its first) |
+| `unknown_preset` | run | node | `preset` is not in the workflow's `studio.presets` |
+| `step_input_invalid` | run | node, param | an `inputs` key that is not a settable param (`<node>.<param>` of a known kind, not wired; or `<node>.bypass` of a bypassable node, a bool), or a value that is `param_invalid` (a take included) |
+| `bind_unknown` | run | node, port | a bind key that is not a settable param of the workflow |
+| `bind_type` | run | node, port | the source does not fit: `$x` of type T fits a param whose wire type is T (Text: string/text, Int: int, Float: float, Seed: seed, Image: image), or an Image into a rows param with exactly one Image field (a one-item list); a takes/picked source of at most n takes fits an `image` param when n = 1, or such a rows param when n ≤ its `max` |
+| `unbound_input` | run | node, port | an `image` param, or a rows param with one Image field and `min` ≥ 1, that is not bound (the workflow holds no take, so it has no default) |
+| `step_seeds` | run | node | `seeds` > 1 and the workflow has no unwired `seed` param |
+
+Problems that depend on another document (the workflows, the palette) only block running, so a pipeline stays
+savable when a workflow it uses changes. The bound of 64 runs per row is what Submit's worst case uses.
+
+## Batches of a pipeline (API 1.7)
+
+- **Submit** (`POST /v1/studio/batches` with `pipeline_id` instead of `workflow_id`): the pipeline must be the caller's
+  (`unknown pipeline <id>`: 422) with no problem (`pipeline cannot run: <message>`). Columns are its inputs
+  (`inputs.prompt`); each row needs every input (`row 3: inputs.edit: a value is required`), except a Seed (drawn);
+  values are checked by type (Image = `{take_id}`, checked as image inputs); `lines` on a Text or Image input; `seeds`
+  repeats rows over the pipeline's one Seed input (422 when none or several). A live host for every step's env; the
+  768 KB limit counts the snapshot. Studio stores the batch with `pipeline_id`, `pipeline_title`, `pipeline_version`,
+  `collection` (the first output's by node id), `workflow_id` / `workflow_title` = the first step's.
+- **Snapshot** (`cmd.pipeline.submit` `snapshot.pipeline`, `defs pipelineSnapshot`): `{id, title, version, nodes, edges,
+  workflows}`: each step's `inputs` already merged over its preset (`preset` kept for display) plus `seed_param`
+  (`<node>.<param>` or null), every workflow a step uses as a `workflowSnapshot`. `snapshot.workflow_id` / `workflow`
+  are the first step's. Each row carries `seeds` (step id → base seed). The batch runs this, never the live documents.
+- **Threads**: the row graph per node: inputs → `inputs`; step → `submit` + `wait` (as today; one `submit` asks
+  `studio.runs.create` once per seed, `wait` resumes once all of the visit's runs have ended; any failed run fails the
+  row, later nodes are skipped); gate → `gate` (only `interrupt()`) + `route` (applies the pick, chooses the edge,
+  counts the loop); output → `output` (ends the row `succeeded` with its `from` takes). Idempotency key
+  `<batch>:<row>:<row attempt>:<step id>:<visit from 0>:<seed index>`; `workflow_id` in the request is the step's
+  workflow (one of `snapshot.pipeline.workflows`). Studio reads node and loop from the key for `made_with.pipeline`
+  (`{id, title, version, node, attempt = visit + 1, row}`; the take keeps `source: pipeline`, `batch_id`).
+- **Parking**: a row at a gate is `waiting`: `evt.pipeline.row` with `status: waiting`, `node`, `parked {gate, visit,
+  keep, candidates}` (the row-parked event). A parked row holds nothing: no run, no window slot (the window of 16
+  rows asked of studio counts only rows not ended and not waiting), and it never holds up row release (row 1 parking
+  counts as row 1 ending for "row 1 first"). A picked (or rejected) row resumes through the same window, before
+  queued rows. `BatchRow.status` `waiting`, `counts.waiting`; studio reports the batch `waiting` (computed) when pipelines says `running` and every row not ended is waiting.
+- **Pick** (`POST …/rows/{n}/pick {gate, take_ids}` or `{gate, reject: true}`): studio checks the row is parked on
+  that gate (409), takes ⊆ candidates, 1..keep, distinct (422), records it on the gate cell, sets the row `running`
+  with `parked` null, writes `cmd.pipeline.pick {batch_id, row, attempt, gate, visit, take_ids | reject}` in one
+  transaction. The same pick again for that visit: 202, nothing sent. `GET …/review` lists every parked row with
+  signed candidates, `on_reject` (`retry` / `then` / `fail`) and `rejects_left`. Pipelines resumes only a thread parked
+  on that gate visit and attempt; any other pick is dropped.
+- **Cells**: `evt.pipeline.row` carries `cells` (one per node reached, first-reached order, `attempts` per visit:
+  `status`, `run_ids`, `take_ids`, `candidates`, `seeds`, `error`); studio adds `seconds` (the attempt's runs, started
+  to finished, summed), `thumb_url`, and shows a step attempt `queued` while none of its runs has started.
+  `BatchRow.node` / `parked` / `cells` exist only for pipeline batches.
+- **Pause, Resume, Stop** as before; a parked row is left parked by Pause and Resume and is `cancelled` by Stop.
+  Picks are accepted while paused (the row's next runs are created held).
+
+## Execution view (API 1.7, plan 16.8)
+
+- **Step events**: pipelines publishes `evt.pipeline.step` for every graph step of a pipeline row: `{seq, row,
+  attempt, step, node, part, visit, status, what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id}`;
+  `step` numbers the row attempt's graph steps from 1; a step that parks (a step's `wait`, a `gate`) is published
+  `current` (checkpoint_id null) and again `resumed` with the same number when it continues; the latest seq per
+  (row, attempt, step) wins. `what` is plain words (`4 runs queued for Qwen Image`, `Parked, then resumed with 4
+  takes`, `Rejected all 4; back to still (1 of 2)`), `changed` the state touched (`takes.still = 4`, `loops.review = 1`).
+- **`GET …/rows/{n}/execution[?attempt=]`** (`RowExecution`): the snapshot doc, the step list, per node visits and
+  last status, the edges taken with counts, the loop counts, `current`; `has_state` per step while the checkpoint can
+  be read (the batch's threads exist and `checkpoint_id` is set). 404 for a workflow batch.
+- **`GET …/execution/{step}/state`**: studio sends `pipelines.state.get {owner_id, batch_id, row, checkpoint_id}`;
+  pipelines answers `{checkpoint_id, state}` only for the owner's batch and that row's thread, else `not_found` (404
+  `this row's state is gone; the batch has finished`); no answer in 5 s is 503. The browser never reads a checkpoint.
+- **Retry row from here** (`POST …/rows/{n}/retry {from_step}`): studio sets the row `queued`, attempt + 1, copies the
+  attempt's steps `1..from_step−1` to the new attempt (`retried_from {attempt, step}`), and writes `cmd.pipeline.retry
+  {batch_id, row, attempt, from_step, checkpoint_id}` (the checkpoint of step `from_step − 1`; none for step 1).
+  Pipelines forks the thread from that checkpoint with the new attempt: state before it is reused, every key from it
+  on carries the new attempt, so its runs are new. Without a body (or `from_step: 1`) the row restarts from its start.
+  That deletes the thread, so an older attempt's steps show `has_state` only while every later attempt forked.
+
+## Save as pipeline (API 1.7)
+
+`POST /v1/studio/takes/{id}/pipeline {title?}` walks the lineage up from the take: each take on the chain is a run
+output (`made_with` set); its **parent run take** is its one parent with `made_with` (more than one: 422 `take <id>
+was made from several runs' takes; a pipeline is a chain`); parents that are uploads become Image inputs. An image
+value in `made_with.inputs` that is not among the take's parents (deleted): 422 `take <id> in the lineage was
+deleted`. The chain stops at a take without a parent run take; at most 8 steps (422 `the lineage is longer than 8
+steps`); every workflow must still exist for the caller (422 `workflow <id> no longer exists`); an upload: 422 `an
+upload has no lineage to save`. The document, oldest run first: inputs node `inputs` with `prompt` (Text: the first
+step's `prompt.text`; only when its workflow has that param, so every input is bound) and one Image input per upload parent (`image`, `image_2`, …,
+in lineage order); steps `step_1`…`step_n`, each `workflow` = `made_with.workflow_id`, `seeds: 1`, `inputs` =
+`made_with.inputs` minus image values, minus its one seed param and minus bound keys; binds: `step_1`'s `prompt.text`
+← `$prompt`; the param that held the parent run take ← `step_<k−1>.takes`, a param that held an upload ← its
+`$image…` input (a rows param holding several takes: 422 `take <id> mixes several sources in <param>`); output `output` `{from: step_n.takes, collection: title}`;
+edges in a line. Title: `title`, else `<take title> pipeline` cut to 80. No gate is added; the editor adds them.
 
 ## Rules
 

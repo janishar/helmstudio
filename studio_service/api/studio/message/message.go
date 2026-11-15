@@ -1,7 +1,11 @@
 // Package message: the NATS bodies studio sends and reads (contracts/messages): cmd.run.execute and evt.run.*.
 package message
 
-import "github.com/helmstudio/studio_service/registry"
+import (
+	"encoding/json"
+
+	"github.com/helmstudio/studio_service/registry"
+)
 
 // TypeExecute is the envelope type of a run command.
 const TypeExecute = "cmd.run.execute"
@@ -84,16 +88,30 @@ type SnapshotWorkflow struct {
 	Nodes  map[string]registry.Node `json:"nodes"`
 }
 
-// Snapshot is what a batch runs: one workflow as it was at Submit.
+// Snapshot is what a batch runs: one workflow as it was at Submit, or with Pipeline a saved pipeline (then the
+// workflow is its first step's).
 type Snapshot struct {
-	WorkflowID string           `json:"workflow_id"`
-	Workflow   SnapshotWorkflow `json:"workflow"`
+	WorkflowID string            `json:"workflow_id"`
+	Workflow   SnapshotWorkflow  `json:"workflow"`
+	Pipeline   *PipelineSnapshot `json:"pipeline,omitempty"`
 }
 
-// SubmitRow is one row of cmd.pipeline.submit: its full inputs.
+// PipelineSnapshot is a saved pipeline as it was at Submit (contracts defs pipelineSnapshot): each node as a JSON
+// object (a step's inputs merged over its preset, plus seed_param), the edges, every workflow a step uses.
+type PipelineSnapshot struct {
+	ID        string                      `json:"id"`
+	Title     string                      `json:"title"`
+	Version   int                         `json:"version"`
+	Nodes     map[string]map[string]any   `json:"nodes"`
+	Edges     json.RawMessage             `json:"edges"`
+	Workflows map[string]SnapshotWorkflow `json:"workflows"`
+}
+
+// SubmitRow is one row of cmd.pipeline.submit: its full inputs; a pipeline batch's also its base seed per step.
 type SubmitRow struct {
-	Row    int            `json:"row"`
-	Inputs map[string]any `json:"inputs"`
+	Row    int              `json:"row"`
+	Inputs map[string]any   `json:"inputs"`
+	Seeds  map[string]int64 `json:"seeds,omitempty"`
 }
 
 // Submit is cmd.pipeline.submit's data.
@@ -111,12 +129,15 @@ func (Submit) Type() string { return "cmd.pipeline.submit" }
 // Subject is cmd.pipeline.submit.
 func (Submit) Subject() string { return "cmd.pipeline.submit" }
 
-// Control is cmd.pipeline.pause, .resume, .stop (Row and Attempt nil) or .retry.
+// Control is cmd.pipeline.pause, .resume, .stop (Row and Attempt nil) or .retry (FromStep and CheckpointID: Retry row
+// from here).
 type Control struct {
-	Kind    string `json:"-"` // pause | resume | stop | retry
-	BatchID string `json:"batch_id"`
-	Row     *int   `json:"row,omitempty"`
-	Attempt *int   `json:"attempt,omitempty"`
+	Kind         string  `json:"-"` // pause | resume | stop | retry
+	BatchID      string  `json:"batch_id"`
+	Row          *int    `json:"row,omitempty"`
+	Attempt      *int    `json:"attempt,omitempty"`
+	FromStep     *int    `json:"from_step,omitempty"`
+	CheckpointID *string `json:"checkpoint_id,omitempty"`
 }
 
 // Type is cmd.pipeline.<kind>.
@@ -124,6 +145,23 @@ func (c Control) Type() string { return "cmd.pipeline." + c.Kind }
 
 // Subject is the type.
 func (c Control) Subject() string { return c.Type() }
+
+// Pick is cmd.pipeline.pick's data: a gate's answer for one parked row (TakeIDs, or Reject).
+type Pick struct {
+	BatchID string   `json:"batch_id"`
+	Row     int      `json:"row"`
+	Attempt int      `json:"attempt"`
+	Gate    string   `json:"gate"`
+	Visit   int      `json:"visit"`
+	TakeIDs []string `json:"take_ids,omitempty"`
+	Reject  *bool    `json:"reject,omitempty"`
+}
+
+// Type is the envelope type.
+func (Pick) Type() string { return "cmd.pipeline.pick" }
+
+// Subject is the type.
+func (Pick) Subject() string { return "cmd.pipeline.pick" }
 
 // RunFinished is evt.studio.run_finished's data: a batch run reached a terminal status.
 type RunFinished struct {
@@ -159,6 +197,52 @@ type PipelineRow struct {
 	RunID   *string  `json:"run_id"`
 	TakeIDs []string `json:"take_ids"`
 	Error   *string  `json:"error"`
+	// pipeline batches
+	Node   *string         `json:"node"`
+	Parked json.RawMessage `json:"parked"` // {gate, visit, keep, candidates} with waiting
+	Cells  json.RawMessage `json:"cells"`  // [{node, kind, attempts: [{visit, status, run_ids, take_ids, …}]}]
+}
+
+// PipelineStep is evt.pipeline.step's data: one graph step of a pipeline row.
+type PipelineStep struct {
+	Seq          int64           `json:"seq"`
+	Row          int             `json:"row"`
+	Attempt      int             `json:"attempt"`
+	Step         int             `json:"step"`
+	Node         string          `json:"node"`
+	Part         string          `json:"part"`
+	Visit        int             `json:"visit"`
+	Status       string          `json:"status"`
+	What         string          `json:"what"`
+	Changed      []string        `json:"changed"`
+	Edge         json.RawMessage `json:"edge"`
+	Loops        map[string]int  `json:"loops"`
+	RunIDs       []string        `json:"run_ids"`
+	TakeIDs      []string        `json:"take_ids"`
+	Error        *string         `json:"error"`
+	CheckpointID *string         `json:"checkpoint_id"`
+}
+
+// PipelineSeq is the event's seq (per batch, over every kind).
+func (s PipelineStep) PipelineSeq() int64 { return s.Seq }
+
+// SubjectStateGet is pipelines' request/reply subject for a row's state at a checkpoint.
+const SubjectStateGet = "pipelines.state.get"
+
+// StateGet is the pipelines.state.get request (bare JSON).
+type StateGet struct {
+	OwnerID      string `json:"owner_id"`
+	BatchID      string `json:"batch_id"`
+	Row          int    `json:"row"`
+	CheckpointID string `json:"checkpoint_id"`
+}
+
+// StateReply is its reply: checkpoint_id and state, or error and code (not_found | internal).
+type StateReply struct {
+	CheckpointID string         `json:"checkpoint_id"`
+	State        map[string]any `json:"state"`
+	Error        string         `json:"error"`
+	Code         string         `json:"code"`
 }
 
 // PipelineSeq is the event's seq (per batch, over both kinds).

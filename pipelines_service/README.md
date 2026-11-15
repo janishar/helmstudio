@@ -7,9 +7,11 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
 | File | What |
 |---|---|
 | `main.py` | connect, migrate, report running batches paused (restart), pull `CMD` and `EVT` |
-| `graph.py` | the row graph `START → submit → wait → record → END` (submit → record on a terminal reply) |
+| `pipeline.py` | the pipeline rules the engine depends on (`problems`, tested on contracts/fixtures/pipelines) and the plan a graph is built from (a batch of one workflow = `step → out`) |
+| `graph.py` | the row graph per node: inputs; step `submit` + `wait`; gate `gate` (interrupt) + `route` (pick, edge, loop cap); output |
+| `states.py` | `pipelines.state.get` responder (queue group `pipelines`): a row's state at a checkpoint, owner only |
 | `engine.py` | batches and rows: row 1 first, pause, resume, stop, retry, restart, events, thread cleanup |
-| `consumer.py` | `cmd.pipeline.{submit,resume,pause,stop,retry}`, durable `pipelines` on `CMD`, one at a time, inbox dedupe |
+| `consumer.py` | `cmd.pipeline.{submit,resume,pause,stop,retry,pick}`, durable `pipelines` on `CMD`, one at a time, inbox dedupe |
 | `events.py` | `evt.studio.<session>.run_finished`, durable `pipelines-runs` on `EVT`: resumes the waiting thread |
 | `messaging/` | contract validation (`gen/`), `evt.pipeline.<batch_id>.{batch,row}` publisher, `studio.runs.create` client |
 | `migrations/` | `batches` (snapshot, control, seq, fail streak), `batch_rows`, `inbox`; LangGraph's tables via `setup()` |
@@ -34,6 +36,12 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
   (a redelivered `run_finished` or command), so a lost publish never leaves a batch hanging. Commands are redelivered
   without limit. `run_finished` events still resume parked threads. On Resume threads continue from
   their checkpoints; a submit that never recorded its run asks again and gets the same run.
+- **Pipelines** (`snapshot.pipeline`): one compiled graph per batch. A step asks one run per seed under
+  `<batch>:<row>:<attempt>:<step>:<visit>:<seed index>` and resumes once every run has ended (results wait in
+  `batch_rows.results`); a gate parks the row `waiting` (no slot, no window; row 1 parking releases the rows) until
+  `cmd.pipeline.pick` for that gate visit (stored in `batch_rows.pick`, any other dropped); a reject takes the fail
+  edge until `max`, then `then`. Every graph step is published as `evt.pipeline.step` from the checkpoint history.
+  Retry with `from_step` forks the thread from `checkpoint_id` (`aupdate_state`) as the new attempt.
 - When every row has ended the batch is `done` (or `stopped`) and its threads are deleted; the batch row and
   snapshot stay.
 

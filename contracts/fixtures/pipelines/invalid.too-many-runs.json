@@ -1,0 +1,87 @@
+{
+  "description": "8 seeds × (1 + a cap of 10) + 8 = 96 runs per row, over 64; the edit binds two picks to the rows param, which fits",
+  "pipeline": {
+    "title": "Fox at night",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "edit",
+            "type": "Text"
+          }
+        ],
+        "position": {
+          "x": 0,
+          "y": 0
+        }
+      },
+      "still": {
+        "kind": "step",
+        "title": "Qwen Image",
+        "workflow": "qwen-image",
+        "seeds": 8,
+        "inputs": {
+          "model.variant": "turbo",
+          "canvas.width": 1024
+        },
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "review": {
+        "kind": "gate",
+        "title": "Pick one still to edit",
+        "takes": "still",
+        "keep": 2
+      },
+      "edit": {
+        "kind": "step",
+        "title": "Qwen edit",
+        "workflow": "qwen-image",
+        "bind": {
+          "prompt.text": "$edit",
+          "encode.refs": "review.picked"
+        },
+        "seeds": 8
+      },
+      "out": {
+        "kind": "output",
+        "from": "edit.takes",
+        "collection": "Fox at night"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "still"
+      ],
+      [
+        "still",
+        "review"
+      ],
+      [
+        "review",
+        {
+          "pass": "edit",
+          "fail": "still",
+          "max": 10,
+          "then": "out"
+        }
+      ],
+      [
+        "edit",
+        "out"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "too_many_runs"
+    }
+  ]
+}

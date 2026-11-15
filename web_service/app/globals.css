@@ -270,9 +270,41 @@
     background: var(--a2);
     color: var(--on2);
   }
+  .st-wait {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--a1);
+    color: var(--a1);
+  }
   .st-bad {
     background: var(--s5);
     color: var(--a2);
+  }
+  /* a pipeline's chain of nodes on its card (docs/mock/Pipelines .chain, .pl) */
+  .chain {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 4px;
+    padding: 10px;
+    border-radius: 12px;
+    background: var(--in);
+  }
+  .pl {
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 999px 999px 999px 6px;
+    background: var(--s3);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 24px;
+    white-space: nowrap;
+  }
+  .pl-io {
+    background: var(--s5);
+  }
+  .pl-gt {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--dash);
   }
   /* rows done as a bar (docs/mock/Pipelines .prog) */
   .prog {
