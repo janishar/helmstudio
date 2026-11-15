@@ -11,6 +11,13 @@ One case per process (as the CLI runs): DistilledPipeline built and driven exact
 --distilled --quantize-on-load 8` does (cli._cmd_generate), with thin wrappers that only observe: the prompt
 embeddings, each stage's input noise / output latent, the upscaled latent, the final latents, the waveform before
 AAC, per-phase time and MLX peak memory. Writes <out>/<case>.mp4, .wav, -first/-mid/-last.png and .json.
+
+Stage B cases (M4) add, still through the CLI's own arguments: `--image PATH FRAME_IDX STRENGTH` rows (first frame =
+image-to-video, later frames = keyframes; the PNGs are made by ltx_inputs.test_image and saved beside the golden),
+`--segment TEXT [LEN]` Prompt Relay beats, and `--lora PATH 1.0` with ltx_inputs.synthetic_lora (written to --scratch,
+never to the repo; its sha256 is in the JSON). Extra observations: each preprocessed image and its encoded latent per
+stage, the denoise / keyframe masks and appended tokens per stage, the relay token ranges and mask, the LoRA keys
+fused and three fused weights. `--cases auto-duration` runs only Gemma + the DurationHead (no DiT) on a few prompts.
 """
 
 from __future__ import annotations
@@ -30,14 +37,16 @@ from pathlib import Path
 os.environ.setdefault("LTX_MLX_CACHE_DIR", str(Path(tempfile.gettempdir()) / "ltx-virtual-packs"))
 os.environ["LTX_MLX_QUANTIZE_ON_LOAD"] = "8"  # what the CLI sets from --quantize-on-load (default 8)
 
+import ltx_inputs
 import mlx.core as mx
 import numpy as np
 from ltx_pipelines_mlx import distilled as distilled_mod
-from ltx_pipelines_mlx.utils import blocks
+from ltx_pipelines_mlx.utils import _orchestration, blocks, media_io
 from ltx_pipelines_mlx.utils._orchestration import save_waveform
 
 REPO = Path(__file__).resolve().parents[2]
-OUT = REPO / "runner_service" / "tests" / "golden" / "ltx-text-to-video"
+GOLDEN = REPO / "runner_service" / "tests" / "golden"
+OUT = GOLDEN / "ltx-text-to-video"
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
 GEMMA_DEFAULT = "mlx-community/gemma-3-12b-it-4bit"  # cli.DEFAULT_GEMMA; unused on LTX-2.5 (Gemma 4 ships in the pack)
 
@@ -48,7 +57,36 @@ CASES = [
     {"name": "t2v-512x320-57f-s7", "width": 512, "height": 320, "frames": 57, "fps": 25.0, "seed": 7,
      "prompt": "Ocean waves crash against black volcanic rocks at sunset, white spray in the air, "
                "seagulls crying overhead and the wind roaring"},
+    # --- stage B (M4): one 448x256x49 @24 seed-42 clip per feature
+    {"name": "i2v-448x256-49f-s42", "out": "ltx-image-to-video", "width": 448, "height": 256, "frames": 49,
+     "fps": 24.0, "seed": 42, "images": [{"variant": 0, "frame_idx": 0, "strength": 1.0}],
+     "prompt": "A red ball rolls slowly to the right across a smooth pastel gradient floor while a blue cube spins "
+               "in place, soft electronic hum"},
+    {"name": "kf-448x256-49f-s42", "out": "ltx-image-to-video", "width": 448, "height": 256, "frames": 49,
+     "fps": 24.0, "seed": 42,
+     "images": [{"variant": 0, "frame_idx": 0, "strength": 1.0}, {"variant": 1, "frame_idx": 48, "strength": 1.0}],
+     "prompt": "A red ball and a blue cube slide past each other and swap places on a smooth pastel gradient "
+               "floor, soft electronic hum"},
+    {"name": "beats-448x256-49f-s42", "out": "ltx-prompt-beats", "width": 448, "height": 256, "frames": 49,
+     "fps": 24.0, "seed": 42, "relay_epsilon": 1e-3, "relay_strength": 1.0,
+     "segments": [{"text": "the puppy sits still and looks at the camera", "length": 3},
+                  {"text": "the puppy jumps up and runs away to the left, barking", "length": None}],
+     "prompt": "A golden retriever puppy on a sunny park lawn, birds chirping in the trees behind it"},
+    {"name": "lora-448x256-49f-s42", "out": "ltx-lora", "width": 448, "height": 256, "frames": 49, "fps": 24.0,
+     "seed": 42, "lora_strength": 1.0,
+     "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, "
+               "birds chirping in the trees behind it"},
 ]  # fmt: skip
+
+# DurationHead only (Gemma + connector + head; no DiT): the two t2v prompts (their embeddings are in those goldens)
+# plus a short and a long scene, at two frame rates and the UI's and the CLI's default bounds.
+DURATION_PROMPTS = [CASES[0]["prompt"], CASES[1]["prompt"],
+                    "A door slams shut.",
+                    ("A slow cinematic tracking shot follows an old fisherman as he walks the length of a long wooden "
+                     "pier at dawn, stops to watch the boats leave the harbour one by one, then turns and walks back "
+                     "while gulls circle and the bells of a distant church ring out")]  # fmt: skip
+DURATION_SETTINGS = [{"fps": 24.0, "min_s": 1.0, "max_s": 20.0}, {"fps": 24.0, "min_s": 1.0, "max_s": 8.0},
+                     {"fps": 25.0, "min_s": 1.0, "max_s": 20.0}]  # fmt: skip
 
 
 def stats(a: mx.array) -> dict:
@@ -103,10 +141,37 @@ def frames(mp4: Path, out: Path, name: str, n: int) -> dict:
     return picks
 
 
-def record(case: dict, out: Path) -> dict:
+def mask_stats(m) -> dict | None:
+    return None if m is None else stats(m)
+
+
+def record(case: dict, out: Path, scratch: Path) -> dict:
     model = MODELS / "ltx-2.5"
     ph = Phases()
     seen: dict = {"stages": []}
+
+    # Stage B inputs, built before the pipeline (as the CLI parses its arguments)
+    from ltx_core_mlx.conditioning.prompt_relay import PromptRelayInput
+    from ltx_pipelines_mlx.utils.args import ImageConditioningInput
+
+    images, image_meta = None, []
+    for i, im in enumerate(case.get("images", [])):
+        png = out / f"{case['name']}-image{i}.png"
+        sha = ltx_inputs.test_image(png, variant=im["variant"])
+        image_meta.append({**im, "file": png.name, "rgb_sha256": sha, "source_size": [640, 400],
+                           "png_sha256": hashlib.sha256(png.read_bytes()).hexdigest(), "crf": media_io.DEFAULT_IMAGE_CRF})  # fmt: skip
+        images = (images or []) + [ImageConditioningInput(path=str(png), frame_idx=im["frame_idx"], strength=im["strength"])]  # fmt: skip
+    relay = None
+    if case.get("segments"):
+        lengths = [s["length"] for s in case["segments"]]
+        relay = PromptRelayInput(local_prompts=[s["text"] for s in case["segments"]],
+                                 segment_lengths=lengths if any(n is not None for n in lengths) else None,
+                                 epsilon=case["relay_epsilon"], strength=case["relay_strength"])  # fmt: skip
+    lora_meta = None
+    if "lora_strength" in case:
+        lora_path = scratch / "ltx-synthetic-lora-r8.safetensors"
+        lora_meta = ltx_inputs.synthetic_lora(lora_path, model / "diffusion_models" / "ltx-2.5-22b-distilled-transformer-bf16.safetensors")  # fmt: skip
+        lora_meta["strength"] = case["lora_strength"]
 
     # cli._cmd_generate, --distilled branch
     t0 = time.perf_counter()
@@ -117,7 +182,58 @@ def record(case: dict, out: Path) -> dict:
     pipe.generate_audio = True
     pipe.video_decoder = "conv"
     pipe.diffvae_tile = None
+    if lora_meta:
+        pipe._pending_loras = [(str(lora_path), case["lora_strength"])]  # what cli._cmd_generate sets from --lora
     t_init = time.perf_counter() - t0
+
+    # Stage B observers (call through unchanged)
+    raw_prep = media_io.load_image_and_preprocess
+
+    def prep(path, height, width, crf=media_io.DEFAULT_IMAGE_CRF):
+        t = raw_prep(path, height, width, crf=crf)
+        seen.setdefault("image_preprocess", []).append({"file": Path(path).name, "height": height, "width": width,
+                                                        "crf": crf, "pixels": stats(t)})  # fmt: skip
+        return t
+
+    media_io.load_image_and_preprocess = prep
+    raw_cond = _orchestration.combined_image_conditionings
+
+    def cond(imgs, **kw):
+        items = raw_cond(imgs, **kw)
+        row = {"enc_h": kw["enc_h"], "enc_w": kw["enc_w"], "spatial_dims": list(kw["spatial_dims"]), "items": []}
+        for it in items:
+            if hasattr(it, "keyframe_latent"):
+                row["items"].append({"type": "VideoConditionByKeyframeIndex", "frame_idx": it.frame_idx,
+                                     "strength": it.strength, "latent": stats(it.keyframe_latent),
+                                     "positions": stats(it.keyframe_positions)})  # fmt: skip
+            else:
+                row["items"].append({"type": "VideoConditionByLatentIndex", "frame_indices": it.frame_indices,
+                                     "strength": it.strength, "latent": stats(it.clean_latent)})  # fmt: skip
+        seen.setdefault("image_conditionings", []).append(row)
+        return items
+
+    _orchestration.combined_image_conditionings = ph.wrap("image_conditioning", cond)
+    raw_relay = pipe._prompt_relay_setup
+
+    def relay_setup(prompt, prompt_relay):
+        combined, ranges = raw_relay(prompt, prompt_relay)
+        if ranges is not None:
+            seen["prompt_relay"] = {"encoded_prompt": combined, "token_ranges": [list(r) for r in ranges]}
+        return combined, ranges
+
+    pipe._prompt_relay_setup = relay_setup
+    fused: dict = {"quantized": 0, "float": 0}
+    if lora_meta:
+        from ltx_core_mlx.loader import fuse_loras
+
+        for name, kind in (("_fuse_delta_with_quantized", "quantized"), ("_fuse_delta_with_float", "float")):
+            raw_f = getattr(fuse_loras, name)
+
+            def counted(*a, _raw=raw_f, _kind=kind, **kw):
+                fused[_kind] += 1
+                return _raw(*a, **kw)
+
+            setattr(fuse_loras, name, counted)
 
     # Observers (call through unchanged)
     enc = pipe.prompt_encoder
@@ -131,7 +247,21 @@ def record(case: dict, out: Path) -> dict:
         return v, a
 
     enc.encode = ph.wrap("text_encode", encode)
-    pipe.load = ph.wrap("dit_vae_encoder_upsampler_load", pipe.load)
+    raw_load = pipe.load
+
+    def load():
+        raw_load()
+        if lora_meta and "lora_fused_weights" not in seen:
+            from mlx.utils import tree_flatten
+
+            p = dict(tree_flatten(pipe.dit.parameters()))
+            seen["lora_fused_weights"] = {
+                k: {s: stats(p[f"{k}.{s}"]) for s in ("weight", "scales", "biases") if f"{k}.{s}" in p}
+                for k in ("transformer_blocks.0.attn1.to_q", "transformer_blocks.47.ff.proj_out", "patchify_proj",
+                          "adaln_single.emb.timestep_embedder.linear1")
+            }  # fmt: skip
+
+    pipe.load = ph.wrap("dit_vae_encoder_upsampler_load", load)
     raw_loop = pipe._run_denoise_loop
 
     def loop(**kw):
@@ -140,7 +270,12 @@ def record(case: dict, out: Path) -> dict:
         row = {"stage": n, "sigmas": [float(s) for s in kw["sigmas"]], "ancestral": kw["ancestral"],
                "loop_noise_seed": kw["seed"] + distilled_mod.ANCESTRAL_NOISE_SEED_OFFSET if kw["ancestral"] else None,
                "video_in": stats(vs.latent), "audio_in": stats(as_.latent),
-               "video_positions": list(vs.positions.shape), "audio_positions": list(as_.positions.shape)}  # fmt: skip
+               "video_positions": list(vs.positions.shape), "audio_positions": list(as_.positions.shape),
+               "video_tokens_total": vs.latent.shape[1], "video_clean_in": stats(vs.clean_latent),
+               "video_denoise_mask": stats(vs.denoise_mask), "video_keyframes_mask": mask_stats(vs.keyframes_mask),
+               "video_attention_mask": None if vs.attention_mask is None else list(vs.attention_mask.shape),
+               "video_positions_stats": stats(vs.positions),
+               "video_cross_attention_mask": mask_stats(kw["video_cross_attention_mask"])}  # fmt: skip
         if n == 2:  # clean_latent of stage 2 is the upscaled, renormalised stage-1 latent (and stage-1 audio)
             row["video_upscaled"], row["audio_from_stage1"] = stats(vs.clean_latent), stats(as_.clean_latent)
         res = ph.wrap(f"stage{n}_denoise", raw_loop)(**kw)
@@ -175,19 +310,30 @@ def record(case: dict, out: Path) -> dict:
     mp4 = out / f"{case['name']}.mp4"
     mx.reset_peak_memory()
     pipe.generate_and_save(prompt=case["prompt"], output_path=str(mp4), height=case["height"], width=case["width"],
-                           num_frames=case["frames"], frame_rate=case["fps"], seed=case["seed"], images=None,
-                           generated_keyframes=0)  # fmt: skip
+                           num_frames=case["frames"], frame_rate=case["fps"], seed=case["seed"], images=images,
+                           generated_keyframes=0, **({"prompt_relay": relay} if relay else {}))  # fmt: skip
     total = time.perf_counter() - t0
     probe = ffprobe(mp4)
     vstream = next(s for s in probe["streams"] if s["codec_type"] == "video")
     picks = frames(mp4, out, case["name"], int(vstream["nb_frames"]))
     ru = resource.getrusage(resource.RUSAGE_SELF)
+    extra = "".join(f" --image {m['file']} {m['frame_idx']} {m['strength']:g}" for m in image_meta)
+    for sg in case.get("segments", []):
+        extra += f" --segment '{sg['text']}'" + (f" {sg['length']}" if sg["length"] is not None else "")
+    if relay:
+        extra += f" --relay-epsilon {case['relay_epsilon']:g} --relay-strength {case['relay_strength']:g}"
+    if lora_meta:
+        extra += f" --lora {lora_meta['file']} {case['lora_strength']:g}"
     meta = {
         **case,
         "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
         "argv_equivalent": f"ltx-2-mlx generate --distilled --model {model} --quantize-on-load 8 "
         f"--width {case['width']} --height {case['height']} --frames {case['frames']} --frame-rate {case['fps']:g} "
-        f"--seed {case['seed']} --prompt '...' -o {case['name']}.mp4",
+        f"--seed {case['seed']} --prompt '...'{extra} -o {case['name']}.mp4",
+        "images": image_meta or None, "image_preprocess": seen.get("image_preprocess"),
+        "image_conditionings": seen.get("image_conditionings"), "prompt_relay": seen.get("prompt_relay"),
+        "lora": None if not lora_meta else {**lora_meta, "fused_quantized": fused["quantized"],
+                                            "fused_float": fused["float"], "weights": seen.get("lora_fused_weights")},
         "quantize_on_load": 8, "quant_group_size": 64, "low_ram": False, "tiling": None, "video_decoder": "conv",
         "generate_audio": True, "stage1_steps": None, "stage2_steps": None, "is_ltx25": pipe._is_25,
         "noise_seeds": {"stage1_video": case["seed"], "stage1_audio": case["seed"] + 1,
@@ -219,14 +365,68 @@ def record(case: dict, out: Path) -> dict:
     return meta
 
 
+def record_duration(out: Path) -> dict:
+    """DurationHead predictions (cli: no --frames, --auto-duration MIN:MAX) for DURATION_PROMPTS; no DiT is loaded."""
+    from ltx_pipelines_mlx.utils.types import AutoDuration
+
+    t0 = time.perf_counter()
+    pipe = distilled_mod.DistilledPipeline(model_dir=str(MODELS / "ltx-2.5"), gemma_model_id=GEMMA_DEFAULT,
+                                           low_memory=True, low_ram_streaming=False, tile_count=None)  # fmt: skip
+    pred = pipe._duration_predictor
+    raw_head, last = pred._head, {}
+
+    def head(**kw):
+        s_ = raw_head(**kw)
+        mx.eval(s_)
+        last["seconds"] = float(s_.item())
+        return s_
+
+    pred._head = head
+    mx.reset_peak_memory()
+    pipe._load_text_encoder()
+    t_load = time.perf_counter() - t0
+    rows = []
+    for prompt in DURATION_PROMPTS:
+        t = time.perf_counter()
+        v, a = pipe._encode_text(prompt)
+        mx.eval(v, a)
+        t_enc = time.perf_counter() - t
+        row = {"prompt": prompt, "video_embeds": stats(v), "audio_embeds": stats(a), "encode_s": round(t_enc, 2),
+               "predictions": []}  # fmt: skip
+        for st in DURATION_SETTINGS:
+            n = pipe._resolve_num_frames(AutoDuration(st["min_s"], st["max_s"]), video_encoding=v, audio_encoding=a,
+                                         frame_rate=st["fps"])  # fmt: skip
+            row["predictions"].append({**st, "raw_seconds": round(last["seconds"], 6), "frames": n})
+        rows.append(row)
+    meta = {
+        "what": "DurationPredictor (blocks.py:791) on the connector outputs; frames = clamp(round(s*fps), "
+        "round(min*fps), round(max*fps)) then floor to 8k+1 (snapped up if below min)",
+        "head_file": "model_patches/ltx-2.5-duration-head-bf16.safetensors", "rows": rows,
+        "timing_s": {"text_encoder_load": round(t_load, 2), "total_wall": round(time.perf_counter() - t0, 1)},
+        "memory": {"mlx_peak_gib_whole_run": gib(mx.get_peak_memory()),
+                   "process_max_rss_gib": gib(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)},
+        "versions": {"mlx": mx.__version__, "python": platform.python_version(), "numpy": np.__version__},
+    }  # fmt: skip
+    (out / "auto-duration.json").write_text(json.dumps(meta, indent=2) + "\n")
+    print("auto-duration", json.dumps([[p["frames"] for p in r["predictions"]] for r in rows]), meta["timing_s"],
+          meta["memory"], flush=True)  # fmt: skip
+    return meta
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cases", nargs="*", help="case names (default: all; run one per process to keep peaks clean)")
-    ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--cases", nargs="*", help="case names or auto-duration (default: all CASES; one per process)")
+    ap.add_argument("--out", type=Path, default=None, help="output dir (default: the case's golden dir)")
+    ap.add_argument("--scratch", type=Path, default=Path(tempfile.gettempdir()), help="where the synthetic LoRA goes")
     args = ap.parse_args()
-    args.out.mkdir(parents=True, exist_ok=True)
+    if args.cases and "auto-duration" in args.cases:
+        out = args.out or GOLDEN / "ltx-auto-duration"
+        out.mkdir(parents=True, exist_ok=True)
+        record_duration(out)
     for case in [c for c in CASES if not args.cases or c["name"] in args.cases]:
-        record(case, args.out)
+        out = args.out or GOLDEN / case.get("out", "ltx-text-to-video")
+        out.mkdir(parents=True, exist_ok=True)
+        record(case, out, args.scratch)
 
 
 if __name__ == "__main__":

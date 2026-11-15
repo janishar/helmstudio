@@ -1,0 +1,239 @@
+{
+  "what": "DurationPredictor (blocks.py:791) on the connector outputs; frames = clamp(round(s*fps), round(min*fps), round(max*fps)) then floor to 8k+1 (snapped up if below min)",
+  "head_file": "model_patches/ltx-2.5-duration-head-bf16.safetensors",
+  "rows": [
+    {
+      "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, birds chirping in the trees behind it",
+      "video_embeds": {
+        "shape": [
+          1,
+          1024,
+          4096
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.013585,
+        "std": 0.999913,
+        "min": -19.5,
+        "max": 23.125,
+        "abs_mean": 0.377563,
+        "sha256_f32": "d5bfb0b42f2220e78fcbab5cc5f9614b405f4583cd7cdfaec3fcbe2cfed7aefa"
+      },
+      "audio_embeds": {
+        "shape": [
+          1,
+          1024,
+          2048
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.023532,
+        "std": 0.999713,
+        "min": -15.0,
+        "max": 15.8125,
+        "abs_mean": 0.360005,
+        "sha256_f32": "b7d058e8c1d5da842902897491d268da8fc0b28b3edff92472042c34fc70b2e2"
+      },
+      "encode_s": 2.17,
+      "predictions": [
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 2.890625,
+          "frames": 65
+        },
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 8.0,
+          "raw_seconds": 2.890625,
+          "frames": 65
+        },
+        {
+          "fps": 25.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 2.890625,
+          "frames": 65
+        }
+      ]
+    },
+    {
+      "prompt": "Ocean waves crash against black volcanic rocks at sunset, white spray in the air, seagulls crying overhead and the wind roaring",
+      "video_embeds": {
+        "shape": [
+          1,
+          1024,
+          4096
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.01305,
+        "std": 0.9999,
+        "min": -19.5,
+        "max": 23.125,
+        "abs_mean": 0.379179,
+        "sha256_f32": "9d112e045751efd955a06379c28aa4c9e7915f5639b37696f8af0ab0b7ee5a01"
+      },
+      "audio_embeds": {
+        "shape": [
+          1,
+          1024,
+          2048
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.023739,
+        "std": 0.999719,
+        "min": -14.9375,
+        "max": 15.8125,
+        "abs_mean": 0.35696,
+        "sha256_f32": "21a635cecdc3ba3401ab16c20d7850598ceda78818f686d99f666078951d3769"
+      },
+      "encode_s": 1.83,
+      "predictions": [
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 3.484375,
+          "frames": 81
+        },
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 8.0,
+          "raw_seconds": 3.484375,
+          "frames": 81
+        },
+        {
+          "fps": 25.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 3.484375,
+          "frames": 81
+        }
+      ]
+    },
+    {
+      "prompt": "A door slams shut.",
+      "video_embeds": {
+        "shape": [
+          1,
+          1024,
+          4096
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.01369,
+        "std": 0.999914,
+        "min": -19.5,
+        "max": 23.125,
+        "abs_mean": 0.370924,
+        "sha256_f32": "2ce94dad285db57a2a5dc23ca49f4ef92a129ed6189a8735c3c665296ad3baaa"
+      },
+      "audio_embeds": {
+        "shape": [
+          1,
+          1024,
+          2048
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.024037,
+        "std": 0.999717,
+        "min": -15.625,
+        "max": 17.125,
+        "abs_mean": 0.351429,
+        "sha256_f32": "3d33b07fad8ec3ee110c8ae96158c2259f1974493e5d98e1620a06d00406a04b"
+      },
+      "encode_s": 1.83,
+      "predictions": [
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 3.828125,
+          "frames": 89
+        },
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 8.0,
+          "raw_seconds": 3.828125,
+          "frames": 89
+        },
+        {
+          "fps": 25.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 3.828125,
+          "frames": 89
+        }
+      ]
+    },
+    {
+      "prompt": "A slow cinematic tracking shot follows an old fisherman as he walks the length of a long wooden pier at dawn, stops to watch the boats leave the harbour one by one, then turns and walks back while gulls circle and the bells of a distant church ring out",
+      "video_embeds": {
+        "shape": [
+          1,
+          1024,
+          4096
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.012863,
+        "std": 0.999925,
+        "min": -19.5,
+        "max": 23.125,
+        "abs_mean": 0.387473,
+        "sha256_f32": "80bdad371bf42bfd5d277bed48dbce1b8973f929d6b51e0e555f667783a3a186"
+      },
+      "audio_embeds": {
+        "shape": [
+          1,
+          1024,
+          2048
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.023894,
+        "std": 0.999709,
+        "min": -14.9375,
+        "max": 15.8125,
+        "abs_mean": 0.363883,
+        "sha256_f32": "c41a26ec453c06eb916df03fe015682e852ac30589e442b55bac08c59c5d7e73"
+      },
+      "encode_s": 1.82,
+      "predictions": [
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 14.9375,
+          "frames": 353
+        },
+        {
+          "fps": 24.0,
+          "min_s": 1.0,
+          "max_s": 8.0,
+          "raw_seconds": 14.9375,
+          "frames": 185
+        },
+        {
+          "fps": 25.0,
+          "min_s": 1.0,
+          "max_s": 20.0,
+          "raw_seconds": 14.9375,
+          "frames": 369
+        }
+      ]
+    }
+  ],
+  "timing_s": {
+    "text_encoder_load": 4.62,
+    "total_wall": 12.5
+  },
+  "memory": {
+    "mlx_peak_gib_whole_run": 21.88,
+    "process_max_rss_gib": 9.8
+  },
+  "versions": {
+    "mlx": "0.32.2",
+    "python": "3.13.14",
+    "numpy": "2.4.3"
+  }
+}

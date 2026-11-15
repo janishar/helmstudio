@@ -1,6 +1,7 @@
 // The run form, derived from a workflow's node schemas (contracts/openapi.yaml `Workflow`).
 import type { S } from "@/lib/api";
 import { frameError } from "@/lib/media";
+import { allowedInts, clipOf, positionErrors, positionOf } from "@/lib/video";
 
 type Param = S<"ParamSchema">;
 type Value = S<"ParamValue">;
@@ -20,6 +21,8 @@ export type Field = {
   model: boolean;
   /** the node kind's family (a LoRA must fit it), null for a core kind */
   family?: string | null;
+  /** the node's params as the workflow has them (defaults filled): what `values_by` and a frame rate read */
+  siblings?: Record<string, Value>;
 };
 
 /** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's
@@ -39,6 +42,9 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
     if (!schema) return [];
     // two nodes of one kind: each field names its node ("Steps (sample_2)"), or the form shows two "Steps"
     const twin = kinds.filter((k) => k === n.kind).length > 1;
+    const siblings = Object.fromEntries(
+      schema.params.map((p) => [p.name, n.params?.[p.name] ?? p.default]),
+    );
     return schema.params
       .filter((param) => !(param.name in (n.in ?? {})))
       .map((param) => ({
@@ -51,6 +57,7 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
         canvas: schema.outputs.some((o) => o.type === "Canvas"),
         model: schema.outputs.some((o) => o.type === "Model"),
         family: schema.family,
+        siblings,
       }));
   });
 }
@@ -181,6 +188,14 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
     const need = Object.keys(p.item ?? {}).filter((k) => p.item?.[k] === "Image");
     const bad = items.findIndex((it) => need.some((k) => !isRef(it[k])));
     if (bad >= 0) return { error: `item ${bad + 1}: an image is required` };
+    // the other fields, a field left out at its default (studio checks the merged item)
+    for (const [i, it] of items.entries())
+      for (const [k, v] of Object.entries(p.item ?? {})) {
+        if (typeof v !== "object") continue;
+        const spec = { name: k, ...(v as object) } as Param;
+        const r = readValue(spec, toRaw((it[k] ?? spec.default) as Value, spec));
+        if ("error" in r) return { error: `item ${i + 1}, ${spec.label ?? k}: ${r.error}` };
+      }
     const lora = Object.keys(p.item ?? {}).find((k) => p.item?.[k] === "Lora");
     const noLora = lora ? items.findIndex((it) => !isLoraRef(it[lora])) : -1;
     return noLora < 0 ? { value: items } : { error: `item ${noLora + 1}: a LoRA is required` };
@@ -200,6 +215,7 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
   }
   if (p.type === "frames") {
     const t = text.trim();
+    if (t === "auto") return p.auto ? { value: "auto" } : { error: "auto length is not offered" };
     const n = Number(t);
     if (t === "" || !Number.isInteger(n)) return { error: "must be a whole number" };
     const err = frameError(p, n);
@@ -210,6 +226,8 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
     const n = Number(t);
     if (t === "" || !Number.isFinite(n)) return { error: "must be a number" };
     if (p.type === "int" && !Number.isInteger(n)) return { error: "must be a whole number" };
+    if (p.type === "int" && p.values && !p.values.includes(n))
+      return { error: `must be one of ${p.values.join(", ")}` };
     if ((p.min != null && n < p.min) || (p.max != null && n > p.max))
       return { error: bounds(p.min, p.max, "") };
     return { value: n };
@@ -241,9 +259,20 @@ export function buildInputs(fs: Field[], raws: Record<string, Raw>) {
   const errors: Record<string, string> = {};
   for (const f of fs) {
     const r = readValue(f.param, raws[f.key] ?? toRaw(f.initial, f.param));
+    const allowed = allowedInts(f, raws);
     if ("error" in r) errors[f.key] = r.error;
-    else if (!same(r.value, f.initial) && !(r.value === -1 && f.initial === null))
-      inputs[f.key] = r.value;
+    else if (allowed && !allowed.includes(r.value as number))
+      errors[f.key] = `must be one of ${allowed.join(", ")}`;
+    else {
+      // keyframe times against the clip the form makes (studio's run rule, said per row)
+      const all = positionOf(f.param)
+        ? positionErrors(f.param, r.value as S<"RowItem">[], clipOf(fs, raws))
+        : [];
+      const i = all.findIndex(Boolean);
+      if (i >= 0) errors[f.key] = `row ${i + 1}: ${all[i]}`;
+      else if (!same(r.value, f.initial) && !(r.value === -1 && f.initial === null))
+        inputs[f.key] = r.value;
+    }
   }
   return { inputs, errors };
 }
@@ -278,8 +307,9 @@ const rank = (f: Field) => (f.model ? 0 : f.param.type === "seed" ? 2 : 1);
 export const isLoraRows = (f: Field) =>
   f.param.type === "rows" && Object.values(f.param.item ?? {}).includes("Lora");
 
-/** The inspector's sections: image inputs (References), LoRA stacks, the canvas node's params, frame counts with
- * their frame rates (Duration), label-over-value tiles, switches, and the rest. */
+/** The inspector's sections: image inputs (References), other rows (each its own section: prompt beats), LoRA
+ * stacks, the canvas node's params, frame counts with their frame rates (Duration), label-over-value tiles,
+ * switches, and the rest. */
 export function sections(fs: Field[]) {
   const rest = fs.filter((f) => f.param.type !== "text");
   const frames = rest.filter((f) => f.param.type === "frames");
@@ -288,9 +318,8 @@ export function sections(fs: Field[]) {
   const other = rest.filter((f) => !f.canvas && !duration.includes(f));
   return {
     duration,
-    refs: other.filter(
-      (f) => (f.param.type === "rows" && !isLoraRows(f)) || f.param.type === "image",
-    ),
+    refs: other.filter((f) => f.param.type === "image" || !!imageField(f.param)),
+    rows: other.filter((f) => f.param.type === "rows" && !isLoraRows(f) && !imageField(f.param)),
     loras: other.filter(isLoraRows),
     canvas: rest.filter((f) => f.canvas),
     // the model node's first, then graph order, the seed last (its home is the composer's chip), as in the mock
@@ -301,6 +330,9 @@ export function sections(fs: Field[]) {
     more: other.filter((f) => f.param.type === "string"),
   };
 }
+
+/** A rows param's Image item field, if it has one. */
+const imageField = (p: Param) => Object.keys(p.item ?? {}).find((k) => p.item?.[k] === "Image");
 
 /** The key of a frames field's frame-rate field (`<node>.<fps>`), if it names one. */
 export const fpsKey = (f: Field) => (f.param.fps ? `${f.node}.${f.param.fps}` : undefined);
@@ -356,14 +388,27 @@ export const aspectOf = (w: number, h: number, grid = 1) =>
 export const megapixelsOf = (w: number, h: number, choices = MEGAPIXELS) =>
   choices.reduce((a, b) => (Math.abs(b - (w * h) / 1e6) < Math.abs(a - (w * h) / 1e6) ? b : a));
 
-/** The session rule (plan 01-concepts.md, Session) on a switch of workflow: what the controls hold carries over where
- * the paths match and the value suits the new field (a canvas's width and height together); a value that does not
- * suit goes, so the field starts from the workflow's own. Paths the new workflow lacks are kept for a switch back. */
-export function carry(raws: Record<string, Raw>, fs: Field[]): Record<string, Raw> {
-  const bad = (f: Field) => f.key in raws && "error" in readValue(f.param, raws[f.key]);
+/** The session rule (plan 01-concepts.md, Session) on a switch of workflow from the fields `from` to `fs`: what the
+ * controls hold carries over where the paths match and the value suits the new field (a canvas's width and height
+ * together; a LoRA stack only within its family, its LoRAs fit no other); a value that does not suit goes, so the
+ * field starts from `back` (what the new workflow held when it was last left), else from the workflow's own. Paths
+ * the new workflow lacks are kept for a switch back. */
+export function carry(
+  raws: Record<string, Raw>,
+  fs: Field[],
+  from: Field[] = [],
+  back: Record<string, Raw> = {},
+): Record<string, Raw> {
+  const was = new Map(from.map((f) => [f.key, f]));
+  const otherFamily = (f: Field) =>
+    isLoraRows(f) && was.has(f.key) && was.get(f.key)?.family !== f.family;
+  const bad = (f: Field) =>
+    f.key in raws && (otherFamily(f) || "error" in readValue(f.param, raws[f.key]));
   const canvasBad = fs.some((f) => f.canvas && bad(f));
   const drop = new Set(fs.filter((f) => bad(f) || (f.canvas && canvasBad)).map((f) => f.key));
-  return Object.fromEntries(Object.entries(raws).filter(([k]) => !drop.has(k)));
+  const out = Object.fromEntries(Object.entries(raws).filter(([k]) => !drop.has(k)));
+  for (const f of fs) if (!(f.key in out) && f.key in back) out[f.key] = back[f.key];
+  return out;
 }
 
 /** One run's inputs per queued seed: n consecutive seeds from the one set, or n random ones (-1). Without a seed

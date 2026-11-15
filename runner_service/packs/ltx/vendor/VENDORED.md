@@ -15,4 +15,9 @@ re-written in `../mlx.py`, following `ltx_pipelines_mlx.distilled` and its helpe
 - The weights (`~/GenAI/models/ltx-2.5`) are under Lightricks' own model licence, which none of this covers.
 - Runtime dependency: `mlx-arsenal` (timestep embedding, Euler step), pinned to 0.2.4 as in the studio's lockfile.
 
+M4 stage B added, also unchanged: `conditioning/prompt_relay.py` (Prompt Relay) and `duration_head/` (the
+DurationHead for auto length). `loader/fuse_loras.py` is the reference the core's MLX bake follows
+(core/loaders_mlx.py); the image preprocessing (`ltx_pipelines_mlx.utils.media_io`) and the image conditioning
+order (`_orchestration.combined_image_conditionings`, `helpers.create_noised_state`) are re-written in `../mlx.py`.
+
 To refresh: copy the same files from a newer commit, re-run `tests/golden/compare_ltx.py` and update this note.

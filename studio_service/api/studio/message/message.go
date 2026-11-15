@@ -78,6 +78,13 @@ type Output struct {
 	Seed   *int64  `json:"seed"`
 	// kind video: its metadata and poster (required then, absent for an image)
 	Video *dto.Video `json:"video"`
+	// the values the runner chose for params the run set to "auto"
+	Resolved *Resolved `json:"resolved"`
+}
+
+// Resolved is an output's resolved: "<node>.<param>" → the value the runner chose for "auto" (a predicted length).
+type Resolved struct {
+	Params map[string]int64 `json:"params"`
 }
 
 // Unload is req.runner.unload's request: the env about to load and the run waiting (both for the runner's log).

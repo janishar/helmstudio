@@ -112,6 +112,12 @@ def parse(key: str, key_style: str) -> tuple[str, str] | None:
     return (rest[: -len(suf)], SUFFIXES[key_style][suf]) if suf and len(rest) > len(suf) else None
 
 
+def _matches(rename: dict, part: str) -> bool:
+    """A rename applies when its `from` starts the module part (`at: start`, the default) or ends it (`at: end`)."""
+    f = rename["from"]
+    return part.endswith(f) if rename.get("at") == "end" else part.startswith(f)
+
+
 def normalise(
     name: str, tensors: dict, block: dict, family: str, shapes: dict | None = None
 ) -> dict:
@@ -130,8 +136,10 @@ def normalise(
             unapplied.append(k)
         else:
             part, role = pr
-            r = next((r for r in block["renames"] if part.startswith(r["from"])), None)
-            part = r["to"] + part[len(r["from"]) :] if r else part
+            r = next((r for r in block["renames"] if _matches(r, part)), None)
+            if r:
+                n = len(r["from"])
+                part = part[:-n] + r["to"] if r.get("at") == "end" else r["to"] + part[n:]
             parts.setdefault(part, {}).setdefault(role, []).append(k)
     applied, rank, groups = [], None, {}
     for part, roles in parts.items():

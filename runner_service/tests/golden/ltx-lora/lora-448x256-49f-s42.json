@@ -1,0 +1,689 @@
+{
+  "name": "lora-448x256-49f-s42",
+  "out": "ltx-lora",
+  "width": 448,
+  "height": 256,
+  "frames": 49,
+  "fps": 24.0,
+  "seed": 42,
+  "lora_strength": 1.0,
+  "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, birds chirping in the trees behind it",
+  "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
+  "argv_equivalent": "ltx-2-mlx generate --distilled --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 448 --height 256 --frames 49 --frame-rate 24 --seed 42 --prompt '...' --lora ltx-synthetic-lora-r8.safetensors 1 -o lora-448x256-49f-s42.mp4",
+  "images": null,
+  "image_preprocess": null,
+  "image_conditionings": null,
+  "prompt_relay": null,
+  "lora": {
+    "file": "ltx-synthetic-lora-r8.safetensors",
+    "sha256": "28250968b12297b8cb3e13b10ddca267d18d6b77e82846f107d79c162804c3d0",
+    "bytes": 59997456,
+    "rank": 8,
+    "modules": 338,
+    "keys": 676,
+    "seed": 20261115,
+    "a_std": 0.05,
+    "b_std": 0.014142135623730949,
+    "other_scale": 0.25,
+    "strength": 1.0,
+    "fused_quantized": 336,
+    "fused_float": 2,
+    "weights": {
+      "transformer_blocks.0.attn1.to_q": {
+        "weight": {
+          "shape": [
+            4096,
+            1024
+          ],
+          "dtype": "uint32",
+          "mean": 2450928640.0,
+          "std": 868127360.0,
+          "min": 19614.0,
+          "max": 4294965504.0,
+          "abs_mean": 2450928640.0,
+          "sha256_f32": "fcfe1a9651dd81400f6bc659d282c0d537e8ac1917903b29901dc30f73c0b97d"
+        },
+        "scales": {
+          "shape": [
+            4096,
+            64
+          ],
+          "dtype": "float32",
+          "mean": 1e-06,
+          "std": 0.000409,
+          "min": -0.004344,
+          "max": 0.003952,
+          "abs_mean": 0.00028,
+          "sha256_f32": "23bb2a1f2c7119bae6437330feacfb35b1560f8b7fa4ee400e6d1c4013732eb2"
+        },
+        "biases": {
+          "shape": [
+            4096,
+            64
+          ],
+          "dtype": "float32",
+          "mean": -0.000178,
+          "std": 0.064132,
+          "min": -0.616563,
+          "max": 0.750287,
+          "abs_mean": 0.042474,
+          "sha256_f32": "935a2e29b20e28e18a87138ce59c1588b290c1e08100fc10dc2fb7c5fa248399"
+        }
+      },
+      "transformer_blocks.47.ff.proj_out": {
+        "weight": {
+          "shape": [
+            4096,
+            4096
+          ],
+          "dtype": "uint32",
+          "mean": 2432190464.0,
+          "std": 884484224.0,
+          "min": 6512.0,
+          "max": 4294967296.0,
+          "abs_mean": 2432190464.0,
+          "sha256_f32": "d367c7762c4123d0c79821b8bedf607f060eba6e6f470c7141614f7bf01b3852"
+        },
+        "scales": {
+          "shape": [
+            4096,
+            256
+          ],
+          "dtype": "float32",
+          "mean": 1e-06,
+          "std": 0.000619,
+          "min": -0.005813,
+          "max": 0.00574,
+          "abs_mean": 0.000542,
+          "sha256_f32": "6fc5db410fcfe0b75617846f4ba6bdecad9047d37831ec8a628f0dc5bfa581f0"
+        },
+        "biases": {
+          "shape": [
+            4096,
+            256
+          ],
+          "dtype": "float32",
+          "mean": -0.000154,
+          "std": 0.093429,
+          "min": -1.148037,
+          "max": 1.069839,
+          "abs_mean": 0.080319,
+          "sha256_f32": "0c54b64f4c29c6896b965973f0f60010390abb8de64f75b4c2fa09270d30d387"
+        }
+      },
+      "patchify_proj": {
+        "weight": {
+          "shape": [
+            4096,
+            128
+          ],
+          "dtype": "bfloat16",
+          "mean": -3e-06,
+          "std": 0.075893,
+          "min": -1.023438,
+          "max": 1.234375,
+          "abs_mean": 0.035068,
+          "sha256_f32": "b0d9c431da124b789e105fe9461e2b033f46cefa257f4350e2b97b2c4879a9b1"
+        }
+      },
+      "adaln_single.emb.timestep_embedder.linear1": {
+        "weight": {
+          "shape": [
+            4096,
+            256
+          ],
+          "dtype": "bfloat16",
+          "mean": 0.000417,
+          "std": 0.006164,
+          "min": -0.613281,
+          "max": 0.211914,
+          "abs_mean": 0.003773,
+          "sha256_f32": "d401f38b478aaa4321b4803193c4f89ab7a456e8ebea85b40bec983229951a69"
+        }
+      }
+    }
+  },
+  "quantize_on_load": 8,
+  "quant_group_size": 64,
+  "low_ram": false,
+  "tiling": null,
+  "video_decoder": "conv",
+  "generate_audio": true,
+  "stage1_steps": null,
+  "stage2_steps": null,
+  "is_ltx25": true,
+  "noise_seeds": {
+    "stage1_video": 42,
+    "stage1_audio": 43,
+    "stage1_ancestral_loop": 10042,
+    "stage2_video_and_audio": 44
+  },
+  "prompt_embeds": {
+    "video": {
+      "shape": [
+        1,
+        1024,
+        4096
+      ],
+      "dtype": "bfloat16",
+      "mean": 0.013585,
+      "std": 0.999913,
+      "min": -19.5,
+      "max": 23.125,
+      "abs_mean": 0.377563,
+      "sha256_f32": "d5bfb0b42f2220e78fcbab5cc5f9614b405f4583cd7cdfaec3fcbe2cfed7aefa"
+    },
+    "audio": {
+      "shape": [
+        1,
+        1024,
+        2048
+      ],
+      "dtype": "bfloat16",
+      "mean": -0.023532,
+      "std": 0.999713,
+      "min": -15.0,
+      "max": 15.8125,
+      "abs_mean": 0.360005,
+      "sha256_f32": "b7d058e8c1d5da842902897491d268da8fc0b28b3edff92472042c34fc70b2e2"
+    }
+  },
+  "stages": [
+    {
+      "stage": 1,
+      "sigmas": [
+        1.0,
+        0.99375,
+        0.9875,
+        0.98125,
+        0.975,
+        0.909375,
+        0.725,
+        0.421875,
+        0.0
+      ],
+      "ancestral": true,
+      "loop_noise_seed": 10042,
+      "video_in": {
+        "shape": [
+          1,
+          196,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.01153,
+        "std": 1.002038,
+        "min": -3.65625,
+        "max": 4.34375,
+        "abs_mean": 0.801872,
+        "sha256_f32": "9d59de9865eaace4a832971e09cf3de67a2693d5e1c84d2e37532a9bc5cff310"
+      },
+      "audio_in": {
+        "shape": [
+          1,
+          51,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.003202,
+        "std": 0.994492,
+        "min": -3.5625,
+        "max": 3.5625,
+        "abs_mean": 0.787674,
+        "sha256_f32": "6c461b935da6ac06a1d0a9b9c584ee13e088699de06d4846c97fab2c65148495"
+      },
+      "video_positions": [
+        1,
+        196,
+        3
+      ],
+      "audio_positions": [
+        1,
+        51,
+        1
+      ],
+      "video_tokens_total": 196,
+      "video_clean_in": {
+        "shape": [
+          1,
+          196,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "abs_mean": 0.0,
+        "sha256_f32": "c7ed01f07cdc4b4dcc076f195492aa8e5c1807b4aaa7ed597c0ccb77981f9a04"
+      },
+      "video_denoise_mask": {
+        "shape": [
+          1,
+          196,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1.0,
+        "max": 1.0,
+        "abs_mean": 1.0,
+        "sha256_f32": "fff91e873df93b4fe0f83d2e7a763bf00af8fe4a51f4e5662a433611336db00a"
+      },
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          196,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.142857,
+        "std": 0.349927,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.142857,
+        "sha256_f32": "18d1049f1be511fdd4c669e14e1d01b95c7c34b13d87ad38048537385ba4ad7b"
+      },
+      "video_attention_mask": null,
+      "video_positions_stats": {
+        "shape": [
+          1,
+          196,
+          3
+        ],
+        "dtype": "float32",
+        "mean": 58.965275,
+        "std": 62.14632,
+        "min": 0.020833,
+        "max": 208.0,
+        "abs_mean": 58.965275,
+        "sha256_f32": "99a4af172e9e016cbec9c6d0e5ed953494f83900711eacdcb91c27994de557bd"
+      },
+      "video_cross_attention_mask": null,
+      "video_out_tokens": {
+        "shape": [
+          1,
+          196,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.018729,
+        "std": 1.223319,
+        "min": -4.59375,
+        "max": 4.875,
+        "abs_mean": 0.98095,
+        "sha256_f32": "2048f7f8421358b39b42d26a385405316bee2900eb5622dd6b432aec360ead8c"
+      },
+      "audio_out_tokens": {
+        "shape": [
+          1,
+          51,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.421752,
+        "std": 1.291046,
+        "min": -6.1875,
+        "max": 4.65625,
+        "abs_mean": 1.164509,
+        "sha256_f32": "77d7c622b42334bbd72da5e127992d204439c373b81b9cebb9b129d938d9538c"
+      }
+    },
+    {
+      "stage": 2,
+      "sigmas": [
+        0.909375,
+        0.725,
+        0.421875,
+        0.0
+      ],
+      "ancestral": false,
+      "loop_noise_seed": null,
+      "video_in": {
+        "shape": [
+          1,
+          784,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.00075,
+        "std": 0.917146,
+        "min": -4.0,
+        "max": 4.1875,
+        "abs_mean": 0.731885,
+        "sha256_f32": "92a15ee85162bc09515bf5fecf398663ab819ca1298418557150a785b08fb4e2"
+      },
+      "audio_in": {
+        "shape": [
+          1,
+          51,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.032879,
+        "std": 0.906576,
+        "min": -3.234375,
+        "max": 3.359375,
+        "abs_mean": 0.722931,
+        "sha256_f32": "09301df03edbe4d24df12d8785e91c900b1ad22e1406cf082c8285753d761235"
+      },
+      "video_positions": [
+        1,
+        784,
+        3
+      ],
+      "audio_positions": [
+        1,
+        51,
+        1
+      ],
+      "video_tokens_total": 784,
+      "video_clean_in": {
+        "shape": [
+          1,
+          784,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.00728,
+        "std": 1.369577,
+        "min": -5.59375,
+        "max": 5.15625,
+        "abs_mean": 1.090609,
+        "sha256_f32": "634913b8b6389bfbc2cd44d279080db40a3d2a65348a2eb2fc59d13c9cea6963"
+      },
+      "video_denoise_mask": {
+        "shape": [
+          1,
+          784,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1.0,
+        "max": 1.0,
+        "abs_mean": 1.0,
+        "sha256_f32": "c0acddaeb5e08ca7c6f0ab859e008b5ea5544cac1fe9eea8d644f87f071f9eab"
+      },
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          784,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.142857,
+        "std": 0.349927,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.142857,
+        "sha256_f32": "e7d8ae3920fc0f6c037cc0f106aeb0cb7da4d77abfaf1c7ab80f7ac945451c61"
+      },
+      "video_attention_mask": null,
+      "video_positions_stats": {
+        "shape": [
+          1,
+          784,
+          3
+        ],
+        "dtype": "float32",
+        "mean": 117.63195,
+        "std": 125.253593,
+        "min": 0.020833,
+        "max": 432.0,
+        "abs_mean": 117.63195,
+        "sha256_f32": "2e5f674ebbb5b2e4ec1cd692f12659dcc4d34e53d4a0f1dc79460de52662917e"
+      },
+      "video_cross_attention_mask": null,
+      "video_upscaled": {
+        "shape": [
+          1,
+          784,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.00728,
+        "std": 1.369577,
+        "min": -5.59375,
+        "max": 5.15625,
+        "abs_mean": 1.090609,
+        "sha256_f32": "634913b8b6389bfbc2cd44d279080db40a3d2a65348a2eb2fc59d13c9cea6963"
+      },
+      "audio_from_stage1": {
+        "shape": [
+          1,
+          51,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.421752,
+        "std": 1.291046,
+        "min": -6.1875,
+        "max": 4.65625,
+        "abs_mean": 1.164509,
+        "sha256_f32": "77d7c622b42334bbd72da5e127992d204439c373b81b9cebb9b129d938d9538c"
+      },
+      "video_out_tokens": {
+        "shape": [
+          1,
+          784,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.014438,
+        "std": 1.35594,
+        "min": -5.4375,
+        "max": 5.34375,
+        "abs_mean": 1.083867,
+        "sha256_f32": "f1951712bdc2b6eea8bca3addf1f3fa14ca625504c3811b126abeaf6d21c64a2"
+      },
+      "audio_out_tokens": {
+        "shape": [
+          1,
+          51,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.418883,
+        "std": 1.362869,
+        "min": -6.875,
+        "max": 6.0,
+        "abs_mean": 1.221774,
+        "sha256_f32": "12a169e8020da22db830e02f4ae8bd55b1e5e2bc58d2fe1271fc79cc35a7ffca"
+      }
+    }
+  ],
+  "final_video_latent": {
+    "shape": [
+      1,
+      128,
+      7,
+      8,
+      14
+    ],
+    "dtype": "bfloat16",
+    "mean": 0.014438,
+    "std": 1.35594,
+    "min": -5.4375,
+    "max": 5.34375,
+    "abs_mean": 1.083867,
+    "sha256_f32": "bcabd7902b91909044664b114632edefc5c972fbcfd851740b6ab2fac5cf77aa"
+  },
+  "final_audio_latent": {
+    "shape": [
+      1,
+      8,
+      51,
+      16
+    ],
+    "dtype": "bfloat16",
+    "mean": -0.418883,
+    "std": 1.362869,
+    "min": -6.875,
+    "max": 6.0,
+    "abs_mean": 1.221774,
+    "sha256_f32": "100a48fa8bd222778374b7b1b21fc63f6f6ab322cf6f586f2fe4d1f1d9f81ca6"
+  },
+  "waveform": {
+    "shape": [
+      1,
+      2,
+      96480
+    ],
+    "dtype": "bfloat16",
+    "mean": 1e-06,
+    "std": 0.030942,
+    "min": -0.226562,
+    "max": 0.207031,
+    "abs_mean": 0.011331,
+    "sha256_f32": "b9a78b7c6a29e03d95aae9b99cd6bd30193e2fd5fb41d511c3e7f7d3b1daea7d"
+  },
+  "wav": {
+    "sample_rate": 48000,
+    "format": "PCM s16le",
+    "file": "lora-448x256-49f-s42.wav"
+  },
+  "frames_png": {
+    "first": {
+      "index": 0,
+      "file": "lora-448x256-49f-s42-first.png"
+    },
+    "mid": {
+      "index": 24,
+      "file": "lora-448x256-49f-s42-mid.png"
+    },
+    "last": {
+      "index": 48,
+      "file": "lora-448x256-49f-s42-last.png"
+    }
+  },
+  "mp4": {
+    "file": "lora-448x256-49f-s42.mp4",
+    "bytes": 537556,
+    "ffprobe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "profile": "High",
+          "codec_type": "video",
+          "width": 448,
+          "height": 256,
+          "pix_fmt": "yuv420p",
+          "r_frame_rate": "24/1",
+          "duration": "2.041667",
+          "nb_frames": "49"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "profile": "LC",
+          "codec_type": "audio",
+          "sample_rate": "48000",
+          "channels": 2,
+          "r_frame_rate": "0/0",
+          "duration": "2.010000",
+          "nb_frames": "96"
+        }
+      ],
+      "format": {
+        "duration": "2.041667",
+        "bit_rate": "2106341"
+      }
+    },
+    "sha256": "816a93ecd0cca2d09cef3a505477977d854a8f89edc5c279f6fe213aee724bdd"
+  },
+  "timing_s": {
+    "pipeline_init": 0.01,
+    "text_encoder_load": 4.28,
+    "text_encode": 2.14,
+    "dit_vae_encoder_upsampler_load": 6.33,
+    "stage1_denoise": 6.31,
+    "stage2_denoise": 5.49,
+    "generate_two_stage_total": 24.88,
+    "decoders_load": 0.05,
+    "audio_decode": 0.39,
+    "decode_video_audio_mux": 1.54,
+    "total_wall": 26.6
+  },
+  "memory": {
+    "phases": {
+      "text_encoder_load": {
+        "s": 4.28,
+        "peak_gib": 12.78,
+        "calls": 2,
+        "active_after_gib": 12.66
+      },
+      "text_encode": {
+        "s": 2.14,
+        "peak_gib": 20.28,
+        "calls": 1,
+        "active_after_gib": 18.59
+      },
+      "dit_vae_encoder_upsampler_load": {
+        "s": 6.33,
+        "peak_gib": 24.63,
+        "calls": 1,
+        "active_after_gib": 19.77
+      },
+      "stage1_denoise": {
+        "s": 6.31,
+        "peak_gib": 21.35,
+        "calls": 1,
+        "active_after_gib": 19.77
+      },
+      "stage2_denoise": {
+        "s": 5.49,
+        "peak_gib": 21.48,
+        "calls": 1,
+        "active_after_gib": 19.77
+      },
+      "generate_two_stage_total": {
+        "s": 24.88,
+        "peak_gib": 21.48,
+        "calls": 1,
+        "active_after_gib": 19.76
+      },
+      "decoders_load": {
+        "s": 0.05,
+        "peak_gib": 0.0,
+        "calls": 1,
+        "active_after_gib": 0.0
+      },
+      "audio_decode": {
+        "s": 0.39,
+        "peak_gib": 3.43,
+        "calls": 1,
+        "active_after_gib": 0.54
+      },
+      "decode_video_audio_mux": {
+        "s": 1.54,
+        "peak_gib": 8.24,
+        "calls": 1,
+        "active_after_gib": 1.3
+      }
+    },
+    "mlx_peak_gib_whole_run": 24.63,
+    "process_max_rss_gib": 9.8
+  },
+  "env": {
+    "LTX_MLX_CACHE_DIR": "<scratch>",
+    "LTX_MLX_QUANTIZE_ON_LOAD": "8"
+  },
+  "versions": {
+    "mlx": "0.32.2",
+    "python": "3.13.14",
+    "numpy": "2.4.3",
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ltx_pipelines_mlx": "0.15.4 (ltx-2-studio lockfile)",
+    "machine": "Darwin 27.2.0 arm64",
+    "metal": {
+      "memory_size": 68719476736,
+      "architecture": "applegpu_g17s"
+    }
+  }
+}

@@ -163,6 +163,12 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode,
 				loraProblems(id, node, param, loras, add)
 			}
 		}
+		for _, param := range schema.Params { // steps per role, on the node's merged values (Video: Steps)
+			value, given := node.Params[param.Name]
+			if detail := valuesByDetail(param, merged(schema, node.Params)); detail != "" && (!given || !valueBad(param, value)) {
+				add("param_invalid", id, "", param.Name, "%s.%s: %s", id, param.Name, detail)
+			}
+		}
 		for _, key := range slices.Sorted(maps.Keys(node.In)) {
 			want := portType(schema, key)
 			if want == "" {
@@ -355,6 +361,13 @@ func studioProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode
 	for _, preset := range slices.Sorted(maps.Keys(studio.Presets)) {
 		for path, value := range studio.Presets[preset] {
 			id, name, _ := strings.Cut(path, ".")
+			// the node's values with this preset's on top: a preset's steps are checked against the node's role
+			values := maps.Clone(doc.Nodes[id].Params)
+			for other, v := range studio.Presets[preset] {
+				if otherID, otherName, _ := strings.Cut(other, "."); otherID == id && otherName != "bypass" {
+					values = setKey(values, otherName, v)
+				}
+			}
 			node, exists := doc.Nodes[id]
 			kind, known := palette[node.Kind]
 			switch {
@@ -366,12 +379,24 @@ func studioProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode
 					add("preset_invalid", id, "", name, "preset %s: %s must be true or false", preset, path)
 				}
 			default:
-				if param, _ := paramOf(kind.NodeSchema, name); valueBad(param, value) {
+				param, _ := paramOf(kind.NodeSchema, name)
+				if valueBad(param, value) {
 					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, invalidReason(param, value))
+				} else if detail := valuesByDetail(param, merged(kind.NodeSchema, values)); detail != "" {
+					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, detail)
 				}
 			}
 		}
 	}
+}
+
+// setKey sets m[key] = value, making m when it is nil.
+func setKey(m map[string]any, key string, value any) map[string]any {
+	if m == nil {
+		m = map[string]any{}
+	}
+	m[key] = value
+	return m
 }
 
 // sortProblems orders problems by node (whole-workflow ones first), then code, port, param.

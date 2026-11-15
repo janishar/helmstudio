@@ -8,11 +8,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,13 +25,16 @@ type workflow struct {
 	Title string `json:"title"`
 	Env   string `json:"env"`
 	Nodes map[string]struct {
-		Kind string `json:"kind"`
+		Kind   string         `json:"kind"`
+		Params map[string]any `json:"params"`
 	} `json:"nodes"`
 	NodeSchemas map[string]struct {
 		Params []struct {
-			Name string         `json:"name"`
-			Type string         `json:"type"`
-			Item map[string]any `json:"item"`
+			Name    string         `json:"name"`
+			Type    string         `json:"type"`
+			Item    map[string]any `json:"item"`
+			Default any            `json:"default"`
+			Fps     string         `json:"fps"`
 		} `json:"params"`
 	} `json:"node_schemas"`
 	// upload stores a file as a take and returns its id: set by helm run for @file image values.
@@ -98,7 +103,10 @@ func (w workflow) value(key, val string) (any, error) {
 	var v any = val
 	var err error
 	switch typ {
-	case "int", "frames": // frames: a count on the family's frame grid (the server checks the grid)
+	case "int", "frames": // frames: a count on the family's frame grid (the server checks the grid), or auto
+		if typ == "frames" && val == "auto" {
+			return val, nil
+		}
 		v, err = strconv.ParseInt(val, 10, 64)
 	case "float":
 		v, err = strconv.ParseFloat(val, 64)
@@ -177,6 +185,10 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	fs.Var(&loras, "lora", "<lora_id>:<strength> (repeatable): the rows of the workflow's LoRA stack, in order")
 	var looks params
 	fs.Var(&looks, "look", "look id (repeatable): a look to run with (helm looks lists them)")
+	image := fs.String("image", "", "first frame: a take id or an image file (uploaded first)")
+	var keyframes params
+	fs.Var(&keyframes, "keyframe", "<frame>:<take id or file> (repeatable): an image pinned at that frame")
+	duration := fs.String("duration", "", "the clip's length in frames, or auto (the model picks it)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -213,6 +225,9 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	}
 	for k, v := range rows { // -p cannot set a rows param of LoRAs (no images in its items): no clash
 		inputs[k] = v
+	}
+	if err := wf.videoInputs(inputs, *image, keyframes, *duration); err != nil {
+		return err
 	}
 
 	sid, since := *sessionID, 0
@@ -395,7 +410,8 @@ func printEvent(e event, stdout io.Writer) string {
 			Error    *string `json:"error"`
 			Host     *string `json:"host"`
 			Resolved struct {
-				Seed *int64 `json:"seed"`
+				Seed   *int64           `json:"seed"`
+				Params map[string]int64 `json:"params"`
 			} `json:"resolved"`
 		}
 		_ = json.Unmarshal(e.Data, &d)
@@ -406,10 +422,19 @@ func printEvent(e event, stdout io.Writer) string {
 			fmt.Fprintf(stdout, "running on %s\n", deref(d.Host))
 		case d.Status == "failed":
 			fmt.Fprintf(stdout, "failed: %s\n", deref(d.Error))
-		case d.Resolved.Seed != nil:
-			fmt.Fprintf(stdout, "%s (seed %d)\n", d.Status, *d.Resolved.Seed)
 		default:
-			fmt.Fprintln(stdout, d.Status)
+			var chose []string
+			if d.Resolved.Seed != nil {
+				chose = append(chose, fmt.Sprintf("seed %d", *d.Resolved.Seed))
+			}
+			for _, k := range slices.Sorted(maps.Keys(d.Resolved.Params)) {
+				chose = append(chose, fmt.Sprintf("%s %d", k, d.Resolved.Params[k]))
+			}
+			if len(chose) > 0 {
+				fmt.Fprintf(stdout, "%s (%s)\n", d.Status, strings.Join(chose, ", "))
+			} else {
+				fmt.Fprintln(stdout, d.Status)
+			}
 		}
 		if d.Status == "succeeded" || d.Status == "failed" || d.Status == "cancelled" {
 			return d.Status

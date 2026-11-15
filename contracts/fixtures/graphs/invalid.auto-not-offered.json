@@ -1,0 +1,32 @@
+{
+  "description": "`auto` on a frames param that declares no `auto` (test/clip) is param_invalid",
+  "workflow": {
+    "title": "Auto not offered",
+    "family": "test",
+    "env": "fake",
+    "nodes": {
+      "clip": {
+        "kind": "test/clip",
+        "params": {
+          "frames": "auto"
+        }
+      },
+      "noise": {
+        "kind": "test/noise"
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "noise.image"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "param_invalid",
+      "node": "clip",
+      "param": "frames"
+    }
+  ]
+}

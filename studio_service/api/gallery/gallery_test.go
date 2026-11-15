@@ -15,6 +15,7 @@ import (
 	"image/png"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -563,5 +564,28 @@ func TestSweep(t *testing.T) {
 	})
 	if left != 5 {
 		t.Fatalf("%d of the kept rows left", left)
+	}
+}
+
+// "Use in…" on the ltx templates: image to video takes the take as keyframe row 1 (at 0 s, strength 1 by the item
+// defaults); text to video takes no image.
+func TestImageInputLtx(t *testing.T) {
+	var r registry.Registry
+	for _, kind := range []string{"nodes", "workflows"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", "ltx."+kind+".valid.json"))
+		if err == nil {
+			err = r.SetRegistry("mac.mlx."+kind, data)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	i2v, _ := r.Workflow("ltx-image-to-video")
+	if key, param, detail := imageInput(i2v, nil); key != "keyframes.images" || param.Type != "rows" || detail != "" {
+		t.Fatal(key, detail)
+	}
+	t2v, _ := r.Workflow("ltx-text-to-video")
+	if _, _, detail := imageInput(t2v, nil); detail != "workflow ltx-text-to-video takes no image input" {
+		t.Fatal(detail)
 	}
 }

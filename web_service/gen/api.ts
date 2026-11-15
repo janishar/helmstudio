@@ -517,6 +517,17 @@ export interface paths {
          *     `LoRA <name> is for <family>`), `encode.refs: at most 10 images; 9 used, @fox +1, look Noir +1 do not fit`,
          *     `lora.rows: at most 8 LoRAs; 7 used, look Noir +2 do not fit`, `prompt.text: at most 4000 characters once
          *     elements and looks are added (<n>)`.
+         *
+         *     Video (from 1.12, contracts/README.md, Video): a `frames` param takes `"auto"` only when its schema declares
+         *     `auto` (else `duration.frames: auto length is not offered`); an int with `values` / `values_by` takes only
+         *     those (`sample2.steps: must be one of 3`); a rows param with an Image field and `min` ≥ 1 needs that many
+         *     items at run (`keyframes.images: at least 1 items`); item fields left out take their defaults and the merged
+         *     item is checked (`encode.beats[1].text: must be between 1 and 500 characters`); keyframe positions
+         *     (`position: seconds`) are checked against the clip: `keyframes.images[2].seconds: frame 50 is past the
+         *     clip's last frame 48`, `keyframes.images[2].seconds: frame 0 is already used by row 1`; a LoRA a model's
+         *     lora block lists as `prefused` for its variant: `lora.rows[1].lora: LoRA <name> is already part of the
+         *     distilled weights`; a bake-only stack's `mode: adapter` fails `enum` (`lora.rows[1].mode: must be one of
+         *     bake`).
          */
         post: operations["studioCreateRun"];
         delete?: never;
@@ -1478,7 +1489,11 @@ export interface components {
          *     UI renders it as the Duration slider (one notch per `step`, labelled `<frames> frames · <frames / fps> s`); a
          *     value off the grid is 422 (`<node>.<param>: <v> is not on the frame grid <min> + <step>k up to <max>`). The size
          *     picker (aspect + megapixels) is drawn for a node whose output is `Canvas` from its `width` and `height` int
-         *     params: `step` is the grid, `min` / `max` the bounds.
+         *     params: `step` is the grid, `min` / `max` the bounds. From 1.12: a `frames` param may declare `auto` (the model
+         *     predicts the length; the value `"auto"`, the Duration slider's Auto length switch; contracts/README.md, Video);
+         *     an `int` may declare `values` (the only allowed values: a choice, one value a read-only readout) and
+         *     `values_by` (the allowed values per value of an enum param of the same node: LTX `steps` per `role`); a
+         *     float item field may declare `position: seconds` (a keyframe's time on the clip).
          */
         ParamSchema: {
             name: string;
@@ -1486,6 +1501,20 @@ export interface components {
             type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows" | "frames";
             /** @description frames only: the name of the same node's int or float param holding frames per second */
             fps?: string;
+            /** @description frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`) */
+            auto?: {
+                min_s: number;
+                max_s: number;
+            };
+            /** @description int only: the only allowed values, ascending (`<node>.<param>: must be one of 3, 8`) */
+            values?: number[];
+            /** @description int with values only: the allowed values per value of the same node's enum param `param` (a value not listed allows all of `values`); the message names the subset (`sample2.steps: must be one of 3`) */
+            values_by?: {
+                param: string;
+                values: {
+                    [key: string]: number[];
+                };
+            };
             /** @description absent = the name */
             label?: string;
             default: components["schemas"]["ParamValue"];
@@ -2058,9 +2087,18 @@ export interface components {
             /** @description the looks it was asked with (RunRequest.looks; a batch run: its row's or step's), as requested; absent or empty = none */
             looks?: components["schemas"]["LookIds"];
         };
-        /** @description values the runner chose (a random seed), sent with succeeded; absent until then and from M0 runners */
+        /** @description values the runner chose (a random seed, an auto length), sent with succeeded; absent until then and from M0 runners */
         Resolved: {
             seed?: number;
+            /**
+             * @description from 1.12: `<node>.<param>` → the value the runner chose for a param set to `"auto"` (`duration.frames`: the predicted length); absent when none
+             * @example {
+             *       "duration.frames": 89
+             *     }
+             */
+            params?: {
+                [key: string]: number;
+            };
         };
         RunList: {
             runs: components["schemas"]["Run"][];
@@ -2271,8 +2309,9 @@ export interface components {
             looks?: components["schemas"]["MadeWithLook"][];
             /**
              * @description for each param the mention and look expansion changed (prompt params, the reference rows, the look stack's
-             *     rows, a pinned canvas), its value before it: the prompt as typed, the rows without the element and look
-             *     images, the stack without the look LoRAs. `inputs` holds the resolved values (what ran).
+             *     rows, a pinned canvas) or the runner resolved (a frames param set to `"auto"`, from 1.12), its value
+             *     before it: the prompt as typed, the rows without the element and look images, the stack without the look
+             *     LoRAs, `"auto"`. `inputs` holds the resolved values (what ran: the predicted frames).
              *     Absent or empty = nothing was expanded.
              */
             typed?: components["schemas"]["RunInputs"];

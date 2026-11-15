@@ -1,6 +1,7 @@
 // Image inputs (contracts/README.md "Image inputs"): an `image` param holds one take, a `rows` param whose item has an
 // Image field holds an ordered list of them (the references). Over HTTP an image is always `{take_id}`.
 import type { S } from "@/lib/api";
+import { roundEven } from "@/lib/video";
 import { fields, isRef, toRaw, type Field, type Raw } from "@/lib/workflow";
 
 type Param = S<"ParamSchema">;
@@ -73,13 +74,6 @@ export function move<T>(list: T[], from: number, to: number): T[] {
 export const mentionOf = (p: Param, n: number) =>
   p.mention ? p.mention.replaceAll("{n}", String(n)) : `image ${n}`;
 
-/** Python's round(): halves go to the even neighbour, as the pipeline rounds. */
-function roundEven(x: number) {
-  const f = Math.floor(x);
-  const d = x - f;
-  return d > 0.5 ? f + 1 : d < 0.5 ? f : f % 2 === 0 ? f : f + 1;
-}
-
 /** Canvas `auto` in an edit: about 1 MP at the last reference's aspect, sides on the 32 px grid (the diffusers
  * pipeline's calculate_dimensions(1024², w / h)). */
 export function autoSize(width: number, height: number) {
@@ -92,8 +86,10 @@ export function autoSize(width: number, height: number) {
 export const editLabel = (title: string, n: number) =>
   n ? `${title} · Edit · ${n} reference${n === 1 ? "" : "s"}` : title;
 
-/** The take action's label for a workflow that takes images ("Edit · Qwen Image"). */
-export const targetLabel = (w: S<"Workflow">) => `Edit · ${w.title}`;
+/** The take action's label for a workflow that takes images ("Edit · Qwen Image"; a video one by its title: the
+ * image is its first frame). */
+export const targetLabel = (w: S<"Workflow">) =>
+  w.media === "video" ? w.title : `Edit · ${w.title}`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

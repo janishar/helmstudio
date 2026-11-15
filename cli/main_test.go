@@ -111,6 +111,8 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, echoWorkflow)
 	case "GET /v1/studio/workflows/echo-video":
 		fmt.Fprint(w, videoWorkflow)
+	case "GET /v1/studio/workflows/echo-image-to-video":
+		fmt.Fprint(w, i2vWorkflow)
 	case "GET /v1/studio/workflows/" + mineID:
 		fmt.Fprint(w, mineWorkflow)
 	case "GET /v1/studio/workflows/w1":
@@ -346,10 +348,8 @@ func TestInputsRejectsBadValues(t *testing.T) {
 			t.Errorf("%s accepted", p)
 		}
 	}
-	qwen := workflow{Nodes: map[string]struct {
-		Kind string `json:"kind"`
-	}{"seed": {Kind: "seed"}, "model": {Kind: "qwen-image/model"}}}
-	_ = json.Unmarshal([]byte(`{"node_schemas": {"seed": {"params": [{"name": "seed", "type": "seed"}]},
+	var qwen workflow
+	_ = json.Unmarshal([]byte(`{"nodes": {"seed": {"kind": "seed"}, "model": {"kind": "qwen-image/model"}}, "node_schemas": {"seed": {"params": [{"name": "seed", "type": "seed"}]},
 		"qwen-image/model": {"params": [{"name": "variant", "type": "enum"}]}}}`), &qwen)
 	seeds, err := qwen.inputs([]string{"seed.seed=random", "model.variant=turbo"})
 	if v, ok := seeds["seed.seed"]; err != nil || !ok || v != nil || seeds["model.variant"] != "turbo" {

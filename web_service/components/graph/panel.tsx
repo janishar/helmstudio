@@ -8,6 +8,7 @@ import { Switch } from "@/components/create/form";
 import { PromptArea } from "@/components/create/prompt";
 import { LoraRows } from "@/components/create/loras";
 import { loraFieldOf } from "@/lib/loras";
+import { allowedInts } from "@/lib/video";
 import type { S } from "@/lib/api";
 import {
   WIREABLE,
@@ -461,7 +462,9 @@ function ParamControl({
         <span className="text-[12px] text-t2">{valueText(p, f.initial)} · set in Studio</span>
       </div>
     );
-  if (p.type === "enum")
+  // an int with `values` is a choice of the ones its node allows now (LTX's stage steps)
+  const allowed = allowedInts(f, {});
+  if (p.type === "enum" || allowed)
     return (
       <div role="group" aria-label={label} className="flex flex-col gap-1.5">
         <span className="flex items-center">
@@ -469,7 +472,7 @@ function ParamControl({
           {p.help && <Info>{p.help}</Info>}
         </span>
         <div className="flex flex-wrap gap-1.5">
-          {p.enum?.map((o) => (
+          {(allowed?.map(String) ?? p.enum)?.map((o) => (
             <button
               key={o}
               type="button"
@@ -481,6 +484,7 @@ function ParamControl({
             </button>
           ))}
         </div>
+        {errLine}
       </div>
     );
   if (p.type === "text" || p.type === "string")

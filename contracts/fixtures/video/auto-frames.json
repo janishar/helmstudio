@@ -1,0 +1,129 @@
+{
+  "description": "auto length (README, Video: auto length): the DurationHead's seconds -> frames on the param's grid. Seconds and the old studio's frames are from runner_service/tests/golden/ltx-auto-duration (max 481 reproduces its unbounded 353 / 369; our max 321 clamps them)",
+  "param": {
+    "min": 9,
+    "step": 8
+  },
+  "cases": [
+    {
+      "seconds": 2.890625,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 65
+    },
+    {
+      "seconds": 2.890625,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 8,
+      "max": 321,
+      "frames": 65
+    },
+    {
+      "seconds": 2.890625,
+      "fps": 25,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 65
+    },
+    {
+      "seconds": 3.484375,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 81
+    },
+    {
+      "seconds": 3.484375,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 8,
+      "max": 321,
+      "frames": 81
+    },
+    {
+      "seconds": 3.484375,
+      "fps": 25,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 81
+    },
+    {
+      "seconds": 3.828125,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 89
+    },
+    {
+      "seconds": 3.828125,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 8,
+      "max": 321,
+      "frames": 89
+    },
+    {
+      "seconds": 3.828125,
+      "fps": 25,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 89
+    },
+    {
+      "seconds": 14.9375,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 321
+    },
+    {
+      "seconds": 14.9375,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 481,
+      "frames": 353
+    },
+    {
+      "seconds": 14.9375,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 8,
+      "max": 321,
+      "frames": 185
+    },
+    {
+      "seconds": 14.9375,
+      "fps": 25,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 321
+    },
+    {
+      "seconds": 14.9375,
+      "fps": 25,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 481,
+      "frames": 369
+    },
+    {
+      "seconds": 0.2,
+      "fps": 24,
+      "min_s": 1,
+      "max_s": 20,
+      "max": 321,
+      "frames": 25
+    }
+  ]
+}

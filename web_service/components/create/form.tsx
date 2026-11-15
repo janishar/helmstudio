@@ -1,12 +1,23 @@
 "use client";
 // Form controls rendered from node schemas: text params go in the composer, the rest in the inspector, grouped
 // generically (the canvas node, label-over-value tiles, switches, the rest); the composer's chips summarise them.
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
-import { RowsEditor, type RefUploads } from "@/components/create/refs";
+import { FirstFrameTile, RowsEditor, type RefUploads } from "@/components/create/refs";
 import { LoraRows } from "@/components/create/loras";
+import { PlainRows } from "@/components/create/rows";
+import {
+  allowedInts,
+  autoBounds,
+  clipOf,
+  firstFrameRow,
+  positionOf,
+  setFirstFrame,
+} from "@/lib/video";
+import { modeOf } from "@/lib/loras";
+import type { S } from "@/lib/api";
 import { autoSize, imageInputs, mentionOf, refIds } from "@/lib/refs";
 import { useTakes } from "@/lib/take-cache";
 import { durationText, gridOf, secondsText, seconds } from "@/lib/media";
@@ -50,7 +61,8 @@ function FieldError({ k, errors }: { k: string; errors: Record<string, string> }
 
 /** The multi-line text params (the prompt), borderless inside the composer, as in the mock; ⌘/Ctrl+Enter submits the form. */
 export function TextFields({ fields, raws, errors, onChange }: FormProps) {
-  const ref = imageInputs(fields).find((f) => refIds(f, raws[f.key]).length);
+  // the prompt names references only where the param says how (`mention`)
+  const ref = imageInputs(fields).find((f) => f.param.mention && refIds(f, raws[f.key]).length);
   return fields
     .filter((f) => f.param.type === "text")
     .map((f) => (
@@ -148,9 +160,14 @@ function Loras({ f, raws, errors, onChange }: { f: Field } & Omit<FormProps, "fi
   );
 }
 
-/** The LoRA section's note (the mock's): what fits and what a strength change re-runs. */
-const loraHelp = (title: string) =>
-  `Only LoRAs made for ${title} can be added. Changing strength re-runs Sample without reloading the model. Drag a LoRA, or focus it and press Alt with an arrow key, to change the order; Delete removes it.`;
+/** The LoRA section's note (the mock's): what fits and what a strength change re-runs (a stack that only bakes
+ * reloads the model). */
+const loraHelp = (title: string, f?: Field) =>
+  `Only LoRAs made for ${title} can be added. ${
+    f && modeOf(f.param)?.[1].enum?.join() === "bake"
+      ? "Each is baked into the model at load: a strength change reloads it."
+      : "Changing strength re-runs Sample without reloading the model."
+  } Drag a LoRA, or focus it and press Alt with an arrow key, to change the order; Delete removes it.`;
 
 /** The params other than the prompt: References (rows editors), Canvas, Quality (tiles), LoRA, Options (switches),
  * More. With `groups` (a workflow's Studio block), its sections instead, in its order. `familyTitle` names the
@@ -166,6 +183,8 @@ export function Inspector({
   groups,
   familyTitle,
   compact,
+  resolved,
+  presets,
 }: FormProps &
   OpenProps & {
     uploads: RefUploads;
@@ -173,12 +192,18 @@ export function Inspector({
     familyTitle?: string;
     /** the canvas as Aspect and Size tiles (a video workflow, docs/mock/TextToVideo.dc.html) */
     compact?: boolean;
+    /** what the runner chose for params set to auto in the shown run (`Run.resolved.params`) */
+    resolved?: Record<string, number>;
+    /** the workflow's presets (`studio.presets`): chips that set their values */
+    presets?: Record<string, Record<string, S<"ParamValue">>>;
   }) {
   const s = sections(fields);
+  const clip = clipOf(fields, raws);
   const c = canvasOf(fields, raws, useLastRef(fields, raws));
   const extra = s.canvas.filter((f) => f !== c?.width && f !== c?.height && f !== c?.mode);
   if (
     !s.refs.length &&
+    !s.rows.length &&
     !s.loras.length &&
     !s.canvas.length &&
     !s.duration.length &&
@@ -199,6 +224,7 @@ export function Inspector({
           fps={fpsOf(f, fields, raws)}
           error={errors[f.key]}
           onChange={onChange}
+          resolved={resolved?.[f.key]}
         />
       );
     if (f.param.type === "string" || f.param.type === "text")
@@ -212,9 +238,34 @@ export function Inspector({
         open={open === f.key}
         setOpen={setOpen}
         onChange={onChange}
+        choices={allowedInts(f, raws)?.map(String)}
       />
     );
   };
+  const rowsEditor = (f: Field) =>
+    s.rows.includes(f) ? (
+      <PlainRows
+        key={f.key}
+        f={f}
+        raw={raws[f.key]}
+        error={errors[f.key]}
+        clip={clip}
+        onChange={onChange}
+      />
+    ) : (
+      <RowsEditor
+        key={f.key}
+        f={f}
+        raw={raws[f.key]}
+        error={errors[f.key]}
+        onChange={onChange}
+        uploads={uploads}
+        clip={clip}
+      />
+    );
+  const presetChips = presets && Object.keys(presets).length > 0 && (
+    <Presets presets={presets} fields={fields} raws={raws} onChange={onChange} />
+  );
   const section = (
     id: string,
     title: string,
@@ -236,56 +287,44 @@ export function Inspector({
       </section>
     );
   if (groups)
-    return groups.map((g, i) => {
-      const refs = g.fields.filter((f) => s.refs.includes(f));
-      const loras = g.fields.filter((f) => s.loras.includes(f));
-      const canvas = c && g.fields.includes(c.width) && g.fields.includes(c.height);
-      const rest = g.fields.filter(
-        (f) =>
-          !refs.includes(f) &&
-          !loras.includes(f) &&
-          !(canvas && (f === c.width || f === c.height || f === c.mode)),
-      );
-      return section(
-        `sec-g${i}`,
-        g.title,
-        rest,
-        (refs.length > 0 || loras.length > 0 || canvas) && (
-          <>
-            {loras.map((f) => (
-              <Loras key={f.key} f={f} raws={raws} errors={errors} onChange={onChange} />
-            ))}
-            {refs.map((f) => (
-              <RowsEditor
-                key={f.key}
-                f={f}
-                raw={raws[f.key]}
-                error={errors[f.key]}
-                onChange={onChange}
-                uploads={uploads}
-              />
-            ))}
-            {canvas && <CanvasPicker c={c} errors={errors} onChange={onChange} compact={compact} />}
-          </>
-        ),
-      );
-    });
+    return [
+      presetChips,
+      ...groups.map((g, i) => {
+        const refs = g.fields.filter((f) => s.refs.includes(f) || s.rows.includes(f));
+        const loras = g.fields.filter((f) => s.loras.includes(f));
+        const canvas = c && g.fields.includes(c.width) && g.fields.includes(c.height);
+        const rest = g.fields.filter(
+          (f) =>
+            !refs.includes(f) &&
+            !loras.includes(f) &&
+            !(canvas && (f === c.width || f === c.height || f === c.mode)),
+        );
+        return section(
+          `sec-g${i}`,
+          g.title,
+          rest,
+          (refs.length > 0 || loras.length > 0 || canvas) && (
+            <>
+              {loras.map((f) => (
+                <Loras key={f.key} f={f} raws={raws} errors={errors} onChange={onChange} />
+              ))}
+              {refs.map(rowsEditor)}
+              {canvas && (
+                <CanvasPicker c={c} errors={errors} onChange={onChange} compact={compact} />
+              )}
+            </>
+          ),
+          loras[0]
+            ? loraHelp(familyTitle ?? loras[0].family ?? "this model", loras[0])
+            : refs[0]?.param.help,
+        );
+      }),
+    ];
   return (
     <>
-      {s.refs.map((f, i) =>
-        section(
-          `sec-refs-${i}`,
-          f.param.label ?? f.param.name,
-          [],
-          <RowsEditor
-            f={f}
-            raw={raws[f.key]}
-            error={errors[f.key]}
-            onChange={onChange}
-            uploads={uploads}
-          />,
-          f.param.help,
-        ),
+      {presetChips}
+      {[...s.refs, ...s.rows].map((f, i) =>
+        section(`sec-refs-${i}`, f.param.label ?? f.param.name, [], rowsEditor(f), f.param.help),
       )}
       {section(
         "sec-canvas",
@@ -302,7 +341,7 @@ export function Inspector({
           s.loras.length > 1 ? `LoRA (${f.node})` : "LoRA",
           [],
           <Loras f={f} raws={raws} errors={errors} onChange={onChange} />,
-          loraHelp(familyTitle ?? f.family ?? "this model"),
+          loraHelp(familyTitle ?? f.family ?? "this model", f),
         ),
       )}
       {section("sec-options", "Options", s.switches)}
@@ -422,24 +461,38 @@ function CanvasPicker({
   );
 }
 
+/** An auto length's span as its readouts show it: "1.0–13.4 s" (its bounds in frames on the grid). */
+export function autoText(p: S<"ParamSchema">, fps: number) {
+  const b = autoBounds(p, fps);
+  return `${(b.lo / fps).toFixed(1)}–${secondsText(b.hi / fps)}`;
+}
+
 /** The Duration slider (plan 05-ui.md 8.4): a frames param on its grid, one notch per step, read as frames and
- * seconds at the node's frame rate. */
+ * seconds at the node's frame rate; with auto length (the param declares `auto`) a switch that lets the model pick
+ * it (the slider off meanwhile) and, after a run, the length it picked. */
 function Duration({
   f,
   raw,
   fps,
   error,
   onChange,
+  resolved,
 }: {
   f: Field;
   raw: Raw;
   fps: number;
   error?: string;
   onChange: (key: string, raw: Raw) => void;
+  resolved?: number;
 }) {
   const id = idOf(f.key);
   const g = gridOf(f.param);
+  const auto = raw === "auto";
   const n = Number(raw);
+  const span = f.param.auto && fps > 0 ? autoText(f.param, fps) : null;
+  const d0 = Number(f.param.default);
+  const fixed = Number.isFinite(n) ? n : (resolved ?? (Number.isFinite(d0) ? d0 : g.min));
+  const text = auto ? `Auto${span ? ` · ${span}` : ""}` : durationText(fixed, fps);
   return (
     <div id={id + "-ed"} className="col-span-2 flex flex-col gap-2">
       <label htmlFor={id} className="flex justify-between gap-2">
@@ -447,9 +500,7 @@ function Duration({
           {f.param.label ?? f.param.name}
           {f.param.help && <Info>{f.param.help}</Info>}
         </span>
-        <span className="mono text-[12px] text-t2">
-          {Number.isFinite(n) ? durationText(n, fps) : String(raw)}
-        </span>
+        <span className="mono text-[12px] text-t2">{text}</span>
       </label>
       <input
         id={id}
@@ -457,15 +508,86 @@ function Duration({
         min={g.min}
         max={g.max}
         step={g.step}
-        value={Number.isFinite(n) ? n : g.min}
-        aria-valuetext={Number.isFinite(n) ? durationText(n, fps) : undefined}
+        value={fixed}
+        disabled={auto}
+        aria-valuetext={text}
         aria-invalid={!!error || undefined}
         aria-describedby={error ? id + "-err" : undefined}
         onChange={(e) => onChange(f.key, e.target.value)}
-        className="w-full accent-a1"
+        className="w-full accent-a1 disabled:opacity-50"
       />
+      {f.param.auto && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex flex-col gap-0.5">
+            <span id={id + "-auto-l"}>Auto length</span>
+            {span && (
+              <span className="text-[12px] text-t2">The model picks {span} from the prompt</span>
+            )}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={auto}
+            aria-labelledby={id + "-auto-l"}
+            onClick={() => onChange(f.key, auto ? String(fixed) : "auto")}
+            className="flex h-[26px] w-11 shrink-0 rounded-full border border-line p-0.5"
+            style={{ background: auto ? "var(--a1)" : "var(--s1)" }}
+          >
+            <span
+              className="block size-5 rounded-full transition-transform"
+              style={{
+                background: auto ? "var(--on1)" : "var(--t2)",
+                transform: auto ? "translateX(18px)" : undefined,
+              }}
+            />
+          </button>
+        </div>
+      )}
+      {auto && resolved != null && fps > 0 && (
+        <span className="mono text-[12px] text-t2">Last run: {durationText(resolved, fps)}</span>
+      )}
       <FieldError k={f.key} errors={error ? { [f.key]: error } : {}} />
     </div>
+  );
+}
+
+/** The workflow's presets (`studio.presets`) as chips: one sets its values; it reads pressed while the form holds
+ * them all. */
+function Presets({
+  presets,
+  fields,
+  raws,
+  onChange,
+}: Omit<FormProps, "errors"> & { presets: Record<string, Record<string, S<"ParamValue">>> }) {
+  const holds = (values: Record<string, S<"ParamValue">>) =>
+    Object.entries(values).every(([k, v]) => {
+      const f = fields.find((x) => x.key === k);
+      return f && JSON.stringify(rawOf(f, raws)) === JSON.stringify(toRaw(v, f.param));
+    });
+  return (
+    <section aria-labelledby="sec-preset" className="flex flex-col gap-2">
+      <h2 id="sec-preset" className="heading">
+        Preset
+      </h2>
+      <div className="flex flex-wrap gap-2">
+        {Object.entries(presets).map(([name, values]) => (
+          <button
+            key={name}
+            type="button"
+            aria-pressed={holds(values)}
+            onClick={() =>
+              Object.entries(values).forEach(([k, v]) => {
+                const f = fields.find((x) => x.key === k);
+                if (f) onChange(k, toRaw(v, f.param));
+              })
+            }
+            className="h-9 rounded-full border border-transparent bg-s3 px-3.5 text-[13px] aria-pressed:border-a2 aria-pressed:bg-s1"
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -477,6 +599,7 @@ function Tile({
   open,
   setOpen,
   onChange,
+  choices,
 }: {
   f: Field;
   raw: Raw;
@@ -484,10 +607,24 @@ function Tile({
   open: boolean;
   setOpen: (key: string | null) => void;
   onChange: (key: string, raw: Raw) => void;
+  /** the only values it takes (an int's `values`): one is a readout, several a choice */
+  choices?: string[];
 }) {
   const id = idOf(f.key);
   const d = display(f, raw);
   const shown = f.param.type === "seed" && raw === "" ? "Random" : d.value || "—";
+  if (choices?.length === 1)
+    return (
+      <div id={id + "-ed"} className="set flex flex-col gap-0.5" title={f.param.help}>
+        <span className="text-[12px] text-t2">{d.label}</span>
+        <span className="font-semibold">{choices[0]}</span>
+        {error && (
+          <span id={id + "-err"} className="text-[12px] text-bad">
+            {error}
+          </span>
+        )}
+      </div>
+    );
   return (
     <>
       <div className="flex min-w-0 flex-col gap-1">
@@ -520,6 +657,7 @@ function Tile({
         <Editor
           f={f}
           raw={raw}
+          choices={choices}
           onChange={onChange}
           close={() => {
             setOpen(null);
@@ -540,11 +678,13 @@ function Editor({
   raw,
   onChange,
   close,
+  choices,
 }: {
   f: Field;
   raw: Raw;
   onChange: (key: string, raw: Raw) => void;
   close: () => void;
+  choices?: string[];
 }) {
   const p = f.param;
   const id = idOf(f.key);
@@ -581,12 +721,12 @@ function Editor({
       }}
     >
       <span className="flex items-center text-[12px] text-t2">
-        {p.type === "enum" ? label : <label htmlFor={id}>{label}</label>}
+        {p.type === "enum" || choices ? label : <label htmlFor={id}>{label}</label>}
         {p.help && <Info>{p.help}</Info>}
       </span>
-      {p.type === "enum" ? (
+      {p.type === "enum" || choices ? (
         <div className="flex flex-wrap gap-1.5">
-          {p.enum?.map((o) => (
+          {(choices ?? p.enum)?.map((o) => (
             <button
               key={o}
               type="button"
@@ -707,10 +847,13 @@ export function Chips({
   onChange,
   show,
   compact,
+  toggles = [],
 }: Omit<FormProps, "errors"> & {
   show: (key: string) => void;
   /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
   compact?: boolean;
+  /** bool params placed on the composer (`studio.quick`): a chip each that switches it ("Audio on") */
+  toggles?: Field[];
 }) {
   const s = sections(fields);
   const model = s.tiles.filter((f) => f.model && f.param.type === "enum");
@@ -751,9 +894,29 @@ export function Chips({
             title={f.param.label ?? f.param.name}
             onClick={() => show(f.key)}
           >
-            {[secondsText(seconds(Number(rawOf(f, raws)), fps)), fps && `${fps} fps`]
+            {[
+              rawOf(f, raws) === "auto"
+                ? "Auto"
+                : secondsText(seconds(Number(rawOf(f, raws)), fps)),
+              fps && `${fps} fps`,
+            ]
               .filter(Boolean)
               .join(" · ")}
+          </button>
+        );
+      })}
+      {toggles.map((f) => {
+        const on = rawOf(f, raws) === true;
+        return (
+          <button
+            key={f.key}
+            type="button"
+            aria-pressed={on}
+            title={f.param.help}
+            className={chip}
+            onClick={() => onChange(f.key, !on)}
+          >
+            {f.param.label ?? f.param.name} {on ? "on" : "off"}
           </button>
         );
       })}
@@ -795,16 +958,38 @@ export function RefChips({
   uploads,
   extra,
 }: FormProps & { uploads: RefUploads; extra?: React.ReactNode }) {
-  return imageInputs(fields).map((f, i) => (
-    <RowsEditor
-      extra={i === 0 ? extra : undefined}
-      key={f.key}
-      f={f}
-      raw={raws[f.key]}
-      error={errors[f.key]}
-      onChange={onChange}
-      uploads={uploads}
-      compact
-    />
-  ));
+  const clip = clipOf(fields, raws);
+  return imageInputs(fields).map((f, i) => {
+    if (!positionOf(f.param))
+      return (
+        <RowsEditor
+          extra={i === 0 ? extra : undefined}
+          key={f.key}
+          f={f}
+          raw={raws[f.key]}
+          error={errors[f.key]}
+          onChange={onChange}
+          uploads={uploads}
+          compact
+        />
+      );
+    // a time on the clip: the composer shows the first frame (docs/mock/TextToVideo.dc.html); the rest is the
+    // inspector's rows editor
+    const rows = rawOf(f, raws) as S<"RowItem">[];
+    const first = firstFrameRow(f.param, rows, clip);
+    return (
+      <Fragment key={f.key}>
+        {i === 0 && extra}
+        <FirstFrameTile
+          id={first ? refIds(f, [first])[0] : undefined}
+          more={rows.length - (first ? 1 : 0)}
+          onPick={(id) =>
+            onChange(f.key, (old) =>
+              setFirstFrame(f.param, Array.isArray(old) ? old : rows, id, clip),
+            )
+          }
+        />
+      </Fragment>
+    );
+  });
 }

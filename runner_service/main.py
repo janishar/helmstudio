@@ -98,6 +98,7 @@ async def main() -> None:
     )
     blocks = registry.lora_blocks(packs)
     values["loras"] = registry.scanned_value("loras", await asyncio.to_thread(library.scan, blocks))
+    registry.fill_prefused(values, packs, library.files)
     values["looks"] = registry.scanned_value("looks", looks.entries(packs, library, config.MODELS))
     await looks.put_thumbs(packs, store)
     nc = await nats.connect(

@@ -9,7 +9,8 @@ checked against openapi.yaml components/schemas/<name>. fixtures/graphs/ run thr
 (README, Graph rules) against fixtures/graphs/palette.json; fixtures/pipelines/ through the reference pipeline rules
 (README, Pipeline rules) against fixtures/pipelines/workflows.json and the same palette; fixtures/mentions/ through
 the reference mention rules (README, Mentions) against the same palette; fixtures/loras/ through the reference
-LoRA normaliser (README, LoRA normaliser) against the canonical qwen-image lora block.
+LoRA normaliser (README, LoRA normaliser) against the canonical qwen-image lora block (or the fixture's `family`);
+fixtures/video/ through the reference auto length and keyframe position rules (README, Video).
 Exit code 1 on any failure."""
 
 import json
@@ -125,6 +126,7 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
                 out.append(f"{nid}.{k}: not a param of {node['kind']}")
             elif err := value_error(params[k], v):
                 out.append(f"{nid}.{k}: {err}")
+        out += [f"{nid}.{k}: {err}" for k, err in values_by_errors(schema, node.get("params", {}))]
         inputs = {p["name"]: p["type"] for p in schema["inputs"]}
         for port, ref in node.get("in", {}).items():
             src_id, src_port = ref.split(".")
@@ -147,6 +149,8 @@ def value_error(param: dict, v) -> str | None:
     if t == "rows":
         if not isinstance(v, list):
             return f"{v!r} is not a list"
+        if v == [] and "Image" in param["item"].values():
+            return None  # a workflow holds no takes: [] even under min; the run needs min items (README, Video)
         if not param.get("min", 0) <= len(v) <= param["max"]:
             return f"{len(v)} items is outside {param.get('min', 0)}..{param['max']}"
         for i, row in enumerate(v, 1):
@@ -163,7 +167,9 @@ def value_error(param: dict, v) -> str | None:
                 if f in row and (err := value_error(spec, row[f])):
                     return f"item {i}.{f}: {err}"
         return None
-    if t == "frames":  # on the frame grid min + k·step (README, Video: Params)
+    if t == "frames":  # on the frame grid min + k·step (README, Video: Params); "auto" where declared
+        if v == "auto":
+            return None if "auto" in param else "auto length is not offered"
         if not isinstance(v, int) or isinstance(v, bool):
             return f"{v!r} is not an integer"
         if not param["min"] <= v <= param["max"] or (v - param["min"]) % param["step"]:
@@ -179,10 +185,44 @@ def value_error(param: dict, v) -> str | None:
         return f"{v!r} is not a string"
     if t == "enum" and v not in param["enum"]:
         return f"{v!r} is not one of {param['enum']}"
+    if t == "int" and "values" in param and v not in param["values"]:
+        return f"must be one of {', '.join(map(str, param['values']))}"
     n = len(v) if t in ("string", "text") else v
     if t != "enum" and t != "bool" and not param.get("min", n) <= n <= param.get("max", n):
         return f"{v!r} is outside {param.get('min')}..{param.get('max')}"
     return None
+
+
+def values_by_errors(schema: dict, values: dict) -> list[tuple[str, str]]:
+    """(param, message) for every int param whose `values_by` refuses the node's merged value (schema defaults, then
+    `values`): its allowed subset for the node's value of `values_by.param` (README, Video: steps)."""
+    merged = {p["name"]: p["default"] for p in schema["params"]} | values
+    out = []
+    for p in schema["params"]:
+        vb = p.get("values_by")
+        allowed = vb["values"].get(merged.get(vb["param"]), p["values"]) if vb else None
+        if allowed is not None and merged.get(p["name"]) in p["values"] and merged[p["name"]] not in allowed:
+            out.append((p["name"], f"must be one of {', '.join(map(str, allowed))}"))
+    return out
+
+
+def schema_errors(n: dict) -> list[str]:
+    """What JSON Schema can't say about one node schema's `values`, `values_by`, `auto`."""
+    out, params = [], {p["name"]: p for p in n["params"]}
+    for p in n["params"]:
+        vs, vb, auto = p.get("values"), p.get("values_by"), p.get("auto")
+        if vs and (vs != sorted(vs) or p["default"] not in vs or not all(p.get("min", x) <= x <= p.get("max", x) for x in vs)):
+            out.append(f"{p['name']}: values must ascend, lie within min..max and hold the default")
+        if vb:
+            ep = params.get(vb["param"])
+            if not ep or ep["type"] != "enum" or set(vb["values"]) - set(ep["enum"]) or any(
+                    set(x) - set(vs) for x in vb["values"].values()):
+                out.append(f"{p['name']}: values_by must name an enum param of the node, its values, subsets of values")
+            elif p["default"] not in vb["values"].get(ep["default"], vs):
+                out.append(f"{p['name']}: the default is not allowed for {vb['param']} {ep['default']}")
+        if auto and not 0 < auto["min_s"] < auto["max_s"]:
+            out.append(f"{p['name']}: auto needs 0 < min_s < max_s")
+    return out
 
 
 def check_canonical_registries() -> None:
@@ -192,6 +232,8 @@ def check_canonical_registries() -> None:
         nodes = json.loads((reg / f"{prefix}nodes.valid.json").read_text())["nodes"]
         kinds = {n["kind"]: n for n in nodes}
         for n in nodes:
+            for e in schema_errors(n):
+                fail(f"fixtures/registry/{prefix}nodes.valid.json {n['kind']}.{e}")
             for p in n["params"]:
                 if err := value_error(p, p["default"]):
                     fail(
@@ -311,6 +353,9 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
                         add("lora_unknown", nid, param=k)
                     if any(i in loras and loras[i] != family(kind) for i in ids):
                         add("lora_family", nid, param=k)
+        for k, _ in values_by_errors(s, n.get("params", {})):
+            if k not in n.get("params", {}) or not value_error(params[k], n["params"][k]):
+                add("param_invalid", nid, param=k)
         for port, ref in wires.items():
             want = port_type(s, port)
             if not want:
@@ -381,9 +426,11 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
             if bad_path(path):
                 add("preset_invalid", nid, param=param)
             elif nid in nodes and nodes[nid]["kind"] in palette:
-                spec = {"type": "bool"} if param == "bypass" else next(
-                    p for p in palette[nodes[nid]["kind"]]["params"] if p["name"] == param)
-                if value_error(spec, v):
+                s = palette[nodes[nid]["kind"]]
+                spec = {"type": "bool"} if param == "bypass" else next(p for p in s["params"] if p["name"] == param)
+                merged = nodes[nid].get("params", {}) | {k.split(".")[1]: x for k, x in values.items()
+                                                         if k.split(".")[0] == nid and k.split(".")[1] != "bypass"}
+                if value_error(spec, v) or param in dict(values_by_errors(s, merged)):
                     add("preset_invalid", nid, param=param)
     return out
 
@@ -658,7 +705,8 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
             if src and src[0] == "input":
                 fits = p["type"] in INPUT_FITS[src[1]] or (src[1] == "Image" and image_field(p) is not None)
             elif src:
-                fits = (p["type"] == "image" and src[1] == 1) or (image_field(p) is not None and src[1] <= p["max"])
+                timed = any(isinstance(v, dict) and v.get("position") == "seconds" for v in p.get("item", {}).values())
+                fits = (p["type"] == "image" and src[1] == 1) or (image_field(p) is not None and src[1] <= (1 if timed else p["max"]))
             if src and not fits:
                 add("bind_type", nid, k)
         for k, p in params.items():
@@ -1035,8 +1083,10 @@ def normalise(name: str, tensors: dict, spec: dict, fam: str) -> dict:
             unapplied.append(k)
         else:
             part, role = pr
-            r = next((r for r in spec["renames"] if part.startswith(r["from"])), None)
-            part = r["to"] + part[len(r["from"]):] if r else part
+            end = lambda r: r.get("at", "start") == "end"
+            r = next((r for r in spec["renames"] if (part.endswith if end(r) else part.startswith)(r["from"])), None)
+            if r:
+                part = part[:-len(r["from"])] + r["to"] if end(r) else r["to"] + part[len(r["from"]):]
             parts.setdefault(part, {}).setdefault(role, []).append(k)
     applied, rank = [], None
     for part, roles in parts.items():
@@ -1070,17 +1120,20 @@ def lora_licence(meta: dict) -> str | None:
 
 def check_loras() -> None:
     """fixtures/loras/*.json: header-only LoRA files run through the reference normaliser against the canonical
-    qwen-image lora block (an optional `ignore` replaces its ignore list for that case)."""
-    models = json.loads((HERE / "fixtures" / "registry" / "qwen-image.models.valid.json").read_text())["models"]
-    spec, fam = models[0]["lora"], models[0]["family"]
-    mods = expand_modules(spec["modules"])
-    if len({m.replace(".", "_") for m in mods}) != len(mods):
-        fail("qwen-image lora block: module names are not unique with . read as _ (kohya)")
-    if spec["modules"] != sorted(spec["modules"]):
-        fail("qwen-image lora block: modules are not sorted")
+    lora block of the fixture's `family` (default qwen-image; an optional `ignore` replaces its ignore list)."""
+    blocks = {}
+    for prefix in CANONICAL[1:]:
+        m = json.loads((HERE / "fixtures" / "registry" / f"{prefix}models.valid.json").read_text())["models"][0]
+        blocks[m["family"]] = spec = m["lora"]
+        mods = expand_modules(spec["modules"])
+        if len({m.replace(".", "_") for m in mods}) != len(mods):
+            fail(f"{prefix}models lora block: module names are not unique with . read as _ (kohya)")
+        if spec["modules"] != sorted(spec["modules"]):
+            fail(f"{prefix}models lora block: modules are not sorted")
     for p in sorted((HERE / "fixtures" / "loras").glob("*.json")):
         fx, name = json.loads(p.read_text()), f"fixtures/loras/{p.name}"
-        s = spec | ({"ignore": fx["ignore"]} if "ignore" in fx else {})
+        fam = fx.get("family", "qwen-image")
+        s = blocks[fam] | ({"ignore": fx["ignore"]} if "ignore" in fx else {})
         got = normalise(fx["name"], fx["tensors"], s, fam)
         got["family"] = fam if got["error"] is None else "unknown"
         got["licence"] = lora_licence(fx.get("metadata", {}))
@@ -1109,6 +1162,76 @@ def check_lora_detection() -> None:
         if got != c["family"]:
             fail(f"fixtures/loras/detect/families.json: {c['lora']} over {c['families']}: got {got}, want {c['family']}")
     print("ok   fixtures/loras/detect/families.json")
+
+
+# ---------------------------------------------------------------- video rules (README, "Video")
+def auto_frames(seconds: float, fps: float, min_s: float, max_s: float, param: dict) -> int:
+    """Auto length: the predicted seconds as frames, clamped to min_s..max_s and the param's max, floored onto the
+    grid min + k·step and snapped up one step when that fell below min_s (round = half to even, as the old studio)."""
+    top = param["min"] + (param["max"] - param["min"]) // param["step"] * param["step"]
+    lo, hi = round(min_s * fps), min(round(max_s * fps), top)
+    f = min(max(round(seconds * fps), lo), hi)
+    f = param["min"] + max(f - param["min"], 0) // param["step"] * param["step"]
+    return min(f + param["step"] if f < lo else f, top)
+
+
+def clip_of(nodes: dict, palette: dict) -> tuple | None:
+    """(frames or "auto", fps) of the workflow's one unwired frames param on a known, not bypassed node whose fps
+    param is unwired; None when there is not exactly one."""
+    found = []
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        for p in (s["params"] if s and not n.get("bypass") else []):
+            if p["type"] == "frames" and p["name"] not in n.get("in", {}) and p["fps"] not in n.get("in", {}):
+                val = lambda name: n.get("params", {}).get(name, next(q["default"] for q in s["params"] if q["name"] == name))
+                found.append((val(p["name"]), val(p["fps"])))
+    return found[0] if len(found) == 1 else None
+
+
+def position_errors(nodes: dict, palette: dict) -> list[str]:
+    """Keyframe positions (README, Video: keyframes): each `position: seconds` item field of an unwired rows param
+    of a known, not bypassed node is the pixel frame min(round(s·fps), F − 1); past the clip (round(s·fps) > F) or a
+    frame an earlier row of that param has is a 422. With auto length (or no single clip) the past-the-clip check
+    is left to the runner."""
+    clip, out = clip_of(nodes, palette), []
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        for p in (s["params"] if s and not n.get("bypass") else []):
+            fields = [k for k, v in p.get("item", {}).items() if isinstance(v, dict) and v.get("position") == "seconds"]
+            if p["type"] != "rows" or p["name"] in n.get("in", {}) or not fields or not clip:
+                continue
+            frames, fps = clip
+            for f in fields:
+                seen = {}
+                for i, row in enumerate(n.get("params", {}).get(p["name"], p["default"]), 1):
+                    fr = round(row.get(f, p["item"][f]["default"]) * fps)
+                    where = f"{nid}.{p['name']}[{i}].{f}"
+                    if isinstance(frames, int) and fr > frames:
+                        out.append(f"{where}: frame {fr} is past the clip's last frame {frames - 1}")
+                        continue
+                    fr = min(fr, frames - 1) if isinstance(frames, int) else fr
+                    if fr in seen:
+                        out.append(f"{where}: frame {fr} is already used by row {seen[fr]}")
+                    else:
+                        seen[fr] = i
+    return out
+
+
+def check_video(registry: Registry, palette: dict) -> None:
+    g = HERE / "fixtures" / "video"
+    fx = json.loads((g / "auto-frames.json").read_text())
+    for c in fx["cases"]:
+        got = auto_frames(c["seconds"], c["fps"], c["min_s"], c["max_s"], fx["param"] | {"max": c["max"]})
+        if got != c["frames"]:
+            fail(f"fixtures/video/auto-frames.json {c}: got {got}")
+    print("ok   fixtures/video/auto-frames.json")
+    doc_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/WorkflowDoc"}, registry=registry)
+    for c in json.loads((g / "keyframes.json").read_text())["cases"]:
+        if errs := list(doc_v.iter_errors(c["workflow"])):
+            fail(f"fixtures/video/keyframes.json {c['description']!r}: not a WorkflowDoc: {errs[0].message}")
+        elif (got := position_errors(c["workflow"]["nodes"], palette)) != c["errors"]:
+            fail(f"fixtures/video/keyframes.json {c['description']!r}: got {got}, want {c['errors']}")
+    print("ok   fixtures/video/keyframes.json")
 
 
 def check_names() -> None:
@@ -1238,6 +1361,7 @@ def main() -> int:
     check_mentions(registry, palette)
     check_loras()
     check_lora_detection()
+    check_video(registry, palette)
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

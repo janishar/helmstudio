@@ -41,6 +41,18 @@ func imageField(param registry.Param) (string, bool) {
 	return param.ImageInput()
 }
 
+// timed reports whether a rows param's item has a `position: seconds` field: every bound row would take its default
+// time, so only one take fits.
+func timed(param registry.Param) bool {
+	for _, raw := range param.Item {
+		var item registry.Param
+		if json.Unmarshal(raw, &item) == nil && item.Position == "seconds" {
+			return true
+		}
+	}
+	return false
+}
+
 // settable is `<node>.<param>` → schema for every unwired param of a known kind: what a step may set or bind.
 func settable(wf dto.WorkflowDoc, palette map[string]registry.PaletteNode) map[string]registry.Param {
 	out := map[string]registry.Param{}
@@ -311,7 +323,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 				fits = slices.Contains(inputFits[src.input], param.Type) || (src.input == "Image" && rowsOfImages)
 			} else {
 				fits = (param.Type == "image" && src.takes == 1) ||
-					(rowsOfImages && (param.Max == nil || float64(src.takes) <= *param.Max))
+					(rowsOfImages && (param.Max == nil || float64(src.takes) <= *param.Max) && (src.takes == 1 || !timed(param)))
 			}
 			if !fits {
 				add("bind_type", id, key, "", "%s.bind.%s: %s does not fit a %s param", id, key, n.Bind[key], param.Type)

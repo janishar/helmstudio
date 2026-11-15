@@ -1,8 +1,10 @@
 # The fake model family `echo` (env fake, no GPU, no weights): node echo/echo reports one progress step per
 # `steps` (each after `delay_ms`, a cancel point before each), then draws its text on a gradient, or fails when
 # `fail` is true; echo/video does the same, then writes a still MP4 of its text (mp4.py) at its canvas size and
-# duration. Their `refs` are read and checked by the core before the first step (contract tests, no GPU).
-# Its registry values equal the canonical contract fixtures (tests/test_packs.py).
+# duration; echo/keyframes names the images it received (frame, size, strength) in its text and echo/sample is
+# echo/video with stage-bound steps (workflow echo-image-to-video, the fake ltx-image-to-video). Image values are
+# read and checked by the core before the first step (contract tests, no GPU). Duration `auto` resolves to 2 s.
+# The kinds of API 1.11 equal the canonical contract fixtures; keyframes, sample and `auto` (1.12) have none yet.
 id: echo
 family: echo
 title: Echo (fake)
@@ -50,7 +52,9 @@ stages:
     title: Duration
     help: "The fake video's length in frames on an 8k + 1 grid, and its frame rate."
     params:
-      frames: {type: frames, label: Length, default: 25, min: 9, max: 121, step: 8, fps: fps}
+      frames: {type: frames, label: Length, default: 25, min: 9, max: 121, step: 8, fps: fps,
+               auto: {min_s: 1, max_s: 5},
+               help: "Auto: the fake model always predicts 2 s, reported with the result."}
       fps: {type: int, label: Frame rate, default: 24, min: 1, max: 60, step: 1}
     outputs: {duration: Duration}
   video:
@@ -66,6 +70,35 @@ stages:
       refs: {type: rows, label: References, default: [], min: 0, max: 10, item: {image: Image},
              mention: "<image{n}>",
              help: "Images the fake runner reads (and checks) before it renders; the video is unchanged."}
+  keyframes:
+    title: Keyframes
+    help: "Fake keyframes: adds the frame, size and strength of each image it received to the text. Bypassed: text to video."
+    inputs: {text: Text, duration: Duration}
+    outputs: {text: Text}
+    params:
+      images:
+        type: rows
+        label: Frames
+        default: []
+        min: 1
+        max: 8
+        item:
+          image: Image
+          seconds: {type: float, label: At, default: 0, min: 0, max: 320, step: 0.1, position: seconds,
+                    help: "Where in the clip, in seconds: 0 is the first frame, the clip's length its last."}
+          strength: {type: float, label: Strength, default: 1, min: 0, max: 1, step: 0.05}
+        help: "Each row: an image, where it goes and how strongly it holds (the fake runner only names them)."
+  sample:
+    title: Echo sample
+    help: "Fake two-stage video model: as Echo video, with steps fixed by the stage (stage1 4, stage2 2)."
+    inputs: {text: Text, canvas: Canvas, duration: Duration}
+    outputs: {video: Video}
+    params:
+      role: {type: enum, label: Stage, default: stage1, enum: [stage1, stage2]}
+      steps: {type: int, label: Steps, default: 4, min: 2, max: 4, step: 1, values: [2, 4],
+              values_by: {param: role, values: {stage1: [4], stage2: [2]}},
+              help: "Fixed by the stage: stage1 runs 4 steps, stage2 runs 2."}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
 # The fake family takes LoRAs (registry models[].lora): exactly the modules the contract LoRA fixtures
 # (contracts/fixtures/loras) name, so they fit echo on a stack without a GPU. Family detection prefers a family a
 # non-fake env publishes, so a real Qwen LoRA is qwen-image wherever both are published. Model-free: no component is

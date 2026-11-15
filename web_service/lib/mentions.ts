@@ -576,9 +576,11 @@ export function fieldErrors(detail: string, keys: string[]): Record<string, stri
   const out: Record<string, string> = {};
   let last = "";
   for (const part of detail.split("; ")) {
-    const key = keys.find((k) => part.startsWith(k + ": "));
+    const key = keys.find((k) => part.startsWith(k + ": ") || part.startsWith(k + "["));
+    // a row's item ("keyframes.images[2].seconds: …") is said as "row 2: …"
+    const rest = key && part.slice(key.length).replace(/^\[(\d+)\](?:\.\w+)?: /, "row $1: ");
     // a part naming no key continues the one before ("at most 10 images; 9 used, … do not fit")
-    const [k, text] = key ? [key, part.slice(key.length + 2)] : [last, part];
+    const [k, text] = key && rest ? [key, rest.replace(/^: /, "")] : [last, part];
     if (!k) return null;
     out[k] = out[k] ? `${out[k]}; ${text}` : text;
     last = k;

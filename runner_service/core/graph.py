@@ -14,6 +14,7 @@ Node functions run one at a time on the GPU thread (GPU), off the event loop, so
 progress keep flowing; Ctx bridges their progress and output calls back to the loop."""
 
 import asyncio
+import dataclasses
 import graphlib
 import hashlib
 import json
@@ -42,10 +43,34 @@ class Cancelled(Exception):
     """The run was cancelled (KV cancels)."""
 
 
-class Cache(OrderedDict):
-    """cache key (`keys`, which hashes the owner) → a node's outputs, least recently used first, at most SIZE."""
+def nbytes(value) -> int:
+    """The bytes the arrays, byte strings and images in a node's outputs hold (dicts, lists, tuples, dataclasses
+    walked); anything else counts 0."""
+    if isinstance(n := getattr(value, "nbytes", None), int):  # numpy, MLX and torch arrays
+        return n
+    if isinstance(value, (bytes, bytearray)):
+        return len(value)
+    if isinstance(value, images.Image.Image):
+        return value.width * value.height * len(value.getbands())
+    if isinstance(value, dict):
+        return sum(nbytes(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(nbytes(v) for v in value)
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return sum(nbytes(getattr(value, f.name)) for f in dataclasses.fields(value))
+    return 0
 
-    SIZE = 24  # ponytail: a count, not bytes; size by memory if cached outputs ever get large
+
+class Cache(OrderedDict):
+    """cache key (`keys`, which hashes the owner) → a node's outputs, least recently used first, at most SIZE
+    entries and BYTES bytes (`nbytes`; the newest entry stays even when it alone is larger)."""
+
+    SIZE = 24
+    BYTES = 2 * 2**30
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.sizes: dict = {}
+        super().__init__(*args, **kwargs)
 
     def get(self, key, default=None):
         if key not in self:
@@ -56,8 +81,17 @@ class Cache(OrderedDict):
     def __setitem__(self, key, value) -> None:
         super().__setitem__(key, value)
         self.move_to_end(key)
-        while len(self) > self.SIZE:
-            self.popitem(last=False)
+        self.sizes[key] = nbytes(value)
+        while len(self) > self.SIZE or (len(self) > 1 and sum(self.sizes.values()) > self.BYTES):
+            self.sizes.pop(self.popitem(last=False)[0], None)
+
+    def __delitem__(self, key) -> None:
+        super().__delitem__(key)
+        self.sizes.pop(key, None)
+
+    def clear(self) -> None:
+        super().clear()
+        self.sizes.clear()
 
 
 class Ctx:
@@ -69,7 +103,8 @@ class Ctx:
     - `output(data, ext=, kind=, width=, height=[, video=, poster=])`: store the run's next output;
     - `component(model, name)`: the loaded component of a Model handle, through the residency manager;
     - `device`, `owner`, `seed` (the run's resolved seed or None), `node` (the running node id);
-    - `fetch(key, limit, etag)`: the core's object-store read for Image params (core.images), set by the consumer."""
+    - `fetch(key, limit, etag)`: the core's object-store read for Image params (core.images), set by the consumer;
+    - `resolved`: `<node>.<param>` → the frames an "auto" length became (a video output's frame count)."""
 
     def __init__(
         self, *, progress, output, check, owner="", residency=None, device="cpu", loop=None
@@ -80,6 +115,10 @@ class Ctx:
         self.fetch = None  # async (key, limit) -> bytes | None
         self.loras = None  # the host's core.lora.Library, set by the consumer
         self.outputs = 0  # outputs stored so far: the next one's index
+        self.auto: list[
+            str
+        ] = []  # `<node>.<param>` of the run's frames params set to "auto" (graph.run)
+        self.resolved: dict[str, int] = {}  # what they resolved to: the stored clip's frame count
         self.started = time.monotonic()  # when the running node started
         self.alive = (
             time.monotonic()
@@ -118,6 +157,9 @@ class Ctx:
         """A video also passes `video` ({duration_s, fps, frames, has_audio}) and `poster` (PNG bytes)."""
         index, self.outputs = self.outputs, self.outputs + 1
         extra = {"video": video, "poster": poster} if video is not None else {}
+        if video is not None and self.auto:  # auto length: the clip's real frames (README, Video)
+            self.resolved |= dict.fromkeys(self.auto, video["frames"])
+            extra["resolved"] = {"params": dict(self.resolved)}
         self._call(
             self._output(index, data, ext=ext, kind=kind, width=width, height=height, **extra)
         )
@@ -129,13 +171,18 @@ class Ctx:
         gb, transient = model.gb(name)
         key = model.key(name)
         module = self.residency.get(key, gb, transient, lambda: model.load(name, self), model.resident_loras(name))  # fmt: skip
+        if model.baked(
+            name
+        ):  # counted at what it holds, not at the plain size (loaders_mlx: float32 scales)
+            gb += model.extra_gb(name, module)
+            self.residency.resize(key, gb)
         if (
             name == model.lora_component
         ):  # exactly this handle's adapters, at its strengths; no reload
             from core.pack import BYTES
 
             uses = [u for u, _ in model.adapters(name).values()]
-            dtype = BYTES[model.pack.component(name).get("dtype", "bf16")]
+            dtype = BYTES.get(model.pack.component(name).get("dtype", "bf16"), 2)  # stored: as bf16
             self.residency.grow(
                 key, gb + model.lora_gb(uses, dtype)
             )  # room first: nothing is allocated yet
@@ -167,7 +214,9 @@ def _check_param(spec: dict, value) -> str | None:
         return _check_rows(spec, value)
     if t == "bool":
         return None if isinstance(value, bool) else "must be a bool"
-    if t == "frames":  # contracts/README.md, Video: Params
+    if t == "frames":  # contracts/README.md, Video: Params (and auto length where declared)
+        if value == "auto":
+            return None if "auto" in spec else ": auto length is not offered"
         lo, step, hi = spec["min"], spec["step"], spec["max"]
         if (
             isinstance(value, bool)
@@ -188,6 +237,8 @@ def _check_param(spec: dict, value) -> str | None:
         if isinstance(value, bool) or not isinstance(value, number):
             return "must be a number" if t == "float" else f"must be an {t}"
         size = value
+        if t == "int" and "values" in spec and value not in spec["values"]:
+            return f": must be one of {', '.join(map(str, spec['values']))}"
     if "min" in spec and size < spec["min"]:
         return f"is below the minimum {spec['min']}"
     if "max" in spec and size > spec["max"]:
@@ -202,6 +253,10 @@ def _image(value) -> bool:
 def _check_rows(spec: dict, value) -> str | None:
     if not isinstance(value, list):
         return "must be a list"
+    if value == [] and "Image" in spec["item"].values():
+        return (
+            None  # a workflow holds no takes: [] even under min; `validate` needs min items at run
+        )
     if not spec.get("min", 0) <= len(value) <= spec["max"]:
         return f"must have {spec.get('min', 0)} to {spec['max']} items"
     for i, row in enumerate(value, 1):
@@ -323,14 +378,11 @@ def problems(
             elif why := _check_param(spec, params[name]):
                 sep = "" if why.startswith(":") else " "
                 add("param_invalid", nid, param=name, message=f"{nid}.{name}{sep}{why}")
-            elif spec["type"] == "rows" and (gap := next(((i, f) for i, r in enumerate(params[name], 1)
-                                                          for f in spec["item"] if f not in r), None)):  # fmt: skip
-                add(
-                    "param_missing",
-                    nid,
-                    param=name,
-                    message=f"{nid}.{name} item {gap[0]}.{gap[1]}: missing",
-                )
+            elif (vb := spec.get("values_by")) and params[name] not in (
+                ok := vb["values"].get(params.get(vb["param"]), spec["values"])
+            ):  # README, Video: steps allowed for the node's role
+                add("param_invalid", nid, param=name,
+                    message=f"{nid}.{name}: must be one of {', '.join(map(str, ok))}")  # fmt: skip
             elif field := lora_field(spec):  # README, LoRAs: one LoRA once per stack
                 ids = [r[field]["lora_id"] for r in params[name]]
                 if dup := next((x for i, x in enumerate(ids) if x in ids[:i]), None):
@@ -393,13 +445,24 @@ def problems(
     return out
 
 
-def validate(nodes: dict, schemas: dict[str, dict]) -> list[str]:
+def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[str]:
     """Why this runner refuses a resolved graph (cmd.run.execute), each message naming its node; empty when it can
-    run. Checked here, independently of studio: the graph rules (`problems`), every param present, and no bypassed
-    node (studio splices them out before it sends a graph)."""
+    run. Checked here, independently of studio: the graph rules (`problems`), every param present, no bypassed
+    node (studio splices them out before it sends a graph) and, for a run, `min` items in a rows param of takes
+    (`run=False`: a registry workflow, which holds no takes)."""
     errs = [
         f"{nid}: a bypassed node reached the runner" for nid, n in nodes.items() if n.get("bypass")
     ]
+    for nid, n in nodes.items() if run else ():  # takes rows: [] in a workflow, min items in a run
+        for spec in schemas.get(n["kind"], {}).get("params", []):
+            rows = n.get("params", {}).get(spec["name"])
+            if (
+                spec["type"] == "rows"
+                and rows == []
+                and "Image" in spec["item"].values()
+                and spec.get("min")
+            ):
+                errs.append(f"{nid}.{spec['name']}: at least {spec['min']} items")
     return errs + [p[4] for p in problems(nodes, schemas)]
 
 
@@ -427,12 +490,17 @@ def _wired_params(node: dict, schema: dict) -> set[str]:
 
 
 def resolve(nodes: dict, schemas: dict[str, dict]) -> tuple[dict, dict]:
-    """(nodes with every random seed picked, the resolved values {"seed": n} when the graph has a seed; the graph
-    rules allow one unwired seed param, so it is the run's only seed)."""
+    """(nodes with every random seed picked and each rows item's missing fields at their defaults, the resolved
+    values {"seed": n} when the graph has a seed; the graph rules allow one unwired seed param, so it is the run's
+    only seed)."""
     nodes, resolved = json.loads(json.dumps(nodes)), {}
     for node in nodes.values():
         wired = _wired_params(node, schemas[node["kind"]])
         for spec in schemas[node["kind"]]["params"]:
+            if spec["type"] == "rows" and node.get("params", {}).get(spec["name"]):
+                # item fields left out take their defaults (contracts/README.md, Video: keyframes)
+                defaults = {f: s["default"] for f, s in spec["item"].items() if isinstance(s, dict) and "default" in s}  # fmt: skip
+                node["params"][spec["name"]] = [defaults | r for r in node["params"][spec["name"]]]
             if spec["type"] == "seed" and spec["name"] not in wired:
                 params = node.setdefault("params", {})
                 if params.get(spec["name"]) in (None, -1):
@@ -512,8 +580,24 @@ def _canvas_mp(nodes: dict, schemas: dict, nid: str) -> float:
     return 0.0
 
 
+def auto_frames(seconds: float, fps: float, spec: dict) -> int:
+    """Auto length (contracts/README.md, Video; check.py `auto_frames`): `seconds` as frames clamped to the param's
+    auto min_s..max_s and its max, floored onto min + k·step, one step up when that fell below min_s (round is half
+    to even, as the old studio)."""
+    lo_, step, top = (
+        spec["min"],
+        spec["step"],
+        spec["min"] + (spec["max"] - spec["min"]) // spec["step"] * spec["step"],
+    )
+    lo, hi = round(spec["auto"]["min_s"] * fps), min(round(spec["auto"]["max_s"] * fps), top)
+    f = min(max(round(seconds * fps), lo), hi)
+    f = lo_ + max(f - lo_, 0) // step * step
+    return min(f + step if f < lo else f, top)
+
+
 def _frames(nodes: dict, schemas: dict, nid: str) -> int:
-    """The `frames` param of the node nearest upstream of `nid` (breadth first) that has one, or 0."""
+    """The `frames` param of the node nearest upstream of `nid` (breadth first) that has one, or 0; "auto" counts
+    as its upper bound (admission, like the client's estimate, plans for the longest clip)."""
     queue, seen = [nid], set()
     while queue:
         cur = queue.pop(0)
@@ -523,7 +607,9 @@ def _frames(nodes: dict, schemas: dict, nid: str) -> int:
         node = nodes[cur]
         for p in schemas[node["kind"]]["params"]:
             if p["type"] == "frames":
-                return node.get("params", {}).get(p["name"], 0)
+                v = node.get("params", {}).get(p["name"], 0)
+                fps = node.get("params", {}).get(p["fps"], 24)
+                return auto_frames(p["auto"]["max_s"], fps, p) if v == "auto" else v
         queue += [ref.partition(".")[0] for ref in node.get("in", {}).values()]
     return 0
 
@@ -547,6 +633,8 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
     loop = asyncio.get_running_loop()
     ctx.loop = loop
     k = keys(nodes, impls, schemas, ctx.owner)
+    ctx.auto = [f"{nid}.{p['name']}" for nid, n in nodes.items() for p in schemas[n["kind"]]["params"]
+                if p["type"] == "frames" and n.get("params", {}).get(p["name"]) == "auto"]  # fmt: skip
     done: dict[str, dict] = {}
     sinks = [nid for nid in order(nodes) if not schemas[nodes[nid]["kind"]]["outputs"]]
     pending = upstream(nodes, sinks)
@@ -563,9 +651,18 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
             if impl.peak is not None:
                 from core.pack import evaluate
 
-                mp, n = _canvas_mp(nodes, schemas, nid), _images(nodes, schemas, nid)
-                frames = _frames(nodes, schemas, nid)
-                peak = evaluate(impl.peak, params | {"mp": mp, "images": n, "frames": frames})
+                mp, refs = _canvas_mp(nodes, schemas, nid), _image_values(nodes, schemas, nid)
+                # an input that carries its clip's frames (a Latent after stage 1) has the resolved length, which
+                # an "auto" param upstream only bounds
+                known = [
+                    v.frames for v in inputs.values() if isinstance(getattr(v, "frames", None), int)
+                ]
+                frames = known[0] if known else _frames(nodes, schemas, nid)
+                mp_in = max((v["width"] * v["height"] / 1e6 for v in refs), default=0.0)
+                peak = evaluate(
+                    impl.peak,
+                    params | {"mp": mp, "images": len(refs), "frames": frames, "mp_in": mp_in},
+                )
             ctx.residency.admit(needs, peak, later() - set(needs))
         outs = impl.fn(ctx, params, inputs)
         if (

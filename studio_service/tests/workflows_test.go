@@ -69,9 +69,9 @@ func TestUserWorkflowCRUD(t *testing.T) {
 	e.call(userA, "POST", path, with(echoDoc("x", 4), map[string]any{"extra": 1}), 422)
 	e.call(userA, "POST", path, with(echoDoc("x", 4), map[string]any{"based_on": "nope"}), 404)
 
-	// list: templates by title (Echo, Echo video), then mine newest first; never problems
+	// list: templates by title (Echo, Echo image to video, Echo video), then mine newest first; never problems
 	list := e.call(userA, "GET", path, nil, 200)["workflows"].([]any)
-	if len(list) != 5 || list[1].(map[string]any)["source"] != "template" || list[2].(map[string]any)["title"] != "Two" {
+	if len(list) != 6 || list[2].(map[string]any)["source"] != "template" || list[3].(map[string]any)["title"] != "Two" {
 		t.Fatal(list)
 	}
 	for _, item := range list {
@@ -79,7 +79,7 @@ func TestUserWorkflowCRUD(t *testing.T) {
 			t.Fatal("problems in a list")
 		}
 	}
-	if only := e.call(userA, "GET", path+"?source=template", nil, 200)["workflows"].([]any); len(only) != 2 {
+	if only := e.call(userA, "GET", path+"?source=template", nil, 200)["workflows"].([]any); len(only) != 3 {
 		t.Fatal(only)
 	}
 	e.call(userA, "GET", path+"?source=other", nil, 422)

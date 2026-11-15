@@ -31,6 +31,7 @@ import {
   type UploadState,
 } from "@/lib/loras";
 import { move } from "@/lib/refs";
+import { choosable } from "@/lib/video";
 
 type Row = S<"RowItem">;
 
@@ -58,7 +59,8 @@ export function LoraRows({
   const ids = rowIds(param, rows);
   const issues = rowIssues(param, rows, library, family);
   const strength = strengthOf(param);
-  const mode = modeOf(param);
+  // a one-value mode (a stack that only bakes) is not a choice: not drawn
+  const mode = choosable(modeOf(param)?.[1]) ? modeOf(param) : undefined;
   const max = param.max ?? 8;
   const list = useRef<HTMLOListElement>(null);
   const dragFrom = useRef<number | null>(null);
@@ -144,7 +146,9 @@ export function LoraRows({
                 {strength && s !== null && (
                   <>
                     <span className="text-[12px] text-t2">
-                      <label htmlFor={sid}>{strengthCaption(l)}</label>
+                      <label htmlFor={sid}>
+                        {mode ? strengthCaption(l) : strengthCaption(l).replace(/ · $/, "")}
+                      </label>
                       {mode && m && (
                         <button
                           type="button"

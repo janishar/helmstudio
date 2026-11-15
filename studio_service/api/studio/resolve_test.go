@@ -212,7 +212,7 @@ func TestResolveImages(t *testing.T) {
 		value.([]any)[0].(map[string]any)["weight"] != float64(1) {
 		t.Fatal(value, detail)
 	}
-	if _, detail := check(rows, []any{}); detail != "at least 1 items" {
+	if _, detail := check(rows, []any{}); detail != "" { // a workflow holds no takes: [] under min; resolve needs min
 		t.Fatal(detail)
 	}
 	if _, detail := check(rows, []any{map[string]any{"image": map[string]any{"take_id": takeA}, "weight": 3.0}}); detail != "[1].weight: must be at most 2" {

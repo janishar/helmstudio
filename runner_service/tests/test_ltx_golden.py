@@ -1,12 +1,16 @@
-"""The ltx pack against the old studio's goldens (tests/golden/ltx-text-to-video, recorded by
-tests/golden/record_ltx.py at the repo root): runs the pack's ltx-text-to-video workflow in-process (no NATS:
-graph.run with a real residency manager on the GPU) with a golden's settings, then compares
-- the latents at every recorded point (sha256 of the float32 bytes: equal only on the golden's mlx; else mean / std),
+"""The ltx pack against the old studio's goldens (tests/golden/ltx-*, recorded by tests/golden/record_ltx.py at the
+repo root): runs the pack's workflows in-process (no NATS: graph.run with a real residency manager on the GPU) with a
+golden's settings — text to video, image to video and keyframes (`ltx-image-to-video`), Prompt Relay beats, a baked
+synthetic LoRA (rebuilt byte for byte by tests/golden/ltx_inputs.py) — then compares
+- every recorded point (sha256 of the float32 bytes: equal only on the golden's mlx; else mean / std): the prompt
+  embeddings, each stage's input state (noise, clean latent, denoise / keyframe masks, positions, relay mask) and
+  output tokens, the upscaled latent, the keyframe image latents per stage, the LoRA-fused weights,
 - the video: every decoded frame (rgb24) against the golden MP4's, per-frame PSNR (mean and worst), plus the first,
   middle and last frame PNGs; frame count, size, fps and codecs from ffprobe,
 - the audio: the WAV before AAC (same sample count; log-mel spectrogram mean |diff| in dB; waveform SNR),
-and reports per node its time and MLX peak memory (reset at each node). Loads real weights: never alongside another
-process that holds a model (make runners-stop first).
+and reports per node its time and MLX peak memory (reset at each node). `auto-duration` runs only Gemma and the
+DurationHead on the golden's prompts. Loads real weights: never alongside another process that holds a model (make
+runners-stop first).
 
     uv run --project envs/mlx python tests/test_ltx_golden.py [case ...] [--reseed] [--out DIR]
     uv run --project envs/mlx pytest -m gpu -s tests/test_ltx_golden.py
@@ -29,8 +33,20 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-GOLDEN = Path(__file__).resolve().parent / "golden" / "ltx-text-to-video"
-CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7"]
+GOLDENS = Path(__file__).resolve().parent / "golden"
+DIRS = {"t2v": "ltx-text-to-video", "i2v": "ltx-image-to-video", "kf": "ltx-image-to-video",
+        "beats": "ltx-prompt-beats", "lora": "ltx-lora"}  # fmt: skip
+CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7", "i2v-448x256-49f-s42", "kf-448x256-49f-s42",
+         "beats-448x256-49f-s42", "lora-448x256-49f-s42", "auto-duration"]  # fmt: skip
+INPUTS = (
+    Path(__file__).resolve().parents[2] / "tests" / "golden"
+)  # ltx_inputs.py: the synthetic LoRA
+
+
+def golden_dir(name: str) -> Path:
+    return GOLDENS / DIRS[name.split("-")[0]]
+
+
 # On the goldens' mlx (0.32.2) every latent must be bit-exact (measured: it is, PSNR inf, WAV identical). On another
 # mlx the port is just as faithful but kernels differ (0.32.4: masked SDPA at head_dim 256 in Gemma, the compiled
 # nn.silu, bf16 matmuls with a ragged M; GOTCHAS.md) and the 8-step ancestral stage 1 amplifies the 0.3-1 % change of
@@ -40,6 +56,13 @@ CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7"]
 BARS = {
     "t2v-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 18.0, "logmel_db": 1.25},
     "t2v-512x320-57f-s7": {"video_mean_db": 31.5, "video_worst_db": 30.0, "logmel_db": 0.95},
+    # stage B, 0.32.4 measured 2026-11-15 (mean / worst dB, log-mel dB): the images anchor the clip, so i2v / kf
+    # drift little (42.19 / 39.34 / 1.479; 43.15 / 42.42 / 1.473); beats 23.25 / 16.53 / 1.526; the LoRA clip
+    # 26.91 / 23.73 / 1.154 (its fused weights are bit-equal on 0.32.4 too: quantize / dequantize did not change)
+    "i2v-448x256-49f-s42": {"video_mean_db": 41.5, "video_worst_db": 38.5, "logmel_db": 1.6},
+    "kf-448x256-49f-s42": {"video_mean_db": 42.5, "video_worst_db": 41.5, "logmel_db": 1.6},
+    "beats-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 16.0, "logmel_db": 1.65},
+    "lora-448x256-49f-s42": {"video_mean_db": 26.0, "video_worst_db": 23.0, "logmel_db": 1.3},
 }
 
 
@@ -51,9 +74,14 @@ def stats(a) -> dict:
             "sha256_f32": hashlib.sha256(x.tobytes()).hexdigest()}  # fmt: skip
 
 
+def opt(a) -> dict | None:
+    return None if a is None else stats(a)
+
+
 class Bench:
-    """The mlx registry and node implementations (recording what ran, its time, MLX peak and the handles' stats),
-    the cache and the residency of one runner."""
+    """The mlx registry and node implementations (recording what ran, its time, MLX peak and the handles' stats;
+    each sampler loop's input state and output; the keyframe image latents; the LoRA-fused weights), the cache and
+    the residency of one runner, and the inputs a run fetches (golden PNGs as image takes, the synthetic LoRA)."""
 
     def __init__(self, out: Path) -> None:
         import mlx.core as mx
@@ -63,25 +91,64 @@ class Bench:
         from core.residency import Residency, ram_gb
         from packs.ltx import mlx as ltx
 
-        self.mx, self.graph, self.lm, self.out = mx, graph, lm, out
+        self.mx, self.graph, self.lm, self.ltx, self.out = mx, graph, lm, ltx, out
         values, impls, packs = registry.build("mlx")
         self.schemas = registry.node_schemas(values)
-        self.workflow = next(
-            w for p in packs for w in p.workflows if w["id"] == "ltx-text-to-video"
-        )
+        self.pack = next(p for p in packs if p.family == "ltx")
+        self.workflows = {w["id"]: w for w in self.pack.workflows}
+        self.raw_impls = impls
         self.impls = {k: dataclasses.replace(n, fn=self._record(n.fn)) for k, n in impls.items()}
         self.residency = Residency(ram_gb() - 12, free=lm.free, measure=lm.measure_gb)
         self.cache = graph.Cache()
         self.residency.on_short.append(self.cache.clear)
         self.wav: Path | None = None
-        save = ltx._save_wav
+        self.files: dict[str, Path] = {}  # object key → local file (image takes, the LoRA)
+        self.stages, self.images, self.fused, self.loads = [], [], {}, {}
+        save, denoise, conds, load = (
+            ltx._save_wav,
+            ltx._denoise,
+            ltx._conditionings,
+            lm.load_component,
+        )
 
         def save_and_keep(waveform, path):  # the WAV before AAC, for the audio compare
             save(waveform, path)
             if self.wav:
                 shutil.copy(path, self.wav)
 
-        ltx._save_wav = save_and_keep
+        def loop(ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask=None):
+            row = {"video_in": stats(video.latent), "audio_in": stats(audio.latent),
+                   "video_clean_in": stats(video.clean_latent), "video_denoise_mask": stats(video.denoise_mask),
+                   "video_keyframes_mask": opt(video.keyframes_mask), "video_positions_stats": stats(video.positions),
+                   "video_cross_attention_mask": opt(cross_mask), "video_tokens_total": video.latent.shape[1]}  # fmt: skip
+            mx.reset_peak_memory()  # the loop's own peak (the image encode before it is in the node's)
+            vx, ax = denoise(ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask)
+            row |= {"video_out_tokens": stats(vx), "audio_out_tokens": stats(ax),
+                    "loop_peak_gib": round(mx.get_peak_memory() / 2**30, 2)}  # fmt: skip
+            self.stages.append(row)
+            return vx, ax
+
+        def conditionings(*a):
+            items = conds(*a)
+            self.images.append([stats(getattr(c, "keyframe_latent", None) if hasattr(c, "keyframe_latent")
+                                      else c.clean_latent) for c in items])  # fmt: skip
+            return items
+
+        def load_component(model, component, ctx):
+            before, t = mx.get_active_memory(), time.monotonic()
+            mx.reset_peak_memory()
+            module = load(model, component, ctx)
+            self.loads[component] = {"s": round(time.monotonic() - t, 2),
+                                     "peak_over_gib": round((mx.get_peak_memory() - before) / 2**30, 2),
+                                     "kept_gib": round((mx.get_active_memory() - before) / 2**30, 2)}  # fmt: skip
+            if model.baked(component):  # the fused weights, read when compared
+                from mlx.utils import tree_flatten
+
+                self.fused = dict(tree_flatten(module.parameters()))
+            return module
+
+        ltx._save_wav, ltx._denoise, ltx._conditionings = save_and_keep, loop, conditionings
+        lm.load_component = load_component
 
     def _record(self, fn):
         def run(ctx, params, inputs):
@@ -100,20 +167,88 @@ class Bench:
 
         return run
 
+    def image(self, path: Path) -> dict:
+        """A golden PNG as a resolved Image value (an image take of the owner `golden`)."""
+        from PIL import Image
+
+        key = f"u/golden/takes/{path.name}"
+        self.files[key] = path
+        data = path.read_bytes()
+        with Image.open(path) as im:
+            w, h = im.size
+        return {"take_id": "00000000-0000-4000-8000-000000000001", "key": key, "content_type": "image/png",
+                "width": w, "height": h, "bytes": len(data), "etag": hashlib.md5(data).hexdigest()}  # fmt: skip
+
+    def lora(self, case: dict) -> dict:
+        """The synthetic LoRA (ltx_inputs.synthetic_lora, rebuilt from the transformer header) as a shared LoRA row."""
+        sys.path.insert(0, str(INPUTS))
+        import ltx_inputs
+
+        f = self.out / "ltx-synthetic-lora-r8.safetensors"
+        dit = self.pack_file("diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors")
+        meta = ltx_inputs.synthetic_lora(f, dit)
+        assert meta["sha256"] == case["lora"]["sha256"], "the synthetic LoRA is not the golden's"
+        self.files[meta["sha256"]] = f
+        value = {"lora_id": meta["sha256"], "source": "shared", "name": f.stem, "sha256": meta["sha256"],
+                 "bytes": meta["bytes"]}  # fmt: skip
+        return {"lora": value, "strength": case["lora_strength"], "mode": "bake"}
+
+    def pack_file(self, rel: str) -> Path:
+        from core.pack import models_root
+
+        return models_root() / "ltx-2.5" / rel
+
     def nodes(self, case: dict) -> dict:
-        nodes = json.loads(json.dumps(self.workflow["nodes"]))
+        kind = case["name"].split("-")[0]
+        wf = "ltx-image-to-video" if kind in ("i2v", "kf") else "ltx-text-to-video"
+        nodes = json.loads(json.dumps(self.workflows[wf]["nodes"]))
         nodes["prompt"]["params"]["text"] = case["prompt"]
         nodes["seed"]["params"]["seed"] = case["seed"]
         nodes["canvas"]["params"] |= {"width": case["width"], "height": case["height"]}
         nodes["duration"]["params"] |= {"frames": case["frames"], "fps": round(case["fps"])}
         nodes["model"]["params"]["precision"] = f"int{case['quantize_on_load']}"
+        for im in (
+            case.get("images") or []
+        ):  # frame f is at f / fps seconds: round(s * fps) gives f back
+            nodes["keyframes"]["params"]["images"].append({"image": self.image(golden_dir(case["name"]) / im["file"]),
+                                                           "seconds": im["frame_idx"] / case["fps"],
+                                                           "strength": im["strength"]})  # fmt: skip
+        for sg in (
+            case.get("segments") or []
+        ):  # beats in latent frames → seconds (round(s * fps / 8) gives them)
+            nodes["encode"]["params"]["beats"].append({"text": sg["text"],
+                                                       "seconds": sg["length"] * 8 / case["fps"] if sg["length"] else 0})  # fmt: skip
+        if case.get("lora"):
+            nodes["lora"]["params"]["rows"] = [self.lora(case)]
         return nodes
+
+    def ctx(self, progress=None, output=None):
+        g = self.graph
+
+        async def fetch(key, limit, etag):
+            return self.files[key].read_bytes()
+
+        async def none(*a, **k):
+            pass
+
+        ctx = g.Ctx(progress=progress or none, output=output or none, check=lambda: None, owner="golden",
+                    residency=self.residency, device=self.lm.device())  # fmt: skip
+        ctx.fetch = fetch
+        files = self.files
+
+        class Loras:  # the host's LoRA library: the synthetic LoRA by sha256
+            async def path(self, use, owner, progress=None):
+                return files[use.sha256]
+
+        ctx.loras = Loras()
+        return ctx
 
     def run(self, nodes: dict, wav: Path | None = None) -> dict:
         g = self.graph
-        assert not g.validate(nodes, self.schemas)
+        assert not g.validate(nodes, self.schemas), g.validate(nodes, self.schemas)
         nodes, _ = g.resolve(nodes, self.schemas)
         self.rows, self.wav, out = {}, wav, {"mp4": None, "phases": []}
+        self.stages, self.images, self.fused = [], [], {}
 
         async def progress(node, step, of, phase, eta):
             out["phases"].append((node, phase, step, of))
@@ -121,8 +256,7 @@ class Bench:
         async def output(index, data, **meta):
             out["mp4"], out["meta"] = data, meta
 
-        ctx = g.Ctx(progress=progress, output=output, check=lambda: None, owner="golden",
-                    residency=self.residency, device=self.lm.device())  # fmt: skip
+        ctx = self.ctx(progress, output)
         t = time.monotonic()
         try:
             asyncio.run(g.run(nodes, self.impls, self.schemas, ctx, self.cache))
@@ -132,6 +266,69 @@ class Bench:
         out["nodes"] = self.rows
         out["resident_gb"] = round(self.residency.used_gb, 2)
         return out
+
+    def variant(self, which: str) -> dict:
+        """auto: the clip has the predicted frames and the output reports them as resolved.params; noaudio: no
+        audio track and the frames of the golden (bit-exact on its mlx: the DiT generates audio either way)."""
+        name = "t2v-448x256-49f-s42"
+        case = json.loads((golden_dir(name) / f"{name}.json").read_text())
+        nodes = self.nodes(case)
+        if which == "auto":
+            nodes["duration"]["params"]["frames"] = "auto"
+        else:
+            nodes["decode"]["params"]["audio"] = False
+        r = self.run(nodes)
+        mp4 = self.out / f"{which}.mp4"
+        mp4.write_bytes(r["mp4"])
+        got, probe = frames(mp4)
+        res = {"total_s": r["total_s"], "frames": len(got), "streams": [s["codec_type"] for s in probe],
+               "resolved": r["meta"].get("resolved"), "nodes": {k: v["s"] for k, v in r["nodes"].items() if v["s"]}}  # fmt: skip
+        if which == "auto":
+            res["pass"] = len(got) == 65 and res["resolved"] == {"params": {"duration.frames": 65}}
+        else:
+            want, _ = frames(golden_dir(name) / f"{name}.mp4")
+            per = [psnr(a, b) for a, b in zip(got, want, strict=True)]
+            res["video_worst_db"] = min(per)
+            res["pass"] = res["streams"] == ["video"] and (min(per) == float("inf") or case["versions"]["mlx"] != self.mx.__version__)  # fmt: skip
+        return res
+
+    def durations(self) -> dict:
+        """DurationHead on the auto-duration golden's prompts: the embeddings and the raw seconds (bit-exact on the
+        golden's mlx), and the frames per setting (the old studio's, clamped by our max 321: contracts auto_frames)."""
+        from core.pack import ModelRef
+
+        g = json.loads((GOLDENS / "ltx-auto-duration" / "auto-duration.json").read_text())
+        ltx, model = self.ltx, ModelRef(self.pack, "distilled", "int8")
+        ctx = self.ctx()
+        ctx.progress = lambda *a, **k: None  # no event loop here
+        ctx.node, ctx.impl = "encode", self.raw_impls["ltx/encode"]
+        t, rows, ok = time.monotonic(), [], True
+        self.mx.reset_peak_memory()
+        for row in g["rows"]:
+            cond = ltx.encode(ctx, {"beats": []}, {"model": model, "prompt": row["prompt"]})["cond"]
+            p = self.pack_file(ltx.DURATION_HEAD)
+            seconds = float(ltx._duration_head(p, p.stat().st_size, p.stat().st_mtime_ns)(
+                video_tokens=cond.video, audio_tokens=cond.audio).item())  # fmt: skip
+            got = {"embeds_exact": stats(cond.video)["sha256_f32"] == row["video_embeds"]["sha256_f32"],
+                   "seconds": [seconds, row["predictions"][0]["raw_seconds"]], "frames": []}  # fmt: skip
+            for pr in row["predictions"]:
+                spec = ltx.FRAMES | {"auto": {"min_s": pr["min_s"], "max_s": pr["max_s"]}}
+                got["frames"].append(
+                    [self.graph.auto_frames(seconds, pr["fps"], spec), pr["frames"]]
+                )
+            # on the golden's mlx exact; on another the seconds move by a bf16 step or so (0.32.4: 2.92 vs 2.89 s),
+            # which may cross a grid point: one step (8 frames) of slack
+            exact = g["versions"]["mlx"] == self.mx.__version__
+            got["frames_ok"] = all(
+                abs(a - min(b, 321)) <= (0 if exact else 8) for a, b in got["frames"]
+            )
+            ok &= got["frames_ok"] and abs(seconds / row["predictions"][0]["raw_seconds"] - 1) <= (
+                1e-6 if exact else 0.02
+            )
+            rows.append(got)
+        self.residency.unload()
+        return {"rows": rows, "s": round(time.monotonic() - t, 1),
+                "peak_gib": round(self.mx.get_peak_memory() / 2**30, 2), "pass": bool(ok)}  # fmt: skip
 
 
 def frames(mp4: Path) -> tuple[np.ndarray, dict]:
@@ -182,7 +379,8 @@ def logmel(
     return 10 * np.log10(np.maximum(spec @ fb.T, 1e-10))
 
 
-def compare(name: str, r: dict, out: Path) -> dict:
+def compare(name: str, r: dict, out: Path, bench: Bench) -> dict:
+    GOLDEN = golden_dir(name)
     g = json.loads((GOLDEN / f"{name}.json").read_text())
     mp4 = out / f"{name}.mp4"
     mp4.write_bytes(r["mp4"])
@@ -204,15 +402,34 @@ def compare(name: str, r: dict, out: Path) -> dict:
             round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
         )
     stages = g["stages"]
-    latents = {  # the golden's recorded points vs this run's handles
-        "embeds": (g["prompt_embeds"]["video"], r["nodes"]["encode"]["video"]),
-        "stage1": (stages[0]["video_out_tokens"], r["nodes"]["sample1"]["video"]),
-        "stage1_audio": (stages[0]["audio_out_tokens"], r["nodes"]["sample1"]["audio"]),
-        "upscaled": (stages[1]["video_upscaled"], r["nodes"]["upscale"]["video"]),
-        "stage2": (stages[1]["video_out_tokens"], r["nodes"]["sample2"]["video"]),
-        "stage2_audio": (stages[1]["audio_out_tokens"], r["nodes"]["sample2"]["audio"]),
+    points = {  # the golden's recorded points vs this run's handles (a node that was a cache hit has none)
+        "embeds": (g["prompt_embeds"]["video"], "encode", "video"),
+        "stage1": (stages[0]["video_out_tokens"], "sample1", "video"),
+        "stage1_audio": (stages[0]["audio_out_tokens"], "sample1", "audio"),
+        "upscaled": (stages[1]["video_upscaled"], "upscale", "video"),
+        "stage2": (stages[1]["video_out_tokens"], "sample2", "video"),
+        "stage2_audio": (stages[1]["audio_out_tokens"], "sample2", "audio"),
     }
-    lat = {k: {"exact": w["sha256_f32"] == h["sha256_f32"], "mean": [w["mean"], h["mean"]], "std": [w["std"], h["std"]]}
+    if g.get("images"):  # the golden's stage-2 clean latent is the upscaled one after conditioning
+        del points["upscaled"]
+    latents = {k: (w, r["nodes"][n][x]) for k, (w, n, x) in points.items() if n in r["nodes"]}
+    for i, (wrow, hrow) in enumerate(
+        zip(stages, bench.stages, strict=True), 1
+    ):  # each loop's state
+        for k in ("video_in", "audio_in", "video_clean_in", "video_denoise_mask", "video_keyframes_mask",
+                  "video_positions_stats", "video_cross_attention_mask"):  # fmt: skip
+            if k in wrow:
+                latents[f"loop{i}.{k}"] = (wrow[k], hrow[k])
+    for i, row in enumerate(
+        g.get("image_conditionings") or [], 1
+    ):  # the keyframe image latents per stage
+        for j, (it, have) in enumerate(zip(row["items"], bench.images[i - 1], strict=True), 1):
+            latents[f"images{i}.{j}"] = (it["latent"], have)
+    for m, w in ((g.get("lora") or {}).get("weights") or {}).items():  # the fused weights
+        for part, wst in w.items():
+            latents[f"lora.{m}.{part}"] = (wst, stats(bench.fused[f"{m}.{part}"]))
+    same = lambda w, h: (w is None and h is None) or (w is not None and h is not None and w["sha256_f32"] == h["sha256_f32"])  # fmt: skip
+    lat = {k: {"exact": same(w, h)} | ({"mean": [w["mean"], h["mean"]], "std": [w["std"], h["std"]]} if w and h else {})
            for k, (w, h) in latents.items()}  # fmt: skip
     streams = lambda p: [(s["codec_type"], s["codec_name"], s.get("profile"), s.get("pix_fmt"), s.get("width"),
                           s.get("height"), s.get("r_frame_rate"), s.get("nb_frames"), s.get("sample_rate"),
@@ -233,6 +450,9 @@ def compare(name: str, r: dict, out: Path) -> dict:
             bool(per) and all(v["exact"] for v in lat.values()) and min(per) == float("inf")
         )
         return res
+    if name not in BARS:  # not measured on this mlx yet: report only
+        res["pass"] = False
+        return res
     bars = BARS[name]
     res["pass"] = bool(per and res["video"]["mean_db"] >= bars["video_mean_db"]
                        and res["video"]["worst_db"] >= bars["video_worst_db"] and res["video"]["same_streams"]
@@ -252,17 +472,33 @@ def main(argv=None) -> int:
 
     bench, ok, report = Bench(out), True, {"mlx": mx.__version__}
     for name in args.cases:
-        case = json.loads((GOLDEN / f"{name}.json").read_text())
+        if name == "auto-duration":
+            report[name] = bench.durations()
+            ok &= report[name]["pass"]
+            print(name, json.dumps(report[name]), flush=True)
+            continue
+        if name in (
+            "auto",
+            "noaudio",
+        ):  # the first t2v case with frames "auto" (65 predicted) / decode.audio off
+            report[name] = bench.variant(name)
+            ok &= report[name]["pass"]
+            print(name, json.dumps(report[name]), flush=True)
+            continue
+        case = json.loads((golden_dir(name) / f"{name}.json").read_text())
         r = bench.run(bench.nodes(case), wav=out / f"{name}.wav")
         r["mlx"] = mx.__version__
-        c = compare(name, r, out)
+        c = compare(name, r, out, bench)
+        c["loops"] = [{k: v for k, v in x.items() if k == "loop_peak_gib"} for x in bench.stages]
+        c["loads"], bench.loads = bench.loads, {}
+        bench.fused = {}  # drop the baked weights it held for the compare
         ok &= c["pass"]
         report[name] = {"total_s": r["total_s"], "nodes": {k: {x: v[x] for x in ("s", "peak_gib", "active_after_gib")}
                         for k, v in r["nodes"].items()}, "resident_gb_after": r["resident_gb"],
                         "phases": sorted({f"{n}:{p}" for n, p, _, _ in r["phases"]}), **c}  # fmt: skip
         print(name, json.dumps(report[name]), flush=True)
     if args.reseed:
-        case = json.loads((GOLDEN / f"{args.cases[0]}.json").read_text())
+        case = json.loads((golden_dir(args.cases[0]) / f"{args.cases[0]}.json").read_text())
         nodes = bench.nodes(case)
         nodes["seed"]["params"]["seed"] = case["seed"] + 1
         r = bench.run(nodes)
@@ -285,7 +521,7 @@ def main(argv=None) -> int:
 @pytest.mark.gpu
 def test_ltx_goldens():
     pytest.importorskip("mlx")
-    assert main([*CASES[:1], "--reseed"]) == 0
+    assert main([*CASES, "auto", "noaudio", "--reseed"]) == 0
 
 
 if __name__ == "__main__":

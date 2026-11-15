@@ -100,7 +100,13 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 					return nil, fmt.Sprintf("%s.%s: at least %s items", id, param.Name, format(*param.Min))
 				}
 			}
+			if detail := valuesByDetail(param, node.Params); detail != "" {
+				return nil, id + "." + param.Name + ": " + detail
+			}
 		}
+	}
+	if errs := positionErrors(nodes, workflow.NodeSchemas); len(errs) > 0 {
+		return nil, errs[0]
 	}
 	splice(nodes, workflow.NodeSchemas)
 	return nodes, ""
@@ -148,6 +154,9 @@ func check(param registry.Param, value any) (any, string) {
 		if detail := bounds(param, number, ""); detail != "" {
 			return nil, detail
 		}
+		if param.Type == "int" && len(param.Values) > 0 && !slices.Contains(param.Values, int64(number)) {
+			return nil, "must be one of " + joinInts(param.Values)
+		}
 		if param.Type != "float" {
 			return int64(number), ""
 		}
@@ -182,8 +191,15 @@ func check(param registry.Param, value any) (any, string) {
 	return nil, "has an unknown type " + param.Type
 }
 
-// checkFrames returns a frame count on the param's grid, min + k × step up to max, or why it is not one.
+// checkFrames returns a frame count on the param's grid, min + k × step up to max, or "auto" where the param offers
+// it (the runner predicts the length), or why it is neither.
 func checkFrames(param registry.Param, value any) (any, string) {
+	if value == "auto" {
+		if param.Auto == nil {
+			return nil, "auto length is not offered"
+		}
+		return "auto", ""
+	}
 	low, step, high := deref(param.Min), deref(param.Step), deref(param.Max)
 	number, ok := value.(float64)
 	if ok && number == math.Trunc(number) && number >= low && number <= high && step > 0 && math.Mod(number-low, step) == 0 {
@@ -226,7 +242,9 @@ func checkRows(param registry.Param, value any) (any, string) {
 	if param.Max != nil && float64(len(items)) > *param.Max {
 		return nil, fmt.Sprintf("at most %s items", format(*param.Max))
 	}
-	if param.Min != nil && float64(len(items)) < *param.Min {
+	_, takesImages := param.ImageInput()
+	// a workflow holds no takes: an image rows param may be [] under its min; the run needs min items (resolve)
+	if param.Min != nil && float64(len(items)) < *param.Min && (len(items) > 0 || !takesImages) {
 		return nil, fmt.Sprintf("at least %s items", format(*param.Min))
 	}
 	out := make([]any, len(items))
@@ -271,9 +289,8 @@ func checkRows(param registry.Param, value any) (any, string) {
 			if err := json.Unmarshal(raw, &itemParam); err != nil {
 				return nil, at + "." + name + ": has an unknown type"
 			}
-			if !given {
-				filled[name] = itemParam.Default
-				continue
+			if !given { // the merged item is checked: a default may not do (a beat's text)
+				field = itemParam.Default
 			}
 			checked, detail := check(itemParam, field)
 			if detail != "" {
@@ -284,6 +301,133 @@ func checkRows(param registry.Param, value any) (any, string) {
 		out[i] = filled
 	}
 	return out, ""
+}
+
+// joinInts writes values as "3, 8".
+func joinInts(values []int64) string {
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = strconv.FormatInt(v, 10)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// number is a JSON or checked number as a float64.
+func number(value any) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case int64:
+		return float64(v), true
+	}
+	return 0, false
+}
+
+// valuesByDetail says why the node's merged value of an int param with values_by is not allowed for the node's value
+// of its enum param (an enum value not listed allows all of values); "" when it is, or when the value is not one of
+// values at all (check says so).
+func valuesByDetail(param registry.Param, params map[string]any) string {
+	by := param.ValuesBy
+	if by == nil {
+		return ""
+	}
+	choice, _ := params[by.Param].(string)
+	allowed, listed := by.Values[choice]
+	if !listed {
+		allowed = param.Values
+	}
+	n, ok := number(params[param.Name])
+	if !ok || n != math.Trunc(n) || !slices.Contains(param.Values, int64(n)) || slices.Contains(allowed, int64(n)) {
+		return ""
+	}
+	return "must be one of " + joinInts(allowed)
+}
+
+// merged is a node's params over its schema's defaults.
+func merged(schema registry.NodeSchema, params map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, p := range schema.Params {
+		out[p.Name] = p.Default
+	}
+	maps.Copy(out, params)
+	return out
+}
+
+// clipOf is the frames value (a number or "auto") and fps of the graph's one unwired frames param on a known, not
+// bypassed node whose fps param is unwired; ok false when there is not exactly one.
+func clipOf(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) (frames, fps any, ok bool) {
+	found := 0
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		node, schema := nodes[id], schemas[nodes[id].Kind]
+		if node.Bypass || schema.Kind == "" {
+			continue
+		}
+		for _, p := range schema.Params {
+			_, wired := node.In[p.Name]
+			_, fpsWired := node.In[p.FPS]
+			if p.Type == "frames" && !wired && !fpsWired {
+				values := merged(schema, node.Params)
+				frames, fps, found = values[p.Name], values[p.FPS], found+1
+			}
+		}
+	}
+	return frames, fps, found == 1
+}
+
+// positionErrors are a graph's keyframe position errors (contracts/README.md, Video: keyframes): each
+// `position: seconds` item field of an unwired rows param of a known, not bypassed node is the pixel frame
+// min(round(s·fps), F − 1) of the clip; past the clip, or a frame an earlier row of that param has, is refused. With
+// auto length only the second rule runs (the runner checks the first on the resolved length); no single clip: none.
+func positionErrors(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) []string {
+	frames, fpsValue, ok := clipOf(nodes, schemas)
+	if !ok {
+		return nil
+	}
+	fps, _ := number(fpsValue)
+	length, fixed := number(frames)
+	var out []string
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		node, schema := nodes[id], schemas[nodes[id].Kind]
+		if node.Bypass {
+			continue
+		}
+		for _, p := range schema.Params {
+			if _, wired := node.In[p.Name]; p.Type != "rows" || wired {
+				continue
+			}
+			rows, _ := merged(schema, node.Params)[p.Name].([]any)
+			for _, field := range slices.Sorted(maps.Keys(p.Item)) {
+				var item registry.Param
+				if json.Unmarshal(p.Item[field], &item) != nil || item.Position != "seconds" {
+					continue
+				}
+				seen := map[float64]int{}
+				for i, row := range rows {
+					fields, _ := row.(map[string]any)
+					value, given := fields[field]
+					if !given {
+						value = item.Default
+					}
+					seconds, _ := number(value)
+					frame := math.RoundToEven(seconds * fps)
+					where := fmt.Sprintf("%s.%s[%d].%s", id, p.Name, i+1, field)
+					if fixed && frame > length {
+						out = append(out, fmt.Sprintf("%s: frame %s is past the clip's last frame %s", where, format(frame), format(length-1)))
+						continue
+					}
+					if fixed {
+						frame = min(frame, length-1)
+					}
+					if first, used := seen[frame]; used {
+						out = append(out, fmt.Sprintf("%s: frame %s is already used by row %d", where, format(frame), first))
+					} else {
+						seen[frame] = i + 1
+					}
+				}
+			}
+		}
+	}
+	return out
 }
 
 // imageAt is one Image value of a graph: where it is ("encode.refs[2].image", items from 1) and its take.

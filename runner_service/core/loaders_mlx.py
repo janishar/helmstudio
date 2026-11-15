@@ -10,6 +10,13 @@ with an explicit component `dtype`; `stored` keeps each tensor's own dtype) → 
 after the kept tensors are evaluated: quantizing can evict lazy buffers) → `nn.quantize` on exactly those Linears →
 `load_weights(strict=True)`: a missing or extra key fails the load. Nothing is written anywhere.
 
+LoRA (contracts/README.md "LoRAs", MLX bake): bake only, no adapters. The rows of mode bake are normalised against
+the family's lora block (core/lora.py: no key is silently dropped) and merged after quantization, module by module
+and evaluated as it goes, in the old studio's order (ltx_core_mlx.loader.fuse_loras): delta = sum (B · s) @ A in
+float32 (s = strength · alpha / rank); a quantized Linear is dequantized, + delta, requantized (so it carries float32
+scales and biases), a float one is (W.f32 + delta) cast back to W's dtype. A baked component is its own residency
+entry (core.pack.ModelRef.key).
+
 Memory: `measure_gb` is MLX active + cache memory; `free` is gc + `mx.clear_cache()`; the Metal cache is capped at
 the residency budget (RAM - RUNNER_RESERVE_GB), never raising a stricter cap already set."""
 
@@ -55,6 +62,75 @@ def measure_gb() -> float:
     return (mx.get_active_memory() + mx.get_cache_memory()) / 2**30
 
 
+def linears(module: nn.Module) -> list[str]:
+    """The names of the Linear layers of `module` a LoRA may patch."""
+    return [n for n, m in module.named_modules() if isinstance(m, (nn.Linear, nn.QuantizedLinear))]
+
+
+def activate(model, component: str, module: nn.Module, ctx) -> float:
+    """MLX has no LoRA adapters (bake only: model.yaml `lora.modes` [bake], so studio refuses adapter rows)."""
+    if model.adapters(component):
+        raise RunError(f"{ctx.node}: LoRA adapters are not available on MLX; use mode bake")
+    return 0.0
+
+
+def extra_gb(module: nn.Module) -> float:
+    """What the quantized Linears' scales and biases hold beyond size_gb's count of them at bf16: a baked one is
+    re-quantized from float32 (`_bake`), so its scales and biases are float32."""
+    extra = sum(m.scales.nbytes + m.biases.nbytes - 2 * (m.scales.size + m.biases.size)
+                for _, m in module.named_modules() if isinstance(m, nn.QuantizedLinear))  # fmt: skip
+    return extra / 2**30
+
+
+def lora_tensors(model, use, path, shapes: dict) -> dict:
+    """module → (A, B, alpha / rank) of one LoRA file (lazy arrays) normalised against the family's lora block.
+    RunError with the contract's text when a key does not apply (each unapplied key is logged)."""
+    from core import lora
+
+    spec = model.pack.spec["lora"]
+    block = {"modules": list(shapes), "renames": spec.get("renames", []), "ignore": spec.get("ignore", [])}  # fmt: skip
+    try:
+        tensors, _ = lora.read_header(path, block["ignore"])
+    except lora.LoraFileError as e:
+        raise RunError(f"LoRA {use.name}: {e}") from e
+    res = lora.normalise(use.name, tensors, block, model.pack.family, shapes)
+    for k in res["unapplied"]:
+        log.warning("LoRA %s: %s does not apply to %s", use.name, k, model.pack.family)
+    if res["error"]:
+        raise RunError(res["error"])
+    log.info("LoRA %s (%s keys): %d of %d keys applied, %d ignored", use.name, res["key_style"], res["applied"],
+             res["total"], res["ignored"])  # fmt: skip
+    arrays = mx.load(str(path))
+    out = {}
+    for module, g in res["groups"].items():
+        a, b = arrays[g["A"]], arrays[g["B"]]
+        factor = float(arrays[g["alpha"]].astype(mx.float32).reshape(-1)[0]) / a.shape[0] if g["alpha"] else 1.0  # fmt: skip
+        out[module] = (a, b, factor)
+    return out
+
+
+def _bake(weights: dict, layer: str, terms: list, bits: int | None, quantized: bool) -> None:
+    """fuse_loras._prepare_deltas + _fuse_delta_with_{quantized,float} for one module, evaluated."""
+    if f"{layer}.weight" not in weights:
+        raise KeyError(f"LoRA module {layer} has no weight")
+    deltas = [mx.matmul(b.astype(mx.float32) * s, a.astype(mx.float32)) for a, b, s in terms]
+    delta = deltas[0] if len(deltas) == 1 else mx.sum(mx.stack(deltas, axis=0), axis=0)
+    w = weights[f"{layer}.weight"]
+    if quantized:
+        scales, biases = weights[f"{layer}.scales"], weights[f"{layer}.biases"]
+        f32 = mx.dequantize(w, scales=scales, biases=biases, group_size=GROUP, bits=bits).astype(
+            mx.float32
+        )
+        q, scales, biases = mx.quantize(f32 + delta.astype(mx.float32), group_size=GROUP, bits=bits)
+        weights |= {f"{layer}.weight": q, f"{layer}.scales": scales, f"{layer}.biases": biases}
+        mx.eval(q, scales, biases)
+    else:
+        weights[f"{layer}.weight"] = (w.astype(mx.float32) + delta.astype(mx.float32)).astype(
+            w.dtype
+        )
+        mx.eval(weights[f"{layer}.weight"])
+
+
 def load(
     module: nn.Module,
     files: list,
@@ -64,10 +140,13 @@ def load(
     quantize=lambda name: False,
     rename=lambda key: key,
     convert=lambda name, value: value,
+    bake=None,
     check=lambda: None,
+    baking=lambda: None,
 ) -> nn.Module:
     """Fill `module` from `files` (see the module doc). `quantize(module name)` picks the Linears stored at `bits`;
-    `check` runs before each quantized tensor (a cancel point)."""
+    `bake` (module name → [(A, B, s)]) merges LoRA deltas after quantization (`baking()` first); `check` runs before
+    each quantized tensor and each baked module (a cancel point)."""
     weights: dict[str, mx.array] = {}
     for path in files:
         for key, value in mx.load(str(path)).items():
@@ -100,6 +179,14 @@ def load(
             mx.eval(q, scales, biases)
             weights |= {f"{layer}.weight": q, f"{layer}.scales": scales, f"{layer}.biases": biases}
             del w
+    if bake:
+        baking()
+        for layer in sorted(
+            bake
+        ):  # module by module: the old all-at-once build peaked +5.3 GiB (ltx note 11.7)
+            check()
+            _bake(weights, layer, bake[layer], bits, layer in layers)
+    if bits:
         nn.quantize(module, group_size=GROUP, bits=bits,
                     class_predicate=lambda p, m: p in layers and isinstance(m, nn.Linear))  # fmt: skip
     module.load_weights(list(weights.items()), strict=True)
@@ -119,6 +206,19 @@ def load_component(model, component: str, ctx):
     module = model.pack.module.build(component, model)
     rename = getattr(model.pack.module, "rename", None)
     convert = getattr(model.pack.module, "convert", None)
+    bake: dict[str, list] = {}
+    if baked := model.baked(
+        component
+    ):  # the files first (an own LoRA is fetched): a bad one fails before loading
+        lin = set(linears(module))  # name → (in_features, out_features)
+        shapes = {
+            n: (m.weight.shape[1], m.weight.shape[0]) for n, m in module.named_modules() if n in lin
+        }
+        for use in baked:
+            for name, (a, b, factor) in lora_tensors(
+                model, use, ctx.lora_path(use), shapes
+            ).items():
+                bake.setdefault(name, []).append((a, b, use.strength * factor))
     return load(
         module,
         files,
@@ -127,5 +227,7 @@ def load_component(model, component: str, ctx):
         quantize=lambda name: packs.quantized(spec, precision, name),
         rename=(lambda key: rename(component, key)) if rename else (lambda key: key),
         convert=(lambda name, v: convert(component, name, v)) if convert else (lambda name, v: v),
+        bake=bake,
         check=ctx.check,
+        baking=lambda: ctx.progress(1, 1, "baking LoRAs"),
     )

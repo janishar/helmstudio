@@ -76,7 +76,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k × step (k ≥ 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds)",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k × step (k ≥ 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role)",
       "required": [
         "name",
         "type",
@@ -111,6 +111,25 @@
           "pattern": "^[a-z][a-z0-9_]{0,63}$",
           "description": "frames only: the name of the same node's int or float param that holds frames per second; the UI shows the length as frames / fps seconds"
         },
+        "auto": {
+          "type": "object",
+          "required": [
+            "min_s",
+            "max_s"
+          ],
+          "additionalProperties": false,
+          "description": "frames only: present = the model can predict the clip's length from the prompt; the value \"auto\" asks for it. The prediction is clamped to min_s..max_s seconds and to the param's min..max frames, then put on the grid (contracts/README.md, Video: auto length). The UI draws the Duration slider's Auto length switch from it",
+          "properties": {
+            "min_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        },
         "label": {
           "type": "string",
           "minLength": 1,
@@ -130,6 +149,43 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "int, float, seed: the field's increment (int: an integer)"
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer"
+          },
+          "description": "int only: the only allowed values, ascending, each within min..max, the default among them; the UI draws a choice (one allowed value: a read-only readout), studio refuses others (`<node>.<param>: must be one of <values>`)"
+        },
+        "values_by": {
+          "type": "object",
+          "required": [
+            "param",
+            "values"
+          ],
+          "additionalProperties": false,
+          "description": "int with `values` only: the allowed values depend on the node's value of enum param `param`: values[that value] (a subset of `values`; an enum value not listed allows all of `values`). The message names that subset (LTX sample: role stage1 -> [8], stage2 -> [3])",
+          "properties": {
+            "param": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            },
+            "values": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
         },
         "enum": {
           "type": "array",
@@ -475,12 +531,60 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "frames"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "auto"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "dependentRequired": {
+              "values_by": [
+                "values"
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "values"
+                  ]
+                },
+                {
+                  "required": [
+                    "values_by"
+                  ]
+                }
+              ]
+            }
+          }
         }
       ]
     },
     "itemParam": {
       "type": "object",
-      "description": "a rows item field that is a param: a paramSchema without name, not rows or image",
+      "description": "a rows item field that is a param: a paramSchema without name, not rows or image (an item may add `position`)",
       "required": [
         "type",
         "default"
@@ -529,6 +633,12 @@
         "help": {
           "type": "string",
           "maxLength": 300
+        },
+        "position": {
+          "enum": [
+            "seconds"
+          ],
+          "description": "float only: the field is a time on the clip in seconds (a keyframe's place): studio turns it into the pixel frame min(round(s * fps), F - 1) of the workflow's frames param and refuses rows past the clip or on a frame another row uses (contracts/README.md, Video: keyframes); the rows editor draws it on the clip's length"
         }
       },
       "allOf": [
@@ -708,6 +818,22 @@
             "not": {
               "required": [
                 "step"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "position"
               ]
             }
           }
@@ -1230,7 +1356,7 @@
         "renames": {
           "type": "array",
           "maxItems": 64,
-          "description": "family-specific key fixes, in order: the first whose `from` starts a key's module part (after the style's prefix and suffix are cut) replaces that prefix with `to`. Most families: []",
+          "description": "family-specific key fixes, in order: the first that matches a key's module part (after the style's prefix and suffix are cut) replaces the matched part with `to`. `at: start` (default): `from` starts the part (a prefix rewrite); `at: end`: `from` ends it (LTX: `.to_out.0` -> `.to_out`). Most families: []",
           "items": {
             "type": "object",
             "required": [
@@ -1247,6 +1373,13 @@
               "to": {
                 "type": "string",
                 "maxLength": 200
+              },
+              "at": {
+                "enum": [
+                  "start",
+                  "end"
+                ],
+                "description": "where `from` must match: start (default) or end of the module part"
               }
             }
           }
@@ -1260,6 +1393,28 @@
             "maxLength": 200
           },
           "description": "glob patterns (fnmatch: `*` any run, `?` one character; case-sensitive) over raw tensor keys that are counted as ignored instead of unapplied. Empty = every key must apply"
+        },
+        "prefused": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "LoRAs already fused into a variant's weights (LTX: the distilled LoRA is part of the distilled transformer): a stack row naming one on a model of that variant is 422 at run (`<node>.<param>[<i>].lora: LoRA <name> is already part of the <variant> weights`), so it is never applied twice. The runner fills lora_id from its LoRA index (model.yaml names the file); absent = none",
+          "items": {
+            "type": "object",
+            "required": [
+              "lora_id",
+              "variant"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "lora_id": {
+                "$ref": "messages/defs.schema.json#/$defs/sha256"
+              },
+              "variant": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+              }
+            }
+          }
         }
       }
     },

@@ -55,7 +55,7 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     for w in workflows:
         if w["env"] != env:
             raise ValueError(f"workflow {w['id']}: env {w['env']}, this runner is {env}")
-        if errs := graph.validate(w["nodes"], node_schemas):
+        if errs := graph.validate(w["nodes"], node_schemas, run=False):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
     return values, {k: n for k, (_, n) in every.items()}, [p for p, _ in loaded]
 
@@ -73,6 +73,22 @@ def scanned_value(kind: str, entries: list[dict], env: str = ENV) -> dict:
 def lora_blocks(loaded) -> dict[str, dict]:
     """family → its registry lora block, for the loaded packs that publish one."""
     return {p.family: b for p in loaded if (b := packs.lora_block(p))}
+
+
+def fill_prefused(values: dict[str, dict], loaded, files: dict) -> None:
+    """models[].lora.prefused (contracts/README.md, LoRAs: pre-fused): the shared index's id (`files`: path →
+    sha256, core.lora.Library.files) of each file model.yaml `lora.prefused` names inside a variant's folder; a file
+    not on this host gives no entry. The models value holds the same block, so it is updated in place."""
+    for p in loaded:
+        if (block := packs.lora_block(p)) is None or "prefused" not in block:
+            continue
+        found = [(x, packs.models_root() / p.spec["variants"][x["variant"]]["dir"] / x["file"])
+                 for x in p.spec["lora"]["prefused"]]  # fmt: skip
+        block["prefused"] = [
+            {"lora_id": files[f], "variant": x["variant"]} for x, f in found if f in files
+        ]
+    if errs := schemas.registry_errors("models", values["models"]):
+        raise ValueError(f"registry models is off-contract: {'; '.join(errs[:3])}")
 
 
 def node_schemas(values: dict[str, dict]) -> dict[str, dict]:

@@ -1,0 +1,1841 @@
+{
+  "description": "keyframe positions (README, Video: keyframes): a `position: seconds` item field becomes the pixel frame min(round(s * fps), F - 1) of the workflow's one frames param F at its fps; past the clip or a frame used twice is 422 (items from 1). With auto length only the frame-twice rule is checked (the runner checks the rest once the length is known)",
+  "cases": [
+    {
+      "description": "first and last frame (s = F / fps lands on the last frame)",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 2.0416666666666665
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": []
+    },
+    {
+      "description": "rows may come in any order",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 1.5
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 0
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000003"
+                  },
+                  "seconds": 0.5
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": []
+    },
+    {
+      "description": "past the clip",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 2.1
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": [
+        "keyframes.images[2].seconds: frame 50 is past the clip's last frame 48"
+      ]
+    },
+    {
+      "description": "two rows on one frame (0.02 s rounds to frame 0)",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 0.02
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": [
+        "keyframes.images[2].seconds: frame 0 is already used by row 1"
+      ]
+    },
+    {
+      "description": "the last frame twice: 2.04 s and 2.0416 s both land on frame 48",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 2.04
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 2.0416
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": [
+        "keyframes.images[2].seconds: frame 48 is already used by row 1"
+      ]
+    },
+    {
+      "description": "a field left out takes its default (0 s)",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  }
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 0
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": [
+        "keyframes.images[2].seconds: frame 0 is already used by row 1"
+      ]
+    },
+    {
+      "description": "auto length: past-the-end is the runner's check, twice is still studio's",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": "auto",
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 30
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 30
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": [
+        "keyframes.images[2].seconds: frame 720 is already used by row 1"
+      ]
+    },
+    {
+      "description": "a bypassed node is not checked",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 0
+                }
+              ]
+            },
+            "bypass": true
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": []
+    },
+    {
+      "description": "fps changes the frame: 1 s at 25 fps is frame 25",
+      "workflow": {
+        "title": "LTX-2.5 Image to video",
+        "family": "ltx",
+        "env": "mlx",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 25
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": [
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 1
+                },
+                {
+                  "image": {
+                    "take_id": "00000000-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 2
+                }
+              ]
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        },
+        "studio": {
+          "composer": [
+            "prompt.text"
+          ],
+          "quick": [
+            "keyframes.images",
+            "elements",
+            "look:film",
+            "look:camera",
+            "look:lighting",
+            "model.variant",
+            "decode.audio"
+          ],
+          "inspector": [
+            {
+              "title": "Canvas",
+              "items": [
+                "canvas.width",
+                "canvas.height"
+              ]
+            },
+            {
+              "title": "Duration",
+              "items": [
+                "duration.frames",
+                "duration.fps"
+              ]
+            },
+            {
+              "title": "Quality",
+              "items": [
+                "model.precision",
+                "sample1.steps",
+                "sample2.steps"
+              ]
+            },
+            {
+              "title": "Prompt beats",
+              "items": [
+                "encode.beats"
+              ]
+            },
+            {
+              "title": "LoRA",
+              "items": [
+                "lora.rows"
+              ]
+            }
+          ],
+          "labels": {
+            "sample1.steps": "Stage 1 steps",
+            "sample2.steps": "Stage 2 steps",
+            "keyframes.images": "Frames"
+          },
+          "presets": {
+            "Fast": {
+              "model.precision": "int8"
+            },
+            "Quality": {
+              "model.precision": "bf16"
+            },
+            "Low memory": {
+              "model.precision": "int4"
+            }
+          }
+        }
+      },
+      "errors": [
+        "keyframes.images[2].seconds: frame 50 is past the clip's last frame 48"
+      ]
+    }
+  ]
+}

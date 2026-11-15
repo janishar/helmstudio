@@ -99,7 +99,12 @@
           "min": 9,
           "max": 321,
           "step": 8,
-          "fps": "fps"
+          "fps": "fps",
+          "auto": {
+            "min_s": 1,
+            "max_s": 20
+          },
+          "help": "Auto: the model predicts the length from the prompt, 1 to 20 s (at most 321 frames), reported with the result."
         },
         {
           "name": "fps",
@@ -158,11 +163,88 @@
       ]
     },
     {
+      "kind": "ltx/lora-stack",
+      "title": "LoRA Stack",
+      "family": "ltx",
+      "help": "Bakes LoRAs into the model's transformer at load, in order. Empty: the model as it is.",
+      "params": [
+        {
+          "name": "rows",
+          "type": "rows",
+          "label": "LoRAs",
+          "default": [],
+          "min": 0,
+          "max": 8,
+          "item": {
+            "lora": "Lora",
+            "strength": {
+              "type": "float",
+              "label": "Strength",
+              "default": 1,
+              "min": -4,
+              "max": 4,
+              "step": 0.05
+            },
+            "mode": {
+              "type": "enum",
+              "label": "Mode",
+              "default": "bake",
+              "enum": [
+                "bake"
+              ],
+              "help": "Bake: merged into the transformer at load (its own copy in memory; a strength change reloads it). LTX on MLX has no adapter yet."
+            }
+          },
+          "help": "Each row: a LoRA that fits this model and its strength."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ]
+    },
+    {
       "kind": "ltx/encode",
       "title": "Encode prompt",
       "family": "ltx",
-      "help": "Encodes the prompt for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling.",
-      "params": [],
+      "help": "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling.",
+      "params": [
+        {
+          "name": "beats",
+          "type": "rows",
+          "label": "Prompt beats",
+          "default": [],
+          "min": 0,
+          "max": 8,
+          "item": {
+            "text": {
+              "type": "string",
+              "label": "Beat",
+              "default": "",
+              "min": 1,
+              "max": 500
+            },
+            "seconds": {
+              "type": "float",
+              "label": "Length",
+              "default": 0,
+              "min": 0,
+              "max": 20,
+              "step": 0.1,
+              "help": "How long this beat lasts, in seconds; 0 shares what the others leave equally."
+            }
+          },
+          "help": "Prompt Relay: each beat steers the picture (not the sound) for its stretch of the clip, in order; the prompt above holds for the whole clip."
+        }
+      ],
       "inputs": [
         {
           "name": "model",
@@ -171,6 +253,57 @@
         {
           "name": "prompt",
           "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        }
+      ]
+    },
+    {
+      "kind": "ltx/keyframes",
+      "title": "Keyframes",
+      "family": "ltx",
+      "help": "Pins gallery images at chosen times of the clip: at 0 s the clip starts from the image, later ones are frames it passes through. Bypassed: text to video.",
+      "params": [
+        {
+          "name": "images",
+          "type": "rows",
+          "label": "Frames",
+          "default": [],
+          "min": 1,
+          "max": 8,
+          "item": {
+            "image": "Image",
+            "seconds": {
+              "type": "float",
+              "label": "At",
+              "default": 0,
+              "min": 0,
+              "max": 320,
+              "step": 0.1,
+              "position": "seconds",
+              "help": "Where in the clip, in seconds: 0 is the first frame, the clip's length its last."
+            },
+            "strength": {
+              "type": "float",
+              "label": "Strength",
+              "default": 1,
+              "min": 0,
+              "max": 1,
+              "step": 0.05,
+              "help": "1 holds the frame to the image; lower lets the model drift from it."
+            }
+          },
+          "help": "Each row: an image, where it goes and how strongly it holds."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "cond",
+          "type": "Conditioning"
         }
       ],
       "outputs": [
@@ -202,10 +335,25 @@
           "type": "int",
           "label": "Steps",
           "default": 8,
-          "min": 1,
+          "min": 3,
           "max": 8,
           "step": 1,
-          "help": "The first steps of the stage's fixed distilled schedule: stage 1 has 8, stage 2 has 3."
+          "help": "Fixed by the stage's distilled schedule: stage 1 runs 8 steps, stage 2 runs 3 (fewer would stop with noise left in).",
+          "values": [
+            3,
+            8
+          ],
+          "values_by": {
+            "param": "role",
+            "values": {
+              "stage1": [
+                8
+              ],
+              "stage2": [
+                3
+              ]
+            }
+          }
         }
       ],
       "inputs": [
@@ -272,7 +420,15 @@
       "title": "Decode",
       "family": "ltx",
       "help": "Decodes video and audio and writes an MP4 (H.264 + AAC 48 kHz stereo) with a poster frame.",
-      "params": [],
+      "params": [
+        {
+          "name": "audio",
+          "type": "bool",
+          "label": "Audio",
+          "default": true,
+          "help": "Off: an MP4 without a sound track. The picture is the same: the model always generates both."
+        }
+      ],
       "inputs": [
         {
           "name": "model",

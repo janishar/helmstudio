@@ -1,0 +1,14 @@
+{
+  "description": "keyframes.images has a position: seconds field: a source of 2 takes would put both rows at 0 s (bind_type); one take fits",
+  "pipeline": {
+    "title": "i2v",
+    "nodes": {
+      "inputs": {"kind": "inputs", "inputs": [{"name": "prompt", "type": "Text"}]},
+      "stills": {"kind": "step", "workflow": "qwen-image", "seeds": 2, "bind": {"prompt.text": "$prompt"}},
+      "clip": {"kind": "step", "workflow": "ltx-image-to-video", "bind": {"prompt.text": "$prompt", "keyframes.images": "stills.takes"}},
+      "output": {"kind": "output", "from": "clip.takes", "collection": "clips"}
+    },
+    "edges": [["inputs", "stills"], ["stills", "clip"], ["clip", "output"]]
+  },
+  "problems": [{"code": "bind_type", "node": "clip", "port": "keyframes.images"}]
+}

@@ -180,7 +180,12 @@
           "min": 9,
           "max": 121,
           "step": 8,
-          "fps": "fps"
+          "fps": "fps",
+          "auto": {
+            "min_s": 1,
+            "max_s": 5
+          },
+          "help": "Auto: the fake model always predicts 2 s, reported with the result."
         },
         {
           "name": "fps",
@@ -265,6 +270,131 @@
         }
       ],
       "help": "Fake video model: as Echo, then a still MP4 of its text (H.264, silent AAC stereo) and a poster."
+    },
+    {
+      "kind": "echo/keyframes",
+      "title": "Keyframes",
+      "family": "echo",
+      "params": [
+        {
+          "name": "images",
+          "type": "rows",
+          "label": "Frames",
+          "default": [],
+          "min": 1,
+          "max": 8,
+          "item": {
+            "image": "Image",
+            "seconds": {
+              "type": "float",
+              "label": "At",
+              "default": 0,
+              "min": 0,
+              "max": 320,
+              "step": 0.1,
+              "position": "seconds",
+              "help": "Where in the clip, in seconds: 0 is the first frame, the clip's length its last."
+            },
+            "strength": {
+              "type": "float",
+              "label": "Strength",
+              "default": 1,
+              "min": 0,
+              "max": 1,
+              "step": 0.05
+            }
+          },
+          "help": "Each row: an image, where it goes and how strongly it holds (the fake runner only names them)."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "duration",
+          "type": "Duration"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "help": "Fake keyframes: adds the frame, size and strength of each image it received to the text. Bypassed: text to video."
+    },
+    {
+      "kind": "echo/sample",
+      "title": "Echo sample",
+      "family": "echo",
+      "params": [
+        {
+          "name": "role",
+          "type": "enum",
+          "label": "Stage",
+          "default": "stage1",
+          "enum": [
+            "stage1",
+            "stage2"
+          ]
+        },
+        {
+          "name": "steps",
+          "type": "int",
+          "label": "Steps",
+          "default": 4,
+          "min": 2,
+          "max": 4,
+          "step": 1,
+          "values": [
+            2,
+            4
+          ],
+          "values_by": {
+            "param": "role",
+            "values": {
+              "stage1": [
+                4
+              ],
+              "stage2": [
+                2
+              ]
+            }
+          },
+          "help": "Fixed by the stage: stage1 runs 4 steps, stage2 runs 2."
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        },
+        {
+          "name": "duration",
+          "type": "Duration"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "Video"
+        }
+      ],
+      "help": "Fake two-stage video model: as Echo video, with steps fixed by the stage (stage1 4, stage2 2)."
     },
     {
       "kind": "output",

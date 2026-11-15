@@ -22,8 +22,10 @@ import (
 // the run stored them), every settable param of every node of the graph the run was sent with (resolved again from
 // the registry for a run stored before it kept its graph; a wired param is not settable) with seed in place of a
 // random seed, the bypass switches the run asked for, the prompt node's text as typed and the <family>/model node, and
-// what the mention and look expansion did (typed, elements, looks). With no graph it keeps the inputs as requested.
-func madeWith(workflows *registry.Registry, run model.Run, seed *int64) gallerydto.MadeWith {
+// what the mention and look expansion did (typed, elements, looks). A param the run set to "auto" holds the value the
+// runner chose (resolved, "<node>.<param>" → value) with typed keeping "auto". With no graph it keeps the inputs as
+// requested.
+func madeWith(workflows *registry.Registry, run model.Run, seed *int64, resolved map[string]int64) gallerydto.MadeWith {
 	inputs := map[string]any{}
 	_ = json.Unmarshal(run.Inputs, &inputs)
 	out := gallerydto.MadeWith{WorkflowID: run.WorkflowID, WorkflowTitle: run.WorkflowID, Inputs: inputs, Seed: seed,
@@ -76,6 +78,10 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 			}
 			if seed != nil && isSeed(schemas, node.Kind, name) && randomSeed(value) {
 				value = *seed
+			}
+			if chosen, ok := resolved[id+"."+name]; ok && chosen >= 1 && value == "auto" {
+				value = chosen
+				out.Typed = setKey(out.Typed, id+"."+name, "auto")
 			}
 			out.Inputs[id+"."+name] = value
 		}
@@ -180,7 +186,7 @@ func (p *Projector) Backfill(ctx context.Context) (int, error) {
 			if err != nil {
 				return err
 			}
-			with, err := withPipeline(ctx, tx, run, madeWith(p.Workflows, run, o.Seed))
+			with, err := withPipeline(ctx, tx, run, madeWith(p.Workflows, run, o.Seed, resolvedParams(run.Resolved)))
 			if err != nil {
 				return err
 			}

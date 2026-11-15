@@ -437,6 +437,78 @@ async def test_adapters_that_do_not_fit_fail_before_anything_is_attached(tmp_pat
     assert not [a for a in q.active if a[1]]  # refused before activate
 
 
-def test_a_command_row_without_its_strength_is_refused():
+def test_a_row_field_left_out_takes_its_default():
+    """contracts/README.md, Video: item fields left out take their defaults, and the merged item is checked."""
     nodes = lora_nodes([{"lora": SHARED, "mode": "adapter"}])
-    assert "lora.rows item 1.strength: missing" in graph.validate(nodes, _qwen_schemas())
+    assert graph.validate(nodes, _qwen_schemas()) == []
+    nodes, _ = graph.resolve(nodes, _qwen_schemas())
+    assert nodes["lora"]["params"]["rows"] == [{"lora": SHARED, "mode": "adapter", "strength": 1}]
+    bad = lora_nodes([{"lora": SHARED, "mode": "adapter", "strength": 9}])
+    assert graph.validate(bad, _qwen_schemas()) == [
+        "lora.rows item 1.strength is above the maximum 4"
+    ]
+
+
+def test_an_auto_length_is_reported_as_the_stored_clips_frames():
+    """contracts/README.md, Video: auto length → evt.run.output and the succeeded status carry resolved.params."""
+    got = []
+
+    async def output(index, data, **meta):
+        got.append(meta.get("resolved"))
+
+    async def go():
+        ctx = Ctx(progress=None, output=output, check=lambda: None)
+        ctx.loop, ctx.auto = asyncio.get_running_loop(), ["duration.frames"]
+        await asyncio.to_thread(ctx.output, b"", ext="mp4", kind="video", width=1, height=1,
+                                video={"frames": 89}, poster=b"")  # fmt: skip
+        return ctx.resolved
+
+    assert asyncio.run(go()) == {"duration.frames": 89}
+    assert got == [{"params": {"duration.frames": 89}}]
+
+
+def test_cache_is_bounded_by_bytes_and_keeps_the_newest(monkeypatch):
+    import numpy as np
+
+    monkeypatch.setattr(Cache, "BYTES", 250)
+    cache = Cache()
+    cache["a"] = {"x": np.zeros(100, np.uint8)}
+    cache["b"] = {"x": (b"y" * 100,)}
+    cache["c"] = {"x": [np.zeros(100, np.uint8)]}  # 300 bytes: a goes
+    assert list(cache) == ["b", "c"] and sum(cache.sizes.values()) == 200
+    cache["d"] = {"x": np.zeros(1000, np.uint8)}  # alone over the bound: it stays, the rest goes
+    assert list(cache) == ["d"] and cache.sizes == {"d": 1000}
+
+
+async def test_admission_plans_a_stage_after_an_auto_length_for_the_resolved_frames():
+    """An auto length is planned at its longest clip only until a stage's input carries the resolved frames."""
+    from core.pack import compile_formula
+
+    lat = types.SimpleNamespace(frames=97)
+    peaks = []
+
+    class Res:
+        def admit(self, needs, peak, later):
+            peaks.append(peak)
+
+    frames = {"name": "frames", "type": "frames", "min": 9, "max": 321, "step": 8, "fps": "fps",
+              "auto": {"min_s": 1, "max_s": 20}}  # fmt: skip
+    schemas = {
+        "dur": {"params": [frames, {"name": "fps", "type": "int"}], "inputs": [],
+                "outputs": [{"name": "d", "type": "Duration"}]},
+        "s1": {"params": [], "inputs": [{"name": "d", "type": "Duration"}], "outputs": [{"name": "l", "type": "Latent"}]},
+        "s2": {"params": [], "inputs": [{"name": "l", "type": "Latent"}], "outputs": [{"name": "l", "type": "Latent"}]},
+        "out": {"params": [], "inputs": [{"name": "l", "type": "Latent"}], "outputs": []},
+    }  # fmt: skip
+    peak = compile_formula("frames", {"frames"})
+    impls = {
+        "dur": Node(lambda c, p, i: {"d": {}}),
+        "s1": Node(lambda c, p, i: {"l": lat}, peak=peak),
+        "s2": Node(lambda c, p, i: {"l": lat}, peak=peak),
+        "out": Node(lambda c, p, i: {}),
+    }
+    n = {"dur": {"kind": "dur", "params": {"frames": "auto", "fps": 24}},
+         "s1": {"kind": "s1", "in": {"d": "dur.d"}}, "s2": {"kind": "s2", "in": {"l": "s1.l"}},
+         "out": {"kind": "out", "in": {"l": "s2.l"}}}  # fmt: skip
+    await graph.run(n, impls, schemas, ctx(residency=Res()), Cache())
+    assert peaks == [321, 97]  # stage 1 plans for the longest clip, stage 2 for the one it got

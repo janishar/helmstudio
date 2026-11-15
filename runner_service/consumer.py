@@ -176,7 +176,11 @@ class Consumer:
                 log.exception("run %s: node %s failed", run_id, ctx.node)
                 end = ("failed", f"{ctx.node}: internal error ({type(e).__name__})", None)
             else:
-                end = ("succeeded", None, resolved)
+                end = (
+                    "succeeded",
+                    None,
+                    resolved | ({"params": ctx.resolved} if ctx.resolved else {}),
+                )
         except Exception as e:  # the cancels KV or a publish broke: still try to end the run
             log.exception("run %s: runner error", run_id)
             end = ("failed", f"runner error ({type(e).__name__})", None)

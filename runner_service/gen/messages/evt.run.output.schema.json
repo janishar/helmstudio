@@ -68,6 +68,27 @@
           "$ref": "defs.schema.json#/$defs/seed",
           "description": "the seed this output was made with"
         },
+        "resolved": {
+          "type": "object",
+          "description": "the values the runner chose for params set to \"auto\", as evt.run.status `resolved.params` (so the take's made_with has them when the projector stores it); absent when none",
+          "required": [
+            "params"
+          ],
+          "properties": {
+            "params": {
+              "type": "object",
+              "maxProperties": 16,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+              },
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "description": "`<node>.<param>` -> the value the runner chose for a param the run set to \"auto\" (a frames param: the predicted length, on its grid). Studio records it in made_with.inputs (made_with.typed keeps \"auto\")"
+            }
+          }
+        },
         "attempt": {
           "$ref": "defs.schema.json#/$defs/attempt",
           "description": "the attempt of cmd.run.execute this event belongs to; absent = 1. seq restarts at 1 for each attempt; the projector dedupes on (job_id, attempt, seq) and drops events of an attempt that is not the run's current one"

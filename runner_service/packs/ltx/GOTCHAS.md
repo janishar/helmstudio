@@ -32,6 +32,41 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
   the goldens embody left), the *last* of the 49 hidden states post-norm and the other 48 raw.
 - **fps is a model input** (RoPE time positions), not just the container rate: a different fps is a different clip.
 
+## Stage B: image to video, keyframes, beats, auto length, LoRA (docs/reference-notes/ltx.md part 11)
+
+- **Bit-exact on the goldens' mlx (0.32.2)** (`tests/test_ltx_golden.py`, 2026-11-15): `i2v`, `kf` (frames 0 and 48),
+  `beats`, `lora` (the 4 recorded fused weights included), auto length (embeddings and the DurationHead's seconds for
+  the 4 prompts), audio off (frames = the t2v golden's) and the t2v goldens again: every loop's input state (noise,
+  clean latent, denoise / keyframe masks, positions, relay mask), every output, every image latent, PSNR inf, WAV
+  equal. Without weights (CPU): the preprocessed image pixels, the keyframe positions, the relay ranges and masks.
+- **Order is everything**: the noise blend runs on the plain grid first, then the conditionings (frame 0 replaces
+  latent frame 0's tokens, later frames append theirs), so conditioned tokens start clean even at strength < 1; masks
+  are `1 - strength` in float32 (so stage 2's Euler output is float32); a mask that is not all 1 passes per-token
+  timesteps `mask * sigma`; the ancestral stage 1 re-applies the mask after its noise; appended tokens are cut before
+  the upscale and the decode.
+- **Frame-0 replacement drops `keyframes_mask`** (`VideoConditionByLatentIndex.apply`): with an image at frame 0 the
+  DiT gets no keyframe embedding, though the reference marks frame 0 always. Copied (the goldens embody it); fixing it
+  needs new goldens from a fixed old studio.
+- Keyframe images: RGB → one libx264 frame at CRF 33 and back (yuv444p with ffmpeg 9.0.2: the pixels depend on the
+  ffmpeg build) → LANCZOS cover + centre crop to each stage's grid → the conv VAE encoder (`vae_encoder`, 0.59 GB),
+  once per stage. The round trip is done once in `keyframes`; each sample resizes and encodes.
+- **Steps**: only the whole tables end at sigma 0 (stage 1: 8, stage 2: 3); the old `--stageN-steps n` truncated
+  them, leaving noise. The schema's `values_by` allows exactly those; `check_sample` refuses anything else.
+- Prompt Relay: one prompt `prompt + " " + beat ...`, token ranges by incremental tokenization (refused over 1024
+  tokens: the left truncation would shift every range); the additive mask gates the video cross-attention only.
+- Auto length: the DurationHead (3.8 MB, held outside the residency manager) on the connector outputs; deterministic.
+  Across mlx versions its seconds move by a bf16 step (0.32.4: 2.92 against 2.89 s), which can cross a grid point
+  (73 against 65 frames at 25 fps).
+- **LoRA, bake only** (no MLX adapter exists to copy): normalised by core/lora.py (`at: end` renames, nothing
+  silently dropped; the old studio ignored unmatched keys and kohya files), merged after int8 quantization module by
+  module: dequantize, + float32 delta, requantize (float32 scales and biases). Unchanged on 0.32.4 (bit-equal fused
+  weights). Block streaming does not exist on our layout (the old `--low-ram` refused the official files).
+- 0.32.4 against the stage-B goldens (mean / worst frame dB, log-mel dB): i2v 42.19 / 39.34 / 1.48, kf 43.15 /
+  42.42 / 1.47, beats 23.25 / 16.53 / 1.53, lora 26.91 / 23.73 / 1.15; bars just under them.
+- Memory: one process keeps components resident within the budget (RAM - 12 GB), so a baked transformer and the
+  plain one can sit side by side (38 GB; decode peaked 50.5 GiB in the bench). Who evicts what across envs and runs
+  is stage C. The Metal buffer cache is capped at the budget too, so the process footprint reached 53 GB.
+
 ## Weights and memory
 
 - The official split files are read in place: `mx.load` is lazy, keys are renamed and conv weights transposed with

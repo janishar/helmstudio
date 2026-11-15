@@ -20,7 +20,118 @@
             "int4"
           ]
         }
-      ]
+      ],
+      "lora": {
+        "component": "transformer",
+        "modules": [
+          "adaln_single.emb.timestep_embedder.linear1",
+          "adaln_single.emb.timestep_embedder.linear2",
+          "adaln_single.linear",
+          "audio_adaln_single.emb.timestep_embedder.linear1",
+          "audio_adaln_single.emb.timestep_embedder.linear2",
+          "audio_adaln_single.linear",
+          "audio_patchify_proj",
+          "audio_proj_out",
+          "audio_prompt_adaln_single.emb.timestep_embedder.linear1",
+          "audio_prompt_adaln_single.emb.timestep_embedder.linear2",
+          "audio_prompt_adaln_single.linear",
+          "av_ca_a2v_gate_adaln_single.emb.timestep_embedder.linear1",
+          "av_ca_a2v_gate_adaln_single.emb.timestep_embedder.linear2",
+          "av_ca_a2v_gate_adaln_single.linear",
+          "av_ca_audio_scale_shift_adaln_single.emb.timestep_embedder.linear1",
+          "av_ca_audio_scale_shift_adaln_single.emb.timestep_embedder.linear2",
+          "av_ca_audio_scale_shift_adaln_single.linear",
+          "av_ca_v2a_gate_adaln_single.emb.timestep_embedder.linear1",
+          "av_ca_v2a_gate_adaln_single.emb.timestep_embedder.linear2",
+          "av_ca_v2a_gate_adaln_single.linear",
+          "av_ca_video_scale_shift_adaln_single.emb.timestep_embedder.linear1",
+          "av_ca_video_scale_shift_adaln_single.emb.timestep_embedder.linear2",
+          "av_ca_video_scale_shift_adaln_single.linear",
+          "patchify_proj",
+          "proj_out",
+          "prompt_adaln_single.emb.timestep_embedder.linear1",
+          "prompt_adaln_single.emb.timestep_embedder.linear2",
+          "prompt_adaln_single.linear",
+          "transformer_blocks.{0..47}.attn1.to_gate_logits",
+          "transformer_blocks.{0..47}.attn1.to_k",
+          "transformer_blocks.{0..47}.attn1.to_out",
+          "transformer_blocks.{0..47}.attn1.to_q",
+          "transformer_blocks.{0..47}.attn1.to_v",
+          "transformer_blocks.{0..47}.attn2.to_gate_logits",
+          "transformer_blocks.{0..47}.attn2.to_k",
+          "transformer_blocks.{0..47}.attn2.to_out",
+          "transformer_blocks.{0..47}.attn2.to_q",
+          "transformer_blocks.{0..47}.attn2.to_v",
+          "transformer_blocks.{0..47}.audio_attn1.to_gate_logits",
+          "transformer_blocks.{0..47}.audio_attn1.to_k",
+          "transformer_blocks.{0..47}.audio_attn1.to_out",
+          "transformer_blocks.{0..47}.audio_attn1.to_q",
+          "transformer_blocks.{0..47}.audio_attn1.to_v",
+          "transformer_blocks.{0..47}.audio_attn2.to_gate_logits",
+          "transformer_blocks.{0..47}.audio_attn2.to_k",
+          "transformer_blocks.{0..47}.audio_attn2.to_out",
+          "transformer_blocks.{0..47}.audio_attn2.to_q",
+          "transformer_blocks.{0..47}.audio_attn2.to_v",
+          "transformer_blocks.{0..47}.audio_ff.proj_in",
+          "transformer_blocks.{0..47}.audio_ff.proj_out",
+          "transformer_blocks.{0..47}.audio_to_video_attn.to_gate_logits",
+          "transformer_blocks.{0..47}.audio_to_video_attn.to_k",
+          "transformer_blocks.{0..47}.audio_to_video_attn.to_out",
+          "transformer_blocks.{0..47}.audio_to_video_attn.to_q",
+          "transformer_blocks.{0..47}.audio_to_video_attn.to_v",
+          "transformer_blocks.{0..47}.ff.proj_in",
+          "transformer_blocks.{0..47}.ff.proj_out",
+          "transformer_blocks.{0..47}.video_to_audio_attn.to_gate_logits",
+          "transformer_blocks.{0..47}.video_to_audio_attn.to_k",
+          "transformer_blocks.{0..47}.video_to_audio_attn.to_out",
+          "transformer_blocks.{0..47}.video_to_audio_attn.to_q",
+          "transformer_blocks.{0..47}.video_to_audio_attn.to_v"
+        ],
+        "renames": [
+          {
+            "from": ".to_out.0",
+            "to": ".to_out",
+            "at": "end"
+          },
+          {
+            "from": ".audio_ff.net.0.proj",
+            "to": ".audio_ff.proj_in",
+            "at": "end"
+          },
+          {
+            "from": ".audio_ff.net.2",
+            "to": ".audio_ff.proj_out",
+            "at": "end"
+          },
+          {
+            "from": ".ff.net.0.proj",
+            "to": ".ff.proj_in",
+            "at": "end"
+          },
+          {
+            "from": ".ff.net.2",
+            "to": ".ff.proj_out",
+            "at": "end"
+          },
+          {
+            "from": ".linear_1",
+            "to": ".linear1",
+            "at": "end"
+          },
+          {
+            "from": ".linear_2",
+            "to": ".linear2",
+            "at": "end"
+          }
+        ],
+        "ignore": [],
+        "prefused": [
+          {
+            "lora_id": "5d0c00000000000000000000000000000000000000000000000000000000a450",
+            "variant": "distilled"
+          }
+        ]
+      }
     }
   ]
 }

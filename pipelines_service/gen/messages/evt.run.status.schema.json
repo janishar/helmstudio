@@ -51,10 +51,22 @@
         },
         "resolved": {
           "type": "object",
-          "description": "sent with succeeded: values the runner chose for the run (a random seed), so the UI shows what was actually used; open for more fields",
+          "description": "sent with succeeded: values the runner chose for the run (a random seed, an auto length), so the UI shows what was actually used; open for more fields",
           "properties": {
             "seed": {
               "$ref": "defs.schema.json#/$defs/seed"
+            },
+            "params": {
+              "type": "object",
+              "maxProperties": 16,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+              },
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "description": "`<node>.<param>` -> the value the runner chose for a param the run set to \"auto\" (a frames param: the predicted length, on its grid). Studio records it in made_with.inputs (made_with.typed keeps \"auto\")"
             }
           }
         },

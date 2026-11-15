@@ -207,6 +207,9 @@ describe("chips and handles", () => {
         "encode.refs": "at most 10 images; 9 used, @fox +2 do not fit",
       },
     );
+    expect(
+      fieldErrors("encode.refs[2].seconds: frame 50 is past the clip's last frame 48", keys),
+    ).toEqual({ "encode.refs": "row 2: frame 50 is past the clip's last frame 48" });
     expect(fieldErrors("workflow not found", keys)).toBeNull();
   });
 });

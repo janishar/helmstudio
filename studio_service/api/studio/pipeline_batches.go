@@ -409,7 +409,7 @@ func (s *Service) pipelineLoras(ctx context.Context, tx pgx.Tx, ownerID string, 
 		usable[env] = found
 	}
 	for _, g := range graphs {
-		if _, detail := checkLoras(eachLora(g.Nodes, g.Schemas), nodeKinds(g.Nodes), usable[g.Env]); detail != "" {
+		if _, detail := checkLoras(eachLora(g.Nodes, g.Schemas), g.Nodes, s.registry.LoraBlocks(), usable[g.Env]); detail != "" {
 			return g.Where + ": " + detail, nil
 		}
 	}

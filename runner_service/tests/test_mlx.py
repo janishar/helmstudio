@@ -7,6 +7,7 @@ import hashlib
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -75,7 +76,27 @@ def test_ltx_pack_publishes_the_canonical_fixtures():
     (model,) = values["models"]["models"]
     assert (model["id"], model["family"], model["title"]) == ("ltx-2.5", "ltx", "LTX-2.5")
     assert [v["id"] for v in model["variants"]] == ["distilled"]
-    assert model["variants"][0]["precisions"] == ["bf16", "int8", "int4"] and "lora" not in model
+    assert model["variants"][0]["precisions"] == ["bf16", "int8", "int4"]
+
+
+@needs_mlx
+def test_ltx_lora_block_is_generated_from_the_transformer_and_equals_the_fixture():
+    """modules: the LTX transformer's Linears built from the header's config (no weights read); prefused is filled
+    from the shared index (the fixture's id is a placeholder: the real one is the file's SHA-256)."""
+    if not (pack.models_root() / "ltx-2.5/diffusion_models").is_dir():
+        pytest.skip("the LTX-2.5 weights are not on this host")
+    values, _, p = ltx()
+    want = json.loads((FIXTURES / "ltx.models.valid.json").read_text())["models"][0]["lora"]
+    got = values["models"]["models"][0]["lora"]
+    assert {k: v for k, v in got.items() if k != "prefused"} == {
+        k: v for k, v in want.items() if k != "prefused"
+    }
+    assert got["prefused"] == []  # until registry.fill_prefused
+    f = pack.models_root() / "ltx-2.5/loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors"
+    registry.fill_prefused(values, [p], {f: "ab" * 32})
+    assert got["prefused"] == [{"lora_id": "ab" * 32, "variant": "distilled"}]
+    registry.fill_prefused(values, [p], {})
+    assert got["prefused"] == []  # the file is not on this host: no entry
 
 
 @needs_mlx
@@ -183,10 +204,6 @@ def run_graph(nodes, impls, schemas):
             lambda n: n["sample2"]["in"].update(canvas="canvas.canvas"),
             "sample2: stage 2 needs latent, not canvas",
         ),
-        (
-            lambda n: n["sample2"]["params"].update(steps=4),
-            "sample2.steps: stage 2 has 3 steps at most",
-        ),
     ],
 )
 def test_ltx_role_rules_fail_the_run_before_anything_loads(edit, error):
@@ -203,6 +220,23 @@ def test_ltx_role_rules_fail_the_run_before_anything_loads(edit, error):
 
 
 @needs_mlx
+def test_steps_take_only_the_whole_distilled_table_of_the_role():
+    """values / values_by (contracts README, Video: steps): refused by the graph rules, and by the pack's own check
+    when a graph reaches it anyway."""
+    from packs.ltx import mlx as ltx_mlx
+
+    values, _, _ = ltx()
+    nodes = json.loads(json.dumps(values["workflows"]["workflows"][0]["nodes"]))
+    nodes["sample2"]["params"]["steps"] = 8
+    nodes["sample1"]["params"]["steps"] = 4
+    assert graph.validate(nodes, registry.node_schemas(values)) == [
+        "sample1.steps: must be one of 3, 8", "sample2.steps: must be one of 3"]  # fmt: skip
+    wired = {"model", "cond", "seed", "latent"}
+    assert ltx_mlx.check_sample({"role": "stage2", "steps": 8}, wired) == ".steps: must be one of 3"
+    assert ltx_mlx.check_sample({"role": "stage2", "steps": 3}, wired) is None
+
+
+@needs_mlx
 def test_frames_off_the_grid_is_param_invalid_with_the_contract_text():
     values, _, _ = ltx()
     nodes = json.loads(json.dumps(values["workflows"]["workflows"][0]["nodes"]))
@@ -210,6 +244,24 @@ def test_frames_off_the_grid_is_param_invalid_with_the_contract_text():
     assert graph.validate(nodes, registry.node_schemas(values)) == [
         "duration.frames: 50 is not on the frame grid 9 + 8k up to 321"
     ]
+    nodes["duration"]["params"]["frames"] = "auto"
+    assert graph.validate(nodes, registry.node_schemas(values)) == []
+
+
+@needs_mlx
+def test_an_image_to_video_run_needs_one_keyframe():
+    values, _, _ = ltx()
+    nodes = json.loads(json.dumps(values["workflows"]["workflows"][1]["nodes"]))
+    schemas = registry.node_schemas(values)
+    assert graph.validate(nodes, schemas, run=False) == []  # the template holds no take
+    assert graph.validate(nodes, schemas) == ["keyframes.images: at least 1 items"]
+
+
+def test_auto_frames_follow_the_contract_fixture():
+    fx = json.loads((CONTRACTS / "fixtures/video/auto-frames.json").read_text())
+    for c in fx["cases"]:
+        spec = fx["param"] | {"max": c["max"], "auto": {"min_s": c["min_s"], "max_s": c["max_s"]}}
+        assert graph.auto_frames(c["seconds"], c["fps"], spec) == c["frames"], c
 
 
 def sha(a) -> str:
@@ -229,8 +281,10 @@ def test_stage1_noise_is_the_goldens_bit_for_bit(case, on_cpu):
     fhw = ltx_mlx.compute_video_latent_shape(g["frames"], h // 2, w // 2)
     t = ltx_mlx.compute_audio_token_count(g["frames"], frame_rate=g["fps"])
     pos = ltx_mlx.compute_video_positions(*fhw, frame_rate=g["fps"])
-    video = ltx_mlx._state((1, fhw[0] * fhw[1] * fhw[2], 128), fhw, pos, g["seed"], 1.0)
-    audio = ltx_mlx._state((1, t, 128), fhw, ltx_mlx.compute_audio_positions(t), g["seed"] + 1, 1.0)
+    video = ltx_mlx.noised_state((1, fhw[0] * fhw[1] * fhw[2], 128), [], fhw, pos, g["seed"], 1.0)
+    audio = ltx_mlx.noised_state(
+        (1, t, 128), [], fhw, ltx_mlx.compute_audio_positions(t), g["seed"] + 1, 1.0
+    )
     stage = g["stages"][0]
     assert list(pos.shape) == stage["video_positions"] and stage["sigmas"] == ltx_mlx.STAGE1_SIGMAS
     assert (sha(video.latent), sha(audio.latent)) == (
@@ -253,3 +307,154 @@ def test_a_second_upscale_of_one_latent_fails_before_it_loads_anything(on_cpu):
         ltx_mlx.upscale(
             ctx, {}, {"model": None, "latent": latent}
         )  # model None: any load would fail otherwise
+
+
+# --- stage B against the goldens' recorded inputs, still without weights (tests/golden/ltx-*/<case>.json)
+
+GOLDENS = ROOT / "tests/golden"
+
+
+def golden(path: str) -> dict:
+    return json.loads((GOLDENS / f"{path}.json").read_text())
+
+
+@needs_mlx
+@pytest.mark.parametrize("case", ["i2v-448x256-49f-s42", "kf-448x256-49f-s42"])
+def test_keyframe_images_are_preprocessed_as_the_goldens(case, on_cpu):
+    """RGB → H.264 CRF 33 round trip → LANCZOS cover + centre crop → [-1, 1] bf16, per stage grid, bit for bit
+    (the round trip depends on the host's ffmpeg / libx264 build, as the goldens' did)."""
+    from PIL import Image
+
+    from packs.ltx import mlx as ltx_mlx
+
+    g = golden(f"ltx-image-to-video/{case}")
+    rgb = {m["file"]: ltx_mlx.crf_round_trip(Image.open(GOLDENS / "ltx-image-to-video" / m["file"])) for m in g["images"]}  # fmt: skip
+    for row in g["image_preprocess"]:
+        px = ltx_mlx.to_pixels(rgb[row["file"]], row["height"], row["width"])
+        assert sha(px) == row["pixels"]["sha256_f32"], (row["file"], row["height"])
+    want = g["image_conditionings"][0]["items"][-1]
+    if (
+        want["type"] == "VideoConditionByKeyframeIndex"
+    ):  # the appended frame's positions at the stage-1 grid
+        kf = ltx_mlx.VideoConditionByKeyframeIndex(
+            want["frame_idx"], mx.zeros((1, 28, 128)), (7, 4, 7), 24.0
+        )
+        assert sha(kf.keyframe_positions) == want["positions"]["sha256_f32"]
+
+
+@needs_mlx
+def test_keyframe_positions_follow_the_contract_fixture():
+    """The runner's check on the resolved length (contracts/fixtures/video/keyframes.json, fixed-length cases)."""
+    from packs.ltx import mlx as ltx_mlx
+
+    for c in json.loads((CONTRACTS / "fixtures/video/keyframes.json").read_text())["cases"]:
+        nodes = c["workflow"]["nodes"]
+        d, kf = nodes["duration"]["params"], nodes.get("keyframes", {})
+        if d["frames"] == "auto" or kf.get("bypass") or "keyframes" not in nodes:
+            continue
+        rows = tuple(
+            (None, r.get("seconds", 0), r.get("strength", 1)) for r in kf["params"]["images"]
+        )
+        cond = ltx_mlx.Cond(None, None, images=rows, images_at="keyframes.images")
+        try:
+            ltx_mlx.keyframe_frames(cond, d["frames"], d["fps"])
+            got = []
+        except RunError as e:
+            got = [str(e)]
+        assert got == c["errors"][:1], c["description"]
+
+
+@needs_mlx
+def test_prompt_beats_give_the_goldens_ranges_and_relay_masks(on_cpu):
+    """Prompt Relay without weights: the combined prompt and token ranges (the tokenizer is read from the text
+    encoder file's assets) and each stage's mask, bit for bit."""
+    from packs.ltx import mlx as ltx_mlx
+
+    f = pack.models_root() / "ltx-2.5/text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors"
+    if not f.is_file():
+        pytest.skip("the LTX-2.5 text encoder is not on this host")
+    g = golden("ltx-prompt-beats/beats-448x256-49f-s42")
+    tok = ltx_mlx._tokenizer(f, f.stat().st_size, f.stat().st_mtime_ns)
+    text, ranges = ltx_mlx.map_token_ranges(
+        tok, g["prompt"], [s["text"] for s in g["segments"]], max_length=1024
+    )
+    assert (text, [list(r) for r in ranges]) == (g["prompt_relay"]["encoded_prompt"], g["prompt_relay"]["token_ranges"])  # fmt: skip
+    seconds = tuple(
+        s["length"] * 8 / g["fps"] if s["length"] else 0.0 for s in g["segments"]
+    )  # latent frames → s
+    cond = ltx_mlx.Cond(
+        mx.zeros((1, 1024, 8)), None, seconds, tuple(ranges), beats_at="encode.beats"
+    )
+    for stage, fhw in zip(g["stages"], [(7, 4, 7), (7, 8, 14)], strict=True):
+        mask = ltx_mlx.relay_mask(cond, fhw, stage["video_tokens_total"], g["fps"])
+        assert sha(mask) == stage["video_cross_attention_mask"]["sha256_f32"]
+    with pytest.raises(
+        RunError, match=r"encode\.beats\[2\]: no frames left for this beat \(the clip has 2 latent"
+    ):
+        ltx_mlx.beat_lengths(replace(cond, beats=(3.0, 0.0)), 2, 24.0)
+
+
+@needs_mlx
+def test_vae_encoder_keys_are_renamed():
+    from packs.ltx import mlx as ltx_mlx
+
+    r = ltx_mlx.rename
+    assert r("vae_encoder", "encoder.conv_in.conv.weight") == "conv_in.conv.weight"
+    assert (
+        r("vae_encoder", "per_channel_statistics.mean-of-means")
+        == "per_channel_statistics.mean_of_means"
+    )
+    assert r("vae_encoder", "decoder.conv_in.conv.weight") is None
+
+
+@needs_mlx
+def test_sample_peak_counts_the_tokens_keyframes_append():
+    """Each keyframe appends a latent frame of tokens: 8 rows at 1024x576, 121 frames, stage 2 plan ~ 55 GB."""
+    _, impls, _ = ltx()
+    peak = impls["ltx/sample"].peak
+    at = {"mp": 1024 * 576 / 1e6, "frames": 121, "role": "stage2", "steps": 3, "mp_in": 1}
+    assert pack.evaluate(peak, at | {"images": 8}) > 55
+    assert pack.evaluate(peak, at | {"images": 0}) < 26
+    assert (
+        pack.evaluate(impls["ltx/keyframes"].peak, {"mp_in": 50, "images": 8, "mp": 0, "frames": 0})
+        == 2.0
+    )
+
+
+@needs_mlx
+def test_keyframes_round_trip_each_take_once_and_keep_at_most_the_largest_canvas(monkeypatch):
+    from PIL import Image
+
+    from packs.ltx import mlx as ltx_mlx
+
+    trips = []
+    real = ltx_mlx.crf_round_trip
+    monkeypatch.setattr(ltx_mlx, "crf_round_trip", lambda img: trips.append(img.size) or real(img))
+    big, small = (
+        Image.new("RGB", (4000, 2400), (200, 10, 10)),
+        Image.new("RGB", (640, 400), (10, 200, 10)),
+    )
+    c = Ctx(progress=None, output=None, check=lambda: None)
+    c.node = "keyframes"
+    cond = ltx_mlx.Cond(mx.zeros((1, 1, 1)), mx.zeros((1, 1, 1)))
+    rows = [{"image": small, "seconds": 0, "strength": 1}, {"image": big, "seconds": 1, "strength": 1},
+            {"image": small, "seconds": 2, "strength": 0.5}]  # fmt: skip
+    got = ltx_mlx.keyframes(c, {"images": rows}, {"cond": cond})["cond"].images
+    assert trips == [(640, 400), (4000, 2400)]  # the repeated take once
+    assert [r[0].shape for r in got] == [(400, 640, 3), (1920, 3200, 3), (400, 640, 3)]
+    assert got[0][0] is got[2][0] and [r[1:] for r in got] == [(0.0, 1.0), (1.0, 1.0), (2.0, 0.5)]
+
+
+@needs_mlx
+def test_a_baked_entry_counts_its_float32_scales():
+    from core import loaders_mlx
+
+    q = nn.QuantizedLinear(
+        128, 8, group_size=64, bits=8
+    )  # quantized from float32: float32 scales and biases
+    assert q.scales.dtype == mx.float32
+    assert (
+        loaders_mlx.extra_gb(q) * 2**30 == 2 * 8 * 2 * 2
+    )  # 8 x 2 groups, scales and biases, 2 bytes more each
+    q.scales, q.biases = q.scales.astype(mx.bfloat16), q.biases.astype(mx.bfloat16)
+    assert loaders_mlx.extra_gb(q) == 0

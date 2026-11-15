@@ -1,0 +1,58 @@
+{
+  "id": "echo-image-to-video",
+  "title": "Echo image to video",
+  "family": "echo",
+  "env": "fake",
+  "media": "video",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "canvas": {
+      "kind": "echo/canvas",
+      "params": {
+        "width": 256,
+        "height": 128
+      }
+    },
+    "duration": {
+      "kind": "echo/duration",
+      "params": {
+        "frames": 25,
+        "fps": 24
+      }
+    },
+    "keyframes": {
+      "kind": "echo/keyframes",
+      "in": {
+        "text": "prompt.text",
+        "duration": "duration.duration"
+      },
+      "params": {
+        "images": []
+      }
+    },
+    "sample": {
+      "kind": "echo/sample",
+      "in": {
+        "text": "keyframes.text",
+        "canvas": "canvas.canvas",
+        "duration": "duration.duration"
+      },
+      "params": {
+        "role": "stage1",
+        "steps": 4,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "sample.video"
+      }
+    }
+  }
+}

@@ -1,15 +1,100 @@
 {
   "description": "family detection: among the families whose lora block a file fits, one a non-fake env publishes comes before one only env fake publishes, then by name; none fits: unknown. `families`: family → the envs publishing it and the registry fixture holding its block (models[0].lora); each case: the LoRA fixture, the families published, the detected family",
   "families": {
-    "echo": {"envs": ["fake"], "block": "registry/models.valid.json"},
-    "qwen-image": {"envs": ["torch"], "block": "registry/qwen-image.models.valid.json"},
-    "alt": {"envs": ["fake", "torch"], "block": "registry/qwen-image.models.valid.json"}
+    "echo": {
+      "envs": [
+        "fake"
+      ],
+      "block": "registry/models.valid.json"
+    },
+    "qwen-image": {
+      "envs": [
+        "torch"
+      ],
+      "block": "registry/qwen-image.models.valid.json"
+    },
+    "alt": {
+      "envs": [
+        "fake",
+        "torch"
+      ],
+      "block": "registry/qwen-image.models.valid.json"
+    },
+    "ltx": {
+      "envs": [
+        "mlx"
+      ],
+      "block": "registry/ltx.models.valid.json"
+    }
   },
   "cases": [
-    {"lora": "peft.json", "families": ["echo", "qwen-image"], "family": "qwen-image"},
-    {"lora": "comfyui.json", "families": ["echo"], "family": "echo"},
-    {"lora": "kohya.json", "families": ["alt", "echo", "qwen-image"], "family": "alt"},
-    {"lora": "other-model.json", "families": ["alt", "echo", "qwen-image"], "family": "unknown"},
-    {"lora": "kohya-te.json", "families": ["echo", "qwen-image"], "family": "unknown"}
+    {
+      "lora": "peft.json",
+      "families": [
+        "echo",
+        "qwen-image"
+      ],
+      "family": "qwen-image"
+    },
+    {
+      "lora": "comfyui.json",
+      "families": [
+        "echo"
+      ],
+      "family": "echo"
+    },
+    {
+      "lora": "kohya.json",
+      "families": [
+        "alt",
+        "echo",
+        "qwen-image"
+      ],
+      "family": "alt"
+    },
+    {
+      "lora": "other-model.json",
+      "families": [
+        "alt",
+        "echo",
+        "qwen-image"
+      ],
+      "family": "unknown"
+    },
+    {
+      "lora": "kohya-te.json",
+      "families": [
+        "echo",
+        "qwen-image"
+      ],
+      "family": "unknown"
+    },
+    {
+      "lora": "ltx-comfyui.json",
+      "families": [
+        "echo",
+        "ltx",
+        "qwen-image"
+      ],
+      "family": "ltx"
+    },
+    {
+      "lora": "comfyui.json",
+      "families": [
+        "echo",
+        "ltx",
+        "qwen-image"
+      ],
+      "family": "qwen-image"
+    },
+    {
+      "lora": "ltx-unmatched.json",
+      "families": [
+        "echo",
+        "ltx",
+        "qwen-image"
+      ],
+      "family": "unknown"
+    }
   ]
 }

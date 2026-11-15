@@ -17,7 +17,7 @@ export function deriveStudio(doc: Pick<Doc, "nodes">, schemas: Schemas): Layout 
   const s = sections(fs);
   const keys = (list: Field[]) => list.map((f) => f.key);
   const groups: [string, string[]][] = [
-    ...s.refs.map((f): [string, string[]] => [
+    ...[...s.refs, ...s.rows].map((f): [string, string[]] => [
       (f.param.label ?? f.param.name).slice(0, 40),
       [f.key],
     ]),

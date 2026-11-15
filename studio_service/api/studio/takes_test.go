@@ -37,18 +37,37 @@ func TestMadeWith(t *testing.T) {
 	host, seed := "mac", int64(43)
 	run := model.Run{WorkflowID: "qwen-image", Env: "torch", Host: &host, Inputs: rawInputs, Nodes: rawNodes}
 
-	got := madeWith(workflows, run, &seed)
+	got := madeWith(workflows, run, &seed, nil)
 	if got.WorkflowTitle != workflow.Title || got.Prompt == nil || *got.Prompt != "Fox at dusk" || *got.Seed != 43 ||
 		got.Inputs["seed.seed"] != int64(43) || got.Inputs["prompt.text"] != "Fox at dusk" || got.Inputs["sample.steps"] == nil ||
 		got.Model == nil || got.Model.ID == nil || *got.Model.ID != "qwen-image-2.1" || *got.Model.Variant != "base" {
 		t.Fatalf("%+v %+v", got, got.Model)
 	}
 	run.Nodes = nil // a run stored before it kept its graph: resolved again
-	if again := madeWith(workflows, run, &seed); again.Inputs["seed.seed"] != int64(43) || again.Inputs["sample.steps"] == nil {
+	if again := madeWith(workflows, run, &seed, nil); again.Inputs["seed.seed"] != int64(43) || again.Inputs["sample.steps"] == nil {
 		t.Fatalf("%+v", again)
 	}
-	bare := madeWith(nil, run, &seed)
+	bare := madeWith(nil, run, &seed, nil)
 	if bare.WorkflowTitle != "qwen-image" || bare.Model != nil || *bare.Prompt != "Fox at dusk" || len(bare.Inputs) != 2 {
 		t.Fatalf("%+v", bare)
+	}
+}
+
+// A frames param run as "auto" is made_with the length the runner chose, typed keeping "auto" (reuse asks again).
+func TestMadeWithAutoLength(t *testing.T) {
+	workflow := ltxWorkflow(t, "ltx-text-to-video")
+	nodes, detail := resolve(workflow, inputs(t, `{"duration.frames": "auto"}`))
+	if detail != "" {
+		t.Fatal(detail)
+	}
+	rawNodes, _ := json.Marshal(nodes)
+	run := model.Run{WorkflowID: workflow.ID, Env: "mlx", Inputs: []byte(`{"duration.frames":"auto"}`), Nodes: rawNodes,
+		Resolved: []byte(`{"seed": 7, "params": {"duration.frames": 89}}`)}
+	got := madeWith(nil, run, nil, resolvedParams(run.Resolved))
+	if got.Inputs["duration.frames"] != int64(89) || got.Typed["duration.frames"] != "auto" {
+		t.Fatalf("%v %v", got.Inputs["duration.frames"], got.Typed)
+	}
+	if plain := madeWith(nil, run, nil, nil); plain.Inputs["duration.frames"] != "auto" || plain.Typed != nil {
+		t.Fatalf("%v %v", plain.Inputs["duration.frames"], plain.Typed)
 	}
 }

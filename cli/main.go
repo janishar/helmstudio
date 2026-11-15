@@ -20,6 +20,8 @@ const usage = `usage:
   helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--lora <id>:<strength> ...] [-o|--out <dir>]
              saves each output (a PNG, or a video's MP4) as <dir>/<run_id>_<n>.<ext>
              --lora fills the rows of the workflow's LoRA stack, in order
+             [--image <take|file>] [--keyframe <frame>:<take|file> ...] [--duration <frames>|auto]   a video's first
+             frame and keyframes (files are uploaded first); auto: the model picks the length (printed when it ends)
   helm batch <workflow_id> (--lines <file|-> [--param node.param] | --csv <file> | --grid node.param=a,b,c ...)
              [-p node.param=value ...] [--seeds N] [--session <id>] [--title <t>]   exit 1 if any row failed
   helm batch --pipeline <pipeline_id> (--lines ... [--param inputs.name] | --csv ... | --grid inputs.name=a,b ...) [-p inputs.name=value ...]

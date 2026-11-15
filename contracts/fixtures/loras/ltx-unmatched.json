@@ -1,0 +1,135 @@
+{
+  "description": "an LTX file with a key that names no ltx module: the old studio ignored it silently, the shared normaliser refuses the file (no key is silently dropped)",
+  "name": "ltx-unmatched",
+  "family": "ltx",
+  "metadata": {},
+  "tensors": {
+    "diffusion_model.transformer_blocks.0.attn1.to_out.0.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_out.0.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_q.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_q.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.0.proj.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.0.proj.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        16384,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.2.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        16384
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.2.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.47.audio_ff.net.2.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        8192
+      ]
+    },
+    "diffusion_model.transformer_blocks.47.audio_ff.net.2.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        2048,
+        8
+      ]
+    },
+    "diffusion_model.adaln_single.emb.timestep_embedder.linear_1.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        256
+      ]
+    },
+    "diffusion_model.adaln_single.emb.timestep_embedder.linear_1.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.patchify_proj.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        128
+      ]
+    },
+    "diffusion_model.patchify_proj.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_out.1.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_out.1.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    }
+  },
+  "values": {},
+  "expect": {
+    "key_style": "comfyui",
+    "rank": 8,
+    "total": 16,
+    "applied": 14,
+    "ignored": 0,
+    "unapplied": [
+      "diffusion_model.transformer_blocks.0.attn1.to_out.1.lora_A.weight",
+      "diffusion_model.transformer_blocks.0.attn1.to_out.1.lora_B.weight"
+    ],
+    "error": "LoRA ltx-unmatched: 2 of 16 keys do not apply to ltx: diffusion_model.transformer_blocks.0.attn1.to_out.1.lora_A.weight, diffusion_model.transformer_blocks.0.attn1.to_out.1.lora_B.weight",
+    "family": "unknown",
+    "licence": null
+  }
+}

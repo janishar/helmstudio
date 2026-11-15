@@ -16,15 +16,20 @@ from core.pack import LoraUse
 FIXTURES = CONTRACTS / "fixtures/loras"
 MODELS = json.loads((CONTRACTS / "fixtures/registry/qwen-image.models.valid.json").read_text())
 BLOCK, FAMILY = MODELS["models"][0]["lora"], MODELS["models"][0]["family"]
+LTX_BLOCK = json.loads((CONTRACTS / "fixtures/registry/ltx.models.valid.json").read_text())[
+    "models"
+][0]["lora"]
+BLOCKS = {FAMILY: BLOCK, "ltx": LTX_BLOCK}
 
 
 @pytest.mark.parametrize("path", sorted(FIXTURES.glob("*.json")), ids=lambda p: p.stem)
 def test_contract_lora_fixtures(path):
     fx = json.loads(path.read_text())
-    block = BLOCK | ({"ignore": fx["ignore"]} if "ignore" in fx else {})
-    got = lora.normalise(fx["name"], fx["tensors"], block, FAMILY)
+    family = fx.get("family", FAMILY)  # the block a fixture is checked against (default qwen-image)
+    block = BLOCKS[family] | ({"ignore": fx["ignore"]} if "ignore" in fx else {})
+    got = lora.normalise(fx["name"], fx["tensors"], block, family)
     got.pop("groups")
-    got["family"] = FAMILY if got["error"] is None else "unknown"
+    got["family"] = family if got["error"] is None else "unknown"
     got["licence"] = lora.licence(fx.get("metadata", {}))
     assert got == fx["expect"]
 
@@ -83,6 +88,57 @@ def test_every_key_of_a_model_lora_applies(style):
             res = lora.normalise("x", broken, BLOCK, FAMILY, SHAPES)
             assert res["error"] and res["unapplied"], (k, res)
             assert res["applied"] + res["ignored"] + len(res["unapplied"]) == res["total"]
+
+
+def comfy_name(module: str) -> str:
+    """An LTX module's name in a ComfyUI file: the official key's part, as the old renaming map undid it."""
+    r = next(
+        (r for r in LTX_BLOCK["renames"] if module.endswith(r["to"])), None
+    )  # audio_ff's come before ff's
+    return module[: -len(r["to"])] + r["from"] if r else module
+
+
+def test_every_key_of_an_ltx_lora_applies_and_none_is_dropped():
+    """The property on the LTX transformer's own module names (the canonical block, which test_mlx checks against
+    the model built from the header): a ComfyUI file over any of them applies 100 % through the `at: end` renames,
+    and a key removed, renamed or added is reported, never dropped (the old studio ignored unmatched keys)."""
+    rng = random.Random("ltx")
+    mods = lora.expand(LTX_BLOCK["modules"])
+    shapes = dict.fromkeys(mods, (64, 96))
+    pick = (
+        rng.sample(mods, 60)
+        + [m for m in mods if m.endswith(("to_out", "proj_in", "proj_out", "linear1"))][:12]
+    )
+    h = {}
+    for m in pick:
+        base = "diffusion_model." + comfy_name(m)
+        h[base + ".lora_A.weight"] = {"dtype": "BF16", "shape": [4, 64]}
+        h[base + ".lora_B.weight"] = {"dtype": "BF16", "shape": [96, 4]}
+    res = lora.normalise("x", h, LTX_BLOCK, "ltx", shapes)
+    assert (res["key_style"], res["applied"], res["error"]) == ("comfyui", len(h), None)
+    assert set(res["groups"]) == set(pick)
+    for _ in range(20):
+        k = rng.choice(sorted(h))
+        removed = {x: v for x, v in h.items() if x != k}
+        renamed = removed | {
+            k.replace("transformer_blocks.", "blocks.") if "blocks." in k else "x" + k: h[k]
+        }
+        added = h | {k.rsplit(".", 2)[0] + ".lora_mid.weight": h[k]}
+        for broken in (removed, renamed, added):
+            res = lora.normalise("x", broken, LTX_BLOCK, "ltx", shapes)
+            assert res["error"] and res["unapplied"], k
+            assert res["applied"] + res["ignored"] + len(res["unapplied"]) == res["total"]
+    kohya = {f"lora_unet_{k.removeprefix('diffusion_model.').removesuffix(suf).replace('.', '_')}{to}": v
+             for k, v in h.items() for suf, to in ((".lora_A.weight", ".lora_down.weight"),
+                                                  (".lora_B.weight", ".lora_up.weight")) if k.endswith(suf)}  # fmt: skip
+    res = lora.normalise(
+        "k", kohya, LTX_BLOCK, "ltx", shapes
+    )  # `_0` / `net_2` parts match no rename: refused
+    assert (
+        res["key_style"] == "kohya"
+        and res["error"]
+        and any("to_out_0" in k for k in res["unapplied"])
+    )
 
 
 def test_a_shape_that_does_not_fit_the_linear_is_unapplied():

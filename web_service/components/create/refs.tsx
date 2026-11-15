@@ -19,6 +19,8 @@ import {
   withIds,
 } from "@/lib/refs";
 import { remember, useTakes } from "@/lib/take-cache";
+import { ClipTrack, ItemFields } from "@/components/create/rows";
+import { itemSpecs, positionErrors, positionOf, type Clip } from "@/lib/video";
 import { safeUrl } from "@/lib/format";
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
 import type { Field, Raw, Update } from "@/lib/workflow";
@@ -84,6 +86,7 @@ export function RowsEditor({
   uploads,
   compact = false,
   extra,
+  clip = null,
 }: {
   f: Field;
   raw: Raw | undefined;
@@ -93,6 +96,8 @@ export function RowsEditor({
   compact?: boolean;
   /** compact: shown between the references and "Add from gallery" (the composer's mention chips) */
   extra?: React.ReactNode;
+  /** the clip the form makes: where an item's time on the clip (`position: seconds`) can go */
+  clip?: Clip | null;
 }) {
   const ids = refIds(f, raw);
   const get = useTakes(ids);
@@ -111,6 +116,12 @@ export function RowsEditor({
     );
   const label = (i: number) => mentionOf(f.param, i + 1);
   const name = f.param.label ?? f.param.name;
+  // an item with fields besides its image (keyframes: a time and a strength) is a card per row
+  const cards = !compact && itemSpecs(f.param).length > 0;
+  const rows = Array.isArray(raw) ? raw : Array.isArray(f.initial) ? f.initial : [];
+  const issues = positionErrors(f.param, rows, clip);
+  const imageKey =
+    Object.keys(f.param.item ?? {}).find((k) => f.param.item?.[k] === "Image") ?? "image";
 
   const items = ids.map((id, i) => {
     const t = get(id);
@@ -202,6 +213,61 @@ export function RowsEditor({
     );
   });
 
+  const card = (id: string, i: number) => {
+    const t = get(id);
+    const thumb = t ? safeUrl(t.thumb_url) : undefined;
+    const title = t ? t.title : t === null ? "gone" : "loading";
+    const issue = issues[i];
+    return (
+      <li
+        key={id}
+        data-ref={id}
+        tabIndex={-1}
+        className={`flex flex-col gap-2 rounded-[10px] border bg-s1 px-3 py-2.5 ${issue ? "border-bad" : "border-s3"}`}
+      >
+        <div className="flex items-center gap-2">
+          {thumb ? (
+            <img src={thumb} alt="" className="h-7 w-11 shrink-0 rounded-md object-cover" />
+          ) : (
+            <span
+              aria-hidden
+              className="h-7 w-11 shrink-0 rounded-md border border-dashed border-dash bg-s3"
+            />
+          )}
+          <span className="min-w-0 grow truncate" title={title}>
+            {title}
+          </span>
+          <button
+            type="button"
+            aria-label={`Remove ${title}`}
+            onClick={() => set(ids.filter((x) => x !== id))}
+            className="grid size-[22px] shrink-0 place-items-center rounded-lg bg-s3 text-t2 hover:text-t1"
+          >
+            <X size={12} aria-hidden />
+          </button>
+        </div>
+        <ItemFields
+          p={f.param}
+          row={rows[i] ?? {}}
+          id={`f-${f.key.replace(/\W/g, "-")}-${i}`}
+          clip={clip}
+          skip={[imageKey]}
+          onRow={(patch) =>
+            onChange(f.key, (old) => {
+              const list = Array.isArray(old) ? old : rows;
+              return list.map((r, j) => (j === i ? { ...r, ...patch } : r));
+            })
+          }
+        />
+        {issue && (
+          <span role="alert" className="text-[12px] text-bad">
+            {issue}
+          </span>
+        )}
+      </li>
+    );
+  };
+
   const busy = pending.map((u) => (
     <div
       key={u.id}
@@ -265,7 +331,8 @@ export function RowsEditor({
       {!compact && (
         <span className="mono flex justify-between gap-2 text-[12px] text-t2">
           <span className="min-w-0">
-            In the prompt: {max > 1 ? `${label(0)}, ${label(1)}…` : label(0)}
+            {f.param.mention &&
+              `In the prompt: ${max > 1 ? `${label(0)}, ${label(1)}…` : label(0)}`}
           </span>
           <span aria-label={`${ids.length} of ${max}`} className="shrink-0">
             {ids.length} / {max}
@@ -283,9 +350,17 @@ export function RowsEditor({
         </>
       ) : (
         <>
-          {(ids.length > 0 || pending.length > 0) && (
+          {cards && clip && positionOf(f.param) && rows.length > 0 && (
+            <ClipTrack p={f.param} rows={rows} imageKey={imageKey} clip={clip} />
+          )}
+          {cards && ids.length > 0 && (
+            <ol aria-label={`${name}, in order`} className="m-0 flex list-none flex-col gap-2 p-0">
+              {ids.map(card)}
+            </ol>
+          )}
+          {(cards ? pending.length > 0 : ids.length > 0 || pending.length > 0) && (
             <div role="list" aria-label={name} className="grid grid-cols-3 gap-2">
-              {items}
+              {!cards && items}
               {busy}
             </div>
           )}
@@ -315,6 +390,7 @@ export function RowsEditor({
           />
           <span className="flex items-center text-[12px] text-t2">
             Drop or paste images here, or onto the stage.
+            {positionOf(f.param) && " A new one goes on the first free end of the clip."}
             <Info>
               Each image is added to the gallery first. Drag to reorder, or focus one and press Alt
               with an arrow key; Delete removes it.
@@ -363,5 +439,54 @@ export function RefThumbs({ ids, onPick }: { ids: string[]; onPick: (t: S<"Take"
         );
       })}
     </span>
+  );
+}
+
+/** The composer's "First frame" tile (docs/mock/TextToVideo.dc.html): the take on the clip's first frame (`id`) and
+ * how many other frames there are, or "None · text only"; it opens the gallery picker for one image. */
+export function FirstFrameTile({
+  id,
+  more = 0,
+  onPick,
+}: {
+  id?: string;
+  more?: number;
+  onPick: (takeId: string) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const t = useTakes(id ? [id] : [])(id ?? "");
+  const thumb = t ? safeUrl(t.thumb_url) : undefined;
+  const name = id ? (t?.title ?? (t === null ? "gone" : "…")) : "None · text only";
+  const shown = more ? `${name} +${more}` : name;
+  return (
+    <>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={`First frame: ${shown}`}
+        onClick={() => setPicking(true)}
+        className="bevel flex h-8 max-w-[28ch] items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]"
+      >
+        {thumb ? (
+          <img src={thumb} alt="" className="size-6 rounded-md object-cover" />
+        ) : (
+          <span
+            aria-hidden
+            className="size-6 shrink-0 rounded-md border border-dashed border-dash"
+          />
+        )}
+        <span className="mono text-[10px] text-t2">First frame</span>
+        <b className="truncate font-semibold">{shown}</b>
+      </button>
+      <GalleryPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        max={1}
+        onPick={(takes) => {
+          remember(takes);
+          if (takes[0]) onPick(takes[0].id);
+        }}
+      />
+    </>
   );
 }

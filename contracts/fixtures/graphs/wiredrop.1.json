@@ -1,5 +1,5 @@
 {
-  "description": "from a Text output in an echo workflow: the family's kinds first (echo and echo-video take Text; its Text → Text LoRA stack), then core ones (prompt takes Text into its text param)",
+  "description": "from a Text output in an echo workflow: the family's kinds first (echo, echo/sample, echo-video and echo/keyframes take Text; its Text → Text LoRA stack), then core ones (prompt takes Text into its text param)",
   "workflow": {
     "title": "Echo",
     "family": "echo",
@@ -38,7 +38,9 @@
   },
   "expect": [
     "echo/echo",
+    "echo/sample",
     "echo/video",
+    "echo/keyframes",
     "echo/lora-stack",
     "prompt"
   ]

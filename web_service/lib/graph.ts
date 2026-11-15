@@ -114,9 +114,11 @@ export function valueError(
   if (t === "image") return v === null ? null : "a workflow cannot fill an image param";
   if (t === "rows") {
     if (!Array.isArray(v)) return "not a list";
+    const item = (p.item ?? {}) as Record<string, unknown>;
+    // a workflow holds no takes: [] even under min; the run needs min items (README, Video)
+    if (!v.length && Object.values(item).includes("Image")) return null;
     if (v.length < (min ?? 0) || (max != null && v.length > max))
       return `${v.length} items is outside ${min ?? 0}..${max}`;
-    const item = (p.item ?? {}) as Record<string, unknown>;
     for (let i = 0; i < v.length; i++) {
       const row = v[i];
       if (!row || typeof row !== "object" || Array.isArray(row))
@@ -141,7 +143,12 @@ export function valueError(
     }
     return null;
   }
-  if (t === "frames") return frameError(p as Param, v);
+  if (t === "frames")
+    return v === "auto"
+      ? p.auto
+        ? null
+        : "auto length is not offered"
+      : frameError(p as Param, v);
   if ((t === "int" || t === "seed") && !isInt(v)) return "not an integer";
   if (t === "float" && typeof v !== "number") return "not a number";
   if (t === "bool" && typeof v !== "boolean") return "not a bool";
@@ -149,11 +156,29 @@ export function valueError(
     return "not a string";
   if (t === "enum")
     return (p.enum as string[]).includes(v as string) ? null : "not one of the options";
+  const values = p.values as number[] | undefined;
+  if (t === "int" && values && !values.includes(v as number))
+    return `must be one of ${values.join(", ")}`;
   if (t === "bool") return null;
   const n = t === "string" || t === "text" ? codePoints(v as string) : (v as number);
   if ((min != null && n < min) || (max != null && n > max))
     return `outside ${min ?? "…"}..${max ?? "…"}`;
   return null;
+}
+
+/** [param, message] for each int whose `values_by` refuses the node's merged value (defaults, then `values`): the
+ * subset for the node's value of its enum param (README, Video: Steps). A value outside `values` is valueError's. */
+export function valuesByErrors(s: { params: Param[] }, values: Record<string, unknown>) {
+  const merged = { ...Object.fromEntries(s.params.map((p) => [p.name, p.default])), ...values };
+  return s.params.flatMap((p): [string, string][] => {
+    const vb = p.values_by;
+    if (!vb || !p.values) return [];
+    const allowed = vb.values[String(merged[vb.param])] ?? p.values;
+    const v = merged[p.name] as number;
+    return p.values.includes(v) && !allowed.includes(v)
+      ? [[p.name, `must be one of ${allowed.join(", ")}`]]
+      : [];
+  });
 }
 
 /** The compact JSON size in UTF-8 bytes (too_large). */
@@ -263,6 +288,15 @@ export function graphProblems(
         }
       }
     }
+    for (const [k, msg] of valuesByErrors(s, n.params ?? {}))
+      if (
+        !(k in (n.params ?? {})) ||
+        !valueError(
+          s.params.find((p) => p.name === k)!,
+          n.params![k],
+        )
+      )
+        add("param_invalid", `${id}.${k}: ${msg}`, id, undefined, k);
     for (const [port, ref] of Object.entries(wires)) {
       const want = portType(s, port);
       if (!want) {
@@ -341,7 +375,12 @@ export function graphProblems(
           param === "bypass"
             ? { type: "bool" }
             : palette[nodes[id].kind].params.find((p) => p.name === param)!;
-        if (valueError(spec, v)) add("preset_invalid", msg, id, undefined, param);
+        // values_by reads the node's values as the preset leaves them
+        const merged = { ...nodes[id].params };
+        for (const [k, x] of Object.entries(values))
+          if (splitRef(k)[0] === id && splitRef(k)[1] !== "bypass") merged[splitRef(k)[1]] = x;
+        const byErr = valuesByErrors(palette[nodes[id].kind], merged).some(([k]) => k === param);
+        if (valueError(spec, v) || byErr) add("preset_invalid", msg, id, undefined, param);
       }
     }
   return sortProblems([...out.values()]);

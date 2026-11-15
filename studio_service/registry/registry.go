@@ -35,6 +35,24 @@ type Param struct {
 	Item    map[string]json.RawMessage `json:"item,omitempty"`
 	Mention string                     `json:"mention,omitempty"` // rows only: how the prompt names item n, e.g. <image{n}>
 	FPS     string                     `json:"fps,omitempty"`     // frames only: the same node's frame-rate param
+	// frames only: present = the value "auto" is allowed (the model predicts the length within min_s..max_s)
+	Auto *Auto `json:"auto,omitempty"`
+	// int only: the only allowed values; ValuesBy narrows them per value of an enum param of the same node
+	Values   []int64   `json:"values,omitempty"`
+	ValuesBy *ValuesBy `json:"values_by,omitempty"`
+	Position string    `json:"position,omitempty"` // a float item field: "seconds" = a time on the clip (a keyframe's)
+}
+
+// Auto is a frames param's auto length bounds in seconds.
+type Auto struct {
+	MinS float64 `json:"min_s"`
+	MaxS float64 `json:"max_s"`
+}
+
+// ValuesBy is an int param's allowed values per value of the node's enum param Param.
+type ValuesBy struct {
+	Param  string             `json:"param"`
+	Values map[string][]int64 `json:"values"`
 }
 
 // IsImageField reports whether a rows item field holds an Image.
@@ -197,14 +215,23 @@ type LoraBlock struct {
 	Modules   []string `json:"modules"`
 	Renames   []Rename `json:"renames"`
 	Ignore    []string `json:"ignore"`
+	// LoRAs already fused into a variant's weights (a stack row naming one on that variant is refused)
+	Prefused []Prefused `json:"prefused,omitempty"`
 	// Fake: only env fake publishes the family (set by LoraBlocks); family detection prefers the others
 	Fake bool `json:"-"`
 }
 
-// Rename is one prefix rewrite of a LoRA key's module part.
+// Rename is one rewrite of a LoRA key's module part: a prefix, or with At "end" a suffix.
 type Rename struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+	At   string `json:"at,omitempty"` // start (default) | end
+}
+
+// Prefused is a LoRA already part of a variant's weights.
+type Prefused struct {
+	LoraID  string `json:"lora_id"`
+	Variant string `json:"variant"`
 }
 
 // SharedLora is one entry of a registry loras value: a LoRA file a runner indexed on its host.

@@ -20,10 +20,13 @@ import (
 var fixtures = filepath.Join("..", "..", "..", "contracts", "fixtures")
 
 // qwenBlock is the canonical qwen-image lora block.
-func qwenBlock(t *testing.T) registry.LoraBlock {
+func qwenBlock(t *testing.T) registry.LoraBlock { return familyBlock(t, "qwen-image") }
+
+// familyBlock is the canonical lora block of a family (qwen-image, ltx).
+func familyBlock(t *testing.T, family string) registry.LoraBlock {
 	t.Helper()
 	var models struct{ Models []registry.Model }
-	data, err := os.ReadFile(filepath.Join(fixtures, "registry", "qwen-image.models.valid.json"))
+	data, err := os.ReadFile(filepath.Join(fixtures, "registry", family+".models.valid.json"))
 	if err == nil {
 		err = json.Unmarshal(data, &models)
 	}
@@ -81,6 +84,7 @@ func read(file []byte) (Header, string) {
 // upload checks pass the files whose only fault is a family fit, and name the first bad key of the others.
 func TestLoraFixtures(t *testing.T) {
 	block := qwenBlock(t)
+	blocks := map[string]registry.LoraBlock{"qwen-image": block, "ltx": familyBlock(t, "ltx")}
 	files, _ := filepath.Glob(filepath.Join(fixtures, "loras", "*.json"))
 	if len(files) < 7 {
 		t.Fatalf("found %d LoRA fixtures", len(files))
@@ -94,6 +98,7 @@ func TestLoraFixtures(t *testing.T) {
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			var fixture struct {
 				Name     string                `json:"name"`
+				Family   string                `json:"family"`
 				Metadata map[string]string     `json:"metadata"`
 				Tensors  map[string]fileTensor `json:"tensors"`
 				Ignore   []string              `json:"ignore"`
@@ -112,11 +117,12 @@ func TestLoraFixtures(t *testing.T) {
 			if reason != "" {
 				t.Fatal(reason)
 			}
-			spec := block
+			family := cmpOr(fixture.Family, "qwen-image")
+			spec := blocks[family]
 			if fixture.Ignore != nil {
 				spec.Ignore = fixture.Ignore
 			}
-			got := Normalise(fixture.Name, header, spec, "qwen-image")
+			got := Normalise(fixture.Name, header, spec, family)
 			want := fixture.Expect.Result
 			want.Rank = 0
 			if fixture.Expect.Rank != nil {
@@ -128,9 +134,9 @@ func TestLoraFixtures(t *testing.T) {
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("got %+v\nwant %+v", got, want)
 			}
-			family := Detect(fixture.Name, header, map[string]registry.LoraBlock{"qwen-image": spec})
-			if family != fixture.Expect.Family || !reflect.DeepEqual(Licence(header.Metadata), fixture.Expect.Licence) {
-				t.Errorf("family %s licence %v", family, Licence(header.Metadata))
+			detected := Detect(fixture.Name, header, map[string]registry.LoraBlock{family: spec})
+			if detected != fixture.Expect.Family || !reflect.DeepEqual(Licence(header.Metadata), fixture.Expect.Licence) {
+				t.Errorf("family %s licence %v", detected, Licence(header.Metadata))
 			}
 			style, rank, detail := Check(header, nil)
 			if detail != upload[filepath.Base(file)] || (detail == "" && (style != want.Style || rank != want.Rank)) {
@@ -147,7 +153,7 @@ func TestLoraFixtures(t *testing.T) {
 	header, _ := read(synth(t, fixture.Tensors, nil))
 	other := block
 	other.Ignore = []string{"lora_te1_*"}
-	blocks := map[string]registry.LoraBlock{"qwen-image": block, "zz-other": other}
+	blocks = map[string]registry.LoraBlock{"qwen-image": block, "zz-other": other}
 	if _, _, detail := Check(header, Ignores(blocks)); detail != "" {
 		t.Fatal(detail)
 	}

@@ -1,0 +1,46 @@
+{
+  "description": "keyframes.images has an Image field and min 1: a step must bind it (unbound_input)",
+  "pipeline": {
+    "title": "i2v",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          }
+        ]
+      },
+      "clip": {
+        "kind": "step",
+        "workflow": "ltx-image-to-video",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "from": "clip.takes",
+        "collection": "clips"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "clip"
+      ],
+      [
+        "clip",
+        "output"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "unbound_input",
+      "node": "clip",
+      "port": "keyframes.images"
+    }
+  ]
+}

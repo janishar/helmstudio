@@ -53,3 +53,24 @@ func TestResolveFillsWorkflowRowItems(t *testing.T) {
 		t.Fatalf("%q", detail)
 	}
 }
+
+// A LoRA the family's block lists as prefused for the graph's model variant is refused (it would apply twice); on
+// another variant it is fine. A bake-only stack refuses mode adapter by its enum.
+func TestPrefusedLoraIsRefused(t *testing.T) {
+	workflow := ltxWorkflow(t, "ltx-text-to-video")
+	row := `{"lora.rows": [{"lora": {"lora_id": "` + sixtyFour + `"}, "strength": 0.5}]}`
+	nodes, detail := resolve(workflow, inputs(t, row))
+	if detail != "" || nodes["lora"].Params["rows"].([]any)[0].(map[string]any)["mode"] != "bake" {
+		t.Fatal(detail)
+	}
+	usable := map[string]lora.Info{sixtyFour: {ID: sixtyFour, Source: "shared", Name: "distilled-lora", Family: "ltx"}}
+	blocks := map[string]registry.LoraBlock{"ltx": {Prefused: []registry.Prefused{{LoraID: sixtyFour, Variant: "distilled"}}}}
+	values := eachLora(nodes, workflow.NodeSchemas)
+	if _, detail := checkLoras(values, nodes, blocks, usable); detail != "lora.rows[1].lora: LoRA distilled-lora is already part of the distilled weights" {
+		t.Fatalf("%q", detail)
+	}
+	nodes["model"].Params["variant"] = "dev"
+	if used, detail := checkLoras(values, nodes, blocks, usable); detail != "" || len(used) != 1 || used[0].Mode != "bake" {
+		t.Fatal(detail, used)
+	}
+}

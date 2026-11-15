@@ -10,6 +10,7 @@ import hashlib
 import importlib
 import json
 import struct
+import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -194,6 +195,12 @@ class ModelRef:
         loader = importlib.import_module(f"core.loaders_{self.pack.runtime}")
         return loader.activate(self, component, module, ctx)
 
+    def extra_gb(self, component: str, module) -> float:
+        """GB the loaded `module` holds beyond `gb` (core/loaders_<runtime>.py `extra_gb`, 0 without one); the
+        loader is the one the load that made `module` imported (none: a fake load, 0)."""
+        loader = sys.modules.get(f"core.loaders_{self.pack.runtime}")
+        return loader.extra_gb(module) if hasattr(loader, "extra_gb") else 0.0
+
     def gb(self, component: str) -> tuple[float, float]:
         """(resident size, load-time transient) in GB, from the safetensors headers and the target dtype; the
         transient includes the baked LoRAs' deltas, held in fp32 on the device while it loads."""
@@ -365,13 +372,16 @@ def lora_stack_schema(pack: Pack) -> dict:
         "strength": {"type": "float", "label": "Strength", "default": st["default"],
                      "min": st["min"], "max": st["max"], "step": 0.05},
         "mode": {"type": "enum", "label": "Mode", "default": modes[0], "enum": modes,
-                 "help": MODE_HELP},
+                 "help": spec.get("mode_help", MODE_HELP)},
     }  # fmt: skip
     return {
         "kind": f"{pack.family}/lora-stack",
         "title": "LoRA Stack",
         "family": pack.family,
-        "help": f"Applies LoRAs to the model's {spec['component']}, in order. Empty: the model as it is.",
+        "help": spec.get(
+            "help",
+            f"Applies LoRAs to the model's {spec['component']}, in order. Empty: the model as it is.",
+        ),
         "params": [
             {
                 "name": "rows",
@@ -381,7 +391,10 @@ def lora_stack_schema(pack: Pack) -> dict:
                 "min": 0,
                 "max": spec.get("max_rows", 8),
                 "item": item,
-                "help": "Each row: a LoRA that fits this model, its strength and how it is applied.",
+                "help": spec.get(
+                    "rows_help",
+                    "Each row: a LoRA that fits this model, its strength and how it is applied.",
+                ),
             }
         ],
         "inputs": [{"name": "model", "type": "Model"}],
@@ -398,10 +411,10 @@ def lora_stack(ctx, params: dict, inputs: dict) -> dict:
 
 
 def lora_block(pack: Pack) -> dict | None:
-    """The registry lora block {component, modules, renames, ignore}: modules are the Linear names of the
-    component built on the meta device (no weights) from the first present variant, compressed to `{a..b}` ranges.
-    None without a `lora` block, a `build()` or a present variant; a model-free pack may list `modules` itself.
-    Computed once per pack."""
+    """The registry lora block {component, modules, renames, ignore[, prefused]}: modules are the Linear names of
+    the component built on the meta device (no weights) from the first present variant, compressed to `{a..b}`
+    ranges. None without a `lora` block, a `build()` or a present variant; a model-free pack may list `modules`
+    itself. `prefused` starts empty: registry.fill_prefused puts the shared index's ids in. Computed once per pack."""
     if "lora_block" not in pack.cache:
         spec, block = pack.spec.get("lora"), None
         build = getattr(pack.module, "build", None)
@@ -420,6 +433,8 @@ def lora_block(pack: Pack) -> dict | None:
                 "renames": spec.get("renames", []),
                 "ignore": spec.get("ignore", []),
             }
+            if "prefused" in spec:
+                block["prefused"] = []
         pack.cache["lora_block"] = block
     return pack.cache["lora_block"]
 
@@ -474,7 +489,7 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             raise ValueError(
                 f"{schema['kind']}: params and inputs share the names {sorted(shared)}"
             )
-        names = {"mp", "images", "frames"} | set(stage.get("params") or {})
+        names = {"mp", "images", "frames", "mp_in"} | set(stage.get("params") or {})
         peak = compile_formula(stage["peak_gb"], names) if "peak_gb" in stage else None
         fn = getattr(module, name, None)
         if fn is None:

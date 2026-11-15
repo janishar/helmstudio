@@ -115,9 +115,12 @@ Keys the core understands; anything else is ignored:
   `[bf16]`; `int8`, and `int4` on MLX), `quantize` (fnmatch globs over module names, used only at a quantized
   precision). Only the keys the module's `rename()` keeps count towards the component's size.
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
-  `renames` (ordered `{from, to}` prefix rewrites of a key's module part), `ignore` (fnmatch globs over raw keys
-  counted as ignored), `modes` (`[adapter, bake]`, or `[bake]` for a runtime without adapters), `max_rows` (8),
-  `strength {min, max, default}`. The core generates the `<family>/lora-stack` node (`Model → Model`, param `rows` of
+  `renames` (ordered `{from, to[, at: end]}` rewrites of a key's module part: a prefix, or with `at: end` a suffix,
+  as ltx's `.to_out.0` → `.to_out`), `ignore` (fnmatch globs over raw keys counted as ignored), `modes`
+  (`[adapter, bake]`, or `[bake]` for a runtime without adapters: MLX), `max_rows` (8), `strength {min, max,
+  default}`, optional `help` / `rows_help` / `mode_help` (the stack node's texts) and `prefused` (`[{file, variant}]`:
+  a LoRA already fused into a variant, `file` inside its folder; published with the shared index's id, none when the
+  file is not on the host). The core generates the `<family>/lora-stack` node (`Model → Model`, param `rows` of
   `{lora: Lora, strength, mode}`) and the registry `models[].lora` block, whose `modules` are the component's Linear
   names read from `build()` on the meta device (no weights), compressed to `{a..b}` ranges. A stage whose `uses`
   holds the component gets it from `ctx.component` with exactly its Model's adapters attached (strengths set; no
@@ -131,8 +134,13 @@ Keys the core understands; anything else is ignored:
   unloaded as soon as the stage has run: ltx's Gemma never sits beside its DiT), `peak_gb`, `stall_s`.
   - `params`: name → a registry `paramSchema` without `name`, copied verbatim (`type` int | float | bool |
     string | text | enum | seed | image | rows | frames (a frame count on `min + k × step`, `fps` naming the node's
-    frame-rate param); `label`, `default`, `min`, `max`, `step`, `enum`, `help`, `when`,
-    and for rows `item` (field → `Image` or a param schema) and `mention` (`<image{n}>`)). Order is kept.
+    frame-rate param; `auto {min_s, max_s}` allows the value `"auto"`: the pack resolves it, `core.graph.auto_frames`
+    puts seconds on the grid, and the run reports the stored clip's frames as `resolved.params`); `label`,
+    `default`, `min`, `max`, `step`, `enum`, `help`, `when`, for int `values` (the only values allowed) and
+    `values_by {param, values: {<enum value>: [...]}}` (the subset for the node's value of that enum param), and for
+    rows `item` (field → `Image`, `Lora` or a param schema; a float field may say `position: seconds`, a time on the
+    clip) and `mention` (`<image{n}>`)). Order is kept. Item fields left out of a row take their defaults; a rows
+    param with an `Image` field may be `[]` in a workflow, and a run needs its `min` items.
     **YAML 1.1 reads bare `on`, `off`, `yes`, `no` as booleans: quote them.**
   - `inputs` / `outputs`: port name → port type, in order. Types: `Text`, `Image`, `Int`, `Float`, `Seed`,
     `Canvas`, `Duration`, `Video` (plain values; `Media` is an input that takes Image or Video) and the
@@ -141,8 +149,10 @@ Keys the core understands; anything else is ignored:
     `bypass` (the runner refuses to start otherwise).
   - `title` and `help` are what the Graph view's palette and node cards show (the core publishes them as is).
   - `peak_gb`: a Python expression over `mp` (megapixels of the nearest upstream Canvas, 0 without one),
-    `images` (how many Image values the params of the stage and of every node upstream of it hold), `frames` (the
-    `frames` param of the nearest upstream node that has one, 0 without) and the
+    `images` (how many Image values the params of the stage and of every node upstream of it hold), `mp_in`
+    (megapixels of the largest of them, 0 without), `frames` (the length an input carries as an int `frames`
+    attribute, such as a Latent after an auto length resolved; else the `frames` param of the nearest upstream node
+    that has one, `"auto"` counting as its longest clip, 0 without) and the
     stage's own params: numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
     `max()`. Anything else fails at start.
 
@@ -274,8 +284,10 @@ channels-last), casts only for an explicit `dtype`, quantizes the matching 2-D `
 loads with `strict=True`. Phase `loading <component>` (underscores as spaces) is reported under the node that needs
 it. Memory: MLX active + cache; eviction runs `gc` + `mx.clear_cache()`; the Metal cache is capped at the budget.
 A stage that must refuse a wiring before anything runs defines `check_<stage>(params, wired) -> str | None` (the
-text after the node id, e.g. `": stage 2 needs latent, not canvas or duration"`). LoRA on MLX is not wired yet
-(`ltx` publishes no lora block).
+text after the node id, e.g. `": stage 2 needs latent, not canvas or duration"`). LoRA on MLX is bake only
+(`modes: [bake]`): the rows are normalised like torch's, then merged after quantization module by module
+(dequantize, + float32 delta, requantize; a float Linear: W.f32 + delta cast back), phase `baking LoRAs` after
+`loading <component>`; a baked component is its own residency entry. There are no MLX adapters.
 
 ## Checking a pack
 

@@ -2,6 +2,7 @@ package studio
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"strings"
@@ -176,7 +177,7 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 		log.Printf("projector: dropping output %d of run %s (%s)", data.Index, run.ID, data.Key)
 		return nil, nil
 	}
-	made, err := withPipeline(ctx, tx, run, madeWith(p.Workflows, run, data.Seed))
+	made, err := withPipeline(ctx, tx, run, madeWith(p.Workflows, run, data.Seed, outputParams(data)))
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +206,21 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 		stored["video"] = data.Video
 	}
 	return stored, nil
+}
+
+// outputParams is an output's resolved.params, nil without.
+func outputParams(data message.Output) map[string]int64 {
+	if data.Resolved == nil {
+		return nil
+	}
+	return data.Resolved.Params
+}
+
+// resolvedParams is runs.resolved's params (null or absent: nil).
+func resolvedParams(raw []byte) map[string]int64 {
+	var resolved message.Resolved
+	_ = json.Unmarshal(raw, &resolved)
+	return resolved.Params
 }
 
 // badVideo reports whether an output's video part breaks evt.run.output: a video needs its MP4 key, size and metadata

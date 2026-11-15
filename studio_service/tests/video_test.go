@@ -174,7 +174,7 @@ func TestWorkflowMediaAndFrames(t *testing.T) {
 		slices.Sort(out)
 		return out
 	}
-	if got := ids("?media=video"); !slices.Equal(got, []string{"echo-video:video", "ltx-text-to-video:video"}) {
+	if got := ids("?media=video"); !slices.Equal(got, []string{"echo-image-to-video:video", "echo-video:video", "ltx-image-to-video:video", "ltx-text-to-video:video"}) {
 		t.Fatal(got)
 	}
 	if got := ids("?media=image"); slices.Contains(got, "ltx-text-to-video:video") || !slices.Contains(got, "qwen-image:image") {

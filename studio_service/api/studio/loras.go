@@ -60,17 +60,28 @@ func loraIDs(values []loraAt) []string {
 	return ids
 }
 
-// checkLoras resolves a graph's Lora values against what the owner can use (usable): each must be usable, of its
-// node's family and not already in an earlier row of the same node. It returns them as the run keeps them, or the 422
-// detail of the first bad one.
-func checkLoras(values []loraAt, kinds map[string]string, usable map[string]lora.Info) ([]lora.Used, string) {
+// checkLoras resolves a graph's Lora values against what the owner can use (usable): each must be usable, not already
+// fused into the graph's model variant of its family (blocks' prefused), of its node's family and not already in an
+// earlier row of the same node. It returns them as the run keeps them, or the 422 detail of the first bad one.
+func checkLoras(values []loraAt, nodes map[string]registry.Node, blocks map[string]registry.LoraBlock,
+	usable map[string]lora.Info) ([]lora.Used, string) {
+	prefused := map[string]string{} // "<family> <lora id>" → the variant whose weights hold it
+	for _, m := range runModels(nodes) {
+		for _, p := range blocks[m.family].Prefused {
+			if p.Variant == m.variant {
+				prefused[m.family+" "+p.LoraID] = p.Variant
+			}
+		}
+	}
 	var out []lora.Used
 	for i, v := range values {
 		info, ok := usable[v.ID]
-		family := registry.Family(kinds[v.Node])
+		family := registry.Family(nodes[v.Node].Kind)
 		switch {
 		case !ok:
 			return nil, v.Path + ": LoRA " + v.ID + " not found"
+		case prefused[family+" "+v.ID] != "":
+			return nil, v.Path + ": LoRA " + info.Name + " is already part of the " + prefused[family+" "+v.ID] + " weights"
 		case info.Family == "unknown":
 			return nil, v.Path + ": LoRA " + info.Name + " does not fit " + family + " (its model is unknown)"
 		case info.Family != family:
@@ -107,19 +118,10 @@ func runLoras(ctx context.Context, tx pgx.Tx, reg *registry.Registry, ownerID, e
 	}
 	for i := range graphs {
 		if details[i] == "" && len(values[i]) > 0 {
-			graphs[i].Loras, details[i] = checkLoras(values[i], nodeKinds(graphs[i].Nodes), usable)
+			graphs[i].Loras, details[i] = checkLoras(values[i], graphs[i].Nodes, reg.LoraBlocks(), usable)
 		}
 	}
 	return nil
-}
-
-// nodeKinds maps each node id to its kind.
-func nodeKinds(nodes map[string]registry.Node) map[string]string {
-	out := map[string]string{}
-	for id, node := range nodes {
-		out[id] = node.Kind
-	}
-	return out
 }
 
 // lorasJSON is runs.loras: null without LoRAs.

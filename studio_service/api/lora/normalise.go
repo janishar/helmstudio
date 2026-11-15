@@ -170,7 +170,11 @@ func Normalise(name string, header Header, block registry.LoraBlock, family stri
 			continue
 		}
 		for _, r := range block.Renames {
-			if strings.HasPrefix(part, r.From) {
+			if r.At == "end" && strings.HasSuffix(part, r.From) {
+				part = part[:len(part)-len(r.From)] + r.To
+				break
+			}
+			if r.At != "end" && strings.HasPrefix(part, r.From) {
 				part = r.To + part[len(r.From):]
 				break
 			}

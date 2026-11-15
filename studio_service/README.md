@@ -152,6 +152,23 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
   wait). An ok reply opens the gate until a run is released to that env; 120 s shut fails the run. The one-run-per-host
   rule already keeps the other env idle.
 
+## Video, stage B (API 1.12, M4 stage B)
+
+- Run rules in `resolve.go` (Create, batch rows, `studio.runs.create`): `"auto"` on a `frames` param only where it
+  declares `auto` (`checkFrames`); an int's `values` and, on the node's merged values, `values_by`
+  (`valuesByDetail`: `sample2.steps: must be one of 3`); a rows param with an Image field may be `[]` in a workflow and
+  needs its `min` at run; item fields left out take their defaults and are checked; keyframe positions
+  (`positionErrors`, `position: seconds`: past the clip, a frame used twice; with auto length only the second).
+  Graph rules add `values_by` to `param_invalid` and `preset_invalid` (`graph.go`). Tested on
+  `contracts/fixtures/video/keyframes.json` and the graph, pipeline, mention and LoRA fixtures.
+- Keyframe images are image inputs like reference rows (`images.go`: the owner's ready image takes; lineage parents in
+  row order; "Use in…" fills `keyframes.images` row 1). Gallery multi-select to a batch is a `table` with the image
+  column and `prompt.text` (no new API).
+- LoRAs: renames with `at: end` (`api/lora/normalise.go`); bake-only stacks refuse `mode: adapter` by their enum; a row
+  naming a LoRA the family's block lists in `prefused` for the graph's model variant is 422 (`checkLoras`).
+- Auto length: the runner's `resolved.params` is kept on the run (`evt.run.status` succeeded) and, from
+  `evt.run.output`, in the take's `made_with.inputs` with `made_with.typed` keeping `"auto"`.
+
 NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack),
 `runner.unload.>` (the GPU gate's requests) and `$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
 consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable `studio-pipelines`), publishes

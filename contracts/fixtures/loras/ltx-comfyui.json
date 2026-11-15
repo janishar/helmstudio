@@ -1,0 +1,118 @@
+{
+  "description": "an LTX LoRA in ComfyUI style (the old studio's only style): renames `at: end` turn `.to_out.0`, `.ff.net.0.proj`, `.ff.net.2`, `.audio_ff.net.2`, `.linear_1` into the MLX module names; no alpha (scale = strength). Checked against the canonical ltx lora block (`family`)",
+  "name": "ltx-comfyui",
+  "family": "ltx",
+  "metadata": {},
+  "tensors": {
+    "diffusion_model.transformer_blocks.0.attn1.to_out.0.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_out.0.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_q.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.0.attn1.to_q.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.0.proj.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        4096
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.0.proj.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        16384,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.2.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        16384
+      ]
+    },
+    "diffusion_model.transformer_blocks.5.ff.net.2.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.transformer_blocks.47.audio_ff.net.2.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        8192
+      ]
+    },
+    "diffusion_model.transformer_blocks.47.audio_ff.net.2.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        2048,
+        8
+      ]
+    },
+    "diffusion_model.adaln_single.emb.timestep_embedder.linear_1.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        256
+      ]
+    },
+    "diffusion_model.adaln_single.emb.timestep_embedder.linear_1.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    },
+    "diffusion_model.patchify_proj.lora_A.weight": {
+      "dtype": "BF16",
+      "shape": [
+        8,
+        128
+      ]
+    },
+    "diffusion_model.patchify_proj.lora_B.weight": {
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        8
+      ]
+    }
+  },
+  "values": {},
+  "expect": {
+    "key_style": "comfyui",
+    "rank": 8,
+    "total": 14,
+    "applied": 14,
+    "ignored": 0,
+    "unapplied": [],
+    "error": null,
+    "family": "ltx",
+    "licence": null
+  }
+}

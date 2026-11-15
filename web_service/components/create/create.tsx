@@ -8,7 +8,8 @@ import { Check, ChevronDown, Cpu, Maximize, Minus, Pause, Play, Plus, Star } fro
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
-import { takeDrop, useRefUploads } from "@/components/create/refs";
+import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/refs";
+import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
 import { ElementsPicker } from "@/components/create/elements";
 import { LooksPicker, QuickTiles } from "@/components/create/looks";
@@ -397,6 +398,8 @@ export function Create({
     (runs === null && sessionId ? "" : (known(runs?.[0]?.workflow_id) ?? workflows?.[0]?.id ?? ""));
   const workflow = workflows?.find((w) => w.id === workflowId);
   const all = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  // what the form held in each workflow when it was left: a value that did not suit the next one comes back
+  const left = useRef<Record<string, Record<string, Raw>>>({});
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
@@ -434,7 +437,16 @@ export function Create({
   }, []);
   const seedField = fields.find((f) => f.param.type === "seed");
   const change = (key: string, u: Update) => {
-    setRaws((r) => ({ ...r, [key]: typeof u === "function" ? u(r[key]) : u }));
+    setRaws((r) => {
+      const v = typeof u === "function" ? u(r[key]) : u;
+      // an image added to rows with a time on the clip (keyframes) goes on a free frame
+      const f = fields.find((x) => x.key === key);
+      const placed =
+        f && Array.isArray(v) && positionOf(f.param)
+          ? placeRows(f.param, v, r[key] ?? f.initial ?? [], clipOf(fields, r))
+          : v;
+      return { ...r, [key]: placed };
+    });
     setErrors((errs) => {
       const next = { ...errs };
       delete next[key];
@@ -446,7 +458,11 @@ export function Create({
    * where the paths match (the session rule, lib/workflow.ts carry). */
   const switchTo = (id: string) => {
     const w = workflows?.find((x) => x.id === id);
-    if (w) setRaws((r) => carry(r, fieldsOf(w)));
+    if (w)
+      setRaws((r) => {
+        if (workflow) left.current[workflow.id] = r;
+        return carry(r, fieldsOf(w), all, left.current[id]);
+      });
     setChosen(id);
     setOpenKey(null);
   };
@@ -465,6 +481,49 @@ export function Create({
       uploads,
     );
   const refs = refCount(fields, raws);
+  // a workflow without image inputs whose family has a template with a first frame (text to video → image to
+  // video): the composer's First frame tile opens that one with the image picked
+  const firstFrameIn =
+    !refField && workflow
+      ? workflows?.find(
+          (w) =>
+            w.source === "template" &&
+            w.family === workflow.family &&
+            mediaOf(w) === media &&
+            imageInputs(fieldsOf(w)).some((f) => positionOf(f.param)),
+        )
+      : undefined;
+  // the top bar's label: an edit counts its references; a clip its frames, or offers a first frame
+  const workflowLabel = !workflow
+    ? ""
+    : !video
+      ? editLabel(workflow.title, refs)
+      : [
+          workflow.title,
+          refs
+            ? `${refs} frame${refs === 1 ? "" : "s"}`
+            : firstFrameIn && "add a first frame to animate it",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+  // the composer holds the quick switches and one-value choices; a quick rows editor is its own inspector section
+  const quick =
+    layout?.groups.find((g) => g.title === "Quick")?.fields.filter((f) => fields.includes(f)) ?? [];
+  const toggles = quick.filter((f) => f.param.type === "bool");
+  const groups = layout?.groups.flatMap((g) => {
+    const fs = g.fields.filter((f) => fields.includes(f));
+    if (g.title !== "Quick") return [{ title: g.title, fields: fs }];
+    const rest = fs.filter(
+      (f) => !toggles.includes(f) && !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2),
+    );
+    const own = rest.filter((f) => f.param.type === "rows" || f.param.type === "image");
+    return [
+      ...(rest.length > own.length
+        ? [{ title: g.title, fields: rest.filter((f) => !own.includes(f)) }]
+        : []),
+      ...own.map((f) => ({ title: f.param.label ?? f.param.name, fields: [f] })),
+    ];
+  });
   // the mentions: what they add for this workflow (the line under the prompt), checked as studio checks them
   const library = useLibrary();
   const looks = useLooks();
@@ -698,7 +757,7 @@ export function Create({
           // the Image / Video switch is a filter on what the chip offers
           workflows={workflows.filter((w) => mediaOf(w) === media)}
           current={workflow}
-          label={badge ?? (workflow ? editLabel(workflow.title, refs) : "Workflow")}
+          label={badge ?? (workflow ? workflowLabel : "Workflow")}
           onPick={switchTo}
           onChanged={(w) => onWorkflow(w, false)}
           onDeleted={(id) => {
@@ -890,7 +949,12 @@ export function Create({
                     extra={<MentionChips texts={texts} />}
                   />
                 ) : (
-                  <MentionChips texts={texts} />
+                  <>
+                    {firstFrameIn && (
+                      <FirstFrameTile onPick={(id) => void applyUse(id, firstFrameIn.id)} />
+                    )}
+                    <MentionChips texts={texts} />
+                  </>
                 )}
                 <QuickTiles
                   tiles={tiles}
@@ -937,7 +1001,14 @@ export function Create({
                 </p>
               )}
             <div className="flex flex-wrap items-center gap-2">
-              <Chips fields={fields} raws={raws} onChange={change} show={show} compact={video} />
+              <Chips
+                fields={fields}
+                raws={raws}
+                onChange={change}
+                show={show}
+                compact={video}
+                toggles={toggles}
+              />
               <div className="grow" />
               {seedField && (
                 <div
@@ -1023,10 +1094,9 @@ export function Create({
         className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
       >
         <Inspector
-          groups={layout?.groups.map((g) => ({
-            title: g.title,
-            fields: g.fields.filter((f) => fields.includes(f)),
-          }))}
+          groups={groups}
+          resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
+          presets={workflow?.studio?.presets}
           fields={fields}
           raws={raws}
           errors={errors}

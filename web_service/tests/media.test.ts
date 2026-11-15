@@ -73,6 +73,21 @@ describe("media of workflows and the Image / Video switch", () => {
     expect(fit["canvas.width"]).toBe("1024");
     expect(carry({ "duration.frames": "50" }, fields(ltx))).toEqual({});
   });
+
+  it("keeps a LoRA stack in its family: it does not cross to another and comes back on the switch back", () => {
+    const id = "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51";
+    for (const mode of ["adapter", "bake"]) {
+      const raws = {
+        "prompt.text": "a fox",
+        "lora.rows": [{ lora: { lora_id: id }, strength: 1, mode }],
+      };
+      const video = carry(raws, fields(ltx), fields(qwen));
+      expect(video).toEqual({ "prompt.text": "a fox" });
+      expect(carry(video, fields(qwen), fields(ltx), raws)).toEqual(raws);
+    }
+    const ltxRows = { "lora.rows": [{ lora: { lora_id: id }, strength: 1, mode: "bake" }] };
+    expect(carry(ltxRows, fields(ltx), fields(ltx))).toEqual(ltxRows);
+  });
 });
 
 describe("the frame grid and the Duration slider", () => {
@@ -106,7 +121,13 @@ describe("the frame grid and the Duration slider", () => {
     expect(s.canvas.map((f) => f.key)).toEqual(["canvas.width", "canvas.height"]);
     expect(s.tiles.some((f) => f.key === "duration.fps")).toBe(false);
     const st = deriveStudio(ltx, ltx.node_schemas);
-    expect(st.inspector?.map((x) => x.title)).toEqual(["Canvas", "Duration", "Quality"]);
+    expect(st.inspector?.map((x) => x.title)).toEqual([
+      "Prompt beats",
+      "Canvas",
+      "Duration",
+      "Quality",
+      "Options",
+    ]);
   });
 
   it("offers sizes a 64 px canvas reaches and names its aspect within a grid step", () => {

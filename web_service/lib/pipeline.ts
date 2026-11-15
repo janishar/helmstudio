@@ -57,6 +57,12 @@ export function imageField(p: Param): string | null {
   return fs.length === 1 ? fs[0] : null;
 }
 
+/** Whether a rows param's item has a `position: seconds` field (README, `bind_type`: only one take fits). */
+const timed = (p: Param) =>
+  Object.values(p.item ?? {}).some(
+    (v) => typeof v === "object" && (v as { position?: string }).position === "seconds",
+  );
+
 /** `<node>.<param>` → schema for every unwired param of a known kind: what a step may set or bind. */
 export function settable(wf: Doc, palette: Palette): Record<string, Param> {
   const out: Record<string, Param> = {};
@@ -144,7 +150,8 @@ export function fits(p: Param, src: { input: InputType } | { takes: number }): b
   if ("input" in src)
     return INPUT_FITS[src.input].includes(p.type) || (src.input === "Image" && !!imageField(p));
   return (
-    (p.type === "image" && src.takes === 1) || (!!imageField(p) && src.takes <= (p.max ?? 100))
+    (p.type === "image" && src.takes === 1) ||
+    (!!imageField(p) && src.takes <= (p.max ?? 100) && (src.takes === 1 || !timed(p)))
   );
 }
 

@@ -24,12 +24,13 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
 | `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
-| `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflow `ltx-text-to-video`): published verbatim; `ltx.models.valid.json` and `host.valid.6.json` are examples (sizes measured) |
+| `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflows `ltx-text-to-video`, `ltx-image-to-video`): published verbatim; `ltx.models.valid.json` (with the canonical ltx `lora` block; its `prefused` id is a placeholder the runner fills from its index) and `host.valid.6.json` are examples (sizes measured) |
+| `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them). studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
-| `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical qwen-image lora block (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, lints `openapi.yaml` and the house rules |
+| `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -70,7 +71,8 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
 - **Workflows.** A workflow (registry `workflows`) is `{id, title, family, env, nodes}`; `nodes` maps a node id to
   `{kind, params, in}`, `in` wires an input port to `<node id>.<output>`. A node schema (registry `nodes`) gives a
   kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed`, `image`, `rows`, `frames` with
-  `default`, `min`, `max`, `step`, `enum`, `item`, `mention`, `fps`, `help`, `when`; see Image inputs, Video) and typed
+  `default`, `min`, `max`, `step`, `enum`, `item`, `mention`, `fps`, `auto`, `values`, `values_by`, `help`, `when`;
+  item fields may add `position`; see Image inputs, Video) and typed
   `inputs` / `outputs`. Port types: `Text`, `Image`, `Video`, `Int`, `Float`, `Seed`, `Canvas`, `Duration`, the
   input-only `Media` (accepts `Image` or `Video`: the output node's input), and the family-scoped handles `Model`,
   `Conditioning`, `Latent` (they wire nodes of one family inside one workflow and never cross a process). `when` is a visibility expression (`model.variant != 'turbo'`), carried
@@ -91,6 +93,13 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   `output` kind serves image and video families on every env. Its models entry carries a `lora` block (`component` `transformer`, `modules` = exactly the
   modules the qwen-image fixtures of `fixtures/loras/` name, `renames` and `ignore` `[]`), so those files fit echo on
   a stack without a GPU.
+  Stage B stand-ins (API 1.12; exactly as `fixtures/registry/{nodes,workflows}.valid.json`): `echo/duration.frames`
+  declares `auto {min_s 1, max_s 5}` (the fake predicts 2 s, put on the grid by `auto_frames` and reported in
+  `resolved.params`); `echo/keyframes` (Text + Duration → Text, bypassable; `images` rows 1–8 of `{image: Image,
+  seconds: float 0–320 position seconds, strength 0–1}`; it appends `[keyframes f<frame> <w>x<h> x<strength>, …]` and
+  fails the run with the keyframe-position texts of Video); `echo/sample` (echo/video with `role` stage1|stage2 and
+  `steps` `values [2, 4]`, `values_by {role: stage1 [4], stage2 [2]}`); workflow `echo-image-to-video`: prompt,
+  canvas, duration → keyframes → sample → output.
 - **Seeds.** A `seed` param is an integer (≤ 2^53−1); `null` or `-1` means random: the runner picks one and reports it
   in `evt.run.status` `succeeded` `data.resolved.seed` and in each `evt.run.output` `data.seed` (both ≥ 0).
 - **The qwen-image family (torch).** Workflow `qwen-image` (env `torch`), text-to-image, and multi-reference edit
@@ -220,7 +229,7 @@ dispatcher enforces it:
     (`ct` URL-encoded in the query, raw in the HMAC). A GET signature never verifies as a PUT. Answers: 204 stored,
     403 bad / expired / path, 409 exists, 411 `Content-Length` not the signed bytes, 415 `Content-Type` not `ct`.
 
-## Video (API 1.11, M4 stage A)
+## Video (API 1.11, M4 stage A; 1.12, M4 stage B)
 
 Takes are `image` or `video` (`audio` is in `TakeKind` for later). A video take is one MP4 (H.264, may carry an AAC
 audio track) plus a poster image; uploads stay images.
@@ -236,25 +245,81 @@ audio track) plus a poster image; uploads stay images.
   The UI draws the **Duration slider** for any `frames` param (a notch per `step`, labelled `<frames> frames · <s> s`,
   s = frames / fps, one decimal) and the **size picker** (aspect + megapixels) for any node whose output is `Canvas`,
   from its `width` / `height` int params (`step` = the grid, `min` / `max` the bounds): no model-specific code.
-- **The ltx family (mlx).** Workflow `ltx-text-to-video` (title `LTX-2.5 Text to video`, env `mlx`, `media: video`),
-  LTX-2.5 distilled two-stage text-to-video with audio (docs/reference-notes/ltx.md):
+- **The ltx family (mlx).** LTX-2.5 distilled two-stage with audio (docs/reference-notes/ltx.md, parts 4 and 11).
+  Workflow `ltx-text-to-video` (title `LTX-2.5 Text to video`, env `mlx`, `media: video`):
   `prompt` (`text`) · `seed` (`seed` -1) · `canvas` (`ltx/canvas`: `width` 704, `height` 448, 128–1920 step 64) ·
-  `duration` (`ltx/duration`: `frames` 49, 9–321 step 8, `fps` = `fps`; `fps` 24, 1–60) · `model` (`ltx/model`:
-  `variant` distilled, `precision` int8 | int4 | bf16 default int8) → `encode` (`ltx/encode`, in `model`, `prompt`; no
-  params) → `sample1` (`ltx/sample`, `role` stage1, `steps` 8; in `model`, `cond`, `seed`, `canvas`, `duration`) →
-  `upscale` (`ltx/upscale`, in `model`, `latent`) → `sample2` (`ltx/sample`, `role` stage2, `steps` 3; in `model`,
-  `cond`, `seed`, `latent`) → `decode` (`ltx/decode`, in `model`, `latent`; output `video`: Video) → `output`.
+  `duration` (`ltx/duration`: `frames` 49, 9–321 step 8, `fps` = `fps`, `auto` `{min_s: 1, max_s: 20}`; `fps` 24,
+  1–60) · `model` (`ltx/model`: `variant` distilled, `precision` int8 | int4 | bf16 default int8) → `lora`
+  (`ltx/lora-stack`, in `model`, `rows` `[]`; LoRAs, below) · `encode` (`ltx/encode`, in `model` (the plain model),
+  `prompt`; `beats` rows `[]`: Prompt beats) → `sample1` (`ltx/sample`, `role` stage1, `steps` 8; in `model` =
+  `lora.model`, `cond`, `seed`, `canvas`, `duration`) → `upscale` (`ltx/upscale`, in `model`, `latent`) → `sample2`
+  (`ltx/sample`, `role` stage2, `steps` 3; in `model` = `lora.model`, `cond`, `seed`, `latent`) → `decode`
+  (`ltx/decode`, in `model`, `latent`; `audio` true; output `video`: Video) → `output`. The empty stack, no beats and
+  `audio: true` are the stage A graph: same cache keys, same pixels (the t2v goldens hold).
+  Workflow `ltx-image-to-video` (title `LTX-2.5 Image to video`): the same graph plus `keyframes` (`ltx/keyframes`,
+  in `cond` = `encode.cond`; output `cond`) feeding both samples' `cond`. Keyframes and first-last-frame are more
+  rows of this template (the old studio's i2v, flf2v and anchors are one code path); bypassing `keyframes` is
+  text to video.
   `ltx/sample`'s `canvas`, `duration` and `latent` are optional inputs; its `role` fixes grid, sigma table, sampler and
   seed offsets (stage1: half size, ancestral, noise seeds `seed` / `seed+1`, loop `seed+10000`; stage2: full size,
   Euler from σ 0.909375, renoise `seed+2` for video and audio). `Latent` of ltx carries video and audio latents
-  together; `upscale` doubles the video latent and passes audio through. The runner checks the graph before it loads
-  anything and fails the run with: `<node>: stage 1 needs canvas and duration, not latent`, `<node>: stage 2 needs
-  latent, not canvas or duration`, `<node>.steps: stage 2 has 3 steps at most`. A `width` / `height` off the 64 grid
-  is floored to it (as the old studio did); the take reports the real size. The pack publishes no LoRA stack and no
-  lora block in this stage.
+  together; `upscale` doubles the video latent and passes audio through. `Conditioning` of ltx carries the prompt
+  embeddings, the beats' token ranges and the keyframe rows **unresolved** (take, seconds, strength): each sample
+  resolves them at its own grid (plan 01, Handles), so a canvas change never re-runs Gemma. The runner checks the
+  graph before it loads anything and fails the run with: `<node>: stage 1 needs canvas and duration, not latent`,
+  `<node>: stage 2 needs latent, not canvas or duration`, `<node>.steps: must be one of <n>` (studio refuses it
+  first, below). A `width` / `height` off the 64 grid is floored to it (as the old studio did); the take reports the
+  real size.
+- **Steps** (`values`, `values_by`). The distilled schedule is fixed: stage 1's 8 sigmas end at 0, stage 2 is its
+  last 3; the old `--stageN-steps n` truncated the table, leaving noise for any other n. So `ltx/sample.steps` is an
+  int 3–8 with `values: [3, 8]` and `values_by: {param: role, values: {stage1: [8], stage2: [3]}}`. Rule (studio's run
+  rules and `param_invalid`; presets too): an int with `values` takes only those (`<node>.<param>: must be one of 3,
+  8`); with `values_by`, only the subset for the node's merged value of that enum param (`sample2.steps: must be one
+  of 3`; an enum value not listed allows all of `values`). A user workflow that changes `role` and keeps the default
+  steps is `param_invalid` on `steps`. The UI draws a choice of the allowed subset; one value is a read-only readout
+  (the board's "Stage 1 steps 8", "Stage 2 steps 3"). Nothing is hidden and nothing invalid can be picked.
+- **Auto length** (`auto` on a `frames` param). The value `"auto"` asks the model to choose the length (LTX: a 3.8 MB
+  DurationHead on the encoded prompt, beats included; deterministic, no seed). Allowed only when the param declares
+  `auto` (else 422 / `param_invalid`: `<node>.<param>: auto length is not offered`); it may sit in a workflow, a preset,
+  `RunRequest.inputs`, batch rows, and reaches `cmd.run.execute` as `"auto"`. The runner resolves it (`auto_frames`,
+  `fixtures/video/auto-frames.json`): `lo = round(min_s·fps)`, `hi = min(round(max_s·fps), max)`, `f = clamp(round(s·fps),
+  lo, hi)`, floored onto `min + k·step`, one `step` up if that fell below `lo` (round = half to even, as the old
+  studio). The max clamp is ours: the old studio could predict 353 frames past the slider's 321. It reports the
+  value in `evt.run.output` and `evt.run.status` succeeded as `resolved.params {"duration.frames": 89}` (only params
+  that were `"auto"`); studio shows `Run.resolved.params` and stores the take with `made_with.inputs` = the resolved
+  frames and `made_with.typed` = `"auto"` (so reuse asks for auto again; `video.frames` is the real count). Sample
+  stage 1 keys its cache on the resolved frames. Estimates: the client estimates time and memory for `"auto"` at the
+  upper bound (`hi` frames) and labels them "up to". The UI: the Duration slider's **Auto length** switch (help: the
+  board's "The model picks 1–20 s from the prompt"); while on, the slider is disabled.
+- **Keyframes** (`position: seconds`). `ltx/keyframes.images`: rows, `min` 1, `max` 8 (our cap; the old studio had
+  none), item `{image: Image (a gallery image take), seconds: float 0–320 step 0.1 default 0, position: seconds,
+  strength: float 0–1 step 0.05 default 1}`; no `mention` (LTX takes no reference images). A float item field with
+  `position: seconds` is a time on the clip; its pixel frame is `min(round(s·fps), F − 1)`, F = the value of the
+  workflow's one unwired `frames` param on a known, not bypassed node and fps its `fps` param (`position_errors`,
+  `fixtures/video/keyframes.json`). Studio's run rules (422, rows of one param from 1): `round(s·fps) > F` →
+  `keyframes.images[2].seconds: frame 50 is past the clip's last frame 48` (s = F / fps is the last frame: first and
+  last frame need no other rule); a frame an earlier row has → `keyframes.images[2].seconds: frame 0 is already used by
+  row 1`. With `"auto"` (or no single frames param) only the second check runs at studio; the runner checks both on
+  the resolved length and fails the run with the same text. Frame 0 replaces latent frame 0, any other appends
+  tokens; one strength for both stages; CRF 33 and the resize are internal. A rows param with an Image field and
+  `min` ≥ 1 holds `[]` in a workflow (it holds no take) and needs `min` items at run (`keyframes.images: at least 1
+  items`); the pipeline rule `unbound_input` already covers it. Item fields left out take their defaults, and the
+  merged item is checked. The board draws only a "First frame" tile; the keyframe rows editor needs a new board.
+- **Prompt beats** (Prompt Relay). `ltx/encode.beats`: rows, `min` 0 (off), `max` 8 (our cap), item `{text: string
+  1–500 default "" (so required), seconds: float 0–20 step 0.1 default 0}`: each beat steers the **video** (not the
+  audio) for `seconds` of the clip, in order, 0 = an equal share of what the pinned ones leave; the prompt holds for the
+  whole clip. The runner encodes the prompt and the beats as one prompt (`prompt + "".join(" " + beat)`), turns
+  seconds into latent frames `max(1, round(s·fps/8))` and fails the run with `encode.beats[<i>]: no frames left for
+  this beat (the clip has <n> latent frames)` or `encode.beats: the prompt and its beats are longer than 1024
+  tokens`. Epsilon (1e-3) and relay strength (1.0) are fixed. Beat text is not scanned for mentions.
+- **Audio**. `ltx/decode.audio` (bool, default true): false skips the audio decode and the mux; the MP4 has no audio
+  track (`has_audio: false`) and the same frames (the DiT always generates audio; no video-only generation
+  exists). Only decode's cache key changes.
 - **Progress** (the run strip). The strip's cells are the run graph's nodes that have inputs, except `output`, in
   topological order (ties by node id): `encode`, `sample1`, `upscale`, `sample2`, `decode`. A `progress` event names one
-  of them (`node`), and every cell before it is done. The ltx runner sends: `encode` `encoding` 1/1; `sample1`
+  of them (`node`), and every cell before it is done (ltx: `encode`, `keyframes`, `lora`, `sample1`, …; the stack and
+  the keyframes send nothing of their own: the bake is `baking LoRAs` 1/1 under `sample1` after `loading transformer`,
+  the image encodes `encoding images` 1/1 under each sample). The ltx runner sends: `encode` `encoding` 1/1; `sample1`
   `stage 1` 1..steps; `upscale` `upscaling` 1/1; `sample2` `stage 2` 1..steps; `decode` `decoding audio` 1/1,
   `decoding video` 1/1, `writing mp4` 1/1; `eta_s` once it can estimate. Before those, `loading <component>` 1/1 for
   each component it loads (`text encoder`, `connector`, `transformer`, `upscaler`, `vae`, `audio vae`, `vocoder`),
@@ -273,8 +338,14 @@ audio track) plus a poster image; uploads stay images.
   `ReviewCandidate` carries the take's `kind` and, for a video, `video` (its `thumb_url` the poster, `url` the MP4).
 - **Playback.** `GET /files/<key>` answers `Range` requests (206, `Accept-Ranges: bytes`, 416; openapi
   `filesGetFile`) with the stored `Content-Type`, so `<video src=url poster=poster_url controls>` streams and seeks.
-- **Where a take goes in.** Image params, reference rows, element and look images and "Use in…" take images only: a
-  video take is 422 `… take <id> is not an image` (Image inputs). A pipeline that binds a video step's takes into an
+- **Where a take goes in.** Image params, reference rows, keyframe rows, element and look images and "Use in…" take
+  images only: a video take is 422 `… take <id> is not an image` (Image inputs). A clip's `parents` are its keyframe
+  images in row order (Lineage). "Use in…" on an image take offers the workflows with exactly such a param: among the
+  ltx templates only `ltx-image-to-video` (row 1 = the take at 0 s, strength 1: image to video).
+- **Mentions and looks on LTX**: the prompt always (`prompt.text`); keyframe rows have no `mention`, so ltx has no
+  reference rows: a mention becomes the element's name and text (its images are dropped), a look with images does not
+  fit (`this workflow takes no reference images`), a text look fits, a LoRA look fits through `ltx/lora-stack` when its
+  LoRA is detected `ltx` (`fixtures/mentions/fit.json`, `resolve.ltx-text-only.json`). A pipeline that binds a video step's takes into an
   image param fails that row when the run is made (no pipeline rule checks media in 1.11).
 
 ## Batches and the pipeline engine (plan 7.2, 16.3)
@@ -467,7 +538,7 @@ checked, so the work stays bounded).
 | `unknown_kind` | run | node | the kind is not in the palette; nothing else of that node is checked (its params, its `in`, wires from it, studio paths and presets on it) |
 | `env_mismatch` | run | node | the palette kind's `envs` lack the workflow's `env` |
 | `unknown_param` | save | node, param | a `params` key the kind does not have |
-| `param_invalid` | save | node, param | the value breaks the run rules (type, `min`/`max` — string length in Unicode code points, `enum`, rows count and fields; a `Lora` field missing or not `{lora_id}`) or holds a take (a workflow holds none: image params null, no Image items in rows; LoRA ids are allowed) |
+| `param_invalid` | save | node, param | the value breaks the run rules (type, `min`/`max` — string length in Unicode code points, `enum`, `values` / `values_by` on the node's merged values (Video: Steps), `"auto"` only where `auto` is declared, rows count and fields (a rows param with an Image field may be `[]` under its `min`); a `Lora` field missing or not `{lora_id}`) or holds a take (a workflow holds none: image params null, no Image items in rows; LoRA ids are allowed) |
 | `unknown_input` | save | node, port | an `in` key that is neither an input nor a wireable param of the kind |
 | `unknown_source` | save | node, port | the wire names a node that is not in the graph, or an output its (known) kind does not have |
 | `type_mismatch` | save | node, port | the types differ, or a handle joins two families |
@@ -589,7 +660,7 @@ without exactly one inputs node. A **capped edge** is a branch's fail edge.
 | `unknown_preset` | run | node | `preset` is not in the workflow's `studio.presets` |
 | `step_input_invalid` | run | node, param | an `inputs` key that is not a settable param (`<node>.<param>` of a known kind, not wired; or `<node>.bypass` of a bypassable node, a bool), or a value that is `param_invalid` (a take included) |
 | `bind_unknown` | run | node, port | a bind key that is not a settable param of the workflow |
-| `bind_type` | run | node, port | the source does not fit: `$x` of type T fits a param whose wire type is T (Text: string/text, Int: int, Float: float, Seed: seed, Image: image), or an Image into a rows param with exactly one Image field (a one-item list); a takes/picked source of at most n takes fits an `image` param when n = 1, or such a rows param when n ≤ its `max` |
+| `bind_type` | run | node, port | the source does not fit: `$x` of type T fits a param whose wire type is T (Text: string/text, Int: int, Float: float, Seed: seed, Image: image), or an Image into a rows param with exactly one Image field (a one-item list); a takes/picked source of at most n takes fits an `image` param when n = 1, or such a rows param when n ≤ its `max`, and n = 1 when its item has a `position: seconds` field (each bound row takes the field's default time, so a second row would repeat a frame) |
 | `unbound_input` | run | node, port | an `image` param, or a rows param with one Image field and `min` ≥ 1, that is not bound (the workflow holds no take, so it has no default) |
 | `step_seeds` | run | node | `seeds` > 1 and the workflow has no unwired `seed` param |
 | `unknown_look` | run | node, param `looks` | a step `looks` id that is not a look the caller can use now (Looks: unknown look) |
@@ -945,10 +1016,17 @@ Sharing a user's LoRA with others is not in this version.
 - **The stack node** `<family>/lora-stack` (`qwen-image/lora-stack`, title `LoRA Stack`): input `model: Model`, output
   `model: Model` (so it is bypassable: bypassed = the model as it is), one param `rows` (label `LoRAs`, default `[]`,
   `min` 0, `max` 8 = the family's row cap) with item `{lora: Lora, strength: float -4..4 default 1 step 0.05, mode:
-  enum adapter|bake default adapter}`. A family that cannot run adapters yet publishes `enum: [bake]`. Graph rules:
+  enum adapter|bake default adapter}`. A family that cannot run adapters yet publishes `enum: [bake]` default `bake`
+  (**ltx**: `ltx/lora-stack`, same item, bake only: the old MLX code fuses every LoRA; no adapter exists to copy or
+  prove); `mode: adapter` then fails the enum like any value (`param_invalid`; 422 `lora.rows[1].mode: must be one of
+  bake`) and the rows editor draws no Mode control (an enum item field with one value is not drawn). Graph rules:
   Model → Model within one family (the handle rules), `lora_duplicate`, `lora_unknown`, `lora_family` (Graph rules).
   Stacks may chain: the Model's LoRA set is the upstream set followed by this node's rows. An empty stack is the
   identity: same handle, same cache identity, same pixels (the template carries one, so M2 goldens hold).
+- **Pre-fused LoRAs** (`lora.prefused` `[{lora_id, variant}]`): a LoRA already fused into a variant's weights (the
+  ltx distilled transformer is dev + `ltx-2.5-22b-distilled-lora-450`). A stack row naming it on a model of that
+  variant is 422 `lora.rows[1].lora: LoRA <name> is already part of the distilled weights` (it would be applied
+  twice). model.yaml names the file; the runner fills `lora_id` from its index (no such file on the host: no entry).
 - **Studio resolves** each Lora value when it creates the run (Create, and `studio.runs.create` for a batch row), as
   the caller, after values and mentions are merged and checked: own = the caller's, `ready`, not deleted; shared = an
   id a live host of the workflow's env lists. Errors are 422 naming the param and item from 1 (openapi
@@ -972,6 +1050,14 @@ Sharing a user's LoRA with others is not in this version.
     different entry (a load), a rename is not. The deltas (fp32, while loading) and the adapters count in the memory
     budget before they are allocated (at most the file's size / 2 elements each).
   - `s = strength · alpha / rank` per module (alpha absent: `s = strength`).
+  - **MLX bake (ltx)**, the old studio's order exactly (the LoRA golden is bit-exact on mlx 0.32.2): the transformer
+    loads int8 as usual; per module the int8 weight is dequantized, `+ Σ (s_i·B_i) @ A_i` added in float32, and
+    requantized (`mx.quantize`, so baked layers carry float32 scales and biases; unbaked ones keep bf16); a float
+    (non-block) Linear is `(W.f32 + delta).astype(W.dtype)`; module by module, evaluated as it goes (the old code's
+    all-at-once build peaked +5.3 GiB). A baked transformer is its own residency entry (`resident[].loras`); on a
+    64 GB host the budget holds one transformer, so a run with another baked set (or none) evicts and reloads it
+    (about 19 GB at int8). The dispatcher's "resident" test already compares the baked list, so runs with the same
+    LoRAs and strengths go first.
 - **Cache keys** (plan 6.1). The Model handle carries its ordered LoRA set `[(sha256, strength, mode)]`. A stage's key
   hashes a Model input per component it `uses`, and the LoRA set only with the family's `lora.component`: Sample
   (`uses: [transformer]`) includes it; Encode (`text_encoder`, `vae`) and Decode (`vae`) never do. So a strength
@@ -998,8 +1084,16 @@ inclusive; generated by the runner from the meta-device model; unique with `.` r
 `{from, to}` prefix rewrites of a key's module part; the first whose `from` starts it applies; most families `[]`),
 `ignore` (fnmatch globs, case-sensitive, over raw keys a family declares harmless; Qwen: `[]`). The node's row cap,
 strength range and modes are in the stack node schema; model.yaml's `lora:` block holds both (`component`, `renames`,
-`ignore`, `modes`, `max_rows`, `strength {min, max, default}`) and the runner generates the node and the registry
-block from it.
+`ignore`, `modes`, `max_rows`, `strength {min, max, default}`, `prefused`) and the runner generates the node and the
+registry block from it. A `renames` entry may say `at: end` (default `start`): then `from` must **end** the module part
+and is replaced there (`transformer_blocks.3.attn1.to_out.0` → `….attn1.to_out`). The ltx block
+(`ltx.models.valid.json`): `component` transformer, 62 module entries in MLX names (48 blocks × 6 attentions ×
+`to_q,to_k,to_v,to_out,to_gate_logits`, `ff` / `audio_ff` × `proj_in,proj_out`, 4 projections, 8 adaLN × 3; from
+docs/reference-notes/ltx.md 11.7: the runner generates the real list), renames `at: end` `.to_out.0`,
+`.audio_ff.net.0.proj`, `.audio_ff.net.2`, `.ff.net.0.proj`, `.ff.net.2`, `.linear_1`, `.linear_2` (the old
+`LTXV_LORA_COMFY_RENAMING_MAP`), `ignore` `[]`. Unlike the old studio, an unmatched key fails the run
+(`fixtures/loras/ltx-unmatched.json`); kohya LTX files stay unsupported (their `_` parts match no rename: refused, as
+the old studio ignored them silently).
 
 **Key styles** (detected from the keys, never configured). The first rule that matches any key decides:
 1. `kohya`: a key starts `lora_unet_` or `lora_transformer_`. Roles by suffix `.lora_down.weight` (A), `.lora_up.weight`
