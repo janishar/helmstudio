@@ -31,11 +31,16 @@ import pytest
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "ltx-text-to-video"
 CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7"]
-# On the goldens' mlx (0.32.2) every latent must be bit-exact (measured: it is, PSNR inf). Across mlx versions the
-# stage-1 ancestral noise amplifies kernel drift: measured on 0.32.4, 448x256x49 mean 23.1 / worst 18.7 dB, log-mel
-# 1.13 dB; 512x320x57 32.5 / 30.8 dB, 0.83 dB (composition holds). The reference note's untested 30 / 25 / 1.0 bars
-# are loosened to those measurements with a margin.
-BARS = {"video_mean_db": 20.0, "video_worst_db": 16.0, "logmel_db": 1.5}
+# On the goldens' mlx (0.32.2) every latent must be bit-exact (measured: it is, PSNR inf, WAV identical). On another
+# mlx the port is just as faithful but kernels differ (0.32.4: masked SDPA at head_dim 256 in Gemma, the compiled
+# nn.silu, bf16 matmuls with a ragged M; GOTCHAS.md) and the 8-step ancestral stage 1 amplifies the 0.3-1 % change of
+# the first DiT call to 10-19 % of the final latent. Bars per case, just under what 0.32.4 measured (mean / worst
+# frame dB, log-mel dB): 448x256x49 23.09 / 18.72 / 1.133; 512x320x57 32.46 / 30.78 / 0.834. A new mlx may drift
+# differently: re-measure and re-set these, after checking the 0.32.2 run is still bit-exact.
+BARS = {
+    "t2v-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 18.0, "logmel_db": 1.25},
+    "t2v-512x320-57f-s7": {"video_mean_db": 31.5, "video_worst_db": 30.0, "logmel_db": 0.95},
+}
 
 
 def stats(a) -> dict:
@@ -228,9 +233,10 @@ def compare(name: str, r: dict, out: Path) -> dict:
             bool(per) and all(v["exact"] for v in lat.values()) and min(per) == float("inf")
         )
         return res
-    res["pass"] = bool(per and res["video"]["mean_db"] >= BARS["video_mean_db"]
-                       and res["video"]["worst_db"] >= BARS["video_worst_db"] and res["video"]["same_streams"]
-                       and audio.get("logmel_db", 99) <= BARS["logmel_db"])  # fmt: skip
+    bars = BARS[name]
+    res["pass"] = bool(per and res["video"]["mean_db"] >= bars["video_mean_db"]
+                       and res["video"]["worst_db"] >= bars["video_worst_db"] and res["video"]["same_streams"]
+                       and audio.get("logmel_db", 99) <= bars["logmel_db"])  # fmt: skip
     return res
 
 

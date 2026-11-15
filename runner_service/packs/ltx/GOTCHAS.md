@@ -13,10 +13,21 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
 - **Blends**: video uses the scalar blend `noise * sigma + clean * (1 - sigma)` with a Python sigma in both stages
   (bf16 cannot hold 0.05; the mask blend adds ~3e-3 per element); stage-2 audio uses `noise_latent_state`'s
   `mask * sigma` blend. Do not "fix" either.
-- **mlx versions drift**: the ancestral stage-1 sampler amplifies kernel differences. On mlx 0.32.4 the embeddings
-  already differ in the 6th decimal and the clips differ in detail, not composition (448x256x49: mean PSNR 23.1 dB,
-  worst frame 18.7, log-mel 1.13 dB; 512x320x57: 32.5 / 30.8 dB, 0.83 dB). The cross-version bars in
-  `tests/test_ltx_golden.py` are those numbers with a margin.
+- **mlx versions drift; the port does not.** The new pack under mlx 0.32.2 (a scratch venv = envs/mlx with only mlx
+  pinned) is bit-exact on both goldens: every latent sha, every frame, the WAV. Under 0.32.4 (the lock) the same
+  code gives 448x256x49 mean 23.09 / worst 18.72 dB (first / mid / last 25.12 / 23.62 / 18.93; raw frames before
+  H.264 23.11 / 18.63, so the mux costs nothing), log-mel 1.13 dB; 512x320x57 32.46 / 30.78 dB (raw 32.78 / 31.08),
+  0.83 dB. Measured stage by stage (2026-11-15): the stage-1 noise is identical; the first difference is the
+  prompt embeddings (rel 0.9 %, max 4.75); with 0.32.2's embeddings fed in, the first DiT call on identical inputs
+  still differs (rel 0.3 %), and the 8-step ancestral stage 1 grows that to 7-10 % of the stage-1 latent and 18-19 %
+  after stage 2 (composition holds, details move). The decoders alone (0.32.2's final latent decoded on 0.32.4):
+  frames 43.5 dB, audio log-mel 0.71 dB. The kernels that changed, op by op on fixed inputs (everything else tested
+  is bit-equal: int8 quantize / quantized_matmul, SDPA without a mask, rms/layer norm, rope, convs, RNG):
+  `mx.fast.scaled_dot_product_attention` with an additive mask at head_dim 256 (Gemma's local layers; 0.32.4 is the
+  more accurate, rel error vs float64 0.16 % against 0.36 %), the compiled `nn.silu` (1 ulp on ~0.03 % of bf16
+  elements, f32 too: DiT timestep MLP, both VAEs), and bf16 matmul/addmm with a ragged M (51 audio tokens). Pinning
+  mlx 0.32.2 gives bit-exact goldens but conflicts with mlx-vlm's >= 0.32.4 (docs/plan/14-dependencies.md). The
+  cross-version bars in `tests/test_ltx_golden.py` are per case, just under the 0.32.4 numbers.
 - **Gemma 4**: no chat template, no system prompt, prompt stripped, left-padded to 1024 tokens (upstream right-pads;
   the goldens embody left), the *last* of the 49 hidden states post-norm and the other 48 raw.
 - **fps is a model input** (RoPE time positions), not just the container rate: a different fps is a different clip.
