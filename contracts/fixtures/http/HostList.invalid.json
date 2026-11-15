@@ -1,0 +1,13 @@
+{
+  "hosts": [
+    {
+      "host": "mac",
+      "env": "mlx",
+      "state": "idle",
+      "updated_at": "2026-11-15T10:11:00Z",
+      "host_memory": {
+        "budget_gb": 48
+      }
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "description": "the host is free (the torch run's terminal status is projected) but the view still holds the key torch wrote during that run, naming it, its transformer pinned: such a key is not fresh until its next write, so its pin is not Pn and nothing is asked; the run waits instead of failing at once",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "run_id": "3f0c7a52-8d1e-4b6a-9c2f-5e7d1a3b8c40",
+      "budget_gb": 48,
+      "used_gb": 16.67,
+      "resident": [
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8",
+          "gb": 9.28,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:10Z"
+        },
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 6.76,
+          "pinned": true,
+          "last_used": "2026-11-15T10:00:20Z"
+        },
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 0.63,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:30Z"
+        }
+      ]
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 48,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": 44.07,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "connector",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vae_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "upscaler",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "audio_vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vocoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "wait",
+    "unload": {},
+    "budget_gb": null,
+    "error": null
+  }
+}

@@ -173,12 +173,14 @@ type EventPage struct {
 
 // Host is one runner as users see it: no run id, no owner.
 type Host struct {
-	Host      string              `json:"host"`
-	Env       string              `json:"env"`
-	State     string              `json:"state"` // idle | busy | offline
-	UpdatedAt time.Time           `json:"updated_at"`
-	Memory    *registry.Memory    `json:"memory,omitempty"`
-	Resident  []registry.Resident `json:"resident,omitempty"`
+	Host      string           `json:"host"`
+	Env       string           `json:"env"`
+	State     string           `json:"state"` // idle | busy | offline
+	UpdatedAt time.Time        `json:"updated_at"`
+	Memory    *registry.Memory `json:"memory,omitempty"`
+	// the host's shared budget and what all its envs hold (the same on each of its envs); nil: no key reports memory
+	HostMemory *registry.Memory    `json:"host_memory,omitempty"`
+	Resident   []registry.Resident `json:"resident,omitempty"`
 }
 
 // HostList is every runner, by key.

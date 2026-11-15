@@ -77,6 +77,20 @@ def test_load_renames_casts_quantizes_onto_the_device(weights):
     assert ((got - want).abs().max() / want.abs().max()) < 0.03
 
 
+def test_load_gives_the_allocator_cache_back_as_it_goes(weights, monkeypatch):
+    _, path = weights
+    freed = []
+    monkeypatch.setattr(lt, "free", lambda: freed.append(1))
+    monkeypatch.setattr(
+        lt, "FREE_EVERY_GB", 1000 / 2**30
+    )  # every 1000 bytes read: the 32x32 fp32 weights
+    lt.load(meta_tiny(), [path], dev=lt.device(), dtype=torch.bfloat16,
+            rename=lambda key: key.removeprefix("model."))  # fmt: skip
+    assert (
+        len(freed) == 2
+    )  # after blocks.0.weight and head.weight (4096 bytes each); the biases add up to less
+
+
 def test_load_reports_missing_and_unknown_keys(weights):
     _, path = weights
     with pytest.raises(KeyError, match="has no place"):

@@ -1,0 +1,24 @@
+{
+  "for_env": "torch",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "components": [
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8",
+      "loras": [
+        {
+          "lora_id": "1f3a5c7e9b2d4f6a8c0e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a",
+          "strength": 0.8
+        }
+      ]
+    },
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8"
+    }
+  ]
+}

@@ -29,6 +29,9 @@ DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}
 # bigger batches dequantize and use a bf16 matmul.
 SMALL_BATCH = 8
 PROGRESS_EVERY = 1.0  # seconds between load progress events
+# GB of tensors read between giving the allocator's cache back during a load: without it MPS keeps every bf16 source
+# buffer a quantized load frees (measured: 30.7 GB on the device while the 9.3 GB int8 Qwen text encoder loaded)
+FREE_EVERY_GB = 1.0
 
 if torch.backends.mps.is_available():
     # torch 2.14+: mps.empty_cache() waits on the GPU while holding the GIL, which non_blocking copies need ->
@@ -262,10 +265,11 @@ def load(
                 setattr(parent, child_name, Int8Linear(child))
     modules = dict(module.named_modules())
     total = sum(len(packs.header(p)) for p in files)
-    done = 0
+    done, read = 0, 0
     for path in files:
         for key, tensor in tensors(path, dev):
             check()
+            read += tensor.numel() * tensor.element_size()
             name = rename(key)
             if name is not None:
                 owner_name, _, attr = name.rpartition(".")
@@ -287,6 +291,9 @@ def load(
                 else:
                     owner._buffers[attr] = tensor
             del tensor
+            if read >= FREE_EVERY_GB * 2**30:
+                free()  # the freed source buffers go back now, not after the load
+                read = 0
             done += 1
             progress(done, total)
     if unbaked := sorted(bake.keys() - baked):

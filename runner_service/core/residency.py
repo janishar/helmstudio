@@ -8,8 +8,15 @@ budget of physical RAM minus RUNNER_RESERVE_GB.
   node results are dropped first, then the least recently used components, those the rest of the run does not
   need before those it does; never one the stage uses. A need that cannot fit even then fails the run at once,
   with numbers.
-- After a run: unload (everything), keep_warm (the default: stay until memory is needed or RUNNER_IDLE_UNLOAD_S
-  passes) or keep_pinned (only RUNNER_PIN components stay).
+  Within each of those two groups a baked set the run does not use goes before plain components (the
+  hand-over, contracts/README.md "Two envs on one host").
+- A run's `cap` (cmd.run.execute `budget_gb`: what the host's other envs leave) lowers the budget for that run.
+- What the device measures beyond the entries' sizes (`measure`: caches, the runtime) counts against the budget too,
+  after the device cache was freed (contracts/README.md, "Measured memory above the declared sizes").
+- After a run: a plain component whose baked set the run used is unloaded (the two never stay together); then
+  unload (everything), keep_warm (the default: stay until memory is needed or RUNNER_IDLE_UNLOAD_S passes) or
+  keep_pinned (only RUNNER_PIN components stay); then the device cache is freed, after every run.
+- `unload_named`: studio's dispatcher names entries to unload (runner.unload), never a pinned one.
 
 Every method but `state` runs on the GPU thread; `state` (read by the hosts heartbeat) takes the lock."""
 
@@ -19,6 +26,7 @@ import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from core.graph import RunError
 
@@ -42,16 +50,22 @@ class Residency:
         pins: set[str] = frozenset(),
     ) -> None:
         self.budget_gb, self.free, self.measure, self.pins = budget_gb, free, measure, pins
-        self.entries: OrderedDict[tuple, list] = (
-            OrderedDict()
-        )  # key → [gb, value, loras]; LRU first
+        # key → [gb, value, loras, last_used (epoch s)]; LRU first
+        self.entries: OrderedDict[tuple, list] = OrderedDict()
         self.in_use: set[tuple] = set()  # the running stage's components: not evictable
+        self.used: set[tuple] = set()  # every component the running run has used
+        self.cap: float | None = None  # the running run's budget_gb, if studio sent one
         self.on_short: list[Callable[[], None]] = []  # drop cached node results (graph.Cache.clear)
         self.lock = threading.Lock()
 
     @property
     def used_gb(self) -> float:
         return sum(e[0] for e in self.entries.values())
+
+    @property
+    def limit(self) -> float:
+        """The budget now: the runner's own, capped by the running run's budget_gb."""
+        return self.budget_gb if self.cap is None else min(self.budget_gb, self.cap)
 
     def admit(self, needs: dict[tuple, float], peak_gb: float, later: set[tuple]) -> None:
         """Before a stage: `needs` = its components (key → GB), `later` = components the rest of the run
@@ -65,9 +79,10 @@ class Residency:
     ):
         """The loaded component `key`, loading it (with room for `gb` + the load-time transient) if needed. `loras`:
         what the hosts value lists as its baked LoRAs (names may change; the key does not)."""
+        self.used.add(key)
         if key in self.entries:
             self.entries.move_to_end(key)
-            self.entries[key][2] = loras
+            self.entries[key][2:4] = [loras, time.time()]
             return self.entries[key][1]
         self.in_use.add(key)
         self._make_room(gb + transient_gb, set())
@@ -77,7 +92,7 @@ class Residency:
             "loaded %s (%.1f GB est.) in %.1f s", "/".join(map(str, key)), gb, time.monotonic() - t
         )
         with self.lock:
-            self.entries[key] = [gb, value, loras]
+            self.entries[key] = [gb, value, loras, time.time()]
         return value
 
     def grow(self, key: tuple, gb: float) -> None:
@@ -94,30 +109,45 @@ class Residency:
                 self.entries[key][0] = gb
 
     def done(self) -> None:
-        """The run ended: nothing is in use."""
-        self.in_use = set()
+        """The run ended: nothing is in use, no cap."""
+        self.in_use, self.used, self.cap = set(), set(), None
+
+    def _over(self) -> float:
+        """GB the device holds beyond the entries' declared sizes (its cache, the runtime, cached node results), as
+        it measures them now; 0 without a measure."""
+        measured = self.measure()
+        return 0.0 if measured is None else max(0.0, measured - self.used_gb)
 
     def _make_room(self, need: float, later: set[tuple]) -> None:
-        if self.used_gb + need <= self.budget_gb:
+        """Room for `need` GB more: the entries plus what the device measures beyond them stay within the limit.
+        When short, cached node results and the device cache go first (no weights), then components."""
+        if self.used_gb + self._over() + need <= self.limit:
             return
         for drop in self.on_short:
             drop()
+        self.free()
+        over = (
+            self._over()
+        )  # ponytail: assumed fixed while evicting (weights go back on free, the rest stays)
         lru = list(self.entries)
-        victims = sorted(
-            (k for k in lru if k not in self.in_use), key=lambda k: (k in later, lru.index(k))
-        )
+
+        def order(
+            k: tuple,
+        ) -> tuple:  # not needed later first; then a baked set this run does not use; then LRU
+            return k in later, not (len(k) > 4 and k not in self.used), lru.index(k)
+
         evicted = False
-        for k in victims:
-            if self.used_gb + need <= self.budget_gb:
+        for k in sorted((k for k in lru if k not in self.in_use), key=order):
+            if self.used_gb + over + need <= self.limit:
                 break
             self._evict(k)
             evicted = True
         if evicted:
             self.free()
-        if self.used_gb + need > self.budget_gb:
+        if self.used_gb + over + need > self.limit:
             raise RunError(
-                f"does not fit in memory: needs {need:.1f} GB more, {self.used_gb:.1f} GB in use "
-                f"by this run, budget {self.budget_gb:.1f} GB"
+                f"does not fit in memory: needs {need:.1f} GB more, {self.used_gb + over:.1f} GB in use "
+                f"by this run, budget {self.limit:.1f} GB"
             )
 
     def _evict(self, key: tuple) -> None:
@@ -135,26 +165,52 @@ class Residency:
         if victims:
             self.free()
 
-    def unload(self, keep_pins: bool = False) -> None:
-        """Unload every component (keep_pins: but RUNNER_PIN ones) and give the memory back."""
+    def unload(self, keep_pins: bool = False) -> list[dict]:
+        """Unload every component (keep_pins: but RUNNER_PIN ones) and give the memory back; returns the
+        unloaded entries' names (runner.unload `freed`)."""
         victims = [k for k in self.entries if not (keep_pins and k[2] in self.pins)]
+        freed = [_name(k, self.entries[k][2]) for k in victims]
         for k in victims:
             self._evict(k)
         if victims:
             self.free()
+        return freed
+
+    def unload_named(self, names: list[dict]) -> tuple[list[dict], float]:
+        """runner.unload `components`: unload exactly the named entries held, not in use and not RUNNER_PIN ones;
+        returns (their names, their GB)."""
+        want = {_ident(n) for n in names}
+        victims = [k for k, e in self.entries.items() if _ident(_name(k, e[2])) in want
+                   and k not in self.in_use and k[2] not in self.pins]  # fmt: skip
+        freed = [_name(k, self.entries[k][2]) for k in victims]
+        gb = sum(self.entries[k][0] for k in victims)
+        for k in victims:
+            self._evict(k)
+        if victims:
+            self.free()
+        return freed, gb
 
     def after_run(self, policy: str) -> None:
-        self.done()
+        """The run ended: nothing stays in use or capped even when unloading raises, and the device cache (the
+        run's activations, which the allocator keeps) goes back after every run, not only after an eviction."""
+        try:
+            # a baked set the run used makes the plain copy dead weight (38 GB together for LTX): it goes now
+            plain = {k[:4] for k in self.used if len(k) > 4} - self.used
+            for k in [k for k in plain if k in self.entries and k[2] not in self.pins]:
+                self._evict(k)
+        finally:
+            self.done()
         if policy == "unload":
             self.unload()
         elif policy == "keep_pinned":
             self.unload(keep_pins=True)
+        self.free()
 
     def state(self) -> dict:
         """The hosts value's `memory` and `resident`."""
         with self.lock:
-            entries = [(k, e[0], e[2] if len(e) > 2 else None) for k, e in self.entries.items()]
-        used = sum(gb for _, gb, _ in entries)
+            entries = [(k, e[0], e[2], e[3]) for k, e in self.entries.items()]
+        used = sum(e[1] for e in entries)
         measured = self.measure()
         return {
             "memory": {
@@ -162,17 +218,42 @@ class Residency:
                 "used_gb": round(measured if measured is not None else used, 1),
             },
             "resident": [
-                _resident(k, gb, k in self.in_use or k[2] in self.pins, loras)
-                for k, gb, loras in entries
+                _resident(k, gb, k in self.in_use or k[2] in self.pins, loras, at)
+                for k, gb, loras, at in entries
             ],
         }
 
 
-def _resident(key: tuple, gb: float, pinned: bool, loras: list | None) -> dict:
+def _stamp(at: float) -> str:
+    return datetime.fromtimestamp(at, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _resident(key: tuple, gb: float, pinned: bool, loras: list | None, at: float) -> dict:
     """One hosts value `resident` entry; one with baked LoRAs (core.pack.ModelRef.resident_loras) lists them."""
     model, variant, component, precision, *_ = key
     out = {"component": component, "model": model, "variant": variant, "precision": precision,
-           "gb": round(gb, 2), "pinned": pinned}  # fmt: skip
+           "gb": round(gb, 2), "pinned": pinned, "last_used": _stamp(at)}  # fmt: skip
     if loras:
         out["loras"] = loras
     return out
+
+
+def _name(key: tuple, loras: list | None) -> dict:
+    """The req.runner.unload `component` naming the entry `key` (its baked LoRAs by id and strength)."""
+    model, variant, component, precision, *_ = key
+    out = {"component": component, "model": model, "variant": variant, "precision": precision}
+    if loras:
+        out["loras"] = [{"lora_id": x["lora_id"], "strength": x["strength"]} for x in loras]
+    return out
+
+
+def _ident(name: dict) -> tuple:
+    """A named entry as a comparable tuple (absent and empty `loras` are both the plain component)."""
+    loras = tuple((x.get("lora_id"), float(x.get("strength", 0))) for x in name.get("loras") or ())
+    return (
+        name.get("component"),
+        name.get("model"),
+        name.get("variant"),
+        name.get("precision"),
+        loras,
+    )

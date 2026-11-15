@@ -58,6 +58,7 @@ import {
   type RunTrack,
 } from "@/lib/runs";
 import { stripItems } from "@/lib/takes";
+import { hostMemory, type HostMemory } from "@/lib/hosts";
 import {
   TAKE_MIME,
   capacity,
@@ -327,6 +328,7 @@ export function Create({
       .catch((e) => setError(message(e)));
   }, [reuse, workflows]);
 
+  const switchRef = useRef<(id: string) => void>(() => undefined);
   /** "Use in…": the workflow, with the take as its image input (merged over the form). */
   const applyUse = useCallback(
     (takeId: string, workflowId: string) =>
@@ -339,10 +341,9 @@ export function Create({
         .then((r) => {
           const w = workflows?.find((x) => x.id === r.workflow_id);
           if (!w) return setError(`The workflow ${r.workflow_id} is not available any more.`);
-          setChosen(w.id);
+          switchRef.current(w.id); // carries over only what suits w (a Qwen variant is no LTX variant)
           setRaws((old) => ({ ...old, ...rawsFrom(fieldsOf(w), r.inputs) }));
           setErrors({});
-          setOpenKey(null);
         })
         .catch((e) => setError(message(e))),
     [workflows],
@@ -466,6 +467,9 @@ export function Create({
     setChosen(id);
     setOpenKey(null);
   };
+  useEffect(() => {
+    switchRef.current = switchTo;
+  });
   const media = workflow ? mediaOf(workflow) : "image";
   const kinds = workflows ? mediaKinds(workflows) : [];
   const video = media === "video";
@@ -696,7 +700,7 @@ export function Create({
     workflow;
   const anyActive = !!runs?.some((r) => isActive(r.status));
   const took = workflow && runs ? lastDuration(runs, workflow.id) : null;
-  const host = hosts?.find((h) => h.env === workflow?.env && h.state !== "offline" && h.memory);
+  const host = hostMemory(hosts, workflow?.env);
   const session = sessions?.find((s) => s.id === sessionId);
 
   const topBar = (badge?: string) => (
@@ -788,7 +792,7 @@ export function Create({
           ))}
         </div>
       )}
-      {host?.memory && <Memory host={host} memory={host.memory} />}
+      {host && <Memory memory={host} />}
     </div>
   );
 
@@ -1115,22 +1119,17 @@ export function Create({
   );
 }
 
-/** The memory button: used / budget of the host that runs the workflow; its popover lists what is loaded. */
-function Memory({
-  host,
-  memory,
-}: {
-  host: S<"Host">;
-  memory: { used_gb: number; budget_gb: number };
-}) {
-  const resident = host.resident ?? [];
+/** The memory button: used / budget of the host that runs the workflow, across its envs; its popover lists what
+ * each env holds. */
+function Memory({ memory }: { memory: HostMemory }) {
+  const resident = memory.envs.flatMap((e) => e.resident ?? []);
   const gb = (n: number) => +n.toFixed(1);
   return (
     <>
       <button
         type="button"
         popoverTarget="memory"
-        aria-label={`Memory on ${host.host}: ${gb(memory.used_gb)} of ${gb(memory.budget_gb)} gigabytes used, ${resident.length} loaded`}
+        aria-label={`Memory on ${memory.host}: ${gb(memory.used_gb)} of ${gb(memory.budget_gb)} gigabytes used, ${resident.length} loaded${memory.busy ? ", busy" : ""}`}
         className="bevel mono flex h-10 items-center gap-2 rounded-[10px] border border-s3 bg-s1 px-3 text-[12px]"
         style={{ anchorName: "--memory" } as React.CSSProperties}
       >
@@ -1153,23 +1152,29 @@ function Memory({
       >
         <div className="flex flex-col gap-2">
           <span className="heading">
-            {host.host} · {gb(memory.used_gb)} of {gb(memory.budget_gb)} GB
+            {memory.host} · {gb(memory.used_gb)} of {gb(memory.budget_gb)} GB
+            {memory.busy ? " · busy" : ""}
           </span>
-          {resident.length ? (
-            resident.map((r) => (
-              <div
-                key={`${r.component}/${r.model}/${r.variant}/${r.precision}`}
-                className="flex justify-between gap-3"
-              >
-                <span className="min-w-0 truncate">
-                  {r.component} · {r.variant} · {r.precision}
-                </span>
-                <span className="mono text-t2">{gb(r.gb)} GB</span>
-              </div>
-            ))
-          ) : (
-            <span className="text-t2">Nothing loaded.</span>
-          )}
+          {memory.envs.map((e) => (
+            <div key={e.env} className="flex flex-col gap-1">
+              <span className="text-t2">
+                {e.env} · {e.state}
+              </span>
+              {e.resident?.length ? (
+                e.resident.map((r, i) => (
+                  <div key={i} className="flex justify-between gap-3">
+                    <span className="min-w-0 truncate">
+                      {r.component} · {r.variant} · {r.precision}
+                      {r.loras?.length ? ` · ${r.loras.length} LoRA` : ""}
+                    </span>
+                    <span className="mono text-t2">{gb(r.gb)} GB</span>
+                  </div>
+                ))
+              ) : (
+                <span className="text-t2">Nothing loaded.</span>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </>

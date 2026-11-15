@@ -1,0 +1,86 @@
+{
+  "description": "the envs' resident components and the run's planned peak fit in the host budget (the smallest env budget, 48): released, nothing unloaded; budget_gb for cmd.run.execute = 48 - what torch holds",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "resident": [
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 1.3,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:30Z"
+        }
+      ]
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 48,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": 44.07,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "connector",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vae_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "upscaler",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "audio_vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vocoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "release",
+    "unload": {},
+    "budget_gb": 46.7,
+    "error": null
+  }
+}

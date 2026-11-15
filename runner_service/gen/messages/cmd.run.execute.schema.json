@@ -75,6 +75,11 @@
         "output_prefix": {
           "$ref": "defs.schema.json#/$defs/objectPrefix",
           "description": "u/<owner_id>/runs/<run_id>/<attempt>/ (a retried attempt never writes over the keys of the one before); output n is written to <output_prefix><n>.<ext> (the echo node: 0.png)"
+        },
+        "budget_gb": {
+          "type": "number",
+          "minimum": 0,
+          "description": "from API 1.13: the memory this env may hold during the run, in GB: the host's shared budget minus what the host's other envs hold resident at release (contracts/README.md, The hand-over). The runner caps its residency budget at it for the run (its own admission evicts its LRU components or fails the run with numbers); absent = its own budget (a host with one env)"
         }
       }
     }

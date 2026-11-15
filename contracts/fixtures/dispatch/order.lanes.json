@@ -1,0 +1,149 @@
+{
+  "description": "interactive goes before batch whatever is resident: b's interactive LTX run evicts a's resident batch model",
+  "budget_gb": 48,
+  "plans": {
+    "qwen": {
+      "env": "torch",
+      "model": "qwen-image-2.1",
+      "peak_gb": 29.2,
+      "lora_component": "transformer",
+      "components": [
+        {
+          "component": "text_encoder",
+          "variant": "base",
+          "precision": "int8",
+          "gb": 8.5
+        },
+        {
+          "component": "transformer",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 7.4
+        },
+        {
+          "component": "vae",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 1.3
+        }
+      ]
+    },
+    "ltx": {
+      "env": "mlx",
+      "model": "ltx-2.5",
+      "peak_gb": 44.07,
+      "lora_component": "transformer",
+      "components": [
+        {
+          "component": "text_encoder",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 12.66,
+          "unloads_after": true
+        },
+        {
+          "component": "connector",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 5.91,
+          "unloads_after": true
+        },
+        {
+          "component": "vae_encoder",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.59
+        },
+        {
+          "component": "upscaler",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.93
+        },
+        {
+          "component": "transformer",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 19.18
+        },
+        {
+          "component": "vae",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.76
+        },
+        {
+          "component": "audio_vae",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.06
+        },
+        {
+          "component": "vocoder",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.48
+        }
+      ]
+    }
+  },
+  "resident": [
+    "qwen"
+  ],
+  "runs": [
+    {
+      "id": "a1",
+      "owner": "a",
+      "lane": "batch",
+      "plan": "qwen",
+      "at": 0,
+      "seconds": 10
+    },
+    {
+      "id": "a2",
+      "owner": "a",
+      "lane": "batch",
+      "plan": "qwen",
+      "at": 0,
+      "seconds": 10
+    },
+    {
+      "id": "b1",
+      "owner": "b",
+      "lane": "interactive",
+      "plan": "ltx",
+      "at": 1,
+      "seconds": 10
+    }
+  ],
+  "expect": {
+    "releases": [
+      "a1",
+      "b1",
+      "a2"
+    ],
+    "unloads": [
+      {
+        "before": "b1",
+        "env": "torch",
+        "components": [
+          "text_encoder",
+          "transformer"
+        ]
+      },
+      {
+        "before": "a2",
+        "env": "mlx",
+        "components": [
+          "vae_encoder",
+          "upscaler",
+          "transformer"
+        ]
+      }
+    ],
+    "loads": {
+      "ltx": 1,
+      "qwen": 1
+    }
+  }
+}

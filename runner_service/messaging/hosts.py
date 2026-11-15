@@ -47,12 +47,15 @@ class Host:
             raise ValueError(f"hosts value is off-contract: {'; '.join(errs[:3])}")
         return value
 
-    async def put(self) -> None:
-        """Write the key; a failure is logged (the next beat tries again)."""
+    async def put(self) -> dict | None:
+        """Write the key and return the value written; a failure is logged (the next beat tries again)."""
         try:
-            await self.kv.put(KEY, json.dumps(self.value()).encode())
+            value = self.value()
+            await self.kv.put(KEY, json.dumps(value).encode())
         except Exception:
             log.warning("could not write hosts key %s", KEY, exc_info=True)
+            return None
+        return value
 
     async def beat(self, stop: asyncio.Event) -> None:
         """Rewrite the key every HEARTBEAT seconds until `stop` is set."""

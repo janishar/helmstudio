@@ -93,6 +93,11 @@ class Cache(OrderedDict):
         super().clear()
         self.sizes.clear()
 
+    def trim(self) -> None:
+        """At a run's end: within BYTES again (the newest entry, kept at any size for its run, goes when too big)."""
+        while self and sum(self.sizes.values()) > self.BYTES:
+            self.sizes.pop(self.popitem(last=False)[0], None)
+
 
 class Ctx:
     """What a node function sees of its run (it runs on the GPU thread):
@@ -626,6 +631,41 @@ def _components(nodes: dict, impls: dict, schemas: dict, nid: str) -> dict[tuple
     return out
 
 
+def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
+    """The graph's sizes a peak_gb formula at `nid` sees: mp, images, frames, mp_in."""
+    mp, refs = _canvas_mp(nodes, schemas, nid), _image_values(nodes, schemas, nid)
+    # an input that carries its clip's frames (a Latent after stage 1) has the resolved length, which an "auto"
+    # param upstream only bounds
+    known = [v.frames for v in inputs.values() if isinstance(getattr(v, "frames", None), int)]
+    frames = known[0] if known else _frames(nodes, schemas, nid)
+    mp_in = max((v["width"] * v["height"] / 1e6 for v in refs), default=0.0)
+    return {"mp": mp, "images": len(refs), "frames": frames, "mp_in": mp_in}
+
+
+def stage_peak(nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict) -> float:
+    """The stage's peak_gb formula at `nid` (0 without one), over its params and the graph's sizes."""
+    if impl.peak is None:
+        return 0.0
+    from core.pack import evaluate
+
+    return evaluate(impl.peak, params | stage_sizes(nodes, schemas, nid, inputs))
+
+
+def pull_order(nodes: dict, sinks: list[str]) -> list[str]:
+    """The order `run` runs the nodes the sinks need: each sink pulls its inputs depth first, in wiring order."""
+    out: list[str] = []
+
+    def pull(nid: str) -> None:
+        for ref in nodes[nid].get("in", {}).values():
+            pull(ref.partition(".")[0])
+        if nid not in out:
+            out.append(nid)
+
+    for nid in sinks:
+        pull(nid)
+    return out
+
+
 async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -> None:
     """Run every sink (an `output` node) of a validated, resolved graph, pulling only what is not cached; a node no
     sink needs is not run. A node's result is reused when its cache key matches, whatever its id: within the run
@@ -647,22 +687,7 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         if ctx.residency is not None and (impl.uses or impl.peak is not None):
             comps = _components(nodes, impls, schemas, nid)
             needs = {key: m.gb(key[2])[0] for key, m in comps.items()}
-            peak = 0.0
-            if impl.peak is not None:
-                from core.pack import evaluate
-
-                mp, refs = _canvas_mp(nodes, schemas, nid), _image_values(nodes, schemas, nid)
-                # an input that carries its clip's frames (a Latent after stage 1) has the resolved length, which
-                # an "auto" param upstream only bounds
-                known = [
-                    v.frames for v in inputs.values() if isinstance(getattr(v, "frames", None), int)
-                ]
-                frames = known[0] if known else _frames(nodes, schemas, nid)
-                mp_in = max((v["width"] * v["height"] / 1e6 for v in refs), default=0.0)
-                peak = evaluate(
-                    impl.peak,
-                    params | {"mp": mp, "images": len(refs), "frames": frames, "mp_in": mp_in},
-                )
+            peak = stage_peak(nodes, schemas, nid, impl, params, inputs)
             ctx.residency.admit(needs, peak, later() - set(needs))
         outs = impl.fn(ctx, params, inputs)
         if (

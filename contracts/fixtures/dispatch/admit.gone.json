@@ -1,0 +1,74 @@
+{
+  "description": "a deleted key (make runners-stop) holds nothing and its budget does not count",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "gone"
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 48,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": 44.07,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "connector",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vae_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "upscaler",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "audio_vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vocoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "release",
+    "unload": {},
+    "budget_gb": 48.0,
+    "error": null
+  }
+}

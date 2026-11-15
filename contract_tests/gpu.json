@@ -1,0 +1,1338 @@
+{
+ "runs": [
+  {
+   "name": "qwen1",
+   "id": "4daa5536-ef07-439e-940e-0ecd3f35df6a",
+   "status": "succeeded",
+   "error": null,
+   "s": 48
+  },
+  {
+   "name": "ltx",
+   "id": "11c189ac-39e4-4146-8fb2-80ea097c8b80",
+   "status": "succeeded",
+   "error": null,
+   "s": 34
+  },
+  {
+   "name": "qwen2",
+   "id": "11c9864a-9be2-48cc-9f6c-50f45419769e",
+   "status": "succeeded",
+   "error": null,
+   "s": 50
+  }
+ ],
+ "samples": [
+  {
+   "t": 1794748343.145397,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 0
+   }
+  },
+  {
+   "t": 1794748345.150275,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 0,
+     "declared": 0
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 0
+   }
+  },
+  {
+   "t": 1794748347.156637,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 22,
+     "declared": 0
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 22
+   }
+  },
+  {
+   "t": 1794748349.1623669,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 22,
+     "declared": 0
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 22
+   }
+  },
+  {
+   "t": 1794748351.1673548,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 22,
+     "declared": 0
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 22
+   }
+  },
+  {
+   "t": 1794748353.1738298,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 22,
+     "declared": 0
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 22
+   }
+  },
+  {
+   "t": 1794748355.177529,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 22,
+     "declared": 0
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 22
+   }
+  },
+  {
+   "t": 1794748357.179859,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 27.2,
+     "declared": 9.28
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.2
+   }
+  },
+  {
+   "t": 1794748359.187737,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 27.2,
+     "declared": 9.28
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.2
+   }
+  },
+  {
+   "t": 1794748361.210929,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 27.2,
+     "declared": 9.28
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.2
+   }
+  },
+  {
+   "t": 1794748363.2172768,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 27.2,
+     "declared": 9.28
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.2
+   }
+  },
+  {
+   "t": 1794748365.2197871,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 27.2,
+     "declared": 9.28
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.2
+   }
+  },
+  {
+   "t": 1794748367.224673,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748369.2334359,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748371.238983,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748373.245117,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748375.247977,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748377.2553759,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748379.262686,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748381.265861,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748383.269506,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748385.273781,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748387.2826738,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748389.28553,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.1,
+     "declared": 16.04
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748391.2900832,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 18.1,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.1
+   }
+  },
+  {
+   "t": 1794748393.296714,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3.1,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 3.1
+   }
+  },
+  {
+   "t": 1794748395.299149,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3.1,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 3.1
+   }
+  },
+  {
+   "t": 1794748397.302349,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 3
+   }
+  },
+  {
+   "t": 1794748399.31004,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 3
+   }
+  },
+  {
+   "t": 1794748401.3139882,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 3
+   }
+  },
+  {
+   "t": 1794748403.320108,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 0,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 3
+   }
+  },
+  {
+   "t": 1794748405.326404,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 15.3,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.3
+   }
+  },
+  {
+   "t": 1794748407.334717,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 15.3,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.3
+   }
+  },
+  {
+   "t": 1794748409.342307,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 15.3,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.3
+   }
+  },
+  {
+   "t": 1794748411.350055,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 15.3,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.3
+   }
+  },
+  {
+   "t": 1794748413.357493,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 15.3,
+     "declared": 0
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 18.3
+   }
+  },
+  {
+   "t": 1794748415.3623838,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 24.1,
+     "declared": 20.87
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.1
+   }
+  },
+  {
+   "t": 1794748417.3660522,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 24.1,
+     "declared": 20.87
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.1
+   }
+  },
+  {
+   "t": 1794748419.413058,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 24.1,
+     "declared": 20.87
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.1
+   }
+  },
+  {
+   "t": 1794748421.420896,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 24.1,
+     "declared": 20.87
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.1
+   }
+  },
+  {
+   "t": 1794748423.442014,
+   "envs": {
+    "mlx": {
+     "state": "busy",
+     "used": 24.1,
+     "declared": 20.87
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 27.1
+   }
+  },
+  {
+   "t": 1794748425.450905,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "idle",
+     "used": 3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 24.4
+   }
+  },
+  {
+   "t": 1794748427.5315819,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 14.2,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 35.6
+   }
+  },
+  {
+   "t": 1794748429.538903,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 14.2,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 35.6
+   }
+  },
+  {
+   "t": 1794748431.542355,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 14.2,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 35.6
+   }
+  },
+  {
+   "t": 1794748433.565314,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 14.2,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 35.6
+   }
+  },
+  {
+   "t": 1794748435.575999,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 14.2,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 35.6
+   }
+  },
+  {
+   "t": 1794748437.582177,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 31.3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 52.7
+   }
+  },
+  {
+   "t": 1794748439.747742,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 31.3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 52.7
+   }
+  },
+  {
+   "t": 1794748441.760536,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 31.3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 52.7
+   }
+  },
+  {
+   "t": 1794748443.766253,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 31.3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 52.7
+   }
+  },
+  {
+   "t": 1794748445.7757802,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 31.3,
+     "declared": 0.63
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 52.7
+   }
+  },
+  {
+   "t": 1794748447.78433,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748449.7894971,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748451.79806,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748453.807332,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748455.8133261,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748457.818889,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748459.823463,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748461.832521,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748463.857965,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748465.8670201,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748467.873162,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748469.881183,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748471.8885171,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748473.900828,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "busy",
+     "used": 18.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 39.9
+   }
+  },
+  {
+   "t": 1794748475.9071412,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "idle",
+     "used": 17.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 38.9
+   }
+  },
+  {
+   "t": 1794748477.915173,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "idle",
+     "used": 17.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 38.9
+   }
+  },
+  {
+   "t": 1794748479.9204412,
+   "envs": {
+    "mlx": {
+     "state": "idle",
+     "used": 21.4,
+     "declared": 21.41
+    },
+    "torch": {
+     "state": "idle",
+     "used": 17.5,
+     "declared": 16.67
+    }
+   },
+   "host": {
+    "budget_gb": 52,
+    "used_gb": 38.9
+   }
+  }
+ ]
+}

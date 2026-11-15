@@ -1,0 +1,139 @@
+{
+  "description": "a Qwen run needs 22.95 GB more: an unreferenced baked set goes first though it was used more recently, then the least recently used (the plain transformer)",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "resident": []
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 48,
+      "resident": [
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 19.18,
+          "pinned": false,
+          "last_used": "2026-11-15T10:02:00Z"
+        },
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 19.75,
+          "pinned": false,
+          "last_used": "2026-11-15T10:10:40Z",
+          "loras": [
+            {
+              "lora_id": "1f3a5c7e9b2d4f6a8c0e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a",
+              "name": "Film grain",
+              "strength": 0.8,
+              "bytes": 612368384
+            }
+          ]
+        },
+        {
+          "component": "vae_encoder",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.59,
+          "pinned": false,
+          "last_used": "2026-11-15T10:10:10Z"
+        },
+        {
+          "component": "upscaler",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.93,
+          "pinned": false,
+          "last_used": "2026-11-15T10:10:25Z"
+        },
+        {
+          "component": "vae",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.76,
+          "pinned": false,
+          "last_used": "2026-11-15T10:10:45Z"
+        },
+        {
+          "component": "audio_vae",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.06,
+          "pinned": false,
+          "last_used": "2026-11-15T10:10:50Z"
+        },
+        {
+          "component": "vocoder",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.48,
+          "pinned": false,
+          "last_used": "2026-11-15T10:10:55Z"
+        }
+      ]
+    }
+  },
+  "run": {
+    "env": "torch",
+    "peak_gb": 29.2,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "turbo",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "unload",
+    "unload": {
+      "mlx": [
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8",
+          "loras": [
+            {
+              "lora_id": "1f3a5c7e9b2d4f6a8c0e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a",
+              "strength": 0.8
+            }
+          ]
+        },
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8"
+        }
+      ]
+    },
+    "budget_gb": null,
+    "error": null
+  }
+}

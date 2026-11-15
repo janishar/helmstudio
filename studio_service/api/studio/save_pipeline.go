@@ -20,7 +20,8 @@ import (
 )
 
 // "Save as pipeline" (contracts/README.md "Save as pipeline"): the chain of runs that made a take becomes a pipeline,
-// oldest run first: inputs → step_1 … step_n → output, each step binding the take of the step before it.
+// oldest run first: inputs → step_1 … step_n → output, each step binding the take of the step before it. A later step
+// of another family than the step before it gets its own prompt input prompt_<k> (a clip's prompt is per row).
 
 // MaxSavedSteps is the longest lineage Save as pipeline turns into steps.
 const MaxSavedSteps = 8
@@ -104,8 +105,10 @@ func (s *Service) SaveTakeAsPipeline(ctx context.Context, caller common.Caller, 
 		if body.Title != nil {
 			doc.Title = strings.TrimSpace(*body.Title)
 		}
-		columns := []dto.PipelineInput{} // prompt (when step_1 binds it), then each upload
+		prompts := []dto.PipelineInput{} // prompt (when step_1 binds it), then each prompt_<k>
+		columns := []dto.PipelineInput{} // each upload
 		uploads := map[string]string{}   // upload take → its input name
+		family := ""                     // the family of the step before
 		previous := "inputs"
 		doc.Edges = []dto.PipelineEdge{}
 		for k, link := range chain {
@@ -132,14 +135,20 @@ func (s *Service) SaveTakeAsPipeline(ctx context.Context, caller common.Caller, 
 			}
 			params := settable(workflow, palette)
 			step := fmt.Sprintf("step_%d", k+1)
-			node := dto.PipelineNode{Kind: "step", Workflow: made.WorkflowID, Fixed: map[string]any{}, Bind: map[string]string{}}
+			one := 1
+			node := dto.PipelineNode{Kind: "step", Workflow: made.WorkflowID, Seeds: &one, Fixed: map[string]any{}, Bind: map[string]string{}}
 			for _, l := range made.Looks { // the looks come back through the step, as the take was made
 				node.Looks = append(node.Looks, l.ID)
 			}
-			if _, ok := params["prompt.text"]; ok && k == 0 {
-				node.Bind["prompt.text"] = "$prompt"
-				columns = append(columns, dto.PipelineInput{Name: "prompt", Type: "Text"})
+			if _, ok := params["prompt.text"]; ok && (k == 0 || workflow.Family != family) {
+				name := "prompt"
+				if k > 0 {
+					name = fmt.Sprintf("prompt_%d", k+1)
+				}
+				node.Bind["prompt.text"] = "$" + name
+				prompts = append(prompts, dto.PipelineInput{Name: name, Type: "Text"})
 			}
+			family = workflow.Family
 			seed := seedParam(workflow, palette)
 			for _, key := range slices.Sorted(maps.Keys(made.Inputs)) {
 				value := made.Inputs[key]
@@ -180,7 +189,7 @@ func (s *Service) SaveTakeAsPipeline(ctx context.Context, caller common.Caller, 
 			doc.Edges = append(doc.Edges, dto.PipelineEdge{From: previous, To: step})
 			previous = step
 		}
-		doc.Nodes["inputs"] = dto.PipelineNode{Kind: "inputs", Columns: columns}
+		doc.Nodes["inputs"] = dto.PipelineNode{Kind: "inputs", Columns: append(prompts, columns...)}
 		doc.Nodes["output"] = dto.PipelineNode{Kind: "output", From: previous + ".takes", Collection: doc.Title}
 		doc.Edges = append(doc.Edges, dto.PipelineEdge{From: previous, To: "output"})
 		if detail := doc.Validate(); detail != "" {

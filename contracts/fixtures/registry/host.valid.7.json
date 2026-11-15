@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "state": "idle",
+  "run_id": null,
+  "updated_at": "2026-11-15T10:11:00Z",
+  "published_by": "runner mlx 0.4.0",
+  "memory": {
+    "budget_gb": 48,
+    "used_gb": 41.2
+  },
+  "resident": [
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8",
+      "gb": 19.18,
+      "pinned": false,
+      "last_used": "2026-11-15T10:02:00Z"
+    },
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8",
+      "gb": 19.75,
+      "pinned": false,
+      "last_used": "2026-11-15T10:10:40Z",
+      "loras": [
+        {
+          "lora_id": "1f3a5c7e9b2d4f6a8c0e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a",
+          "name": "Film grain",
+          "strength": 0.8,
+          "bytes": 612368384
+        }
+      ]
+    },
+    {
+      "component": "vae_encoder",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.59,
+      "pinned": false,
+      "last_used": "2026-11-15T10:10:10Z"
+    },
+    {
+      "component": "upscaler",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.93,
+      "pinned": false,
+      "last_used": "2026-11-15T10:10:25Z"
+    },
+    {
+      "component": "vae",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.76,
+      "pinned": false,
+      "last_used": "2026-11-15T10:10:45Z"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "pipeline_id": "4e6a8c0e-2b4d-4f6a-8c0e-9b1d3f5a7c92",
+  "rows": {
+    "table": {
+      "columns": [
+        "inputs.prompt",
+        "inputs.prompt_2"
+      ],
+      "rows": [
+        [
+          "a red fox in fresh snow, morning light",
+          "the fox lifts its head and snow drifts past"
+        ],
+        [
+          "a heron standing in a misty pond",
+          "the heron spreads its wings and takes off"
+        ],
+        [
+          "a lighthouse on a cliff at dusk",
+          "waves break below as the beam sweeps"
+        ],
+        [
+          "a cabin in a pine forest, smoke from the chimney",
+          "smoke curls up, branches sway in the wind"
+        ],
+        [
+          "a paper boat on a rain puddle",
+          "the boat drifts as raindrops ripple the water"
+        ],
+        [
+          "an old tram on a hill street",
+          "the tram rolls slowly down the hill"
+        ],
+        [
+          "a cat asleep on a windowsill",
+          "the cat stretches and opens its eyes"
+        ],
+        [
+          "a hot air balloon over green fields",
+          "the balloon rises, its shadow sliding over the fields"
+        ],
+        [
+          "a candle on a wooden table",
+          "the flame flickers in a draught"
+        ],
+        [
+          "a field of sunflowers under a blue sky",
+          "the sunflowers sway, clouds pass overhead"
+        ]
+      ]
+    }
+  }
+}

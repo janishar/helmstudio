@@ -11,6 +11,7 @@ import {
   type Palette,
 } from "@/lib/graph";
 import { lookFit, type ResolvableLook } from "@/lib/mentions";
+import type { Field } from "@/lib/workflow";
 
 export type PDoc = S<"PipelineDoc">;
 export type PNode = S<"PipelineNode">;
@@ -583,3 +584,18 @@ export function chooseWorkflow(
   const { preset: _drop, inputs: _old, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
   return setNode(doc, step, { ...rest, workflow, bind });
 }
+
+/** A pipeline's inputs as the batch form's fields: `<inputs node>.<name>`, typed as the param it fills. */
+export const pipelineFields = (p: S<"PipelineDoc">): Field[] =>
+  pipelineColumns(p).map((c) => {
+    const param = inputParam(c.input);
+    return {
+      key: c.key,
+      node: c.node,
+      nodeTitle: param.label ?? c.input.name,
+      param,
+      initial: param.default ?? null,
+      canvas: false,
+      model: false,
+    };
+  });

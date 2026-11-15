@@ -17,7 +17,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/evt.studio.run_finished.schema.json` | studio → pipelines_service: a batch run ended (any terminal status) |
 | `messages/req.studio.runs.create.schema.json` | NATS request/reply pipelines → studio (not enveloped): create a batch-lane run, idempotent on its key |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
-| `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload every component now (Two envs on one host) |
+| `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload the named components now, reply what was freed and what remains (Two envs on one host: the hand-over) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks` (bucket `registry`), `$defs/host` (bucket `hosts`) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
@@ -25,12 +25,13 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflows `ltx-text-to-video`, `ltx-image-to-video`): published verbatim; `ltx.models.valid.json` (with the canonical ltx `lora` block; its `prefused` id is a placeholder the runner fills from its index) and `host.valid.6.json` are examples (sizes measured) |
+| `fixtures/dispatch/` | the **shared dispatcher fixtures** (Two envs on one host: the hand-over): `admit.*.json` (one admission decision: the host's keys, the run, the other queued runs → `{decision, unload, budget_gb, error}`), `order.*.json` (a simulated queue on one host: plans, runs, batches → `{releases, unloads, loads}`). studio_service's Go tests run them |
 | `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them). studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, the dispatch fixtures through `admit` / `simulate`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -55,13 +56,13 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
 | `runner.unload.<host>.<env>` | core request/reply, no queue group | bare JSON (`req.runner.unload`) | studio's dispatcher → the runner of that host and env (60 s) |
 | KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras`, `.looks` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras`, `looks` | the runner writes its own keys once at start; studio reads |
-| KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s; studio reads (older than 30 s = offline) |
+| KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s and deletes it on a clean exit; studio reads (older than 30 s = offline). Bucket TTL 1 h: an offline key stays present (and counts, the hand-over) far past any stall; expiry writes no delete marker, so a studio started later would read an expired key as gone |
 | KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step |
 
 Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
 env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`);
 the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subject `cmd.run.mac.mlx`, registry keys
-`mac.mlx.*`, hosts key `mac.mlx`, unload subject `runner.unload.mac.mlx`): two processes, one GPU (Two envs on one host). The envelope `type` is the kind of message, never the subject.
+`mac.mlx.*`, hosts key `mac.mlx`, unload subject `runner.unload.mac.mlx`): two processes, one GPU and one memory budget (Two envs on one host: the hand-over). The envelope `type` is the kind of message, never the subject.
 
 ## How the pieces meet
 
@@ -121,14 +122,17 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   `qwen-image` in this version.
 - **Models and memory.** The registry `models` value lists, per model id, `variants` with `presence`
   (`present` | `missing`), `bytes` on disk and the `precisions` it can load as: a full-precision variant offers
-  load-time quantization (`[bf16, int8]`; MLX also `int4`), an already-quantized one only its own (`[int8]`). The hosts value adds
-  `memory {budget_gb, used_gb}` and `resident` components (`component, model, variant, precision, gb, pinned`).
+  load-time quantization (`[bf16, int8]`; MLX also `int4`), an already-quantized one only its own (`[int8]`), and from
+  1.13 its `memory` plans (per precision: `peak_gb` and the `components` a run loads; the hand-over). The hosts value adds
+  `memory {budget_gb, used_gb}` and `resident` components (`component, model, variant, precision, gb, pinned`, from 1.13
+  `last_used`).
 - **Events to the browser.** The projector applies each `evt.run.*` to the run row and appends it to the
   session's event log (per-session `seq`); studio appends its own `queued` and the `failed` / `cancelled` it decides
   itself. `GET /v1/studio/sessions/{id}/events` serves the log as JSON (`?since=`) or SSE (`Last-Event-ID`), with
   object keys turned into signed URLs (`SessionEvent` in openapi.yaml).
 - **Hosts.** `GET /v1/studio/hosts` shows host, env, `idle` / `busy` / `offline`, `updated_at` and, when the runner
-  reports them, `memory` and `resident`; never a run id or an owner.
+  reports them, `memory` and `resident`; never a run id or an owner. From 1.13 every entry also has `host_memory`
+  (the host's shared budget and what all its envs hold; the hand-over) and each resident component its `last_used`.
 
 ## The dispatcher (plan 17.5)
 
@@ -146,7 +150,8 @@ create, terminal status and cancel, and every few seconds.
 - **Order**, when a host is free: `interactive` before `batch` (batch runs come from `studio.runs.create`); within a lane,
   round-robin between users: the user whose last released run is the oldest goes first (never released = first; a
   tie goes to the older oldest queued run); within one user, the oldest queued run, except that a queued run whose model is
-  resident on that host goes first. A run's model is its `<family>/model` node (`variant`, `precision`) with the model
+  resident on that host goes first. From 1.13 a user whose next run is resident may go before one whose next run needs a
+  swap, within a fairness bound (Two envs on one host: the hand-over, Order). A run's model is its `<family>/model` node (`variant`, `precision`) with the model
   id of the family in the host's `models` key; resident = an entry of the hosts value's `resident` with the same
   `model`, `variant` and `precision`, and the same baked LoRAs (`loras`: the run's `bake` rows' `(lora_id, strength)` in
   graph order, one LoRA in two chained stacks once with the summed strength; none = an entry without `loras`).
@@ -175,37 +180,163 @@ create, terminal status and cancel, and every few seconds.
   `Nats-Msg-Id` is `<run_id>:<attempt>:<seq>`. The projector dedupes on `(job_id, attempt, seq)` and drops events of an
   attempt that is not the run's current one. The runner sets `attempt` in its hosts value while busy.
 - **Cancel** of a run not yet released: `cancelled` at once, never sent. Of a released one: KV `cancels`, as before.
-- Not yet: the evict hand-over between two envs of one host (stage C; until then Two envs on one host, below),
-  memory admission.
+- **Memory admission and the evict hand-over** between envs of one host: Two envs on one host: the hand-over, below.
 
-## Two envs on one host (API 1.11, M4 stage A)
+## Two envs on one host: the hand-over (API 1.13, M4 stage C; normative)
 
-Host `mac` runs two native runners, env `torch` (Qwen) and env `mlx` (LTX): two processes, **one GPU** (64 GB unified
-memory). Rule: never two processes holding model weights at once. Until the stage C evict hand-over, studio's
-dispatcher enforces it:
+Host `mac` runs two native runners, env `torch` (Qwen) and env `mlx` (LTX): two processes, one GPU, **one memory
+budget** (64 GB unified memory). Studio's dispatcher alone decides what may be loaded across a host's envs: memory
+admission per host, and an evict hand-over that names components (it replaces stage A's gate, which unloaded
+everything on the other env). studio_service implements exactly these rules and runs `fixtures/dispatch/`; `check.py`
+holds the reference (`admit`, `simulate`). One run at a time per host (The dispatcher) still holds.
 
-- **One run per host** across its envs (The dispatcher, above) already holds: the other env is never running a run.
-- **GPU gate.** Before releasing a run to env E of host H, every *other* env E' of H whose hosts key is fresh must
-  report no weights: its hosts value's `resident` empty or absent. An E' with `resident` entries is asked to unload:
-  the dispatcher sends `runner.unload.<H>.<E'>` `{for_env: E, run_id}` (`req.runner.unload`; at most one request in
-  flight per (H, E'), repeated at most every 10 s while the run waits) and leaves the run queued (its `host` stays H,
-  `position` as usual). A later pass releases it once E' shows no `resident` (the hosts watch) or E' replied `ok`
-  (`resident: []`; the runner rewrote its hosts key before replying). `busy`, `internal` or no reply in 60 s: ask
-  again; an `ok` to a request sent before a run was released to E' opens nothing (that run may have loaded since:
-  the next pass asks again). An E' whose key is gone (`make runners-stop` deletes it) counts as holding nothing; a
-  key that is offline (older than 30 s) but still lists `resident` entries holds them (fail closed: the runner may be
-  cut off from NATS with its weights mapped) until it is deleted or rewritten. If the gate is still shut 120 s after the first request, the run fails: `env <E'> on host <H> did not
-  unload its models in 120 s` (studio keeps the first-request time in memory; a restart starts the 120 s again).
-- **The runner** (both native runners; the fake runner, alone on its host, never gets one) answers
-  `runner.unload.<host>.<env>`: idle, it unloads every component (pinned ones, adapters and cached handles too),
-  frees the device cache (MLX `mx.clear_cache()`; torch MPS `synchronize()` then `empty_cache()`), rewrites its hosts
-  key with `resident: []`, then replies `{unloaded_gb, resident: []}` (`unloaded_gb` 0 when it held nothing); while a
-  run is in progress, `{error: "a run is in progress", code: busy}`; if unloading fails, `code: internal` (logged).
-  It loads nothing again until its next `cmd.run.execute`. After a run it writes its hosts key (still naming the run,
-  `resident` as its after-run policy left it) before it publishes the terminal status. `RUNNER_AFTER_RUN=keep_warm` stays the default: an env keeps
-  its weights between its own runs and gives them up only when the other env needs the GPU.
-- **By hand** (goldens, debugging): stop the other runner first (`make runners-stop` stops both); never run a model
-  outside a runner while either runner holds weights.
+**Terms.**
+- **Present key**: a hosts key of host H that exists, fresh or offline (older than 30 s). A **gone** key (deleted;
+  `make runners-stop` and a runner's clean exit delete it; the bucket TTL expires it after 1 h) holds nothing and its
+  budget does not count. An **in-run** key: one that still names a run (`run_id`) while H is free (the run's terminal
+  status was projected before the runner's next write reached studio, or the run lost its lease while its runner may
+  still run it; fresh or offline). That run may still use up to the `budget_gb` it was released with, more than the
+  key declares (its stage's peak is not in `resident`), so X **waits** (Admission 2) and nothing is asked; its pins
+  are not Pn; the next write, idle, decides (or the time limit).
+- **Entry**: one `resident` item of a present key, identified by (env, `component`, `model`, `variant`, `precision`,
+  baked LoRAs = its `loras` as `(lora_id, strength)` in order; none = the plain component). Memory arithmetic is in
+  integer hundredths of a GB: `round(gb × 100)` per value, then sums.
+- **Host budget** B = the smallest `memory.budget_gb` among H's present keys (each runner reports physical RAM minus
+  its reserve; they share the RAM, so the strictest wins). No present key reports memory (the fake host): no
+  admission, a run is released as soon as the order picks it.
+- **Plan** of run X: in `<H>.<X.env>.models`, the model of X's `<family>/model` node (a workflow is one family), its
+  `variant`, that variant's `memory` item for the node's `precision`. **Needs** = the plan's `components` as entries
+  of X's env (each with its own `variant` and `precision`), the family's `lora.component` carrying X's baked LoRAs (its
+  `bake` rows, as for resident below). **Planned peak** P = `peak_gb` + the bytes of X's LoRA files / 2^30. No plan
+  (no models key, no `memory` item for that precision): P = B. A run larger than its plan (the item's `planned_at`:
+  some node's `width` × `height` / 10^6 above its `mp`, or a numeric `frames` above its `frames`), or one with two
+  `<family>/model` nodes: P = B, its needs still reused. Fixtures give P directly.
+- **Measured**: a present key of another env than X's whose `memory.used_gb` exceeds Σ `gb` of its entries holds one
+  more entry of that excess (device caches, cached node results, activations), counted like an offline entry: never a
+  victim (a runner frees its device cache and cached node results after every unload and every run). Not for a key an
+  `ok` reply stands for (its `resident` is newer than the key's `used_gb`). X's own env reuses its caches inside P.
+- **Reused** entries: entries of X's env equal to one of its needs (they are inside P). **Counted** C = Σ `gb` of every
+  entry of every present key that is not reused (measured excess included). **Pinned** Pn = Σ `gb` of counted entries with `pinned: true` in fresh
+  keys (an idle runner marks only its setting's pins, RUNNER_PIN).
+- **Resident** (for order and placement): X's env key on H has an entry of X's model id, variant and precision whose
+  component is the family's `lora.component` (`transformer` in every family so far) with X's baked LoRAs (one LoRA in
+  two chained stacks once, with the summed strength; none = plain); a family without a `lora` block: any entry of that
+  model, variant and precision.
+- **A family loads** at a release when some component of X's plan without `unloads_after` is not resident on H.
+
+**Admission**, when the order (below) picks run X for host H. H is free only once no run released to it holds it
+(One run at a time per host): while a run of env E runs, H admits nothing, so the whole `budget_gb` that run was
+released with, its planned peak included, stays reserved for E however little E's key declares mid-run. The in-run
+rule extends that reservation to a run whose key outlives its end on the view.
+1. P + Pn > B: X fails at once, `needs <P> GB at its peak; host <H> has <B> GB` (P > B), else `…; host <H> has <B>
+   GB, <Pn> GB of it pinned` (one decimal: `needs 44.1 GB at its peak; host mac has 48.0 GB, 7.4 GB of it pinned`).
+2. A present key of H is in-run: X waits (5), nothing is sent. Else C + P ≤ B: X is released; its `cmd.run.execute` carries `budget_gb` = B − Σ `gb` of the entries of H's other envs
+   (measured excess included).
+3. Else **victims**, in this order: counted entries of **fresh** keys with `pinned: false`, (a) first the baked entries
+   (with `loras`) that no other queued run of H needs (queued, not held, eligible for H, any env), then all others;
+   (b) `last_used` ascending, absent first; (c) larger `gb` first; (d) env, component, model, variant, precision by
+   name. Victims are taken in that order until C − taken + P ≤ B, or none are left. Never a reused entry (what X
+   needs), never a pinned one, never an entry of an offline key (counted, fail closed: a runner cut off from NATS may
+   still have its weights mapped).
+4. One `runner.unload.<H>.<env>` `{for_env: X.env, run_id: X.id, components: [that env's victims, in order]}` per env
+   holding victims, **X's own env included** (its idle runner unloads, say, the baked transformer left by a LoRA run).
+   No victims and no fit (only offline entries are in the way): nothing is sent; X waits.
+5. While X waits it stays queued with `host` H and H releases nothing else ("the host waits for it", as before). Every
+   pass decides afresh from the newest state (the order may pick another run, which may fit; requests already sent
+   are harmless).
+
+**Unload requests** (`req.runner.unload`, core request/reply, 60 s):
+- At most one request in flight per (H, env), repeated at most every 10 s while some run waits on it.
+- **Generations**: every release to an env bumps that env's generation; a request records the generation it was sent
+  in. An `ok` reply of the current generation stands for that env's entries (the reply's `resident`) until its hosts
+  key is rewritten after the reply arrived (`updated_at` later) or a run is released to it. An `ok` of an older
+  generation, `busy`, `internal`, a malformed reply or none in 60 s changes nothing; the env is asked again.
+- **The runner**, idle: unloads exactly the named entries it holds (one it does not hold is skipped; a RUNNER_PIN one
+  is kept), frees the device cache (MLX `mx.clear_cache()`; torch MPS `synchronize()` then `empty_cache()`), rewrites
+  its hosts key, then replies `{unloaded_gb, freed, resident}` (`freed`: the entries it unloaded; `resident`: what
+  remains, exactly as the key it wrote). Asked again for what it no longer holds: `{unloaded_gb: 0, freed: [], …}`.
+  A run in progress: `{error, code: busy}`, nothing unloaded; unloading failed: `code: internal` (logged). No
+  `components` (by hand only): everything, pinned ones, adapters and cached handles too (stage A). It loads nothing
+  until its next `cmd.run.execute`; the fake runner, alone on its host, is never asked.
+- **Time limit**: X fails when it still does not fit 120 s after it first waited (a request sent, or nothing to ask):
+  `env <E> on host <H> did not unload its models in 120 s`, E = the first env by name whose key is in-run, else the
+  first that still holds a victim or an offline entry. Studio keeps that time in memory: a restart starts the 120 s again. A run failed at admission or on
+  the time limit is its owner's **turn** (Order 2), as a release is: their next run waits for the other users' heads.
+- **Restarts.** A runner restarting mid hand-over gives no reply (asked again after 10 s); it starts with nothing
+  resident and its first hosts write (`resident: []`) lets the next pass admit X. A runner that stopped writing
+  (offline key): its entries count and are never asked; X waits until the key is rewritten or deleted, at most 120 s.
+  Studio restarting: asks, generations, skip counts and wait times are in memory; the next pass recomputes everything
+  from the hosts watch and asks again.
+
+**Order** (plan 17.5: "interactive before batch, prefer the models already loaded, round-robin between users"; 7.2:
+"keeps running items that use the models already loaded"), when H is free:
+1. **Lane**: interactive before batch, always (a batch run waits behind interactive ones, as before).
+2. **Round-robin** within the lane: users ordered by their last turn (a release, or a fail at admission or on the time
+   limit; never first; a tie: the older oldest queued run). A user's **head** = their oldest run that is resident on H, else their oldest (plan 17.5:
+   "among a user's ready items, one that uses what is loaded"). Within one user there is no bound: a user waits only
+   behind their own work (at most 100 interactive runs, and each batch's window of 16 rows).
+3. **Resident first, bounded**: walk the users in round-robin order; the first whose head is resident or **overdue**
+   goes; if none is, the first user's head goes. Every head walked past is **passed over**: its skip count + 1, and
+   its first-skip time is stamped if unset. Overdue = skips ≥ **N = 4**, or now − first skip ≥ **T = 180 s**. N and T
+   are constants `SwapSkips` and `SwapWait` of studio_service/api/studio/dispatcher.go (`SWAP_SKIPS`, `SWAP_WAIT_S`
+   in check.py; the fixtures assume them). Skip state is per run, in memory (a restart starts it over); a run released,
+   ended or requeued drops it; a run held (its batch paused) keeps it.
+4. **Bound**: a queued run that needs a swap goes within N releases of other users' runs of its lane, or T seconds
+   after it was first passed over, whichever is first (interactive arrivals aside). Skips count only against other
+   users' heads: one user's runs, every run of their batches included, never force swaps on each other.
+5. `Run.position` uses the same order with the current skip counts (time frozen at the read).
+
+**Row 1 first, and each model loaded once** (plan 7.2 and M4). Pipelines releases rows 2..n only once row 1 has
+ended (Batches, below), and row 1's later steps do not wait for the other rows: "end to end" is there so that a wrong
+binding in a late step costs one row, which holding row 1's clip back would defeat. So the dispatcher's "each model
+loads as few times as possible" applies after row 1, and row 1 pays one swap. For a two-step pipeline on families A
+then B (different envs of H), one user, nothing else queued, one seed per step, n rows, window W = 16:
+- Each family on its own (kept = its plan's components without `unloads_after`): A loads **once** when B's runs leave
+  A's kept components resident, i.e. A's kept + P(B) ≤ B; otherwise **1 + ⌈(n − 1) / W⌉** times (n = 1: once; n = 10:
+  **twice**: once for row 1, once for rows 2..n; never once per row). The same for B with A's peak. Both fit: nothing
+  is unloaded and each loads once.
+- Release order for n ≤ W + 1, whenever a swap is needed: A₁, B₁, A₂ … Aₙ, B₂ … Bₙ (after row 1 every still is queued
+  and resident while each new clip is not).
+- Other users' work in the same lane can add at most one swap per N releases or T seconds.
+- **mac**: both runners report 64 − 12 = 52 GB (B = 52); the runners' plans: Qwen Turbo int8 kept 16.67 GB (text
+  encoder 9.28, transformer 6.76, VAE 0.63), peak 29.25; LTX int8 kept 22.0, peak 44.07. LTX kept + Qwen peak = 51.25
+  fits, Qwen kept + LTX peak = 60.74 does not: the M4 demonstration (Qwen still → LTX clip, ten rows, from cold)
+  expects **Qwen loaded twice and LTX once**, with exactly the unloads of `order.two-family-mac.json`: torch
+  `text_encoder` before row 1's clip and before row 2's clip, nothing else. `order.two-family-batch.json` is the same
+  pipeline at B = 48, where neither fits: each loads twice. These plans hold with 0.75 GB to spare: an idle mlx
+  measuring more than 22.75 GB (its caches; Measured) makes Qwen's runs evict LTX components too.
+
+**Runners** (both native runners):
+- **Hosts value**: every resident entry with `gb` (at the target dtype), `last_used` (UTC: its last use by a stage; a
+  load is a use), `pinned` (in use by the running run, or RUNNER_PIN), `loras` for a baked set; `memory.budget_gb`
+  = RAM − RUNNER_RESERVE_GB. Written every 10 s and after every load, unload and run (before the terminal status).
+- **Models key**: a `memory` item for every present variant and every precision it lists: `components` in the order
+  of their last use in a run, with `unloads_after` for a stage's `unload_after`; `peak_gb` = max over the run's stages,
+  at the canonical workflow's default sizes, of (kept components + the stage's components + its `peak_gb` formula).
+- **`budget_gb`** in `cmd.run.execute`: for that run the residency budget is min(its own, `budget_gb`); its own
+  admission then evicts or fails the run with numbers as before, so a run larger than its plan never crosses into
+  another env's memory.
+- **Measured memory above the declared sizes** (device caches, the runtime itself, cached node results, a load's
+  transient). The runner reports it: `memory.used_gb` is what the device measures (torch MPS
+  `driver_allocated_memory`, MLX active + cache), and every resident `gb` stays the declared size. Studio counts a key
+  of another env at max(Σ `gb`, `used_gb`) (Measured, `budget_gb`, `host_memory`). The runner counts itself the same
+  way: before each stage's admission and each load it holds Σ `gb` + max(0, measured − Σ `gb`) against its budget;
+  when that is short it first drops cached node results and frees the device cache, then measures again, and only
+  then evicts or fails. A load gives the allocator's cache back as it goes (torch: at least every 1 GB of tensors
+  read), so a load's transient stays near its largest tensor rather than the component's full source size.
+- **Own eviction order** (its admission, a stage's need): components the rest of the run does not need before those
+  it does (as before); within each, a baked set the current run does not use before plain components; then least
+  recently used. After-run policies (`RUNNER_AFTER_RUN`, `keep_warm` the default) and the idle unload
+  (`RUNNER_IDLE_UNLOAD_S`) stay.
+- **By hand** (goldens, debugging): stop the runners first (`make runners-stop`); never load a model outside a runner
+  while either runner holds weights.
+
+**Hosts data and the memory chip.** `GET /v1/studio/hosts` gives every entry `host_memory {budget_gb, used_gb}` (the
+same for all envs of a host: B, and per present key the larger of its entries' Σ `gb` and its measured `used_gb`,
+summed and rounded to 0.1: what admission counts) and every
+resident component `last_used`; another user's own LoRA in a baked set stays redacted (`lora_id`, `name`, `strength`
+null, `bytes` kept). The memory chip shows `host_memory` used / total for the host the run will use, and busy when any
+env of it is; the admin Hosts screen (M5a) needs nothing more.
 
 ## Takes, the gallery and uploads (plan 9.1, 17.2)
 
@@ -374,7 +505,8 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
   event that follows finds no thread waiting on that run and is dropped. Resumes of one thread are serialised.
 - **Row 1 first**: at Submit only row 1 runs. Once row 1 has succeeded, failed or been cancelled, every other row is
   released. Ordering between rows and users is the dispatcher's job (batch lane after interactive, round-robin
-  between users, loaded models first); pipelines never paces runs itself.
+  between users, loaded models first); pipelines never paces runs itself. The resulting model loads of a pipeline over
+  two families: Two envs on one host: the hand-over, "Row 1 first, and each model loaded once".
 - **Failures**: a failed row is marked with its error and the batch continues. Three rows in a row (by finish
   order) failing with the same error pause the batch (`reason: 3 rows in a row failed: <error>`). A row a gate's reject
   decided (`rejected at <gate>`, or any end after its `then`) is a reviewer's answer and never counts.
@@ -743,6 +875,18 @@ in lineage order); steps `step_1`…`step_n`, each `workflow` = `made_with.workf
 ← `$prompt`; the param that held the parent run take ← `step_<k−1>.takes`, a param that held an upload ← its
 `$image…` input (a rows param holding several takes: 422 `take <id> mixes several sources in <param>`); output `output` `{from: step_n.takes, collection: title}`;
 edges in a line. Title: `title`, else `<take title> pipeline` cut to 80. No gate is added; the editor adds them.
+
+**A chain across families** (API 1.13; a Qwen still → "Use in…" `ltx-image-to-video` → Save as pipeline on the clip):
+a later step k whose workflow has `prompt.text` and whose workflow `family` differs from step k−1's gets its own Text
+input `prompt_<k>` (inputs order: `prompt`, then the `prompt_<k>` by k, then the Image inputs), and `step_k`'s
+`prompt.text` ← `$prompt_<k>` (a bound key, so not in its `inputs`): a clip's prompt describes motion of that row's
+still, so it is a column, not a constant. A later step of the same family keeps its prompt as a fixed input (as
+before: an edit instruction). A rows param bound to `step_<k−1>.takes` (`keyframes.images`) takes its item's defaults
+for every other field (seconds 0, strength 1: what "Use in…" sets). Expected document:
+`fixtures/pipelines/valid.still-to-clip.json` (inputs `prompt`, `prompt_2`; `step_1` `qwen-image`; `step_2`
+`ltx-image-to-video` with `keyframes.images` ← `step_1.takes`); its batch: `fixtures/http/BatchCreate.valid.9.json`
+(`table` with columns `inputs.prompt`, `inputs.prompt_2`, ten rows; each row needs both: `row 3: inputs.prompt_2: a
+value is required`).
 
 ## Elements (API 1.8, plan 10-elements-and-looks.md section 14)
 

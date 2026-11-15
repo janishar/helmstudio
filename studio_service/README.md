@@ -147,10 +147,7 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
 - `Workflow.media`: a template's as published, a user workflow's from its graph (`workflowMedia`); `GET /workflows?media=`.
   Graph rules use `fits` (an input of type `Media` takes `Image` or `Video`); a `frames` param is on its grid
   (`checkFrames`).
-- GPU gate (`dispatcher.go` `gate`): before releasing a run to env E of a host, every other live env of that host must
-  show no `resident`; one that does is asked `runner.unload.<host>.<env>` (one in flight, at most every 10 s, 60 s
-  wait). An ok reply opens the gate until a run is released to that env; 120 s shut fails the run. The one-run-per-host
-  rule already keeps the other env idle.
+- The GPU gate of stage A became the hand-over of stage C (below).
 
 ## Video, stage B (API 1.12, M4 stage B)
 
@@ -174,6 +171,24 @@ NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a 
 consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable `studio-pipelines`), publishes
 `cmd.pipeline.>` and `evt.studio.>`, serves `studio.runs.create`, requests `pipelines.state.get`, watches the KV `registry` and `hosts`, requests
 `auth.validate.token`, subscribes to `evt.auth.revoked`.
+
+
+## Two envs on one host: the hand-over (API 1.13, M4 stage C)
+
+- `dispatcher.go` `handover` / `admit`: the run the order picks for a host is released when its planned peak
+  (`planOf`: the models key's `memory` item, plus its LoRA files; none = the whole budget) plus every other resident
+  entry of the host's present keys fits the smallest `memory.budget_gb`; else victims (fresh, unpinned, not what it
+  reuses; unreferenced baked sets, then `last_used`, then larger) are named in one `runner.unload.<host>.<env>` per
+  env (one in flight, every 10 s, 60 s wait). An ok of the current generation stands for that env's key until the
+  key is rewritten after it or a run is released there; 120 s without room fails the run. The command carries
+  `budget_gb`. All arithmetic in hundredths of a GB.
+- Order (`pick`): lane, then users round-robin; a user's head is their oldest resident run, else their oldest; the first
+  head resident or overdue (`SwapSkips` 4 passes, `SwapWait` 180 s, counted in memory on release or failure) goes.
+  Positions use the dispatcher's skip counts (`Service.SetDispatcher`).
+- `GET /hosts`: `host_memory` per host and `last_used` per resident component. Save as pipeline: a step of another family
+  than the one before gets its own input `prompt_<k>`; saved steps carry `seeds: 1`.
+- Tests: `api/studio/handover_test.go` runs every `contracts/fixtures/dispatch` fixture (`admit.*` through `admit`,
+  `order.*` through a simulation of `pick` and `admit`); `tests/handover_test.go` the interleavings on the DB.
 
 ## Layout
 

@@ -126,6 +126,10 @@ class Consumer:
         events = RunEvents(self.js, cmd)
         self.cancel_requested = False
         self.host.run_id, self.host.attempt = run_id, data["attempt"]
+        if (
+            self.residency is not None
+        ):  # what the host's other envs leave (the hand-over); done() drops it
+            self.residency.cap = data.get("budget_gb")
         await self.host.put()
         stop_watch = None
         nodes, resolved = graph.resolve(data["workflow"]["nodes"], self.node_schemas)
@@ -189,6 +193,7 @@ class Consumer:
             if stop_watch:
                 with contextlib.suppress(Exception):
                     await stop_watch()
+            self.cache.trim()
             if self.residency is not None and not self.stalled:
                 try:
                     await asyncio.get_running_loop().run_in_executor(

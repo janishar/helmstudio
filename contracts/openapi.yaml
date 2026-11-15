@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.12.0
+  version: 1.13.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -794,7 +794,9 @@ paths:
       summary: The runner hosts and their state, redacted
       description: |
         One entry per key in the KV `hosts`. `offline` when the key is older than 30 s. A host running anyone's run is
-        `busy`; which run and whose is never shown.
+        `busy`; which run and whose is never shown. From 1.13 each entry carries `host_memory`, the budget its host's
+        envs share and what they hold together (the memory chip shows it for the host the run will use), and each
+        resident component its `last_used` (contracts/README.md, The hand-over).
       responses:
         '200': {description: hosts, content: {application/json: {schema: {$ref: '#/components/schemas/HostList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -2407,6 +2409,11 @@ components:
           type: object
           required: [budget_gb, used_gb]
           properties: {budget_gb: {type: number}, used_gb: {type: number}}
+        host_memory:
+          type: object
+          required: [budget_gb, used_gb]
+          description: 'from 1.13: the same on every entry of one host. `budget_gb` = the smallest `memory.budget_gb` among the host''s keys (fresh or offline) that report one; `used_gb` = the sum over those keys of the larger of Σ `gb` of its resident components and its measured `memory.used_gb` (what the dispatcher''s admission counts), both rounded to 0.1. Absent when no key of the host reports memory'
+          properties: {budget_gb: {type: number, minimum: 0}, used_gb: {type: number, minimum: 0}}
         resident:
           type: array
           description: model components loaded now; no run or owner
@@ -2420,6 +2427,7 @@ components:
               precision: {type: string, enum: [bf16, fp16, int8, int4]}
               gb: {type: number}
               pinned: {type: boolean}
+              last_used: {type: string, format: date-time, description: 'from 1.13: when the runner last used it; absent from older runners'}
               loras:
                 type: array
                 description: 'a component with LoRAs baked in is its own entry: those LoRAs in order; absent or empty = the plain component. Another user''s own LoRA shows only its size (`lora_id`, `name`, `strength` null)'

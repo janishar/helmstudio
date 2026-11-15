@@ -186,3 +186,41 @@ def test_echo_lora_block_fits_the_contract_lora_fixtures():
         if fx["expect"]["family"] == "qwen-image" and "ignore" not in fx:
             assert lora.normalise(fx["name"], fx["tensors"], block, "echo")["error"] is None, f.name
     assert block == fixture("models.valid.json")["models"][0]["lora"]
+
+
+@pytest.mark.parametrize("variant", ["base", "turbo"])
+def test_memory_plan_lists_components_in_order_of_last_use_and_the_warm_peak(
+    tmp_path, monkeypatch, variant
+):
+    """models[].variants[].memory (the hand-over): the canonical workflow at its default sizes (1024², no refs):
+    decode's 8.5 * mp is the largest stage peak, on top of every kept component."""
+    q = FakeQwen(tmp_path, monkeypatch)
+    q.pack.workflows = fixture("qwen-image.workflows.valid.json")["workflows"]
+    plan = registry.memory_plan(q.pack, variant, "int8", q.impls, q.schemas)
+    owner = {"text_encoder": "base", "vae": "base", "transformer": variant}
+    want = [
+        (c, owner[c], "bf16" if c == "vae" else "int8")
+        for c in ("text_encoder", "transformer", "vae")
+    ]
+    assert [(c["component"], c["variant"], c["precision"]) for c in plan["components"]] == want
+    kept = sum(c["gb"] for c in plan["components"])
+    assert plan["precision"] == "int8" and not any("unloads_after" in c for c in plan["components"])
+    assert plan["peak_gb"] == pytest.approx(kept + 8.5 * 1024 * 1024 / 1e6, abs=0.01)
+    assert plan["planned_at"] == {"mp": 1.0486, "frames": 0}  # a larger run has no plan (studio)
+    entry = pack.models_entry(q.pack)
+    entry["variants"][0]["memory"] = [plan]
+    value = {"schema_version": 1, "host": "mac", "env": "torch", "published_at": "2026-11-14T10:00:00Z",
+             "published_by": "t", "models": [entry]}  # fmt: skip
+    assert schemas.registry_errors("models", value) == []
+
+
+def test_memory_plan_marks_unload_after_and_leaves_it_out_of_the_kept_set(tmp_path, monkeypatch):
+    q = FakeQwen(tmp_path, monkeypatch)
+    q.pack.workflows = fixture("qwen-image.workflows.valid.json")["workflows"]
+    q.impls["qwen-image/encode"].unload_after = ("text_encoder",)
+    q.impls["qwen-image/encode"].peak = pack.compile_formula("100", set())
+    plan = registry.memory_plan(q.pack, "base", "bf16", q.impls, q.schemas)
+    te = plan["components"][0]
+    assert te["component"] == "text_encoder" and te["unloads_after"] is True
+    others = sum(c["gb"] for c in plan["components"][1:])
+    assert plan["peak_gb"] == pytest.approx(others + te["gb"] + 100, abs=0.01)  # its stage holds it

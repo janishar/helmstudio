@@ -3,6 +3,8 @@ import nodesFixture from "../../contracts/fixtures/registry/nodes.valid.json";
 import workflowsFixture from "../../contracts/fixtures/registry/workflows.valid.json";
 import batchFixture from "../../contracts/fixtures/http/Batch.valid.1.json";
 import rowFixture from "../../contracts/fixtures/http/BatchRow.valid.1.json";
+import stillToClip from "../../contracts/fixtures/pipelines/valid.still-to-clip.json";
+import batch9 from "../../contracts/fixtures/http/BatchCreate.valid.9.json";
 import type { S } from "@/lib/api";
 import {
   appendRows,
@@ -26,6 +28,7 @@ import {
   typedLines,
 } from "@/lib/batches";
 import { fields } from "@/lib/workflow";
+import { pipelineFields } from "@/lib/pipeline";
 
 const echo = {
   ...workflowsFixture.workflows[0],
@@ -162,5 +165,21 @@ describe("batch display and controls", () => {
     ];
     expect(inputSummary(rows)(rows[1])).toBe("a heron · seed 2");
     expect(inputSummary(rows.slice(0, 1))(rows[0])).toBe("a fox");
+  });
+});
+
+describe("a still-to-clip pipeline's batch (API 1.13)", () => {
+  const doc = stillToClip.pipeline;
+  const want = batch9.rows.table;
+  it("has both prompts as columns, matched from a CSV header", () => {
+    const fs = pipelineFields(doc as unknown as S<"PipelineDoc">);
+    const cells = [["prompt", "prompt_2"], ...want.rows];
+    const t = buildTable(
+      cells,
+      cells[0].map((h) => matchColumn(h, fs)),
+      fs,
+    );
+    expect(t.errors).toEqual([]);
+    expect(t.table).toEqual(want);
   });
 });

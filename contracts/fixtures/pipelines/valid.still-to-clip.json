@@ -1,0 +1,71 @@
+{
+  "description": "what Save as pipeline makes from an LTX clip made by \"Use in…\" from a Qwen still (API 1.13): the still's prompt is input `prompt`, the clip's (another family) its own input `prompt_2`; the clip's first-frame row is bound to the still's takes (one take: seconds 0, strength 1, the row's defaults); the rest of each made_with is fixed step inputs",
+  "pipeline": {
+    "title": "Fox clip pipeline",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          },
+          {
+            "name": "prompt_2",
+            "type": "Text"
+          }
+        ]
+      },
+      "step_1": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "seeds": 1,
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "step_2": {
+        "kind": "step",
+        "workflow": "ltx-image-to-video",
+        "seeds": 1,
+        "inputs": {
+          "model.precision": "int8",
+          "canvas.width": 448,
+          "canvas.height": 256,
+          "duration.frames": 49
+        },
+        "bind": {
+          "prompt.text": "$prompt_2",
+          "keyframes.images": "step_1.takes"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "from": "step_2.takes",
+        "collection": "Fox clip pipeline"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "step_1"
+      ],
+      [
+        "step_1",
+        "step_2"
+      ],
+      [
+        "step_2",
+        "output"
+      ]
+    ]
+  },
+  "problems": []
+}

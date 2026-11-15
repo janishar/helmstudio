@@ -1,0 +1,88 @@
+{
+  "description": "the GPU-check moment: the host is free (the torch run's terminal status is projected) but the view still holds the key torch wrote during that run, naming it, with only its VAE declared and a measure taken before the run's peak: that run may still use up to its budget_gb, so the LTX run waits for torch's next write (nothing is asked), where counting the key's 0.63 GB alone would release it at 44.07 + 0.63 <= 52 next to a torch process that was at 31.3 GB",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "run_id": "3f0c7a52-8d1e-4b6a-9c2f-5e7d1a3b8c40",
+      "budget_gb": 52,
+      "used_gb": 0.63,
+      "resident": [
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 0.63,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:30Z"
+        }
+      ]
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": 44.07,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "connector",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vae_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "upscaler",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "audio_vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vocoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "wait",
+    "unload": {},
+    "budget_gb": null,
+    "error": null
+  }
+}

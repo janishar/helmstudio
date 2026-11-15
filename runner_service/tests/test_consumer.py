@@ -345,6 +345,7 @@ async def test_runner_unload_frees_everything_when_idle_and_is_busy_during_a_run
         19.2,
         object(),
         None,
+        0.0,
     ]  # pinned: still unloaded
     js = FakeJS()
     c = consumer(js, residency=res)
@@ -352,8 +353,10 @@ async def test_runner_unload_frees_everything_when_idle_and_is_busy_during_a_run
     c.cache["k"] = {"x": 1}
     reply = await main.unload_reply(c, c.host, {"for_env": "torch"})
     assert (
-        reply == {"unloaded_gb": 19.2, "resident": []} and not res.entries and not c.cache and freed
-    )
+        reply == {"unloaded_gb": 19.2, "resident": [], "freed": [
+            {"component": "transformer", "model": "m", "variant": "v", "precision": "int8"}]}
+        and not res.entries and not c.cache and freed
+    )  # fmt: skip
     assert (
         schemas.errors(
             "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json#/$defs/reply",
@@ -390,3 +393,65 @@ async def test_the_hosts_key_lists_the_loads_before_the_terminal_status(tmp_path
     }
     assert seen["value"]["run_id"] == RUN  # still its lease
     assert json.loads(host.kv.data["fake.fake"])["state"] == "idle"
+
+
+UNLOAD = "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json#/$defs/"
+LORA = "7f3e2a10-5b4c-4d8e-9f1a-2c3b4d5e6f70"
+
+
+async def test_runner_unload_frees_the_named_components_and_replies_what_remains():
+    """The hand-over: exactly the named entries go (a baked set by lora id and strength); a pinned or unknown one is
+    skipped; `resident` is what the rewritten hosts key lists; asked again, nothing is freed."""
+    import main
+
+    res = Residency(48, pins={"vae"})
+    baked = [{"lora_id": LORA, "name": "ink", "strength": 0.8, "bytes": 1000}]
+    res.entries[("ltx-2.5", "distilled", "transformer", "int8")] = [19.2, object(), None, 1.0]
+    res.entries[("ltx-2.5", "distilled", "transformer", "int8", (("ab", 0.8),))] = [
+        19.4,
+        object(),
+        baked,
+        2.0,
+    ]
+    res.entries[("ltx-2.5", "distilled", "vae", "bf16")] = [1.0, object(), None, 3.0]
+    js = FakeJS()
+    c = consumer(js, residency=res)
+    c.host.extra = res.state
+    c.cache["k"] = {"x": 1}
+    name = {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8",
+    }
+    request = {"for_env": "torch", "run_id": RUN, "components": [
+        name | {"loras": [{"lora_id": LORA, "strength": 0.8}]},
+        {"component": "vae", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16"},  # pinned
+        name | {"precision": "int4"},  # not held
+    ]}  # fmt: skip
+    assert schemas.errors(UNLOAD + "request", request) == []
+    reply = await main.unload_reply(c, c.host, request)
+    assert schemas.errors(UNLOAD + "reply", reply) == []
+    assert reply["unloaded_gb"] == 19.4 and reply["freed"] == [request["components"][0]]
+    assert [(r["component"], r.get("loras")) for r in reply["resident"]] == [
+        ("transformer", None),
+        ("vae", None),
+    ]
+    assert reply["resident"] == json.loads(c.host.kv.data["fake.fake"])["resident"]
+    assert not c.cache  # cached node results go too: the other env needs the memory
+    again = await main.unload_reply(c, c.host, request)
+    assert again["unloaded_gb"] == 0 and again["freed"] == [] and len(again["resident"]) == 2
+    bad = await main.unload_reply(c, c.host, {"for_env": "torch", "components": []})
+    assert bad["code"] == "internal" and len(res.entries) == 2
+
+
+async def test_budget_gb_caps_the_run_and_ends_with_it(tmp_path, monkeypatch):
+    """cmd.run.execute budget_gb (what the host's other envs leave) caps that run's residency budget."""
+    q, js = FakeQwen(tmp_path, monkeypatch), FakeJS()
+    c, _ = qwen_consumer(q, js)
+    cmd = qwen_command(seed=3)
+    cmd["data"]["budget_gb"] = 1.0
+    await c.handle(FakeMsg(cmd, js))
+    assert kinds(js) == ["running", "failed"]
+    assert js.events()[-1]["data"]["error"].endswith("budget 1.0 GB")
+    assert c.residency.cap is None and c.residency.limit == 52

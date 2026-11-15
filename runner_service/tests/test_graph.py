@@ -478,6 +478,8 @@ def test_cache_is_bounded_by_bytes_and_keeps_the_newest(monkeypatch):
     assert list(cache) == ["b", "c"] and sum(cache.sizes.values()) == 200
     cache["d"] = {"x": np.zeros(1000, np.uint8)}  # alone over the bound: it stays, the rest goes
     assert list(cache) == ["d"] and cache.sizes == {"d": 1000}
+    cache.trim()  # the run ended: the oversized newest entry goes too
+    assert list(cache) == [] and cache.sizes == {}
 
 
 async def test_admission_plans_a_stage_after_an_auto_length_for_the_resolved_frames():

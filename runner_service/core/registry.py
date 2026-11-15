@@ -45,19 +45,70 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
         | meta
         | {"models": [packs.models_entry(p) for p, _ in loaded]},
     }
+    node_schemas = {k: s for k, (s, _) in every.items()}
+    impls = {k: n for k, (_, n) in every.items()}
+    for (p, _), entry in zip(loaded, values["models"]["models"], strict=True):
+        for variant in entry.get("variants", []):
+            if variant["presence"] == "present" and p.spec.get("components"):
+                variant["memory"] = [
+                    memory_plan(p, variant["id"], x, impls, node_schemas)
+                    for x in variant["precisions"]
+                ]
     for kind, value in values.items():
         if errs := schemas.registry_errors(kind, value):
             raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
     ids = [f"{p.family}/{x['id']}" for p, _ in loaded for x in p.looks]
     if dup := {i for i in ids if ids.count(i) > 1}:
         raise ValueError(f"looks: ids {sorted(dup)} are shipped by two packs")
-    node_schemas = {k: s for k, (s, _) in every.items()}
     for w in workflows:
         if w["env"] != env:
             raise ValueError(f"workflow {w['id']}: env {w['env']}, this runner is {env}")
         if errs := graph.validate(w["nodes"], node_schemas, run=False):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
-    return values, {k: n for k, (_, n) in every.items()}, [p for p, _ in loaded]
+    return values, impls, [p for p, _ in loaded]
+
+
+def memory_plan(pack, variant: str, precision: str, impls: dict, node_schemas: dict) -> dict:
+    """The models key's `memory` item of (variant, precision) (contracts/README.md, Two envs on one host: the
+    hand-over): over the pack's workflows at their default sizes, run in `graph.run`'s order, the components a run
+    loads in the order of their last use (`unloads_after` when the stage that last uses one unloads it) and
+    peak_gb = max over stages of (kept components + the stage's own + its peak_gb formula), starting warm; planned_at:
+    the largest mp and frames those formulas saw."""
+    comps: dict[tuple, dict] = {}  # residency key → component item, in order of last use
+    stages = []  # (keys, peak) per stage
+    at = {"mp": 0.0, "frames": 0}  # the largest sizes a stage's formula saw (planned_at)
+    for w in pack.workflows:
+        nodes = json.loads(json.dumps(w["nodes"]))
+        for node in nodes.values():
+            params = node.setdefault("params", {})
+            for spec in node_schemas[node["kind"]]["params"]:
+                if "default" in spec:
+                    params.setdefault(spec["name"], spec["default"])
+            if node["kind"] == f"{pack.family}/model":
+                params |= {"variant": variant, "precision": precision}
+        sinks = [n for n in graph.order(nodes) if not node_schemas[nodes[n]["kind"]]["outputs"]]
+        for nid in graph.pull_order(nodes, sinks):
+            impl = impls[nodes[nid]["kind"]]
+            if not (impl.uses or impl.peak is not None):
+                continue
+            keys = graph._components(nodes, impls, node_schemas, nid)
+            peak = graph.stage_peak(nodes, node_schemas, nid, impl, nodes[nid]["params"], {})
+            stages.append((set(keys), peak))
+            if impl.peak is not None:
+                sizes = graph.stage_sizes(nodes, node_schemas, nid, {})
+                at = {
+                    "mp": max(at["mp"], sizes["mp"]),
+                    "frames": max(at["frames"], sizes["frames"]),
+                }
+            for key, model in keys.items():
+                comps.pop(key, None)
+                comps[key] = {"component": key[2], "variant": key[1], "precision": key[3],
+                              "gb": model.gb(key[2])[0]} | ({"unloads_after": True} if key[2] in impl.unload_after else {})  # fmt: skip
+    kept = {k for k, c in comps.items() if not c.get("unloads_after")}
+    peak = max((sum(comps[k]["gb"] for k in kept | keys) + p for keys, p in stages), default=0.0)
+    items = [c | {"gb": round(c["gb"], 2)} for c in comps.values()]
+    return {"precision": precision, "peak_gb": round(max(peak, 0.01), 2), "components": items,
+            "planned_at": {"mp": round(at["mp"], 4), "frames": at["frames"]}}  # fmt: skip
 
 
 def scanned_value(kind: str, entries: list[dict], env: str = ENV) -> dict:

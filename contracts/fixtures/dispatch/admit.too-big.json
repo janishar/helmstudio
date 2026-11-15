@@ -1,0 +1,76 @@
+{
+  "description": "a planned peak above the host budget fails at once",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "resident": []
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 48,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": 60,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "connector",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vae_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "upscaler",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "audio_vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vocoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "fail",
+    "unload": {},
+    "budget_gb": null,
+    "error": "needs 60.0 GB at its peak; host mac has 48.0 GB"
+  }
+}

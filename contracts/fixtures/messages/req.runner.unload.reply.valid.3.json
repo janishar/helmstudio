@@ -1,0 +1,52 @@
+{
+  "unloaded_gb": 38.93,
+  "freed": [
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8",
+      "loras": [
+        {
+          "lora_id": "1f3a5c7e9b2d4f6a8c0e1b3d5f7a9c2e4b6d8f0a1c3e5b7d9f2a4c6e8b0d1f3a",
+          "strength": 0.8
+        }
+      ]
+    },
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8"
+    }
+  ],
+  "resident": [
+    {
+      "component": "vae_encoder",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.59,
+      "pinned": false,
+      "last_used": "2026-11-15T10:10:10Z"
+    },
+    {
+      "component": "upscaler",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.93,
+      "pinned": false,
+      "last_used": "2026-11-15T10:10:25Z"
+    },
+    {
+      "component": "vae",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.76,
+      "pinned": false,
+      "last_used": "2026-11-15T10:10:45Z"
+    }
+  ]
+}

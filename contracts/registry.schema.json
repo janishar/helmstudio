@@ -1056,6 +1056,97 @@
                             ]
                           },
                           "description": "what it can load as, first = native. A full-precision variant lists its dtype then the load-time quantizations (bf16, int8; MLX also int4); an already-quantized one lists only its own (int8): no choice, nothing quantized at load"
+                        },
+                        "memory": {
+                          "type": "array",
+                          "description": "from API 1.13 (contracts/README.md, The hand-over): per precision of `precisions`, what a run of this variant loaded at that precision holds. The dispatcher's host admission reads it; a precision not listed is planned at the whole host budget. Native runners publish it for every present variant and precision",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "precision",
+                              "peak_gb",
+                              "components"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "precision": {
+                                "enum": [
+                                  "bf16",
+                                  "fp16",
+                                  "int8",
+                                  "int4"
+                                ],
+                                "description": "the model node's precision param"
+                              },
+                              "peak_gb": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "description": "the planned peak: the most this env holds at once during such a run at the canonical workflow's default sizes, starting warm (every component without unloads_after resident): max over its stages of the resident components + the stage's own + the stage's peak_gb formula. LoRAs not included"
+                              },
+                              "planned_at": {
+                                "type": "object",
+                                "required": [
+                                  "mp",
+                                  "frames"
+                                ],
+                                "additionalProperties": false,
+                                "description": "from API 1.13: the largest sizes peak_gb was planned at, over its stages (the formulas' mp and frames). A run larger than either (any node's width × height / 10^6, any numeric frames) has no plan: it is planned at the whole host budget. Absent: every run uses peak_gb",
+                                "properties": {
+                                  "mp": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "frames": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                }
+                              },
+                              "components": {
+                                "type": "array",
+                                "minItems": 1,
+                                "description": "every component such a run loads, in the order of their last use in the run (the hosts value's resident entries of the same key)",
+                                "items": {
+                                  "type": "object",
+                                  "required": [
+                                    "component",
+                                    "variant",
+                                    "precision",
+                                    "gb"
+                                  ],
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "component": {
+                                      "type": "string",
+                                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                                    },
+                                    "variant": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                                      "description": "the variant that owns the files (Qwen turbo's text_encoder and vae: base): the resident entry's variant"
+                                    },
+                                    "precision": {
+                                      "enum": [
+                                        "bf16",
+                                        "fp16",
+                                        "int8",
+                                        "int4"
+                                      ],
+                                      "description": "what it is loaded at (a vae stays bf16 in an int8 run): the resident entry's precision"
+                                    },
+                                    "gb": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "unloads_after": {
+                                      "type": "boolean",
+                                      "description": "true: the run unloads it after its stage (a stage's unload_after), so it is not resident after the run; absent = false"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -1206,7 +1297,7 @@
             "used_gb"
           ],
           "additionalProperties": false,
-          "description": "GPU / unified memory the runner may use and uses now",
+          "description": "GPU / unified memory the runner may use and uses now. budget_gb = physical RAM minus the runner's reserve; the host's shared budget is the smallest budget_gb of its envs (contracts/README.md, The hand-over)",
           "properties": {
             "budget_gb": {
               "type": "number",
@@ -1261,7 +1352,12 @@
               },
               "pinned": {
                 "type": "boolean",
-                "description": "in use by the running run: not evictable"
+                "description": "in use by the running run, or pinned by the host's setting (RUNNER_PIN): not evictable. In an idle runner's value only the setting's pins are true"
+              },
+              "last_used": {
+                "type": "string",
+                "format": "date-time",
+                "description": "from API 1.13: when a stage last used it (its load counts as a use); the dispatcher's victims go least recently used first. Native runners always send it; absent = used before any entry that has it"
               },
               "loras": {
                 "type": "array",

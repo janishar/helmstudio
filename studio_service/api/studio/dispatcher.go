@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -40,11 +41,17 @@ const (
 	// half a second of queue latency ever matters.
 	Tick = 500 * time.Millisecond
 
-	// The GPU gate (contracts/README.md "Two envs on one host"): an env holding weights is asked to unload at most every
-	// AskEvery, each ask waits UnloadWait for its reply, and a run the gate keeps shut for GateTimeout fails.
+	// The hand-over (contracts/README.md "Two envs on one host: the hand-over"): an env holding victims is asked to
+	// unload them at most every AskEvery, each ask waits UnloadWait for its reply, and a run that still does not fit
+	// GateTimeout after it first waited fails.
 	AskEvery    = 10 * time.Second
 	UnloadWait  = 60 * time.Second
 	GateTimeout = 120 * time.Second
+
+	// The fairness bound of resident-first order: a user's head that needs a swap goes once passed over SwapSkips
+	// times, or SwapWait after it was first passed over (check.py SWAP_SKIPS, SWAP_WAIT_S).
+	SwapSkips = 4
+	SwapWait  = 180 * time.Second
 )
 
 // Dispatcher releases queued runs and watches the leases of released ones. purge drops the messages of a CMD subject
@@ -56,29 +63,32 @@ type Dispatcher struct {
 	purge    func(ctx context.Context, subject string) error
 	backlog  func(ctx context.Context) (int, error)
 	lost     map[string]time.Time
-	// Unload sends a core NATS request (runner.unload.<host>.<env>) and returns the reply; nil: never asked (a gate
-	// shut by another env's weights then waits for the hosts watch, and fails after GateTimeout).
+	// Unload sends a core NATS request (runner.unload.<host>.<env>) and returns the reply; nil: never asked (a run
+	// that does not fit then waits for the hosts watch, and fails after GateTimeout).
 	Unload func(ctx context.Context, subject string, body []byte) ([]byte, error)
-	gated  map[string]time.Time // run id → when the gate first kept it (in memory: a restart starts over)
-	mu     sync.Mutex           // guards asks: the replies arrive on their own goroutines
+	waited map[string]time.Time // run id → when it first waited for room (in memory: a restart starts over)
+	mu     sync.Mutex           // guards asks and skips: replies arrive on their own goroutines, readers on theirs
 	asks   map[string]*ask      // "<host>.<env>" asked to unload → the state of its asks
+	skips  map[string]skip      // queued run id → how often resident-first order passed it over
 	asking sync.WaitGroup       // the asks in flight (tests wait for them)
 }
 
-// ask is the state of the unload requests to one env: whether one is in flight, when the last went, whether it
-// answered ok since the last run released to it (it loads nothing again before its next command), and gen, bumped by
-// every release to it: a reply to a request sent before a release says nothing about what that run loads.
+// ask is the state of the unload requests to one env: whether one is in flight, when the last went, and gen, bumped by
+// every release to it: a reply to a request sent before a release says nothing about what that run loads. ok: an ok
+// reply of the current generation, whose resident stands for the env's key until the key is rewritten after at (when
+// it arrived) or a run is released to it.
 type ask struct {
 	inFlight, ok bool
-	sent         time.Time
+	sent, at     time.Time
 	gen          int
+	resident     []registry.Resident
 }
 
 // NewDispatcher returns the dispatcher.
 func NewDispatcher(pool *pgxpool.Pool, registry *registry.Registry, purge func(ctx context.Context, subject string) error,
 	backlog func(ctx context.Context) (int, error)) *Dispatcher {
 	return &Dispatcher{pool: pool, registry: registry, purge: purge, backlog: backlog, lost: map[string]time.Time{},
-		gated: map[string]time.Time{}, asks: map[string]*ask{}}
+		waited: map[string]time.Time{}, asks: map[string]*ask{}, skips: map[string]skip{}}
 }
 
 // Settle waits for the unload requests in flight (tests).
@@ -102,19 +112,22 @@ func (d *Dispatcher) Run(ctx context.Context) {
 
 // Pass does one round as System, under a transaction-scoped advisory lock so two replicas never pass at once: a
 // released run whose lease has been lost for Confirm is retried once (purged, attempt 2, queued again) or ended; a
-// waiting run with no eligible host fails; then each free host takes the next run in the fair order. Nothing happens
-// until the registry has loaded the KV's current values.
+// waiting run with no eligible host fails; then each free host takes the next run in the fair order, released when
+// the host's memory admits it (the hand-over), else the host waits for it. Nothing happens until the registry has
+// loaded the KV's current values.
 func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 	if !d.registry.Ready() { // an empty view would read every host as gone: nothing to decide yet
 		return nil
 	}
-	lost, gated := map[string]time.Time{}, map[string]time.Time{}
+	lost, waited := map[string]time.Time{}, map[string]time.Time{}
+	var snap snapshot
+	decided := map[string][]string{} // run id released or failed → the heads its pick passed over
 	err := common.System(ctx, d.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('studio.dispatcher'))`); err != nil {
 			return err
 		}
-		snap, err := look(ctx, tx, d.registry, now)
-		if err != nil {
+		var err error
+		if snap, err = look(ctx, tx, d.registry, now); err != nil {
 			return err
 		}
 		busy := map[string]bool{}
@@ -169,73 +182,116 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 				free = append(free, host)
 			}
 		}
-		for _, next := range lineup(free, snap.queue, snap.last, nil, 1) {
-			holder := d.gate(ctx, snap.values, next, now)
-			if holder == "" {
-				if err := release(ctx, tx, next); err != nil {
+		for _, next := range lineup(free, snap.queue, snap.last, nil, 1, d.skipState(), now) {
+			got := d.handover(ctx, snap, next, now)
+			switch got.decision {
+			case "release":
+				if err := release(ctx, tx, next, got.budget); err != nil {
 					return err
 				}
 				d.loads(next.host + "." + next.env)
+				decided[next.run.ID] = next.passed
+				continue
+			case "fail":
+				if err := failTurn(ctx, tx, next.run, got.err); err != nil {
+					return err
+				}
+				decided[next.run.ID] = next.passed
 				continue
 			}
-			first, seen := d.gated[next.run.ID]
+			first, seen := d.waited[next.run.ID]
 			if !seen {
 				first = now
 			}
 			if now.Sub(first) < GateTimeout {
-				gated[next.run.ID] = first // stays queued: the host waits for it
+				waited[next.run.ID] = first // stays queued: the host waits for it
 				continue
 			}
-			reason := fmt.Sprintf("env %s on host %s did not unload its models in %d s", holder, next.host, int(GateTimeout.Seconds()))
-			if _, err := finish(ctx, tx, next.run, "failed", &reason); err != nil {
+			reason := fmt.Sprintf("env %s on host %s did not unload its models in %d s", got.holder, next.host, int(GateTimeout.Seconds()))
+			if err := failTurn(ctx, tx, next.run, reason); err != nil {
 				return err
 			}
+			decided[next.run.ID] = next.passed
 		}
 		return nil
 	})
 	if err == nil {
-		d.lost, d.gated = lost, gated // runs held again start over
+		d.lost, d.waited = lost, waited // runs held again start over
+		d.passOver(decided, snap, now)
 	}
 	return err
 }
 
-// gate returns the first other env (by name) of next's host that still holds weights, asking it to unload, or "" when
-// the GPU is free for next: every other env's key is gone, lists nothing resident, or answered an unload ok since its
-// last run (the hosts watch may lag behind the reply). A stale key still listing resident weights holds them (fails
-// closed: a runner cut off from NATS may still have them mapped) until it is deleted or rewritten. One GPU per host;
-// the dispatcher's one run per host means the other env is idle.
-func (d *Dispatcher) gate(ctx context.Context, values []registry.Host, next placed, now time.Time) string {
-	holders := []string{}
-	for _, value := range values {
-		if value.Host == next.host && value.Env != next.env && len(value.Resident) > 0 {
-			holders = append(holders, value.Env)
-		}
-	}
-	slices.Sort(holders)
+// handover decides next's admission on its host (admit) from the host's present keys, an env's standing ok reply in
+// place of its key's resident, next's plan and what the host's other queued runs need, and asks each env holding
+// victims to unload them. A stale key counts (fails closed: a runner cut off from NATS may still have its weights
+// mapped) and is never asked; a deleted key holds nothing.
+func (d *Dispatcher) handover(ctx context.Context, snap snapshot, next placed, now time.Time) admission {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	shut := ""
-	for _, env := range holders {
-		source := next.host + "." + env
-		state := d.asks[source]
-		if state == nil {
-			state = &ask{}
-			d.asks[source] = state
-		}
-		if state.ok {
+	var entries []entry
+	budget, running := -1, ""
+	for _, value := range snap.values {
+		if value.Host != next.host {
 			continue
 		}
-		shut = cmp.Or(shut, env)
-		if d.Unload == nil || state.inFlight || now.Sub(state.sent) < AskEvery {
-			continue
+		if value.RunID != nil && (running == "" || value.Env < running) {
+			running = value.Env // its run may still be using up to its budget_gb: the next write decides
 		}
-		state.inFlight, state.sent = true, now
-		body, _ := json.Marshal(message.Unload{ForEnv: next.env, RunID: next.run.ID})
-		log.Printf("dispatcher: asking %s to unload for run %s (env %s)", source, next.run.ID, next.env)
-		d.asking.Add(1)
-		go d.ask(ctx, source, body, state.gen)
+		if value.Memory != nil && (budget < 0 || hundredths(value.Memory.BudgetGB) < budget) {
+			budget = hundredths(value.Memory.BudgetGB)
+		}
+		resident, standing := value.Resident, false
+		if state := d.asks[value.Host+"."+value.Env]; state != nil && state.ok {
+			if value.UpdatedAt.After(state.at) {
+				state.ok = false // the key was rewritten since: it speaks for itself
+			} else {
+				resident, standing = state.resident, true
+			}
+		}
+		entries = append(entries, keyEntries(value.Env, resident, value.Live(now) && value.RunID == nil,
+			measured(value, standing, next.env))...)
 	}
-	return shut
+	if budget < 0 {
+		return admission{decision: "release"} // no key reports memory (the fake host): no admission
+	}
+	referenced := map[string]bool{}
+	for _, q := range snap.queue {
+		if _, ok := q.slots[next.host]; ok && q.run.ID != next.run.ID {
+			for _, key := range planOf(d.registry, next.host, q.run).needs {
+				referenced[q.run.Env+" "+key] = true
+			}
+		}
+	}
+	p := planOf(d.registry, next.host, next.run)
+	got := admit(next.host, entries, budget, next.env, p.peak, p.needs, referenced, running)
+	for _, env := range slices.Sorted(maps.Keys(got.unload)) {
+		d.ask(ctx, next, env, got.unload[env], now)
+	}
+	return got
+}
+
+// ask sends env of next's host one unload request naming victims, unless one is in flight or the last went less than
+// AskEvery ago (d.mu held).
+func (d *Dispatcher) ask(ctx context.Context, next placed, env string, victims []entry, now time.Time) {
+	source := next.host + "." + env
+	state := d.asks[source]
+	if state == nil {
+		state = &ask{}
+		d.asks[source] = state
+	}
+	if d.Unload == nil || state.inFlight || now.Sub(state.sent) < AskEvery {
+		return
+	}
+	request := message.Unload{ForEnv: next.env, RunID: next.run.ID}
+	for _, v := range victims {
+		request.Components = append(request.Components, v.component())
+	}
+	body, _ := json.Marshal(request)
+	state.inFlight, state.sent = true, now
+	log.Printf("dispatcher: asking %s to unload %d components for run %s (env %s)", source, len(victims), next.run.ID, next.env)
+	d.asking.Add(1)
+	go d.reply(ctx, source, body, state.gen)
 }
 
 // loads says a run was released to source: an unload ok it gave before, or gives to a request sent before, no longer
@@ -249,10 +305,10 @@ func (d *Dispatcher) loads(source string) {
 	}
 }
 
-// ask sends one unload request to source and records the answer: ok opens its gate until a run is released to it
-// (an ok to a request sent before such a release, gen, is ignored); busy, internal, a malformed reply or none within
-// UnloadWait leave it shut until the next ask.
-func (d *Dispatcher) ask(ctx context.Context, source string, body []byte, gen int) {
+// reply sends one unload request to source and records the answer: an ok of generation gen (no release to source
+// since it was sent) stands with its resident; an older ok, busy, internal, a malformed reply or none within
+// UnloadWait change nothing until the next ask.
+func (d *Dispatcher) reply(ctx context.Context, source string, body []byte, gen int) {
 	defer d.asking.Done()
 	ctx, cancel := context.WithTimeout(ctx, UnloadWait)
 	defer cancel()
@@ -261,14 +317,277 @@ func (d *Dispatcher) ask(ctx context.Context, source string, body []byte, gen in
 	if err == nil {
 		err = json.Unmarshal(raw, &reply)
 	}
-	ok := err == nil && reply.UnloadedGB != nil && reply.Code == ""
+	ok := err == nil && reply.UnloadedGB != nil && reply.Resident != nil && reply.Code == ""
 	if !ok {
 		log.Printf("dispatcher: %s did not unload: %v %s %s", source, err, reply.Code, reply.Error)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	state := d.asks[source]
-	state.inFlight, state.ok = false, ok && state.gen == gen
+	state.inFlight = false
+	if ok && state.gen == gen {
+		state.ok, state.at, state.resident = true, time.Now(), *reply.Resident
+	}
+}
+
+// skipState is a copy of the skip counts (nil dispatcher: none).
+func (d *Dispatcher) skipState() map[string]skip {
+	if d == nil {
+		return nil
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return maps.Clone(d.skips)
+}
+
+// passOver applies a committed pass's decided picks to the skip counts and drops every run no longer waiting: a run
+// held (its batch paused) is still waiting and keeps its count.
+func (d *Dispatcher) passOver(decided map[string][]string, snap snapshot, now time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for id, passed := range decided {
+		passOver(d.skips, id, passed, now)
+	}
+	maps.DeleteFunc(d.skips, func(id string, _ skip) bool {
+		return !snap.held[id] && !slices.ContainsFunc(snap.queue, func(q queued) bool { return q.run.ID == id })
+	})
+}
+
+// ------------------------------------------------------------------ host memory admission
+
+// entry is one resident item of a present hosts key: its env, identity (entryKey), the item, its gb in hundredths and
+// whether its key is fresh.
+type entry struct {
+	env   string
+	key   string
+	res   registry.Resident
+	gb    int
+	fresh bool
+}
+
+// hundredths is gb in integer hundredths (the hand-over's arithmetic), rounding half to even as check.py does.
+func hundredths(gb float64) int { return int(math.RoundToEven(gb * 100)) }
+
+// entryKey identifies a resident entry or a planned component: component, model, variant, precision and its baked
+// LoRAs (lora_id and strength, in order; none = the plain component).
+func entryKey(component, model, variant, precision string, loras []registry.ResidentLora) string {
+	key := component + " " + model + " " + variant + " " + precision
+	for _, l := range loras {
+		key += fmt.Sprintf(" %s@%v", deref(l.LoraID), deref(l.Strength))
+	}
+	return key
+}
+
+// newEntry is r of env's key.
+func newEntry(env string, r registry.Resident, fresh bool) entry {
+	return entry{env: env, key: entryKey(r.Component, r.Model, r.Variant, r.Precision, r.Loras), res: r, gb: hundredths(r.GB), fresh: fresh}
+}
+
+// keyEntries are the entries of one present key of env holding resident: fresh only when the key is live and names no
+// run (a key still naming a run is older than that run's end: its pins and sizes wait for the next write); measured
+// (hundredths, -1: none) beyond what the entries declare is one more counted entry that is never a victim (device
+// caches, activations: the runner frees them when it unloads).
+func keyEntries(env string, resident []registry.Resident, fresh bool, measured int) []entry {
+	var out []entry
+	declared := 0
+	for _, r := range resident {
+		e := newEntry(env, r, fresh)
+		out, declared = append(out, e), declared+e.gb
+	}
+	if measured > declared {
+		out = append(out, entry{env: env, key: "(measured)", res: registry.Resident{Component: "(measured)"}, gb: measured - declared})
+	}
+	return out
+}
+
+// measured is the key's memory.used_gb in hundredths when it counts beyond its entries: a key of another env than
+// forEnv's, not stood for by an ok reply (whose resident is newer than the key's used_gb); else -1. The run's own env
+// reuses its own caches inside its peak.
+func measured(value registry.Host, standing bool, forEnv string) int {
+	if value.Memory == nil || standing || value.Env == forEnv {
+		return -1
+	}
+	return hundredths(value.Memory.UsedGB)
+}
+
+// held is what a key's runner holds in hundredths: its entries' gb, or its measured used_gb when larger.
+func held(value registry.Host) int {
+	declared := 0
+	for _, r := range value.Resident {
+		declared += hundredths(r.GB)
+	}
+	if value.Memory != nil {
+		return max(declared, hundredths(value.Memory.UsedGB))
+	}
+	return declared
+}
+
+// component names the entry in an unload request.
+func (e entry) component() message.Component {
+	out := message.Component{Component: e.res.Component, Model: e.res.Model, Variant: e.res.Variant, Precision: e.res.Precision}
+	for _, l := range e.res.Loras {
+		out.Loras = append(out.Loras, message.ComponentLora{LoraID: deref(l.LoraID), Strength: deref(l.Strength)})
+	}
+	return out
+}
+
+// plan is what a run loads on a host: its needs (entry keys of its env) and its planned peak in hundredths (-1: no
+// plan, which admit plans at the whole budget).
+type plan struct {
+	needs []string
+	peak  int
+}
+
+// planOf reads run's plan in <host>.<env>.models: its <family>/model node's variant's memory item for the node's
+// precision, the family's lora component carrying the run's baked LoRAs; the peak adds the run's LoRA files.
+func planOf(reg *registry.Registry, host string, run model.Run) plan {
+	out := plan{peak: -1}
+	var graph map[string]registry.Node
+	_ = json.Unmarshal(run.Nodes, &graph)
+	models := runModels(graph)
+	if reg == nil || len(models) == 0 { // a workflow is one family: its first model node
+		return out
+	}
+	found, ok := reg.Model(host+"."+run.Env, models[0].family)
+	if !ok {
+		return out
+	}
+	memory, ok := found.Plan(models[0].variant, models[0].precision)
+	if !ok {
+		return out
+	}
+	larger := len(models) > 1 || memory.PlannedAt != nil && beyond(graph, *memory.PlannedAt)
+	used := runUsed(run.Loras)
+	bake := baked(used, graph)
+	for _, c := range memory.Components {
+		var loras []registry.ResidentLora
+		if found.Lora != nil && c.Component == found.Lora.Component {
+			loras = bake
+		}
+		out.needs = append(out.needs, entryKey(c.Component, found.ID, c.Variant, c.Precision, loras))
+	}
+	var bytes int64
+	seen := map[string]bool{}
+	for _, u := range used {
+		if !seen[u.ID] {
+			seen[u.ID], bytes = true, bytes+u.Bytes
+		}
+	}
+	if !larger { // larger than its plan: planned at the whole budget, its own entries still reused
+		out.peak = hundredths(memory.PeakGB + float64(bytes)/(1<<30))
+	}
+	return out
+}
+
+// beyond reports whether a graph is larger than at: some node's width × height / 10^6 or numeric frames above it
+// (canvas auto with references is about 1 MP, so its width × height overstates it: fail safe).
+func beyond(graph map[string]registry.Node, at registry.PlannedAt) bool {
+	for _, node := range graph {
+		w, wok := node.Params["width"].(float64)
+		h, hok := node.Params["height"].(float64)
+		frames, fok := node.Params["frames"].(float64) // ponytail: "auto" is planned at its longest clip, at the default fps
+		if wok && hok && w*h/1e6 > at.MP+0.001 || fok && frames > float64(at.Frames) {
+			return true
+		}
+	}
+	return false
+}
+
+// admission is one decision for a run picked for a host: release (budget: the GB its env may hold, nil when no key of
+// the host reports memory), unload (env → its victims in order; the run waits), wait (nothing to ask), or fail (err).
+// holder is the first env by name holding a victim or an offline entry (the timeout's message).
+type admission struct {
+	decision string
+	unload   map[string][]entry
+	budget   *float64
+	err      string
+	holder   string
+}
+
+// admit is the host memory admission (contracts/README.md "Two envs on one host: the hand-over", check.py admit): a
+// run of env with planned peak (-1: the budget) and needs (entry keys) on a host of budget (hundredths) holding
+// entries; referenced holds "<env> <key>" of what the host's other queued runs need; running is the first env by name
+// whose key still names a run ("": none): that run may still use up to the budget_gb it was released with, more than
+// its key declares, so the run waits (nothing asked) until that key's next write.
+func admit(host string, entries []entry, budget int, env string, peak int, needs []string, referenced map[string]bool,
+	running string) admission {
+	p := peak
+	if p < 0 {
+		p = budget
+	}
+	var counted []entry
+	c, pinned := 0, 0
+	for _, e := range entries {
+		if e.env == env && slices.Contains(needs, e.key) {
+			continue // reused: inside the peak
+		}
+		counted = append(counted, e)
+		c += e.gb
+		if e.res.Pinned && e.fresh {
+			pinned += e.gb
+		}
+	}
+	if p+pinned > budget {
+		reason := fmt.Sprintf("needs %.1f GB at its peak; host %s has %.1f GB", float64(p)/100, host, float64(budget)/100)
+		if p <= budget {
+			reason += fmt.Sprintf(", %.1f GB of it pinned", float64(pinned)/100)
+		}
+		return admission{decision: "fail", err: reason}
+	}
+	if running != "" {
+		return admission{decision: "wait", holder: running}
+	}
+	if c+p <= budget {
+		others := 0
+		for _, e := range entries {
+			if e.env != env {
+				others += e.gb
+			}
+		}
+		left := float64(budget-others) / 100
+		return admission{decision: "release", budget: &left}
+	}
+	tier := func(e entry) int { // an unreferenced baked set first
+		if len(e.res.Loras) > 0 && !referenced[e.env+" "+e.key] {
+			return 0
+		}
+		return 1
+	}
+	var victims []entry
+	holders := []string{}
+	for _, e := range counted {
+		if e.fresh && !e.res.Pinned {
+			victims = append(victims, e)
+		} else if !e.fresh && !slices.Contains(holders, e.env) {
+			holders = append(holders, e.env)
+		}
+	}
+	slices.SortStableFunc(victims, func(a, b entry) int {
+		return cmp.Or(cmp.Compare(tier(a), tier(b)), cmp.Compare(btoi(a.res.LastUsed != nil), btoi(b.res.LastUsed != nil)),
+			deref(a.res.LastUsed).Compare(deref(b.res.LastUsed)), cmp.Compare(b.gb, a.gb), strings.Compare(a.env, b.env),
+			strings.Compare(a.res.Component, b.res.Component), strings.Compare(a.res.Model, b.res.Model),
+			strings.Compare(a.res.Variant, b.res.Variant), strings.Compare(a.res.Precision, b.res.Precision))
+	})
+	unload := map[string][]entry{}
+	for _, v := range victims {
+		if c+p <= budget {
+			break
+		}
+		unload[v.env] = append(unload[v.env], v)
+		c -= v.gb
+		if !slices.Contains(holders, v.env) {
+			holders = append(holders, v.env)
+		}
+	}
+	slices.Sort(holders)
+	got := admission{decision: "wait"}
+	if len(holders) > 0 {
+		got.holder = holders[0]
+	}
+	if len(unload) > 0 {
+		got.decision, got.unload = "unload", unload
+	}
+	return got
 }
 
 // holds reports whether a released run still holds its host: the host's key is fresh and, from Lease after the
@@ -328,9 +647,9 @@ func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 }
 
 // release hands a waiting run to its host: host and released_at set, the command in the outbox with its Image values
-// resolved (resolveImages). A run cancelled since the look (no longer waiting) is skipped; one whose reference was
+// resolved (resolveImages) and budget_gb from the admission. A run cancelled since the look (no longer waiting) is skipped; one whose reference was
 // deleted since it was created fails (input image <take_id> is gone) and is never sent.
-func release(ctx context.Context, tx pgx.Tx, next placed) error {
+func release(ctx context.Context, tx pgx.Tx, next placed, budget *float64) error {
 	nodes, gone, err := resolveImages(ctx, tx, next.run.OwnerID, next.run.Nodes)
 	if err != nil {
 		return fmt.Errorf("run %s: %w", next.run.ID, err)
@@ -348,14 +667,29 @@ func release(ctx context.Context, tx pgx.Tx, next placed) error {
 	} else if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO dispatch_owners (owner_id, last_released_at) VALUES ($1, $2)
-		ON CONFLICT (owner_id) DO UPDATE SET last_released_at = EXCLUDED.last_released_at`, run.OwnerID, run.ReleasedAt); err != nil {
+	if err := turn(ctx, tx, run.OwnerID); err != nil {
 		return err
 	}
 	return messaging.Enqueue(ctx, tx, messaging.Command{JobID: run.ID, OwnerID: run.OwnerID, Attempt: run.Attempt,
 		Data: message.Execute{RunID: run.ID, SessionID: run.SessionID, Attempt: run.Attempt,
 			Workflow:     message.GraphWorkflow{ID: run.WorkflowID, Nodes: nodes},
-			OutputPrefix: OutputPrefix(run), Host: next.host, Env: next.env}})
+			OutputPrefix: OutputPrefix(run), BudgetGB: budget, Host: next.host, Env: next.env}})
+}
+
+// turn stamps owner's last turn in round-robin (dispatch_owners) at the transaction's clock.
+func turn(ctx context.Context, tx pgx.Tx, owner string) error {
+	_, err := tx.Exec(ctx, `INSERT INTO dispatch_owners (owner_id, last_released_at) VALUES ($1, clock_timestamp())
+		ON CONFLICT (owner_id) DO UPDATE SET last_released_at = EXCLUDED.last_released_at`, owner)
+	return err
+}
+
+// failTurn fails a run the order picked (admission or its time limit): a turn, so its owner's next run waits for the
+// other users' heads as after a release.
+func failTurn(ctx context.Context, tx pgx.Tx, run model.Run, reason string) error {
+	if _, err := finish(ctx, tx, run, "failed", &reason); err != nil {
+		return err
+	}
+	return turn(ctx, tx, run.OwnerID)
 }
 
 // OutputPrefix is where the run's current attempt writes its outputs: each attempt its own keys, so a lost attempt
@@ -379,12 +713,13 @@ type stuck struct {
 	reason string
 }
 
-// placed is a waiting run lined up on a host (and its env) at a position.
+// placed is a waiting run lined up on a host (and its env) at a position, and the heads its pick passed over.
 type placed struct {
 	run      model.Run
 	host     string
 	env      string
 	position int
+	passed   []string
 }
 
 // snapshot is the queue as one look sees it: the released runs not ended, the waiting runs (oldest first) with
@@ -397,6 +732,7 @@ type snapshot struct {
 	values   []registry.Host
 	hosts    []string
 	last     map[string]time.Time
+	held     map[string]bool // waiting runs of a paused batch: no position, skip counts kept
 }
 
 // look reads the open runs and the history the order needs, in tx (as System: it sees every user's queue).
@@ -420,6 +756,7 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 	for _, id := range heldIDs {
 		held[id] = true
 	}
+	snap.held = held
 	deleted, err := deletedLoras(ctx, tx, open)
 	if err != nil {
 		return snap, err
@@ -516,7 +853,8 @@ func deletedLoras(ctx context.Context, tx pgx.Tx, open []model.Run) (map[string]
 // eligible returns where run may go now: each live host with the run's env whose runner publishes its workflow (a user
 // workflow's run: every kind of its graph), lists every shared LoRA the run was made with and, for every
 // <family>/model node whose family its models key lists, has that variant present (host name → env), and which of
-// those hold every such model resident (with the run's baked LoRAs). With none, reason says why.
+// those hold every such model resident (its family's lora component, with the run's baked LoRAs). With none, reason
+// says why.
 func eligible(reg *registry.Registry, values []registry.Host, run model.Run, now time.Time) (map[string]string, map[string]bool, string) {
 	var graph map[string]registry.Node
 	_ = json.Unmarshal(run.Nodes, &graph)
@@ -553,7 +891,8 @@ hosts:
 				continue hosts
 			}
 			all = all && slices.ContainsFunc(value.Resident, func(r registry.Resident) bool {
-				return r.Model == model.ID && r.Variant == m.variant && r.Precision == m.precision && sameBaked(r.Loras, bake)
+				return r.Model == model.ID && r.Variant == m.variant && r.Precision == m.precision && sameBaked(r.Loras, bake) &&
+					(model.Lora == nil || r.Component == model.Lora.Component)
 			})
 		}
 		resident[value.Host] = all
@@ -596,14 +935,19 @@ func runModels(graph map[string]registry.Node) []runModel {
 // the given order (idle longest first), each taking at most one run per round; rounds 0 runs until every run is
 // placed. A host takes the next run of pick, but a run whose model is resident on another host still free this
 // round goes there and the first host picks again. last is each owner's last release; ahead[h] counts runs already
-// before the line on h (released, not started).
-func lineup(hosts []string, waiting []queued, last map[string]time.Time, ahead map[string]int, rounds int) []placed {
-	last, position, left := maps.Clone(last), maps.Clone(ahead), slices.Clone(waiting)
+// before the line on h (released, not started); skips are the current skip counts, time frozen at now. ponytail:
+// residency stays as it is now for the whole line (positions only: each pass picks again from the newest state).
+func lineup(hosts []string, waiting []queued, last map[string]time.Time, ahead map[string]int, rounds int,
+	skips map[string]skip, now time.Time) []placed {
+	last, position, left, skips := maps.Clone(last), maps.Clone(ahead), slices.Clone(waiting), maps.Clone(skips)
 	if last == nil {
 		last = map[string]time.Time{}
 	}
 	if position == nil {
 		position = map[string]int{}
+	}
+	if skips == nil {
+		skips = map[string]skip{}
 	}
 	clock := time.Time{} // a simulated release time later than every real one
 	for _, at := range last {
@@ -616,9 +960,9 @@ func lineup(hosts []string, waiting []queued, last map[string]time.Time, ahead m
 		used, before := map[string]bool{}, len(out)
 		for i := 0; i < len(hosts); i++ {
 			host := hosts[i]
-			k := -1
+			k, passed := -1, []string(nil)
 			if !used[host] {
-				k = pick(host, left, last)
+				k, passed = pick(host, left, last, skips, now)
 			}
 			if k < 0 {
 				continue
@@ -632,7 +976,8 @@ func lineup(hosts []string, waiting []queued, last map[string]time.Time, ahead m
 			}
 			used[target] = true
 			position[target]++
-			out = append(out, placed{run: next.run, host: target, env: next.slots[target], position: position[target]})
+			out = append(out, placed{run: next.run, host: target, env: next.slots[target], position: position[target], passed: passed})
+			passOver(skips, next.run.ID, passed, now)
 			clock = clock.Add(time.Nanosecond)
 			last[next.run.OwnerID] = clock
 			left = slices.Delete(left, k, k+1)
@@ -647,31 +992,69 @@ func lineup(hosts []string, waiting []queued, last map[string]time.Time, ahead m
 	return out
 }
 
-// pick returns the index in left (oldest first) of the run host takes next, or -1: interactive before batch, then the
-// owner whose last release is the oldest (never released first; a tie goes to the owner with the older oldest run),
-// then that owner's oldest run whose model is resident on host, else their oldest.
-func pick(host string, left []queued, last map[string]time.Time) int {
-	best := -1
-	for i, candidate := range left {
-		if _, ok := candidate.slots[host]; !ok {
-			continue
-		}
-		if best < 0 || goesFirst(candidate, left[best], host, last) {
-			best = i
-		}
-	}
-	return best
+// skip is how often a queued run, its user's head, was passed over for another user's resident head, and when first.
+type skip struct {
+	n     int
+	first time.Time
 }
 
-// goesFirst reports whether a goes before b on host, b being older or of an owner whose oldest run is older.
-func goesFirst(a, b queued, host string, last map[string]time.Time) bool {
-	if a.run.Lane != b.run.Lane {
-		return a.run.Lane == "interactive"
+// overdue reports whether a head that needs a swap goes now: passed over SwapSkips times, or SwapWait since the first.
+func overdue(s skip, now time.Time) bool {
+	return s.n >= SwapSkips || (!s.first.IsZero() && now.Sub(s.first) >= SwapWait)
+}
+
+// passOver records a decided pick in skips: the picked run drops its count, each head passed over counts one more.
+func passOver(skips map[string]skip, picked string, passed []string, now time.Time) {
+	delete(skips, picked)
+	for _, id := range passed {
+		s := skips[id]
+		s.n++
+		if s.first.IsZero() {
+			s.first = now
+		}
+		skips[id] = s
 	}
-	if a.run.OwnerID != b.run.OwnerID {
-		return last[a.run.OwnerID].Before(last[b.run.OwnerID])
+}
+
+// pick returns the index in left (oldest first) of the run host takes next, or -1, and the ids of the heads it passed
+// over (contracts/README.md "the hand-over", Order): interactive before batch; users in round-robin order (the oldest
+// last release first, never released first; a tie: the older oldest run); a user's head is their oldest run resident
+// on host, else their oldest; the first user whose head is resident or overdue goes, else the first user's head.
+func pick(host string, left []queued, last map[string]time.Time, skips map[string]skip, now time.Time) (int, []string) {
+	lane := ""
+	for _, q := range left {
+		if _, ok := q.slots[host]; ok && lane != "interactive" {
+			lane = q.run.Lane
+		}
 	}
-	return a.resident[host] && !b.resident[host]
+	var owners []string
+	heads := map[string]int{}
+	for i, q := range left {
+		if _, ok := q.slots[host]; !ok || q.run.Lane != lane {
+			continue
+		}
+		owner := q.run.OwnerID
+		if h, seen := heads[owner]; !seen {
+			owners, heads[owner] = append(owners, owner), i
+		} else if q.resident[host] && !left[h].resident[host] {
+			heads[owner] = i
+		}
+	}
+	if len(owners) == 0 {
+		return -1, nil
+	}
+	slices.SortStableFunc(owners, func(a, b string) int { return last[a].Compare(last[b]) })
+	for n, owner := range owners {
+		head := left[heads[owner]]
+		if head.resident[host] || overdue(skips[head.run.ID], now) {
+			var passed []string
+			for _, o := range owners[:n] {
+				passed = append(passed, left[heads[o]].run.ID)
+			}
+			return heads[owner], passed
+		}
+	}
+	return heads[owners[0]], nil
 }
 
 // ------------------------------------------------------------------ the queue as users see it
@@ -684,7 +1067,8 @@ func goesFirst(a, b queued, host string, last map[string]time.Time) bool {
 func (s *Service) lineupNow(ctx context.Context) (map[string]placed, map[string]bool, error) {
 	at, busy := map[string]placed{}, map[string]bool{}
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
-		snap, err := look(ctx, tx, s.registry, time.Now())
+		now := time.Now()
+		snap, err := look(ctx, tx, s.registry, now)
 		if err != nil {
 			return err
 		}
@@ -696,7 +1080,7 @@ func (s *Service) lineupNow(ctx context.Context) (map[string]placed, map[string]
 				at[run.ID] = placed{run: run, host: *run.Host, env: run.Env, position: ahead[*run.Host]}
 			}
 		}
-		for _, next := range lineup(snap.hosts, snap.queue, snap.last, ahead, 0) {
+		for _, next := range lineup(snap.hosts, snap.queue, snap.last, ahead, 0, s.dispatcher.skipState(), now) {
 			at[next.run.ID] = next
 		}
 		return nil

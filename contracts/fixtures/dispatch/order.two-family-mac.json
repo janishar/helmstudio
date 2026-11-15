@@ -1,0 +1,150 @@
+{
+  "description": "the M4 demonstration as mac runs it (API 1.13): both runners report 64 - 12 = 52 GB, sizes as the runners publish them (Qwen Turbo int8 kept 16.67, peak 29.25; LTX int8 kept 22.0, peak 44.07, components in the order of last use). LTX's kept components + Qwen's peak fit (51.25), Qwen's + LTX's peak do not (60.74): row 1 end to end, then all stills, then all clips; Qwen's text encoder is unloaded before row 1's clip and before row 2's clip, so Qwen loads twice and LTX once",
+  "budget_gb": 52,
+  "plans": {
+    "qwen": {
+      "env": "torch",
+      "model": "qwen-image-2.1",
+      "peak_gb": 29.25,
+      "lora_component": "transformer",
+      "components": [
+        {
+          "component": "text_encoder",
+          "variant": "base",
+          "precision": "int8",
+          "gb": 9.28
+        },
+        {
+          "component": "transformer",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 6.76
+        },
+        {
+          "component": "vae",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 0.63
+        }
+      ]
+    },
+    "ltx": {
+      "env": "mlx",
+      "model": "ltx-2.5",
+      "peak_gb": 44.07,
+      "lora_component": "transformer",
+      "components": [
+        {
+          "component": "text_encoder",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 12.66,
+          "unloads_after": true
+        },
+        {
+          "component": "connector",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 5.91,
+          "unloads_after": true
+        },
+        {
+          "component": "upscaler",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.93
+        },
+        {
+          "component": "transformer",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 19.18
+        },
+        {
+          "component": "vae_encoder",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.59
+        },
+        {
+          "component": "vae",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.76
+        },
+        {
+          "component": "audio_vae",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.06
+        },
+        {
+          "component": "vocoder",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.48
+        }
+      ]
+    }
+  },
+  "batches": [
+    {
+      "id": "b",
+      "owner": "u",
+      "rows": 10,
+      "steps": [
+        "qwen",
+        "ltx"
+      ],
+      "seconds": [
+        20,
+        40
+      ],
+      "at": 0
+    }
+  ],
+  "expect": {
+    "releases": [
+      "b.1.1",
+      "b.1.2",
+      "b.2.1",
+      "b.3.1",
+      "b.4.1",
+      "b.5.1",
+      "b.6.1",
+      "b.7.1",
+      "b.8.1",
+      "b.9.1",
+      "b.10.1",
+      "b.2.2",
+      "b.3.2",
+      "b.4.2",
+      "b.5.2",
+      "b.6.2",
+      "b.7.2",
+      "b.8.2",
+      "b.9.2",
+      "b.10.2"
+    ],
+    "unloads": [
+      {
+        "before": "b.1.2",
+        "env": "torch",
+        "components": [
+          "text_encoder"
+        ]
+      },
+      {
+        "before": "b.2.2",
+        "env": "torch",
+        "components": [
+          "text_encoder"
+        ]
+      }
+    ],
+    "loads": {
+      "qwen": 2,
+      "ltx": 1
+    }
+  }
+}

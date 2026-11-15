@@ -57,6 +57,7 @@ A prompt may mention your elements as @handle (@@ is a literal @): helm sends it
   helm loras [--source shared|mine] [--family f] [--q words]   LoRAs you can use (id, source, state, family, rank, size, name)
   helm lora upload <file.safetensors>   your own LoRA: uploaded, checked and indexed
   helm lora rm <id>
+  helm hosts                          each host's shared memory (used / budget), its envs and what each holds
   helm whoami
   helm logout
 
@@ -113,6 +114,8 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = lorasCmd(args[1:], stdout, stderr)
 	case "lora":
 		err = loraCmd(args[1:], stdout)
+	case "hosts":
+		err = hostsCmd(stdout)
 	case "whoami":
 		err = whoami(stdout)
 	case "logout":

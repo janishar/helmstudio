@@ -38,7 +38,9 @@ the pipelines container and starts it again; the script presses Resume whenever 
 must end `done` with exactly 12 runs (one per row) and 12 takes. `pipeline-parked` runs a 3-row echo pipeline with a
 gate, picks row 1 and restarts pipelines and studio while its edit runs and rows 2 and 3 are parked, then resumes
 and picks the rest: the batch must end `done` with exactly 6 runs and 6 distinct takes, one per row. It takes a few
-minutes.
+minutes. `handover-studio` restarts studio while a run waits for another env of its host to unload and requires it to
+start exactly once (attempt 1, one `running`); it needs a host with two envs that report memory and `HANDOVER_HOLD` /
+`HANDOVER_WAIT` workflow ids, so it prints SKIP on the fake stack (one env, no memory).
 
 ```sh
 make resilience   # from the repo root: brings the test stack up, makes a key, runs the script
@@ -61,6 +63,7 @@ Kong's sign-in rate limit is 20 a minute per IP; the suite signs in about that o
 | `test_qwen.py` | opt-in (`QWEN=1`, skipped otherwise): `qwen-image` on the Mac torch runner (`make runners`, joined to the stack `BASE_URL` points at), turbo int8 768², a fixed and a random seed, and an edit of an uploaded reference (`encode.refs`, canvas fixed), up to 15 min each: phases on every progress event, one PNG of the size, `resolved.seed` = the output's seed, the edit's `parents` = the reference |
 | `test_image_inputs.py` | image inputs on echo's `refs` (skipped when the fake runner lacks it): references recorded in `made_with`, `parents` (each once) and the reference's `children`; deleted, foreign, pending and unknown take ids 422 naming `echo.refs[n].image`, 11 items, unknown fields and non-ref items 422; "Use in…" (`/use`) and its 404/422s; reuse gives the references back; a deleted reference leaves `parents` but stays in `made_with` and reuse (so reposting 422s); batch lines of take ids and a table cell of references; B can use, see or "Use in" none of A's takes |
 | `test_events.py` | JSON `?since=` paging and `last_seq`, bad `since` 422, SSE replay from `Last-Event-ID` or `?since=` (the header wins) |
+| `test_handover.py` | hosts data of the hand-over (API 1.13: `host_memory` the same on every env of a host, its budget the smallest, its use the sum; none on the fake host; resident items with `last_used`, others' LoRAs redacted); an echo still → "Use in…" `echo-image-to-video` → Save as pipeline on the clip (one family: no `prompt_2`); that pipeline over ten rows ends with exactly 10 stills and 10 clips, each clip's parent its row's still, row 1 first end to end, then every still, then every clip |
 | `test_queue.py` | the dispatcher on the one fake host: three users' runs start round-robin (fresh users Y and Z), positions 1..n that only go down, `lane`/`attempt`, `GET /queue` (own runs only, others as a count), cancel of a queued run ends it at once without running, no live host fails at once (skipped when every workflow has one) |
 | `test_takes.py` | an echo output is a take (`made_with`, prompt, no seed or model, signed `url`/`thumb_url`), titles, newest first, filters (kind, source, starred, session), `q` search over prompt and title, stable cursor pages, 422s, rename and star, reuse (posts as a run), soft delete, a deleted session keeps its takes |
 | `test_uploads.py` | POST /uploads → PUT the signed link → complete: a PNG becomes a take of its size; pending is hidden and 409; single-use PUT; bad type/size 422; a text file sent as PNG is 422 and discarded; tampered, re-dated, sibling, GET-signed links 403, wrong length 411, wrong type 415 |

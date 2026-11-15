@@ -18,6 +18,68 @@
             "bf16",
             "int8",
             "int4"
+          ],
+          "memory": [
+            {
+              "precision": "int8",
+              "peak_gb": 44.07,
+              "components": [
+                {
+                  "component": "text_encoder",
+                  "variant": "distilled",
+                  "precision": "int8",
+                  "gb": 12.66,
+                  "unloads_after": true
+                },
+                {
+                  "component": "connector",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 5.91,
+                  "unloads_after": true
+                },
+                {
+                  "component": "vae_encoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.59
+                },
+                {
+                  "component": "upscaler",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.93
+                },
+                {
+                  "component": "transformer",
+                  "variant": "distilled",
+                  "precision": "int8",
+                  "gb": 19.18
+                },
+                {
+                  "component": "vae",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.76
+                },
+                {
+                  "component": "audio_vae",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.06
+                },
+                {
+                  "component": "vocoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.48
+                }
+              ],
+              "planned_at": {
+                "mp": 0.3154,
+                "frames": 49
+              }
+            }
           ]
         }
       ],

@@ -39,7 +39,7 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 | `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test-down` stops it |
 | `make resilience` | restart each service of `helmstudio-test` mid-run and check the stack recovers (`contract_tests/resilience.sh`) |
 | `.tools/test-db` | Postgres for the services' DB tests (`helmstudio-test`, port 5464) |
-| `make runners` | the native torch runner on this Mac, in the foreground (`make runners-stop` stops it) |
+| `make runners` | both native runners of this Mac (torch, mlx) in the background (`make runners-stop` stops them) |
 
 Each service has its own `Makefile` (at least `test` and `lint`; `dev` and `gen` where they apply).
 
@@ -75,9 +75,9 @@ registry and hosts keys and answer its `runner.unload.mac.<env>`) and the Seawee
 Each has a pid file and a log, `runner_service/.run/runner-mac-<env>.{pid,log}`; a small sh supervisor restarts
 it after a stall (exit 70) or a SIGKILL (137).
 
-One GPU: the two never hold weights at once. Before studio releases a run to one env it asks every other env of the
-host that lists resident models to unload (`runner.unload`), and keeps the run queued until it has
-(contracts/README.md, Two envs on one host).
+One GPU, one memory budget: studio admits a run only when its planned peak plus everything resident on the host's
+envs fits the host's budget; otherwise it asks the env(s) holding the least recently used components to unload exactly
+those (`runner.unload`), and keeps the run queued until they have (contracts/README.md, Two envs on one host).
 
 ## Ports
 

@@ -5,7 +5,7 @@
 #   make resilience                (from the repo root: brings the test stack up and runs this)
 #   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats
-# batch-postgres batch-kill pipeline-parked; studio-queued restarts studio while a second run is still queued behind the first (not yet
+# batch-postgres batch-kill pipeline-parked handover-studio; studio-queued restarts studio while a second run is still queued behind the first (not yet
 # released) and requires that it then succeeds. batch-<svc> restarts <svc> during a 12-row slow echo batch (batch-kill:
 # SIGKILL the pipelines container, then start it), presses Resume whenever the batch is paused (pipelines pauses its
 # batches after a restart) and requires the batch to end done with exactly 12 runs (one per row) and 12 takes.
@@ -13,6 +13,7 @@
 # pipelines and studio while row 1's edit runs and rows 2 and 3 are parked, then presses Resume whenever the batch is
 # paused and picks every parked row; the batch must end done with exactly 6 runs and 6 distinct takes (a still and an
 # edit per row) and every row succeeded with one take.
+# handover-studio restarts studio while a run waits for an unload (see handover_check; skipped on the fake stack).
 # Needs curl and python3. Exit 1 when any service fails.
 set -eu
 cd "$(dirname "$0")"
@@ -170,13 +171,46 @@ print(" ".join(r["status"] + ":" + str(len(r["take_ids"])) for r in json.load(sy
   api DELETE "/v1/studio/pipelines/$pid" >/dev/null || true
 }
 
+# handover_check: restart studio while a run waits for another env of its host to unload (contracts/README.md, Two
+# envs on one host: the hand-over). HANDOVER_HOLD runs first on one env and leaves its weights resident; HANDOVER_WAIT
+# (another env of that host, too big to fit beside them) then waits for the unload while studio restarts. It must
+# succeed with attempt 1 and exactly one `running` status: started once. Skipped when no host has two envs that
+# report memory (the fake stack has one env, host fake, and no memory).
+handover_check() {
+  envs=$(api GET /v1/studio/hosts | python3 -c 'import json,sys,collections
+c=collections.Counter(h["host"] for h in json.load(sys.stdin)["hosts"] if h.get("host_memory"))
+print(max(c.values(), default=0))') || envs=0
+  if [ "$envs" -lt 2 ] || [ -z "${HANDOVER_HOLD:-}" ] || [ -z "${HANDOVER_WAIT:-}" ]; then
+    echo "SKIP $1: no host with two envs reporting memory, or HANDOVER_HOLD / HANDOVER_WAIT unset"
+    return
+  fi
+  hsid=$(api POST /v1/studio/sessions '{"title":"resilience handover"}' | field id)   # its own event log (500 a page)
+  hold=$(api POST "/v1/studio/sessions/$hsid/runs" "{\"workflow_id\":\"$HANDOVER_HOLD\",\"inputs\":{}}" | field id)
+  wait_status "$hold" "succeeded failed cancelled" 120 >/dev/null || true
+  rid=$(api POST "/v1/studio/sessions/$hsid/runs" "{\"workflow_id\":\"$HANDOVER_WAIT\",\"inputs\":{}}" | field id)
+  sleep 1                                    # released only after the unload: still queued now
+  was=$(api GET "/v1/studio/runs/$rid" | field status || true)
+  dc restart studio >/dev/null 2>&1
+  dc up -d --wait >/dev/null 2>&1
+  signin
+  end=$(wait_status "$rid" "succeeded failed cancelled" "$END_TIMEOUT") || true
+  attempt=$(api GET "/v1/studio/runs/$rid" | field attempt || true)
+  starts=$(api GET "/v1/studio/sessions/$hsid/events?since=0" | python3 -c 'import json,sys
+print(sum(1 for e in json.load(sys.stdin)["events"] if e["run_id"]==sys.argv[1] and e["type"]=="status" and e["data"]["status"]=="running"))' "$rid") || starts=?
+  verdict=PASS
+  { [ "$was" = queued ] && [ "$end" = succeeded ] && [ "$attempt" = 1 ] && [ "$starts" = 1 ]; } || { verdict=FAIL; fails=$((fails + 1)); }
+  api DELETE "/v1/studio/sessions/$hsid" >/dev/null || true
+  echo "$verdict $1: waiting run was $was -> $end, attempt $attempt, started $starts time(s)"
+}
+
 signin
 SID=$(api POST /v1/studio/sessions '{"title":"resilience"}' | field id)
 fails=0
-for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked}; do
+for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked handover-studio}; do
   case $svc in
     batch-*) batch_check "$svc"; continue ;;
     pipeline-parked) pipeline_check "$svc"; continue ;;
+    handover-studio) handover_check "$svc"; continue ;;
   esac
   rid=$(run "$SID" 40)                       # 40 steps x 300 ms: ~12 s of work
   wait_status "$rid" "running" 30 >/dev/null || true

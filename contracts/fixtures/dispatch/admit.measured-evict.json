@@ -1,0 +1,114 @@
+{
+  "description": "torch measured 24.0 GB over 16.67 declared: 24.0 + 30 > 52 although the entries alone fit; the measured excess is never named, so the least recently used entry goes (the runner frees its cache on unload)",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "used_gb": 24.0,
+      "resident": [
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8",
+          "gb": 9.28,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:10Z"
+        },
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 6.76,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:20Z"
+        },
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 0.63,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:30Z"
+        }
+      ]
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": 30.0,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "connector",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vae_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "upscaler",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "audio_vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vocoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "unload",
+    "unload": {
+      "torch": [
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8"
+        }
+      ]
+    },
+    "budget_gb": null,
+    "error": null
+  }
+}

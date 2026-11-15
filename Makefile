@@ -57,8 +57,8 @@ test-down:        ## stop the test stack; its volumes stay
 # compose publishes (NATS_HOST_PORT, S3_HOST_PORT). Each runs in the background with its own pid file and log,
 # runner_service/.run/runner-mac-<env>.{pid,log}; the pid file names a small sh supervisor that restarts the runner
 # after a stall (exit 70) or a SIGKILL (137: jetsam) and stops it on SIGTERM (make runners-stop).
-# One GPU: only one of them may hold weights at a time (contracts/README.md, Two envs on one host). Studio's GPU gate
-# asks the other env to unload (runner.unload) before it releases a run; until it does, start one (make runner-<env>).
+# One GPU, one memory budget (contracts/README.md, Two envs on one host): studio's dispatcher admits runs against the
+# host's budget and asks an env to unload named components (runner.unload) to make room.
 RUN_DIR := runner_service/.run
 # runner_service pins uv 0.13.8; an older uv on PATH is stood in for by uvx (the command line still holds "uv run")
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')

@@ -18,6 +18,7 @@ type Execute struct {
 	Attempt      int           `json:"attempt"`
 	Workflow     GraphWorkflow `json:"workflow"`
 	OutputPrefix string        `json:"output_prefix"`
+	BudgetGB     *float64      `json:"budget_gb,omitempty"` // the host's budget minus what its other envs hold
 	Host         string        `json:"-"`
 	Env          string        `json:"-"`
 }
@@ -87,17 +88,36 @@ type Resolved struct {
 	Params map[string]int64 `json:"params"`
 }
 
-// Unload is req.runner.unload's request: the env about to load and the run waiting (both for the runner's log).
+// Unload is req.runner.unload's request: the env about to load and the run waiting (both for the runner's log), and the
+// entries to unload in the dispatcher's victim order.
 type Unload struct {
-	ForEnv string `json:"for_env"`
-	RunID  string `json:"run_id,omitempty"`
+	ForEnv     string      `json:"for_env"`
+	RunID      string      `json:"run_id,omitempty"`
+	Components []Component `json:"components,omitempty"`
 }
 
-// UnloadReply is req.runner.unload's reply: {unloaded_gb, resident: []}, or {error, code: busy | internal}.
+// Component names one resident entry of a hosts value (no LoRAs = the plain component).
+type Component struct {
+	Component string          `json:"component"`
+	Model     string          `json:"model"`
+	Variant   string          `json:"variant"`
+	Precision string          `json:"precision"`
+	Loras     []ComponentLora `json:"loras,omitempty"`
+}
+
+// ComponentLora is one LoRA baked into a component.
+type ComponentLora struct {
+	LoraID   string  `json:"lora_id"`
+	Strength float64 `json:"strength"`
+}
+
+// UnloadReply is req.runner.unload's reply: {unloaded_gb, freed, resident}, or {error, code: busy | internal}.
 type UnloadReply struct {
-	UnloadedGB *float64 `json:"unloaded_gb"`
-	Error      string   `json:"error"`
-	Code       string   `json:"code"`
+	UnloadedGB *float64             `json:"unloaded_gb"`
+	Resident   *[]registry.Resident `json:"resident"` // what remains, as the hosts key the runner rewrote
+	Freed      []Component          `json:"freed"`
+	Error      string               `json:"error"`
+	Code       string               `json:"code"`
 }
 
 // ------------------------------------------------------------------ batches (pipelines_service)

@@ -233,8 +233,16 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
     fails it as `<node>: internal error (<Type>)` and is logged with its traceback.
 - **Memory**: before a stage runs, admission needs its not-yet-loaded `uses` components (their size computed from
   the safetensors headers at the target dtype) plus `peak_gb`; when short, cached node results are dropped,
-  then least recently used components (first those the rest of the run does not need). The budget is RAM minus
-  `RUNNER_RESERVE_GB` (12); after a run `RUNNER_AFTER_RUN` = `keep_warm` (default; idle unload after
+  then components: first those the rest of the run does not need, within each group a baked LoRA set the run does
+  not use before plain ones, then least recently used. The budget is RAM minus `RUNNER_RESERVE_GB` (12), capped
+  for one run by its command's `budget_gb` (what the host's other env leaves: contracts/README.md "Two envs on one
+  host: the hand-over"). After a run that used a baked set, the plain copy of that component is unloaded (unless
+  pinned or used too), so the two never stay resident together. The hosts key lists every entry with `gb`,
+  `last_used`, `pinned` and a baked set's `loras`; the `models` key carries each present variant's `memory` plan per
+  precision, computed from the pack's workflows at their default sizes (components in order of last use,
+  `unloads_after` from `unload_after`, `peak_gb` = max over stages of kept components + the stage's own + its
+  `peak_gb`), so write `peak_gb` for the default sizes honestly: studio admits runs across envs with it.
+  `runner.unload` naming components unloads exactly those (never a RUNNER_PIN one). After a run `RUNNER_AFTER_RUN` = `keep_warm` (default; idle unload after
   `RUNNER_IDLE_UNLOAD_S`), `unload`, or `keep_pinned` (`RUNNER_PIN=transformer,vae`). Eviction drops the
   module, runs `gc` and `torch.mps.empty_cache()` (synchronised first). A pack that needs an `auto` decision
   (tiling) decides it inside the stage; its `peak_gb` should then describe the larger case.

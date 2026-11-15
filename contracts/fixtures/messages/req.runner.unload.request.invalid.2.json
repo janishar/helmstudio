@@ -1,0 +1,10 @@
+{
+  "for_env": "torch",
+  "components": [
+    {
+      "component": "transformer",
+      "variant": "distilled",
+      "precision": "int8"
+    }
+  ]
+}

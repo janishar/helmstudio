@@ -196,6 +196,8 @@ type Resident struct {
 	Precision string  `json:"precision"`
 	GB        float64 `json:"gb"`
 	Pinned    bool    `json:"pinned"`
+	// when the runner last used it (absent from older runners)
+	LastUsed *time.Time `json:"last_used,omitempty"`
 	// a component with LoRAs baked in: those LoRAs in order (absent = the plain component)
 	Loras []ResidentLora `json:"loras,omitempty"`
 }
@@ -266,13 +268,50 @@ type Model struct {
 
 // Variant is one variant of a model on a host.
 type Variant struct {
-	ID       string `json:"id"`
-	Presence string `json:"presence"` // present | missing
+	ID       string       `json:"id"`
+	Presence string       `json:"presence"`         // present | missing
+	Memory   []MemoryPlan `json:"memory,omitempty"` // per precision: what a run holds (the hand-over)
+}
+
+// MemoryPlan is what a run of a variant loaded at Precision holds: its planned peak and the components it loads, in
+// the order of their last use.
+type MemoryPlan struct {
+	Precision  string          `json:"precision"`
+	PeakGB     float64         `json:"peak_gb"`
+	Components []PlanComponent `json:"components"`
+	PlannedAt  *PlannedAt      `json:"planned_at,omitempty"` // the largest sizes PeakGB holds for; nil: every size
+}
+
+// PlannedAt is the largest megapixels and frames a memory plan's peak was computed at.
+type PlannedAt struct {
+	MP     float64 `json:"mp"`
+	Frames int     `json:"frames"`
+}
+
+// PlanComponent is one component a run loads: the variant that owns its files and the precision it is loaded at.
+type PlanComponent struct {
+	Component    string  `json:"component"`
+	Variant      string  `json:"variant"`
+	Precision    string  `json:"precision"`
+	GB           float64 `json:"gb"`
+	UnloadsAfter bool    `json:"unloads_after,omitempty"`
 }
 
 // Has reports whether the variant's files are on the host: always for a model without variants.
 func (m Model) Has(variant string) bool {
-	return len(m.Variants) == 0 || slices.Contains(m.Variants, Variant{ID: variant, Presence: "present"})
+	return len(m.Variants) == 0 || slices.ContainsFunc(m.Variants, func(v Variant) bool { return v.ID == variant && v.Presence == "present" })
+}
+
+// Plan returns the memory plan of variant at precision, if the runner publishes one.
+func (m Model) Plan(variant, precision string) (MemoryPlan, bool) {
+	for _, v := range m.Variants {
+		if v.ID == variant {
+			if i := slices.IndexFunc(v.Memory, func(p MemoryPlan) bool { return p.Precision == precision }); i >= 0 {
+				return v.Memory[i], true
+			}
+		}
+	}
+	return MemoryPlan{}, false
 }
 
 // Live reports whether the runner refreshed its key within Stale of now.

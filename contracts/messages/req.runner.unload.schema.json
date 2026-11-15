@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json",
   "title": "NATS request/reply runner.unload.<host>.<env> (studio's dispatcher → a runner)",
-  "description": "Core NATS request/reply on subject `runner.unload.<host>.<env>` (no queue group: one runner per host and env), bare JSON. One GPU per host (contracts/README.md, Two envs on one host): before the dispatcher releases a run to env E of host H it needs every other env of H to hold no weights; it asks each one whose hosts value lists `resident` components with this request. The runner, when idle, unloads every component (pinned ones included; adapters and cached handles too), frees its device memory (MLX: mx.clear_cache(); torch MPS: synchronize() then empty_cache()), rewrites its hosts key, then replies. While a run is in progress it does not unload and replies `busy`. Studio waits 60 s.",
+  "description": "Core NATS request/reply on subject `runner.unload.<host>.<env>` (no queue group: one runner per host and env), bare JSON. The dispatcher's hand-over (contracts/README.md, The hand-over): to make room on a host whose envs share one memory budget it names the components (resident entries) an env should unload. The runner, when idle, unloads exactly those of them it holds (never a RUNNER_PIN one; absent `components` = every component, pinned ones, adapters and cached handles included: by hand), frees its device memory (MLX: mx.clear_cache(); torch MPS: synchronize() then empty_cache()), rewrites its hosts key, then replies with what it freed and what remains. While a run is in progress it unloads nothing and replies `busy`. Studio waits 60 s.",
   "$defs": {
     "request": {
       "type": "object",
@@ -18,6 +18,15 @@
         "run_id": {
           "$ref": "defs.schema.json#/$defs/uuid",
           "description": "the run waiting for the GPU (for the log; never shown to users)"
+        },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/component"
+          },
+          "description": "from API 1.13: the entries to unload, in the dispatcher's victim order; one it does not hold is skipped. Absent = everything (stage A, by hand)"
         }
       }
     },
@@ -41,12 +50,21 @@
         "unloaded_gb": {
           "type": "number",
           "minimum": 0,
-          "description": "what it freed (0 when it held nothing)"
+          "description": "what it freed, the sum of the freed entries' gb (0 when it held none of them)"
         },
         "resident": {
           "type": "array",
-          "maxItems": 0,
-          "description": "always empty: the hosts key the runner rewrote before replying says the same"
+          "items": {
+            "$ref": "https://helmstudio.local/contracts/registry.schema.json#/$defs/host/properties/resident/items"
+          },
+          "description": "what remains resident after the unload, exactly as the hosts key the runner rewrote before replying (empty after an unload of everything)"
+        },
+        "freed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/component"
+          },
+          "description": "from API 1.13: the entries it unloaded (absent from a stage A runner)"
         }
       },
       "not": {
@@ -72,6 +90,59 @@
             "internal"
           ],
           "description": "busy: a run is in progress (the dispatcher asks again on a later pass); internal: unloading failed (logged by the runner)"
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "required": [
+        "component",
+        "model",
+        "variant",
+        "precision"
+      ],
+      "additionalProperties": false,
+      "description": "names one resident entry of the hosts value: the same component, model, variant, precision and baked LoRAs (lora_id and strength, in order; absent or empty = the plain component)",
+      "properties": {
+        "component": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+        },
+        "variant": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "precision": {
+          "enum": [
+            "bf16",
+            "fp16",
+            "int8",
+            "int4"
+          ]
+        },
+        "loras": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "required": [
+              "lora_id",
+              "strength"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "lora_id": {
+                "$ref": "defs.schema.json#/$defs/loraId"
+              },
+              "strength": {
+                "type": "number"
+              }
+            }
+          }
         }
       }
     }

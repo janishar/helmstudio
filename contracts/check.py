@@ -10,7 +10,8 @@ checked against openapi.yaml components/schemas/<name>. fixtures/graphs/ run thr
 (README, Pipeline rules) against fixtures/pipelines/workflows.json and the same palette; fixtures/mentions/ through
 the reference mention rules (README, Mentions) against the same palette; fixtures/loras/ through the reference
 LoRA normaliser (README, LoRA normaliser) against the canonical qwen-image lora block (or the fixture's `family`);
-fixtures/video/ through the reference auto length and keyframe position rules (README, Video).
+fixtures/video/ through the reference auto length and keyframe position rules (README, Video); fixtures/dispatch/
+through the reference host admission (`admit`) and dispatch order (`simulate`) (README, The hand-over).
 Exit code 1 on any failure."""
 
 import json
@@ -57,6 +58,7 @@ HTTP_SCHEMAS = [
     "BatchPick", "BatchRowRetry", "BatchReview", "RowExecution", "RowState",
     "LibraryItem", "LibraryItemList", "LibraryItemCreate", "LibraryItemUpdate",
     "Lora", "LoraList", "LoraPatch", "LoraUploadCreate", "LoraUpload",
+    "HostList",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -1234,6 +1236,204 @@ def check_video(registry: Registry, palette: dict) -> None:
     print("ok   fixtures/video/keyframes.json")
 
 
+# ---------------------------------------------------------------- the dispatcher's hand-over (README, "The hand-over")
+SWAP_SKIPS, SWAP_WAIT_S = 4, 180  # the fairness bound: studio_service dispatcher.go SwapSkips, SwapWait
+WINDOW = 16  # rows of one batch in flight (the pipelines engine)
+
+
+def cgb(x: float) -> int:
+    """Memory arithmetic is in integer hundredths of a GB."""
+    return round(x * 100)
+
+
+def entry_key(e: dict) -> tuple:
+    """A resident entry's (or an unload component's) identity; no loras = the plain component."""
+    loras = tuple((x["lora_id"], x["strength"]) for x in e.get("loras") or [])
+    return e["component"], e["model"], e["variant"], e["precision"], loras
+
+
+def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: int | None, needs: set,
+          referenced: set, running: str | None = None) -> dict:
+    """The admission decision for releasing a run to `env` of `host`. entries: (env, key, gb, pinned, fresh, used)
+    for every resident entry of the host's present keys (gb in hundredths, used sortable, None = oldest); budget: the
+    host's (None: no key reports memory); peak: the run's planned peak (None: no plan = the whole budget); needs: the
+    keys the run uses; referenced: (env, key) of the host's other queued runs; running: an env whose key still names
+    a run (that run may use up to its budget_gb, more than its key declares: the run waits for that key's next write)."""
+    if budget is None:
+        return {"decision": "release", "unload": {}, "budget_gb": None, "error": None}
+    p = budget if peak is None else peak
+    counted = [x for x in entries if not (x[0] == env and x[1] in needs)]
+    c = sum(x[2] for x in counted)
+    pinned = sum(x[2] for x in counted if x[3] and x[4])
+    if p + pinned > budget:
+        error = f"needs {p / 100:.1f} GB at its peak; host {host} has {budget / 100:.1f} GB"
+        if p <= budget:
+            error += f", {pinned / 100:.1f} GB of it pinned"
+        return {"decision": "fail", "unload": {}, "budget_gb": None, "error": error}
+    if running:
+        return {"decision": "wait", "unload": {}, "budget_gb": None, "error": None}
+    if c + p <= budget:
+        others = sum(x[2] for x in entries if x[0] != env)
+        return {"decision": "release", "unload": {}, "budget_gb": (budget - others) / 100, "error": None}
+    tier = lambda x: 0 if x[1][4] and (x[0], x[1]) not in referenced else 1  # an unreferenced baked set first
+    victims = sorted((x for x in counted if x[4] and not x[3]),
+                     key=lambda x: (tier(x), x[5] is not None, x[5] or 0, -x[2], x[0], x[1][:4]))
+    unload: dict[str, list] = {}
+    for x in victims:
+        if c + p <= budget:
+            break
+        unload.setdefault(x[0], []).append(x[1])
+        c -= x[2]
+    return {"decision": "unload" if unload else "wait", "unload": unload, "budget_gb": None, "error": None}
+
+
+def as_component(key: tuple) -> dict:
+    out = dict(zip(("component", "model", "variant", "precision"), key[:4]))
+    if key[4]:
+        out["loras"] = [{"lora_id": i, "strength": s} for i, s in key[4]]
+    return out
+
+
+def admit_fixture(fx: dict) -> dict:
+    from datetime import datetime
+    entries, budgets = [], []
+    run = fx["run"]
+    for env, k in fx["keys"].items():
+        if k["state"] == "gone":
+            continue
+        if "budget_gb" in k:
+            budgets.append(cgb(k["budget_gb"]))
+        fresh = k["state"] == "fresh" and not k.get("run_id")  # a key still naming a run waits for its next write
+        for e in k.get("resident", []):
+            used = datetime.fromisoformat(e["last_used"].replace("Z", "+00:00")).timestamp() if "last_used" in e else None
+            entries.append((env, entry_key(e), cgb(e["gb"]), e["pinned"], fresh, used))
+        extra = cgb(k["used_gb"]) - sum(cgb(e["gb"]) for e in k.get("resident", [])) if "used_gb" in k else 0
+        if env != run["env"] and extra > 0:  # measured beyond the entries: counted, never a victim
+            entries.append((env, ("(measured)", "", "", "", ()), extra, False, False, None))
+    running = next((env for env, k in sorted(fx["keys"].items()) if k["state"] != "gone" and k.get("run_id")), None)
+    peak = None if run["peak_gb"] is None else cgb(run["peak_gb"])
+    referenced = {(q["env"], entry_key(n)) for q in fx.get("queued", []) for n in q["needs"]}
+    got = admit(fx["host"], entries, min(budgets) if budgets else None, run["env"], peak,
+                {entry_key(n) for n in run["needs"]}, referenced, running)
+    got["unload"] = {env: [as_component(k) for k in keys] for env, keys in got["unload"].items()}
+    return got
+
+
+def simulate(fx: dict) -> dict:
+    """One host, runs released one at a time in the dispatcher's order with host admission; every unload is answered
+    at once. Plans: {env, peak_gb, lora_component, components (in order of last use)}; batches: two-step pipelines
+    with row 1 first and a window of WINDOW rows."""
+    budget, plans = cgb(fx["budget_gb"]), fx["plans"]
+    keys_of = {n: [(c, entry_key(c | {"model": p["model"]})) for c in p["components"]] for n, p in plans.items()}
+    kept = lambda n: [(c, k) for c, k in keys_of[n] if not c.get("unloads_after")]
+    resident: dict[tuple, list] = {}  # (env, key) -> [gb, used]
+    for i, n in enumerate(fx.get("resident", [])):
+        for j, (c, k) in enumerate(kept(n)):
+            resident[plans[n]["env"], k] = [cgb(c["gb"]), (i - len(fx["resident"])) * 1000 + j]
+    runs, seq = [], [0]
+
+    def add(run: dict) -> None:
+        seq[0] += 1
+        runs.append(run | {"seq": seq[0], "seconds": run.get("seconds", 10)})
+
+    for r in fx.get("runs", []):
+        add(r)
+    batches = {b["id"]: b | {"started": 1, "ended": 0} for b in fx.get("batches", [])}
+    for b in batches.values():
+        add({"id": f"{b['id']}.1.1", "owner": b["owner"], "lane": "batch", "plan": b["steps"][0], "at": b["at"],
+             "seconds": b["seconds"][0], "row": (b["id"], 1, 1)})
+
+    def is_resident(r: dict) -> bool:
+        p = plans[r["plan"]]
+        return any((p["env"], k) in resident for c, k in keys_of[r["plan"]] if c["component"] == p["lora_component"])
+
+    t, last, skips, first_skip = 0, {}, {}, {}
+    releases, unloads, loads, fails = [], [], {}, {}
+    while runs:
+        ready = [r for r in runs if r["at"] <= t]
+        if not ready:
+            t = min(r["at"] for r in runs)
+            continue
+        lane = "interactive" if any(r["lane"] == "interactive" for r in ready) else "batch"
+        owners: dict[str, list] = {}
+        for r in sorted((r for r in ready if r["lane"] == lane), key=lambda r: (r["at"], r["seq"])):
+            owners.setdefault(r["owner"], []).append(r)
+        order = sorted(owners, key=lambda o: (o in last, last.get(o, 0), owners[o][0]["at"], owners[o][0]["seq"]))
+        heads = [next((r for r in owners[o] if is_resident(r)), owners[o][0]) for o in order]
+        overdue = lambda r: skips.get(r["id"], 0) >= SWAP_SKIPS or t - first_skip.get(r["id"], t) >= SWAP_WAIT_S
+        pick = next((r for r in heads if is_resident(r) or overdue(r)), heads[0])
+        for r in heads[: heads.index(pick)]:
+            skips[r["id"]] = skips.get(r["id"], 0) + 1
+            first_skip.setdefault(r["id"], t)
+        plan = plans[pick["plan"]]
+        entries = [(env, k, gb, False, True, used) for (env, k), (gb, used) in resident.items()]
+        referenced = {(plans[r["plan"]]["env"], k) for r in ready if r is not pick for _, k in keys_of[r["plan"]]}
+        got = admit("mac", entries, budget, plan["env"], cgb(plan["peak_gb"]), {k for _, k in keys_of[pick["plan"]]},
+                    referenced)
+        runs.remove(pick)
+        end = t
+        if got["decision"] == "fail":
+            fails[pick["id"]] = got["error"]
+        else:
+            assert got["decision"] != "wait", "nothing in a simulation is stale or pinned"
+            for env, ks in got["unload"].items():
+                unloads.append({"before": pick["id"], "env": env, "components": [k[0] for k in ks]})
+                for k in ks:
+                    del resident[env, k]
+            releases.append(pick["id"])
+            if any((plan["env"], k) not in resident for _, k in kept(pick["plan"])):
+                loads[pick["plan"]] = loads.get(pick["plan"], 0) + 1
+            end = t + pick["seconds"]
+            for j, (c, k) in enumerate(kept(pick["plan"])):
+                resident[plan["env"], k] = [cgb(c["gb"]), end * 1000 + j]
+            last[pick["owner"]] = t
+        if "row" in pick:
+            bid, row, step = pick["row"]
+            b = batches[bid]
+            if step < len(b["steps"]) and got["decision"] != "fail":
+                add({"id": f"{bid}.{row}.{step + 1}", "owner": b["owner"], "lane": "batch", "plan": b["steps"][step],
+                     "at": end, "seconds": b["seconds"][step], "row": (bid, row, step + 1)})
+            else:
+                b["ended"] += 1
+                while b["started"] < b["rows"] and b["started"] - b["ended"] < WINDOW:  # row 1 has ended
+                    b["started"] += 1
+                    add({"id": f"{bid}.{b['started']}.1", "owner": b["owner"], "lane": "batch", "plan": b["steps"][0],
+                         "at": end, "seconds": b["seconds"][0], "row": (bid, b["started"], 1)})
+        t = end
+    return {"releases": releases, "unloads": unloads, "loads": loads, "fails": fails}
+
+
+def check_dispatch(registry: Registry) -> None:
+    g = HERE / "fixtures" / "dispatch"
+    reg = "https://helmstudio.local/contracts/registry.schema.json"
+    unload = "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json"
+    entry_v = Draft202012Validator({"$ref": f"{reg}#/$defs/host/properties/resident/items"}, registry=registry,
+                                   format_checker=FormatChecker())
+    comp_v = Draft202012Validator({"$ref": f"{unload}#/$defs/component"}, registry=registry)
+    for p in sorted(g.glob("*.json")):
+        fx, name = json.loads(p.read_text()), f"fixtures/dispatch/{p.name}"
+        if p.name.startswith("admit."):
+            shapes = [(entry_v, e) for k in fx["keys"].values() for e in k.get("resident", [])]
+            shapes += [(comp_v, n) for q in [fx["run"], *fx.get("queued", [])] for n in q["needs"]]
+            shapes += [(comp_v, c) for cs in fx["expect"]["unload"].values() for c in cs]
+            got = admit_fixture(fx)
+        elif p.name.startswith("order."):
+            shapes = [(comp_v, c | {"model": pl["model"]}) for pl in fx["plans"].values()
+                      for c in ({k: v for k, v in c.items() if k in ("component", "variant", "precision")}
+                                for c in pl["components"])]
+            got = simulate(fx)
+            got = {k: v for k, v in got.items() if k in fx["expect"] or v}
+        else:
+            fail(f"{name}: not admit.* or order.*")
+            continue
+        if bad := [e for v, x in shapes for e in v.iter_errors(x)]:
+            fail(f"{name}: {bad[0].json_path}: {bad[0].message}")
+        elif got != fx["expect"]:
+            fail(f"{name}: got {json.dumps(got)}, want {json.dumps(fx['expect'])}")
+        else:
+            print(f"ok   {name}")
+
+
 def check_names() -> None:
     for p in sorted(HERE.rglob("*")):
         if p.suffix in (".json", ".yaml", ".md") and not any(
@@ -1362,6 +1562,7 @@ def main() -> int:
     check_loras()
     check_lora_detection()
     check_video(registry, palette)
+    check_dispatch(registry)
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

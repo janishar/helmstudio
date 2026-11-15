@@ -18,7 +18,7 @@ import { chosenIds, liveChosen, reasonOf, tilesOf, type Chosen } from "@/lib/loo
 import { withInputs } from "@/lib/mentions";
 import { imageInputs } from "@/lib/refs";
 import { remember } from "@/lib/take-cache";
-import { inputParam, pipelineColumns } from "@/lib/pipeline";
+import { pipelineFields } from "@/lib/pipeline";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   MAX_AXES,
@@ -62,21 +62,6 @@ const label = (f: Field) => {
   return p.toLowerCase() === f.nodeTitle.toLowerCase() ? p : `${f.nodeTitle} · ${p}`;
 };
 
-/** A pipeline's inputs as the batch form's fields: `<inputs node>.<name>`, typed as the param it fills. */
-export const pipelineFields = (p: S<"PipelineDoc">): Field[] =>
-  pipelineColumns(p).map((c) => {
-    const param = inputParam(c.input);
-    return {
-      key: c.key,
-      node: c.node,
-      nodeTitle: param.label ?? c.input.name,
-      param,
-      initial: param.default ?? null,
-      canvas: false,
-      model: false,
-    };
-  });
-
 export function NewBatch({
   open,
   onClose,
@@ -97,7 +82,10 @@ export function NewBatch({
   const [raws, setRaws] = useState<Record<string, Raw>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openKey, setOpenKey] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>("lines");
+  // a pipeline needing several inputs per row (a still's prompt and its clip's) opens on the table: one column each
+  const [mode, setMode] = useState<Mode>(() =>
+    pipeline && rowFields(pipelineFields(pipeline)).length > 1 ? "table" : "lines",
+  );
   const [lineKey, setLineKey] = useState("");
   const [lines, setLines] = useState("");
   const [csv, setCsv] = useState("");
@@ -418,7 +406,14 @@ export function NewBatch({
                 <textarea
                   aria-label="CSV table"
                   className="in mono h-28 resize-y py-2 text-[12px] leading-5"
-                  placeholder={"text,steps\na fox at dusk,20"}
+                  placeholder={
+                    // a pipeline's header: its inputs, the columns each row fills
+                    pipeline
+                      ? rowFields(all)
+                          .map((f) => f.param.name)
+                          .join(",")
+                      : "text,steps\na fox at dusk,20"
+                  }
                   value={csv}
                   onChange={(e) => {
                     setCsv(e.target.value);

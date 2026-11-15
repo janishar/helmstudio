@@ -6,7 +6,7 @@ resident components when it has a residency manager), then pulls cmd.run.<host>.
 runner-<host>-<env>) and runs one command at a time (consumer.Consumer). SIGINT/SIGTERM stop pulling, stop the
 current run at its next cancel point (reported failed), unload every component, delete the hosts key and exit.
 A native runner (one with weights) also answers runner.unload.<host>.<env> (contracts/README.md, Two envs on one
-host): idle, it unloads everything so the host's other env may use the GPU."""
+host: the hand-over): idle, it unloads the components studio names (everything when it names none)."""
 
 import asyncio
 import contextlib
@@ -27,6 +27,7 @@ from consumer import ACK_WAIT, Consumer
 from core import looks, lora, registry
 from core.graph import GPU
 from core.residency import POLICIES, Residency, ram_gb
+from messaging import schemas
 from messaging.hosts import Host
 from storage import Store
 
@@ -35,6 +36,7 @@ log = logging.getLogger("runner")
 DURABLE = f"runner-{HOST}-{ENV}"
 SUBJECT = f"cmd.run.{HOST}.{ENV}"
 IDLE_CHECK = 30  # seconds between keep_warm idle checks
+UNLOAD = "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json"
 
 
 def residency_for(packs) -> tuple[Residency | None, str]:
@@ -66,22 +68,34 @@ async def idle_unload(consumer: Consumer, host: Host, stop: asyncio.Event) -> No
 
 
 async def unload_reply(consumer: Consumer, host: Host, request: dict) -> dict:
-    """runner.unload: idle → unload every component (pinned ones too) and cached handles, free the device memory,
-    rewrite the hosts key, then {unloaded_gb, resident: []}; a run in progress → busy; a failure → internal."""
-    log.info("unload asked for env %s (run %s)", request.get("for_env"), request.get("run_id"))
+    """runner.unload, idle: unload exactly the named `components` it holds (RUNNER_PIN ones kept); none named (by
+    hand): every component, pinned ones too, and cached handles. Then free the device memory, rewrite the hosts
+    key and reply {unloaded_gb, freed, resident} (resident: what the key now lists). A run in progress → busy; a
+    request off-contract or a failure → internal."""
+    log.info("unload asked for env %s (run %s): %s", request.get("for_env"), request.get("run_id"),
+             request.get("components", "everything"))  # fmt: skip
     if consumer.ctx is not None:
         return {"error": "a run is in progress", "code": "busy"}
-    res = consumer.residency
+    if errs := schemas.errors(UNLOAD + "#/$defs/request", request):
+        log.error("unload request off-contract: %s", "; ".join(errs[:3]))
+        return {"error": "the unload request is off-contract", "code": "internal"}
+    res, loop = consumer.residency, asyncio.get_running_loop()
     try:
-        gb = res.used_gb
-        await asyncio.get_running_loop().run_in_executor(GPU, res.unload)
-        consumer.cache.clear()
-        await asyncio.get_running_loop().run_in_executor(GPU, res.free)
-        await host.put()
+        if "components" in request:
+            freed, gb = await loop.run_in_executor(GPU, res.unload_named, request["components"])
+            if freed:  # another env needs the memory: cached node results go too (they are not in `resident`)
+                consumer.cache.clear()
+        else:
+            gb = res.used_gb
+            freed = await loop.run_in_executor(GPU, res.unload)
+            consumer.cache.clear()
+        await loop.run_in_executor(GPU, res.free)
+        value = await host.put()
     except Exception:
         log.exception("unload failed")
         return {"error": "unloading failed", "code": "internal"}
-    return {"unloaded_gb": round(gb, 2), "resident": []}
+    resident = value["resident"] if value else res.state()["resident"]
+    return {"unloaded_gb": round(gb, 2), "freed": freed, "resident": resident}
 
 
 async def main() -> None:

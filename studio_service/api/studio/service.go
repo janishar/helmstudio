@@ -5,6 +5,7 @@ package studio
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"time"
 
@@ -37,7 +38,12 @@ type Service struct {
 	cancel   Cancel
 	store    storage.Store
 	stateGet StateGet // pipelines.state.get; nil answers 503
+	// the dispatcher whose skip counts positions use; nil: none
+	dispatcher *Dispatcher
 }
+
+// SetDispatcher lets positions use the dispatcher's current skip counts.
+func (s *Service) SetDispatcher(d *Dispatcher) { s.dispatcher = d }
 
 // NewService returns the service.
 func NewService(db *pgxpool.Pool, signer *common.Signer, registry *registry.Registry, cancel Cancel, store storage.Store) *Service {
@@ -164,7 +170,8 @@ func sessionDTO(row model.Session) dto.Session {
 // ------------------------------------------------------------------ hosts
 
 // Hosts returns every runner's state, redacted: never the run or its owner, and a LoRA baked into a resident
-// component that is another user's own shows only as its size.
+// component that is another user's own shows only as its size. Each entry carries its host's memory: the smallest
+// budget among the host's keys and the sum of every resident component of them (what admission counts).
 func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList, error) {
 	out := dto.HostList{Hosts: []dto.Host{}}
 	now := time.Now()
@@ -178,6 +185,17 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 				}
 			}
 		}
+	}
+	shared := map[string]*registry.Memory{}
+	used := map[string]int{} // hundredths
+	for _, host := range hosts {
+		used[host.Host] += held(host) // its entries, or what it measured when larger (caches the admission counts too)
+		if m := host.Memory; m != nil && (shared[host.Host] == nil || hundredths(m.BudgetGB) < hundredths(shared[host.Host].BudgetGB)) {
+			shared[host.Host] = &registry.Memory{BudgetGB: m.BudgetGB}
+		}
+	}
+	for name, m := range shared {
+		m.BudgetGB, m.UsedGB = math.Round(m.BudgetGB*10)/10, math.Round(float64(used[name])/10)/10
 	}
 	mine := map[string]bool{}
 	if len(ids) > 0 {
@@ -208,7 +226,7 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 			resident[i] = r
 		}
 		out.Hosts = append(out.Hosts, dto.Host{Host: host.Host, Env: host.Env, State: state, UpdatedAt: host.UpdatedAt,
-			Memory: host.Memory, Resident: resident})
+			Memory: host.Memory, HostMemory: shared[host.Host], Resident: resident})
 	}
 	return out, nil
 }

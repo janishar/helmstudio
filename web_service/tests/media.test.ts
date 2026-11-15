@@ -72,6 +72,10 @@ describe("media of workflows and the Image / Video switch", () => {
     const fit = carry({ ...raws, "canvas.width": "1024", "canvas.height": "576" }, fields(ltx));
     expect(fit["canvas.width"]).toBe("1024");
     expect(carry({ "duration.frames": "50" }, fields(ltx))).toEqual({});
+    // "Use in…" from a Qwen Turbo still: Turbo is no LTX variant, the precision carries
+    expect(carry({ "model.variant": "turbo", "model.precision": "int8" }, fields(ltx))).toEqual({
+      "model.precision": "int8",
+    });
   });
 
   it("keeps a LoRA stack in its family: it does not cross to another and comes back on the switch back", () => {

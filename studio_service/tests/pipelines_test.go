@@ -461,3 +461,51 @@ func refsOf(ids ...string) []any {
 	}
 	return refs(ids...)
 }
+
+// Save as pipeline across families (a Qwen still → "Use in…" ltx-image-to-video → the clip): the clip's prompt is its
+// own input prompt_2, its first-frame row bound to the still's takes, exactly fixtures/pipelines/valid.still-to-clip;
+// its ten-row batch (BatchCreate.valid.9) is accepted, and a row without prompt_2 is not.
+func TestSaveStillToClipPipeline(t *testing.T) {
+	e := setup(t)
+	e.twoEnvs()
+	take := func(title, kind string, made map[string]any, parents ...string) string {
+		id := utility.NewID()
+		raw, _ := json.Marshal(made)
+		e.exec(`INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, bytes, ready, made_with)
+			VALUES ($1, $2, $3, 'create', $4, $5, 'image/png', 10, true, $6)`, id, userA, kind, title, "u/"+userA+"/runs/x/"+id, string(raw))
+		for i, parent := range parents {
+			e.exec(`INSERT INTO take_parents (take_id, parent_id, owner_id, idx) VALUES ($1, $2, $3, $4)`, id, parent, userA, i)
+		}
+		return id
+	}
+	still := take("a red fox", "image", map[string]any{"workflow_id": "qwen-image", "workflow_title": "Qwen Image",
+		"prompt": "a red fox", "seed": 7, "model": nil, "inputs": map[string]any{"prompt.text": "a red fox", "seed.seed": 7,
+			"model.variant": "turbo", "model.precision": "int8", "canvas.mode": "fixed", "canvas.width": 1024, "canvas.height": 1024}})
+	clip := take("the fox looks up", "video", map[string]any{"workflow_id": "ltx-image-to-video", "workflow_title": "LTX image to video",
+		"prompt": "the fox looks up", "seed": 9, "model": nil, "inputs": map[string]any{"prompt.text": "the fox looks up",
+			"seed.seed": 9, "model.precision": "int8", "canvas.width": 448, "canvas.height": 256, "duration.frames": 49,
+			"keyframes.images": []any{map[string]any{"image": map[string]any{"take_id": still}, "seconds": 0, "strength": 1}}}}, still)
+	saved := e.call(userA, "POST", "/v1/studio/takes/"+clip+"/pipeline", map[string]any{"title": "Fox clip pipeline"}, 201)
+	want := fixturePipeline(t, "valid.still-to-clip.json")
+	got, _ := json.Marshal(map[string]any{"title": saved["title"], "nodes": saved["nodes"], "edges": saved["edges"]})
+	wanted, _ := json.Marshal(map[string]any{"title": want["title"], "nodes": want["nodes"], "edges": want["edges"]})
+	if string(got) != string(wanted) || len(saved["problems"].([]any)) != 0 {
+		t.Fatalf("got  %s\nwant %s\n%v", got, wanted, saved["problems"])
+	}
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", "contracts", "fixtures", "http", "BatchCreate.valid.9.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	_ = json.Unmarshal(raw, &body)
+	body["pipeline_id"] = saved["id"]
+	if batch := e.submit(userA, body); batch["id"] == nil {
+		t.Fatal(batch)
+	}
+	rows := body["rows"].(map[string]any)["table"].(map[string]any)["rows"].([]any)
+	rows[2] = []any{rows[2].([]any)[0], nil}
+	if bad := e.call(userA, "POST", "/v1/studio/batches", body, 422); bad["detail"] != "row 3: inputs.prompt_2: a value is required" {
+		t.Fatal(bad)
+	}
+}

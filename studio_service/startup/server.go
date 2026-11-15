@@ -64,7 +64,12 @@ func Run() error {
 	}
 
 	runners := &registry.Registry{}
+	dispatcher := studio.NewDispatcher(pool, runners, messaging.NatsPurge(client), func(ctx context.Context) (int, error) {
+		return micro.NatsJetStreamBacklog(ctx, client, messaging.ProjectorConsumer)
+	})
+	dispatcher.Unload = client.Request // runner.unload.<host>.<env>: the hand-over between envs of one host
 	module := &Module{
+		dispatcher:     dispatcher,
 		db:             pool,
 		signer:         common.NewSigner(env.FileURLSecret, env.PublicBaseURL, env.FileURLTTL),
 		registry:       runners,
@@ -142,10 +147,6 @@ func Run() error {
 		}
 	})
 	workers.Go(func() { messaging.Relay(ctx, pool, messaging.NatsJetStreamPublisher(client)) })
-	dispatcher := studio.NewDispatcher(pool, runners, messaging.NatsPurge(client), func(ctx context.Context) (int, error) {
-		return micro.NatsJetStreamBacklog(ctx, client, messaging.ProjectorConsumer)
-	})
-	dispatcher.Unload = client.Request // runner.unload.<host>.<env>: the GPU gate between two envs of one host
 	workers.Go(func() { dispatcher.Run(ctx) })
 	workers.Go(func() { gallery.NewSweeper(pool, module.store).Run(ctx) })
 	workers.Go(func() { lora.RunSweep(ctx, pool, module.store) })

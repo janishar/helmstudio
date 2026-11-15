@@ -633,7 +633,9 @@ export interface paths {
         /**
          * The runner hosts and their state, redacted
          * @description One entry per key in the KV `hosts`. `offline` when the key is older than 30 s. A host running anyone's run is
-         *     `busy`; which run and whose is never shown.
+         *     `busy`; which run and whose is never shown. From 1.13 each entry carries `host_memory`, the budget its host's
+         *     envs share and what they hold together (the memory chip shows it for the host the run will use), and each
+         *     resident component its `last_used` (contracts/README.md, The hand-over).
          */
         get: operations["studioListHosts"];
         put?: never;
@@ -2190,6 +2192,11 @@ export interface components {
                 budget_gb: number;
                 used_gb: number;
             };
+            /** @description from 1.13: the same on every entry of one host. `budget_gb` = the smallest `memory.budget_gb` among the host's keys (fresh or offline) that report one; `used_gb` = the sum over those keys of the larger of Σ `gb` of its resident components and its measured `memory.used_gb` (what the dispatcher's admission counts), both rounded to 0.1. Absent when no key of the host reports memory */
+            host_memory?: {
+                budget_gb: number;
+                used_gb: number;
+            };
             /** @description model components loaded now; no run or owner */
             resident?: {
                 component: string;
@@ -2199,6 +2206,11 @@ export interface components {
                 precision: "bf16" | "fp16" | "int8" | "int4";
                 gb: number;
                 pinned: boolean;
+                /**
+                 * Format: date-time
+                 * @description from 1.13: when the runner last used it; absent from older runners
+                 */
+                last_used?: string;
                 /** @description a component with LoRAs baked in is its own entry: those LoRAs in order; absent or empty = the plain component. Another user's own LoRA shows only its size (`lora_id`, `name`, `strength` null) */
                 loras?: {
                     lora_id: string | null;

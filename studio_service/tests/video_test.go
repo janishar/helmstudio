@@ -1,7 +1,7 @@
 // Integration tests of M4 stage A (contracts/README.md "Video", "Two envs on one host"): a video take from the
 // runner's output event to the gallery, runs and events (isolation included), the image-only inputs refusing it, the
-// sweep removing its poster, workflows by media and the frame grid; and the GPU gate between host mac's torch and mlx
-// runners in every interleaving the stage has.
+// sweep removing its poster, workflows by media and the frame grid (the hand-over between host mac's envs:
+// handover_test.go).
 package tests
 
 import (
@@ -12,14 +12,10 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/helmstudio/studio_service/api/gallery"
-	"github.com/helmstudio/studio_service/api/studio"
-	"github.com/helmstudio/studio_service/gen"
-	"github.com/helmstudio/studio_service/messaging"
 )
 
 // twoEnvs publishes host mac's two native runners, torch (the qwen-image fixtures) and mlx (the ltx fixtures), idle
@@ -40,23 +36,33 @@ func (e *env) twoEnvs() {
 	}
 }
 
-// mac publishes host mac's env key idle, refreshed now (or at), holding resident (nil: nothing).
+// mac publishes host mac's env key idle with a 48 GB budget, refreshed now (or at), holding resident (nil: nothing).
 func (e *env) mac(env string, resident []map[string]any, at ...time.Time) {
 	e.t.Helper()
 	value, _ := json.Marshal(map[string]any{"host": "mac", "env": env, "state": "idle", "run_id": nil,
-		"updated_at": append(at, time.Now())[0].UTC(), "resident": resident})
+		"updated_at": append(at, time.Now())[0].UTC(), "resident": resident, "memory": map[string]any{"budget_gb": 48, "used_gb": 0}})
 	if err := e.registry.SetHost("mac."+env, value); err != nil {
 		e.t.Fatal(err)
 	}
 }
 
-// ltxResident is what the mlx runner holds after an ltx run at the template's precision.
-var ltxResident = []map[string]any{{"component": "transformer", "model": "ltx-2.5", "variant": "distilled",
-	"precision": "int8", "gb": 19.2, "pinned": true}}
+// ltxResident is what the mlx runner keeps after an ltx run at the template's precision (ltx.models.valid's plan).
+var ltxResident = []map[string]any{
+	{"component": "vae_encoder", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16", "gb": 0.59, "pinned": false},
+	{"component": "upscaler", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16", "gb": 0.93, "pinned": false},
+	{"component": "transformer", "model": "ltx-2.5", "variant": "distilled", "precision": "int8", "gb": 19.18, "pinned": false},
+	{"component": "vae", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16", "gb": 0.76, "pinned": false},
+	{"component": "audio_vae", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16", "gb": 0.06, "pinned": false},
+	{"component": "vocoder", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16", "gb": 0.48, "pinned": false}}
 
-// qwenResident is what the torch runner holds after a qwen-image run.
-var qwenResident = []map[string]any{{"component": "transformer", "model": "qwen-image-2.1", "variant": "base",
-	"precision": "bf16", "gb": 38.1, "pinned": true}}
+// qwenResident is what the torch runner keeps after a qwen-image turbo int8 run (qwen-image.models.valid's plan).
+var qwenResident = []map[string]any{
+	{"component": "text_encoder", "model": "qwen-image-2.1", "variant": "base", "precision": "int8", "gb": 8.5, "pinned": false},
+	{"component": "transformer", "model": "qwen-image-2.1", "variant": "turbo", "precision": "int8", "gb": 7.4, "pinned": false},
+	{"component": "vae", "model": "qwen-image-2.1", "variant": "base", "precision": "bf16", "gb": 1.3, "pinned": false}}
+
+// turbo is a qwen-image run's inputs for the variant with a memory plan.
+var turbo = map[string]any{"model.variant": "turbo"}
 
 // start creates a run of workflow as user in a new session and returns its id and session id.
 func (e *env) start(user, workflow string, inputs map[string]any) (string, string) {
@@ -209,183 +215,6 @@ func TestWorkflowMediaAndFrames(t *testing.T) {
 		}
 	}
 	if got := run(57, 202); got["inputs"].(map[string]any)["duration.frames"] != float64(57) {
-		t.Fatal(got)
-	}
-}
-
-// ------------------------------------------------------------------ the GPU gate
-
-// unloads is a fake runner.unload: it records each request and answers reply.
-type unloads struct {
-	mu    sync.Mutex
-	asked []string
-	reply string
-}
-
-func (u *unloads) request(_ context.Context, subject string, body []byte) ([]byte, error) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.asked = append(u.asked, subject+" "+string(body))
-	return []byte(u.reply), nil
-}
-
-// gatePass runs one pass of d at at, waits for its unload requests, drains the outbox and returns "<subject> <run>"
-// of each command sent.
-func (e *env) gatePass(d *studio.Dispatcher, at time.Time) []string {
-	e.t.Helper()
-	if err := d.Pass(context.Background(), at); err != nil {
-		e.t.Fatal(err)
-	}
-	d.Settle()
-	var out []string
-	_, err := messaging.RelayOnce(context.Background(), e.pool, func(_ context.Context, subject string, envelope *gen.Envelope, _ string) error {
-		out = append(out, subject+" "+*envelope.JobID)
-		return nil
-	})
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	return out
-}
-
-// done projects running then succeeded for a released run.
-func (e *env) done(owner, sessionID, runID string) {
-	e.emit(owner, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "mac"})
-	e.emit(owner, sessionID, runID, "status", 2, map[string]any{"status": "succeeded"})
-}
-
-// torch busy: an mlx run waits; then torch idle with its weights: it is asked to unload, and the run goes once it
-// answered ok (before the hosts watch shows it).
-func TestGPUGateWaitsForTheOtherEnv(t *testing.T) {
-	e := setup(t)
-	e.twoEnvs()
-	fake := &unloads{reply: `{"unloaded_gb": 38.1, "resident": []}`}
-	d := studio.NewDispatcher(e.pool, e.registry, nil, nil)
-	d.Unload = fake.request
-	now := time.Now()
-	torch, torchSession := e.start(userA, "qwen-image", nil)
-	if got := e.gatePass(d, now); !slices.Equal(got, []string{"cmd.run.mac.torch " + torch}) {
-		t.Fatal(got)
-	}
-	mlx, _ := e.start(userB, "ltx-text-to-video", nil)
-	if got := e.gatePass(d, now); len(got) != 0 || len(fake.asked) != 0 {
-		t.Fatal("torch is running: the host is busy", got, fake.asked)
-	}
-	e.done(userA, torchSession, torch)
-	e.mac("torch", qwenResident) // keep_warm
-	if got := e.gatePass(d, now); len(got) != 0 {
-		t.Fatal("torch holds its weights:", got)
-	}
-	if !slices.Equal(fake.asked, []string{`runner.unload.mac.torch {"for_env":"mlx","run_id":"` + mlx + `"}`}) {
-		t.Fatal(fake.asked)
-	}
-	if run := e.call(userB, "GET", "/v1/studio/runs/"+mlx, nil, 200); run["status"] != "queued" || run["host"] != "mac" ||
-		run["position"] != float64(1) {
-		t.Fatal("waits first in line", run)
-	}
-	if got := e.gatePass(d, now.Add(time.Second)); !slices.Equal(got, []string{"cmd.run.mac.mlx " + mlx}) || len(fake.asked) != 1 {
-		t.Fatal("released on the ok", got, fake.asked)
-	}
-}
-
-// busy (or no) answers: asked again every AskEvery, never more often; the gate shut for GateTimeout fails the run.
-// Without NATS the hosts watch alone opens it.
-func TestGPUGateAsksAgainThenGivesUp(t *testing.T) {
-	e := setup(t)
-	e.twoEnvs()
-	e.mac("torch", qwenResident)
-	fake := &unloads{reply: `{"error": "a run is in progress", "code": "busy"}`}
-	d := studio.NewDispatcher(e.pool, e.registry, nil, nil)
-	d.Unload = fake.request
-	now := time.Now()
-	mlx, _ := e.start(userA, "ltx-text-to-video", nil)
-	for _, at := range []time.Duration{0, time.Second, studio.AskEvery - time.Second, studio.AskEvery, studio.AskEvery + time.Second} {
-		if got := e.gatePass(d, now.Add(at)); len(got) != 0 {
-			t.Fatal(got)
-		}
-	}
-	if len(fake.asked) != 2 {
-		t.Fatal("asked at 0 and AskEvery:", fake.asked)
-	}
-	e.mac("torch", qwenResident, now.Add(studio.GateTimeout)) // the runners kept refreshing their keys
-	e.mac("mlx", nil, now.Add(studio.GateTimeout))
-	e.gatePass(d, now.Add(studio.GateTimeout))
-	if run := e.call(userA, "GET", "/v1/studio/runs/"+mlx, nil, 200); run["status"] != "failed" ||
-		run["error"] != "env torch on host mac did not unload its models in 120 s" {
-		t.Fatal(run)
-	}
-
-	watched := studio.NewDispatcher(e.pool, e.registry, nil, nil) // no NATS: waits for the hosts watch
-	e.mac("torch", qwenResident)
-	e.mac("mlx", nil)
-	second, _ := e.start(userA, "ltx-text-to-video", nil)
-	if got := e.gatePass(watched, now); len(got) != 0 {
-		t.Fatal(got)
-	}
-	e.mac("torch", nil)
-	if got := e.gatePass(watched, now); !slices.Equal(got, []string{"cmd.run.mac.mlx " + second}) {
-		t.Fatal(got)
-	}
-}
-
-// Both envs queued: the fair order picks the run, the host waits for it (the other env's run does not jump ahead),
-// and each env gives the GPU up in turn.
-func TestGPUGateFairOrderAcrossEnvs(t *testing.T) {
-	e := setup(t)
-	e.twoEnvs()
-	e.mac("torch", qwenResident)
-	fake := &unloads{reply: `{"unloaded_gb": 38.1, "resident": []}`}
-	d := studio.NewDispatcher(e.pool, e.registry, nil, nil)
-	d.Unload = fake.request
-	now := time.Now()
-	mlx, mlxSession := e.start(userA, "ltx-text-to-video", nil) // older: goes first
-	torch, _ := e.start(userB, "qwen-image", nil)
-	if got := e.gatePass(d, now); len(got) != 0 {
-		t.Fatal("the torch run does not jump the gate:", got)
-	}
-	if got := e.gatePass(d, now); !slices.Equal(got, []string{"cmd.run.mac.mlx " + mlx}) {
-		t.Fatal(got)
-	}
-	e.done(userA, mlxSession, mlx)
-	e.mac("torch", nil)
-	e.mac("mlx", ltxResident)
-	if got := e.gatePass(d, now); len(got) != 0 {
-		t.Fatal("mlx holds its weights now:", got)
-	}
-	if len(fake.asked) != 2 || !strings.HasPrefix(fake.asked[1], `runner.unload.mac.mlx {"for_env":"torch","run_id":"`+torch) {
-		t.Fatal(fake.asked)
-	}
-	if got := e.gatePass(d, now); !slices.Equal(got, []string{"cmd.run.mac.torch " + torch}) {
-		t.Fatal(got)
-	}
-}
-
-// Batch rows of two envs on one host: interactive first, then the env whose model is resident (no unload), then the
-// other env behind the gate.
-func TestGPUGateBatchRowsOfTwoEnvs(t *testing.T) {
-	e := setup(t)
-	e.twoEnvs()
-	fake := &unloads{reply: `{"unloaded_gb": 19.2, "resident": []}`}
-	d := studio.NewDispatcher(e.pool, e.registry, nil, nil)
-	d.Unload = fake.request
-	now := time.Now()
-	torchRow, _ := e.start(userA, "qwen-image", nil)
-	mlxRow, mlxRowSession := e.start(userA, "ltx-text-to-video", nil)
-	e.exec(`UPDATE runs SET lane = 'batch' WHERE id = ANY($1::uuid[])`, []string{torchRow, mlxRow})
-	interactive, session := e.start(userA, "ltx-text-to-video", nil)
-	if got := e.gatePass(d, now); !slices.Equal(got, []string{"cmd.run.mac.mlx " + interactive}) {
-		t.Fatal(got)
-	}
-	e.done(userA, session, interactive)
-	e.mac("mlx", ltxResident)
-	if got := e.gatePass(d, now); !slices.Equal(got, []string{"cmd.run.mac.mlx " + mlxRow}) || len(fake.asked) != 0 {
-		t.Fatal("the resident env's row first, no unload", got, fake.asked)
-	}
-	e.done(userA, mlxRowSession, mlxRow)
-	if got := e.gatePass(d, now); len(got) != 0 || len(fake.asked) != 1 || !strings.HasPrefix(fake.asked[0], "runner.unload.mac.mlx ") {
-		t.Fatal(got, fake.asked)
-	}
-	if got := e.gatePass(d, now); !slices.Equal(got, []string{"cmd.run.mac.torch " + torchRow}) {
 		t.Fatal(got)
 	}
 }

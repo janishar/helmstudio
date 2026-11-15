@@ -1,0 +1,135 @@
+{
+  "description": "a run whose models key has no memory plan for its precision is planned at the whole budget: every entry it does not use goes",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "resident": [
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8",
+          "gb": 8.5,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:10Z"
+        },
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 7.4,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:20Z"
+        },
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 1.3,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:30Z"
+        }
+      ]
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 48,
+      "resident": [
+        {
+          "component": "vae",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.76,
+          "pinned": false,
+          "last_used": "2026-11-15T10:10:45Z"
+        }
+      ]
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": null,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "connector",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vae_encoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "upscaler",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "audio_vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      },
+      {
+        "component": "vocoder",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "unload",
+    "unload": {
+      "torch": [
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8"
+        },
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8"
+        },
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16"
+        }
+      ]
+    },
+    "budget_gb": null,
+    "error": null
+  }
+}

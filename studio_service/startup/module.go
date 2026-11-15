@@ -25,9 +25,10 @@ type Module struct {
 	recheck        studio.Recheck  // the token check an open event stream repeats
 	shutdown       <-chan struct{} // closes when the service stops, which ends open SSE streams
 	health         micro.Controller
-	maxBody        int64           // bytes
-	store          storage.Store   // read to check uploads and reference images
-	stateGet       studio.StateGet // pipelines.state.get (a row's checkpoint state)
+	maxBody        int64              // bytes
+	store          storage.Store      // read to check uploads and reference images
+	stateGet       studio.StateGet    // pipelines.state.get (a row's checkpoint state)
+	dispatcher     *studio.Dispatcher // positions use its skip counts; nil in tests
 }
 
 // RootMiddlewares returns the middlewares in load order. The body limit comes before the guard, so 411 and 413 come
@@ -46,6 +47,7 @@ func (m *Module) RootMiddlewares() []network.RootMiddleware {
 func (m *Module) Controllers() []micro.Controller {
 	service := studio.NewService(m.db, m.signer, m.registry, m.cancel, m.store)
 	service.SetStateGet(m.stateGet)
+	service.SetDispatcher(m.dispatcher)
 	return []micro.Controller{
 		m.health,
 		studio.NewController(service, m.recheck, m.shutdown),
