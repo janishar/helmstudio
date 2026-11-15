@@ -1,0 +1,16 @@
+- id: grainy-35mm
+  group: film
+  name: 35mm grain
+  text: "shot on 35mm film, fine grain, slight halation"
+- id: large-format
+  group: film
+  name: Large format
+  text: "large format photograph, very fine detail, shallow depth of field"
+- id: instant-photo
+  group: film
+  name: Instant photo
+  text: "instant photo, soft focus, faded edges, slight colour shift"
+- id: black-and-white
+  group: film
+  name: Black and white
+  text: "black and white photograph, rich blacks, silver tones"

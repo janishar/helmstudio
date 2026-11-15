@@ -36,6 +36,7 @@ type PipelineNode struct {
 	Preset   *string
 	Fixed    map[string]any    // the step's `inputs`
 	Bind     map[string]string // workflow param ← source
+	Looks    []string          // the looks every run of the step is made with
 	// gate
 	Takes string
 	Keep  *int
@@ -63,7 +64,7 @@ func (n PipelineNode) KeepOr1() int {
 // nodeFields are the keys each kind allows (the schemas are closed).
 var nodeFields = map[string][]string{
 	"inputs": {"kind", "title", "position", "inputs"},
-	"step":   {"kind", "title", "position", "workflow", "seeds", "preset", "inputs", "bind"},
+	"step":   {"kind", "title", "position", "workflow", "seeds", "preset", "inputs", "bind", "looks"},
 	"gate":   {"kind", "title", "position", "takes", "keep"},
 	"output": {"kind", "title", "position", "from", "collection"},
 }
@@ -83,7 +84,7 @@ func (n *PipelineNode) UnmarshalJSON(data []byte) error {
 		}
 	}
 	targets := map[string]any{"title": &n.Title, "position": &n.Position, "workflow": &n.Workflow, "seeds": &n.Seeds,
-		"preset": &n.Preset, "bind": &n.Bind, "takes": &n.Takes, "keep": &n.Keep, "from": &n.From, "collection": &n.Collection}
+		"preset": &n.Preset, "bind": &n.Bind, "looks": &n.Looks, "takes": &n.Takes, "keep": &n.Keep, "from": &n.From, "collection": &n.Collection}
 	if n.Kind == "inputs" {
 		targets["inputs"] = &n.Columns
 	} else {
@@ -121,6 +122,7 @@ func (n PipelineNode) MarshalJSON() ([]byte, error) {
 		set("preset", n.Preset, n.Preset != nil)
 		set("inputs", n.Fixed, n.Fixed != nil)
 		set("bind", n.Bind, n.Bind != nil)
+		set("looks", n.Looks, n.Looks != nil)
 	case "gate":
 		out["takes"] = n.Takes
 		set("keep", n.Keep, n.Keep != nil)
@@ -353,6 +355,13 @@ func validNode(id string, n PipelineNode) string {
 			return at + ".preset must be 1-40 characters"
 		case len(n.Bind) > 16:
 			return at + ".bind: at most 16"
+		case len(n.Looks) > 8:
+			return at + ".looks: at most 8"
+		}
+		for i, id := range n.Looks {
+			if !LookID.MatchString(id) {
+				return fmt.Sprintf("%s.looks[%d]: not a look id", at, i+1)
+			}
 		}
 		for key := range n.Fixed {
 			if !reference.MatchString(key) {

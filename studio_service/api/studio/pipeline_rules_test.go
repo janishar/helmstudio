@@ -48,8 +48,10 @@ func TestPipelineFixtures(t *testing.T) {
 	for _, file := range files {
 		t.Run(filepath.Base(file), func(t *testing.T) {
 			var fixture struct {
-				Pipeline dto.PipelineDoc `json:"pipeline"`
-				Problems []dto.Problem   `json:"problems"`
+				Pipeline dto.PipelineDoc   `json:"pipeline"`
+				Problems []dto.Problem     `json:"problems"`
+				Looks    []lookItem        `json:"looks"`
+				Loras    map[string]string `json:"loras"`
 			}
 			data, _ := os.ReadFile(file)
 			if err := json.Unmarshal(data, &fixture); err != nil {
@@ -63,7 +65,8 @@ func TestPipelineFixtures(t *testing.T) {
 			for _, p := range fixture.Problems {
 				want[key(p)] = true
 			}
-			for _, p := range pipelineProblems(fixture.Pipeline, workflows, palette) {
+			for _, p := range pipelineProblems(fixture.Pipeline, workflows, palette, fixture.Looks,
+				func(string) map[string]string { return fixture.Loras }) {
 				got[key(p)] = true
 				if p.Message == "" || (p.Blocks == "run") != pipelineRunOnly[p.Code] {
 					t.Errorf("problem %+v", p)

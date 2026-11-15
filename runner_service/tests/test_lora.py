@@ -158,7 +158,7 @@ def test_shared_index_is_on_contract_and_hashes_each_file_once(tmp_path, monkeyp
         "comfyui",
         fx["expect"]["rank"],
     )
-    assert registry.loras_value(entries)["loras"] == entries  # on contract
+    assert registry.scanned_value("loras", entries)["loras"] == entries  # on contract
     assert lora.Library(models, cache).scan({FAMILY: BLOCK}) == entries
     assert sorted(hashed) == [
         "ink-wash-2.safetensors",

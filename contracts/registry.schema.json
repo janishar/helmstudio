@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/registry.schema.json",
-  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras) and bucket hosts (key <host>.<env>)",
-  "description": "Each runner writes only its own keys: the four registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
+  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras|looks) and bucket hosts (key <host>.<env>)",
+  "description": "Each runner writes only its own keys: the five registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
   "$defs": {
     "meta": {
       "type": "object",
@@ -1198,6 +1198,166 @@
           "description": "glob patterns (fnmatch: `*` any run, `?` one character; case-sensitive) over raw tensor keys that are counted as ignored instead of unapplied. Empty = every key must apply"
         }
       }
+    },
+    "looks": {
+      "description": "registry key <host>.<env>.looks: the starter looks of this runner's packs (runner_service/packs/<pack>/looks/*.yaml, contracts/README.md Looks: starter looks), written at start (an empty list when its packs ship none). Studio lists the union over live hosts to every user, read-only; a look's id is the same on every host",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "looks"
+          ],
+          "properties": {
+            "looks": {
+              "type": "array",
+              "maxItems": 1000,
+              "description": "every look of every pack of this env, by pack, then file name, then file order; ids unique",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "family",
+                  "group",
+                  "name",
+                  "text",
+                  "version",
+                  "loras",
+                  "thumb"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63}$",
+                    "description": "<family>/<the YAML id>: the look's id everywhere (LibraryItem.id, RunRequest.looks), stable across hosts"
+                  },
+                  "family": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "description": "the pack's family (= the id's first part)"
+                  },
+                  "group": {
+                    "enum": [
+                      "film",
+                      "camera",
+                      "colour",
+                      "lighting"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "appended to the prompt; may be empty only when the look has a LoRA"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "the YAML version (default 1); a pack bumps it when it changes the look, so reuse can say changed"
+                  },
+                  "loras": {
+                    "type": "array",
+                    "maxItems": 1,
+                    "description": "the YAML lora, when it has one",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "file",
+                        "name",
+                        "strength",
+                        "lora_id"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "file": {
+                          "type": "string",
+                          "pattern": "^[^/\\\\]{1,200}\\.safetensors$",
+                          "description": "the file name as written in the YAML, looked up in the folders the LoRA index scans (contracts/README.md, LoRAs: shared)"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "description": "the file name without .safetensors, cut to 80 (the index's name)"
+                        },
+                        "strength": {
+                          "type": "number",
+                          "minimum": -4,
+                          "maximum": 4
+                        },
+                        "lora_id": {
+                          "oneOf": [
+                            {
+                              "$ref": "messages/defs.schema.json#/$defs/sha256"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "the file's SHA-256 = its shared LoRA id in <host>.<env>.loras; null when this host has no such file (studio then takes another live host's)"
+                        }
+                      }
+                    }
+                  },
+                  "thumb": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "key",
+                          "content_type",
+                          "width",
+                          "height",
+                          "bytes"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "pattern": "^packs/[a-z0-9][a-z0-9_-]{0,63}/looks/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\\.(png|jpg|webp)$",
+                            "description": "packs/<family>/looks/<id>-<first 16 hex of the file's SHA-256>.<ext>: the YAML image, which the runner PUTs to the object store at start unless that key exists (content-addressed, never overwritten). Shown only as the look's thumb_url; never a reference image"
+                          },
+                          "content_type": {
+                            "enum": [
+                              "image/png",
+                              "image/jpeg",
+                              "image/webp"
+                            ]
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2097152
+                          }
+                        }
+                      }
+                    ],
+                    "description": "null without an image"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

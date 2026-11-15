@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "looks": [
+    {
+      "id": "qwen-image/window-light",
+      "family": "qwen-image",
+      "group": "lighting",
+      "name": "Window",
+      "text": "x",
+      "version": 1,
+      "loras": [],
+      "thumb": {
+        "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/x.png",
+        "content_type": "image/png",
+        "width": 1,
+        "height": 1,
+        "bytes": 1
+      }
+    }
+  ]
+}

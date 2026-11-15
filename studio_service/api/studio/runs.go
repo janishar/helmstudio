@@ -71,7 +71,8 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		if err != nil {
 			return err
 		}
-		graphs, details, _, err := s.runGraphs(ctx, tx, caller.ID, workflow, []map[string]any{body.Inputs}, nil)
+		graphs, details, _, err := s.runGraphs(ctx, tx, caller.ID, workflow, []map[string]any{body.Inputs},
+			[][]string{body.Looks}, nil)
 		if err != nil {
 			return err
 		} else if details[0] != "" {
@@ -92,10 +93,10 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		}
 		inputs, _ := json.Marshal(body.Inputs)
 		run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-			nodes, finished_at, workflow_version, workflow_title, mentions, loras) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13)
+			nodes, finished_at, workflow_version, workflow_title, mentions, loras, looks) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13, $14)
 			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure,
-			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion), lorasJSON(graphs[0].Loras))
+			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion), lorasJSON(graphs[0].Loras), looksJSON(body.Looks))
 		if err != nil {
 			return err
 		}
@@ -109,6 +110,15 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		err = s.placeQueued(ctx, &out)
 	}
 	return out, err
+}
+
+// looksJSON is runs.looks (batch_rows.looks): the ids as requested, null without any.
+func looksJSON(ids []string) []byte {
+	if len(ids) == 0 {
+		return nil
+	}
+	data, _ := json.Marshal(ids)
+	return data
 }
 
 // GetRun returns one run with its outputs.
@@ -270,6 +280,7 @@ func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 		BatchID: run.BatchID, BatchRow: run.BatchRow, WorkflowVersion: run.WorkflowVersion}
 	_ = json.Unmarshal(run.Inputs, &out.Inputs)
 	_ = json.Unmarshal(run.Resolved, &out.Resolved) // null or absent leaves it nil (omitted)
+	_ = json.Unmarshal(run.Looks, &out.Looks)
 	if len(run.Progress) > 0 && string(run.Progress) != "null" {
 		out.Progress = &dto.RunProgress{}
 		_ = json.Unmarshal(run.Progress, out.Progress)

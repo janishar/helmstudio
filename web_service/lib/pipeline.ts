@@ -10,6 +10,7 @@ import {
   type Doc,
   type Palette,
 } from "@/lib/graph";
+import { lookFit, type ResolvableLook } from "@/lib/mentions";
 
 export type PDoc = S<"PipelineDoc">;
 export type PNode = S<"PipelineNode">;
@@ -35,6 +36,8 @@ const RUN_ONLY = new Set<Code>([
   "bind_type",
   "unbound_input",
   "step_seeds",
+  "unknown_look",
+  "look_fit",
 ]);
 /** the param types a pipeline input of each type fills */
 const INPUT_FITS: Record<InputType, string[]> = {
@@ -147,10 +150,14 @@ export function fits(p: Param, src: { input: InputType } | { takes: number }): b
 
 /** Every problem of a pipeline document; `workflows`: id → the workflow documents the caller can run. Sorted as the
  * API sorts them. */
+/** `looks` / `loras`: the looks and LoRAs (id → family) the caller can use now; without `looks` (not known yet) a step's
+ * looks are not checked. */
 export function pipelineProblems(
   doc: PDoc,
   workflows: Record<string, Doc>,
   palette: Palette,
+  looks?: ResolvableLook[],
+  loras: Record<string, string> = {},
 ): PProblem[] {
   const out = new Map<string, PProblem>();
   const add = (code: Code, message: string, node?: string, port?: string, param?: string) => {
@@ -251,6 +258,25 @@ export function pipelineProblems(
     if (wp.length) add("workflow_cannot_run", `${name(id)}: ${wf.title}: ${wp[0].message}`, id);
     if (n.preset !== undefined && !(n.preset in (wf.studio?.presets ?? {})))
       add("unknown_preset", `${name(id)}: ${wf.title} has no preset ${n.preset}`, id);
+    const stepLooks = (n as { looks?: string[] }).looks ?? [];
+    if (looks && stepLooks.length) {
+      const found = new Map(looks.map((x) => [x.id, x]));
+      const gone = stepLooks.find((l) => !found.has(l));
+      const unfit = gone
+        ? null
+        : stepLooks
+            .map((l) => [l, lookFit(wf.nodes, palette, found.get(l)!, loras)] as const)
+            .find(([, r]) => r);
+      if (gone) add("unknown_look", `${name(id)}: unknown look ${gone}`, id, undefined, "looks");
+      else if (unfit)
+        add(
+          "look_fit",
+          `${name(id)}: look ${found.get(unfit[0])!.name} does not fit ${wf.title} (${unfit[1]})`,
+          id,
+          undefined,
+          "looks",
+        );
+    }
     const params = settable(wf, palette);
     for (const [k, v] of Object.entries(n.inputs ?? {})) {
       const [wn, p] = k.split(".");

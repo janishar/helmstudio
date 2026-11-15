@@ -1,5 +1,6 @@
-"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows, .models and .loras, written once at
-start (`loras`: the shared LoRAs core.lora.Library indexed; main adds it with `loras_value`).
+"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows, .models, .loras and .looks, written once
+at start (`loras`: the shared LoRAs core.lora.Library indexed, `looks`: the packs' starter looks with their LoRAs
+looked up in that index; main adds both with `scanned_value`).
 
 The values are built from the packs whose runtime env is RUNNER_ENV (core.pack) plus the core nodes their
 workflows use or their model.yaml lists in `publish`, with this runner's published_at and published_by. Each is checked against registry.schema.json,
@@ -16,7 +17,7 @@ from messaging.publisher import now
 
 log = logging.getLogger(__name__)
 
-KINDS = ("nodes", "workflows", "models", "loras")
+KINDS = ("nodes", "workflows", "models", "loras", "looks")
 
 
 def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
@@ -47,6 +48,9 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     for kind, value in values.items():
         if errs := schemas.registry_errors(kind, value):
             raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
+    ids = [f"{p.family}/{x['id']}" for p, _ in loaded for x in p.looks]
+    if dup := {i for i in ids if ids.count(i) > 1}:
+        raise ValueError(f"looks: ids {sorted(dup)} are shipped by two packs")
     node_schemas = {k: s for k, (s, _) in every.items()}
     for w in workflows:
         if w["env"] != env:
@@ -56,12 +60,13 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     return values, {k: n for k, (_, n) in every.items()}, [p for p, _ in loaded]
 
 
-def loras_value(entries: list[dict], env: str = ENV) -> dict:
-    """The `loras` value: the shared LoRAs this host indexed (core.lora.Library.scan). ValueError when off-contract."""
+def scanned_value(kind: str, entries: list[dict], env: str = ENV) -> dict:
+    """The `loras` value (the shared LoRAs core.lora.Library.scan indexed) or the `looks` value (core.looks.entries).
+    ValueError when off-contract."""
     value = {"schema_version": 1, "host": HOST, "env": env, "published_at": now(),
-             "published_by": PUBLISHED_BY, "loras": entries}  # fmt: skip
-    if errs := schemas.registry_errors("loras", value):
-        raise ValueError(f"registry loras is off-contract: {'; '.join(errs[:3])}")
+             "published_by": PUBLISHED_BY, kind: entries}  # fmt: skip
+    if errs := schemas.registry_errors(kind, value):
+        raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
     return value
 
 

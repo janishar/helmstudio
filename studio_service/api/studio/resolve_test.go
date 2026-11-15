@@ -229,7 +229,7 @@ func TestExpandImageLines(t *testing.T) {
 	if shape != "" {
 		t.Fatal(shape)
 	}
-	rows, detail := expand(qwen(t), parsed, func() int64 { return 0 })
+	rows, _, detail := expand(qwen(t), parsed, func() int64 { return 0 })
 	if detail != "" || len(rows) != 2 {
 		t.Fatal(rows, detail)
 	}
@@ -237,7 +237,7 @@ func TestExpandImageLines(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 	parsed, _ = batchBody(t, `{"workflow_id":"qwen-image","rows":{"lines":{"param":"encode.refs","values":["nope"]}}}`)
-	if _, detail := expand(qwen(t), parsed, func() int64 { return 0 }); detail != `row 1: encode.refs[1].image: must be {"take_id": <uuid>}` {
+	if _, _, detail := expand(qwen(t), parsed, func() int64 { return 0 }); detail != `row 1: encode.refs[1].image: must be {"take_id": <uuid>}` {
 		t.Fatal(detail)
 	}
 }

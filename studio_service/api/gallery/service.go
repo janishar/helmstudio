@@ -336,6 +336,12 @@ func (s *Service) Reuse(ctx context.Context, caller common.Caller, id string) (d
 	if out.LorasStatus, err = s.lorasStatus(ctx, caller, madeWith.Loras); err != nil {
 		return dto.TakeReuse{}, err
 	}
+	if out.LooksStatus, err = s.looksStatus(ctx, caller, madeWith.Looks); err != nil {
+		return dto.TakeReuse{}, err
+	}
+	for _, l := range madeWith.Looks {
+		out.Looks = append(out.Looks, l.ID)
+	}
 	workflow, version, err := s.find(ctx, caller, madeWith.WorkflowID)
 	var notFound *network.APIError
 	switch {
@@ -384,6 +390,46 @@ func (s *Service) elementsStatus(ctx context.Context, caller common.Caller, used
 			if rows[at].Version == e.Version {
 				out[i].Status = "current"
 			}
+		}
+	}
+	return out, err
+}
+
+// looksStatus compares each look a take was made with against what the caller can use now: current (same version),
+// changed (another version), deleted (own, deleted since) or missing (starter, no live host publishes it).
+func (s *Service) looksStatus(ctx context.Context, caller common.Caller, used []dto.MadeWithLook) ([]dto.LookStatus, error) {
+	if len(used) == 0 {
+		return nil, nil
+	}
+	var own []string
+	for _, l := range used {
+		if utility.IsUUID(l.ID) {
+			own = append(own, l.ID)
+		}
+	}
+	versions := map[string]int{}
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		if len(own) == 0 {
+			return nil
+		}
+		rows, _ := tx.Query(ctx, `SELECT id::text, version FROM library_items WHERE kind = 'look' AND id = ANY($1::uuid[])`, own)
+		var id string
+		var version int
+		_, err := pgx.ForEachRow(rows, []any{&id, &version}, func() error { versions[id] = version; return nil })
+		return err
+	})
+	starters := s.registry.Looks(time.Now())
+	out := make([]dto.LookStatus, len(used))
+	for i, l := range used {
+		version, ok := versions[l.ID]
+		gone := "deleted"
+		if !utility.IsUUID(l.ID) {
+			starter, live := starters[l.ID]
+			version, ok, gone = starter.Version, live, "missing"
+		}
+		out[i] = dto.LookStatus{ID: l.ID, Status: gone}
+		if ok {
+			out[i].Status = map[bool]string{true: "current", false: "changed"}[version == l.Version]
 		}
 	}
 	return out, err

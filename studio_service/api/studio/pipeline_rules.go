@@ -27,7 +27,7 @@ const (
 // pipelineRunOnly are the codes that block running only; every other code blocks saving (and running).
 var pipelineRunOnly = map[string]bool{"unreachable": true, "dead_end": true, "no_output": true, "unknown_workflow": true,
 	"workflow_cannot_run": true, "unknown_preset": true, "step_input_invalid": true, "bind_unknown": true, "bind_type": true,
-	"unbound_input": true, "step_seeds": true}
+	"unbound_input": true, "step_seeds": true, "unknown_look": true, "look_fit": true}
 
 // inputFits maps a pipeline input type to the param types it fills.
 var inputFits = map[string][]string{"Text": {"string", "text"}, "Int": {"int"}, "Float": {"float"}, "Seed": {"seed"},
@@ -101,8 +101,10 @@ func (g pipelineGraph) reach(src, avoid string, uncappedOnly bool) map[string]bo
 }
 
 // pipelineProblems checks doc with every pipeline rule, sorted as the API answers them. workflows are the documents the
-// caller can run (templates and their own) by id; palette the live kinds.
-func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc, palette map[string]registry.PaletteNode) []dto.Problem {
+// caller can run (templates and their own) by id; palette the live kinds; looks the looks the caller can use now, loras
+// the LoRA id → family the caller can use now in an env (the fit rule).
+func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc, palette map[string]registry.PaletteNode,
+	looks []lookItem, loras func(env string) map[string]string) []dto.Problem {
 	found := map[[4]string]dto.Problem{}
 	add := func(code, node, port, param, message string, args ...any) {
 		blocks := "save"
@@ -274,6 +276,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 				add("unknown_preset", id, "", "", "%s: workflow %s has no preset %s", id, n.Workflow, *n.Preset)
 			}
 		}
+		pipelineLooks(id, n.Looks, wf, palette, looks, loras, add)
 		params := settable(wf, palette)
 		for _, key := range slices.Sorted(maps.Keys(n.Fixed)) {
 			value := n.Fixed[key]
@@ -329,6 +332,35 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 		}
 	}
 	return sortedProblems(found)
+}
+
+// pipelineLooks adds a step's look problems: unknown_look (a look the caller cannot use now), else look_fit (one that
+// does not fit the step's workflow as stored).
+func pipelineLooks(id string, ids []string, wf dto.WorkflowDoc, palette map[string]registry.PaletteNode, looks []lookItem,
+	loras func(env string) map[string]string, add func(code, node, port, param, message string, args ...any)) {
+	if len(ids) == 0 {
+		return
+	}
+	var picked []lookItem
+	for _, lookID := range ids {
+		at := slices.IndexFunc(looks, func(l lookItem) bool { return l.ID == lookID })
+		if at < 0 {
+			add("unknown_look", id, "", "looks", "%s.looks: unknown look %s", id, lookID)
+			return
+		}
+		picked = append(picked, looks[at])
+	}
+	schemas := map[string]registry.NodeSchema{}
+	for kind, node := range palette {
+		schemas[kind] = node.NodeSchema
+	}
+	families := loras(wf.Env)
+	for _, l := range picked {
+		if reason := lookFit(wf.Nodes, schemas, "look", l, families); reason != "" {
+			add("look_fit", id, "", "looks", "%s.looks: look %s does not fit workflow %s (%s)", id, l.Name, wf.Title, reason)
+			return
+		}
+	}
 }
 
 // seedParam is the workflow's one unwired seed param (`<node>.<param>`), "" without exactly one.

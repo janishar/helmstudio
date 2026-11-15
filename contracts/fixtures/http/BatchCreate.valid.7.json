@@ -1,0 +1,31 @@
+{
+  "workflow_id": "qwen-image",
+  "looks": [
+    "qwen-image/window-light"
+  ],
+  "rows": {
+    "table": {
+      "columns": [
+        "prompt.text",
+        "looks"
+      ],
+      "rows": [
+        [
+          "a fox",
+          null
+        ],
+        [
+          "a heron",
+          [
+            "10000000-0000-4000-8000-000000000003",
+            "qwen-image/silhouette"
+          ]
+        ],
+        [
+          "a cabin",
+          []
+        ]
+      ]
+    }
+  }
+}

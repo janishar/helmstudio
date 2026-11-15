@@ -1,0 +1,97 @@
+{
+  "description": "a step look the caller cannot use now (unknown_look) and one that does not fit the step's workflow (look_fit: qwen-image has no LoRA stack); both block running only",
+  "pipeline": {
+    "title": "Looks",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          }
+        ]
+      },
+      "step_1": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        },
+        "looks": [
+          "10000000-0000-4000-8000-000000000009"
+        ]
+      },
+      "step_2": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "bind": {
+          "prompt.text": "$prompt"
+        },
+        "looks": [
+          "qwen-image/ink-wash"
+        ]
+      },
+      "output": {
+        "kind": "output",
+        "from": "step_2.takes",
+        "collection": "Looks"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "step_1"
+      ],
+      [
+        "step_1",
+        "step_2"
+      ],
+      [
+        "step_2",
+        "output"
+      ]
+    ]
+  },
+  "looks": [
+    {
+      "id": "echo/soft-light",
+      "source": "starter",
+      "name": "Soft light",
+      "version": 1,
+      "text": "soft diffuse light",
+      "images": [],
+      "loras": []
+    },
+    {
+      "id": "qwen-image/ink-wash",
+      "source": "starter",
+      "name": "Ink wash",
+      "version": 1,
+      "text": "ink wash painting",
+      "images": [],
+      "loras": [
+        {
+          "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+          "name": "ink-wash",
+          "strength": 0.8
+        }
+      ]
+    }
+  ],
+  "loras": {
+    "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image"
+  },
+  "problems": [
+    {
+      "code": "unknown_look",
+      "node": "step_1",
+      "param": "looks"
+    },
+    {
+      "code": "look_fit",
+      "node": "step_2",
+      "param": "looks"
+    }
+  ]
+}

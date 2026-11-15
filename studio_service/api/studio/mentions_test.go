@@ -59,10 +59,14 @@ func TestResolveFixtures(t *testing.T) {
 				} `json:"workflow"`
 				Library []element         `json:"library"`
 				Sizes   map[string][2]int `json:"sizes"`
+				Looks   []lookItem        `json:"looks"`
+				Chosen  []string          `json:"chosen"`
+				Loras   map[string]string `json:"loras"`
 				Expect  struct {
 					Inputs   map[string]any               `json:"inputs"`
 					Typed    map[string]any               `json:"typed"`
 					Elements []gallerydto.MadeWithElement `json:"elements"`
+					Looks    []gallerydto.MadeWithLook    `json:"looks"`
 					Errors   []string                     `json:"errors"`
 				} `json:"expect"`
 			}
@@ -70,7 +74,8 @@ func TestResolveFixtures(t *testing.T) {
 			if err := json.Unmarshal(data, &fixture); err != nil {
 				t.Fatal(err)
 			}
-			got, errs := expandMentions(fixture.Workflow.Nodes, schemas, fixture.Library, fixture.Sizes)
+			got, errs := expandMentions(fixture.Workflow.Nodes, schemas, fixture.Library, fixture.Sizes, fixture.Looks,
+				fixture.Chosen, fixture.Loras)
 			want := fixture.Expect
 			if len(want.Errors) > 0 || len(errs) > 0 {
 				if !reflect.DeepEqual(errs, want.Errors) {
@@ -86,6 +91,9 @@ func TestResolveFixtures(t *testing.T) {
 			if want.Elements == nil {
 				want.Elements = []gallerydto.MadeWithElement{}
 			}
+			if want.Looks == nil {
+				want.Looks = []gallerydto.MadeWithLook{}
+			}
 			// compare as JSON decodes it
 			norm := func(v any) any {
 				data, _ := json.Marshal(v)
@@ -94,11 +102,54 @@ func TestResolveFixtures(t *testing.T) {
 				return out
 			}
 			if !reflect.DeepEqual(norm(got.Inputs), norm(want.Inputs)) || !reflect.DeepEqual(norm(got.Typed), norm(want.Typed)) ||
-				!reflect.DeepEqual(got.Elements, want.Elements) {
-				t.Fatalf("got %s\nwant %s", norm(got), norm(map[string]any{"inputs": want.Inputs, "typed": want.Typed,
-					"elements": want.Elements}))
+				!reflect.DeepEqual(got.Elements, want.Elements) || !reflect.DeepEqual(got.Looks, want.Looks) {
+				t.Fatalf("got %s %s\nwant %s", norm(got.Inputs), norm(got), norm(map[string]any{"inputs": want.Inputs,
+					"typed": want.Typed, "elements": want.Elements, "looks": want.Looks}))
 			}
 		})
+	}
+}
+
+// TestFitFixtures runs fit.json: an item against a workflow → the reason it does not fit, or null.
+func TestFitFixtures(t *testing.T) {
+	palette := fixturePalette(t)
+	schemas := map[string]registry.NodeSchema{}
+	for kind, node := range palette {
+		schemas[kind] = node.NodeSchema
+	}
+	var fixture struct {
+		Workflows map[string]struct {
+			Nodes map[string]registry.Node `json:"nodes"`
+		} `json:"workflows"`
+		Cases []struct {
+			Description string            `json:"description"`
+			Workflow    string            `json:"workflow"`
+			Item        json.RawMessage   `json:"item"`
+			Loras       map[string]string `json:"loras"`
+			Expect      *string           `json:"expect"`
+		} `json:"cases"`
+	}
+	data, err := os.ReadFile(filepath.Join(mentionFixtures, "fit.json"))
+	if err == nil {
+		err = json.Unmarshal(data, &fixture)
+	}
+	if err != nil || len(fixture.Cases) < 14 {
+		t.Fatal(err, len(fixture.Cases))
+	}
+	for _, c := range fixture.Cases {
+		var item lookItem
+		var kind struct {
+			Kind string `json:"kind"`
+		}
+		_ = json.Unmarshal(c.Item, &item)
+		_ = json.Unmarshal(c.Item, &kind)
+		got, want := lookFit(fixture.Workflows[c.Workflow].Nodes, schemas, kind.Kind, item, c.Loras), ""
+		if c.Expect != nil {
+			want = *c.Expect
+		}
+		if got != want {
+			t.Errorf("%s: got %q, want %q", c.Description, got, want)
+		}
 	}
 }
 

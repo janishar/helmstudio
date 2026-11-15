@@ -46,12 +46,13 @@ type Run struct {
 	WorkflowTitle   *string
 	Mentions        json.RawMessage // {typed, elements}: what the mention expansion did; null when nothing
 	Loras           json.RawMessage // its LoRA values as resolved when it was made ([]lora.Used); null when none
+	Looks           json.RawMessage // the look ids it was asked with (Run.looks); null when none
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
-	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras`
+	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks`
 
 // Output is a run_outputs row.
 type Output struct {
@@ -136,12 +137,13 @@ type BatchRow struct {
 	Node       *string         // pipeline rows: where it is now
 	Parked     json.RawMessage // pipeline rows: {gate, visit, keep, candidates} while waiting
 	Cells      json.RawMessage // pipeline rows: pipelines' cells
+	Looks      json.RawMessage // a workflow batch's row: its look ids; null when none
 }
 
 // BatchRowFrom selects BatchRow's columns, in order, from batch_rows aliased br; append WHERE … to it.
 const BatchRowFrom = `SELECT br.n, br.attempt, br.inputs, ` + RowShown + `, br.run_id::text, coalesce(tk.ids, '{}'),
 	coalesce(tk.keys, '{}'), br.error, r.started_at, br.finished_at,
-	br.cells IS NOT NULL, br.node, br.parked, br.cells
+	br.cells IS NOT NULL, br.node, br.parked, br.cells, br.looks
 	FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id
 	LEFT JOIN LATERAL (SELECT array_agg(t.id::text ORDER BY u.ord) ids, array_agg(t.key ORDER BY u.ord) keys
 		FROM unnest(br.take_ids) WITH ORDINALITY u(id, ord) JOIN takes t ON t.id = u.id AND t.deleted_at IS NULL) tk ON true `

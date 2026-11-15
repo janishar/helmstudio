@@ -1,0 +1,156 @@
+{
+  "description": "looks add their text to the first prompt param after the element lines (a blank line between the blocks, one line per look in request order); a repeated id counts once (its first place), an identical line is added once; the element images and the canvas pin as before",
+  "workflow": {
+    "title": "Qwen Image",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@fox at dusk"
+        }
+      },
+      "seed": {
+        "kind": "seed"
+      },
+      "canvas": {
+        "kind": "canvas"
+      },
+      "model": {
+        "kind": "qwen-image/model"
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "refs": []
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "handle": "fox",
+      "name": "Fox",
+      "version": 3,
+      "text": "a small red fox with a white-tipped tail",
+      "images": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002"
+      ]
+    }
+  ],
+  "looks": [
+    {
+      "id": "qwen-image/window-light",
+      "source": "starter",
+      "name": "Window",
+      "version": 1,
+      "text": "soft daylight from a single window, deep falloff into shadow",
+      "images": [],
+      "loras": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "source": "mine",
+      "name": "35mm",
+      "version": 2,
+      "text": "shot on 35mm film, fine grain",
+      "images": [],
+      "loras": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "source": "mine",
+      "name": "35mm copy",
+      "version": 1,
+      "text": "shot on 35mm film, fine grain",
+      "images": [],
+      "loras": []
+    }
+  ],
+  "chosen": [
+    "qwen-image/window-light",
+    "10000000-0000-4000-8000-000000000001",
+    "qwen-image/window-light",
+    "10000000-0000-4000-8000-000000000002"
+  ],
+  "expect": {
+    "inputs": {
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000001"
+          }
+        },
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000002"
+          }
+        }
+      ],
+      "canvas.mode": "fixed",
+      "prompt.text": "Fox <image1> <image2> at dusk\n\nFox: a small red fox with a white-tipped tail\n\nsoft daylight from a single window, deep falloff into shadow\nshot on 35mm film, fine grain"
+    },
+    "typed": {
+      "encode.refs": [],
+      "canvas.mode": "auto",
+      "prompt.text": "@fox at dusk"
+    },
+    "elements": [
+      {
+        "id": "e0000000-0000-4000-8000-000000000001",
+        "handle": "fox",
+        "name": "Fox",
+        "version": 3
+      }
+    ],
+    "looks": [
+      {
+        "id": "qwen-image/window-light",
+        "source": "starter",
+        "name": "Window",
+        "version": 1
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000001",
+        "source": "mine",
+        "name": "35mm",
+        "version": 2
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000002",
+        "source": "mine",
+        "name": "35mm copy",
+        "version": 1
+      }
+    ]
+  }
+}

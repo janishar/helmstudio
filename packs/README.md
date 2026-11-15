@@ -8,11 +8,13 @@ Python identifier, e.g. `qwen_image`) holding:
 | `model.yaml` | the model: variants, weight components, stages (node kinds) and their params, ports, memory |
 | `<runtime>.py` | one module per runtime named in `runtimes` (`torch.py`; the fake echo pack has `fake.py`): one function per stage, plus `build()` / `rename()` for weight components |
 | `workflows/*.json` | the workflows the runner publishes, one registry `workflow` object per file |
+| `looks/*.yaml` | (optional) starter looks, shown to every user read-only (below) |
 | `GOTCHAS.md` | (optional) hard-won notes |
 
 The runner (`RUNNER_ENV`) loads every pack with a runtime whose `env` equals it: `fake` → `echo`, `torch` → the
 torch packs. From each pack the core builds the registry values `<host>.<env>.{nodes,workflows,models}`
-(`core/pack.py`, `core/registry.py`); they are checked against `contracts/registry.schema.json` and every
+(`core/pack.py`, `core/registry.py`), plus `.loras` (the host's shared LoRA index) and `.looks` (the packs' starter
+looks, `core/looks.py`); they are checked against `contracts/registry.schema.json` and every
 workflow against the node schemas at start, so a broken pack stops the runner instead of reaching studio.
 `runner_service/tests/test_packs.py` fails when a pack's values drift from the canonical contract fixtures
 (`contracts/fixtures/registry/<family>.{nodes,workflows}.valid.json`).
@@ -218,6 +220,36 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
 
 A registry `workflow` object (`id`, `title`, `family`, `env`, `nodes`), every param given; for the canonical
 ones, copy the workflow from `contracts/fixtures/registry/<family>.workflows.valid.json` verbatim.
+
+## looks/*.yaml
+
+Starter looks (contracts/README.md "Looks"): each file is a list; files are read in name order, looks in file order.
+
+```yaml
+# an example of runner_service/packs/<pack>/looks/<any>.yaml, every key shown
+- id: window-light            # ^[a-z0-9][a-z0-9-]{0,63}$, unique in the family; published as <family>/<id>
+  group: lighting             # film | camera | colour | lighting
+  name: Window                # 1-80 characters
+  text: "soft daylight from a single window, deep falloff into shadow"   # <= 2000; default ""
+  version: 1                  # >= 1, default 1: bump it when the look changes (reuse then says `changed`)
+  lora: {file: window.safetensors, strength: 0.8}   # optional; a file name (no path), strength -4..4 (default 1)
+  image: window-light.webp    # optional thumbnail next to the YAML: PNG, JPEG or WebP, at most 2 MB
+```
+
+- A look needs non-empty `text` or a `lora`; at most 200 looks per pack; no other keys.
+- At load the runner checks every file. A broken one (schema, duplicate id, a missing or undecodable image) stops
+  the runner like a broken pack.
+- `lora.file` is looked up in the shared LoRA index: `<models>/loras/` and the `loras/` folder of each of the family's
+  model folders. A file it does not find is still published, with `lora_id: null`, and logged; studio then takes
+  another live host's id, or greys the look out (`LoRA <name> is on no live host`). A file of another family keeps its
+  id (logged); studio greys the look out with `LoRA <name> is for <family>` (or `fits no known model`).
+- `image` is only a thumbnail, never a reference image. At start it is PUT once to
+  `packs/<family>/looks/<id>-<sha256[:16]>.<ext>`; an existing key is never overwritten.
+- The runner publishes `<host>.<env>.looks` (an empty list when no pack ships looks). It needs no look logic at run
+  time: studio's resolver has already put the text in the prompt, the images in the reference rows and the LoRAs in
+  the stack rows of the graph it sends.
+- The echo pack's looks are `contracts/fixtures/registry/looks.valid.json` exactly (`tests/test_looks.py`).
+- Write short, concrete phrases: no brand or film-stock trademarks, no living persons.
 
 ## Checking a pack
 

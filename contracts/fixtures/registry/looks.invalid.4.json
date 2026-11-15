@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "looks": [
+    {
+      "id": "qwen-image/ink",
+      "family": "qwen-image",
+      "group": "film",
+      "name": "Ink",
+      "text": "",
+      "version": 1,
+      "loras": [
+        {
+          "file": "../ink.safetensors",
+          "name": "ink",
+          "strength": 0.8,
+          "lora_id": null
+        }
+      ],
+      "thumb": null
+    }
+  ]
+}

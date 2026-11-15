@@ -63,6 +63,8 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 	seeds := fs.Int("seeds", 0, "repeat each row N times with consecutive seeds")
 	sessionID := fs.String("session", "", "session id (default: a new one)")
 	title := fs.String("title", "", "batch title")
+	var looks params
+	fs.Var(&looks, "look", "look id (repeatable): the looks of every row")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -125,6 +127,9 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 	}
 	if *title != "" {
 		body["title"] = *title
+	}
+	if len(looks) > 0 {
+		body["looks"] = looks
 	}
 	var b batch
 	if err := c.call(http.MethodPost, "/v1/studio/batches", body, http.StatusAccepted, &b); err != nil {

@@ -183,7 +183,7 @@ def test_a_deleted_take_drops_out(ue, anon, pics):
 def test_list_filters_and_search(ue, pics):
     qu = element(ue, "qu", pics[:1], name="Qu", group="location")
     attic = element(ue, "attic", pics[:1], name="Quiet attic", group="location")
-    items = ok(ue.get(LIB))["items"]
+    items = ok(ue.get(LIB, params={"source": "mine"}))["items"]
     stamps = [datetime.fromisoformat(i["updated_at"]) for i in items]
     assert stamps == sorted(stamps, reverse=True)  # newest first
     assert all(i["kind"] == "element" for i in ok(ue.get(LIB, params={"kind": "element"}))["items"])
@@ -195,7 +195,7 @@ def test_list_filters_and_search(ue, pics):
         assert [i["handle"] for i in got] == ["qu", "attic"], q
     assert len(ok(ue.get(LIB, params={"q": "qu", "limit": 1}))["items"]) == 1
     assert ok(ue.get(LIB, params={"q": "zzz-nothing"}))["items"] == []
-    for bad in ({"limit": 0}, {"limit": 201}, {"group": "film"}, {"kind": "lora"}):
+    for bad in ({"limit": 0}, {"limit": 1001}, {"group": "nope"}, {"kind": "lora"}):
         assert ue.get(LIB, params=bad).status_code == 422, bad
 
 
@@ -205,7 +205,7 @@ def test_at_most_200_items(new_user, anon):
         ids = [element(c, f"cap-{i}", [take])["id"] for i in range(200)]
         r = c.post(LIB, json=body("cap-200", [take]))
         assert detail(r, 409) == "You have 200 library items; delete some first."
-        assert len(ok(c.get(LIB))["items"]) == 200
+        assert len(ok(c.get(LIB, params={"source": "mine"}))["items"]) == 200
         assert c.delete(f"{LIB}/{ids[0]}").status_code == 204
         element(c, "cap-200", [take])
 
@@ -396,7 +396,7 @@ def test_isolation(ue, api_b, anon, pics):
         == "prompt.text: unknown element @iso-cat"
     )
     mine = element(api_b, "iso-cat", [b_take])  # handles are unique per owner only
-    assert [i["id"] for i in ok(api_b.get(LIB))["items"]] == [mine["id"]]
+    assert [i["id"] for i in ok(api_b.get(LIB, params={"source": "mine"}))["items"]] == [mine["id"]]
     assert cat["id"] not in {i["id"] for i in ok(api_b.get(LIB, params={"q": "iso"}))["items"]}
 
 
@@ -437,7 +437,7 @@ def test_mention_fixture_on_echo(um, anon, mention_env, path):
     rows = next((n["params"]["refs"] for n in nodes.values() if "refs" in n.get("params", {})), [])
     rows = [ref(real(r["image"]["take_id"])) for r in rows]
 
-    for item in ok(um.get(LIB))["items"]:
+    for item in ok(um.get(LIB, params={"source": "mine"}))["items"]:
         assert um.delete(f"{LIB}/{item['id']}").status_code == 204
     for e in fx["library"]:
         takes = [real(t) for t in e["images"]]
@@ -448,7 +448,7 @@ def test_mention_fixture_on_echo(um, anon, mention_env, path):
     library = [
         {k: i[k] for k in ("id", "handle", "name", "version", "text")}
         | {"images": [x["take_id"] for x in i["images"]]}
-        for i in ok(um.get(LIB))["items"]
+        for i in ok(um.get(LIB, params={"kind": "element"}))["items"]
     ]
     graph = copy.deepcopy(mention_env["nodes"])
     graph["prompt"].setdefault("params", {})["text"] = prompt

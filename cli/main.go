@@ -46,6 +46,11 @@ An image input takes a comma list of take ids and @files (uploaded first): -p en
   helm element rm <id>
 
 A prompt may mention your elements as @handle (@@ is a literal @): helm sends it as typed, the server expands it.
+  helm looks [--group film|camera|colour|lighting] [--source mine|starter] [--workflow id]   looks (id, source, group, needs, version, name)
+  helm look get <id> > file.json      a look as a file (yours: id, version; a starter look: based_on, saved as your copy)
+  helm look save file.json            replace yours or make one; "from_take": {"take_id": ...} fills text and LoRAs from a take
+  helm look rm <id>
+  helm run|batch ... --look <id>      run with a look (repeatable; with batch: every row)
   helm loras [--source shared|mine] [--family f] [--q words]   LoRAs you can use (id, source, state, family, rank, size, name)
   helm lora upload <file.safetensors>   your own LoRA: uploaded, checked and indexed
   helm lora rm <id>
@@ -97,6 +102,10 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = elements(args[1:], stdout, stderr)
 	case "element":
 		err = docCmd(elementKind, args[1:], stdout, stderr)
+	case "looks":
+		err = looks(args[1:], stdout, stderr)
+	case "look":
+		err = docCmd(lookKind, args[1:], stdout, stderr)
 	case "loras":
 		err = lorasCmd(args[1:], stdout, stderr)
 	case "lora":

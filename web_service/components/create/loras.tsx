@@ -6,9 +6,9 @@
 // Generic: it reads the rows param's item schema (a `Lora` field, a float, an enum), nothing of one family.
 import { useEffect, useRef, useState } from "react";
 import { Pencil, X } from "lucide-react";
-import { ErrorNote, Info, Modal } from "@/components/kit";
+import { ErrorNote, Modal } from "@/components/kit";
+import { Pic, Tile, VisualPicker } from "@/components/create/visual-picker";
 import { message, type S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
 import {
   deleteLora,
   lorasError,
@@ -293,304 +293,260 @@ function Picker({
     }
   }
 
-  const tab = (on: boolean) =>
-    `h-8 rounded-full px-3 text-[12px] ${on ? "bg-t1 font-semibold text-panel" : "bg-s3 font-medium"}`;
   const icon = "grid size-6 place-items-center rounded-lg bg-s3 text-t2 hover:text-t1";
   const small = "chip h-6 px-2 text-[11px]";
   return (
-    <div className="flex max-h-[76dvh] flex-col gap-3.5">
-      <div className="-mt-11 flex items-center justify-end gap-2">
-        <Info>
+    <VisualPicker
+      info={
+        <>
           Shared LoRAs are files on the GPU hosts, for everyone. Yours are your uploads: only you
           can use them, and any host fetches one the first time it runs. A LoRA&apos;s picture is
           the first take you made with it.
-        </Info>
-        <button
-          type="button"
-          className="chip bevel bg-a1 font-semibold text-on1"
-          onClick={() => fileInput.current?.click()}
-        >
-          Upload .safetensors
-        </button>
-        <input
-          ref={fileInput}
-          type="file"
-          accept=".safetensors"
-          multiple
-          hidden
-          onChange={(e) => {
-            if (e.target.files) upload(Array.from(e.target.files));
-            e.target.value = "";
-          }}
-        />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="lora-q" className="sr-only">
-          Search names
-        </label>
-        <input
-          id="lora-q"
-          type="search"
-          placeholder="Search names"
-          value={q}
-          maxLength={80}
-          autoFocus
-          onChange={(e) => setQ(e.target.value)}
-          // the picker sits inside the composer's form: Enter must not submit it
-          onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
-          className="h-9 flex-[1_1_260px] rounded-xl border border-s5 bg-s1 px-3 text-t1"
-        />
-        <div role="group" aria-label="Source" className="flex gap-1.5">
-          {(
-            [
-              ["", "All"],
-              ["shared", "Shared"],
-              ["mine", "Mine"],
-            ] as const
-          ).map(([s, label]) => (
-            <button
-              key={label}
-              type="button"
-              aria-pressed={source === s}
-              className={tab(source === s)}
-              onClick={() => setSource(s)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {error && <ErrorNote>{error}</ErrorNote>}
-      <div className="min-h-32 overflow-y-auto p-0.5">
-        {library === null &&
-          (lorasError() ? (
-            <ErrorNote onRetry={() => void reloadLoras()}>{lorasError()}</ErrorNote>
-          ) : (
-            <p role="status" className="text-t2">
-              Loading…
+        </>
+      }
+      action={
+        <>
+          <button
+            type="button"
+            className="chip bevel bg-a1 font-semibold text-on1"
+            onClick={() => fileInput.current?.click()}
+          >
+            Upload .safetensors
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept=".safetensors"
+            multiple
+            hidden
+            onChange={(e) => {
+              if (e.target.files) upload(Array.from(e.target.files));
+              e.target.value = "";
+            }}
+          />
+        </>
+      }
+      search={{
+        id: "lora-q",
+        label: "Search names",
+        placeholder: "Search names",
+        value: q,
+        onChange: setQ,
+        className: "flex-[1_1_260px]",
+      }}
+      filters={[
+        {
+          label: "Source",
+          kind: "press",
+          options: [
+            ["", "All"],
+            ["shared", "Shared"],
+            ["mine", "Mine"],
+          ] as const,
+          value: source,
+          onChange: setSource,
+        },
+      ]}
+      error={error}
+      status={
+        <>
+          {library === null &&
+            (lorasError() ? (
+              <ErrorNote onRetry={() => void reloadLoras()}>{lorasError()}</ErrorNote>
+            ) : (
+              <p role="status" className="text-t2">
+                Loading…
+              </p>
+            ))}
+          {library && !shown.length && !uploads.length && (
+            <p className="py-8 text-center text-t2">
+              {library.length > taken.length
+                ? "No LoRA matches."
+                : "No LoRAs yet: upload a .safetensors file, or ask an admin to put shared ones on a host."}
             </p>
-          ))}
-        {library && !shown.length && !uploads.length && (
-          <p className="py-8 text-center text-t2">
-            {library.length > taken.length
-              ? "No LoRA matches."
-              : "No LoRAs yet: upload a .safetensors file, or ask an admin to put shared ones on a host."}
+          )}
+        </>
+      }
+      listLabel="LoRAs"
+      grid="grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3"
+      footer={
+        <>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="mono mr-auto text-[12px] text-t2" aria-live="polite">
+              {picked.length} picked · up to {max}
+            </span>
+            <button type="button" className="chip bevel" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="chip bevel bg-a1 font-semibold text-on1"
+              disabled={!picked.length}
+              onClick={() => {
+                onPick(picked);
+                onClose();
+              }}
+            >
+              Add {picked.length || ""}
+            </button>
+          </div>
+          <p className="m-0 text-[12px] text-t2">
+            LoRAs that do not fit{family ? ` ${family}` : ""}, or are not ready, are greyed with the
+            reason. Picks join the stack in the order picked, at strength 1. Uploads: .safetensors
+            only, up to 2 GB each; 50 LoRAs and 20 GB per person.
           </p>
-        )}
-        <ul
-          aria-label="LoRAs"
-          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3 p-0"
-        >
-          {uploads.map(({ key, state: u }) => (
-            <li key={`u${key}`} className="flex min-w-0 flex-col gap-1.5">
-              <i
-                className={`flex aspect-[16/10] flex-col items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-dash bg-s1 px-2 text-center text-[11px] not-italic ${u.phase === "failed" ? "text-bad" : "text-t2"}`}
+        </>
+      }
+    >
+      {uploads.map(({ key, state: u }) => (
+        <li key={`u${key}`} className="flex min-w-0 flex-col gap-1.5">
+          <i
+            className={`flex aspect-[16/10] flex-col items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-dash bg-s1 px-2 text-center text-[11px] not-italic ${u.phase === "failed" ? "text-bad" : "text-t2"}`}
+          >
+            {u.phase === "sending" ? (
+              <>
+                <span aria-live="polite">Uploading {Math.round(u.progress * 100)}%</span>
+                <span
+                  role="progressbar"
+                  aria-label={`Uploading ${u.name}`}
+                  aria-valuenow={Math.round(u.progress * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  className="block h-1 w-full overflow-hidden rounded-[2px] bg-in"
+                >
+                  <span className="block h-full bg-a2" style={{ width: `${u.progress * 100}%` }} />
+                </span>
+              </>
+            ) : u.phase === "failed" ? (
+              <span role="alert">{u.error}</span>
+            ) : (
+              <span aria-live="polite">checking…</span>
+            )}
+          </i>
+          <b className="truncate text-[12px] font-semibold">
+            {u.name.replace(/\.safetensors$/i, "")}
+          </b>
+          {u.phase === "failed" && (
+            <small>
+              <button
+                type="button"
+                className={small}
+                onClick={() => setUploads((x) => x.filter((y) => y.key !== key))}
               >
-                {u.phase === "sending" ? (
-                  <>
-                    <span aria-live="polite">Uploading {Math.round(u.progress * 100)}%</span>
-                    <span
-                      role="progressbar"
-                      aria-label={`Uploading ${u.name}`}
-                      aria-valuenow={Math.round(u.progress * 100)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      className="block h-1 w-full overflow-hidden rounded-[2px] bg-in"
-                    >
-                      <span
-                        className="block h-full bg-a2"
-                        style={{ width: `${u.progress * 100}%` }}
-                      />
-                    </span>
-                  </>
-                ) : u.phase === "failed" ? (
-                  <span role="alert">{u.error}</span>
-                ) : (
-                  <span aria-live="polite">checking…</span>
-                )}
-              </i>
-              <b className="truncate text-[12px] font-semibold">
-                {u.name.replace(/\.safetensors$/i, "")}
-              </b>
-              {u.phase === "failed" && (
-                <small>
+                Dismiss
+              </button>
+            </small>
+          )}
+        </li>
+      ))}
+      {shown.map((l) => {
+        const why = fitReason(l, family);
+        const n = picked.indexOf(l.id);
+        const pic = <Pic thumb={l.thumb_url} empty="no take yet" n={n} />;
+        const save = () => {
+          const name = renaming?.name.trim();
+          if (name)
+            void act(async () => {
+              await renameLora(l.id, name);
+              setRenaming(null);
+            });
+        };
+        return (
+          <li key={l.id} className="relative flex min-w-0 flex-col gap-1.5">
+            {renaming?.id === l.id ? (
+              <div
+                className="flex flex-col gap-1.5"
+                onKeyDown={(e) => {
+                  // a div, not a form: the picker may sit inside the composer's form
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    save();
+                  } else if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setRenaming(null);
+                  }
+                }}
+              >
+                {pic}
+                <input
+                  aria-label="New name"
+                  value={renaming.name}
+                  maxLength={80}
+                  autoFocus
+                  onChange={(e) => setRenaming({ id: l.id, name: e.target.value })}
+                  className="h-[26px] min-w-0 rounded-lg border border-a1 bg-s1 px-2 text-[12px] text-t1"
+                />
+                <small className="flex gap-1">
+                  <button type="button" className={small} onClick={() => setRenaming(null)}>
+                    Cancel
+                  </button>
                   <button
                     type="button"
-                    className={small}
-                    onClick={() => setUploads((x) => x.filter((y) => y.key !== key))}
+                    className={`${small} bg-a1 text-on1`}
+                    disabled={!renaming.name.trim()}
+                    onClick={save}
                   >
-                    Dismiss
+                    Save
                   </button>
                 </small>
-              )}
-            </li>
-          ))}
-          {shown.map((l) => {
-            const why = fitReason(l, family);
-            const n = picked.indexOf(l.id);
-            const thumb = safeUrl(l.thumb_url);
-            const pic = (
-              <span className="relative block w-full">
-                {thumb ? (
-                  <img
-                    src={thumb}
-                    alt=""
-                    loading="lazy"
-                    className={`block aspect-[16/10] w-full rounded-[10px] bg-s1 object-cover ${n >= 0 ? "outline-2 -outline-offset-2 outline-a1" : ""}`}
-                  />
-                ) : (
-                  <i
-                    className={`flex aspect-[16/10] items-center justify-center rounded-[10px] bg-s1 text-[11px] text-t2 not-italic ${n >= 0 ? "border-2 border-a1" : "border border-dashed border-dash"}`}
-                  >
-                    no take yet
-                  </i>
-                )}
-                {n >= 0 && (
-                  <span className="absolute top-1.5 left-1.5 grid size-5 place-items-center rounded-full bg-a1 text-[11px] font-bold text-on1">
-                    {n + 1}
-                  </span>
-                )}
-              </span>
-            );
-            const save = () => {
-              const name = renaming?.name.trim();
-              if (name)
-                void act(async () => {
-                  await renameLora(l.id, name);
-                  setRenaming(null);
-                });
-            };
-            return (
-              <li key={l.id} className="relative flex min-w-0 flex-col gap-1.5">
-                {renaming?.id === l.id ? (
-                  <div
-                    className="flex flex-col gap-1.5"
-                    onKeyDown={(e) => {
-                      // a div, not a form: the picker may sit inside the composer's form
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        save();
-                      } else if (e.key === "Escape") {
-                        e.stopPropagation();
-                        setRenaming(null);
-                      }
-                    }}
-                  >
-                    {pic}
-                    <input
-                      aria-label="New name"
-                      value={renaming.name}
-                      maxLength={80}
-                      autoFocus
-                      onChange={(e) => setRenaming({ id: l.id, name: e.target.value })}
-                      className="h-[26px] min-w-0 rounded-lg border border-a1 bg-s1 px-2 text-[12px] text-t1"
-                    />
-                    <small className="flex gap-1">
-                      <button type="button" className={small} onClick={() => setRenaming(null)}>
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        className={`${small} bg-a1 text-on1`}
-                        disabled={!renaming.name.trim()}
-                        onClick={save}
-                      >
-                        Save
-                      </button>
-                    </small>
-                  </div>
-                ) : (
+              </div>
+            ) : (
+              <Tile
+                pic={pic}
+                name={l.name}
+                line={deleting === l.id ? "" : tileLine(l, family)}
+                reason={why}
+                pressed={n >= 0}
+                disabled={n < 0 && picked.length >= max}
+                onClick={() => toggle(l.id)}
+              />
+            )}
+            {deleting === l.id && (
+              <>
+                <small className="text-[11px]">Delete {l.name}? Takes made with it keep it.</small>
+                <small className="flex gap-1">
+                  <button type="button" className={small} onClick={() => setDeleting("")}>
+                    Cancel
+                  </button>
                   <button
                     type="button"
-                    aria-pressed={n >= 0}
-                    disabled={!!why || (n < 0 && picked.length >= max)}
-                    title={why ?? l.name}
-                    onClick={() => toggle(l.id)}
-                    className="flex w-full flex-col gap-1.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                    className={`${small} text-bad`}
+                    onClick={() =>
+                      void act(async () => {
+                        await deleteLora(l);
+                        setDeleting("");
+                        setPicked((p) => p.filter((x) => x !== l.id));
+                      })
+                    }
                   >
-                    {pic}
-                    <b className="truncate text-[12px] font-semibold">{l.name}</b>
-                    <small
-                      className={`mono text-[10px] break-words text-t2 ${why ? "line-clamp-3" : "truncate"}`}
-                    >
-                      {deleting === l.id ? "" : tileLine(l, family)}
-                    </small>
+                    Delete
                   </button>
-                )}
-                {deleting === l.id && (
-                  <>
-                    <small className="text-[11px]">
-                      Delete {l.name}? Takes made with it keep it.
-                    </small>
-                    <small className="flex gap-1">
-                      <button type="button" className={small} onClick={() => setDeleting("")}>
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        className={`${small} text-bad`}
-                        onClick={() =>
-                          void act(async () => {
-                            await deleteLora(l);
-                            setDeleting("");
-                            setPicked((p) => p.filter((x) => x !== l.id));
-                          })
-                        }
-                      >
-                        Delete
-                      </button>
-                    </small>
-                  </>
-                )}
-                {l.source === "mine" && renaming?.id !== l.id && deleting !== l.id && (
-                  <span className="absolute top-1.5 right-1.5 flex gap-1">
-                    <button
-                      type="button"
-                      aria-label={`Rename ${l.name}`}
-                      className={icon}
-                      onClick={() => setRenaming({ id: l.id, name: l.name })}
-                    >
-                      <Pencil size={12} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete ${l.name}`}
-                      className={icon}
-                      onClick={() => setDeleting(l.id)}
-                    >
-                      <X size={13} aria-hidden />
-                    </button>
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <span className="mono mr-auto text-[12px] text-t2" aria-live="polite">
-          {picked.length} picked · up to {max}
-        </span>
-        <button type="button" className="chip bevel" onClick={onClose}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="chip bevel bg-a1 font-semibold text-on1"
-          disabled={!picked.length}
-          onClick={() => {
-            onPick(picked);
-            onClose();
-          }}
-        >
-          Add {picked.length || ""}
-        </button>
-      </div>
-      <p className="m-0 text-[12px] text-t2">
-        LoRAs that do not fit{family ? ` ${family}` : ""}, or are not ready, are greyed with the
-        reason. Picks join the stack in the order picked, at strength 1. Uploads: .safetensors only,
-        up to 2 GB each; 50 LoRAs and 20 GB per person.
-      </p>
-    </div>
+                </small>
+              </>
+            )}
+            {l.source === "mine" && renaming?.id !== l.id && deleting !== l.id && (
+              <span className="absolute top-1.5 right-1.5 flex gap-1">
+                <button
+                  type="button"
+                  aria-label={`Rename ${l.name}`}
+                  className={icon}
+                  onClick={() => setRenaming({ id: l.id, name: l.name })}
+                >
+                  <Pencil size={12} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${l.name}`}
+                  className={icon}
+                  onClick={() => setDeleting(l.id)}
+                >
+                  <X size={13} aria-hidden />
+                </button>
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </VisualPicker>
   );
 }

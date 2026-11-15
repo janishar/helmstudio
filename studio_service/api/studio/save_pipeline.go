@@ -114,7 +114,7 @@ func (s *Service) SaveTakeAsPipeline(ctx context.Context, caller common.Caller, 
 				return err
 			}
 			if made.Inputs != nil {
-				maps.Copy(made.Inputs, made.Typed) // the typed view: element images come back through the mentions
+				maps.Copy(made.Inputs, made.Typed) // the typed view: element and look additions come back through mentions and looks
 			}
 			var workflow dto.WorkflowDoc
 			if utility.IsUUID(made.WorkflowID) {
@@ -133,6 +133,9 @@ func (s *Service) SaveTakeAsPipeline(ctx context.Context, caller common.Caller, 
 			params := settable(workflow, palette)
 			step := fmt.Sprintf("step_%d", k+1)
 			node := dto.PipelineNode{Kind: "step", Workflow: made.WorkflowID, Fixed: map[string]any{}, Bind: map[string]string{}}
+			for _, l := range made.Looks { // the looks come back through the step, as the take was made
+				node.Looks = append(node.Looks, l.ID)
+			}
 			if _, ok := params["prompt.text"]; ok && k == 0 {
 				node.Bind["prompt.text"] = "$prompt"
 				columns = append(columns, dto.PipelineInput{Name: "prompt", Type: "Text"})

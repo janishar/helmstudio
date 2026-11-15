@@ -24,6 +24,7 @@ var (
 	workflowKind = docKind{"workflow", "/v1/studio/workflows", []string{"title", "family", "env", "nodes", "studio"}, ""}
 	pipelineKind = docKind{"pipeline", "/v1/studio/pipelines", []string{"title", "nodes", "edges"}, ""}
 	elementKind  = docKind{"element", "/v1/studio/library", []string{"group", "name", "handle", "text", "images"}, "element"}
+	lookKind     = docKind{"look", "/v1/studio/library", []string{"group", "name", "text", "images", "loras", "from_take"}, "look"}
 )
 
 type problem struct {
@@ -133,6 +134,47 @@ func elements(args []string, stdout, stderr io.Writer) error {
 	return nil
 }
 
+// looks lists the looks the caller can choose: their own (newest first), then the live hosts' starter looks. With
+// --workflow each says whether it fits that workflow, and why not.
+func looks(args []string, stdout, stderr io.Writer) error {
+	fs := flag.NewFlagSet("looks", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	query := url.Values{"kind": {"look"}}
+	for _, name := range []string{"group", "source", "workflow"} {
+		fs.Func(name, "filter: "+name, func(v string) error { query.Set(name, v); return nil })
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	var list struct {
+		Items []struct {
+			ID      string   `json:"id"`
+			Source  string   `json:"source"`
+			Group   string   `json:"group"`
+			Name    string   `json:"name"`
+			Version int      `json:"version"`
+			Needs   []string `json:"needs"`
+			Fits    *bool    `json:"fits"`
+			Reason  *string  `json:"reason"`
+		} `json:"items"`
+	}
+	if err := c.call(http.MethodGet, lookKind.path+"?"+query.Encode(), nil, http.StatusOK, &list); err != nil {
+		return err
+	}
+	for _, l := range list.Items {
+		line := fmt.Sprintf("%-36s %-7s %-8s %-15s v%-3d %s", l.ID, l.Source, l.Group, strings.Join(l.Needs, ","), l.Version, l.Name)
+		if l.Fits != nil && !*l.Fits {
+			line += " (does not fit: " + deref(l.Reason) + ")"
+		}
+		fmt.Fprintln(stdout, line)
+	}
+	return nil
+}
+
 // docCmd is helm workflow / helm pipeline: get, save, validate, copy, rm.
 func docCmd(k docKind, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet(k.name, flag.ContinueOnError)
@@ -150,7 +192,7 @@ func docCmd(k docKind, args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	path := k.path + "/" + url.PathEscape(arg)
+	path := k.path + "/" + strings.ReplaceAll(url.PathEscape(arg), "%2F", "/") // a starter look is <family>/<id>
 	switch sub {
 	case "get":
 		return c.getDoc(k, path, stdout)
@@ -212,6 +254,22 @@ func (c *client) getDoc(k docKind, path string, stdout io.Writer) error {
 		}
 		out["images"] = mustJSON(imgs)
 	}
+	if k.library == "look" { // LookLora → LookLoraRef; a starter LoRA no live host has (lora null) cannot be saved
+		var ls []struct {
+			Lora     json.RawMessage `json:"lora"`
+			Strength float64         `json:"strength"`
+		}
+		if err := json.Unmarshal(w["loras"], &ls); err != nil {
+			return err
+		}
+		refs := []any{}
+		for _, l := range ls {
+			if string(l.Lora) != "null" {
+				refs = append(refs, map[string]any{"lora": l.Lora, "strength": l.Strength})
+			}
+		}
+		out["loras"] = mustJSON(refs)
+	}
 	b, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return err
@@ -259,9 +317,9 @@ func (c *client) saveDoc(k docKind, file string, stdout io.Writer) error {
 		doc["version"] = mustJSON(version)
 	case id != "":
 		return fmt.Errorf("%s: an id needs its version (helm %s get it again)", file, k.name)
-	case basedOn != "":
+	case basedOn != "" && k.library == "":
 		doc["based_on"] = mustJSON(basedOn)
-	case k.library != "":
+	case k.library != "": // a starter look's file (based_on) saves as one's own copy
 		doc["kind"] = mustJSON(k.library)
 	}
 	resp, err := c.do(context.Background(), method, path, doc, nil)

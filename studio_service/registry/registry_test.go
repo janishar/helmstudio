@@ -199,3 +199,78 @@ func TestLoraFamiliesPreferNonFakeEnvs(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// Starter looks: the union over live hosts; one id on several hosts is the highest version (a tie: a non-fake env's
+// first), a LoRA id the first non-null for that version and file, created at the oldest published_at; a host gone
+// stale drops its looks.
+func TestStarterLooks(t *testing.T) {
+	var r Registry
+	now := time.Now()
+	host := func(name, env string, age time.Duration) []byte {
+		return []byte(`{"host": "` + name + `", "env": "` + env + `", "state": "idle", "run_id": null, "updated_at": "` +
+			now.Add(-age).UTC().Format(time.RFC3339Nano) + `"}`)
+	}
+	looks := func(at, version, loraID string) []byte {
+		return []byte(`{"published_at": "` + at + `", "looks": [{"id": "qwen-image/ink", "family": "qwen-image", "group": "film",
+			"name": "Ink v` + version + `", "text": "", "version": ` + version + `, "loras": [{"file": "ink.safetensors",
+			"name": "ink", "strength": 0.5, "lora_id": ` + loraID + `}], "thumb": null}]}`)
+	}
+	models := []byte(`{"models": [{"id": "echo", "family": "echo", "title": "Echo"}, {"id": "qwen-image", "family": "qwen-image", "title": "Qwen"}]}`)
+	_ = r.SetHost("fake.fake", host("fake", "fake", 0))
+	_ = r.SetHost("mac.torch", host("mac", "torch", 0))
+	_ = r.SetHost("pc.torch", host("pc", "torch", 0))
+	for _, source := range []string{"fake.fake", "mac.torch", "pc.torch"} {
+		_ = r.SetRegistry(source+".models", models)
+	}
+	_ = r.SetRegistry("fake.fake.looks", fixture(t, "looks"))
+	_ = r.SetRegistry("mac.torch.looks", looks("2026-11-14T12:00:00Z", "1", "null"))
+	_ = r.SetRegistry("pc.torch.looks", looks("2026-11-14T10:00:00Z", "1", `"`+strings.Repeat("b", 64)+`"`))
+	got := r.Looks(now)
+	ink := got["qwen-image/ink"]
+	if len(got) != 3 || got["echo/soft-light"].Text != "soft diffuse light" || ink.Loras[0].LoraID == nil ||
+		*ink.Loras[0].LoraID != strings.Repeat("b", 64) || !ink.PublishedAt.Equal(time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("%+v", got)
+	}
+	// a fake env never replaces a non-fake env's entry, whatever its version
+	_ = r.SetRegistry("fake.fake.looks", looks("2026-11-14T09:00:00Z", "2", "null"))
+	if ink = r.Looks(now)["qwen-image/ink"]; ink.Name != "Ink v1" || ink.Loras[0].LoraID == nil ||
+		!ink.PublishedAt.Equal(time.Date(2026, 11, 14, 9, 0, 0, 0, time.UTC)) {
+		t.Fatalf("%+v", ink)
+	}
+	// with only fake hosts left, the highest version wins
+	_ = r.SetHost("mac.torch", host("mac", "torch", time.Minute))
+	_ = r.SetHost("pc.torch", host("pc", "torch", time.Minute))
+	if ink = r.Looks(now)["qwen-image/ink"]; ink.Name != "Ink v2" || ink.Loras[0].LoraID != nil {
+		t.Fatalf("%+v", ink)
+	}
+}
+
+// A published starter look is kept only with an id <family>/<slug> of a family its host serves and no control
+// characters; a thumb key outside packs/<family>/looks/ is dropped, never signed.
+func TestStarterLookChecks(t *testing.T) {
+	var r Registry
+	now := time.Now()
+	_ = r.SetHost("pc.torch", []byte(`{"host": "pc", "env": "torch", "state": "idle", "run_id": null, "updated_at": "`+
+		now.UTC().Format(time.RFC3339Nano)+`"}`))
+	_ = r.SetRegistry("pc.torch.models", []byte(`{"models": [{"id": "echo", "family": "echo", "title": "Echo"}]}`))
+	look := func(id, family, text, thumb string) string {
+		return `{"id": "` + id + `", "family": "` + family + `", "group": "film", "name": "N", "text": "` + text +
+			`", "version": 1, "loras": [], "thumb": ` + thumb + `}`
+	}
+	key := func(k string) string {
+		return `{"key": "` + k + `", "content_type": "image/png", "width": 1, "height": 1, "bytes": 1}`
+	}
+	_ = r.SetRegistry("pc.torch.looks", []byte(`{"published_at": "2026-11-14T10:00:00Z", "looks": [`+strings.Join([]string{
+		look("echo/ok", "echo", `a\nb`, key("packs/echo/looks/ok-0123456789abcdef.png")),
+		look("echo/victim", "echo", "x", key("u/10000000-0000-4000-8000-000000000001/takes/a.png")),
+		look("echo/other", "echo", "x", key("packs/qwen-image/looks/other-0123456789abcdef.png")),
+		look("qwen-image/golden", "echo", "x", "null"),       // id not of its family
+		look("qwen-image/golden", "qwen-image", "x", "null"), // a family the host does not serve
+		look("echo/nul", "echo", `a\u0000b`, "null"),
+	}, ",")+`]}`))
+	got := r.Looks(now)
+	if len(got) != 3 || got["echo/ok"].Thumb == nil || got["echo/ok"].Text != "a\nb" || got["echo/victim"].Thumb != nil ||
+		got["echo/other"].Thumb != nil {
+		t.Fatalf("%+v", got)
+	}
+}

@@ -174,6 +174,8 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	fs.Var(&ps, "p", "node.param=value (repeatable; a seed takes a number or random)")
 	var loras params
 	fs.Var(&loras, "lora", "<lora_id>:<strength> (repeatable): the rows of the workflow's LoRA stack, in order")
+	var looks params
+	fs.Var(&looks, "look", "look id (repeatable): a look to run with (helm looks lists them)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -228,6 +230,9 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 
 	var r run
 	body := map[string]any{"workflow_id": wfID, "inputs": inputs}
+	if len(looks) > 0 {
+		body["looks"] = looks
+	}
 	if err := c.call(http.MethodPost, "/v1/studio/sessions/"+url.PathEscape(sid)+"/runs", body, http.StatusAccepted, &r); err != nil {
 		return err
 	}

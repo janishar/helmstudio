@@ -1,0 +1,252 @@
+{
+  "description": "a look's images go after the user's rows (a take already in a row keeps its number) and its tokens follow its text; its LoRAs are appended to the stack at their saved strength unless a row of the user already has the LoRA (the user's row wins); a starter look whose LoRA the user already has adds only text; the canvas is pinned to the auto size of the user's last row",
+  "workflow": {
+    "title": "Qwen Image + LoRA",
+    "family": "qwen-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "a cabin in the woods"
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "canvas": {
+        "kind": "canvas",
+        "params": {
+          "mode": "auto",
+          "width": 1024,
+          "height": 1024
+        }
+      },
+      "model": {
+        "kind": "qwen-image/model",
+        "params": {
+          "variant": "base",
+          "precision": "int8"
+        }
+      },
+      "lora": {
+        "kind": "qwen-image/lora-stack",
+        "in": {
+          "model": "model.model"
+        },
+        "params": {
+          "rows": [
+            {
+              "lora": {
+                "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+              },
+              "strength": 0.8,
+              "mode": "adapter"
+            },
+            {
+              "lora": {
+                "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10"
+              },
+              "strength": 1,
+              "mode": "bake"
+            }
+          ]
+        }
+      },
+      "encode": {
+        "kind": "qwen-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {
+          "transparent": false,
+          "refs": [
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000009"
+              }
+            }
+          ]
+        }
+      },
+      "sample": {
+        "kind": "qwen-image/sample",
+        "in": {
+          "model": "lora.model",
+          "cond": "encode.cond",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        },
+        "params": {
+          "steps": 40
+        }
+      },
+      "decode": {
+        "kind": "qwen-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        },
+        "params": {
+          "tiled": "auto"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "library": [],
+  "looks": [
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "source": "mine",
+      "name": "Noir",
+      "version": 4,
+      "text": "black and white, hard shadows",
+      "images": [
+        "00000000-0000-4000-8000-000000000005",
+        "00000000-0000-4000-8000-000000000009"
+      ],
+      "loras": [
+        {
+          "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+          "name": "ink-wash",
+          "strength": 0.3
+        },
+        {
+          "lora_id": "5b1d0000-0000-4000-8000-000000000001",
+          "name": "noir-lut",
+          "strength": 0.6
+        }
+      ]
+    },
+    {
+      "id": "qwen-image/ink-wash",
+      "source": "starter",
+      "name": "Ink wash",
+      "version": 1,
+      "text": "ink wash painting, loose brush strokes",
+      "images": [],
+      "loras": [
+        {
+          "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+          "name": "ink-wash",
+          "strength": 0.8
+        }
+      ]
+    }
+  ],
+  "chosen": [
+    "10000000-0000-4000-8000-000000000003",
+    "qwen-image/ink-wash"
+  ],
+  "sizes": {
+    "00000000-0000-4000-8000-000000000009": [
+      1536,
+      1024
+    ]
+  },
+  "loras": {
+    "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+    "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+    "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown",
+    "5b1d0000-0000-4000-8000-000000000001": "qwen-image",
+    "5b1d0000-0000-4000-8000-000000000002": "qwen-image",
+    "5b1d0000-0000-4000-8000-000000000003": "qwen-image",
+    "5b1d0000-0000-4000-8000-000000000004": "qwen-image",
+    "5b1d0000-0000-4000-8000-000000000005": "qwen-image"
+  },
+  "expect": {
+    "inputs": {
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000009"
+          }
+        },
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000005"
+          }
+        }
+      ],
+      "canvas.mode": "fixed",
+      "canvas.width": 1248,
+      "canvas.height": 832,
+      "lora.rows": [
+        {
+          "lora": {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+          },
+          "strength": 0.8,
+          "mode": "adapter"
+        },
+        {
+          "lora": {
+            "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10"
+          },
+          "strength": 1,
+          "mode": "bake"
+        },
+        {
+          "lora": {
+            "lora_id": "5b1d0000-0000-4000-8000-000000000001"
+          },
+          "strength": 0.6
+        }
+      ],
+      "prompt.text": "a cabin in the woods\n\nblack and white, hard shadows <image2> <image1>\nink wash painting, loose brush strokes"
+    },
+    "typed": {
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000009"
+          }
+        }
+      ],
+      "canvas.mode": "auto",
+      "canvas.width": 1024,
+      "canvas.height": 1024,
+      "lora.rows": [
+        {
+          "lora": {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+          },
+          "strength": 0.8,
+          "mode": "adapter"
+        },
+        {
+          "lora": {
+            "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10"
+          },
+          "strength": 1,
+          "mode": "bake"
+        }
+      ],
+      "prompt.text": "a cabin in the woods"
+    },
+    "looks": [
+      {
+        "id": "10000000-0000-4000-8000-000000000003",
+        "source": "mine",
+        "name": "Noir",
+        "version": 4
+      },
+      {
+        "id": "qwen-image/ink-wash",
+        "source": "starter",
+        "name": "Ink wash",
+        "version": 1
+      }
+    ]
+  }
+}

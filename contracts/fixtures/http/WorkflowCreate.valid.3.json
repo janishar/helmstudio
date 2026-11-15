@@ -1,0 +1,72 @@
+{
+  "title": "My echo",
+  "family": "echo",
+  "env": "fake",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      },
+      "position": {
+        "x": 0,
+        "y": 40
+      }
+    },
+    "echo": {
+      "kind": "echo/echo",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "steps": 10,
+        "delay_ms": 300,
+        "fail": false,
+        "refs": []
+      },
+      "position": {
+        "x": 280,
+        "y": 40
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "echo.image"
+      },
+      "position": {
+        "x": 560,
+        "y": 40
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text"
+    ],
+    "quick": [
+      "elements",
+      "look:lighting",
+      "echo.steps"
+    ],
+    "inspector": [
+      {
+        "title": "Run",
+        "items": [
+          "echo.delay_ms",
+          "echo.fail"
+        ]
+      }
+    ],
+    "labels": {
+      "echo.steps": "Steps"
+    },
+    "presets": {
+      "Fast": {
+        "echo.steps": 2,
+        "echo.delay_ms": 0
+      }
+    }
+  },
+  "based_on": "echo"
+}

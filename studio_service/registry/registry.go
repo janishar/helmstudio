@@ -1,4 +1,4 @@
-// Package registry: what the runners publish, watched and cached. KV `registry` keys <host>.<env>.nodes|workflows|models|loras
+// Package registry: what the runners publish, watched and cached. KV `registry` keys <host>.<env>.nodes|workflows|models|loras|looks
 // (contracts/registry.schema.json) and KV `hosts` keys <host>.<env> (each runner's live state).
 package registry
 
@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // Stale is how old a hosts key may be before its runner counts as offline.
@@ -249,13 +251,15 @@ func (h Host) Live(now time.Time) bool { return now.Sub(h.UpdatedAt) <= Stale }
 // Registry holds the latest value of every registry and hosts key. The zero value is empty and ready to use.
 type Registry struct {
 	mu        sync.RWMutex
-	nodes     map[string][]NodeSchema // "<host>.<env>" → its node schemas
-	nodesAt   map[string]time.Time    // "<host>.<env>" → when its nodes were published
-	workflows map[string][]Workflow   // "<host>.<env>" → its workflows (without node schemas)
-	models    map[string][]Model      // "<host>.<env>" → the models present there
-	loras     map[string][]SharedLora // "<host>.<env>" → the shared LoRAs on that host
-	hosts     map[string]Host         // "<host>.<env>" → its state
-	awaiting  map[string]bool         // watched buckets whose current values have not all arrived yet
+	nodes     map[string][]NodeSchema  // "<host>.<env>" → its node schemas
+	nodesAt   map[string]time.Time     // "<host>.<env>" → when its nodes were published
+	workflows map[string][]Workflow    // "<host>.<env>" → its workflows (without node schemas)
+	models    map[string][]Model       // "<host>.<env>" → the models present there
+	loras     map[string][]SharedLora  // "<host>.<env>" → the shared LoRAs on that host
+	looks     map[string][]StarterLook // "<host>.<env>" → the starter looks of its packs
+	looksAt   map[string]time.Time     // "<host>.<env>" → when its looks were published
+	hosts     map[string]Host          // "<host>.<env>" → its state
+	awaiting  map[string]bool          // watched buckets whose current values have not all arrived yet
 }
 
 // Await marks buckets as not loaded yet: Ready is false until Loaded was called for each.
@@ -350,6 +354,29 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			return err
 		}
 		set(&r.models, source, parsed.Models)
+	case "looks":
+		if value == nil {
+			delete(r.looks, source)
+			delete(r.looksAt, source)
+			return nil
+		}
+		var parsed struct {
+			Looks       []StarterLook `json:"looks"`
+			PublishedAt time.Time     `json:"published_at"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		kept := []StarterLook{}
+		for _, look := range parsed.Looks {
+			if why := badLook(&look); why != "" {
+				log.Printf("registry %s: look %s dropped: %s", key, look.ID, why)
+				continue
+			}
+			kept = append(kept, look)
+		}
+		set(&r.looks, source, kept)
+		set(&r.looksAt, source, parsed.PublishedAt)
 	case "loras":
 		if value == nil {
 			delete(r.loras, source)
@@ -392,6 +419,127 @@ func (r *Registry) Loras(now time.Time, env string) map[string]LiveLora {
 				slices.Sort(live.Hosts)
 			}
 			out[entry.ID] = live
+		}
+	}
+	return out
+}
+
+// StarterLook is one entry of a registry looks value: a look a pack ships (contracts/README.md, Looks: starter looks).
+type StarterLook struct {
+	ID      string        `json:"id"` // <family>/<pack look id>
+	Family  string        `json:"family"`
+	Group   string        `json:"group"`
+	Name    string        `json:"name"`
+	Text    string        `json:"text"`
+	Version int           `json:"version"`
+	Loras   []StarterLora `json:"loras"`
+	Thumb   *LookThumb    `json:"thumb"`
+}
+
+// StarterLora is a starter look's LoRA: its file, name, strength and shared id (nil: this host has no such file).
+type StarterLora struct {
+	File     string  `json:"file"`
+	Name     string  `json:"name"`
+	Strength float64 `json:"strength"`
+	LoraID   *string `json:"lora_id"`
+}
+
+// LookThumb is a starter look's pack image in the object store (packs/<family>/looks/…), only ever a thumbnail.
+type LookThumb struct {
+	Key string `json:"key"`
+}
+
+var (
+	lookID    = regexp.MustCompile(`^([a-z0-9][a-z0-9_-]{0,63})/[a-z0-9][a-z0-9-]{0,63}$`)
+	lookThumb = regexp.MustCompile(`^packs/([a-z0-9][a-z0-9_-]{0,63})/looks/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\.(png|jpg|webp)$`)
+)
+
+// badLook says why a published starter look is not kept ("" = kept): its id not <family>/<slug>, or a control
+// character in its name or (other than \n \r \t) its text. A thumb key outside packs/<family>/looks/ is dropped
+// (never signed), the look kept.
+func badLook(l *StarterLook) string {
+	if m := lookID.FindStringSubmatch(l.ID); m == nil || m[1] != l.Family {
+		return "id is not <family>/<slug>"
+	}
+	if strings.ContainsFunc(l.Name, unicode.IsControl) ||
+		strings.ContainsFunc(l.Text, func(r rune) bool { return unicode.IsControl(r) && !strings.ContainsRune("\n\r\t", r) }) {
+		return "control characters in its name or text"
+	}
+	if l.Thumb != nil {
+		if m := lookThumb.FindStringSubmatch(l.Thumb.Key); m == nil || m[1] != l.Family {
+			l.Thumb = nil
+		}
+	}
+	return ""
+}
+
+// LiveLook is a starter look as the live hosts publish it, from hosts that serve its family: a non-fake env's entry
+// before env fake's, then the highest version (a tie: host, then env), each LoRA's id the first non-null over the hosts publishing that version and file, and
+// the oldest published_at of the hosts publishing the id.
+type LiveLook struct {
+	StarterLook
+	PublishedAt time.Time
+}
+
+// Looks returns the starter looks of the live hosts, by id.
+func (r *Registry) Looks(now time.Time) map[string]LiveLook {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	var sources []string
+	for source := range r.looks {
+		if host, ok := r.hosts[source]; ok && host.Live(now) {
+			sources = append(sources, source)
+		}
+	}
+	slices.SortFunc(sources, func(a, b string) int { // non-fake env first, then host, then env
+		ha, ea, _ := strings.Cut(a, ".")
+		hb, eb, _ := strings.Cut(b, ".")
+		return cmp.Or(cmp.Compare(btoi(ea == "fake"), btoi(eb == "fake")), strings.Compare(ha, hb), strings.Compare(ea, eb))
+	})
+	kept := map[string][]StarterLook{} // the looks of a family the source serves
+	for _, source := range sources {
+		kept[source] = slices.DeleteFunc(slices.Clone(r.looks[source]), func(l StarterLook) bool {
+			return !slices.ContainsFunc(r.models[source], func(m Model) bool { return m.Family == l.Family })
+		})
+	}
+	out := map[string]LiveLook{}
+	real := map[string]bool{} // ids a non-fake env publishes: a fake env's entry never replaces theirs
+	for _, source := range sources {
+		_, env, _ := strings.Cut(source, ".")
+		fake := env == "fake"
+		for _, entry := range kept[source] {
+			live, seen := out[entry.ID]
+			if !fake {
+				real[entry.ID] = true
+			}
+			if !seen || entry.Version > live.Version && (!fake || !real[entry.ID]) {
+				at := live.PublishedAt
+				live.StarterLook = entry
+				live.Loras = slices.Clone(entry.Loras)
+				if !seen || r.looksAt[source].Before(at) {
+					at = r.looksAt[source]
+				}
+				live.PublishedAt = at
+			} else if r.looksAt[source].Before(live.PublishedAt) {
+				live.PublishedAt = r.looksAt[source]
+			}
+			out[entry.ID] = live
+		}
+	}
+	for _, source := range sources { // a LoRA this host lacks: another host's id for the same version and file
+		for _, entry := range kept[source] {
+			live := out[entry.ID]
+			if entry.Version != live.Version {
+				continue
+			}
+			for i, l := range live.Loras {
+				if l.LoraID != nil {
+					continue
+				}
+				if at := slices.IndexFunc(entry.Loras, func(e StarterLora) bool { return e.File == l.File && e.LoraID != nil }); at >= 0 {
+					live.Loras[i].LoraID = entry.Loras[at].LoraID
+				}
+			}
 		}
 	}
 	return out

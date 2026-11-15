@@ -52,4 +52,14 @@ func TestServe(t *testing.T) {
 	if w := serve(http.MethodPost, link(key)); w.Code != 404 {
 		t.Fatalf("POST: %d", w.Code)
 	}
+	// a starter look's thumbnail (packs/<family>/looks/<id>-<16 hex>.<ext>) is served; any other key outside u/ never is, even signed
+	for k, want := range map[string]int{"packs/echo/looks/grain-0123456789abcdef.png": 200, "x/a.png": 403,
+		"packs/echo/other.bin": 403, "packs/echo/looks/grain.bin": 403} {
+		if err := store.Put(context.Background(), k, strings.NewReader("png"), 3, "image/png"); err != nil {
+			t.Fatal(err)
+		}
+		if w := serve(http.MethodGet, link(k)); w.Code != want {
+			t.Fatalf("%s: %d, want %d", k, w.Code, want)
+		}
+	}
 }

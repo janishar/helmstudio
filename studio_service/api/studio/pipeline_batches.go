@@ -223,7 +223,7 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM user_workflows WHERE id = ANY($1::uuid[]) FOR SHARE`, own); err != nil {
 		return dto.Batch{}, err
 	}
-	problems, docs, err := s.pipelineProblemsNow(ctx, tx, doc)
+	problems, docs, err := s.pipelineProblemsNow(ctx, tx, caller.ID, doc)
 	if err != nil {
 		return dto.Batch{}, err
 	} else if len(problems) > 0 {
@@ -318,6 +318,10 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	} else if detail != "" {
 		return dto.Batch{}, unprocessable("%s", detail)
 	}
+	looks, err := readLooks(ctx, tx, s.registry, caller.ID, stepLookIDs(doc), nil) // the batch's copy (checked above)
+	if err != nil {
+		return dto.Batch{}, err
+	}
 	if detail, err := s.pipelineLoras(ctx, tx, caller.ID, graphs); err != nil {
 		return dto.Batch{}, err
 	} else if detail != "" {
@@ -351,10 +355,10 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	batchID := utility.NewID()
 	if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
-		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`, batchID, caller.ID, sessionID, title,
+		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements, looks)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`, batchID, caller.ID, sessionID, title,
 		first.ID, first.Title, first, base, stored.version(first.ID), row.ID, row.Title, row.Version, collection, stored,
-		lib); err != nil {
+		lib, looks); err != nil {
 		return dto.Batch{}, err
 	}
 	numbers := make([]int, len(rows))

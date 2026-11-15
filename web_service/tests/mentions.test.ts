@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import scanFixture from "../../contracts/fixtures/mentions/scan.json";
+import fitFixture from "../../contracts/fixtures/mentions/fit.json";
 import palette from "../../contracts/fixtures/graphs/palette.json";
 import type { S } from "@/lib/api";
 import { paletteOf } from "@/lib/graph";
@@ -9,6 +10,8 @@ import {
   handleFrom,
   HANDLE,
   insertMention,
+  lookFit,
+  looksNote,
   mentionAt,
   mentionNote,
   mentionRanges,
@@ -31,6 +34,22 @@ describe("scan (fixtures/mentions/scan.json)", () => {
   });
 });
 
+describe("lookFit (fixtures/mentions/fit.json)", () => {
+  const fit = fitFixture as unknown as {
+    workflows: Record<string, { nodes: never }>;
+    cases: {
+      description: string;
+      workflow: string;
+      item: never;
+      loras?: never;
+      expect: string | null;
+    }[];
+  };
+  it.each(fit.cases)("$description", (c) => {
+    expect(lookFit(fit.workflows[c.workflow].nodes, schemas, c.item, c.loras ?? {})).toBe(c.expect);
+  });
+});
+
 describe("autoSize", () => {
   it("rounds as the runner (Python round: half to even)", () => {
     expect(autoSize(1920, 1080)).toEqual([1376, 768]);
@@ -44,18 +63,28 @@ describe("resolveMentions (fixtures/mentions/resolve.*.json)", () => {
   it("has the fixtures", () => expect(files.length).toBeGreaterThanOrEqual(10));
   it.each(files)("%s", (f) => {
     const fx = JSON.parse(readFileSync(new URL(f, dir), "utf8"));
-    const got = resolveMentions(fx.workflow.nodes, schemas, fx.library, fx.sizes);
+    const got = resolveMentions(
+      fx.workflow.nodes,
+      schemas,
+      fx.library,
+      fx.sizes,
+      fx.looks,
+      fx.chosen,
+      fx.loras,
+    );
     if (fx.expect.errors) expect(got.errors).toEqual(fx.expect.errors);
     else
       expect({
         inputs: got.inputs,
         typed: got.typed,
         elements: got.elements,
+        looks: got.looks,
         errors: got.errors,
       }).toEqual({
         inputs: {},
         typed: {},
         elements: [],
+        looks: [],
         errors: [],
         ...fx.expect,
       });
@@ -93,6 +122,25 @@ describe("the preview", () => {
     expect(mentionNote(r, [{ ...fox, text: "" }], true)).toBe(
       "Text only in this workflow. Mentions add @fox: its name",
     );
+  });
+});
+
+describe("what the looks add", () => {
+  it("lists text, image tokens and LoRAs per look", () => {
+    const fx = JSON.parse(readFileSync(new URL("resolve.looks-images-loras.json", dir), "utf8"));
+    const r = resolveMentions(
+      fx.workflow.nodes,
+      schemas,
+      [],
+      fx.sizes,
+      fx.looks,
+      fx.chosen,
+      fx.loras,
+    );
+    expect(looksNote(r, fx.looks)).toBe(
+      "Looks add Noir: text + <image2> <image1> + LoRA noir-lut · Ink wash: text",
+    );
+    expect(looksNote(resolveMentions(fx.workflow.nodes, schemas, []), fx.looks)).toBeNull();
   });
 });
 

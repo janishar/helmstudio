@@ -1,0 +1,20 @@
+{
+  "kind": "look",
+  "group": "lighting",
+  "name": "Warm key",
+  "handle": null,
+  "text": "warm key light from the left",
+  "images": [
+    {
+      "take_id": "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+    }
+  ],
+  "loras": [
+    {
+      "lora": {
+        "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+      },
+      "strength": 0.6
+    }
+  ]
+}

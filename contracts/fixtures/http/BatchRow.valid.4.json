@@ -1,0 +1,20 @@
+{
+  "row": 3,
+  "attempt": 1,
+  "inputs": {
+    "prompt.text": "a blue heron",
+    "seed.seed": 1001
+  },
+  "status": "succeeded",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "take_ids": [
+    "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b69"
+  ],
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.png?exp=1767225600&sig=ab12",
+  "error": null,
+  "started_at": "2026-11-14T10:16:00Z",
+  "finished_at": "2026-11-14T10:16:40Z",
+  "looks": [
+    "qwen-image/window-light"
+  ]
+}

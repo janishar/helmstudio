@@ -10,9 +10,19 @@ import { ErrorNote } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { takeDrop, useRefUploads } from "@/components/create/refs";
 import { WorkflowPicker } from "@/components/create/workflows";
-import { ElementsButton, ElementsPicker } from "@/components/create/elements";
+import { ElementsPicker } from "@/components/create/elements";
+import { LooksPicker, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
-import { useLibrary } from "@/lib/library";
+import { useLibrary, useLooks } from "@/lib/library";
+import {
+  chosenFrom,
+  chosenIds,
+  liveChosen,
+  looksReuseNote,
+  reasonOf,
+  tilesOf,
+  type Chosen,
+} from "@/lib/looks";
 import { useLoras } from "@/lib/lora-library";
 import { lorasNote, usable } from "@/lib/loras";
 import {
@@ -20,7 +30,9 @@ import {
   mentioned,
   mentionNote,
   referenceRows,
+  looksNote,
   resolvable,
+  resolvableLooks,
   resolveMentions,
   withInputs,
 } from "@/lib/mentions";
@@ -183,6 +195,11 @@ export function Create({
   const [count, setCount] = useState(1);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [elementsOpen, setElementsOpen] = useState(false);
+  // the chosen looks per group (the composer's look tiles), and the group whose picker is open
+  const [looksPicked, setLooksChosen] = useState<Chosen>({});
+  const [lookGroup, setLookGroup] = useState<S<"LibraryGroup"> | null>(null);
+  // a reused take's look ids, put under their groups once the looks are known
+  const [reusedLooks, setReusedLooks] = useState<string[] | null>(null);
   // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
   const [reuseNote, setReuseNote] = useState("");
   const [view, setView] = useState<"studio" | "graph">("studio");
@@ -286,11 +303,18 @@ export function Create({
         setErrors({});
         setOpenKey(null);
         setReuseNote(elementsNote(r.elements_status ?? []));
-        if (r.loras_status?.some((x) => x.status !== "current"))
+        setReusedLooks(r.looks ?? []);
+        if (
+          [...(r.loras_status ?? []), ...(r.looks_status ?? [])].some((x) => x.status !== "current")
+        )
           void ok(api.GET("/v1/studio/takes/{take_id}", { params: { path: { take_id: reuse } } }))
             .then((t) =>
               setReuseNote((n) =>
-                [n, lorasNote(r.loras_status ?? [], t.made_with?.loras ?? [])]
+                [
+                  n,
+                  lorasNote(r.loras_status ?? [], t.made_with?.loras ?? []),
+                  looksReuseNote(r.looks_status ?? [], t.made_with?.looks ?? []),
+                ]
                   .filter(Boolean)
                   .join(" "),
               ),
@@ -430,24 +454,58 @@ export function Create({
   const refs = refCount(fields, raws);
   // the mentions: what they add for this workflow (the line under the prompt), checked as studio checks them
   const library = useLibrary();
+  const looks = useLooks();
+  // a chosen look deleted or gone from every live host since is dropped, never sent
+  const looksChosen = liveChosen(looksPicked, looks);
+  const lookList = useMemo(() => resolvableLooks(looks ?? []), [looks]);
+  const loraFamilies = useMemo(() => usable(loras), [loras]);
+  // Reuse's looks, once the looks are known (one gone since is left out; the note says so)
+  if (reusedLooks && looks) {
+    setLooksChosen(chosenFrom(reusedLooks, looks));
+    setReusedLooks(null);
+  }
+  /** The run's looks for `w`: the chosen looks of its tiles, in tile order. */
+  const lookIdsOf = (w: S<"Workflow">) =>
+    chosenIds(tilesOf(w, looks ?? [], loraFamilies, looksChosen), looksChosen);
   const mentionsOf = (w: S<"Workflow">, inputs: S<"RunInputs">) =>
-    library && resolveMentions(withInputs(w.nodes, inputs), w.node_schemas, resolvable(library));
+    library &&
+    resolveMentions(
+      withInputs(w.nodes, inputs),
+      w.node_schemas,
+      resolvable(library),
+      {},
+      lookList,
+      looks ? lookIdsOf(w) : [],
+      loraFamilies,
+    );
   const textFields = (layout ? fields.filter((f) => layout.text.includes(f)) : fields).filter(
     (f) => f.param.type === "text",
   );
   const texts = textFields.map((f) => String(raws[f.key] ?? toRaw(f.initial, f.param)));
   const handles = [...new Set(texts.flatMap(mentioned))];
+  const formInputs = buildInputs(fields, raws).inputs;
+  // the graph as the form sets it: what the picker's fit reasons are about
+  const current = workflow && { ...workflow, nodes: withInputs(workflow.nodes, formInputs) };
+  const tiles = (workflow ? tilesOf(workflow, looks ?? [], loraFamilies, looksChosen) : []).filter(
+    (t) => t !== "elements" || textFields.length > 0,
+  );
+  const lookIds = workflow ? lookIdsOf(workflow) : [];
   const preview =
-    workflow && handles.length ? mentionsOf(workflow, buildInputs(fields, raws).inputs) : null;
+    workflow && (handles.length || lookIds.length) ? mentionsOf(workflow, formInputs) : null;
   const note =
     preview && workflow
       ? preview.errors.length
         ? preview.errors.join("; ")
-        : mentionNote(
-            preview,
-            resolvable(library ?? []),
-            !referenceRows(workflow.nodes, workflow.node_schemas),
-          )
+        : [
+            mentionNote(
+              preview,
+              resolvable(library ?? []),
+              !referenceRows(workflow.nodes, workflow.node_schemas),
+            ),
+            looksNote(preview, lookList),
+          ]
+            .filter(Boolean)
+            .join("\n") || null
       : null;
   /** Opens a field's inspector control (or the canvas picker) and moves focus to it. */
   const show = (key: string) => {
@@ -498,6 +556,7 @@ export function Create({
     sending.current = true;
     setBusy(true);
     setError("");
+    const ids = lookIdsOf(w);
     try {
       const prompt = fields.find((f) => f.param.type === "text");
       const title = prompt
@@ -510,7 +569,7 @@ export function Create({
         const run = await ok(
           api.POST("/v1/studio/sessions/{session_id}/runs", {
             params: { path: { session_id: sid } },
-            body: { workflow_id: w.id, inputs: each },
+            body: { workflow_id: w.id, inputs: each, ...(ids.length && { looks: ids }) },
           }),
         );
         if (sid === sessionRef.current) put(mergeRuns(runsRef.current, [run]));
@@ -795,7 +854,7 @@ export function Create({
           aria-label="Composer"
           className="panel flex shrink-0 flex-col gap-3 bg-s2 px-4 py-3.5 [box-shadow:0_16px_40px_color-mix(in_srgb,var(--shd)_45%,transparent)]"
         >
-          {(refField || textFields.length > 0) && (
+          {(refField || textFields.length > 0 || tiles.length > 0) && (
             <div className="flex flex-wrap items-center gap-2">
               {refField ? (
                 <RefChips
@@ -809,9 +868,13 @@ export function Create({
               ) : (
                 <MentionChips texts={texts} />
               )}
-              {textFields.length > 0 && (
-                <ElementsButton count={handles.length} onClick={() => setElementsOpen(true)} />
-              )}
+              <QuickTiles
+                tiles={tiles}
+                chosen={looksChosen}
+                mentioned={handles.length}
+                onElements={() => setElementsOpen(true)}
+                onLook={setLookGroup}
+              />
             </div>
           )}
           <TextFields
@@ -823,7 +886,7 @@ export function Create({
           {note && (
             <p
               role={preview?.errors.length ? "alert" : "status"}
-              className={`mono m-0 text-[12px] ${preview?.errors.length ? "text-bad" : "text-t2"}`}
+              className={`mono m-0 text-[12px] whitespace-pre-line ${preview?.errors.length ? "text-bad" : "text-t2"}`}
             >
               {note}
             </p>
@@ -912,6 +975,15 @@ export function Create({
                 change(textFields[0].key, v),
               )
             }
+          />
+        )}
+        {current && (
+          <LooksPicker
+            group={lookGroup}
+            onClose={() => setLookGroup(null)}
+            chosen={looksChosen}
+            onChosen={setLooksChosen}
+            reason={(x) => reasonOf(current, x, loraFamilies)}
           />
         )}
       </main>

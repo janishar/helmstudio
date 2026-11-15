@@ -141,9 +141,13 @@ def ul(new_user):
 
 @pytest.fixture(scope="module")
 def stack(ul) -> dict | None:
+    return find_stack(ul)
+
+
+def find_stack(client) -> dict | None:
     """The fake env's Model-free LoRA stack: {kind, family, in, out, field} (rows param `rows`, a Lora field, a Text
     input and output), or None."""
-    groups = ok(ul.get(f"{STUDIO}/nodes", params={"env": "fake"}))["groups"]
+    groups = ok(client.get(f"{STUDIO}/nodes", params={"env": "fake"}))["groups"]
     for n in (n for g in groups for n in g["nodes"]):
         rows = {p["name"]: p for p in n["params"]}.get("rows")
         field = check.lora_field(rows) if rows else None

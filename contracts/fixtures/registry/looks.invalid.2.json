@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "looks": [
+    {
+      "id": "qwen-image/window-light",
+      "family": "qwen-image",
+      "group": "character",
+      "name": "Window",
+      "text": "x",
+      "version": 1,
+      "loras": [],
+      "thumb": null
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "looks": [
+    {
+      "id": "qwen-image/window-light",
+      "family": "qwen-image",
+      "group": "lighting",
+      "name": "Window",
+      "text": "soft daylight from a single window, deep falloff into shadow",
+      "version": 1,
+      "loras": [],
+      "thumb": {
+        "key": "packs/qwen-image/looks/window-light-3f0a6c1e9b2d4a7c.webp",
+        "content_type": "image/webp",
+        "width": 512,
+        "height": 512,
+        "bytes": 41230
+      }
+    },
+    {
+      "id": "qwen-image/silhouette",
+      "family": "qwen-image",
+      "group": "lighting",
+      "name": "Silhouette",
+      "text": "strong backlight, subject in silhouette, rim light on edges",
+      "version": 2,
+      "loras": [],
+      "thumb": null
+    },
+    {
+      "id": "qwen-image/ink-wash",
+      "family": "qwen-image",
+      "group": "film",
+      "name": "Ink wash",
+      "text": "ink wash painting, loose brush strokes",
+      "version": 1,
+      "loras": [
+        {
+          "file": "ink-wash.safetensors",
+          "name": "ink-wash",
+          "strength": 0.8,
+          "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+        }
+      ],
+      "thumb": null
+    },
+    {
+      "id": "qwen-image/kodak-portra",
+      "family": "qwen-image",
+      "group": "colour",
+      "name": "Portra",
+      "text": "",
+      "version": 1,
+      "loras": [
+        {
+          "file": "kodak-portra.safetensors",
+          "name": "kodak-portra",
+          "strength": 1,
+          "lora_id": null
+        }
+      ],
+      "thumb": null
+    }
+  ]
+}

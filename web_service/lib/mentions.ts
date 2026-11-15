@@ -180,13 +180,135 @@ export function withInputs(nodes: Record<string, Node>, inputs: Record<string, V
   return out;
 }
 
+/** A look as the resolver reads it (contracts/README.md "Looks"): images as take ids, LoRAs with their saved
+ * strength (`lora_id` null: a starter LoRA no live host has). */
+export type ResolvableLook = {
+  id: string;
+  source: S<"LibrarySource">;
+  name: string;
+  version: number;
+  text: string;
+  images: string[];
+  loras: { lora_id: string | null; name: string; strength: number }[];
+};
+
+/** Library looks as the resolver reads them. */
+export const resolvableLooks = (items: S<"LibraryItem">[]): ResolvableLook[] =>
+  items.flatMap((x) =>
+    x.kind === "look"
+      ? [
+          {
+            id: x.id,
+            source: x.source ?? (x.id.includes("/") ? "starter" : "mine"),
+            name: x.name,
+            version: x.version,
+            text: x.text,
+            images: x.images.map((i) => i.take_id),
+            loras: (x.loras ?? []).map((l) => ({
+              lora_id: l.lora?.lora_id ?? null,
+              name: l.name,
+              strength: l.strength,
+            })),
+          },
+        ]
+      : [],
+  );
+
+/** Mentions "Where": every unwired `text` param of a known, not bypassed node, node id order then schema order. */
+export const promptParams = (nodes: Record<string, Node>, schemas: Schemas) =>
+  known(nodes, schemas).flatMap(({ id, n, params }) =>
+    params.filter((p) => p.type === "text" && !(p.name in (n.in ?? {}))).map((p) => ({ id, n, p })),
+  );
+
+/** A rows param's Lora field, else undefined. */
+const loraField = (p: Param) =>
+  p.type === "rows" ? Object.keys(p.item ?? {}).find((k) => p.item?.[k] === "Lora") : undefined;
+
+/** Where look LoRAs go: among the known, not bypassed `<family>/lora-stack` nodes with an unwired rows param that has
+ * a Lora field, the first by node id from which no other such node is reachable downstream; null = none. */
+export function lookStack(nodes: Record<string, Node>, schemas: Schemas) {
+  const cands = new Map<string, Param>();
+  for (const { id, n, params } of known(nodes, schemas)) {
+    const p = n.kind.endsWith("/lora-stack")
+      ? params.find((x) => loraField(x) && !(x.name in (n.in ?? {})))
+      : undefined;
+    if (p) cands.set(id, p);
+  }
+  const succ = (id: string) =>
+    Object.keys(nodes).filter((m) =>
+      Object.values(nodes[m].in ?? {}).some((ref) => ref.split(".")[0] === id),
+    );
+  const reaches = (id: string) => {
+    const seen = new Set<string>();
+    const todo = succ(id);
+    while (todo.length) {
+      const x = todo.pop() as string;
+      if (!seen.has(x)) {
+        seen.add(x);
+        todo.push(...succ(x));
+      }
+    }
+    return seen;
+  };
+  for (const [id, p] of cands)
+    if (![...reaches(id)].some((x) => cands.has(x))) return { node: id, param: p };
+  return null;
+}
+
+/** What an item brings (LibraryItem.needs): text, images, lora, in that order. */
+export const needsOf = (x: { text: string; images: unknown[]; loras?: unknown[] }) =>
+  (
+    [
+      ["text", !!x.text],
+      ["images", x.images.length > 0],
+      ["lora", !!x.loras?.length],
+    ] as const
+  ).flatMap(([k, on]) => (on ? [k] : []));
+
+/** Why an item cannot be applied to this graph (README, Looks: fit), null when it can. `loras`: LoRA id → detected
+ * family of every LoRA the caller can use now. */
+export function lookFit(
+  nodes: Record<string, Node>,
+  schemas: Schemas,
+  item: Pick<ResolvableLook, "text" | "images"> & {
+    kind?: string;
+    loras?: ResolvableLook["loras"];
+  },
+  loras: Record<string, string>,
+): string | null {
+  const needs = needsOf(item);
+  const element = item.kind === "element";
+  if ((needs.includes("text") || element) && !promptParams(nodes, schemas).length)
+    return "this workflow has no prompt";
+  if (element) return null; // its images are dropped where there are no reference rows
+  if (needs.includes("images") && !referenceRows(nodes, schemas))
+    return "this workflow takes no reference images";
+  if (needs.includes("lora")) {
+    const stack = lookStack(nodes, schemas);
+    if (!stack) return "this workflow has no LoRA stack";
+    const kind = nodes[stack.node].kind;
+    for (const x of item.loras ?? []) {
+      if (x.lora_id === null) return `LoRA ${x.name} is on no live host`;
+      const fam = loras[x.lora_id];
+      if (fam === undefined) return `LoRA ${x.name} is not available`;
+      if (fam === "unknown") return `LoRA ${x.name} fits no known model`;
+      if (kind.includes("/") && fam !== kind.split("/")[0]) return `LoRA ${x.name} is for ${fam}`;
+    }
+  }
+  return null;
+}
+
 export type Resolved = {
   inputs: Record<string, Value>;
   typed: Record<string, Value>;
   elements: { id: string; handle: string; name: string; version: number }[];
+  looks: { id: string; source: S<"LibrarySource">; name: string; version: number }[];
   errors: string[];
   /** each used handle's image mentions (`<image3>`), empty without reference rows */
   tokens: Record<string, string[]>;
+  /** each applied look's image mentions, and the LoRAs it added to the stack (names) */
+  lookTokens: Record<string, string[]>;
+  lookLoras: Record<string, string[]>;
 };
 
 /** Canvas `auto` with references (the runner's): about 1 MP at width / height, sides rounded half to even to 32. */
@@ -200,35 +322,62 @@ export function autoSize(width: number, height: number): [number, number] {
   return [even(w / 32) * 32, even(w / ratio / 32) * 32];
 }
 
-/** The expansion of every mention (studio_service's resolver): changed paths → resolved values, their values as
- * typed, the elements used, or the errors (422 detail parts). `sizes`: take id → [width, height] of the user's row
- * takes, when known (the canvas pin). */
+/** The one resolver of mentions and chosen looks (studio_service's, plan 14.2): changed paths → resolved values, their
+ * values as typed, the elements and looks used, or the errors (422 detail parts). `sizes`: take id → [width, height] of
+ * the user's row takes, when known (the canvas pin); `looks`: the looks the caller can use now; `chosen`:
+ * RunRequest.looks; `loras`: LoRA id → detected family of the caller's usable LoRAs (the fit). */
 export function resolveMentions(
   nodes: Record<string, Node>,
   schemas: Schemas,
   library: Resolvable[],
   sizes: Record<string, [number, number]> = {},
+  looks: ResolvableLook[] = [],
+  chosen: string[] = [],
+  loras: Record<string, string> = {},
 ): Resolved {
   const lib = new Map(library.map((e) => [e.handle, e]));
+  const found = new Map(looks.map((x) => [x.id, x]));
   const val = (n: Node, p: Param) => n.params?.[p.name] ?? p.default;
-  const prompts = known(nodes, schemas).flatMap(({ id, n, params }) =>
-    params
-      .filter((p) => p.type === "text" && !(p.name in (n.in ?? {})))
-      .map((p) => {
-        const text = String(val(n, p) ?? "");
-        return { n, p, path: `${id}.${p.name}`, text, parts: scan(text), used: mentioned(text) };
-      }),
-  );
-  const none = { inputs: {}, typed: {}, elements: [], tokens: {} };
-  const unknown = prompts.flatMap((x) =>
-    x.used.filter((h) => !lib.has(h)).map((h) => `${x.path}: unknown element @${h}`),
-  );
+  const prompts = promptParams(nodes, schemas).map(({ id, n, p }) => {
+    const text = String(val(n, p) ?? "");
+    return { n, p, path: `${id}.${p.name}`, text, parts: scan(text), used: mentioned(text) };
+  });
+  const none = {
+    inputs: {},
+    typed: {},
+    elements: [],
+    looks: [],
+    tokens: {},
+    lookTokens: {},
+    lookLoras: {},
+  };
+  const first = new Map<string, number>(); // look id → its first place in the request, from 1
+  chosen.forEach((id, i) => first.has(id) || first.set(id, i + 1));
+  const unknown = [
+    ...prompts.flatMap((x) =>
+      x.used.filter((h) => !lib.has(h)).map((h) => `${x.path}: unknown element @${h}`),
+    ),
+    ...[...first]
+      .filter(([id]) => !found.has(id))
+      .map(([id, i]) => `looks[${i}]: unknown look ${id}`),
+  ];
   if (unknown.length) return { ...none, errors: unknown };
+  const picked = [...first.keys()].map((id) => found.get(id) as ResolvableLook);
+  const unfit = picked.flatMap((x) => {
+    const r = lookFit(nodes, schemas, x, loras);
+    return r ? [`looks[${first.get(x.id)}]: look ${x.name} does not fit this workflow (${r})`] : [];
+  });
+  if (unfit.length) return { ...none, errors: unfit };
   const used = [...new Set(prompts.flatMap((x) => x.used))];
-  const tokens: Record<string, string[]> = Object.fromEntries(used.map((h) => [h, []]));
+  // what brings images, in order: the mentioned elements, then the looks
+  const adds = [
+    ...used.map((h) => ({ label: `@${h}`, key: `e:${h}`, images: lib.get(h)!.images })),
+    ...picked.map((x) => ({ label: `look ${x.name}`, key: `l:${x.id}`, images: x.images })),
+  ];
+  const tok: Record<string, string[]> = Object.fromEntries(adds.map((a) => [a.key, []]));
   const inputs: Record<string, Value> = {};
   const typed: Record<string, Value> = {};
-  const target = used.length ? referenceRows(nodes, schemas) : null;
+  const target = adds.length ? referenceRows(nodes, schemas) : null;
   if (target) {
     const { node, param: tp } = target;
     const field = imageField(tp) as string;
@@ -244,19 +393,18 @@ export function resolveMentions(
     });
     const over: string[] = [];
     let full: number | null = null;
-    for (const h of used) {
-      const e = lib.get(h) as Resolvable;
-      const fresh = e.images.filter((t) => !at.has(t));
+    for (const a of adds) {
+      const fresh = [...new Set(a.images)].filter((t) => !at.has(t));
       if (full !== null || rows.length + fresh.length > cap) {
         full ??= rows.length;
-        if (fresh.length) over.push(`@${h} +${fresh.length}`);
+        if (fresh.length) over.push(`${a.label} +${fresh.length}`);
         continue;
       }
       for (const t of fresh) {
         rows.push({ [field]: { take_id: t } });
         at.set(t, rows.length);
       }
-      tokens[h] = e.images.map((t) => (tp.mention as string).replaceAll("{n}", String(at.get(t))));
+      tok[a.key] = a.images.map((t) => (tp.mention as string).replaceAll("{n}", String(at.get(t))));
     }
     if (over.length)
       return {
@@ -266,7 +414,7 @@ export function resolveMentions(
     if (rows.length > before.length) {
       inputs[path] = rows;
       typed[path] = before;
-      // element rows never change the output size: each auto canvas is pinned to what auto gives without them
+      // element and look rows never change the output size: each auto canvas is pinned to what auto gives without them
       const last = before.at(-1)?.[field] as { take_id?: string } | null | undefined;
       const size =
         last && typeof last === "object" && last.take_id ? sizes[last.take_id] : undefined;
@@ -287,34 +435,126 @@ export function resolveMentions(
       }
     }
   }
+  const lookLoras: Record<string, string[]> = Object.fromEntries(picked.map((x) => [x.id, []]));
+  const stack = picked.some((x) => x.loras.length) ? lookStack(nodes, schemas) : null;
+  if (stack) {
+    const { node, param: sp } = stack;
+    const field = loraField(sp) as string;
+    const cap = sp.max ?? 100;
+    const path = `${node}.${sp.name}`;
+    const before = (val(nodes[node], sp) ?? []) as S<"RowItem">[];
+    // the user's rows win: a LoRA already in any stack's rows is not added again
+    const present = new Set<string>();
+    for (const { n, params } of known(nodes, schemas))
+      for (const p of params) {
+        const f = loraField(p);
+        if (!f) continue;
+        for (const r of (val(n, p) ?? []) as S<"RowItem">[]) {
+          const ref = r[f] as { lora_id?: string } | null;
+          if (ref && typeof ref === "object" && ref.lora_id) present.add(ref.lora_id);
+        }
+      }
+    const st = sp.item?.strength as unknown as Partial<Param> | undefined;
+    const clamp = (v: number) =>
+      st && typeof st === "object" ? Math.min(Math.max(v, st.min ?? v), st.max ?? v) : v;
+    const rows = [...before];
+    const over: string[] = [];
+    let full: number | null = null;
+    for (const x of picked) {
+      const fresh: ResolvableLook["loras"] = [];
+      for (const y of x.loras)
+        if (!present.has(y.lora_id as string) && !fresh.some((z) => z.lora_id === y.lora_id))
+          fresh.push(y);
+      if (full !== null || rows.length + fresh.length > cap) {
+        full ??= rows.length;
+        if (fresh.length) over.push(`look ${x.name} +${fresh.length}`);
+        continue;
+      }
+      for (const y of fresh) {
+        rows.push({
+          [field]: { lora_id: y.lora_id as string },
+          ...(st ? { strength: clamp(y.strength) } : {}),
+        });
+        present.add(y.lora_id as string);
+        lookLoras[x.id].push(y.name);
+      }
+    }
+    if (over.length)
+      return {
+        ...none,
+        errors: [`${path}: at most ${cap} LoRAs; ${full} used, ${over.join(", ")} do not fit`],
+      };
+    if (rows.length > before.length) {
+      inputs[path] = rows;
+      typed[path] = before;
+    }
+  }
+  const lines = [
+    ...new Set(
+      picked
+        .map((x) => [...(x.text ? [x.text] : []), ...tok[`l:${x.id}`]].join(" "))
+        .filter(Boolean),
+    ),
+  ];
   const errors: string[] = [];
-  for (const x of prompts) {
+  prompts.forEach((x, i) => {
     let out = x.parts
       .map((p) =>
         "text" in p
           ? p.text.replaceAll("@@", "@")
-          : [(lib.get(p.mention) as Resolvable).name, ...tokens[p.mention]].join(" "),
+          : [lib.get(p.mention)!.name, ...tok[`e:${p.mention}`]].join(" "),
       )
       .join("");
     const notes = x.used.flatMap((h) => {
-      const e = lib.get(h) as Resolvable;
+      const e = lib.get(h)!;
       return e.text ? [`${e.name}: ${e.text}`] : [];
     });
     if (notes.length) out += "\n\n" + notes.join("\n");
+    const extra = i === 0 ? lines : []; // look lines go to the first prompt param only
+    out = [out, extra.join("\n")].filter(Boolean).join("\n\n");
     const length = [...out].length;
     if (x.p.max != null && length > x.p.max)
-      errors.push(`${x.path}: at most ${x.p.max} characters once elements are added (${length})`);
+      errors.push(
+        `${x.path}: at most ${x.p.max} characters once ${extra.length ? "elements and looks" : "elements"} are added (${length})`,
+      );
     else if (out !== x.text) {
       inputs[x.path] = out;
       typed[x.path] = x.text;
     }
-  }
+  });
   if (errors.length) return { ...none, errors };
   const elements = used.map((h) => {
-    const { id, handle, name, version } = lib.get(h) as Resolvable;
+    const { id, handle, name, version } = lib.get(h)!;
     return { id, handle, name, version };
   });
-  return { inputs, typed, elements, errors: [], tokens };
+  return {
+    inputs,
+    typed,
+    elements,
+    looks: picked.map(({ id, source, name, version }) => ({ id, source, name, version })),
+    errors: [],
+    tokens: Object.fromEntries(used.map((h) => [h, tok[`e:${h}`]])),
+    lookTokens: Object.fromEntries(picked.map((x) => [x.id, tok[`l:${x.id}`]])),
+    lookLoras,
+  };
+}
+
+/** The line under the prompt for the chosen looks: what each adds ("Looks add Window: text · Noir: <image3> + text +
+ * LoRA ink-wash"), or null without looks. */
+export function looksNote(r: Resolved, looks: ResolvableLook[]) {
+  if (!r.looks.length) return null;
+  const by = new Map(looks.map((x) => [x.id, x]));
+  const each = r.looks.map((x) => {
+    const t = r.lookTokens[x.id] ?? [];
+    const l = r.lookLoras[x.id] ?? [];
+    const what = [
+      ...(by.get(x.id)?.text ? ["text"] : []),
+      ...(t.length ? [t.join(" ")] : []),
+      ...l.map((n) => `LoRA ${n}`),
+    ];
+    return `${x.name}: ${what.join(" + ") || "nothing new"}`;
+  });
+  return `Looks add ${each.join(" · ")}`;
 }
 
 /** The line under the prompt: what the mentions add for this workflow ("@fox: <image3> <image4> + text · @owl:

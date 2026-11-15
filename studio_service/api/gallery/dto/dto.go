@@ -26,6 +26,8 @@ type MadeWith struct {
 	Typed    map[string]any    `json:"typed,omitempty"`
 	// every LoRA of every lora-stack node that ran, node id order then row order, as resolved when the run was made
 	Loras []MadeWithLora `json:"loras,omitempty"`
+	// the looks it was made with, in request order (repeats once), as they were when the run was made
+	Looks []MadeWithLook `json:"looks,omitempty"`
 	// a take made by a step of a pipeline batch
 	Pipeline *MadeWithPipeline `json:"pipeline,omitempty"`
 }
@@ -36,6 +38,20 @@ type MadeWithElement struct {
 	Handle  string `json:"handle"`
 	Name    string `json:"name"`
 	Version int    `json:"version"`
+}
+
+// MadeWithLook is a look a take was made with, as it was applied.
+type MadeWithLook struct {
+	ID      string `json:"id"`
+	Source  string `json:"source"` // mine | starter
+	Name    string `json:"name"`
+	Version int    `json:"version"`
+}
+
+// LookStatus is how a look of made_with.looks compares now: current, changed, deleted (own) or missing (starter).
+type LookStatus struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
 }
 
 // MadeWithLora is a LoRA a take was made with.
@@ -160,6 +176,9 @@ type TakeReuse struct {
 	ElementsStatus []ElementStatus `json:"elements_status,omitempty"`
 	// reuse only: one per made_with.loras entry
 	LorasStatus []LoraStatus `json:"loras_status,omitempty"`
+	// reuse only: the ids of made_with.looks (send them back as RunRequest.looks), and how each compares now
+	Looks       []string     `json:"looks,omitempty"`
+	LooksStatus []LookStatus `json:"looks_status,omitempty"`
 }
 
 // TakePatch renames or stars a take: at least one field, no others.

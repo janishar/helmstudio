@@ -1,0 +1,11 @@
+{
+  "workflow_id": "qwen-image",
+  "inputs": {
+    "prompt.text": "a red fox in the snow",
+    "seed.seed": -1
+  },
+  "looks": [
+    "qwen-image/window-light",
+    "10000000-0000-4000-8000-000000000003"
+  ]
+}

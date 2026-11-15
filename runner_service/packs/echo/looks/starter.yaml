@@ -1,0 +1,11 @@
+# The fake family's starter looks: published verbatim as contracts/fixtures/registry/looks.valid.json.
+# grain names a LoRA file; where the fake host has no echo-grain.safetensors it is published with lora_id null.
+- id: soft-light
+  group: lighting
+  name: Soft light
+  text: "soft diffuse light"
+- id: grain
+  group: film
+  name: Grain
+  text: "fine film grain"
+  lora: {file: echo-grain.safetensors, strength: 0.5}

@@ -69,11 +69,11 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		if err != nil {
 			return err
 		}
-		rows, detail := expand(workflow, body, randomSeedStart)
+		rows, looks, detail := expand(workflow, body, randomSeedStart)
 		if detail != "" {
 			return network.NewUnprocessableError(detail, nil)
 		}
-		graphs, details, lib, err := s.runGraphs(ctx, tx, caller.ID, workflow, rows, nil)
+		graphs, details, lib, err := s.runGraphs(ctx, tx, caller.ID, workflow, rows, looks, nil)
 		if err != nil {
 			return err
 		}
@@ -111,18 +111,21 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		}
 		batchID := utility.NewID()
 		if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
-			inputs, workflow_version, elements) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, batchID, caller.ID, sessionID, title,
-			workflow.ID, workflow.Title, workflow, base, version, lib); err != nil {
+			inputs, workflow_version, elements, looks) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`, batchID, caller.ID,
+			sessionID, title, workflow.ID, workflow.Title, workflow, base, version, lib.Elements, lib.Looks); err != nil {
 			return err
 		}
 		numbers := make([]int, len(rows))
 		submitRows := make([]message.SubmitRow, len(rows))
+		rowLooks := make([][]byte, len(rows))
 		for i, inputs := range rows {
 			numbers[i] = i + 1
 			submitRows[i] = message.SubmitRow{Row: i + 1, Inputs: inputs}
+			rowLooks[i] = looksJSON(looks[i])
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO batch_rows (batch_id, n, owner_id, inputs)
-			SELECT $1, n, $2, inputs FROM unnest($3::int[], $4::jsonb[]) AS u(n, inputs)`, batchID, caller.ID, numbers, rows); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO batch_rows (batch_id, n, owner_id, inputs, looks)
+			SELECT $1, n, $2, inputs, looks FROM unnest($3::int[], $4::jsonb[], $5::jsonb[]) AS u(n, inputs, looks)`,
+			batchID, caller.ID, numbers, rows, rowLooks); err != nil {
 			return err
 		}
 		if err := appendBatchEvent(ctx, tx, batchID, "batch", 0); err != nil {
@@ -190,6 +193,7 @@ func (s *Service) rowDTO(row model.BatchRow) dto.BatchRow {
 	out := dto.BatchRow{Row: row.Row, Attempt: row.Attempt, Inputs: map[string]any{}, Status: row.Status, RunID: row.RunID,
 		TakeIDs: row.TakeIDs, Error: row.Error, StartedAt: row.StartedAt, FinishedAt: row.FinishedAt}
 	_ = json.Unmarshal(row.Inputs, &out.Inputs)
+	_ = json.Unmarshal(row.Looks, &out.Looks)
 	if len(row.TakeKeys) > 0 {
 		out.ThumbURL = s.signer.SignPtr(&row.TakeKeys[0])
 	}
@@ -636,9 +640,10 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			Version   *int            // a user workflow's version at Submit
 			Pipeline  json.RawMessage // a pipeline batch's storedPipeline
 			Elements  []element       // the copy of every element the batch mentions
+			Looks     []lookItem      // the copy of every look its rows or steps use
 		}
 		batch, err := one[batchRecord](ctx, tx, `SELECT owner_id::text, session_id::text, status, control, snapshot,
-			workflow_version, pipeline, coalesce(elements, '[]') FROM batches
+			workflow_version, pipeline, coalesce(elements, '[]'), coalesce(looks, '[]') FROM batches
 			WHERE id = $1 FOR UPDATE`, req.BatchID) // serialises two asks under one key
 		var workflow registry.Workflow
 		var stored storedPipeline
@@ -664,8 +669,9 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 		// (a pipeline step's from the request: pipelines fills its binds from earlier steps' takes)
 		var attempt int
 		var stored0 map[string]any
-		if err := tx.QueryRow(ctx, `SELECT attempt, inputs FROM batch_rows WHERE batch_id = $1 AND n = $2`, req.BatchID,
-			req.Row).Scan(&attempt, &stored0); errors.Is(err, pgx.ErrNoRows) {
+		var looks []string // the row's looks (a workflow batch), else its step's
+		if err := tx.QueryRow(ctx, `SELECT attempt, inputs, looks FROM batch_rows WHERE batch_id = $1 AND n = $2`, req.BatchID,
+			req.Row).Scan(&attempt, &stored0, &looks); errors.Is(err, pgx.ErrNoRows) {
 			refused = notFound
 			return nil
 		} else if err != nil {
@@ -679,6 +685,9 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				return nil
 			}
 			version = stored.version(workflow.ID)
+			if key, ok := parsePipelineKey(req.IdempotencyKey); ok {
+				looks = stored.Doc.Nodes[key.Step].Looks
+			}
 		} else {
 			if !strings.HasSuffix(req.IdempotencyKey, fmt.Sprintf(":%d:step:0:0", attempt)) { // one step, no loops or branches
 				refused = invalid(fmt.Sprintf("idempotency_key must be <batch_id>:<row>:%d:step:0:0 (the row's attempt)", attempt))
@@ -689,7 +698,8 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE idempotency_key = $1`, req.IdempotencyKey)
 		created := errors.Is(err, errNotFound)
 		if created {
-			graphs, details, _, err := s.runGraphs(ctx, tx, req.OwnerID, workflow, []map[string]any{req.Inputs}, &batch.Elements)
+			graphs, details, _, err := s.runGraphs(ctx, tx, req.OwnerID, workflow, []map[string]any{req.Inputs},
+				[][]string{looks}, &libraryCopy{Elements: batch.Elements, Looks: batch.Looks})
 			if err != nil {
 				return err
 			}
@@ -703,7 +713,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				refused = invalid(detail)
 				return nil
 			}
-			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, graphs[0], batch.Status, batch.Control, req); err != nil {
+			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, graphs[0], looks, batch.Status, batch.Control, req); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -726,7 +736,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 // createBatchRun stores the run of a batch row's step: cancelled for a stopped batch, failed with no eligible host,
 // else queued (lane batch); its status event goes to the session's log, and a terminal one to pipelines.
 func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, workflow registry.Workflow, version *int,
-	built built, batchStatus, control string, req *message.RunsCreate) (model.Run, error) {
+	built built, looks []string, batchStatus, control string, req *message.RunsCreate) (model.Run, error) {
 	graph, _ := json.Marshal(built.Nodes)
 	status, failure := "queued", (*string)(nil)
 	if control == "stop" || batchStatus == "stopped" {
@@ -737,11 +747,11 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	}
 	inputs, _ := json.Marshal(req.Inputs)
 	run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions, loras)
+		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions, loras, looks)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
-		$13, $14, $15, $16) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
+		$13, $14, $15, $16, $17) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env, inputs, status,
 		failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion),
-		lorasJSON(built.Loras))
+		lorasJSON(built.Loras), looksJSON(looks))
 	if err != nil {
 		return run, err
 	}

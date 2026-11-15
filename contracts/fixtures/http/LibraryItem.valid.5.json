@@ -1,0 +1,26 @@
+{
+  "id": "qwen-image/kodak-portra",
+  "kind": "look",
+  "group": "colour",
+  "name": "Portra",
+  "handle": null,
+  "text": "",
+  "images": [],
+  "thumb_url": null,
+  "version": 1,
+  "created_at": "2026-11-14T10:00:00Z",
+  "updated_at": "2026-11-14T10:00:00Z",
+  "source": "starter",
+  "family": "qwen-image",
+  "loras": [
+    {
+      "lora": null,
+      "name": "kodak-portra",
+      "strength": 1
+    }
+  ],
+  "needs": [
+    "lora"
+  ],
+  "from_take_id": null
+}

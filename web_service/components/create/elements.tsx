@@ -4,11 +4,19 @@
 // images from the gallery picker). Saved through /v1/studio/library.
 import { useEffect, useState } from "react";
 import { Pencil, X } from "lucide-react";
-import { ErrorNote, Info, Modal } from "@/components/kit";
+import { ErrorNote, Modal } from "@/components/kit";
+import { VisualPicker } from "@/components/create/visual-picker";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
-import { GROUPS, groupLabel, libraryError, reloadLibrary, useLibrary } from "@/lib/library";
+import {
+  GROUPS,
+  groupLabel,
+  libraryError,
+  reloadLibrary,
+  useLibrary,
+  useLooks,
+} from "@/lib/library";
 import { HANDLE, handleFrom } from "@/lib/mentions";
 
 type Item = S<"LibraryItem">;
@@ -59,6 +67,8 @@ function Picker({
   inPrompt: string[];
 }) {
   const lib = useLibrary();
+  // elements and own looks share the 200 library items
+  const ownLooks = useLooks()?.filter((x) => x.source === "mine").length ?? 0;
   // the list may be stale (another tab): read it again on each opening
   useEffect(() => void reloadLibrary(), []);
   const [group, setGroup] = useState<S<"LibraryGroup"> | "">("");
@@ -81,16 +91,16 @@ function Picker({
       setError(message(err));
     }
   }
-  const tab = (on: boolean) =>
-    `h-8 rounded-full px-3 text-[12px] ${on ? "bg-t1 font-semibold text-panel" : "bg-s3 font-medium"}`;
   return (
-    <div className="flex max-h-[76dvh] flex-col gap-3.5">
-      <div className="-mt-11 flex items-center justify-end gap-2">
-        <Info>
+    <VisualPicker
+      info={
+        <>
           An element is a name, 1 to 4 images from your gallery and optional text. Type @ in any
           prompt to use it: it adds its images as references where the workflow takes them, and its
           text after the prompt.
-        </Info>
+        </>
+      }
+      action={
         <button
           type="button"
           className="chip bevel bg-a1 font-semibold text-on1"
@@ -98,155 +108,132 @@ function Picker({
         >
           New element
         </button>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="el-q" className="sr-only">
-          Search names and handles
-        </label>
-        <input
-          id="el-q"
-          type="search"
-          placeholder="Search names and @handles"
-          value={q}
-          maxLength={80}
-          autoFocus
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
-          className="h-9 flex-[1_1_220px] rounded-xl border border-s5 bg-s1 px-3 text-t1"
-        />
-        <div role="tablist" aria-label="Group" className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!group}
-            className={tab(!group)}
-            onClick={() => setGroup("")}
-          >
-            All
-          </button>
-          {GROUPS.map(([g, , plural]) => (
-            <button
-              key={g}
-              type="button"
-              role="tab"
-              aria-selected={group === g}
-              className={tab(group === g)}
-              onClick={() => setGroup(g)}
-            >
-              {plural}
-            </button>
-          ))}
-        </div>
-      </div>
-      {error && <ErrorNote>{error}</ErrorNote>}
-      <div className="min-h-32 overflow-y-auto p-0.5">
-        {lib === null &&
-          (libraryError() ? (
-            <ErrorNote onRetry={() => void reloadLibrary()}>{libraryError()}</ErrorNote>
-          ) : (
-            <p role="status" className="text-t2">
-              Loading…
+      }
+      search={{
+        id: "el-q",
+        label: "Search names and handles",
+        placeholder: "Search names and @handles",
+        value: q,
+        onChange: setQ,
+        className: "flex-[1_1_220px]",
+      }}
+      filters={[
+        {
+          label: "Group",
+          kind: "tab",
+          options: [["", "All"], ...GROUPS.map(([g, , plural]) => [g, plural] as const)],
+          value: group,
+          onChange: setGroup,
+        },
+      ]}
+      error={error}
+      status={
+        <>
+          {lib === null &&
+            (libraryError() ? (
+              <ErrorNote onRetry={() => void reloadLibrary()}>{libraryError()}</ErrorNote>
+            ) : (
+              <p role="status" className="text-t2">
+                Loading…
+              </p>
+            ))}
+          {lib?.length === 0 && (
+            <p className="py-8 text-center text-t2">
+              No elements yet. Make one from images of your gallery with New element.
             </p>
-          ))}
-        {lib?.length === 0 && (
-          <p className="py-8 text-center text-t2">
-            No elements yet. Make one from images of your gallery with New element.
+          )}
+          {!!lib?.length && !shown.length && (
+            <p className="py-8 text-center text-t2">No element matches.</p>
+          )}
+        </>
+      }
+      listLabel="Elements"
+      grid="grid-cols-1 gap-2.5 sm:grid-cols-2"
+      footer={
+        <>
+          <p className="m-0 text-[12px] text-t2">
+            Click an element to put its @handle in the prompt at the caret.
+            {lib ? ` ${lib.length + ownLooks} of 200.` : ""}
           </p>
-        )}
-        {!!lib?.length && !shown.length && (
-          <p className="py-8 text-center text-t2">No element matches.</p>
-        )}
-        <ul
-          aria-label="Elements"
-          className="m-0 grid list-none grid-cols-1 gap-2.5 p-0 sm:grid-cols-2"
-        >
-          {shown.map((e) => {
-            const on = !!e.handle && inPrompt.includes(e.handle);
-            const n = e.images.length;
-            return (
-              <li
-                key={e.id}
-                className={`flex items-center gap-3 rounded-[18px_18px_18px_8px] border p-2.5 ${on ? "border-a1 bg-s2" : "border-s5 bg-s1"}`}
-              >
+          <ElementEditor
+            open={editing !== null}
+            onClose={() => setEditing(null)}
+            item={editing === "new" ? undefined : (editing ?? undefined)}
+          />
+        </>
+      }
+    >
+      {shown.map((e) => {
+        const on = !!e.handle && inPrompt.includes(e.handle);
+        const n = e.images.length;
+        return (
+          <li
+            key={e.id}
+            className={`flex items-center gap-3 rounded-[18px_18px_18px_8px] border p-2.5 ${on ? "border-a1 bg-s2" : "border-s5 bg-s1"}`}
+          >
+            <button
+              type="button"
+              data-pick
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              title={`Put @${e.handle} in the prompt`}
+              onClick={() => {
+                if (e.handle) onInsert(e.handle);
+                onClose();
+              }}
+            >
+              {e.thumb_url ? (
+                <img
+                  src={safeUrl(e.thumb_url)}
+                  alt=""
+                  className="size-16 shrink-0 rounded-[10px] object-cover"
+                />
+              ) : (
+                <span className="grid size-16 shrink-0 place-items-center rounded-[10px] border border-dashed border-dash text-[10px] text-t2">
+                  no image
+                </span>
+              )}
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <b className={`mono truncate font-medium ${on ? "text-a1" : ""}`}>@{e.handle}</b>
+                <small className="truncate text-[12px] text-t2">
+                  {deleting === e.id
+                    ? `Delete @${e.handle}? Takes made with it keep it.`
+                    : `${e.name} · ${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
+                </small>
+              </span>
+            </button>
+            {deleting === e.id ? (
+              <span className="flex gap-1.5">
+                <button type="button" className="chip h-7" onClick={() => setDeleting("")}>
+                  Cancel
+                </button>
+                <button type="button" className="chip h-7 text-bad" onClick={() => void remove(e)}>
+                  Delete
+                </button>
+              </span>
+            ) : (
+              <span className="flex flex-col gap-1">
                 <button
                   type="button"
-                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                  title={`Put @${e.handle} in the prompt`}
-                  onClick={() => {
-                    if (e.handle) onInsert(e.handle);
-                    onClose();
-                  }}
+                  aria-label={`Edit @${e.handle}`}
+                  className="grid size-7 place-items-center rounded-lg bg-s3 text-t2"
+                  onClick={() => setEditing(e)}
                 >
-                  {e.thumb_url ? (
-                    <img
-                      src={safeUrl(e.thumb_url)}
-                      alt=""
-                      className="size-16 shrink-0 rounded-[10px] object-cover"
-                    />
-                  ) : (
-                    <span className="grid size-16 shrink-0 place-items-center rounded-[10px] border border-dashed border-dash text-[10px] text-t2">
-                      no image
-                    </span>
-                  )}
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <b className={`mono truncate font-medium ${on ? "text-a1" : ""}`}>
-                      @{e.handle}
-                    </b>
-                    <small className="truncate text-[12px] text-t2">
-                      {deleting === e.id
-                        ? `Delete @${e.handle}? Takes made with it keep it.`
-                        : `${e.name} · ${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
-                    </small>
-                  </span>
+                  <Pencil size={13} aria-hidden />
                 </button>
-                {deleting === e.id ? (
-                  <span className="flex gap-1.5">
-                    <button type="button" className="chip h-7" onClick={() => setDeleting("")}>
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="chip h-7 text-bad"
-                      onClick={() => void remove(e)}
-                    >
-                      Delete
-                    </button>
-                  </span>
-                ) : (
-                  <span className="flex flex-col gap-1">
-                    <button
-                      type="button"
-                      aria-label={`Edit @${e.handle}`}
-                      className="grid size-7 place-items-center rounded-lg bg-s3 text-t2"
-                      onClick={() => setEditing(e)}
-                    >
-                      <Pencil size={13} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete @${e.handle}`}
-                      className="grid size-7 place-items-center rounded-lg bg-s3 text-t2"
-                      onClick={() => setDeleting(e.id)}
-                    >
-                      <X size={14} aria-hidden />
-                    </button>
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      <p className="m-0 text-[12px] text-t2">
-        Click an element to put its @handle in the prompt at the caret.
-        {lib ? ` ${lib.length} of 200.` : ""}
-      </p>
-      <ElementEditor
-        open={editing !== null}
-        onClose={() => setEditing(null)}
-        item={editing === "new" ? undefined : (editing ?? undefined)}
-      />
-    </div>
+                <button
+                  type="button"
+                  aria-label={`Delete @${e.handle}`}
+                  className="grid size-7 place-items-center rounded-lg bg-s3 text-t2"
+                  onClick={() => setDeleting(e.id)}
+                >
+                  <X size={14} aria-hidden />
+                </button>
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </VisualPicker>
   );
 }
 

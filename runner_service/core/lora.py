@@ -280,6 +280,8 @@ class Library:
         self.models, self.dir, self.store, self.host = models, cache / "loras", store, host
         self.cap = int(cache_gb * 2**30)
         self.shared: dict[str, Path] = {}  # sha256 → file
+        # every indexed file → its sha256 (one LoRA may have several names)
+        self.files: dict[Path, str] = {}
         self.entries: list[dict] = []  # the registry value's `loras`
 
     def scan(self, blocks: dict[str, dict]) -> list[dict]:
@@ -293,7 +295,7 @@ class Library:
             known = {}
         files = sorted({*self.models.glob("loras/*.safetensors"), *self.models.glob("*/loras/*.safetensors")})  # fmt: skip
         ignore = [g for b in blocks.values() for g in b["ignore"]]
-        self.shared, self.entries, kept = {}, [], {}
+        self.shared, self.files, self.entries, kept = {}, {}, [], {}
         for p in files:
             try:
                 tensors, meta = read_header(p, ignore)
@@ -308,6 +310,7 @@ class Library:
                 log.info("hashing shared LoRA %s (%.1f GB)", p, st.st_size / 2**30)
                 sha = sha256_file(p)
             kept[str(p)] = [*stamp, sha]
+            self.files[p] = sha
             if sha in self.shared:
                 continue  # the same file twice on this host is one LoRA
             # family detection: this runner's packs are one env, so the fake-last rule leaves name order

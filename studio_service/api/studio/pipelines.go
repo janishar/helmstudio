@@ -78,18 +78,45 @@ func (s *Service) stepWorkflows(ctx context.Context, tx pgx.Tx, docs ...dto.Pipe
 	return out, err
 }
 
-// pipelineProblemsNow checks doc as the caller in tx, against the live palette.
-func (s *Service) pipelineProblemsNow(ctx context.Context, tx pgx.Tx, doc dto.PipelineDoc) ([]dto.Problem, map[string]dto.WorkflowDoc, error) {
+// pipelineProblemsNow checks doc as the caller (ownerID) in tx, against the live palette, and the caller's looks and
+// LoRAs now.
+func (s *Service) pipelineProblemsNow(ctx context.Context, tx pgx.Tx, ownerID string, doc dto.PipelineDoc) ([]dto.Problem, map[string]dto.WorkflowDoc, error) {
 	workflows, err := s.stepWorkflows(ctx, tx, doc)
 	if err != nil {
 		return nil, nil, err
 	}
-	return pipelineProblems(doc, workflows, s.palette()), workflows, nil
+	looks, err := readLooks(ctx, tx, s.registry, ownerID, stepLookIDs(doc), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	families := map[string]map[string]string{}
+	for _, wf := range workflows {
+		if _, done := families[wf.Env]; !done {
+			if families[wf.Env], err = loraFamilies(ctx, tx, s.registry, ownerID, wf.Env, lookLoraIDs(looks)); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	return pipelineProblems(doc, workflows, s.palette(), looks, func(env string) map[string]string { return families[env] }),
+		workflows, nil
+}
+
+// stepLookIDs are the distinct look ids the document's steps name.
+func stepLookIDs(doc dto.PipelineDoc) []string {
+	var out []string
+	for _, node := range doc.Nodes {
+		for _, id := range node.Looks {
+			if !slices.Contains(out, id) {
+				out = append(out, id)
+			}
+		}
+	}
+	return out
 }
 
 // checkPipelineSave returns the document's problems, or the 422 when one blocks saving.
-func (s *Service) checkPipelineSave(ctx context.Context, tx pgx.Tx, doc dto.PipelineDoc) ([]dto.Problem, error) {
-	problems, _, err := s.pipelineProblemsNow(ctx, tx, doc)
+func (s *Service) checkPipelineSave(ctx context.Context, tx pgx.Tx, ownerID string, doc dto.PipelineDoc) ([]dto.Problem, error) {
+	problems, _, err := s.pipelineProblemsNow(ctx, tx, ownerID, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +204,7 @@ func (s *Service) GetPipeline(ctx context.Context, caller common.Caller, id stri
 		if err != nil {
 			return err
 		}
-		problems, _, err := s.pipelineProblemsNow(ctx, tx, pipelineDoc(row))
+		problems, _, err := s.pipelineProblemsNow(ctx, tx, caller.ID, pipelineDoc(row))
 		if err != nil {
 			return err
 		}
@@ -225,7 +252,7 @@ func (s *Service) insertPipeline(ctx context.Context, tx pgx.Tx, caller common.C
 	} else if count >= MaxPipelines {
 		return dto.Pipeline{}, network.NewConflictError(fmt.Sprintf("You have %d pipelines; delete some first.", MaxPipelines), nil)
 	}
-	problems, err := s.checkPipelineSave(ctx, tx, doc)
+	problems, err := s.checkPipelineSave(ctx, tx, caller.ID, doc)
 	if err != nil {
 		return dto.Pipeline{}, err
 	}
@@ -254,7 +281,7 @@ func (s *Service) ReplacePipeline(ctx context.Context, caller common.Caller, id 
 		}
 		doc := body.PipelineDoc
 		doc.Title = strings.TrimSpace(doc.Title)
-		problems, err := s.checkPipelineSave(ctx, tx, doc)
+		problems, err := s.checkPipelineSave(ctx, tx, caller.ID, doc)
 		if err != nil {
 			return err
 		}
@@ -320,7 +347,7 @@ func (s *Service) ValidatePipeline(ctx context.Context, caller common.Caller, do
 	}
 	var out dto.WorkflowValidation
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		problems, _, err := s.pipelineProblemsNow(ctx, tx, doc)
+		problems, _, err := s.pipelineProblemsNow(ctx, tx, caller.ID, doc)
 		out = dto.WorkflowValidation{Problems: problems, CanSave: !blocksSave(problems), CanRun: len(problems) == 0}
 		return err
 	})

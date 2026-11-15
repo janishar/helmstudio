@@ -92,6 +92,9 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/library/:id", c.getLibraryItemHandler)
 	group.PUT("/library/:id", c.replaceLibraryItemHandler)
 	group.DELETE("/library/:id", c.deleteLibraryItemHandler)
+	group.GET("/library/:id/:look_id", c.starterLookHandler) // :id is the starter look's family
+	group.PUT("/library/:id/:look_id", c.starterLookHandler)
+	group.DELETE("/library/:id/:look_id", c.starterLookHandler)
 }
 
 // MountNats registers studio.runs.create (the service's group is "studio"), pipelines_service's request for a batch
@@ -639,9 +642,19 @@ func (c *controller) batchEventsHandler(ctx *gin.Context) {
 
 // ------------------------------------------------------------------ the library
 
-// listLibraryHandler: GET /library?kind=&group=&q=&limit=.
+// listLibraryHandler: GET /library?kind=&group=&q=&source=&family=&workflow=&limit=.
 func (c *controller) listLibraryHandler(ctx *gin.Context) {
 	query, detail := ParseLibraryQuery(ctx.Query("kind"), ctx.Query("group"), ctx.Query("q"), ctx.Query("limit"))
+	query.Source, query.Family, query.Workflow = ctx.Query("source"), ctx.Query("family"), ctx.Query("workflow")
+	switch {
+	case detail != "":
+	case query.Source != "" && query.Source != "mine" && query.Source != "starter":
+		detail = "source must be mine or starter"
+	case query.Family != "" && !familySlug.MatchString(query.Family):
+		detail = "family must be a family id"
+	case query.Workflow != "" && !familySlug.MatchString(query.Workflow):
+		detail = "unknown workflow " + query.Workflow
+	}
 	if detail != "" {
 		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
 		return
@@ -650,21 +663,27 @@ func (c *controller) listLibraryHandler(ctx *gin.Context) {
 	reply(ctx, http.StatusOK, out, err)
 }
 
-// ParseLibraryQuery checks GET /library's query: q trimmed, a leading @ dropped, lower-cased; limit 1-200 (200).
+// familySlug is a family id (and the shape of a workflow id: a template slug or a UUID).
+var familySlug = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+
+// MaxLibraryList is the most items GET /library answers (own items and the starter looks).
+const MaxLibraryList = 1000
+
+// ParseLibraryQuery checks GET /library's query: q trimmed, a leading @ dropped, lower-cased; limit 1-1000 (1000).
 func ParseLibraryQuery(kind, group, q, limit string) (LibraryQuery, string) {
-	out := LibraryQuery{Kind: kind, Group: group, Q: strings.ToLower(strings.TrimPrefix(strings.TrimSpace(q), "@")), Limit: MaxLibraryItems}
+	out := LibraryQuery{Kind: kind, Group: group, Q: strings.ToLower(strings.TrimPrefix(strings.TrimSpace(q), "@")), Limit: MaxLibraryList}
 	switch {
-	case kind != "" && kind != "element":
-		return out, "kind must be element"
-	case group != "" && !slices.Contains(dto.LibraryGroups, group):
-		return out, "group must be one of " + strings.Join(dto.LibraryGroups, ", ")
+	case kind != "" && kind != "element" && kind != "look":
+		return out, "kind must be element or look"
+	case group != "" && !slices.Contains(dto.LibraryGroups, group) && !slices.Contains(dto.LookGroups, group):
+		return out, "group must be one of " + strings.Join(append(slices.Clone(dto.LibraryGroups), dto.LookGroups...), ", ")
 	case utf8.RuneCountInString(q) > 80:
 		return out, "q must be at most 80 characters"
 	}
 	if limit != "" {
 		n, err := strconv.Atoi(limit)
-		if err != nil || n < 1 || n > MaxLibraryItems {
-			return out, "limit must be a whole number from 1 to 200"
+		if err != nil || n < 1 || n > MaxLibraryList {
+			return out, "limit must be a whole number from 1 to 1000"
 		}
 		out.Limit = n
 	}
@@ -679,6 +698,21 @@ func (c *controller) createLibraryItemHandler(ctx *gin.Context) {
 		out, err = c.service.CreateLibraryItem(ctx.Request.Context(), common.MustCaller(ctx), body)
 	}
 	reply(ctx, http.StatusCreated, out, err)
+}
+
+// starterLookHandler: GET, PUT and DELETE /library/{family}/{look_id} — a starter look (writes are 409).
+func (c *controller) starterLookHandler(ctx *gin.Context) {
+	id := ctx.Param("id") + "/" + ctx.Param("look_id")
+	if !dto.LookID.MatchString(id) {
+		network.SendMixedError(ctx, errNotFound)
+		return
+	}
+	if ctx.Request.Method == http.MethodGet {
+		out, err := c.service.GetStarterLook(ctx.Request.Context(), id)
+		reply(ctx, http.StatusOK, out, err)
+		return
+	}
+	network.SendMixedError(ctx, c.service.WriteStarterLook(ctx.Request.Context(), id))
 }
 
 // getLibraryItemHandler: GET /library/{id}.

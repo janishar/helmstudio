@@ -3,7 +3,9 @@
 package dto
 
 import (
+	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -72,12 +74,29 @@ type WorkflowList struct {
 type RunRequest struct {
 	WorkflowID string         `json:"workflow_id"`
 	Inputs     map[string]any `json:"inputs"`
+	Looks      []string       `json:"looks"` // the chosen looks, every group together; a repeat counts once
 }
 
-// Validate wants a workflow id.
+// Validate wants a workflow id and at most 8 look ids.
 func (b *RunRequest) Validate() string {
 	if b.WorkflowID == "" {
 		return "workflow_id is required"
+	}
+	return CheckLookIDs("looks", b.Looks)
+}
+
+// MaxRunLooks is the most look ids a run (a batch row, a step) asks for.
+const MaxRunLooks = 8
+
+// CheckLookIDs checks a list of look ids at where: at most 8, each an own (UUID) or starter look id.
+func CheckLookIDs(where string, ids []string) string {
+	if len(ids) > MaxRunLooks {
+		return where + ": at most 8 looks"
+	}
+	for i, id := range ids {
+		if !LookID.MatchString(id) {
+			return fmt.Sprintf("%s[%d]: %q is not a look id", where, i+1, id)
+		}
 	}
 	return ""
 }
@@ -125,6 +144,8 @@ type Run struct {
 	BatchRow   *int           `json:"batch_row,omitempty"`
 	// a user workflow: the version it ran
 	WorkflowVersion *int `json:"workflow_version,omitempty"`
+	// the looks it was asked with, as requested
+	Looks []string `json:"looks,omitempty"`
 }
 
 // RunList is a session's runs, newest first.
@@ -219,6 +240,8 @@ type BatchRow struct {
 	Error      *string        `json:"error"`
 	StartedAt  *time.Time     `json:"started_at"`
 	FinishedAt *time.Time     `json:"finished_at"`
+	// a batch of one workflow: the row's looks
+	Looks []string `json:"looks,omitempty"`
 	// pipeline batches only (a nil interface is left out; a typed nil is null): *string, *BatchRowParked, []BatchCell
 	Node   any `json:"node,omitempty"`
 	Parked any `json:"parked,omitempty"`
@@ -296,6 +319,15 @@ type BatchCreate struct {
 	Inputs     map[string]any `json:"inputs"`
 	Rows       BatchRowsIn    `json:"rows"`
 	Seeds      *BatchSeeds    `json:"seeds"`
+	Looks      []string       `json:"looks"` // a batch of one workflow: the looks of every row without its own
+}
+
+// rowLooks reports whether a table column or grid axis is looks (each row's own looks).
+func (b *BatchCreate) rowLooks() bool {
+	if t := b.Rows.Table; t != nil && slices.Contains(t.Columns, "looks") {
+		return true
+	}
+	return b.Rows.Grid != nil && slices.ContainsFunc(b.Rows.Grid.Axes, func(a BatchAxis) bool { return a.Param == "looks" })
 }
 
 // paramKey is "<node id>.<param>" (a pipeline batch: "<inputs node>.<input>").
@@ -325,6 +357,11 @@ func (b *BatchCreate) Validate() string {
 		return "seeds.count must be 1 to 8"
 	case b.Seeds != nil && b.Seeds.Start != nil && (*b.Seeds.Start < 0 || *b.Seeds.Start > 1<<53-1):
 		return "seeds.start must be from 0 to 9007199254740991"
+	case b.PipelineID != "" && (b.Looks != nil || b.rowLooks()):
+		return "looks: a pipeline batch takes its looks from its steps"
+	}
+	if detail := CheckLookIDs("looks", b.Looks); detail != "" {
+		return detail
 	}
 	switch {
 	case rows.Lines != nil:
@@ -337,7 +374,7 @@ func (b *BatchCreate) Validate() string {
 	case rows.Table != nil:
 		seen := map[string]bool{}
 		for _, column := range rows.Table.Columns {
-			if !paramKey.MatchString(column) || seen[column] {
+			if !(paramKey.MatchString(column) || column == "looks") || seen[column] {
 				return "rows.table.columns must be distinct <node>.<param> names"
 			}
 			seen[column] = true
@@ -353,7 +390,7 @@ func (b *BatchCreate) Validate() string {
 			return "rows.grid.axes must have 1 or 2 axes"
 		}
 		for _, axis := range rows.Grid.Axes {
-			if !paramKey.MatchString(axis.Param) {
+			if !paramKey.MatchString(axis.Param) && axis.Param != "looks" {
 				return "rows.grid.axes[].param must be <node>.<param>"
 			}
 			if n := len(axis.Values); n < 1 || n > 500 {

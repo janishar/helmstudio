@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create · looks and the visual picker</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+/* organic layer */
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+.pk{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px;box-shadow:none!important}
+.pk i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.pk b{font-size:12px;font-weight:600}
+.pk small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.chip{height:32px;padding:0 12px;border-radius:999px;border:0;background:var(--s3);font-size:12px;font-weight:500}
+.ic{width:28px;height:28px;padding:0;border:0;border-radius:8px;background:var(--s3);font-size:12px;color:var(--t2)}
+.qt{height:32px;padding:0 10px 0 4px;border-radius:8px;border:0;background:var(--s3);display:flex;align-items:center;gap:8px;font-size:12px}
+.qt i{width:24px;height:24px;border-radius:6px;background:var(--ln);display:block}
+.qt small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.qt b{font-weight:600}
+.fl{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--t2)}
+.fl input,.fl textarea{height:38px;box-sizing:border-box;padding:0 12px;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px}
+.seg{height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--ln);background:transparent;font-size:12px}
+.seg[aria-pressed="true"]{border-color:var(--a1);background:var(--s1)}
+.ck{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--t1)}
+.ck input{margin:3px 0 0;accent-color:var(--a1)}
+.ck small{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="position: relative; display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<details open="open" style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">Qwen Image + LoRA · Edit · 1 reference</span>
+<div style="flex-grow: 1"></div>
+<div role="group" aria-label="View" style="display: flex; padding: 3px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
+<button aria-pressed="true" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--s5); font-weight: 500">Studio</button>
+<button aria-pressed="false" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Graph</button>
+</div>
+</div>
+
+<div style="flex-grow: 1; min-height: 360px; position: relative; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box">
+<div style="width: 100%; max-width: 760px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2)">Take</div>
+</div>
+
+<div style="border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span aria-label="Reference &lt;image1&gt;" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; border: 1px dashed var(--dash); background: var(--s1)"></span>&lt;image1&gt;</span>
+<span style="padding: 4px 10px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace">@fox</span>
+<button style="height: 32px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); font-size: 12px">Add from gallery</button>
+<button class="qt" aria-haspopup="dialog"><i></i><small>Elements</small><b>1 in prompt</b></button>
+<button class="qt" aria-haspopup="dialog"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box"></i><small>Film</small><b>Auto</b></button>
+<button class="qt" aria-haspopup="dialog"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box"></i><small>Camera</small><b>Auto</b></button>
+<button class="qt" aria-haspopup="dialog"><i></i><small>Colour</small><b>Noir</b></button>
+<button class="qt" aria-haspopup="dialog" aria-expanded="true" style="outline: 2px solid var(--a1)"><i></i><small>Lighting</small><b>Window +1</b></button>
+</div>
+<div style="font-size: 15px; line-height: 22px; min-height: 44px">Place the fox from <span style="padding: 1px 0; border-radius: 5px; background: var(--s5); box-shadow: 0 0 0 2px var(--s5)">@fox</span> in a cabin doorway at dusk</div>
+<p style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Mentions add @fox: &lt;image2&gt; + text<br>Looks add Noir: text + &lt;image3&gt; + LoRA noir-lut · Window: text · Practicals: text</p>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Base · int8</button>
+<button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Auto · 1 MP</button>
+<div style="flex-grow: 1"></div>
+<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Generate</span></button>
+</div>
+</div>
+</main>
+
+<aside aria-label="Inspector" style="flex: 1 1 320px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2); display: flex; align-items: center">LoRA<span style="flex-grow: 1"></span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400">1 / 8</span></h2>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
+<div style="display: flex; justify-content: space-between; gap: 8px"><span>[YOUR LORA NAME]</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">0.80</span></div>
+<label for="lora1" style="font-size: 12px; color: var(--t2)">Strength · rank 32 · adapter</label>
+<input id="lora1" type="range" min="-4" max="4" step="0.05" value="0.8" style="width: 100%; accent-color: var(--a1)">
+</div>
+<span style="font-size: 12px; color: var(--t2)">A chosen look's LoRAs join after these, at the look's strength; a LoRA already here keeps yours.</span>
+</div>
+</aside>
+
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 960px; background: color-mix(in srgb, var(--g) 70%, transparent)"></div>
+<section role="dialog" aria-label="Looks" style="position: absolute; left: 50%; top: 480px; transform: translate(-50%, -50%); width: 880px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600">Looks<button class="i" aria-label="More information" title="A look adds its text after the prompt, its images as references and its LoRAs to the LoRA stack, at its strength. Starter looks come with the models; yours you save from a take or make here.">i</button></h2>
+<button class="chip" style="background: var(--a1); color: var(--on1); font-weight: 600">New look</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+<input aria-label="Search names" placeholder="Search names" style="flex: 1 1 200px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--a1); background: var(--s1); color: var(--t1); font: inherit; font-size: 13px">
+<div role="tablist" aria-label="Group" style="display: flex; gap: 6px">
+<button class="chip" role="tab" aria-selected="false">Film</button><button class="chip" role="tab" aria-selected="false">Camera</button><button class="chip" role="tab" aria-selected="false">Colour</button><button class="chip" role="tab" aria-selected="true" style="background: var(--t1); color: var(--p0); font-weight: 600">Lighting</button>
+</div>
+<div role="group" aria-label="Source" style="display: flex; gap: 6px">
+<button class="chip" aria-pressed="true" style="background: var(--t1); color: var(--p0); font-weight: 600">All</button><button class="chip" aria-pressed="false">Starter</button><button class="chip" aria-pressed="false">Mine</button>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px">
+<button class="pk" aria-pressed="false"><i>no look</i><b>Auto</b><small>nothing added</small></button>
+<button class="pk" aria-pressed="true" style="position: relative"><span style="position: absolute; left: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%; background: var(--a1); color: var(--on1); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">1</span><i style="border: 2px solid var(--a1)">pack image</i><b>Window</b><small>text · starter</small></button>
+<button class="pk" aria-pressed="false"><i>pack image</i><b>Silhouette</b><small>text · starter</small></button>
+<button class="pk" aria-pressed="true" style="position: relative"><span style="position: absolute; left: 6px; top: 6px; width: 20px; height: 20px; border-radius: 50%; background: var(--a1); color: var(--on1); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center">2</span><i style="border: 2px solid var(--a1)">pack image</i><b>Practicals</b><small>text · starter</small></button>
+<div class="pk" style="position: relative"><i>its take</i><b>[YOUR LOOK]</b><small>text + LoRA</small><span style="position: absolute; right: 6px; top: 6px; display: flex; gap: 4px"><button class="ic" aria-label="Edit [YOUR LOOK]" style="width: 24px; height: 24px">✎</button><button class="ic" aria-label="Delete [YOUR LOOK]" style="width: 24px; height: 24px">×</button></span></div>
+<button class="pk" aria-pressed="false" disabled style="opacity: 0.5; cursor: not-allowed"><i>pack image</i><b>[LTX LOOK]</b><small>LoRA ltx-grain is for ltx-2.5</small></button>
+<button class="pk" aria-pressed="false" disabled style="opacity: 0.5; cursor: not-allowed"><i>pack image</i><b>[HOSTLESS LOOK]</b><small>LoRA kodak-portra is on no live host</small></button>
+<div class="pk"><i>its take</i><b>[OLD LOOK]</b><small style="font-family: Inter, sans-serif; font-size: 11px">Delete [OLD LOOK]? Takes made with it keep it.</small><small><button class="chip" style="height: 24px; padding: 0 8px; font-size: 11px">Cancel</button> <button class="chip" style="height: 24px; padding: 0 8px; font-size: 11px; color: #ff8a80">Delete</button></small></div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">2 chosen · up to 8 in all</span>
+<span style="flex-grow: 1"></span>
+<button style="height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px">Cancel</button>
+<button style="height: 36px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-size: 13px; font-weight: 600">Use 2</button>
+</div>
+<p style="margin: 0; font-size: 12px; color: var(--t2)">Looks that do not fit this workflow are greyed with the reason. Starter looks are read-only: save your own from a take. Auto adds nothing.</p>
+</section>
+
+<section aria-label="Save as look, edit a look, and what a take was made with" style="flex: 1 1 100%; position: relative; min-height: 960px; border-top: 1px solid var(--s3)">
+<span style="position: absolute; left: 40px; top: 28px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">The gallery's Save as look, and a look's ✎ in the picker (or New look), open these</span>
+
+<section role="dialog" aria-label="Save as look" style="position: absolute; left: 40px; top: 72px; width: 560px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600">Save as look</h2>
+<label class="fl">Name<input value="Cabin dusk"></label>
+<div class="fl">Group
+<div role="group" aria-label="Group" style="display: flex; gap: 6px">
+<button class="seg" aria-pressed="false">Film</button><button class="seg" aria-pressed="false">Camera</button><button class="seg" aria-pressed="true">Colour</button><button class="seg" aria-pressed="false">Lighting</button>
+</div>
+</div>
+<div class="fl">From this take
+<label class="ck"><input type="checkbox" checked><span>Its prompt, as typed<small>a cabin in the woods at dusk, warm window glow</small></span></label>
+<label class="ck"><input type="checkbox" checked><span>Its LoRAs, at their strengths<small>ink-wash 0.80 · noir-lut 0.60</small></span></label>
+<label class="ck"><input type="checkbox"><span>The take itself as a reference image</span></label>
+</div>
+<p style="margin: 0; font-size: 12px; color: var(--t2)">A look is chosen from the composer's tiles: its text goes after the prompt, its LoRAs join the LoRA stack. The take is its picture.</p>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="flex-grow: 1"></span>
+<button style="height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px">Cancel</button>
+<button style="height: 36px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-size: 13px; font-weight: 600">Save</button>
+</div>
+</section>
+
+<section role="dialog" aria-label="Edit look" style="position: absolute; left: 640px; top: 72px; width: 600px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 15px; font-weight: 600">Edit look</h2>
+<label class="fl">Name<input value="Noir"></label>
+<div class="fl">Group
+<div role="group" aria-label="Group" style="display: flex; gap: 6px">
+<button class="seg" aria-pressed="false">Film</button><button class="seg" aria-pressed="false">Camera</button><button class="seg" aria-pressed="true">Colour</button><button class="seg" aria-pressed="false">Lighting</button>
+</div>
+</div>
+<label class="fl"><span style="display: flex; justify-content: space-between">Text<span style="font-family: 'JetBrains Mono', monospace">29 / 2000</span></span><textarea rows="2" style="height: auto; padding: 8px 12px; resize: none">black and white, hard shadows</textarea></label>
+<div class="fl"><span style="display: flex; justify-content: space-between">Images<span style="font-family: 'JetBrains Mono', monospace">1 / 4</span></span>
+<ol aria-label="Images, in order" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+<li style="position: relative; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1)"><button aria-label="Remove image 1" style="position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px">×</button></li>
+<li><button style="width: 100%; height: 100%; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); font-size: 12px">Add from gallery</button></li>
+</ol>
+</div>
+<div class="fl"><span style="display: flex; justify-content: space-between">LoRAs<span style="font-family: 'JetBrains Mono', monospace">1 / 4</span></span>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3); color: var(--t1)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span>noir-lut</span><span style="display: flex; align-items: center; gap: 6px"><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">0.60</span><button class="ic" aria-label="Remove noir-lut" style="width: 22px; height: 22px">×</button></span></div>
+<input aria-label="Strength of noir-lut" type="range" min="-4" max="4" step="0.05" value="0.6" style="width: 100%; accent-color: var(--a1)">
+</div>
+<button style="height: 36px; border-radius: 10px; border: 1px dashed var(--dash); background: transparent; color: var(--t1); font-size: 13px">Add LoRA</button>
+</div>
+<p style="margin: 0; font-size: 12px; color: var(--t2)">Takes already made keep the version they used.</p>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="flex-grow: 1"></span>
+<button style="height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px">Cancel</button>
+<button style="height: 36px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-size: 13px; font-weight: 600">Save</button>
+</div>
+</section>
+
+<div aria-label="A take's details and Reuse" style="position: absolute; left: 40px; top: 560px; width: 560px; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; background: var(--p0); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Made with</h2>
+<div class="row"><span>Looks</span><span>Noir (colour) · Window (lighting)</span></div>
+<div class="row"><span>LoRAs</span><span>[YOUR LORA NAME] · 0.80 · adapter<br>noir-lut · 0.60 · adapter</span></div>
+<p role="status" style="margin: 4px 0 0; font-size: 12px; color: var(--t2)">After Reuse: Since this take: look Noir was edited: a new run uses it as it is now; look Window is on no live host now, so it is left out.</p>
+</div>
+
+<div aria-label="A cap error" style="position: absolute; left: 640px; top: 760px; width: 600px; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; gap: 8px"><button class="qt"><i></i><small>Film</small><b>Portra +2</b></button></div>
+<p role="alert" style="margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #ff8a80">lora.rows: at most 8 LoRAs; 7 used, look Portra +2 do not fit</p>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1920}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>

@@ -43,6 +43,7 @@ type expansion struct {
 	Inputs   map[string]any               `json:"-"`
 	Typed    map[string]any               `json:"typed,omitempty"`
 	Elements []gallerydto.MadeWithElement `json:"elements,omitempty"`
+	Looks    []gallerydto.MadeWithLook    `json:"looks,omitempty"`
 }
 
 // isWord is an ASCII word character (so bytes, runes and UTF-16 units agree).
@@ -164,14 +165,20 @@ func referenceRows(nodes map[string]registry.Node, schemas map[string]registry.N
 	return "", registry.Param{}, "", false
 }
 
-// expandMentions expands every mention of a graph whose params hold the merged, checked values against lib (the
-// owner's elements, deleted takes left out); sizes are the user's row takes' [width, height] as studio knows them. It
-// changes nothing; the errors are the 422 details.
+// expandMentions is the one library resolver (README, Mentions and Looks): it expands every mention of a graph whose
+// params hold the merged, checked values against lib (the owner's elements, deleted takes left out) and applies the
+// chosen looks (RunRequest.looks) out of looks (those the owner can use now, or a batch's copy); sizes are the user's
+// row takes' [width, height] as studio knows them, loras the LoRA id → family of the LoRAs the owner can use now in the
+// workflow's env. It changes nothing; the errors are the 422 details.
 func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, lib []element,
-	sizes map[string][2]int) (expansion, []string) {
+	sizes map[string][2]int, looks []lookItem, chosen []string, loras map[string]string) (expansion, []string) {
 	byHandle := map[string]element{}
 	for _, e := range lib {
 		byHandle[e.Handle] = e
+	}
+	byID := map[string]lookItem{}
+	for _, l := range looks {
+		byID[l.ID] = l
 	}
 	all := prompts(nodes, schemas)
 	var errs, used []string
@@ -184,12 +191,45 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 			}
 		}
 	}
+	var picked []lookItem
+	first := map[string]int{} // look id → its first place in the request, from 1
+	for i, id := range chosen {
+		if _, seen := first[id]; seen {
+			continue
+		}
+		first[id] = i + 1
+		if l, ok := byID[id]; !ok {
+			errs = append(errs, fmt.Sprintf("looks[%d]: unknown look %s", i+1, id))
+		} else {
+			picked = append(picked, l)
+		}
+	}
 	if len(errs) > 0 {
 		return expansion{}, errs
 	}
-	out := expansion{Inputs: map[string]any{}, Typed: map[string]any{}, Elements: []gallerydto.MadeWithElement{}}
+	for _, l := range picked {
+		if reason := lookFit(nodes, schemas, "look", l, loras); reason != "" {
+			errs = append(errs, fmt.Sprintf("looks[%d]: look %s does not fit this workflow (%s)", first[l.ID], l.Name, reason))
+		}
+	}
+	if len(errs) > 0 {
+		return expansion{}, errs
+	}
+	out := expansion{Inputs: map[string]any{}, Typed: map[string]any{}, Elements: []gallerydto.MadeWithElement{},
+		Looks: []gallerydto.MadeWithLook{}}
+	type adding struct {
+		Label, Key string
+		Images     []string
+	}
+	var adds []adding
+	for _, handle := range used {
+		adds = append(adds, adding{"@" + handle, "e:" + handle, byHandle[handle].Images})
+	}
+	for _, l := range picked {
+		adds = append(adds, adding{"look " + l.Name, "l:" + l.ID, l.Images})
+	}
 	tokens := map[string][]string{}
-	if id, param, field, ok := referenceRows(nodes, schemas); ok && len(used) > 0 {
+	if id, param, field, ok := referenceRows(nodes, schemas); ok && len(adds) > 0 {
 		limit := 100.0
 		if param.Max != nil {
 			limit = *param.Max
@@ -213,10 +253,10 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 		}
 		var over []string
 		full := -1
-		for _, handle := range used {
+		for _, add := range adds {
 			var fresh []string
-			for _, takeID := range byHandle[handle].Images {
-				if _, in := at[takeID]; !in {
+			for _, takeID := range add.Images {
+				if _, in := at[takeID]; !in && !slices.Contains(fresh, takeID) {
 					fresh = append(fresh, takeID)
 				}
 			}
@@ -225,7 +265,7 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 					full = len(rows)
 				}
 				if len(fresh) > 0 {
-					over = append(over, fmt.Sprintf("@%s +%d", handle, len(fresh)))
+					over = append(over, fmt.Sprintf("%s +%d", add.Label, len(fresh)))
 				}
 				continue
 			}
@@ -233,8 +273,8 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 				rows = append(rows, map[string]any{field: map[string]any{"take_id": takeID}})
 				at[takeID] = len(rows)
 			}
-			for _, takeID := range byHandle[handle].Images {
-				tokens[handle] = append(tokens[handle], strings.ReplaceAll(param.Mention, "{n}", strconv.Itoa(at[takeID])))
+			for _, takeID := range add.Images {
+				tokens[add.Key] = append(tokens[add.Key], strings.ReplaceAll(param.Mention, "{n}", strconv.Itoa(at[takeID])))
 			}
 		}
 		if len(over) > 0 {
@@ -246,14 +286,27 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 			pinCanvases(nodes, schemas, before, field, sizes, out)
 		}
 	}
-	for _, p := range all {
+	if detail := addLookLoras(nodes, schemas, picked, out); detail != "" {
+		return expansion{}, []string{detail}
+	}
+	var lines []string
+	for _, l := range picked {
+		parts := tokens["l:"+l.ID]
+		if l.Text != "" {
+			parts = append([]string{l.Text}, parts...)
+		}
+		if line := strings.Join(parts, " "); line != "" && !slices.Contains(lines, line) {
+			lines = append(lines, line)
+		}
+	}
+	for i, p := range all {
 		var b strings.Builder
 		for _, x := range p.Parts {
 			if x.Mention == "" {
 				b.WriteString(strings.ReplaceAll(x.Text, "@@", "@"))
 				continue
 			}
-			b.WriteString(strings.Join(append([]string{byHandle[x.Mention].Name}, tokens[x.Mention]...), " "))
+			b.WriteString(strings.Join(append([]string{byHandle[x.Mention].Name}, tokens["e:"+x.Mention]...), " "))
 		}
 		var notes []string
 		for _, handle := range mentioned(p.Parts) {
@@ -264,9 +317,13 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 		if len(notes) > 0 {
 			b.WriteString("\n\n" + strings.Join(notes, "\n"))
 		}
-		text, path := b.String(), p.Node+"."+p.Param.Name
+		text, what := b.String(), "elements"
+		if i == 0 && len(lines) > 0 { // look lines go to the first prompt param only
+			text, what = strings.Join(slices.DeleteFunc([]string{text, strings.Join(lines, "\n")}, func(s string) bool { return s == "" }), "\n\n"), "elements and looks"
+		}
+		path := p.Node + "." + p.Param.Name
 		if n := utf8.RuneCountInString(text); p.Param.Max != nil && float64(n) > *p.Param.Max {
-			errs = append(errs, fmt.Sprintf("%s: at most %s characters once elements are added (%d)", path, format(*p.Param.Max), n))
+			errs = append(errs, fmt.Sprintf("%s: at most %s characters once %s are added (%d)", path, format(*p.Param.Max), what, n))
 		} else if text != p.Value {
 			out.Inputs[path], out.Typed[path] = text, p.Value
 		}
@@ -278,7 +335,95 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 		e := byHandle[handle]
 		out.Elements = append(out.Elements, gallerydto.MadeWithElement{ID: e.ID, Handle: e.Handle, Name: e.Name, Version: e.Version})
 	}
+	for _, l := range picked {
+		out.Looks = append(out.Looks, gallerydto.MadeWithLook{ID: l.ID, Source: l.Source, Name: l.Name, Version: l.Version})
+	}
 	return out, nil
+}
+
+// addLookLoras appends the picked looks' LoRAs to the look stack's rows (README, Looks: resolving, step 4) at their
+// saved strength, clamped; a LoRA already in any user row, or added by an earlier look, is skipped. It returns the
+// 422 detail when they pass the rows' max.
+func addLookLoras(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, picked []lookItem, out expansion) string {
+	if !slices.ContainsFunc(picked, func(l lookItem) bool { return len(l.Loras) > 0 }) {
+		return ""
+	}
+	id, param, ok := lookStack(nodes, schemas)
+	if !ok {
+		return "" // a look with LoRAs did not fit (lookFit)
+	}
+	present := map[string]bool{} // the user's rows win
+	for _, nodeID := range slices.Sorted(maps.Keys(nodes)) {
+		node := nodes[nodeID]
+		schema, known := schemas[node.Kind]
+		if !known || node.Bypass {
+			continue
+		}
+		for _, p := range schema.Params {
+			field := p.LoraField()
+			items, _ := valueOf(node, p).([]any)
+			for _, item := range items {
+				fields, _ := item.(map[string]any)
+				if ref, ok := fields[field].(map[string]any); ok && field != "" {
+					if loraID, ok := ref["lora_id"].(string); ok {
+						present[loraID] = true
+					}
+				}
+			}
+		}
+	}
+	field, path := param.LoraField(), id+"."+param.Name
+	limit := 100.0
+	if param.Max != nil {
+		limit = *param.Max
+	}
+	lo, hi, hasStrength := strengthRange(param)
+	before, _ := valueOf(nodes[id], param).([]any)
+	if before == nil {
+		before = []any{}
+	}
+	rows := slices.Clone(before)
+	var over []string
+	full := -1
+	for _, l := range picked {
+		var fresh []lookLora
+		for _, x := range l.Loras {
+			if x.LoraID != nil && !present[*x.LoraID] && !slices.ContainsFunc(fresh, func(y lookLora) bool { return *y.LoraID == *x.LoraID }) {
+				fresh = append(fresh, x)
+			}
+		}
+		if full >= 0 || float64(len(rows)+len(fresh)) > limit {
+			if full < 0 {
+				full = len(rows)
+			}
+			if len(fresh) > 0 {
+				over = append(over, fmt.Sprintf("look %s +%d", l.Name, len(fresh)))
+			}
+			continue
+		}
+		for _, x := range fresh {
+			row := map[string]any{field: map[string]any{"lora_id": *x.LoraID}}
+			if hasStrength {
+				v := x.Strength
+				if lo != nil {
+					v = max(v, *lo)
+				}
+				if hi != nil {
+					v = min(v, *hi)
+				}
+				row["strength"] = v
+			}
+			rows = append(rows, row)
+			present[*x.LoraID] = true
+		}
+	}
+	if len(over) > 0 {
+		return fmt.Sprintf("%s: at most %s LoRAs; %d used, %s do not fit", path, format(limit), full, strings.Join(over, ", "))
+	}
+	if len(rows) > len(before) {
+		out.Inputs[path], out.Typed[path] = rows, before
+	}
+	return ""
 }
 
 // pinCanvases keeps the output size the element rows would change (Mentions, step 2, Canvas): each canvas on auto
@@ -342,15 +487,29 @@ type built struct {
 	Loras     []lora.Used // its Lora values as resolved (runs.loras)
 }
 
+// libraryCopy is what a batch keeps of the library: every element its rows mention and every look its rows or steps
+// use, as they were at Submit (batches.elements, batches.looks).
+type libraryCopy struct {
+	Elements []element
+	Looks    []lookItem
+}
+
 // runGraphs is the one place a run's graph is made (Create, a batch's rows at Submit, studio.runs.create): each
-// inputs resolved with the workflow (resolve), then its mentions expanded against the owner's elements, read once for
-// all rows: now (copied nil, as the caller) or a batch's copy (images of takes deleted since left out), then its LoRA
-// values checked as the owner now (runLoras). It returns per row the graph or the 422 detail (errors joined by "; "),
-// and the elements read (a batch keeps them as its copy).
+// inputs resolved with the workflow (resolve), then its mentions expanded and its looks (chosen, per row; nil = none)
+// applied against the owner's library, read once for all rows: now (copied nil, as the caller) or a batch's copy
+// (images of takes deleted since left out), then its LoRA values (the looks' included) checked as the owner now
+// (runLoras). It returns per row the graph or the 422 detail (errors joined by "; "), and the library read (a batch
+// keeps it as its copy).
 func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, workflow registry.Workflow,
-	rows []map[string]any, copied *[]element) ([]built, []string, []element, error) {
+	rows []map[string]any, chosen [][]string, copied *libraryCopy) ([]built, []string, libraryCopy, error) {
 	out, details := make([]built, len(rows)), make([]string, len(rows))
-	var handles []string
+	var handles, ids []string
+	lookAt := func(i int) []string {
+		if chosen == nil {
+			return nil
+		}
+		return chosen[i]
+	}
 	for i, inputs := range rows {
 		nodes, detail := resolve(workflow, inputs)
 		out[i].Nodes, details[i] = nodes, detail
@@ -360,15 +519,33 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 					handles = append(handles, handle)
 				}
 			}
+			for _, id := range lookAt(i) {
+				if !slices.Contains(ids, id) {
+					ids = append(ids, id)
+				}
+			}
 		}
 	}
-	lib, err := readElements(ctx, tx, ownerID, handles, copied)
+	var lib libraryCopy
+	var err error
+	var copiedElements *[]element
+	var copiedLooks *[]lookItem
+	if copied != nil {
+		copiedElements, copiedLooks = &copied.Elements, &copied.Looks
+	}
+	if lib.Elements, err = readElements(ctx, tx, ownerID, handles, copiedElements); err != nil {
+		return nil, nil, lib, err
+	}
+	if lib.Looks, err = readLooks(ctx, tx, s.registry, ownerID, ids, copiedLooks); err != nil {
+		return nil, nil, lib, err
+	}
+	families, err := loraFamilies(ctx, tx, s.registry, ownerID, workflow.Env, lookLoraIDs(lib.Looks))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, lib, err
 	}
 	var takeIDs []string
 	for i := range out {
-		if details[i] == "" && len(handles) > 0 {
+		if details[i] == "" && (len(handles) > 0 || len(ids) > 0) {
 			for _, ref := range images(out[i].Nodes) {
 				takeIDs = append(takeIDs, ref.TakeID)
 			}
@@ -376,13 +553,13 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 	}
 	sizes, err := takeSizes(ctx, tx, ownerID, takeIDs)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, lib, err
 	}
 	for i := range out {
 		if details[i] != "" {
 			continue
 		}
-		exp, errs := expandMentions(out[i].Nodes, workflow.NodeSchemas, lib, sizes)
+		exp, errs := expandMentions(out[i].Nodes, workflow.NodeSchemas, lib.Elements, sizes, lib.Looks, lookAt(i), families)
 		if len(errs) > 0 {
 			details[i] = strings.Join(errs, "; ")
 			continue
@@ -392,7 +569,7 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 			value := exp.Inputs[path]
 			id, name, _ := strings.Cut(path, ".")
 			if param, _ := paramOf(workflow.NodeSchemas[out[i].Nodes[id].Kind], name); param.Type == "rows" {
-				var detail string // the element rows take their fields' defaults, or say why they cannot
+				var detail string // the element and look rows take their fields' defaults, or say why they cannot
 				if value, detail = checkRows(param, value); detail != "" {
 					bad = append(bad, path+": "+detail)
 					continue
@@ -412,7 +589,7 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 		out[i].Expansion = exp
 	}
 	if err := runLoras(ctx, tx, s.registry, ownerID, workflow.Env, out, workflow.NodeSchemas, details); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, lib, err
 	}
 	return out, details, lib, nil
 }
@@ -469,9 +646,9 @@ func takeSizes(ctx context.Context, tx pgx.Tx, ownerID string, ids []string) (ma
 	return out, err
 }
 
-// mentionsJSON is runs.mentions: what the expansion did, null when it changed nothing.
+// mentionsJSON is runs.mentions: what the expansion did ({typed, elements, looks}), null when it changed nothing.
 func mentionsJSON(exp expansion) []byte {
-	if len(exp.Elements) == 0 && len(exp.Typed) == 0 {
+	if len(exp.Elements) == 0 && len(exp.Typed) == 0 && len(exp.Looks) == 0 {
 		return nil
 	}
 	data, _ := json.Marshal(exp)
@@ -479,7 +656,7 @@ func mentionsJSON(exp expansion) []byte {
 }
 
 // typedView lays a run's typed values (runs.mentions) over its stored graph: the graph as the user set it, which
-// lineage reads (element images are never parents).
+// lineage reads (element and look images are never parents).
 func typedView(graph, mentions []byte) []byte {
 	var exp expansion
 	if len(mentions) == 0 || json.Unmarshal(mentions, &exp) != nil || len(exp.Typed) == 0 {

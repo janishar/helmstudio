@@ -3,6 +3,7 @@ package dto
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -41,6 +42,15 @@ type StudioLayout struct {
 type StudioSection struct {
 	Title string   `json:"title"`
 	Items []string `json:"items"`
+}
+
+// LookGroups are a look's groups, in the order the composer's default tiles show them.
+var LookGroups = []string{"film", "camera", "colour", "lighting"}
+
+// IsTile reports whether a studio.quick entry is a library tile (elements, look:<group>), not a path.
+func IsTile(entry string) bool {
+	group, isLook := strings.CutPrefix(entry, "look:")
+	return entry == "elements" || isLook && slices.Contains(LookGroups, group)
 }
 
 // Placed is every path placed in composer, quick and the inspector, in that order.
@@ -204,7 +214,7 @@ func (l *StudioLayout) validate() string {
 			return fmt.Sprintf("studio.%s: at most %d items", where, most)
 		}
 		for _, path := range list {
-			if !reference.MatchString(path) {
+			if !reference.MatchString(path) && !(where == "quick" && IsTile(path)) {
 				return fmt.Sprintf("studio.%s: %q is not <node>.<param>", where, path)
 			}
 		}

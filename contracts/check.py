@@ -44,6 +44,7 @@ REGISTRY_KEYS = [
     "workflows",
     "models",
     "loras",
+    "looks",
     "host",
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
 # openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
@@ -229,6 +230,10 @@ def port_type(schema: dict, name: str) -> str | None:
     return t or (WIREABLE.get(p["type"]) if p else None)
 
 
+LOOK_GROUPS = ("film", "camera", "colour", "lighting")
+TILES = {"elements"} | {f"look:{g}" for g in LOOK_GROUPS}  # studio.quick library tiles (README, Looks)
+
+
 def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | None = None) -> set[tuple]:
     """Every problem as (code, node, port, param); palette: kind → schema with `envs` (the live kinds); loras: the
     caller's usable LoRAs (own ready ones, shared ones a live host of the env lists) as id → detected family."""
@@ -331,10 +336,11 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
     placed = studio.get("composer", []) + studio.get("quick", [])
     placed += [p for sec in studio.get("inspector", []) for p in sec["items"]]
     for path in placed + list(studio.get("labels", {})):
-        if bad_path(path):
+        if path not in TILES and bad_path(path):
             add("studio_unknown_path", *path.split(".")[:1], param=path.split(".")[1])
-    for path in {p for p in placed if placed.count(p) > 1}:
-        add("studio_duplicate", path.split(".")[0], param=path.split(".")[1])
+    for path in {p for p in placed if placed.count(p) > 1}:  # a tile twice: no node, param = the tile
+        nid, param = (None, path) if path in TILES else path.split(".")
+        add("studio_duplicate", nid, param=param)
     for values in studio.get("presets", {}).values():
         for path, v in values.items():
             nid, param = path.split(".")
@@ -467,7 +473,7 @@ def check_graphs(registry: Registry) -> dict:
 # ---------------------------------------------------------------- pipeline rules (README, "Pipeline rules")
 P_MAX_NODES, P_MAX_BYTES, P_MAX_RUNS = 24, 65536, 64
 P_RUN_ONLY = {"unreachable", "dead_end", "no_output", "unknown_workflow", "workflow_cannot_run", "unknown_preset",
-              "step_input_invalid", "bind_unknown", "bind_type", "unbound_input", "step_seeds"}
+              "step_input_invalid", "bind_unknown", "bind_type", "unbound_input", "step_seeds", "unknown_look", "look_fit"}
 INPUT_FITS = {"Text": {"string", "text"}, "Int": {"int"}, "Float": {"float"}, "Seed": {"seed"}, "Image": {"image"}}
 
 
@@ -488,8 +494,10 @@ def settable(wf: dict, palette: dict) -> dict[str, dict]:
             for p in palette[n["kind"]]["params"] if p["name"] not in n.get("in", {})}
 
 
-def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict) -> set[tuple]:
-    """Every problem as (code, node, port, param); workflows: the id → WorkflowDoc the caller can run."""
+def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, looks: list[dict] | None = None,
+                      loras: dict[str, str] | None = None) -> set[tuple]:
+    """Every problem as (code, node, port, param); workflows: the id → WorkflowDoc the caller can run; looks, loras:
+    the looks and LoRAs the caller can use now (as resolve_mentions takes them)."""
     out, nodes = set(), doc["nodes"]
     add = lambda code, node=None, port=None, param=None: out.add((code, node, port, param))
     if len(nodes) > P_MAX_NODES:
@@ -592,6 +600,11 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict) -> s
             add("workflow_cannot_run", nid)
         if "preset" in n and n["preset"] not in wf.get("studio", {}).get("presets", {}):
             add("unknown_preset", nid)
+        found = {x["id"]: x for x in looks or []}
+        if any(lid not in found for lid in n.get("looks", [])):
+            add("unknown_look", nid, param="looks")
+        elif any(look_fit(wf["nodes"], palette, found[lid] | {"kind": "look"}, loras or {}) for lid in n.get("looks", [])):
+            add("look_fit", nid, param="looks")
         params = settable(wf, palette)
         for k, v in n.get("inputs", {}).items():
             wn, p = k.split(".")
@@ -636,7 +649,7 @@ def check_pipelines(registry: Registry, palette: dict) -> None:
         if errs := list(doc_v.iter_errors(fx["pipeline"])):
             fail(f"{name}: pipeline is not a PipelineDoc: {errs[0].json_path}: {errs[0].message}")
             continue
-        got = pipeline_problems(fx["pipeline"], workflows, palette)
+        got = pipeline_problems(fx["pipeline"], workflows, palette, fx.get("looks"), fx.get("loras"))
         want = {(x["code"], x.get("node"), x.get("port"), x.get("param")) for x in fx["problems"]}
         if not p.name.startswith(("valid.", "invalid.")) or p.name.startswith("valid.") != (not want):
             fail(f"{name}: valid.* has no problems, invalid.* has some")
@@ -713,22 +726,94 @@ def pin_canvases(nodes: dict, palette: dict, before: list, field: str, sizes: di
                 changed[f"{nid}.{name}"], typed[f"{nid}.{name}"] = v, val[name]
 
 
-def resolve_mentions(nodes: dict, palette: dict, library: list[dict], sizes: dict | None = None) -> dict:
-    """Expand every mention of a graph whose params hold the merged values (defaults, workflow, preset, inputs).
-    `sizes` is take id → [width, height] of the user's own row takes, as studio knows them.
-    Answers {inputs: changed path → resolved value, typed: changed path → value as set, elements, errors}."""
-    lib = {e["handle"]: e for e in library}
+def prompt_params(nodes: dict, palette: dict) -> list[tuple[str, dict]]:
+    """Mentions "Where": every unwired `text` param of a known, not bypassed node, node id order then schema order."""
+    return [(nid, p) for nid in sorted(nodes) if (s := palette.get(nodes[nid]["kind"])) and not nodes[nid].get("bypass")
+            for p in s["params"] if p["type"] == "text" and p["name"] not in nodes[nid].get("in", {})]
+
+
+def look_stack(nodes: dict, palette: dict) -> tuple[str, dict] | None:
+    """Where look LoRAs go (README, Looks): among the known, not bypassed `<family>/lora-stack` nodes with an unwired
+    rows param that has a Lora field, the first by node id from which no other such node is reachable downstream."""
+    cands = {}
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        if s and not n.get("bypass") and n["kind"].endswith("/lora-stack"):
+            if p := next((p for p in s["params"] if lora_field(p) and p["name"] not in n.get("in", {})), None):
+                cands[nid] = p
+    succ = {nid: {m for m, x in nodes.items() for ref in x.get("in", {}).values() if ref.split(".")[0] == nid}
+            for nid in nodes}
+
+    def down(nid: str) -> set[str]:
+        seen, todo = set(), list(succ[nid])
+        while todo:
+            if (x := todo.pop()) not in seen:
+                seen.add(x)
+                todo += succ.get(x, ())
+        return seen
+
+    return next(((nid, p) for nid, p in cands.items() if not down(nid) & set(cands)), None)
+
+
+def look_needs(item: dict) -> list[str]:
+    """LibraryItem.needs: text (non-empty), images (at least one), lora (at least one), in that order."""
+    return [k for k, v in (("text", item["text"]), ("images", item["images"]), ("lora", item.get("loras"))) if v]
+
+
+def look_fit(nodes: dict, palette: dict, item: dict, loras: dict[str, str]) -> str | None:
+    """Why the item cannot be applied to this graph (README, Looks: fit), None when it can. `loras`: LoRA id → detected
+    family of every LoRA the caller can use now in the workflow's env."""
+    needs = look_needs(item)
+    if ("text" in needs or item.get("kind") == "element") and not prompt_params(nodes, palette):
+        return "this workflow has no prompt"
+    if item.get("kind") == "element":
+        return None  # an element's images are dropped where there are no reference rows (Mentions)
+    if "images" in needs and not reference_rows(nodes, palette):
+        return "this workflow takes no reference images"
+    if "lora" in needs:
+        if not (stack := look_stack(nodes, palette)):
+            return "this workflow has no LoRA stack"
+        for x in item["loras"]:
+            fam = loras.get(x["lora_id"]) if x["lora_id"] else None
+            if x["lora_id"] is None:
+                return f"LoRA {x['name']} is on no live host"
+            if fam is None:
+                return f"LoRA {x['name']} is not available"
+            if fam == "unknown":
+                return f"LoRA {x['name']} fits no known model"
+            if fam != family(nodes[stack[0]]["kind"]):
+                return f"LoRA {x['name']} is for {fam}"
+    return None
+
+
+def resolve_mentions(nodes: dict, palette: dict, library: list[dict], sizes: dict | None = None,
+                     looks: list[dict] | None = None, chosen: list[str] | None = None,
+                     loras: dict[str, str] | None = None) -> dict:
+    """Expand every mention and apply the chosen looks (README, Mentions and Looks) on a graph whose params hold the
+    merged values (defaults, workflow, preset, inputs). `sizes`: take id → [width, height] of the user's own row
+    takes; `looks`: the looks the caller can use now; `chosen`: RunRequest.looks; `loras`: as look_fit's.
+    Answers {inputs: changed path → resolved value, typed: changed path → value as set, elements, looks, errors}."""
+    lib, found, chosen = {e["handle"]: e for e in library}, {x["id"]: x for x in looks or []}, chosen or []
     val = lambda nid, p: nodes[nid].get("params", {}).get(p["name"], p["default"])
-    prompts = [(nid, f"{nid}.{p['name']}", p, scan(val(nid, p))) for nid in sorted(nodes)
-               if (s := palette.get(nodes[nid]["kind"])) and not nodes[nid].get("bypass")
-               for p in s["params"] if p["type"] == "text" and p["name"] not in nodes[nid].get("in", {})]
+    prompts = [(nid, f"{nid}.{p['name']}", p, scan(val(nid, p))) for nid, p in prompt_params(nodes, palette)]
     mentioned = lambda parts: list(dict.fromkeys(x["mention"] for x in parts if "mention" in x))
+    first = {}  # look id → its first place in the request, from 1
+    for i, lid in enumerate(chosen, 1):
+        first.setdefault(lid, i)
     errors = [f"{path}: unknown element @{h}" for _, path, _, parts in prompts for h in mentioned(parts) if h not in lib]
+    errors += [f"looks[{i}]: unknown look {lid}" for lid, i in first.items() if lid not in found]
+    if errors:
+        return {"errors": errors}
+    picked = [found[lid] for lid in first]
+    errors = [f"looks[{first[x['id']]}]: look {x['name']} does not fit this workflow ({r})" for x in picked
+              if (r := look_fit(nodes, palette, x | {"kind": "look"}, loras or {}))]
     if errors:
         return {"errors": errors}
     used = list(dict.fromkeys(h for *_, parts in prompts for h in mentioned(parts)))
-    tokens, changed, typed = {h: [] for h in used}, {}, {}
-    if (target := reference_rows(nodes, palette)) and used:
+    adds = [(f"@{h}", ("e", h), lib[h]["images"]) for h in used] + [(f"look {x['name']}", ("l", x["id"]), x["images"])
+                                                                     for x in picked]
+    tokens, changed, typed = {k: [] for _, k, _ in adds}, {}, {}
+    if (target := reference_rows(nodes, palette)) and adds:
         tid, tp = target
         field, cap, path = image_field(tp), tp.get("max", 100), f"{tid}.{tp['name']}"
         rows = list(val(tid, tp))
@@ -737,34 +822,68 @@ def resolve_mentions(nodes: dict, palette: dict, library: list[dict], sizes: dic
             if isinstance(r.get(field), dict):
                 at.setdefault(r[field]["take_id"], i)
         over, full = [], None
-        for h in used:
-            new = [t for t in lib[h]["images"] if t not in at]
+        for label, key, images in adds:
+            new = [t for t in dict.fromkeys(images) if t not in at]
             if full is not None or len(rows) + len(new) > cap:
                 full = len(rows) if full is None else full
-                over += [f"@{h} +{len(new)}"] if new else []
+                over += [f"{label} +{len(new)}"] if new else []
                 continue
             for t in new:
                 rows.append({field: {"take_id": t}})
                 at[t] = len(rows)
-            tokens[h] = [tp["mention"].replace("{n}", str(at[t])) for t in lib[h]["images"]]
+            tokens[key] = [tp["mention"].replace("{n}", str(at[t])) for t in images]
         if over:
             return {"errors": [f"{path}: at most {cap} images; {full} used, {', '.join(over)} do not fit"]}
         if len(rows) > len(val(tid, tp)):
             changed[path], typed[path] = rows, val(tid, tp)
             pin_canvases(nodes, palette, val(tid, tp), field, sizes or {}, changed, typed)
-    for nid, path, p, parts in prompts:
+    if any(x["loras"] for x in picked) and (stack := look_stack(nodes, palette)):
+        sid, sp = stack
+        field, cap, path, before = lora_field(sp), sp.get("max", 100), f"{sid}.{sp['name']}", val(sid, stack[1])
+        present = {r[f]["lora_id"] for nid in nodes if (s := palette.get(nodes[nid]["kind"])) and not nodes[nid].get("bypass")
+                   for p in s["params"] if (f := lora_field(p))
+                   for r in val(nid, p) if isinstance(r.get(f), dict)}  # the user's rows win
+        st = sp["item"].get("strength")
+        clamp = lambda v: min(max(v, st.get("min", v)), st.get("max", v)) if isinstance(st, dict) else v
+        rows, over, full = list(before), [], None
+        for x in picked:
+            new = []
+            for y in x["loras"]:
+                if y["lora_id"] not in present and all(y["lora_id"] != z["lora_id"] for z in new):
+                    new.append(y)
+            if full is not None or len(rows) + len(new) > cap:
+                full = len(rows) if full is None else full
+                over += [f"look {x['name']} +{len(new)}"] if new else []
+                continue
+            for y in new:
+                rows.append({field: {"lora_id": y["lora_id"]}} | ({"strength": clamp(y["strength"])} if st else {}))
+                present.add(y["lora_id"])
+        if over:
+            return {"errors": [f"{path}: at most {cap} LoRAs; {full} used, {', '.join(over)} do not fit"]}
+        if len(rows) > len(before):
+            changed[path], typed[path] = rows, before
+    look_lines = list(dict.fromkeys(line for x in picked
+                                    if (line := " ".join(([x["text"]] if x["text"] else []) + tokens[("l", x["id"])]))))
+    for i, (nid, path, p, parts) in enumerate(prompts):
         out = "".join(x["text"].replace("@@", "@") if "text" in x
-                      else " ".join([lib[x["mention"]]["name"]] + tokens[x["mention"]]) for x in parts)
+                      else " ".join([lib[x["mention"]]["name"]] + tokens[("e", x["mention"])]) for x in parts)
         notes = [f"{lib[h]['name']}: {lib[h]['text']}" for h in mentioned(parts) if lib[h]["text"]]
         out += "\n\n" + "\n".join(notes) if notes else ""
+        extra = look_lines if i == 0 else []  # look text goes to the first prompt param only
+        out = "\n\n".join(x for x in (out, "\n".join(extra)) if x)
         if len(out) > p.get("max", len(out)):
-            errors.append(f"{path}: at most {p['max']} characters once elements are added ({len(out)})")
+            what = "elements and looks" if extra else "elements"
+            errors.append(f"{path}: at most {p['max']} characters once {what} are added ({len(out)})")
         elif out != val(nid, p):
             changed[path], typed[path] = out, val(nid, p)
     if errors:
         return {"errors": errors}
     elements = [{k: lib[h][k] for k in ("id", "handle", "name", "version")} for h in used]
-    return {"inputs": changed, "typed": typed, "elements": elements, "errors": []}
+    applied = [{k: x[k] for k in ("id", "source", "name", "version")} for x in picked]
+    return {"inputs": changed, "typed": typed, "elements": elements, "looks": applied, "errors": []}
+
+
+LOOK_ID = re.compile(r"^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$")
 
 
 def check_mentions(registry: Registry, palette: dict) -> None:
@@ -775,6 +894,28 @@ def check_mentions(registry: Registry, palette: dict) -> None:
             fail(f"fixtures/mentions/scan.json {case['text']!r}: got {got}, want {case['parts']}")
     print("ok   fixtures/mentions/scan.json")
     doc_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/WorkflowDoc"}, registry=registry)
+
+    def bad_looks(name: str, looks: list[dict]) -> bool:
+        """The looks as studio reads them: own (UUID) or starter ids, 0-4 images, 0-4 LoRAs (null id: starter only)."""
+        bad = [x["id"] for x in looks if not LOOK_ID.match(x["id"]) or x["source"] != ("mine" if "/" not in x["id"] else "starter")
+               or len(x["images"]) > 4 or len(x["loras"]) > 4 or not look_needs(x)
+               or any(y["lora_id"] is None and x["source"] == "mine" for y in x["loras"])]
+        if bad:
+            fail(f"{name}: looks break the look rules: {bad}")
+        return bool(bad)
+
+    fit = json.loads((g / "fit.json").read_text())
+    for wid, wf in fit["workflows"].items():
+        if errs := list(doc_v.iter_errors(wf)):
+            fail(f"fixtures/mentions/fit.json {wid}: not a WorkflowDoc: {errs[0].json_path}: {errs[0].message}")
+    for case in fit["cases"]:
+        item = case["item"]
+        if item.get("kind") == "look" and bad_looks("fixtures/mentions/fit.json", [item]):
+            continue
+        got = look_fit(fit["workflows"][case["workflow"]]["nodes"], palette, item, case.get("loras", {}))
+        if got != case["expect"]:
+            fail(f"fixtures/mentions/fit.json {case['description']!r}: got {got!r}, want {case['expect']!r}")
+    print("ok   fixtures/mentions/fit.json")
     for p in sorted(g.glob("resolve.*.json")):
         fx, name = json.loads(p.read_text()), f"fixtures/mentions/{p.name}"
         if errs := list(doc_v.iter_errors(fx["workflow"])):
@@ -784,8 +925,13 @@ def check_mentions(registry: Registry, palette: dict) -> None:
         bad = [e["handle"] for e in fx["library"] if not HANDLE.match(e["handle"]) or len(e["images"]) > 4]
         if bad:
             fail(f"{name}: library items break the element rules: {bad}")
-        got, want = resolve_mentions(fx["workflow"]["nodes"], palette, fx["library"], fx.get("sizes")), fx["expect"]
-        if got != (want if want.get("errors") else {"inputs": {}, "typed": {}, "elements": [], "errors": []} | want):
+        if bad_looks(name, fx.get("looks", [])):
+            continue
+        got = resolve_mentions(fx["workflow"]["nodes"], palette, fx["library"], fx.get("sizes"), fx.get("looks"),
+                               fx.get("chosen"), fx.get("loras"))
+        want = fx["expect"]
+        if got != (want if want.get("errors") else {"inputs": {}, "typed": {}, "elements": [], "looks": [],
+                                                     "errors": []} | want):
             fail(f"{name}: got {json.dumps(got)}, want {json.dumps(want)}")
         else:
             print(f"ok   {name}")

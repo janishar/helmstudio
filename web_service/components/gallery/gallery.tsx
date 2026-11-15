@@ -10,6 +10,9 @@ import { FullScreen, Media, useFullScreenKey } from "@/components/media";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { RefThumbs } from "@/components/create/refs";
 import { ElementEditor } from "@/components/create/elements";
+import { SaveAsLook } from "@/components/create/looks";
+import { lookGroupLabel } from "@/lib/looks";
+import { useLooks } from "@/lib/library";
 import { imageWorkflows, targetLabel } from "@/lib/refs";
 import { remember, useTakes } from "@/lib/take-cache";
 import { api, message, ok, type S } from "@/lib/api";
@@ -216,6 +219,7 @@ export function Gallery({
   const [actionError, setActionError] = useState("");
   // the takes a new element is being made from (Save as element)
   const [making, setMaking] = useState<Take[] | null>(null);
+  const [lookOf, setLookOf] = useState<Take | null>(null);
   const [full, setFull] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSeq = useRef(0);
@@ -521,6 +525,7 @@ export function Gallery({
             onDelete={() => setModal("delete")}
             onFull={() => setFull(true)}
             onMakeElement={() => setMaking([current])}
+            onSaveLook={() => setLookOf(current)}
             onPick={(t) => {
               if ("url" in t) remember([t]);
               setCurrentId(t.id);
@@ -547,6 +552,7 @@ export function Gallery({
       )}
 
       <ElementEditor open={!!making} onClose={() => setMaking(null)} takes={making ?? undefined} />
+      <SaveAsLook take={lookOf} onClose={() => setLookOf(null)} />
       <Modal
         open={modal === "rename" && !!current}
         onClose={() => setModal(null)}
@@ -609,6 +615,7 @@ function TakePanel({
   onDelete,
   onFull,
   onMakeElement,
+  onSaveLook,
   onPick,
   workflows,
 }: {
@@ -619,6 +626,8 @@ function TakePanel({
   onFull: () => void;
   /** opens the element editor with this take */
   onMakeElement: () => void;
+  /** opens Save as look with this take */
+  onSaveLook: () => void;
   /** selects a take of its lineage */
   onPick: (t: Take | S<"TakeRef">) => void;
   /** the workflows that take an image ("Use in…") */
@@ -627,6 +636,7 @@ function TakePanel({
   const url = safeUrl(t.url);
   const m = t.made_with;
   const loras = useLoras();
+  const looks = useLooks();
   const size = sizeSeed(t);
   // "Used in" is only on the take itself (GET /takes/{id}), not in lists
   const [children, setChildren] = useState<{ id: string; list: S<"TakeRef">[] } | null>(null);
@@ -678,6 +688,17 @@ function TakePanel({
         <h2 className="heading">{m ? "Made with" : "Uploaded"}</h2>
         {m?.prompt && <p className="m-0 text-[13px] break-words">{m.prompt}</p>}
         {m && <Row label="Template" value={templateLine(m)} />}
+        {!!m?.looks?.length && (
+          <Row
+            label="Looks"
+            value={m.looks
+              .map((x) => {
+                const g = looks?.find((l) => l.id === x.id)?.group;
+                return g ? `${x.name} (${lookGroupLabel(g).toLowerCase()})` : x.name;
+              })
+              .join(" · ")}
+          />
+        )}
         {!!m?.loras?.length && (
           <Row label="LoRAs" value={m.loras.map((l) => madeWithLine(l, loras)).join("\n")} />
         )}
@@ -758,6 +779,11 @@ function TakePanel({
         {t.kind === "image" && (
           <button type="button" className="act" onClick={onMakeElement}>
             Save as element
+          </button>
+        )}
+        {m && (
+          <button type="button" className="act" onClick={onSaveLook}>
+            Save as look
           </button>
         )}
         {m && (

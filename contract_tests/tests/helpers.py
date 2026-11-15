@@ -187,3 +187,32 @@ def upload(
 def ref(take_id: str) -> dict:
     """One references row item: {"image": {"take_id": …}}."""
     return {"image": {"take_id": take_id}}
+
+
+def usable_looks(client: httpx.Client) -> list[dict]:
+    """The looks the caller can use now, as contracts/check.py's resolve_mentions and pipeline_problems take them."""
+    items = ok(client.get(f"{STUDIO}/library", params={"kind": "look"}))["items"]
+    return [
+        {k: x[k] for k in ("id", "source", "name", "version", "text")}
+        | {
+            "images": [i["take_id"] for i in x["images"]],
+            "loras": [
+                {
+                    "lora_id": (y["lora"] or {}).get("lora_id"),
+                    "name": y["name"],
+                    "strength": y["strength"],
+                }
+                for y in x["loras"]
+            ],
+        }
+        for x in items
+    ]
+
+
+def usable_loras(client: httpx.Client) -> dict[str, str]:
+    """LoRA id → detected family of every LoRA the caller can use now (as check.py's look_fit takes them)."""
+    return {
+        x["id"]: x["family"]
+        for x in ok(client.get(f"{STUDIO}/loras"))["loras"]
+        if x["state"] == "ready"
+    }

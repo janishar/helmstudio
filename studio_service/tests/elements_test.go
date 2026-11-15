@@ -55,8 +55,10 @@ func TestLibraryItems(t *testing.T) {
 		"images[2]: take " + one + " is listed twice":                           body("x", one, one),
 		"images[1]: take " + video + " is not an image":                         body("x", video),
 		"name must be 1-80 characters":                                          with(body("x", one), map[string]any{"name": "  "}),
-		"group must be one of character, location, prop":                        with(body("x", one), map[string]any{"group": "film"}),
-		"kind must be element":                                                  with(body("x", one), map[string]any{"kind": "look"}),
+		"group film is not an element group":                                    with(body("x", one), map[string]any{"group": "film"}),
+		"group prop is not a look group":                                        with(body("x", one), map[string]any{"kind": "look"}),
+		"kind must be element or look":                                          with(body("x", one), map[string]any{"kind": "x"}),
+		"loras: an element has no LoRAs":                                        with(body("x", one), map[string]any{"loras": []any{map[string]any{"lora": map[string]any{"lora_id": "x"}, "strength": 1}}}),
 		"unknown field lora":                                                    with(body("x", one), map[string]any{"lora": "x"}),
 		"text must be at most 2000 characters":                                  with(body("x", one), map[string]any{"text": strings.Repeat("é", 2001)}),
 		"name must not contain control characters":                              with(body("x", one), map[string]any{"name": "a\u0000b"}),
@@ -99,7 +101,7 @@ func TestLibraryItems(t *testing.T) {
 		t.Fatal(got)
 	}
 	e.call(userA, "GET", library+"?limit=0", nil, 422)
-	e.call(userA, "GET", library+"?kind=look", nil, 422)
+	e.call(userA, "GET", library+"?kind=x", nil, 422)
 
 	// isolation: B cannot list, get, change or delete A's; B may use the same handle
 	if items := e.call(userB, "GET", library, nil, 200)["items"].([]any); len(items) != 0 {

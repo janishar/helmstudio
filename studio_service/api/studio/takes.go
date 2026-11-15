@@ -22,7 +22,7 @@ import (
 // the run stored them), every settable param of every node of the graph the run was sent with (resolved again from
 // the registry for a run stored before it kept its graph; a wired param is not settable) with seed in place of a
 // random seed, the bypass switches the run asked for, the prompt node's text as typed and the <family>/model node, and
-// what the mention expansion did (typed, elements). With no graph it keeps the inputs as requested.
+// what the mention and look expansion did (typed, elements, looks). With no graph it keeps the inputs as requested.
 func madeWith(workflows *registry.Registry, run model.Run, seed *int64) gallerydto.MadeWith {
 	inputs := map[string]any{}
 	_ = json.Unmarshal(run.Inputs, &inputs)
@@ -56,7 +56,7 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64) galleryd
 	}
 	var exp expansion // the prompt as typed, the elements it mentioned
 	_ = json.Unmarshal(run.Mentions, &exp)
-	out.Typed, out.Elements = exp.Typed, exp.Elements
+	out.Typed, out.Elements, out.Looks = exp.Typed, exp.Elements, exp.Looks
 	for _, u := range runUsed(run.Loras) {
 		out.Loras = append(out.Loras, gallerydto.MadeWithLora{Node: u.Node, ID: u.ID, Source: u.Source, Name: u.Name,
 			Strength: u.Strength, Mode: u.Mode, SHA256: u.SHA256})

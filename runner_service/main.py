@@ -1,7 +1,7 @@
 """runner_service: `python main.py`. RUNNER_HOST / RUNNER_ENV say which runner: fake/fake (the compose fake
 runner, the echo pack) or mac/torch (native, `make runners`, the torch packs).
 
-Loads the packs of its env, indexes the host's shared LoRAs, checks and publishes its registry values, keeps its hosts key fresh (with memory and
+Loads the packs of its env, indexes the host's shared LoRAs, stores the starter looks' thumbnails, checks and publishes its registry values, keeps its hosts key fresh (with memory and
 resident components when it has a residency manager), then pulls cmd.run.<host>.<env> from CMD (durable
 runner-<host>-<env>) and runs one command at a time (consumer.Consumer). SIGINT/SIGTERM stop pulling, stop the
 current run at its next cancel point (reported failed), unload every component, delete the hosts key and exit."""
@@ -21,7 +21,7 @@ import config
 import health
 from config import ENV, HOST, INBOX_PREFIX, NATS_URL
 from consumer import ACK_WAIT, Consumer
-from core import lora, registry
+from core import looks, lora, registry
 from core.graph import GPU
 from core.residency import POLICIES, Residency, ram_gb
 from messaging.hosts import Host
@@ -75,7 +75,9 @@ async def main() -> None:
         config.MODELS, config.CACHE, store=store, host=HOST, cache_gb=config.LORA_CACHE_GB
     )
     blocks = registry.lora_blocks(packs)
-    values["loras"] = registry.loras_value(await asyncio.to_thread(library.scan, blocks))
+    values["loras"] = registry.scanned_value("loras", await asyncio.to_thread(library.scan, blocks))
+    values["looks"] = registry.scanned_value("looks", looks.entries(packs, library, config.MODELS))
+    await looks.put_thumbs(packs, store)
     nc = await nats.connect(
         NATS_URL, name=DURABLE, max_reconnect_attempts=-1, inbox_prefix=INBOX_PREFIX
     )

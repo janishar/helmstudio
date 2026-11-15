@@ -111,11 +111,16 @@ func (c *counter) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// serveHandler streams one object. A bad link, a key outside u/ or a missing object is 403; a Stat that fails for any
+// lookThumb is a starter look thumbnail's key (contracts/registry.schema.json, looks: thumb.key).
+var lookThumb = regexp.MustCompile(`^packs/[a-z0-9][a-z0-9_-]{0,63}/looks/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\.(png|jpg|webp)$`)
+
+// serveHandler streams one object. A bad link, a key outside u/ and the starter look thumbnails (packs/<family>/looks/) or a missing object is 403; a Stat that fails for any
 // other reason is 500.
 func (c *controller) serveHandler(ctx *gin.Context) {
 	key := strings.TrimPrefix(ctx.Param("path"), "/") // Gin keeps the leading slash of a *path value
-	if strings.Contains(key, "..") || !strings.HasPrefix(key, "u/") || !c.signer.Verify(key, ctx.Query("exp"), ctx.Query("sig")) {
+	// u/<owner>/… and the packs' starter look thumbnails (packs/<family>/looks/…, PUT by the runners, never by a link)
+	servable := strings.HasPrefix(key, "u/") || lookThumb.MatchString(key)
+	if strings.Contains(key, "..") || !servable || !c.signer.Verify(key, ctx.Query("exp"), ctx.Query("sig")) {
 		network.SendError(ctx, http.StatusForbidden, "invalid or expired link")
 		return
 	}

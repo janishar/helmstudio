@@ -1,0 +1,10 @@
+{
+  "kind": "look",
+  "group": "film",
+  "name": "Noir",
+  "from_take": {
+    "take_id": "5a7e0c11-2b3d-4e5f-8a9b-0c1d2e3f4a88",
+    "prompt": true,
+    "loras": true
+  }
+}

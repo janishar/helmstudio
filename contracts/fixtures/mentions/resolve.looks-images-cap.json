@@ -1,0 +1,110 @@
+{
+  "description": "look images share the reference cap with the user's rows and the element images, after the elements",
+  "workflow": {
+    "title": "Echo",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@fox"
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": [
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000020"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000021"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000022"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000023"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000024"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000025"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000026"
+              }
+            },
+            {
+              "image": {
+                "take_id": "00000000-0000-4000-8000-000000000027"
+              }
+            }
+          ]
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000001",
+      "handle": "fox",
+      "name": "Fox",
+      "version": 3,
+      "text": "a small red fox with a white-tipped tail",
+      "images": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002"
+      ]
+    }
+  ],
+  "looks": [
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "source": "mine",
+      "name": "Noir",
+      "version": 4,
+      "text": "black and white, hard shadows",
+      "images": [
+        "00000000-0000-4000-8000-000000000005",
+        "00000000-0000-4000-8000-000000000009"
+      ],
+      "loras": []
+    }
+  ],
+  "chosen": [
+    "10000000-0000-4000-8000-000000000003"
+  ],
+  "expect": {
+    "errors": [
+      "echo.refs: at most 10 images; 10 used, look Noir +2 do not fit"
+    ]
+  }
+}

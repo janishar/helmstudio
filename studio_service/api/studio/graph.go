@@ -314,7 +314,7 @@ func studioProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode
 	}
 	placed := studio.Placed()
 	for _, path := range append(slices.Clone(placed), slices.Collect(maps.Keys(studio.Labels))...) {
-		if bad(path) {
+		if !dto.IsTile(path) && bad(path) {
 			id, name, _ := strings.Cut(path, ".")
 			add("studio_unknown_path", id, "", name, "studio: %s is not a param this workflow can show", path)
 		}
@@ -323,6 +323,9 @@ func studioProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode
 	for _, path := range placed {
 		if counts[path]++; counts[path] == 2 {
 			id, name, _ := strings.Cut(path, ".")
+			if dto.IsTile(path) { // a tile twice: no node, the tile as param
+				id, name = "", path
+			}
 			add("studio_duplicate", id, "", name, "studio: %s is placed more than once", path)
 		}
 	}

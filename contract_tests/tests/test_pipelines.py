@@ -25,6 +25,8 @@ from helpers import (
     ref,
     start_run,
     upload,
+    usable_looks,
+    usable_loras,
     wait_run,
 )
 from test_batches import BATCHES, FINAL, finish, lines, rows_of, wait_batch, wait_rows
@@ -230,7 +232,13 @@ def live_workflows(client, pipeline: dict) -> dict:
 @pytest.mark.parametrize("path", PIPELINE_FIXTURES, ids=lambda p: p.stem)
 def test_fixture_validate_and_save(api, palette, path):
     fx = json.loads(path.read_text())
-    want = check.pipeline_problems(fx["pipeline"], live_workflows(api, fx["pipeline"]), palette)
+    want = check.pipeline_problems(
+        fx["pipeline"],
+        live_workflows(api, fx["pipeline"]),
+        palette,
+        usable_looks(api),
+        usable_loras(api),
+    )
     save_blocking = {k for k in want if k[0] not in check.P_RUN_ONLY}
     assert save_blocking == {k for k in keys(fx["problems"]) if k[0] not in check.P_RUN_ONLY}
 

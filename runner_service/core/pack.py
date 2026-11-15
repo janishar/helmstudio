@@ -15,6 +15,8 @@ from pathlib import Path
 
 import yaml
 
+from core import looks
+
 PACKS = Path(__file__).resolve().parent.parent / "packs"
 PRECISIONS = ("bf16", "fp16", "int8")
 BYTES = {"bf16": 2, "fp16": 2, "fp32": 4, "int8": 1}
@@ -44,6 +46,7 @@ class Pack:
     module: object  # the runtime module, or None for a pack without one
     code: str = ""  # hash of model.yaml and the runtime module
     workflows: list = field(default_factory=list)
+    looks: list = field(default_factory=list)  # starter looks (core/looks.py), checked at load
     cache: dict = field(default_factory=dict)  # values computed once (the lora block)
 
     @property
@@ -468,6 +471,7 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     module = importlib.import_module(f"packs.{dir.name}.{runtime}")
     pack = Pack(dir.name, dir, spec, runtime, module, code)
     pack.workflows = [json.loads(p.read_text()) for p in sorted(dir.glob("workflows/*.json"))]
+    pack.looks = looks.load(pack)
     nodes = {}
     if "variants" in spec:
         schema = model_schema(pack)

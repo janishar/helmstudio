@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "looks": [
+    {
+      "id": "echo/soft-light",
+      "family": "echo",
+      "group": "lighting",
+      "name": "Soft light",
+      "text": "soft diffuse light",
+      "version": 1,
+      "loras": [],
+      "thumb": null
+    },
+    {
+      "id": "echo/grain",
+      "family": "echo",
+      "group": "film",
+      "name": "Grain",
+      "text": "fine film grain",
+      "version": 1,
+      "loras": [
+        {
+          "file": "echo-grain.safetensors",
+          "name": "echo-grain",
+          "strength": 0.5,
+          "lora_id": null
+        }
+      ],
+      "thumb": null
+    }
+  ]
+}

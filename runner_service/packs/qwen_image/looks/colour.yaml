@@ -1,0 +1,12 @@
+- id: teal-orange
+  group: colour
+  name: Teal and orange
+  text: "teal shadows, warm orange skin tones, cinematic colour grade"
+- id: muted-pastel
+  group: colour
+  name: Muted pastel
+  text: "muted pastel palette, low contrast, airy"
+- id: high-contrast
+  group: colour
+  name: High contrast
+  text: "high contrast, deep saturated colours, crisp blacks"

@@ -1,0 +1,60 @@
+{
+  "description": "unknown looks (an unknown id, a starter no live host publishes, an element's id) are listed after the unknown handles, each distinct one once with its first place; nothing else is checked",
+  "workflow": {
+    "title": "Echo",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "@wolf in the snow"
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      }
+    }
+  },
+  "library": [],
+  "looks": [
+    {
+      "id": "echo/soft-light",
+      "source": "starter",
+      "name": "Soft light",
+      "version": 1,
+      "text": "soft diffuse light",
+      "images": [],
+      "loras": []
+    }
+  ],
+  "chosen": [
+    "10000000-0000-4000-8000-000000000009",
+    "qwen-image/gone",
+    "10000000-0000-4000-8000-000000000009",
+    "e0000000-0000-4000-8000-000000000001"
+  ],
+  "expect": {
+    "errors": [
+      "prompt.text: unknown element @wolf",
+      "looks[1]: unknown look 10000000-0000-4000-8000-000000000009",
+      "looks[2]: unknown look qwen-image/gone",
+      "looks[4]: unknown look e0000000-0000-4000-8000-000000000001"
+    ]
+  }
+}

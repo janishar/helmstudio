@@ -1,0 +1,16 @@
+- id: window-light
+  group: lighting
+  name: Window
+  text: "soft daylight from a single window, deep falloff into shadow"
+- id: silhouette
+  group: lighting
+  name: Silhouette
+  text: "strong backlight, subject in silhouette, rim light on edges"
+- id: golden-hour
+  group: lighting
+  name: Golden hour
+  text: "low warm sun at golden hour, long soft shadows"
+- id: neon-night
+  group: lighting
+  name: Neon night
+  text: "night street lit by coloured neon signs, wet reflections"

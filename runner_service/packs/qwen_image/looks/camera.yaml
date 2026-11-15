@@ -1,0 +1,16 @@
+- id: wide-low
+  group: camera
+  name: Wide, low angle
+  text: "wide angle lens, low camera angle looking up"
+- id: telephoto
+  group: camera
+  name: Telephoto
+  text: "long telephoto lens, compressed background, subject isolated"
+- id: overhead
+  group: camera
+  name: Overhead
+  text: "top-down overhead shot, flat composition"
+- id: close-up
+  group: camera
+  name: Close-up
+  text: "tight close-up, 85mm portrait lens, background softly blurred"

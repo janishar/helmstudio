@@ -1,6 +1,7 @@
 "use client";
-// The caller's elements in this tab (GET /v1/studio/library?kind=element, at most 200, not paginated): what marks
-// unknown mentions and previews what the mentions add. Fetched once, again after an edit here.
+// The caller's elements and looks in this tab (GET /v1/studio/library?kind=element and ?kind=look: own items at most
+// 200, plus the live hosts' starter looks; not paginated): what marks unknown mentions, previews what the mentions and
+// the chosen looks add, and fills the visual picker. Fetched once, again after an edit here.
 import { useEffect, useReducer } from "react";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -9,6 +10,9 @@ type Item = S<"LibraryItem">;
 
 // ponytail: an edit in another tab shows here only after the next reload (picker open, edit, page load)
 let items: Item[] | null = null;
+// looks are read apart: an older studio that knows no looks still serves the elements
+let looks: Item[] | null = null;
+let looksFailed = "";
 let loading: Promise<void> | null = null;
 let failed = "";
 // whose list this is: a sign-out and sign-in in the same tab is a soft navigation that keeps this module
@@ -21,23 +25,25 @@ function ownedBy(id: string | null) {
   if (id === owner) return;
   owner = id;
   items = null;
+  looks = null;
   loading = null;
   failed = "";
+  looksFailed = "";
   generation++;
 }
 
 /** Fetches the list again (after a create, edit or delete, or when the picker opens). */
 export function reloadLibrary(): Promise<void> {
   const mine = generation;
-  const read = ok(api.GET("/v1/studio/library", { params: { query: { kind: "element" } } }))
-    .then((l) => {
+  const kind = (k: "element" | "look") =>
+    ok(api.GET("/v1/studio/library", { params: { query: { kind: k } } }));
+  const read = Promise.allSettled([kind("element"), kind("look")])
+    .then(([e, l]) => {
       if (mine !== generation) return;
-      items = l.items;
-      failed = "";
-    })
-    .catch((e) => {
-      if (mine !== generation) return;
-      failed = message(e);
+      if (e.status === "fulfilled") [items, failed] = [e.value.items, ""];
+      else failed = message(e.reason);
+      if (l.status === "fulfilled") [looks, looksFailed] = [l.value.items, ""];
+      else looksFailed = message(l.reason);
     })
     .finally(() => {
       if (loading === read) loading = null;
@@ -63,6 +69,15 @@ export function useLibrary(): Item[] | null {
 
 /** Why the last read failed ("" when it did not); read while rendering after useLibrary. */
 export const libraryError = () => failed;
+
+/** The signed-in user's looks and the live starter looks, or null until they are known (or could not be read). */
+export function useLooks(): Item[] | null {
+  useLibrary();
+  return looks;
+}
+
+/** Why the last read of the looks failed ("" when it did not). */
+export const looksError = () => looksFailed;
 
 /** A group's label ("character" → "Character"), and the picker's tabs. */
 export const GROUPS: [S<"LibraryGroup">, string, string][] = [

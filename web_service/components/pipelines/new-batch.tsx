@@ -10,6 +10,12 @@ import { Inspector, TextFields } from "@/components/create/form";
 import { MentionText, PromptArea } from "@/components/create/prompt";
 import { useRefUploads } from "@/components/create/refs";
 import { GalleryPicker } from "@/components/gallery/picker";
+import { LooksPicker, QuickTiles } from "@/components/create/looks";
+import { useLooks } from "@/lib/library";
+import { useLoras } from "@/lib/lora-library";
+import { usable } from "@/lib/loras";
+import { chosenIds, liveChosen, reasonOf, tilesOf, type Chosen } from "@/lib/looks";
+import { withInputs } from "@/lib/mentions";
 import { imageInputs } from "@/lib/refs";
 import { remember } from "@/lib/take-cache";
 import { inputParam, pipelineColumns } from "@/lib/pipeline";
@@ -102,6 +108,12 @@ export function NewBatch({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [serverRow, setServerRow] = useState<RowError | null>(null);
+  // the looks every row is made with (BatchCreate.looks); a pipeline batch takes its looks from its steps
+  const [looksPicked, setLooksChosen] = useState<Chosen>({});
+  const [lookGroup, setLookGroup] = useState<S<"LibraryGroup"> | null>(null);
+  const looks = useLooks();
+  const looksChosen = liveChosen(looksPicked, looks);
+  const loras = useLoras();
 
   useEffect(() => {
     if (!open || workflows || pipeline) return;
@@ -188,6 +200,11 @@ export function NewBatch({
   const uploads = useRefUploads(change);
   const [picking, setPicking] = useState(false);
   const lineIsImage = !!lineField && imageInputs([lineField]).length > 0;
+  const loraFamilies = usable(loras);
+  const lookTiles = workflow
+    ? tilesOf(workflow, looks ?? [], loraFamilies, looksChosen).filter((t) => t !== "elements")
+    : [];
+  const lookIds = chosenIds(lookTiles, looksChosen);
 
   function pickWorkflow(id: string) {
     setWorkflowId(id);
@@ -221,6 +238,7 @@ export function NewBatch({
             ...(title.trim() && { title: title.trim() }),
             inputs: b.inputs,
             rows: built.rows,
+            ...(lookIds.length && { looks: lookIds }),
             ...(seedField && {
               seeds: { count: seedCount, ...(start && { start: Number(start) }) },
             }),
@@ -584,6 +602,17 @@ export function NewBatch({
             <h3 id="nb-base" className="heading">
               Every row
             </h3>
+            {workflow && lookTiles.length > 0 && (
+              <div role="group" aria-label="Looks" className="flex flex-wrap items-center gap-2">
+                <QuickTiles
+                  tiles={lookTiles}
+                  chosen={looksChosen}
+                  mentioned={0}
+                  onElements={() => undefined}
+                  onLook={setLookGroup}
+                />
+              </div>
+            )}
             {base.some((f) => f.param.type === "text") && (
               <div className="rounded-xl bg-s4 px-3 py-2">
                 <TextFields fields={base} raws={raws} errors={errors} onChange={change} />
@@ -622,6 +651,24 @@ export function NewBatch({
           </button>
         </div>
       </form>
+      {workflow && (
+        <LooksPicker
+          group={lookGroup}
+          onClose={() => setLookGroup(null)}
+          chosen={looksChosen}
+          onChosen={setLooksChosen}
+          reason={(x) =>
+            reasonOf(
+              {
+                ...workflow,
+                nodes: withInputs(workflow.nodes, buildInputs(base, raws).inputs),
+              },
+              x,
+              loraFamilies,
+            )
+          }
+        />
+      )}
     </Modal>
   );
 }

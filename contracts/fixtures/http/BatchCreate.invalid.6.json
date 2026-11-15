@@ -1,0 +1,19 @@
+{
+  "workflow_id": "qwen-image",
+  "rows": {
+    "table": {
+      "columns": [
+        "prompt.text",
+        "looks"
+      ],
+      "rows": [
+        [
+          "a fox",
+          [
+            "Window"
+          ]
+        ]
+      ]
+    }
+  }
+}

@@ -304,8 +304,11 @@ export function graphProblems(
     ...(studio.quick ?? []),
     ...(studio.inspector ?? []).flatMap((sec) => sec.items),
   ];
+  // studio.quick's library tiles (README, Looks) are not paths
+  const tile = (p: string) =>
+    p === "elements" || ["film", "camera", "colour", "lighting"].some((g) => p === `look:${g}`);
   for (const path of [...placed, ...Object.keys(studio.labels ?? {})])
-    if (badPath(path)) {
+    if (!tile(path) && badPath(path)) {
       const [id, param] = splitRef(path);
       add(
         "studio_unknown_path",
@@ -317,7 +320,7 @@ export function graphProblems(
     }
   for (const path of placed)
     if (placed.indexOf(path) !== placed.lastIndexOf(path)) {
-      const [id, param] = splitRef(path);
+      const [id, param] = tile(path) ? [undefined, path] : splitRef(path);
       add("studio_duplicate", `${path}: placed more than once`, id, undefined, param);
     }
   for (const [name, values] of Object.entries(studio.presets ?? {}))

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.9.0
+  version: 1.10.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -363,18 +363,26 @@ paths:
     get:
       tags: [studio]
       operationId: studioListLibrary
-      summary: The caller's library items (at most 200, not paginated); the `@` menu searches it with `q`
+      summary: The caller's library items and the starter looks of the live hosts (not paginated); the `@` menu searches it with `q`, the visual picker asks with `workflow`
       description: |
-        Filters combine with AND. `q` (trimmed, a leading `@` dropped, lower-cased; blank = no filter) matches an item
-        whose `handle` starts with it or whose `name`, lower-cased, starts with it. Order: with `q`, the item whose
-        handle equals it first, then by `handle` (code points); without `q`, newest `updated_at` first. `limit` cuts
-        the list (the `@` menu asks for 8). Images of deleted takes are left out of every item (contracts/README.md,
-        Elements).
+        The caller's own items (at most 200) plus every starter look a live host publishes (contracts/README.md,
+        Looks: starter looks). Filters combine with AND. `q` (trimmed, a leading `@` dropped, lower-cased; blank = no
+        filter) matches an item whose `handle` starts with it or whose `name`, lower-cased, starts with it. `source`
+        keeps one source; `family` keeps the items whose `family` is null or equal to it. Order: with `q`, the item
+        whose handle equals it first, then by `handle` (code points; null handles last), then `name`; without `q`, own
+        items newest `updated_at` first, then starter looks by `name` (code points), then `id`. `limit` cuts the list
+        (the `@` menu asks for 8). Images of deleted takes are left out of every item (contracts/README.md, Elements).
+        `workflow` (a template slug or one of the caller's workflow UUIDs; 422 `unknown workflow <id>`) filters nothing:
+        it adds `fits` and `reason` to every item, against that workflow's graph and the caller's LoRAs now
+        (contracts/README.md, Looks: fit); the picker greys the items that do not fit with the reason.
       parameters:
         - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryKind'}}
         - {name: group, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryGroup'}}
         - {name: q, in: query, required: false, schema: {type: string, maxLength: 80}, description: 'prefix of a handle or a name'}
-        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 200}}
+        - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/LibrarySource'}}
+        - {name: family, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}, description: 'items for this family: `family` null or equal'}
+        - {name: workflow, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}, description: 'annotate every item with `fits` / `reason` for this workflow'}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 1000, default: 1000}}
       responses:
         '200': {description: items, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -383,8 +391,18 @@ paths:
     post:
       tags: [studio]
       operationId: studioCreateLibraryItem
-      summary: Make an element from 1 to 4 of the caller's gallery images
+      summary: Make an element from 1 to 4 of the caller's gallery images, or a look (also "Save as look" on a take)
       description: |
+        Looks (`kind: look`, contracts/README.md, Looks: own looks): `group` film|camera|colour|lighting, no handle,
+        0-4 images (checked as an element's), 0-4 `loras`, at least one of text, an image, a LoRA. 422 `group <g> is
+        not a look group` (or `… is not an element group`), `a look has no handle`, `a look needs text, an image or a
+        LoRA`, `loras: a look has at most 4 LoRAs`, `loras[2]: LoRA <name> is listed twice`, `loras: an element has
+        no LoRAs`, `from_take makes looks only`, `from_take: take <id> was not made by a run` (an upload); 404
+        `loras[2].lora: LoRA <id> not found` (unknown, another user's, deleted, pending, rejected, or shared and
+        listed by no live host), `from_take: take <id> not found` (unknown, another user's, deleted). `from_take`
+        fills `text` (option `prompt`) and `loras` (option `loras`) when the body leaves them out, then every rule
+        above applies. Looks count in the same 200 items as elements; handle uniqueness concerns elements only.
+
         `name` and `text` are trimmed. 422: `name must be 1-80 characters`, `handle must be a slug: a-z, 0-9, - and _,
         starting with a letter, ending with a letter or digit, at most 40 characters`, `text must be at most 2000
         characters` (code points), `name must not contain control characters`, `text must not contain control
@@ -420,7 +438,8 @@ paths:
       summary: Replace an item's group, name, handle, text and images
       description: |
         Optimistic concurrency like workflows: `version` is the one the edit started from; stale = 409 `element changed
-        since you opened it (now version <n>)`, nothing changes. Checked like POST (the handle may stay its own). On
+        since you opened it (now version <n>)` (a look: `look changed since you opened it (now version <n>)`), nothing
+        changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). Checked like POST (the handle may stay its own). On
         success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
         element `changed`. `kind` never changes.
       parameters: [{$ref: '#/components/parameters/LibraryItemId'}]
@@ -439,14 +458,51 @@ paths:
       operationId: studioDeleteLibraryItem
       summary: Delete an item (always allowed)
       description: |
-        Hard delete, never refused: past takes keep their resolved graph and `made_with.elements`; their reuse answers
-        this element `deleted`; a batch already submitted keeps its copy (contracts/README.md, Elements). A prompt that
+        Hard delete, never refused: past takes keep their resolved graph and `made_with.elements` / `made_with.looks`;
+        their reuse answers this item `deleted`; a batch already submitted keeps its copy (contracts/README.md, Elements). A prompt that
         still mentions the handle is 422 at its next run. Deleting again is 404.
       parameters: [{$ref: '#/components/parameters/LibraryItemId'}]
       responses:
         '204': {description: deleted}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/library/{family}/{look_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetStarterLook
+      summary: A starter look (id `<family>/<look_id>`, the same URL as `/library/` + the id)
+      description: 'A starter look some live host publishes now; anything else is 404.'
+      parameters: [{$ref: '#/components/parameters/LookFamily'}, {$ref: '#/components/parameters/StarterLookId'}]
+      responses:
+        '200': {description: the look, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioReplaceStarterLook
+      summary: 'Always refused: starter looks are read-only'
+      description: '409 `starter looks are read-only; save your own copy` for a starter look a live host publishes; 404 otherwise. Nothing is read from the body.'
+      parameters: [{$ref: '#/components/parameters/LookFamily'}, {$ref: '#/components/parameters/StarterLookId'}]
+      responses:
+        '200': {description: never answered, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteStarterLook
+      summary: 'Always refused: starter looks are read-only'
+      description: '409 `starter looks are read-only; save your own copy` for a starter look a live host publishes; 404 otherwise.'
+      parameters: [{$ref: '#/components/parameters/LookFamily'}, {$ref: '#/components/parameters/StarterLookId'}]
+      responses:
+        '204': {description: never answered}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
   # ------------------------------------------------------------------ studio: LoRAs (contracts/README.md, LoRAs)
@@ -623,6 +679,16 @@ paths:
         (`lora.rows[1].strength: must be between -4 and 4`), the row count by `max` (`lora.rows: at most 8 items`). A
         shared LoRA no live host of the env has at dispatch fails the run `no live host for env <env> has LoRA
         <name>`.
+
+        `looks` (contracts/README.md, Looks) are applied in the same resolver as the mentions, after the values are
+        merged and checked, and before the LoRA values are resolved, against the caller's looks and the live starter
+        looks now; `Run.looks` keeps them as requested. 422 (items from 1, in request order, each distinct one; with
+        unknown handles those come first): `looks[2]: unknown look <id>` (unknown, an element, another user's,
+        deleted, or a starter look no live host publishes), `looks[2]: look <name> does not fit this workflow
+        (<reason>)` (the fit reasons, e.g. `this workflow has no LoRA stack`, `LoRA <name> is on no live host`,
+        `LoRA <name> is for <family>`), `encode.refs: at most 10 images; 9 used, @fox +1, look Noir +1 do not fit`,
+        `lora.rows: at most 8 LoRAs; 7 used, look Noir +2 do not fit`, `prompt.text: at most 4000 characters once
+        elements and looks are added (<n>)`.
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       requestBody:
         required: true
@@ -808,6 +874,9 @@ paths:
         With LoRAs: `inputs` hold them as recorded (`{lora_id}`); `loras_status` says, per `made_with.loras` entry,
         `current` (the caller can use it now), `missing` (shared: no live host lists it now; it may come back) or
         `deleted` (own: deleted since). Running a missing or deleted one is 422 (`… LoRA <id> not found`).
+        With looks: `inputs` come back without what the looks added (the typed view), `looks` = the ids of
+        `made_with.looks` (send them as RunRequest.looks), `looks_status` per look: `current`, `changed`, `deleted`
+        (own) or `missing` (starter, no live host publishes it now).
       parameters: [{$ref: '#/components/parameters/TakeId'}]
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/TakeReuse'}}}}
@@ -853,7 +922,8 @@ paths:
         deleted. 409 at 100 pipelines. 422 with the reason when the lineage is not a chain it can save: `an upload has
         no lineage to save`, `take <id> was made from several runs' takes; a pipeline is a chain`, `take <id> in the
         lineage was deleted`, `workflow <id> no longer exists`, `the lineage is longer than 8 steps`, `take <id> mixes several sources in
-        <param>`.
+        <param>`. Each step's `looks` = the ids of its take's `made_with.looks` (one gone since shows as an
+        `unknown_look` problem).
       parameters: [{$ref: '#/components/parameters/TakeId'}]
       requestBody:
         required: false
@@ -962,6 +1032,12 @@ paths:
           `invalid`).
           Studio keeps a copy of every element the batch mentions: its runs, Retry included, resolve against that
           copy, never against later edits or deletes.
+        - Looks (contracts/README.md, Looks: batches): a row's looks are its `looks` cell (table column or grid axis
+          `looks`; null = `looks`), else `looks`; they resolve with the mentions, the failing rows listed the same way
+          (`row 2: looks[1]: unknown look <id>`). A pipeline batch takes its looks from its steps: `looks` or a
+          `looks` column is 422 `looks: a pipeline batch takes its looks from its steps`; unknown or unfitting step
+          looks are pipeline problems (`unknown_look`, `look_fit`: `pipeline cannot run: …`). Studio keeps a copy of
+          every look a row or step uses, like the elements.
         - A live host has the workflow's env and publishes the workflow (`no live host for env <env>`).
         - The submit message fits NATS: the rows' inputs together at most 768 KB (`batch inputs are too large; use
           fewer or shorter rows`).
@@ -1500,6 +1576,8 @@ components:
     PipelineId: {name: pipeline_id, in: path, required: true, schema: {type: string}, description: pipeline UUID (malformed = 404)}
     LoraId: {name: lora_id, in: path, required: true, schema: {type: string}, description: 'a shared LoRA''s SHA-256 (64 hex) or an own LoRA''s UUID (malformed = 404)'}
     LibraryItemId: {name: item_id, in: path, required: true, schema: {type: string}, description: library item UUID (malformed = 404)}
+    LookFamily: {name: family, in: path, required: true, schema: {type: string}, description: 'a starter look''s family (the part of its id before `/`; malformed = 404)'}
+    StarterLookId: {name: look_id, in: path, required: true, schema: {type: string}, description: 'the pack''s look id (the part after `/`; malformed = 404)'}
     BatchRowN: {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
@@ -1698,6 +1776,10 @@ components:
       pattern: '^[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}$'
       description: '`<node id>.<param>`, or `<node id>.bypass` for a bypassable node (a switch)'
       examples: [sample.steps, enhance.bypass]
+    StudioTile:
+      type: string
+      enum: [elements, 'look:film', 'look:camera', 'look:colour', 'look:lighting']
+      description: 'a composer tile in `studio.quick` (plan 04-workflows.md section 7): `elements` opens the visual picker on elements (it inserts an `@` mention), `look:<group>` on that look group (it adds looks to the run''s `looks`). Not a path: never `studio_unknown_path`; twice = `studio_duplicate`'
     StudioLayout:
       type: object
       additionalProperties: false
@@ -1707,7 +1789,11 @@ components:
         form (every param, as `Workflow` says). A path is placed at most once over composer, quick and inspector.
       properties:
         composer: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/StudioPath'}, description: 'in the composer box, in order (the prompt, the references)'}
-        quick: {type: array, maxItems: 12, items: {$ref: '#/components/schemas/StudioPath'}, description: 'chips on the composer, in order'}
+        quick:
+          type: array
+          maxItems: 12
+          items: {anyOf: [{$ref: '#/components/schemas/StudioPath'}, {$ref: '#/components/schemas/StudioTile'}]}
+          description: 'chips on the composer, in order: params, and library tiles (`elements`, `look:<group>`) that open the visual picker (contracts/README.md, Looks: composer tiles)'
         inspector:
           type: array
           maxItems: 12
@@ -1897,6 +1983,7 @@ components:
           additionalProperties: {$ref: '#/components/schemas/PipelineSource'}
           description: 'workflow param `<node>.<param>` ← a source, applied last'
           examples: [{prompt.text: $prompt, encode.refs: review.picked}]
+        looks: {$ref: '#/components/schemas/LookIds', description: 'the looks every run of this step is made with (as RunRequest.looks); missing = []'}
         position: {$ref: '#/components/schemas/NodePosition'}
     PipelineGateNode:
       type: object
@@ -2016,7 +2103,7 @@ components:
         title: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
     PipelineProblemCode:
       type: string
-      enum: [too_many_nodes, too_large, inputs_node, duplicate_input, unknown_node, edge_invalid, branch_not_gate, uncapped_cycle, too_many_runs, unreachable, dead_end, no_output, gate_takes, gate_keep, bind_source, unknown_workflow, workflow_cannot_run, unknown_preset, step_input_invalid, bind_unknown, bind_type, unbound_input, step_seeds]
+      enum: [too_many_nodes, too_large, inputs_node, duplicate_input, unknown_node, edge_invalid, branch_not_gate, uncapped_cycle, too_many_runs, unreachable, dead_end, no_output, gate_takes, gate_keep, bind_source, unknown_workflow, workflow_cannot_run, unknown_preset, step_input_invalid, bind_unknown, bind_type, unbound_input, step_seeds, unknown_look, look_fit]
       description: 'meaning and which block saving: contracts/README.md, Pipeline rules. May grow in a minor version; an unknown code blocks running'
     PipelineProblem:
       type: object
@@ -2065,6 +2152,17 @@ components:
       properties:
         workflow_id: {type: string}
         inputs: {$ref: '#/components/schemas/RunInputs', description: 'missing = {}'}
+        looks: {$ref: '#/components/schemas/LookIds', description: 'the chosen looks, every group together, in the order the composer''s tiles list them (tile order, then pick order); missing = []. Resolved with the mentions (contracts/README.md, Looks)'}
+    LookId:
+      type: string
+      pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$'
+      description: 'a look: one of the caller''s own (a UUID) or a starter look `<family>/<pack look id>` (stable across hosts)'
+      examples: [qwen-image/window-light]
+    LookIds:
+      type: array
+      maxItems: 8
+      items: {$ref: '#/components/schemas/LookId'}
+      description: 'look ids, in order; a repeated id counts once (its first place)'
     RunProgress:
       type: object
       required: [node, step, of]
@@ -2113,6 +2211,7 @@ components:
         batch_id: {type: [string, 'null'], format: uuid, description: 'the batch it runs a row of (lane batch); absent or null for a Create run'}
         batch_row: {type: [integer, 'null'], minimum: 1, description: 'the batch row number; with batch_id'}
         workflow_version: {type: [integer, 'null'], minimum: 1, description: 'a user workflow: the version it ran (its graph is the run''s snapshot); absent or null for a template'}
+        looks: {$ref: '#/components/schemas/LookIds', description: 'the looks it was asked with (RunRequest.looks; a batch run: its row''s or step''s), as requested; absent or empty = none'}
     Resolved:
       type: object
       description: 'values the runner chose (a random seed), sent with succeeded; absent until then and from M0 runners'
@@ -2295,11 +2394,17 @@ components:
           maxItems: 64
           items: {$ref: '#/components/schemas/MadeWithLora'}
           description: 'every LoRA of every lora-stack node that ran, node id order then row order, as resolved when the run was made; absent or empty = none'
+        looks:
+          type: array
+          maxItems: 8
+          items: {$ref: '#/components/schemas/MadeWithLook'}
+          description: 'the looks it was made with, in request order (repeats once), as they were when the run was made; absent or empty = none'
         typed:
           $ref: '#/components/schemas/RunInputs'
           description: |
-            for each param the mention expansion changed (prompt params, the reference rows), its value before it: the
-            prompt as typed, the rows without the element images. `inputs` holds the resolved values (what ran).
+            for each param the mention and look expansion changed (prompt params, the reference rows, the look stack's
+            rows, a pinned canvas), its value before it: the prompt as typed, the rows without the element and look
+            images, the stack without the look LoRAs. `inputs` holds the resolved values (what ran).
             Absent or empty = nothing was expanded.
         pipeline:
           description: 'a take made by a step of a pipeline batch (source pipeline): which pipeline, node and loop attempt; absent or null otherwise'
@@ -2369,6 +2474,26 @@ components:
           type: array
           items: {$ref: '#/components/schemas/LoraStatus'}
           description: 'reuse only: one per `made_with.loras` entry, same order; absent or empty without LoRAs'
+        looks: {$ref: '#/components/schemas/LookIds', description: 'reuse only: the ids of `made_with.looks`, in order, as recorded (send them back as RunRequest.looks); absent or empty without looks'}
+        looks_status:
+          type: array
+          items: {$ref: '#/components/schemas/LookStatus'}
+          description: 'reuse only: one per `made_with.looks` entry, same order; absent or empty without looks'
+    MadeWithLook:
+      type: object
+      required: [id, source, name, version]
+      additionalProperties: false
+      properties:
+        id: {$ref: '#/components/schemas/LookId'}
+        source: {$ref: '#/components/schemas/LibrarySource'}
+        name: {type: string, description: 'as it was when the run was made'}
+        version: {type: integer, minimum: 1, description: 'the version that was applied (a starter look: the pack''s `version`)'}
+    LookStatus:
+      type: object
+      required: [id, status]
+      properties:
+        id: {$ref: '#/components/schemas/LookId'}
+        status: {type: string, enum: [current, changed, deleted, missing], description: 'current: the same version is there now; changed: another version now (edited since, or a pack that bumped it); deleted: an own look deleted since; missing: a starter look no live host publishes now (it may come back). Running a deleted or missing one is 422 `looks[<i>]: unknown look <id>`'}
     MadeWithLora:
       type: object
       required: [node, id, source, name, strength, mode, sha256]
@@ -2408,12 +2533,20 @@ components:
     # ---------------------------------------------------------- studio: the library (contracts/README.md, Elements)
     LibraryKind:
       type: string
-      enum: [element]
-      description: 'element (character, location, prop; used with `@handle`). `look` comes later in a minor version; clients show an unknown kind as is'
+      enum: [element, look]
+      description: 'element (character, location, prop; used with `@handle`); look (film, camera, colour, lighting; chosen from the visual picker, sent as RunRequest.looks). Clients show an unknown kind as is'
     LibraryGroup:
       type: string
-      enum: [character, location, prop]
-      description: 'an element''s group; looks will add theirs (film, camera, colour, lighting) in a minor version'
+      enum: [character, location, prop, film, camera, colour, lighting]
+      description: 'an element''s group (character, location, prop) or a look''s (film, camera, colour, lighting)'
+    LibrarySource:
+      type: string
+      enum: [mine, starter]
+      description: 'mine: the caller''s own (id a UUID, editable); starter: a look shipped by a pack and published by a runner (id `<family>/<pack look id>`, read-only, everyone sees it)'
+    LibraryNeed:
+      type: string
+      enum: [text, images, lora]
+      description: 'what an item brings to a run: text (non-empty `text`: every family with a prompt), images (reference rows), lora (a LoRA stack)'
     LibraryImage:
       type: object
       required: [take_id, url, thumb_url, width, height]
@@ -2423,56 +2556,104 @@ components:
         thumb_url: {$ref: '#/components/schemas/SignedUrl'}
         width: {type: integer, minimum: 1}
         height: {type: integer, minimum: 1}
+    LookLora:
+      type: object
+      required: [lora, name, strength]
+      additionalProperties: false
+      description: 'one LoRA of a look, appended to the look stack at `strength` when the look is applied (contracts/README.md, Looks)'
+      properties:
+        lora: {oneOf: [{$ref: '#/components/schemas/LoraRef'}, {type: 'null'}], description: 'the LoRA; null only for a starter look whose file no live host has (the look then does not fit anything)'}
+        name: {type: string, minLength: 1, maxLength: 80, description: 'own look: the LoRA''s name now (as recorded when it is gone); starter look: the file name without .safetensors'}
+        strength: {type: number, minimum: -4, maximum: 4}
     LibraryItem:
       type: object
       description: |
-        A library item (plan 10-elements-and-looks.md, one record shape for elements and, later, looks; a LoRA and its
-        strength come later as optional fields). `images` are takes of the owner's gallery in order; one whose take
-        was deleted is left out, so a stored element may show 0 images.
+        A library item (plan 10-elements-and-looks.md section 14): one record shape for elements and looks.
+        `images` are takes of the owner's gallery in order; one whose take was deleted is left out, so a stored item
+        may show 0 images. Fields added in API 1.10 (`source`, `family`, `loras`, `needs`, `from_take_id`) are always
+        sent from 1.10 on; `fits` / `reason` only when the list was asked with `workflow`.
       required: [id, kind, group, name, handle, text, images, thumb_url, version, created_at, updated_at]
       properties:
-        id: {type: string, format: uuid}
+        id: {type: string, pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$', description: 'own: a UUID; starter look: `<family>/<pack look id>`'}
         kind: {$ref: '#/components/schemas/LibraryKind'}
         group: {$ref: '#/components/schemas/LibraryGroup'}
         name: {type: string, minLength: 1, maxLength: 80}
-        handle: {type: [string, 'null'], pattern: '^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$', description: 'what `@` mentions; always set for an element (null is kept for looks, which are not mentioned)'}
-        text: {type: string, maxLength: 2000, description: 'appended to the prompt where it is mentioned; empty = none'}
-        images: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/LibraryImage'}}
-        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first image''s thumb_url; null with no image'}
-        version: {type: integer, minimum: 1, description: '1 on create, +1 on every PUT; send it back in LibraryItemUpdate'}
-        created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
+        handle: {type: [string, 'null'], pattern: '^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$', description: 'what `@` mentions; always set for an element, always null for a look'}
+        text: {type: string, maxLength: 2000, description: 'an element: appended where it is mentioned; a look: appended to the prompt when chosen; empty = none'}
+        images: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/LibraryImage'}, description: 'an element 1-4 when saved, a look 0-4; a starter look none (its picture is only `thumb_url`)'}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first image''s thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look''s pack image; else null'}
+        version: {type: integer, minimum: 1, description: '1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look: the pack''s `version`'}
+        created_at: {type: string, format: date-time, description: 'a starter look: the oldest `published_at` of the live hosts publishing it'}
+        updated_at: {type: string, format: date-time, description: 'a starter look: = created_at'}
+        source: {$ref: '#/components/schemas/LibrarySource'}
+        family: {type: [string, 'null'], pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'a starter look: its pack''s family (where it comes from; whether it fits is `fits`); own items: null (any family)'}
+        loras: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/LookLora'}, description: 'a look''s LoRAs in order; always empty for an element'}
+        needs: {type: array, uniqueItems: true, maxItems: 3, items: {$ref: '#/components/schemas/LibraryNeed'}, description: 'computed, in the order text, images, lora: non-empty text, at least one image, at least one LoRA'}
+        from_take_id: {type: [string, 'null'], format: uuid, description: 'a look made with "Save as look": the take (null once deleted, and for every other item)'}
+        fits: {type: boolean, description: 'only with `GET /library?workflow=`: whether the item can be applied to that workflow now (contracts/README.md, Looks: fit)'}
+        reason: {type: [string, 'null'], description: 'with `fits`: why not (`this workflow has no LoRA stack`); null when it fits'}
+      allOf:
+        - if: {properties: {kind: {const: element}}, required: [kind]}
+          then: {properties: {group: {enum: [character, location, prop]}, handle: {type: string}}}
+        - if: {properties: {kind: {const: look}}, required: [kind]}
+          then: {properties: {group: {enum: [film, camera, colour, lighting]}, handle: {type: 'null'}}}
     LibraryItemList:
       type: object
       required: [items]
-      properties: {items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/LibraryItem'}}}
+      properties: {items: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/LibraryItem'}}}
     LibraryImageRef:
       type: object
       required: [take_id]
       additionalProperties: false
       properties:
         take_id: {type: string, format: uuid}
+    LookLoraRef:
+      type: object
+      required: [lora, strength]
+      additionalProperties: false
+      properties:
+        lora: {$ref: '#/components/schemas/LoraRef'}
+        strength: {type: number, minimum: -4, maximum: 4, description: 'the strength the look applies it at'}
+    LibraryFromTake:
+      type: object
+      required: [take_id]
+      additionalProperties: false
+      description: '"Save as look": fill the fields the body leaves out from a take the caller made with a run (contracts/README.md, Looks: Save as look)'
+      properties:
+        take_id: {type: string, format: uuid}
+        prompt: {type: boolean, default: true, description: 'when `text` is absent: copy the take''s `made_with.prompt` as typed with `@@` turned into `@` (trimmed, cut to 2000 code points)'}
+        loras: {type: boolean, default: true, description: 'when `loras` is absent: copy the take''s `made_with.loras` the caller can use now, `{lora, strength}`, first per id, at most 4'}
     LibraryItemCreate:
       type: object
-      required: [kind, group, name, handle, images]
+      required: [kind, group, name]
       additionalProperties: false
+      description: 'an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA'
       properties:
         kind: {$ref: '#/components/schemas/LibraryKind'}
         group: {$ref: '#/components/schemas/LibraryGroup'}
         name: {type: string, maxLength: 200, description: 'trimmed; must then be 1-80 characters'}
-        handle: {type: string, maxLength: 200, description: 'a slug (LibraryItem.handle), unique per owner; the client proposes one from the name'}
-        text: {type: string, maxLength: 4000, description: 'trimmed; must then be at most 2000 characters; missing = ""'}
-        images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}, description: 'takes of the caller, images, 1-4 distinct, in order (the first is the thumbnail)'}
+        handle: {type: [string, 'null'], maxLength: 200, description: 'an element: a slug (LibraryItem.handle), unique per owner; the client proposes one from the name. A look: absent or null'}
+        text: {type: string, maxLength: 4000, description: 'trimmed; must then be at most 2000 characters; missing = "" (a look with from_take: copied)'}
+        images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}, description: 'takes of the caller, images, distinct, in order (the first is the thumbnail): an element 1-4, a look 0-4; missing = []'}
+        loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only: 0-4 LoRAs the caller can use now, distinct; missing = [] (with from_take: copied)'}
+        from_take: {$ref: '#/components/schemas/LibraryFromTake'}
+      allOf:
+        - if: {properties: {kind: {const: element}}, required: [kind]}
+          then: {required: [handle, images], properties: {group: {enum: [character, location, prop]}, handle: {type: string}, loras: {maxItems: 0}}, not: {required: [from_take]}}
+        - if: {properties: {kind: {const: look}}, required: [kind]}
+          then: {properties: {group: {enum: [film, camera, colour, lighting]}, handle: {type: 'null'}}}
     LibraryItemUpdate:
       type: object
-      required: [group, name, handle, text, images, version]
+      required: [group, name, text, images, version]
       additionalProperties: false
+      description: 'every field (checked like LibraryItemCreate for the item''s kind); an element also needs `handle`'
       properties:
         group: {$ref: '#/components/schemas/LibraryGroup'}
         name: {type: string, maxLength: 200}
-        handle: {type: string, maxLength: 200}
+        handle: {type: [string, 'null'], maxLength: 200}
         text: {type: string, maxLength: 4000}
         images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}}
+        loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only; missing = []'}
         version: {type: integer, minimum: 1, description: 'the version the edit started from (409 when stale)'}
     UploadCreate:
       type: object
@@ -2610,6 +2791,7 @@ components:
         row: {type: integer, minimum: 1, maximum: 500}
         attempt: {type: integer, minimum: 1, description: '1; +1 on every Retry'}
         inputs: {$ref: '#/components/schemas/RunInputs', description: 'what the row runs with: the base inputs, then its own values, then its seed (a pipeline batch: `<inputs node>.<input>` keys)'}
+        looks: {$ref: '#/components/schemas/LookIds', description: 'a batch of one workflow: the row''s looks (its cell, else BatchCreate.looks); absent or empty = none'}
         status: {$ref: '#/components/schemas/BatchRowStatus', description: 'queued until its run starts (also while the run waits in the queue or is held), running while it runs, waiting while parked on a gate, then the row''s end'}
         run_id: {type: [string, 'null'], format: uuid, description: 'the current attempt''s run (a pipeline row: its latest run); null before it has one'}
         take_ids: {type: array, items: {type: string, format: uuid}, description: 'the current attempt''s takes (deleted ones left out); a pipeline row: the takes its output received, once it succeeded'}
@@ -2678,8 +2860,8 @@ components:
       additionalProperties: false
       description: 'a CSV parsed by the client or the CLI: each cell typed by its param (clients convert CSV text with node_schemas); a null cell leaves that input unset for the row (a seed: random)'
       properties:
-        columns: {type: array, minItems: 1, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'}}
-        rows: {type: array, minItems: 1, maxItems: 500, items: {type: array, items: {$ref: '#/components/schemas/ParamValue'}}, description: 'each as long as columns (else 422)'}
+        columns: {type: array, minItems: 1, uniqueItems: true, items: {type: string, pattern: '^([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|looks)$'}, description: 'param paths; `looks` (a batch of one workflow only) is the row''s looks: a cell is a list of look ids (null = BatchCreate.looks)'}
+        rows: {type: array, minItems: 1, maxItems: 500, items: {type: array, items: {anyOf: [{$ref: '#/components/schemas/ParamValue'}, {$ref: '#/components/schemas/LookIds'}]}}, description: 'each as long as columns (else 422)'}
     BatchGrid:
       type: object
       required: [axes]
@@ -2695,8 +2877,8 @@ components:
             required: [param, values]
             additionalProperties: false
             properties:
-              param: {type: string, pattern: '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'}
-              values: {type: array, minItems: 1, maxItems: 500, items: {$ref: '#/components/schemas/ParamValue'}}
+              param: {type: string, pattern: '^([a-z][a-z0-9_]*\.[a-z][a-z0-9_]*|looks)$', description: 'a param path, or `looks` (a batch of one workflow only: each value a list of look ids, the row''s looks)'}
+              values: {type: array, minItems: 1, maxItems: 500, items: {anyOf: [{$ref: '#/components/schemas/ParamValue'}, {$ref: '#/components/schemas/LookIds'}]}}
     BatchSeeds:
       type: object
       required: [count]
@@ -2729,6 +2911,7 @@ components:
             - {type: object, required: [table], additionalProperties: false, properties: {table: {$ref: '#/components/schemas/BatchTable'}}}
             - {type: object, required: [grid], additionalProperties: false, properties: {grid: {$ref: '#/components/schemas/BatchGrid'}}}
         seeds: {$ref: '#/components/schemas/BatchSeeds'}
+        looks: {$ref: '#/components/schemas/LookIds', description: 'a batch of one workflow: the looks of every row whose own `looks` cell (table column or grid axis `looks`) is absent or null; missing = []. A pipeline batch takes its looks from its steps (422 here)'}
     BatchEvent:
       description: 'one stored event of the batch: the whole batch, or one whole row'
       oneOf:

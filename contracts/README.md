@@ -18,16 +18,16 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/req.studio.runs.create.schema.json` | NATS request/reply pipelines → studio (not enveloped): create a batch-lane run, idempotent on its key |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
-| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras` (bucket `registry`), `$defs/host` (bucket `hosts`) |
+| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks` (bucket `registry`), `$defs/host` (bucket `hosts`) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
-| `fixtures/registry/{nodes,workflows,models}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
-| `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured) |
+| `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
+| `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
-| `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`. studio_service and the web editor both run them |
-| `fixtures/mentions/` | the **shared mention-rule fixtures** (Mentions, below): `scan.json` (prompt → parts), `resolve.*.json` (a graph with merged values, a library → the expanded inputs, `typed`, `elements`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
+| `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them). studio_service and the web editor both run them |
+| `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical qwen-image lora block (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention fixtures through `scan` / `resolve_mentions`, the LoRA fixtures through `normalise`, lints `openapi.yaml` and the house rules |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types, values and defaults in range), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -50,7 +50,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `studio.runs.create` | core request/reply, queue group `studio` | bare JSON (`req.studio.runs.create`) | pipelines → studio |
 | `pipelines.state.get` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.state.get`) | studio → pipelines (5 s) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
-| KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras` | the runner writes its own keys once at start; studio reads |
+| KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras`, `.looks` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras`, `looks` | the runner writes its own keys once at start; studio reads |
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s; studio reads (older than 30 s = offline) |
 | KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step |
 
@@ -305,7 +305,8 @@ graph is saved first: "Save" for one's own, "Save as my workflow" for a template
   (`WorkflowValidation {problems, can_save, can_run}`, nothing saved); `GET /nodes?env=` (the palette). POST and PUT
   with a problem that blocks saving answer 422 `WorkflowError {detail, problems}`; problems that block only running
   are saved and returned in `problems`. PUT, PATCH and DELETE on a template id are 409.
-- **Studio block** (`StudioLayout`, plan 04-workflows.md section 7): `composer`, `quick` (lists of paths),
+- **Studio block** (`StudioLayout`, plan 04-workflows.md section 7): `composer`, `quick` (lists of paths; `quick` also
+  holds the library tiles `elements`, `look:<group>`: Looks, composer tiles),
   `inspector` (`[{title, items}]`), `labels` (path → field title), `presets` (name → `{path: value}`, at most 8).
   A path is `<node>.<param>` or `<node>.bypass`. Present = Create shows exactly the placed paths, each at most once;
   every other param keeps its graph value. Absent = the derived form (every param, as today). Graph view "Show in
@@ -379,7 +380,7 @@ checked, so the work stays bounded).
 | `cycle` | save | node | the node can reach itself through wires (one problem per node on a cycle; a self-wire counts) |
 | `no_output` | run | — | no node of kind `output` |
 | `studio_unknown_path` | save | node, param | a path in `composer`, `quick`, `inspector` or `labels` whose node is missing, whose param the kind lacks, which is wired, or `<node>.bypass` of a node that cannot be bypassed |
-| `studio_duplicate` | save | node, param | a path placed more than once over composer, quick and inspector |
+| `studio_duplicate` | save | node, param | a path placed more than once over composer, quick and inspector; a tile (`elements`, `look:<group>`) twice in `quick`: no node, `param` = the tile (a tile is never `studio_unknown_path`) |
 | `preset_invalid` | save | node, param | a preset key that would be `studio_unknown_path`, or a value that is `param_invalid` (`bypass`: not a bool) |
 | `lora_duplicate` | save | node, param | a valid rows value with a `Lora` field names one LoRA id in two items |
 | `lora_unknown` | run | node, param | a node that is not bypassed has a LoRA id the caller cannot use now (unknown, another user's, deleted, pending, rejected, or shared and listed by no live host of the env) |
@@ -495,6 +496,8 @@ without exactly one inputs node. A **capped edge** is a branch's fail edge.
 | `bind_type` | run | node, port | the source does not fit: `$x` of type T fits a param whose wire type is T (Text: string/text, Int: int, Float: float, Seed: seed, Image: image), or an Image into a rows param with exactly one Image field (a one-item list); a takes/picked source of at most n takes fits an `image` param when n = 1, or such a rows param when n ≤ its `max` |
 | `unbound_input` | run | node, port | an `image` param, or a rows param with one Image field and `min` ≥ 1, that is not bound (the workflow holds no take, so it has no default) |
 | `step_seeds` | run | node | `seeds` > 1 and the workflow has no unwired `seed` param |
+| `unknown_look` | run | node, param `looks` | a step `looks` id that is not a look the caller can use now (Looks: unknown look) |
+| `look_fit` | run | node, param `looks` | (no `unknown_look`) a step look does not fit the step's workflow as stored (Looks: fit) |
 
 Problems that depend on another document (the workflows, the palette) only block running, so a pipeline stays
 savable when a workflow it uses changes. The bound of 64 runs per row is what Submit's worst case uses.
@@ -578,8 +581,7 @@ edges in a line. Title: `title`, else `<take title> pipeline` cut to 80. No gate
 
 An element is a **library item** of the caller's: `kind: element`, `group` character | location | prop, `name`,
 a unique `handle` (what `@` mentions), optional `text`, 1–4 images picked from the caller's gallery. Elements and
-(in M3) looks are one record shape and one table (`LibraryItem`); a look will add `kind: look`, its groups and
-optional LoRA fields in a minor version, with `handle` null.
+looks are one record shape and one table (`LibraryItem`); a look is `kind: look` with `handle` null (Looks, below).
 
 - **Endpoints** (`/v1/studio/library`, owner-scoped by RLS, another user's id is 404): `GET` (filters `kind`,
   `group`, `q`, `limit`; `q` is the `@` menu's prefix search on handle and name), `POST` (201; the gallery's "Make
@@ -676,6 +678,139 @@ params hold the merged values; missing params take the schema default), library:
 images: [take id]}] (as studio reads it: deleted takes already left out), sizes (optional: take id → [width, height]
 of the user's row takes), expect: {inputs, typed, elements} or
 {errors}}` (missing keys of a success = empty).
+
+## Looks (API 1.10, plan 10-elements-and-looks.md section 14)
+
+A look is a **library item** (`LibraryItem`, the elements' table and endpoints) of `kind: look`, `group` film | camera |
+colour | lighting, `handle` always null: a `name`, a `text`, 0-4 reference images, 0-4 LoRAs with a saved strength, a
+thumbnail. Looks are **chosen, not typed**: the run request names them (`looks`), never the prompt. Two sources:
+
+- **Starter looks** (`source: starter`), shipped by a pack and read-only for everyone. A pack holds
+  `runner_service/packs/<pack>/looks/*.yaml`, each file a list:
+  `{id, group, name, text?, version?, lora?: {file, strength}, image?}`: `id` a slug `^[a-z0-9][a-z0-9-]{0,63}$`
+  unique in the family; `text` ≤ 2000 code points (default `""`); `version` ≥ 1 (default 1; bump it when the look
+  changes); `lora.file` a file name (no path) looked up in the folders the shared LoRA index scans (`<models>/loras/`, a
+  `loras/` folder inside one of the family's model folders), `strength` −4..4 (default 1); `image` a png, jpeg or webp
+  file next to the YAML, at most 2 MB. A look needs non-empty `text` or a `lora`. At most 200 looks per pack. A broken
+  file (schema, duplicate id, missing image) stops the runner like a broken pack; a `lora.file` this host does not have
+  is not an error (`lora_id: null`, logged). At start the runner publishes registry `<host>.<env>.looks`
+  (`$defs/looks`): id `<family>/<id>` (stable across hosts), `family`, `group`, `name`, `text`, `version`, `loras`
+  (`[{file, name, strength, lora_id}]`, `lora_id` = the file's SHA-256 from its LoRA index, else null), `thumb`
+  (the image PUT once to `packs/<family>/looks/<id>-<sha256[:16]>.<ext>`, never overwritten; null without one). The
+  image is only a thumbnail, never a reference image (it is not a take). The fake runner publishes
+  `fixtures/registry/looks.valid.json` verbatim (echo pack).
+- **Own looks** (`source: mine`): the caller's, owner-scoped by RLS like elements (another user's id is 404), id a
+  UUID, `family` null, counted in the same 200 items, `version` / 409 like elements (`look changed since you opened it
+  (now version <n>)`), delete never refused.
+
+**Starter looks in the API.** `GET /v1/studio/library` lists the caller's own items and the union of the live hosts'
+`looks` keys (fresh `hosts` key). Studio keeps an entry only when its `id` is `<family>/<slug>`, its `family` is one
+of that host's `models` families, its `name` has no control character and its `text` none but `\n` `\r` `\t` (others
+are dropped and logged); a `thumb.key` that is not `packs/<family>/looks/<slug>-<16 hex>.<png|jpg|webp>` of the entry's
+family is dropped (`thumb_url` null). One id published by several live hosts: a non-`fake` env's entry before env
+`fake`'s, then the highest `version`; on a tie the first host by (host, then env name); each LoRA's `lora_id` = the first non-null over
+the live hosts publishing that id, version and `file`. `created_at` = `updated_at` = the oldest `published_at` of
+those hosts; `thumb_url` = a signed GET of `thumb.key`; `images` `[]`; `family` the pack's. A starter id is
+`<family>/<id>`: `GET /v1/studio/library/{family}/{look_id}` (the same URL as `/library/` + the id unescaped); PUT and
+DELETE are 409 `starter looks are read-only; save your own copy`; an id no live host publishes is 404. A shared LoRA
+named by a starter look is an ordinary shared LoRA: the dispatcher's LoRA rule places the run.
+
+**Fields** (every item from 1.10): `source`, `family`, `loras` `[{lora: {lora_id} | null, name, strength}]` (an
+element: `[]`; null only for a starter LoRA no live host has), `needs` (computed, in this order: `text` when `text` is
+not empty, `images` with at least one image, `lora` with at least one LoRA), `from_take_id`. `thumb_url`: the first
+image's thumb; else the `from_take_id` take's thumb (null once that take is deleted); else the starter `thumb`; else
+null. With `?workflow=<id>` every item also gets `fits` and `reason` (fit, below). List filters: `kind`, `group`, `q`,
+`source`, `family` (items whose `family` is null or equal), `limit` (≤ 1000).
+
+**Own look rules** (POST / PUT, after trimming; elements unchanged): `group` must be a look group (422 `group <g> is not
+a look group`; an element: `… is not an element group`); `handle` absent or null (422 `a look has no handle`); `text`
+≤ 2000; `images` 0-4 with the element image checks; `loras` 0-4 (422 `loras: a look has at most 4 LoRAs`), each a LoRA
+the caller can use now (own `ready`, or shared and listed by a live host; else 404 `loras[<i>].lora: LoRA <id> not
+found`), distinct (422 `loras[<i>]: LoRA <name> is listed twice`), `strength` −4..4; at least one of text, an image, a
+LoRA (422 `a look needs text, an image or a LoRA`). An element with `loras` is 422 `loras: an element has no LoRAs`.
+The stored LoRA keeps its id, its name at save time (shown while it is gone) and the strength.
+
+**Save as look** (the take's action, plan 06-platform.md 9.1) = `POST /v1/studio/library` with `kind: look` and
+`from_take {take_id, prompt = true, loras = true}`. The take must be the caller's, not deleted (else 404 `from_take:
+take <id> not found`), made by a run (an upload: 422 `from_take: take <id> was not made by a run`); `from_take` on an
+element is 422 `from_take makes looks only`. It fills only what the body leaves out: `text` (when `prompt`) =
+`made_with.prompt` as typed with each `@@` turned into `@` (as the prompt reached the runner; other mentions stay literal
+text: look text is never scanned), trimmed, cut to 2000
+code points (null prompt = `""`); `loras` (when `loras`) = `made_with.loras` in order whose LoRA the caller can use now,
+the first per id, `{lora: {lora_id: id}, strength}` (the mode is not kept), at most 4. Images are never copied (the
+client sends `images`, e.g. the take itself). Then the rules above apply; `from_take_id` = the take.
+
+**Composer tiles.** `studio.quick` may hold `elements` and `look:<group>` among its paths, in order; each is a tile that
+opens the shared visual picker on that group (elements insert an `@` mention; looks join the run's `looks`). A
+workflow without `studio` (every template today: registry workflows carry none) shows the `elements` tile when it has a
+prompt param, then one tile per look group, in the order film, camera, colour, lighting, that has at least one item
+with `fits: true` for it. With `studio`, exactly the tiles its `quick` lists.
+
+**Fit** (normative; `look_fit`; studio for the list's `fits` / `reason`, at run and in pipeline problems; the web for
+the picker's preview). Against a workflow's graph and `loras` = the caller's usable LoRAs now (own `ready`; shared
+listed by a live host of the workflow's env) with their detected families. The first that holds is the reason:
+1. `text` in needs, or an element, and the graph has no prompt param (Mentions, Where): `this workflow has no prompt`.
+   An element fits otherwise (its images are dropped where there are no reference rows).
+2. `images` in needs and no reference rows (Mentions): `this workflow takes no reference images`.
+3. `lora` in needs and no look stack (below): `this workflow has no LoRA stack`.
+4. per LoRA in order: `lora_id` null: `LoRA <name> is on no live host`; not in `loras`: `LoRA <name> is not
+   available`; detected `unknown`: `LoRA <name> fits no known model`; another family than the stack's: `LoRA <name> is
+   for <family>`.
+A starter look's `family` decides nothing here: a text-only look fits every family with a prompt.
+
+**The look stack**: among the known, not bypassed nodes of kind `<family>/lora-stack` with an unwired rows param that
+has a `Lora` field, the first by node id from which no other such node is reachable along wires (the last of a
+chain). None: looks with LoRAs do not fit; studio never adds a node (the graph stays typed).
+
+**Resolving** (normative, `resolve_mentions` with `looks`, `chosen`, `loras`; one resolver with the mentions, plan
+14.2): values are merged first (defaults, the workflow, the preset, the user's inputs) and checked; the expansion then
+only appends, so the user's own edits keep their places. `chosen` = RunRequest.looks; a repeated id counts once, at its
+first place `i` (from 1).
+1. **Unknown**: the unknown-handle errors first, then per distinct id not among the caller's usable looks (own, or a
+   starter a live host publishes; an element id is unknown too): `looks[<i>]: unknown look <id>`. Any: stop.
+2. **Fit**: per look that does not fit: `looks[<i>]: look <name> does not fit this workflow (<reason>)`. Any: stop.
+3. **Images** (Mentions step 2, extended): after the user's rows and the element images, each look's images not yet in
+   a row are appended in stored order, in look order, under the same `max`; a look that does not fit stops it and every
+   later item with new images: `<node>.<param>: at most <max> images; <rows before it> used, @fox +2, look <name> +1 do
+   not fit`. A look's **tokens** = `mention` with `{n}` = the row of each of its images. The canvas pin rule applies
+   when element or look rows were appended.
+4. **LoRAs**: each look's LoRAs, in look order then stored order, go to the look stack's rows as `{<lora field>:
+   {lora_id}, strength}` (the saved strength clamped to the item's `strength` min/max; other fields take their
+   defaults). Skipped: a LoRA already in a row of any known, not bypassed node's Lora rows (the user's row wins, at its
+   strength and mode) or added by an earlier look. Over the param's `max`: `<node>.<param>: at most <max> LoRAs;
+   <rows before it> used, look <name> +<new> do not fit` (that look and every later look with new LoRAs).
+5. **Prompt**: mentions expand per prompt param as before. A look's **line** = its text, then its tokens,
+   space-separated (empty: no line); lines in look order, an identical line once. The lines go to the **first** prompt
+   param only (Where order): its value = the non-empty of (expanded prompt with its element lines, the look lines
+   joined by `\n`) joined by `\n\n`. Over `max`: `<node>.<param>: at most <max> characters once elements and looks are
+   added (<n>)` when look lines went in, else the element text.
+6. **Result**: `inputs` / `typed` as for mentions (a look stack's rows, the prompt, refs, a pinned canvas), `looks` =
+   the distinct chosen looks in order as `{id, source, name, version}`.
+Then the LoRA values of the resolved graph are resolved as today (LoRAs). Errors reach the API as 422 `detail` joined by
+`; ` (a batch row: `row <n>: …`).
+
+**Runs**: `RunRequest.looks` (≤ 8 ids); the resolved graph is checked for a host, hashed, cached, stored as the
+snapshot, sent and recorded; `Run.looks` = as requested. `cmd.run.execute` is unchanged (the runner sees an ordinary
+prompt, reference rows and LoRA rows).
+**Batches** (a workflow): a row's looks = its `looks` cell (table column or grid axis named `looks`, each value a
+list of ids; null = the batch's) else `BatchCreate.looks`; `BatchRow.looks` shows them; `seeds` repeats keep them; every
+row resolves at Submit like mentions. A pipeline batch: `looks` or a `looks` column is 422 `looks: a pipeline batch
+takes its looks from its steps`; a step's runs use `PipelineStepNode.looks` (in the snapshot as `looks`, which
+pipelines ignores); `unknown_look` / `look_fit` are pipeline problems (Submit: `pipeline cannot run: …`), the rest is
+checked as each run is made (the row fails `invalid`). Studio keeps a **copy** of every look a row or step uses (id,
+source, name, version, text, image take ids, LoRAs `{lora_id, name, strength}`) with the batch, like the elements, and
+resolves its runs (`studio.runs.create`, Retry included) against that copy; no message changes.
+**Takes**: `made_with.looks` = the result's `looks`; `made_with.typed` holds every path the looks changed; lineage and
+Save as pipeline read the typed view (look images are never parents); Save as pipeline gives each step `looks` = its
+take's `made_with.looks` ids. `made_with.loras` lists the look LoRAs too (they ran).
+**Reuse**: `inputs` = the typed view; `looks` = the `made_with.looks` ids; `looks_status` per entry: `current` (usable
+now, same version), `changed` (another version), `deleted` (own, deleted since), `missing` (starter, no live host
+publishes it now).
+
+**Fixtures**: `fixtures/mentions/fit.json` `{workflows: {name: WorkflowDoc}, cases: [{description, workflow, item,
+loras?, expect: reason | null}]}`; `resolve.*.json` may add `looks` (the usable looks: `{id, source, name, version,
+text, images: [take id], loras: [{lora_id | null, name, strength}]}`), `chosen` (RunRequest.looks) and `loras` (LoRA id
+→ detected family); `expect.looks` (missing = `[]`).
 
 ## LoRAs (API 1.9, plan 03-runtime.md section 6.4)
 

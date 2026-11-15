@@ -1,0 +1,86 @@
+{
+  "description": "steps with looks that fit their workflows (a text look fits every family with a prompt); `looks` = the looks the caller can use, `loras` = LoRA id → family",
+  "pipeline": {
+    "title": "Looks",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          }
+        ]
+      },
+      "step_1": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        },
+        "looks": [
+          "echo/soft-light"
+        ]
+      },
+      "step_2": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "bind": {
+          "prompt.text": "$prompt"
+        },
+        "looks": [
+          "echo/soft-light"
+        ]
+      },
+      "output": {
+        "kind": "output",
+        "from": "step_2.takes",
+        "collection": "Looks"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "step_1"
+      ],
+      [
+        "step_1",
+        "step_2"
+      ],
+      [
+        "step_2",
+        "output"
+      ]
+    ]
+  },
+  "looks": [
+    {
+      "id": "echo/soft-light",
+      "source": "starter",
+      "name": "Soft light",
+      "version": 1,
+      "text": "soft diffuse light",
+      "images": [],
+      "loras": []
+    },
+    {
+      "id": "qwen-image/ink-wash",
+      "source": "starter",
+      "name": "Ink wash",
+      "version": 1,
+      "text": "ink wash painting",
+      "images": [],
+      "loras": [
+        {
+          "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+          "name": "ink-wash",
+          "strength": 0.8
+        }
+      ]
+    }
+  ],
+  "loras": {
+    "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image"
+  },
+  "problems": []
+}

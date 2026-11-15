@@ -1,0 +1,666 @@
+{
+  "description": "the fit rules (README, Looks: fit): item → the reason it cannot be applied to the workflow, null when it can; `loras` = LoRA id → detected family of the LoRAs the caller can use now",
+  "workflows": {
+    "qwen-basic": {
+      "title": "Qwen Image",
+      "family": "qwen-image",
+      "env": "torch",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "@fox in @snowfield at dusk"
+          }
+        },
+        "seed": {
+          "kind": "seed"
+        },
+        "canvas": {
+          "kind": "canvas"
+        },
+        "model": {
+          "kind": "qwen-image/model"
+        },
+        "encode": {
+          "kind": "qwen-image/encode",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {
+            "refs": []
+          }
+        },
+        "sample": {
+          "kind": "qwen-image/sample",
+          "in": {
+            "model": "model.model",
+            "cond": "encode.cond",
+            "canvas": "canvas.canvas",
+            "seed": "seed.seed"
+          }
+        },
+        "decode": {
+          "kind": "qwen-image/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample.latent"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.image"
+          }
+        }
+      }
+    },
+    "qwen-lora": {
+      "title": "Qwen Image + LoRA",
+      "family": "qwen-image",
+      "env": "torch",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "canvas": {
+          "kind": "canvas",
+          "params": {
+            "mode": "auto",
+            "width": 1024,
+            "height": 1024
+          }
+        },
+        "model": {
+          "kind": "qwen-image/model",
+          "params": {
+            "variant": "base",
+            "precision": "int8"
+          }
+        },
+        "lora": {
+          "kind": "qwen-image/lora-stack",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {
+            "rows": [
+              {
+                "lora": {
+                  "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+                },
+                "strength": 0.8,
+                "mode": "adapter"
+              },
+              {
+                "lora": {
+                  "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10"
+                },
+                "strength": 1,
+                "mode": "bake"
+              }
+            ]
+          }
+        },
+        "encode": {
+          "kind": "qwen-image/encode",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {
+            "transparent": false,
+            "refs": []
+          }
+        },
+        "sample": {
+          "kind": "qwen-image/sample",
+          "in": {
+            "model": "lora.model",
+            "cond": "encode.cond",
+            "canvas": "canvas.canvas",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "steps": 40
+          }
+        },
+        "decode": {
+          "kind": "qwen-image/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample.latent"
+          },
+          "params": {
+            "tiled": "auto"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.image"
+          }
+        }
+      }
+    },
+    "qwen-lora-bypassed": {
+      "title": "Qwen Image + LoRA",
+      "family": "qwen-image",
+      "env": "torch",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "canvas": {
+          "kind": "canvas",
+          "params": {
+            "mode": "auto",
+            "width": 1024,
+            "height": 1024
+          }
+        },
+        "model": {
+          "kind": "qwen-image/model",
+          "params": {
+            "variant": "base",
+            "precision": "int8"
+          }
+        },
+        "lora": {
+          "kind": "qwen-image/lora-stack",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {
+            "rows": [
+              {
+                "lora": {
+                  "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c"
+                },
+                "strength": 0.8,
+                "mode": "adapter"
+              },
+              {
+                "lora": {
+                  "lora_id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10"
+                },
+                "strength": 1,
+                "mode": "bake"
+              }
+            ]
+          },
+          "bypass": true
+        },
+        "encode": {
+          "kind": "qwen-image/encode",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {
+            "transparent": false,
+            "refs": []
+          }
+        },
+        "sample": {
+          "kind": "qwen-image/sample",
+          "in": {
+            "model": "lora.model",
+            "cond": "encode.cond",
+            "canvas": "canvas.canvas",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "steps": 40
+          }
+        },
+        "decode": {
+          "kind": "qwen-image/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample.latent"
+          },
+          "params": {
+            "tiled": "auto"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.image"
+          }
+        }
+      }
+    },
+    "echo": {
+      "title": "Echo",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "steps": 10,
+            "delay_ms": 300,
+            "fail": false,
+            "refs": []
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    },
+    "echo-stack": {
+      "title": "Echo + LoRA",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "a fox"
+          }
+        },
+        "lora": {
+          "kind": "echo/lora-stack",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "rows": []
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "lora.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    },
+    "noise": {
+      "title": "Noise",
+      "family": "test",
+      "env": "fake",
+      "nodes": {
+        "noise": {
+          "kind": "test/noise"
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "noise.image"
+          }
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "description": "text works with every family that has a prompt",
+      "workflow": "echo",
+      "item": {
+        "id": "echo/soft-light",
+        "source": "starter",
+        "name": "Soft light",
+        "version": 1,
+        "text": "soft diffuse light",
+        "images": [],
+        "loras": [],
+        "kind": "look"
+      },
+      "expect": null
+    },
+    {
+      "description": "a starter look of another family fits by what it needs",
+      "workflow": "echo",
+      "item": {
+        "id": "qwen-image/window-light",
+        "source": "starter",
+        "name": "Window",
+        "version": 1,
+        "text": "soft daylight from a single window, deep falloff into shadow",
+        "images": [],
+        "loras": [],
+        "kind": "look"
+      },
+      "expect": null
+    },
+    {
+      "description": "text needs a prompt",
+      "workflow": "noise",
+      "item": {
+        "id": "echo/soft-light",
+        "source": "starter",
+        "name": "Soft light",
+        "version": 1,
+        "text": "soft diffuse light",
+        "images": [],
+        "loras": [],
+        "kind": "look"
+      },
+      "expect": "this workflow has no prompt"
+    },
+    {
+      "description": "images need reference rows",
+      "workflow": "noise",
+      "item": {
+        "id": "10000000-0000-4000-8000-000000000005",
+        "source": "mine",
+        "name": "Palette",
+        "version": 1,
+        "text": "",
+        "images": [
+          "00000000-0000-4000-8000-000000000007"
+        ],
+        "loras": [],
+        "kind": "look"
+      },
+      "expect": "this workflow takes no reference images"
+    },
+    {
+      "description": "images on a family with reference rows",
+      "workflow": "echo",
+      "item": {
+        "id": "10000000-0000-4000-8000-000000000005",
+        "source": "mine",
+        "name": "Palette",
+        "version": 1,
+        "text": "",
+        "images": [
+          "00000000-0000-4000-8000-000000000007"
+        ],
+        "loras": [],
+        "kind": "look"
+      },
+      "expect": null
+    },
+    {
+      "description": "a LoRA needs a lora-stack node",
+      "workflow": "qwen-basic",
+      "item": {
+        "id": "qwen-image/ink-wash",
+        "source": "starter",
+        "name": "Ink wash",
+        "version": 1,
+        "text": "ink wash painting, loose brush strokes",
+        "images": [],
+        "loras": [
+          {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+            "name": "ink-wash",
+            "strength": 0.8
+          }
+        ],
+        "kind": "look"
+      },
+      "loras": {
+        "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+        "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+        "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown",
+        "5b1d0000-0000-4000-8000-000000000001": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000002": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000003": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000004": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000005": "qwen-image"
+      },
+      "expect": "this workflow has no LoRA stack"
+    },
+    {
+      "description": "a bypassed stack is no stack",
+      "workflow": "qwen-lora-bypassed",
+      "item": {
+        "id": "qwen-image/ink-wash",
+        "source": "starter",
+        "name": "Ink wash",
+        "version": 1,
+        "text": "ink wash painting, loose brush strokes",
+        "images": [],
+        "loras": [
+          {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+            "name": "ink-wash",
+            "strength": 0.8
+          }
+        ],
+        "kind": "look"
+      },
+      "loras": {
+        "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+        "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+        "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown",
+        "5b1d0000-0000-4000-8000-000000000001": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000002": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000003": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000004": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000005": "qwen-image"
+      },
+      "expect": "this workflow has no LoRA stack"
+    },
+    {
+      "description": "a starter LoRA file no live host has",
+      "workflow": "qwen-lora",
+      "item": {
+        "id": "qwen-image/kodak-portra",
+        "source": "starter",
+        "name": "Portra",
+        "version": 1,
+        "text": "",
+        "images": [],
+        "loras": [
+          {
+            "lora_id": null,
+            "name": "kodak-portra",
+            "strength": 1
+          }
+        ],
+        "kind": "look"
+      },
+      "loras": {
+        "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+        "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+        "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown",
+        "5b1d0000-0000-4000-8000-000000000001": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000002": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000003": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000004": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000005": "qwen-image"
+      },
+      "expect": "LoRA kodak-portra is on no live host"
+    },
+    {
+      "description": "a LoRA the caller cannot use now (deleted, pending, rejected, on no live host of the env)",
+      "workflow": "qwen-lora",
+      "item": {
+        "id": "10000000-0000-4000-8000-000000000003",
+        "source": "mine",
+        "name": "Noir",
+        "version": 4,
+        "text": "black and white, hard shadows",
+        "images": [
+          "00000000-0000-4000-8000-000000000005",
+          "00000000-0000-4000-8000-000000000009"
+        ],
+        "loras": [
+          {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+            "name": "ink-wash",
+            "strength": 0.3
+          },
+          {
+            "lora_id": "5b1d0000-0000-4000-8000-000000000001",
+            "name": "noir-lut",
+            "strength": 0.6
+          }
+        ],
+        "kind": "look"
+      },
+      "loras": {
+        "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image"
+      },
+      "expect": "LoRA noir-lut is not available"
+    },
+    {
+      "description": "a LoRA of no known model",
+      "workflow": "qwen-lora",
+      "item": {
+        "id": "10000000-0000-4000-8000-000000000004",
+        "source": "mine",
+        "name": "Flux style",
+        "version": 1,
+        "text": "flux style",
+        "images": [],
+        "loras": [
+          {
+            "lora_id": "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d",
+            "name": "flux-style",
+            "strength": 1
+          }
+        ],
+        "kind": "look"
+      },
+      "loras": {
+        "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+        "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+        "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown",
+        "5b1d0000-0000-4000-8000-000000000001": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000002": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000003": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000004": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000005": "qwen-image"
+      },
+      "expect": "LoRA flux-style fits no known model"
+    },
+    {
+      "description": "a LoRA of another family than the stack's",
+      "workflow": "echo-stack",
+      "item": {
+        "id": "qwen-image/ink-wash",
+        "source": "starter",
+        "name": "Ink wash",
+        "version": 1,
+        "text": "ink wash painting, loose brush strokes",
+        "images": [],
+        "loras": [
+          {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+            "name": "ink-wash",
+            "strength": 0.8
+          }
+        ],
+        "kind": "look"
+      },
+      "loras": {
+        "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+        "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+        "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown",
+        "5b1d0000-0000-4000-8000-000000000001": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000002": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000003": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000004": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000005": "qwen-image"
+      },
+      "expect": "LoRA ink-wash is for qwen-image"
+    },
+    {
+      "description": "text, images and LoRAs that fit",
+      "workflow": "qwen-lora",
+      "item": {
+        "id": "10000000-0000-4000-8000-000000000003",
+        "source": "mine",
+        "name": "Noir",
+        "version": 4,
+        "text": "black and white, hard shadows",
+        "images": [
+          "00000000-0000-4000-8000-000000000005",
+          "00000000-0000-4000-8000-000000000009"
+        ],
+        "loras": [
+          {
+            "lora_id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+            "name": "ink-wash",
+            "strength": 0.3
+          },
+          {
+            "lora_id": "5b1d0000-0000-4000-8000-000000000001",
+            "name": "noir-lut",
+            "strength": 0.6
+          }
+        ],
+        "kind": "look"
+      },
+      "loras": {
+        "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c": "qwen-image",
+        "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10": "qwen-image",
+        "9d4c2b7a1e6f3c8d5a0b9e4f2c7d1a6b3e8f5c0d9a4b2e7f1c6d3a8b5e0f9c4d": "unknown",
+        "5b1d0000-0000-4000-8000-000000000001": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000002": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000003": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000004": "qwen-image",
+        "5b1d0000-0000-4000-8000-000000000005": "qwen-image"
+      },
+      "expect": null
+    },
+    {
+      "description": "an element needs only a prompt (its images are dropped without reference rows)",
+      "workflow": "echo-stack",
+      "item": {
+        "kind": "element",
+        "text": "",
+        "images": [
+          "00000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "expect": null
+    },
+    {
+      "description": "an element without a prompt",
+      "workflow": "noise",
+      "item": {
+        "kind": "element",
+        "text": "",
+        "images": [
+          "00000000-0000-4000-8000-000000000001"
+        ]
+      },
+      "expect": "this workflow has no prompt"
+    }
+  ]
+}

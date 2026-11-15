@@ -33,7 +33,7 @@ describe("pipeline rules against contracts/fixtures/pipelines", () => {
   for (const f of readdirSync(DIR).filter((x) => /^(valid|invalid)\./.test(x)))
     it(f, () => {
       const fx = load(f);
-      const got = pipelineProblems(fx.pipeline, workflows, palette);
+      const got = pipelineProblems(fx.pipeline, workflows, palette, fx.looks, fx.loras);
       expect(new Set(got.map(key))).toEqual(new Set(fx.problems.map(key)));
       for (const p of got) expect(p.message).toBeTruthy();
     });

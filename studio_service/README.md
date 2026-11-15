@@ -124,6 +124,19 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
   (`batches.elements`, `studio.runs.create`, Retry included). The resolved graph is stored, sent and recorded;
   `runs.mentions` keeps `{typed, elements}` for `made_with`; lineage and Save as pipeline read the typed view.
 
+## Looks (API 1.10)
+
+- Own looks are `library_items` of kind `look` (migration 00013: `loras` `[{lora_id, name, strength}]`,
+  `from_take_id`); starter looks are the live hosts' registry `looks` keys (`registry.Looks`: highest version,
+  read-only, `/library/{family}/{look_id}` answers 409 to writes). `GET /library` merges both, filters by `source` /
+  `family`, and with `workflow` adds `fits` / `reason` (`lookFit`). "Save as look" is POST with `from_take`.
+- `expandMentions` is the one library resolver: mentions and the chosen looks (`RunRequest.looks`, a batch row's
+  `looks` cell, a pipeline step's `looks`) in the contracts' order: look images after the element images, look LoRAs
+  into the look stack (`lookStack`; the user's row wins), look lines in the first prompt. The LoRA check that follows
+  (and so the dispatcher's host rule) sees the look LoRAs. `runs.looks` keeps the request, `runs.mentions` the
+  applied `looks` (made_with); a batch keeps a copy in `batches.looks`, a row its ids in `batch_rows.looks`. Reuse
+  answers `looks` and `looks_status`; pipeline problems `unknown_look` / `look_fit` (`pipelineLooks`).
+
 NATS user `studio`: publishes `cmd.run.>`, `$KV.cancels.>` (a KV put, sent as a request for the stream's ack) and
 `$JS.API.STREAM.PURGE.CMD` (the dispatcher's purge of a lost run's command),
 consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable `studio-pipelines`), publishes
@@ -147,4 +160,4 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 | `api/lora/` | the LoRA library (`/v1/studio/loras`: list, get, upload by signed PUT, complete, rename, delete, the sweep), `safetensors.go` (the bounded header parser: 8 MB, 20000 tensors, offsets, dtypes; no tensor data held), `normalise.go` (key styles, the normaliser, upload checks, family detection; tests run `contracts/fixtures/loras` as real files), `Usable` (what runs may use) |
 | `api/studio/loras.go` | LoRA values of a run: checked as the owner in `runGraphs`, kept as `runs.loras`, resolved into the command at release; the dispatcher's shared-LoRA host rule, baked residency and deleted-LoRA failure |
 | `api/studio/batch*.go` | batches: `batches.go` (Submit, reads, control, events, `studio.runs.create`), `batch_rows.go` (rows from lines/table/grid/seeds), `batch_projector.go` (`evt.pipeline.*`), `batch_record.go` (`run_finished`, the batch log) |
-| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras` |
+| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras`, `00013` looks (`library_items.loras`, `from_take_id`, `runs.looks`, `batches.looks`, `batch_rows.looks`) |
