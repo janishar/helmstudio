@@ -759,6 +759,20 @@ func (r *Registry) Looks(now time.Time) map[string]LiveLook {
 	return out
 }
 
+// PrefusedIn is the title of a published model whose lora block lists the shared LoRA id as pre-fused (the first by
+// source), or "": its file is part of that model's weights.
+func (r *Registry) PrefusedIn(id string) string {
+	published := r.Published()
+	for _, source := range slices.Sorted(maps.Keys(published)) {
+		for _, m := range published[source].Models {
+			if m.Lora != nil && slices.ContainsFunc(m.Lora.Prefused, func(p Prefused) bool { return p.LoraID == id }) {
+				return m.Title
+			}
+		}
+	}
+	return ""
+}
+
 // Published returns what every runner publishes about weights, by "<host>.<env>" (live or not).
 func (r *Registry) Published() map[string]Published {
 	r.mu.RLock()

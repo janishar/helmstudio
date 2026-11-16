@@ -221,9 +221,11 @@ def models_root() -> Path:
 def owns_copy(pack: Pack, variant: str, component: str) -> bool:
     """Whether the variant's own folder holds files of `component` (a shared one kept separate); a link (into the
     owner's folder, as a hand-made share) is not a copy."""
+    from core.models import linked
+
     root = models_root() / pack.spec["variants"][variant]["dir"]
     globs = pack.component(component)["files"]
-    return any(p.is_file() and not p.is_symlink()
+    return any(p.is_file() and not p.is_symlink() and not linked(root, p.relative_to(root).as_posix())
                for g in ([globs] if isinstance(globs, str) else globs) for p in root.glob(g))  # fmt: skip
 
 

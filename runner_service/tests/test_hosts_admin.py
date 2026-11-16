@@ -134,6 +134,24 @@ async def test_settings_apply_at_once_when_idle_and_after_the_run_when_busy(monk
     assert s.version is None and res.pin_refs is None and res.budget_gb == 64 - config.RESERVE_GB
 
 
+async def test_an_older_version_never_replaces_a_newer_one_and_unload_clears_the_cache(monkeypatch):
+    monkeypatch.setattr("messaging.settings.ram_gb", lambda: 64.0)
+    c = consumer(FakeJS(), residency=Residency(52))
+    s = Settings(c, c.host)
+    await s.offer(settings_value(version=6, after_run="keep_warm"))
+    await s.offer(settings_value(version=5, after_run="keep_pinned"))  # its KV put landed late
+    assert s.version == 6 and s.after_run == "keep_warm"
+    c.ctx = object()
+    await s.offer(settings_value(version=8, after_run="keep_warm"))
+    await s.offer(settings_value(version=7, after_run="keep_pinned"))  # older than the pending one
+    c.ctx = None
+    await s.run_ended()
+    assert s.version == 8 and s.after_run == "keep_warm"
+    c.cache["x"] = object()
+    await s.offer(settings_value(version=9, after_run="unload"))  # idle: cached node results go too
+    assert s.version == 9 and not c.cache
+
+
 async def test_off_contract_settings_are_ignored():
     c = consumer(FakeJS())
     s = Settings(c, c.host)

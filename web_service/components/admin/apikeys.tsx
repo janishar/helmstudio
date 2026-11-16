@@ -143,8 +143,8 @@ export function ApiKeysAdmin() {
       <NewKeyPanel />
       <Modal open={!!revoking} onClose={() => setRevoking(null)} title="Revoke this key?">
         <p className="mb-4 text-[13px] text-t2">
-          Every request with the {revoking?.client} key ({revoking?.prefix}…) is refused from now
-          on. This cannot be undone: make a new key with the command if it is still needed.
+          Every request with the {revoking?.client} key ({revoking?.prefix}…) is refused within a
+          minute. This cannot be undone: make a new key with the command if it is still needed.
         </p>
         <div className="flex justify-end gap-2">
           <button type="button" className="chip bevel" onClick={() => setRevoking(null)}>

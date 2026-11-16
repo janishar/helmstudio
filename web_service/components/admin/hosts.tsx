@@ -83,10 +83,11 @@ export function HostsAdmin() {
         }),
       );
       setNotice(
-        `${r.host}: ` +
+        `Unload on ${r.host}: ` +
           r.requests
-            .map((q) => `${q.env} ${q.state === "asked" ? "asked" : "after its run"}`)
-            .join(", "),
+            .map((q) => `env ${q.env} ${q.state === "asked" ? "asked now" : "after its run"}`)
+            .join(", ") +
+          ".",
       );
       setActionError("");
       reload();

@@ -417,14 +417,20 @@ function LoraPanel({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className="act justify-center disabled:opacity-50 text-a2"
-            disabled={!target}
-            onClick={() => setConfirm(true)}
-          >
-            Delete from host
-          </button>
+          {l.prefused ? (
+            <p className="m-0 text-[12px] text-t2">
+              Part of {l.prefused} (pre-fused): delete the model instead.
+            </p>
+          ) : (
+            <button
+              type="button"
+              className="act justify-center disabled:opacity-50 text-a2"
+              disabled={!target}
+              onClick={() => setConfirm(true)}
+            >
+              Delete from host
+            </button>
+          )}
         </div>
       )}
       <Modal

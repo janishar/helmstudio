@@ -8,6 +8,7 @@ import {
   downloadPlan,
   folderOf,
   forHost,
+  jobOpen,
   macOnly,
   mediaText,
   percent,
@@ -103,6 +104,13 @@ describe("download plan", () => {
     expect(downloadPlan(list, turbo, "mac").gatedNote).toMatch(/mac has none/);
     expect(downloadPlan(list, ltx.variants[0], "mac").blocked).toBe("no download source");
     expect(downloadPlan(list, ltx.variants[0], "mac").licence).toBeNull();
+  });
+  it("keeps a queued notice only while its job is open", () => {
+    const job = (state: string) => ({ id: "j1", state }) as S<"ModelJob">;
+    expect(jobOpen([], "j1")).toBe(true); // not in the list yet
+    expect(jobOpen([job("running")], "j1")).toBe(true);
+    expect(jobOpen([job("succeeded")], "j1")).toBe(false);
+    expect(jobOpen([job("failed")], "j1")).toBe(false);
   });
   it("needs no accept for a licence that does not ask", () => {
     const p = downloadPlan(list, base, "gpu1");

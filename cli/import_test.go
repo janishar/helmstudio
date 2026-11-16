@@ -186,9 +186,13 @@ func TestImport(t *testing.T) {
 	if !strings.HasPrefix(out, "imported 1 new (1 images, 0 videos), 0 already imported, 0 failed; 0 lineage edges, 1 starred") {
 		t.Fatalf("first run: %s", out)
 	}
-	out = helmOK(t, "import", root, "--user", "ann@example.com")
-	if !strings.HasPrefix(out, "imported 2 new (1 images, 1 videos), 1 already imported, 0 failed; 2 lineage edges, 0 starred, 0.0 GB uploaded; skipped 3 (audio 1, text 0, deleted 1, unsupported 1)") {
+	out = helmOK(t, "import", root, "--user", "ann@example.com", "--limit", "1") // --limit counts new items
+	if !strings.HasPrefix(out, "imported 1 new (1 images, 0 videos), 1 already imported, 0 failed; 1 lineage edges, 0 starred") {
 		t.Fatalf("second run: %s", out)
+	}
+	out = helmOK(t, "import", root, "--user", "ann@example.com")
+	if !strings.HasPrefix(out, "imported 1 new (0 images, 1 videos), 2 already imported, 0 failed; 1 lineage edges, 0 starred, 0.0 GB uploaded; skipped 3 (audio 1, text 0, deleted 1, unsupported 1)") {
+		t.Fatalf("rest: %s", out)
 	}
 	out = helmOK(t, "import", root, "--user", "ann@example.com")
 	if !strings.HasPrefix(out, "imported 0 new (0 images, 0 videos), 3 already imported, 0 failed; 0 lineage edges") {
@@ -223,4 +227,95 @@ func TestImport(t *testing.T) {
 	if code := helm([]string{"import", root, "--user", "nobody@example.com"}, nil, io.Discard, io.Discard, nil); code != 2 {
 		t.Errorf("unknown user: exit %d, want 2", code)
 	}
+}
+
+// Paths helm.db names stay inside assets/ (posters inside cache/derived/): no "..", no absolute path, no link, no
+// linked folder; such an item fails and nothing of it is uploaded. Rows still in the -wal are read.
+func TestImportReadsOnlyItsOwnFiles(t *testing.T) {
+	root := oldGallery(t)
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "private.png"), pngBytes(t, 3, 3), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for link, target := range map[string]string{"assets/blobs/link.png": filepath.Join(outside, "private.png"),
+		"assets/blobs/out": outside, "cache/derived/p.png": filepath.Join(outside, "private.png")} {
+		if err := os.Symlink(target, filepath.Join(root, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rel, _ := filepath.Rel(filepath.Join(root, "assets"), filepath.Join(outside, "private.png"))
+	db := filepath.Join(root, "helm.db")
+	cmd := exec.Command("sqlite3", db)
+	cmd.Stdin = strings.NewReader(`
+INSERT INTO assets (id, sha256, kind, mime, bytes, blob_path) VALUES ('X1','x1','image','image/png',1,'` + rel + `'),
+ ('X2','x2','image','image/png',1,'blobs/link.png'), ('X3','x3','image','image/png',1,'blobs/out/private.png'),
+ ('X4','x4','image','image/png',1,'` + filepath.Join(outside, "private.png") + `'),
+ ('X5','x5','video','video/mp4',1,'blobs/cc/c3.mp4'), ('X6','x6','video','video/mp4',1,'blobs/cc/c3.mp4'),
+ ('X7','x7','video','video/mp4',1,'../concat:/x');
+INSERT INTO items (id, studio_id, kind, asset_id, params, created_at) VALUES ('J1','s','image','X1','{}',1),
+ ('J2','s','image','X2','{}',2), ('J3','s','image','X3','{}',3), ('J4','s','image','X4','{}',4),
+ ('J5','s','video','X5','{}',5), ('J6','s','video','X6','{}',6), ('J7','s','video','X7','{}',7);
+INSERT INTO derived VALUES ('X5','poster','../../../` + filepath.Base(outside) + `/private.png',1), ('X6','poster','p.png',1);
+DELETE FROM items WHERE id NOT LIKE 'J%';
+`)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sqlite3: %v %s", err, out)
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("HELM_API_KEY", "helm_test")
+	api := &importAPI{takes: map[string]map[string]any{}, ready: map[string]bool{}, ids: map[string]string{}, puts: map[string]int{}, parents: map[string][]any{}}
+	srv := httptest.NewServer(api)
+	t.Cleanup(srv.Close)
+	if err := saveConfig(config{URL: srv.URL, AccessToken: "at1"}); err != nil {
+		t.Fatal(err)
+	}
+	defer func(p func(string) (videoInfo, error)) { probeVideo = p }(probeVideo)
+	probeVideo = func(string) (videoInfo, error) {
+		return videoInfo{Width: 8, Height: 6, DurationS: 2, FPS: 24, Frames: 48}, nil
+	}
+	var out bytes.Buffer
+	if code := helm([]string{"import", root, "--user", "ann@example.com"}, nil, &out, io.Discard, nil); code != 1 {
+		t.Fatalf("exit %d: %s", code, out.String())
+	}
+	for _, want := range []string{"J1: unsafe file path", "J2: not a regular file", "J3: unsafe file path", "J4: unsafe file path",
+		"J5: poster: unsafe file path", "J6: poster: not a regular file", "J7: unsafe file path"} {
+		if !strings.Contains(out.String(), want+"\n") {
+			t.Errorf("missing %q in:\n%s", want, out.String())
+		}
+	}
+	if len(api.puts) != 0 || len(api.takes) != 0 {
+		t.Errorf("uploaded: %v %v", api.puts, api.takes)
+	}
+
+	// the old app still open: a row in the -wal only is read, and nothing is written next to helm.db
+	writer := exec.Command("sqlite3", db)
+	stdin, _ := writer.StdinPipe()
+	stdout, _ := writer.StdoutPipe()
+	if err := writer.Start(); err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprint(stdin, "PRAGMA journal_mode=WAL;\nPRAGMA wal_autocheckpoint=0;\n"+
+		"INSERT INTO items (id, studio_id, kind, asset_id, params, created_at) VALUES ('W1','s','image','A2','{}',9);\n.print done\n")
+	b := make([]byte, 64)
+	for got := ""; !strings.Contains(got, "done"); {
+		n, err := stdout.Read(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got += string(b[:n])
+	}
+	if fi, err := os.Stat(db + "-wal"); err != nil || fi.Size() == 0 {
+		t.Fatal("no wal", err)
+	}
+	before := snapshot(t, root)
+	out.Reset()
+	helm([]string{"import", root, "--user", "ann@example.com", "--dry-run"}, nil, &out, io.Discard, nil)
+	if !strings.HasPrefix(out.String(), "user ann@example.com\nwould import 3 (1 images, 2 videos)") { // W1 is the image
+		t.Errorf("dry run missed the wal's row: %s", out.String())
+	}
+	if snapshot(t, root) != before {
+		t.Error("the old folder changed")
+	}
+	stdin.Close()
+	_ = writer.Wait()
 }

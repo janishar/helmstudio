@@ -3632,6 +3632,8 @@ export interface components {
              * @description mine: the upload's creation; shared: the file's mtime (the oldest over its hosts)
              */
             created_at: string;
+            /** @description from 1.16, shared only: the title of a model a host publishes with this LoRA pre-fused into its weights (its file cannot be deleted: delete the model instead); absent otherwise */
+            prefused?: string;
         };
         LoraList: {
             loras: components["schemas"]["Lora"][];
@@ -4773,7 +4775,7 @@ export interface components {
             idle_unload_min: number;
             reserve_gb: number;
             pins: components["schemas"]["PinRef"][];
-            /** @description every fresh hosts key of the host reports `policy.settings_version` = version */
+            /** @description every fresh hosts key of the host (but a local server's `server` env, which holds no weights) reports `policy.settings_version` = version */
             applied: boolean;
             /** Format: date-time */
             updated_at: string;

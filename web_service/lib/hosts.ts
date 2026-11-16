@@ -87,7 +87,10 @@ export function hostCards(hosts: Host[]): HostCard[] {
   const by = new Map<string, Host[]>();
   for (const h of hosts) by.set(h.host, [...(by.get(h.host) ?? []), h]);
   return [...by.keys()].sort().map((host) => {
-    const envs = by.get(host)!.toSorted((a, b) => a.env.localeCompare(b.env));
+    // a local server's `server` env holds no weights: not shown beside runners (contracts "Hosts admin")
+    const all = by.get(host)!.toSorted((a, b) => a.env.localeCompare(b.env));
+    const runners = all.filter((e) => e.env !== "server");
+    const envs = runners.length ? runners : all;
     const live = envs.filter((e) => e.state !== "offline");
     const entries = envs.flatMap((e) => (e.resident ?? []).map((r) => ({ env: e.env, r })));
     const components = entries.reduce((s, x) => s + x.r.gb, 0);

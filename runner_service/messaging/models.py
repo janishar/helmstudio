@@ -5,7 +5,8 @@ holder, so a download does not block generation.
 - invalid → copied to dlq.<subject> and `term`;
 - cancel key `<job_id>` already written → cancelled;
 - else `running` → the job (`+WIP` every WIP seconds; a download watches its cancel key and sends
-  evt.model.progress at each file's start and end and at most every PROGRESS seconds between) → a rescan of the
+  evt.model.progress at each file's start and end, at most every PROGRESS seconds between and at least every HEARD
+  seconds) → a rescan of the
   models and loras keys → one terminal status → ack (after the status is acked). A redelivery (the runner
   restarted: delivery + 1, seq from 1) resumes a download from the files already on disk."""
 
@@ -32,6 +33,7 @@ SUBJECT = f"cmd.model.{HOST}.{ENV}"
 ACK_WAIT = 60  # seconds
 WIP = 10  # seconds between +WIP
 PROGRESS = 2.0  # seconds between progress events within a file
+HEARD = 30.0  # seconds: a progress event at least this often, so studio knows the job is alive
 POLL = 0.25  # seconds between looks at a running download
 
 
@@ -178,8 +180,11 @@ class ModelJobs:
                 if progress.total_bytes is not None:
                     d = progress.data()
                     edge = (d["files_done"], d.get("file"))
-                    if edge != sent or (
-                        time.monotonic() - at >= PROGRESS and d["done_bytes"] != last
+                    since = time.monotonic() - at
+                    if (
+                        edge != sent
+                        or (since >= PROGRESS and d["done_bytes"] != last)
+                        or since >= HEARD
                     ):
                         await events.publish("progress", d)
                         sent, at, last = edge, time.monotonic(), d["done_bytes"]
@@ -201,14 +206,16 @@ class ModelJobs:
         if (v := data.get("variant")) is not None and v not in variants:
             raise JobError("not_found", f"{p.spec['title']} has no variant {v}")
         deleted = {v} if v else set(variants)
-        if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[1] in deleted):
+        kept, only = models.kept_components(p, deleted)
+        first = next(iter(variants))
+        # residency names a shared component by its owner variant: one kept on disk stays loadable (studio's rule)
+        if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[1] in deleted
+                                  and not (k[1] == first and k[2] in kept)):  # fmt: skip
             raise JobError("in_use", f"{p.spec['title']} {loaded[0][1]} {loaded[0][2]} is loaded on "
                                      f"{HOST}.{ENV}: unload it first")  # fmt: skip
         res = self.consumer.residency
         if self.consumer.ctx is not None and res and any(k[0] == p.spec["id"] for k in res.used):
             raise JobError("in_use", f"a run on {HOST}.{ENV} uses {p.spec['title']}")
-        kept, only = models.kept_components(p, deleted)
-        first = next(iter(variants))
 
         def work() -> tuple[int, int]:
             files = freed = 0

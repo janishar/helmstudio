@@ -155,4 +155,7 @@ func TestPrefusedLora(t *testing.T) {
 	if bad["detail"] != "lora.rows[1].lora: LoRA ltx-2.5-22b-distilled-lora-450 is already part of the distilled weights" {
 		t.Fatal(bad)
 	}
+	if got := e.call(userA, "GET", "/v1/studio/loras/"+distilled, nil, 200); got["prefused"] != "LTX-2.5" { // the web offers no delete
+		t.Fatal(got)
+	}
 }

@@ -50,6 +50,7 @@ import {
   fraction,
   isActive,
   lastDuration,
+  pinnedNote,
   mergeRuns,
   nodeLabel,
   seedOf,
@@ -193,6 +194,7 @@ export function Create({
   const [takes, setTakes] = useState<Take[]>(initial?.takes ?? []);
   const [tracks, setTracks] = useState<Record<string, RunTrack>>({});
   const [selected, setSelected] = useState<string | null>(null);
+  const [lastRun, setLastRun] = useState<string | null>(null); // the newest run Generate queued here
   const [full, setFull] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -652,6 +654,7 @@ export function Create({
         );
         if (sid === sessionRef.current) put(mergeRuns(runsRef.current, [run]));
         setSelected(run.id);
+        setLastRun(run.id);
       }
       setReuseNote("");
     } catch (err) {
@@ -700,6 +703,7 @@ export function Create({
     workflow;
   const anyActive = !!runs?.some((r) => isActive(r.status));
   const took = workflow && runs ? lastDuration(runs, workflow.id) : null;
+  const pinned = pinnedNote(runs?.find((r) => r.id === lastRun));
   const host = hostMemory(hosts, workflow?.env);
   const session = sessions?.find((s) => s.id === sessionId);
 
@@ -1058,13 +1062,20 @@ export function Create({
                         ? "Add to queue"
                         : "Generate"}
                 </span>
-                {took != null && !busy && (
-                  <span
-                    className="mono text-[11px] font-medium"
-                    title={`The last run of this workflow took ${clock(took)}`}
-                  >
-                    ≈ {clock(took)}
+                {pinned && !busy ? (
+                  <span className="mono text-[11px] font-medium" title={`The queued run ${pinned}`}>
+                    {pinned}
                   </span>
+                ) : (
+                  took != null &&
+                  !busy && (
+                    <span
+                      className="mono text-[11px] font-medium"
+                      title={`The last run of this workflow took ${clock(took)}`}
+                    >
+                      ≈ {clock(took)}
+                    </span>
+                  )
                 )}
               </button>
             </div>

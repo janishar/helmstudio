@@ -56,6 +56,12 @@ describe("Admin › Hosts", () => {
     expect(machineText(mac.machine)).toBe("Apple Silicon · Metal · native");
     expect(afterRunTag(mac.policy!.after_run)).toBe("After run: keep warm");
   });
+  it("leaves out a local server's env, which holds no weights", () => {
+    const server = { ...admin.hosts[0], env: "server", resident: [] } as S<"Host">;
+    const [card] = hostCards([...(admin.hosts as S<"Host">[]), server]);
+    expect(card.envs.map((e) => e.env)).toEqual(["mlx", "torch"]);
+    expect(hostCards([server])[0].envs.map((e) => e.env)).toEqual(["server"]);
+  });
   it("is running while any env is busy, offline when none is live", () => {
     const h = admin.hosts.map((x) => ({ ...x, state: "busy" })) as S<"Host">[];
     expect(hostCards(h)[0].state).toBe("running");

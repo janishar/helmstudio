@@ -18,6 +18,7 @@ import {
   downloadPlan,
   folderOf,
   forHost,
+  jobOpen,
   macOnly,
   mediaText,
   percent,
@@ -56,9 +57,12 @@ function useModels(admin: boolean) {
     const tick = () => !document.hidden && reload();
     tick();
     const t = setInterval(tick, fast ? 2_000 : 15_000);
+    // a download just ended: look again soon rather than in 15 s, so Download is not offered on what is present
+    const settle = fast ? undefined : setTimeout(tick, 3_000);
     document.addEventListener("visibilitychange", tick);
     return () => {
       clearInterval(t);
+      clearTimeout(settle);
       document.removeEventListener("visibilitychange", tick);
     };
   }, [reload, fast]);
@@ -390,7 +394,7 @@ function VariantPanel({
     host || v.hosts.find((h) => h.state !== "present")?.host || targets[0] || "",
   );
   const [dialog, setDialog] = useState<"download" | "delete" | null>(null);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ job: string; text: string } | null>(null);
   const [error, setError] = useState("");
   const shown = host || target;
   const on = v.hosts.find((h) => h.host === shown);
@@ -511,9 +515,9 @@ function VariantPanel({
               Last {last.kind === "download" ? "download" : "delete"} failed: {last.failure.detail}
             </p>
           )}
-          {notice && (
+          {notice && jobOpen(jobs, notice.job) && (
             <p role="status" className="m-0 text-[12px] text-t2">
-              {notice}
+              {notice.text}
             </p>
           )}
           {error && <ErrorNote>{error}</ErrorNote>}
@@ -560,7 +564,7 @@ function VariantPanel({
           onClose={() => setDialog(null)}
           onDone={(j) => {
             setDialog(null);
-            setNotice(`Download queued on ${j.host}.`);
+            setNotice({ job: j.id, text: `Download queued on ${j.host}.` });
             onChanged();
           }}
         />
@@ -579,12 +583,14 @@ function VariantPanel({
           onClose={() => setDialog(null)}
           onDone={(j) => {
             setDialog(null);
-            setNotice(
-              `Delete queued on ${j.host}.` +
+            setNotice({
+              job: j.id,
+              text:
+                `Delete queued on ${j.host}.` +
                 (j.keeps.length
                   ? ` Kept: ${j.keeps.map((k) => `${k.component} (for ${k.for.map((f) => titleOf(m, f)).join(", ")})`).join(", ")}.`
                   : ""),
-            );
+            });
             onChanged();
           }}
         />

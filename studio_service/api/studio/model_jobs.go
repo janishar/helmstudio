@@ -34,6 +34,10 @@ import (
 // StaleJobKey is how old an env's hosts key may be before studio cancels a released download itself.
 const StaleJobKey = 60 * time.Second
 
+// JobSilence is how long a released job may go unheard (no evt.model.* since its release or its last event: the
+// runner sends progress at least every 30 s) before studio fails it and purges its command.
+var JobSilence = 10 * time.Minute
+
 // jobRow is a model_jobs row.
 type jobRow struct {
 	ID, Kind, Host, Env            string
@@ -398,15 +402,39 @@ func endJob(ctx context.Context, tx pgx.Tx, job *jobRow, state string, failure, 
 
 // ------------------------------------------------------------------ release
 
-// ReleaseModelJobs releases the oldest queued job of every host with no released job open, once its env's key is
-// live: its refusals are checked again (a refusal fails it, class in_use) and its cmd.model.job goes to the outbox.
-func ReleaseModelJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, now time.Time) error {
+// ReleaseModelJobs fails the released jobs unheard for JobSilence (their command purged: a runner that crashed
+// through max_deliver, or term'd it, never reports them), then releases the oldest queued job of every host with no
+// released job open, once its env's key is live: its refusals are checked again (a refusal fails it, class in_use)
+// and its cmd.model.job goes to the outbox. It holds the dispatcher's lock too, so a run is never released to a host
+// in the same instant as a delete of its weights there.
+func ReleaseModelJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error, now time.Time) error {
 	if !reg.Ready() {
 		return nil
 	}
 	return common.System(ctx, pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('studio.model_jobs'))`); err != nil {
 			return err
+		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('studio.dispatcher'))`); err != nil {
+			return err
+		}
+		silent, err := collect[jobRow](ctx, tx, `SELECT `+jobCols+` FROM model_jobs WHERE state IN ('queued', 'running')
+			AND released_at IS NOT NULL AND coalesce(heard_at, released_at) < $1 FOR UPDATE`, now.Add(-JobSilence))
+		if err != nil {
+			return err
+		}
+		for _, job := range silent {
+			if purge != nil {
+				if err := purge(ctx, "cmd.model."+job.Host+"."+job.Env); err != nil {
+					log.Printf("model jobs: purge cmd.model.%s.%s: %v", job.Host, job.Env, err) // tried again next tick
+					continue
+				}
+			}
+			log.Printf("model jobs: %s %s on %s went unheard for %s: failed", job.Kind, job.ID, job.Host, JobSilence)
+			if err := endJob(ctx, tx, &job, "failed", map[string]string{"class": "internal",
+				"detail": "the runner stopped reporting this job"}, nil); err != nil {
+				return err
+			}
 		}
 		next, err := collect[jobRow](ctx, tx, `SELECT DISTINCT ON (host) `+jobCols+` FROM model_jobs j
 			WHERE state = 'queued' AND released_at IS NULL AND NOT EXISTS (SELECT 1 FROM model_jobs o
@@ -432,7 +460,7 @@ func ReleaseModelJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Reg
 			case command == nil:
 				continue // its env's key is not live: it waits
 			}
-			if _, err := tx.Exec(ctx, `UPDATE model_jobs SET released_at = clock_timestamp(), env = $2 WHERE id = $1`,
+			if _, err := tx.Exec(ctx, `UPDATE model_jobs SET released_at = clock_timestamp(), heard_at = clock_timestamp(), env = $2 WHERE id = $1`,
 				job.ID, command.Env); err != nil {
 				return err
 			}
@@ -491,11 +519,11 @@ func recheck(ctx context.Context, tx pgx.Tx, w weights, job jobRow) (*message.Mo
 }
 
 // RunModelJobs releases model jobs every Tick until ctx ends.
-func RunModelJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry) {
+func RunModelJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error) {
 	tick := time.NewTicker(Tick)
 	defer tick.Stop()
 	for {
-		if err := ReleaseModelJobs(ctx, pool, reg, time.Now()); err != nil && ctx.Err() == nil {
+		if err := ReleaseModelJobs(ctx, pool, reg, purge, time.Now()); err != nil && ctx.Err() == nil {
 			log.Printf("model jobs: %v", err)
 		}
 		select {
@@ -555,6 +583,9 @@ func projectModel[D interface{ Base() message.ModelBase }](ctx context.Context, 
 			return err
 		}
 		if first, err := messaging.FirstSeen(ctx, tx, job.ID, base.Delivery, base.Seq); err != nil || !first {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE model_jobs SET heard_at = clock_timestamp() WHERE id = $1`, job.ID); err != nil {
 			return err
 		}
 		return apply(ctx, tx, job, event)

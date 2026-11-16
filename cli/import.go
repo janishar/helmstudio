@@ -78,13 +78,37 @@ const itemsQuery = `SELECT i.id, i.studio_id, i.kind, coalesce(i.title,'') AS ti
 
 const inputsQuery = `SELECT item_id, asset_id FROM item_inputs ORDER BY item_id, role, asset_id`
 
-// sqliteQuery runs one query on the database read-only and decodes its rows (sqlite3 -json) into out.
+// copyDB copies helm.db with its -wal (rows not checkpointed yet) into dir and returns the copy's path: the old
+// app may still be running, and the source folder is never written (no -shm is created there).
+func copyDB(db, dir string) (string, error) {
+	out := filepath.Join(dir, "helm.db")
+	for _, suffix := range []string{"", "-wal"} {
+		src, err := os.Open(db + suffix)
+		if errors.Is(err, os.ErrNotExist) && suffix != "" {
+			continue
+		} else if err != nil {
+			return "", err
+		}
+		dst, err := os.Create(out + suffix)
+		if err == nil {
+			_, err = io.Copy(dst, src)
+			err = errors.Join(err, dst.Close())
+		}
+		src.Close()
+		if err != nil {
+			return "", err
+		}
+	}
+	return out, nil
+}
+
+// sqliteQuery runs one query on the database (a snapshot) read-only and decodes its rows (sqlite3 -json) into out.
 func sqliteQuery(db, query string, out any) error {
 	abs, err := filepath.Abs(db)
 	if err != nil {
 		return err
 	}
-	uri := "file:" + (&url.URL{Path: abs}).EscapedPath() + "?mode=ro&immutable=1"
+	uri := "file:" + (&url.URL{Path: abs}).EscapedPath() + "?mode=ro"
 	cmd := exec.Command("sqlite3", "-readonly", "-batch", "-bail", "-init", os.DevNull, "-json", uri, query)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -114,6 +138,36 @@ func (it oldItem) skipReason() string {
 }
 
 func (it oldItem) key() string { return "helmstudio:" + it.ID }
+
+// under is the absolute path of rel (a path helm.db names) inside base: a clean relative path with no "..", every
+// link resolved still inside base, and a regular file (not a link); else an error. Nothing else under the folder, or
+// outside it, is ever read or uploaded.
+func under(base, rel string) (string, error) {
+	clean := filepath.Clean(filepath.FromSlash(rel))
+	if rel == "" || filepath.IsAbs(clean) || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", errors.New("unsafe file path")
+	}
+	root, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", errors.New("file missing")
+	}
+	if root, err = filepath.Abs(root); err != nil {
+		return "", err
+	}
+	p := filepath.Join(root, clean)
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return "", errors.New("file missing")
+	}
+	if !fi.Mode().IsRegular() {
+		return "", errors.New("not a regular file")
+	}
+	real, err := filepath.EvalSymlinks(p) // a linked folder on the way
+	if err != nil || !strings.HasPrefix(real, root+string(filepath.Separator)) {
+		return "", errors.New("unsafe file path")
+	}
+	return p, nil
+}
 
 // title is the item's title, else its prompt's first line, else its file's stem (at most 80 characters).
 func (it oldItem) title() string {
@@ -189,7 +243,7 @@ func importCmd(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	email := fs.String("user", "", "the email of the user whose gallery receives the items")
 	dry := fs.Bool("dry-run", false, "only read and count: no network call, nothing written")
-	limit := fs.Int("limit", 0, "import at most n items (0 = all)")
+	limit := fs.Int("limit", 0, "import at most n items not imported yet (0 = all; a dry run counts the first n)")
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		return fmt.Errorf("usage: helm import <path> --user <email> [--dry-run] [--limit n]")
 	}
@@ -202,8 +256,13 @@ func importCmd(args []string, stdout, stderr io.Writer) error {
 	}
 	var items []oldItem
 	var inputs []oldInput
-	db := filepath.Join(root, "helm.db")
-	if _, err := os.Stat(db); err != nil {
+	tmp, err := os.MkdirTemp("", "helm-import-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	db, err := copyDB(filepath.Join(root, "helm.db"), tmp)
+	if err != nil {
 		return err
 	}
 	if err := sqliteQuery(db, itemsQuery, &items); err != nil {
@@ -233,15 +292,18 @@ func importCmd(args []string, stdout, stderr io.Writer) error {
 			parents[in.ItemID] = append(parents[in.ItemID], "helmstudio:"+p)
 		}
 	}
-	if *limit > 0 && len(todo) > *limit {
-		todo = todo[:*limit]
-	}
-
 	if *dry {
+		if *limit > 0 && len(todo) > *limit { // without the network a dry run cannot tell what is imported already
+			todo = todo[:*limit]
+		}
 		for _, it := range todo {
-			fi, err := os.Stat(filepath.Join(root, "assets", it.BlobPath))
+			p, err := under(filepath.Join(root, "assets"), it.BlobPath)
+			var fi os.FileInfo
+			if err == nil {
+				fi, err = os.Stat(p)
+			}
 			if err != nil {
-				st.failed = append(st.failed, it.ID+": file missing")
+				st.failed = append(st.failed, it.ID+": "+err.Error())
 				continue
 			}
 			st.imported++
@@ -267,12 +329,10 @@ func importCmd(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.MkdirTemp("", "helm-import-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmp)
 	for _, it := range todo {
+		if *limit > 0 && st.imported+len(st.failed) >= *limit { // --limit counts new items: a re-run goes on
+			break
+		}
 		ready, sent, err := c.importItem(root, tmp, owner, it, parents[it.ID])
 		switch {
 		case err != nil:
@@ -343,7 +403,10 @@ type fileRef struct {
 // importItem creates (or finds) the item's take, uploads its file (and a video's poster) and completes it. ready: it
 // was already imported (only missing parent edges were added); sent: the bytes uploaded.
 func (c *client) importItem(root, tmp, owner string, it oldItem, parents []string) (ready bool, sent int64, err error) {
-	f := fileRef{path: filepath.Join(root, "assets", it.BlobPath), ct: it.Mime, width: it.Width, height: it.Height}
+	f := fileRef{ct: it.Mime, width: it.Width, height: it.Height}
+	if f.path, err = under(filepath.Join(root, "assets"), it.BlobPath); err != nil {
+		return false, 0, err
+	}
 	fi, err := os.Stat(f.path)
 	if err != nil {
 		return false, 0, errors.New("file missing")
@@ -446,7 +509,11 @@ func (f *fileRef) readSize() {
 // posterFor is the old derived poster when it is a png or jpeg, else frame 0 extracted by ffmpeg into tmp.
 func posterFor(root, tmp string, it oldItem, video string) (fileRef, error) {
 	if it.Poster != "" {
-		p := fileRef{path: filepath.Join(root, "cache", "derived", it.Poster)}
+		p := fileRef{}
+		var err error
+		if p.path, err = under(filepath.Join(root, "cache", "derived"), it.Poster); err != nil {
+			return fileRef{}, fmt.Errorf("poster: %v", err)
+		}
 		if b, err := os.ReadFile(p.path); err == nil {
 			if cfg, format, err := image.DecodeConfig(bytes.NewReader(b)); err == nil {
 				p.ct, p.size, p.width, p.height = "image/"+format, int64(len(b)), cfg.Width, cfg.Height
@@ -455,7 +522,7 @@ func posterFor(root, tmp string, it oldItem, video string) (fileRef, error) {
 		}
 	}
 	out := filepath.Join(tmp, it.ID+".poster.png")
-	if err := exec.Command("ffmpeg", "-v", "error", "-nostdin", "-y", "-i", video, "-frames:v", "1", out).Run(); err != nil {
+	if err := exec.Command("ffmpeg", "-v", "error", "-nostdin", "-y", "-i", "file:"+video, "-frames:v", "1", "file:"+out).Run(); err != nil {
 		return fileRef{}, fmt.Errorf("no poster (ffmpeg: %v)", err)
 	}
 	p := fileRef{path: out, ct: "image/png"}
@@ -479,7 +546,7 @@ type videoInfo struct {
 // probeVideo reads a video's size, length and audio with ffprobe (a variable so tests need no ffmpeg).
 var probeVideo = func(path string) (videoInfo, error) {
 	var v videoInfo
-	b, err := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", path).Output()
+	b, err := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-show_streams", "-show_format", "file:"+path).Output()
 	if err != nil {
 		return v, fmt.Errorf("ffprobe: %v", err)
 	}

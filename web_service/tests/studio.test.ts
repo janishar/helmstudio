@@ -10,6 +10,7 @@ import {
   followSession,
   fraction,
   lastDuration,
+  pinnedNote,
   mergeRuns,
   seedOf,
   segments,
@@ -542,5 +543,19 @@ describe("the progress strip", () => {
     const done = run({ status: "succeeded", started_at: at(0), finished_at: at(52) });
     expect(lastDuration([run(), done], "echo")).toBe(52);
     expect(lastDuration([done], "qwen-image")).toBeNull();
+  });
+
+  it("says which pinned entries a queued run would unload first", () => {
+    const pin = { env: "torch", model: "qwen-image-2.1", variant: "turbo", precision: "int8" };
+    const unloads_pinned = [
+      { ...pin, component: "transformer", gb: 6.76 },
+      { ...pin, component: "vae", gb: 0.3 },
+    ];
+    expect(pinnedNote(run({ status: "queued", unloads_pinned }))).toBe(
+      "unloads pinned transformer, VAE, reloads ≈ 7.1 GB after",
+    );
+    expect(pinnedNote(run({ status: "running", unloads_pinned }))).toBe("");
+    expect(pinnedNote(run({ status: "queued" }))).toBe("");
+    expect(pinnedNote(undefined)).toBe("");
   });
 });

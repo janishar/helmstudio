@@ -101,6 +101,18 @@ export function lastDuration(runs: Run[], workflowId: string): number | null {
   return r ? (Date.parse(r.finished_at!) - Date.parse(r.started_at!)) / 1000 : null;
 }
 
+/** "unloads pinned transformer, reloads ≈ 6.8 GB after" for a queued run whose admission would take pinned entries
+ * (Run.unloads_pinned, contracts "Hosts admin": Generate says so first); "" otherwise. */
+export function pinnedNote(r?: Run): string {
+  const p = r?.status === "queued" ? (r.unloads_pinned ?? []) : [];
+  if (!p.length) return "";
+  const names = [
+    ...new Set(p.map((x) => (x.component === "vae" ? "VAE" : x.component.replaceAll("_", " ")))),
+  ];
+  const gb = Math.round(p.reduce((s, x) => s + x.gb, 0) * 10) / 10;
+  return `unloads pinned ${names.join(", ")}, reloads ≈ ${gb} GB after`;
+}
+
 /** When a run's nodes reported: the run's start and, per node, its first and last progress (ms). */
 export type RunTrack = {
   start?: number;

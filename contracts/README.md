@@ -1791,7 +1791,8 @@ must_accept, gated, bytes?}` (absent: not downloadable); licence texts in the pa
 **What a runner publishes** (registry.schema.json): the models key gains `licences [{id, title, url?, text}]`, per model
 `media`, `runtimes [{runtime, env}]` (every runtime of the pack), per variant `title`, `dir`, `source`, `components
 [{component, from_variant, precisions, bytes?, separate?}]`, `files [{path, bytes, sha256?, component?}]` (the
-manifest of its own folder, paths relative to `dir`), `presence` present | partial | missing | mismatch (with
+manifest of its own folder, paths relative to `dir`; left out, largest first, while the models value would pass 768
+KB: NATS max_payload is 1 MB; `bytes` stays), `presence` present | partial | missing | mismatch (with
 `mismatch [path]`). The hosts key gains `models_disk {root (home as ~), free_bytes, total_bytes}`, `machine {os, accel,
 packaging, ram_gb}`, `hub_token` (a token file exists), `policy` (Hosts admin) and `resident[].pinned_why`. The
 runner **rescans** its models root every 60 s and after each model job (presence by stat; a file is hashed once and
@@ -1823,7 +1824,7 @@ another), `Mac only` (only mlx in `runtimes`) and the detail panel's path (`mode
   (class `in_use`) instead of sending it.
 - **The runner** consumes durable `models-<host>-<env>` (max_ack_pending 1, ack wait 60 s) in a worker apart from
   runs, sends `+WIP` every 10 s, publishes `evt.model.status` `running`, `evt.model.progress` (each file's start and
-  end, at most every 2 s between: absolute counts), then one terminal status; it acks the command only after the
+  end, at most every 2 s between and at least every 30 s: absolute counts), then one terminal status; it acks the command only after the
   terminal status is acked. The projector (durable `studio-models`, filter `evt.model.>`) dedupes on (job_id,
   delivery, seq) and ignores events of a terminal job.
 - **Download**: the plan = the variant's `source` files (`huggingface_hub.snapshot_download(repo_id, revision,
@@ -1832,7 +1833,11 @@ another), `Mac only` (only mlx in `runtimes`) and the detail panel's path (`mode
   written; `HF_ENDPOINT` selects the hub: the fake hub in tests) plus each shared component not already on the host
   with matching hashes (from the owner's source, its component's patterns, into the owner's folder). Before fetching:
   the Hub's file list gives sizes and LFS hashes (`total_bytes`); free space < remaining + 1 GiB fails `disk_full`.
-  Each file is checked against its LFS SHA-256 after it lands (else it is deleted and the job fails `hash_mismatch`);
+  Free space is checked again every 256 MiB streamed (below the rest + 0.5 GiB: `disk_full`), and a file streamed past
+  its listed size fails `network`. A file is never written through a symlinked folder of the variant's (`… is under a
+  symlinked folder: remove the link by hand`), nor under `.cache/` in any letter case; two listed paths equal but for
+  case fail the plan (`… twice`); files under a linked folder are not a variant's own copy. Each file is checked
+  against its LFS SHA-256 after it lands (else it is deleted and the job fails `hash_mismatch`);
   hashes are recorded (the manifest's `sha256`). **Licence**: `ModelDownload.accept_licence` must be true when
   `must_accept` (else 422); the job records `{id, sha256 of the text shown}` and the command carries it; the runner
   fails `licence` if its pack's text hashes otherwise. **Token**: the runner reads the Hub token only from the file
@@ -1842,7 +1847,12 @@ another), `Mac only` (only mlx in `runtimes`) and the detail panel's path (`mode
   download continues with the files not yet landed. Studio restarting loses nothing (jobs and the outbox are rows). Cancel
   (queued: at once; running download: KV `cancels` key `<job_id>`, checked at least every 2 s; the files landed are kept,
   the variant shows `partial`); if the env's hosts key is gone or older than 60 s, studio cancels it itself and purges
-  `cmd.model.<host>.<env>`. Studio never fails a released job on its own otherwise.
+  `cmd.model.<host>.<env>`. A released job studio has not heard of (no `evt.model.*` since its release or its last
+  event) for 10 minutes fails `internal` (`the runner stopped reporting this job`) and its command is purged (a runner
+  that crashed through max_deliver, or a command it dead-lettered), so the host's next job goes out. Studio never
+  fails a released job on its own otherwise. While a `delete` or `lora_delete` is released, the dispatcher sends that
+  host no run that loads the model (or names the shared LoRA); such a run waits without a position (the release takes
+  the dispatcher's lock, so neither sees the other half done).
 - **Idempotency**: a second POST for the same (host, model, variant) download, or the same delete, while one is queued
   or running answers that job (200). A finished download leaves `present` and a new POST is 409 `… is already on …`.
 - **Delete**: removes the variant's own files under `<root>/<dir>/` (never outside it, never following a symlink out),
@@ -1851,7 +1861,8 @@ another), `Mac only` (only mlx in `runtimes`) and the detail panel's path (`mode
   belong to no component (configs, tokenizer, scheduler: the sharing variant reads them); only the other components'
   files go. Refused (409, the openapi texts) while
   any affected entry is resident on any env of the host, a run not yet terminal uses the model there, or a download
-  of it is unfinished. `lora_delete` removes every file of the host's index with that SHA-256 (409 for a pre-fused one,
+  of it is unfinished (the runner applies the same rule: a resident shared component the delete keeps, named by its
+  owner variant, does not refuse it). `lora_delete` removes every file of the host's index with that SHA-256 (409 for a pre-fused one,
   one baked into a resident entry, or one a run not yet terminal names on that host); other envs drop it at their next
   rescan (a run sent there meanwhile fails `LoRA <name> is not on host <host>`, as today).
 - **Failures** (`failure.class`, one-line `detail`): `not_found` (repo, revision or file 404: `repo <repo> has no
@@ -1875,7 +1886,9 @@ root, never `~/GenAI/models`.
 - **Settings are per host** (the board's settings panel "apply to every env on it"; plan 6.2 "one setting per host"):
   `after_run` (unload | keep_warm | keep_pinned, the RUNNER_AFTER_RUN values), `idle_unload_min` (RUNNER_IDLE_UNLOAD_S /
   60; 0 = never), `reserve_gb` (RUNNER_RESERVE_GB) and `pins`. Studio's table is the truth; on every change (and at
-  start) studio writes KV bucket `host_settings` key `<host>` (`$defs/settings`, `version` + 1). Each runner of the
+  start) studio writes KV bucket `host_settings` key `<host>` (`$defs/settings`, `version` + 1) under the host's lock,
+  before the change commits (a failed write is a 503 and stores nothing), so the key never ends on an older version;
+  a runner ignores a value whose version is not newer than the one it applied or holds pending. Each runner of the
   host watches its key and applies a new version at once when idle, else right after its run (never mid-run, never a
   restart): new budget, after-run policy, idle timer, pins; an idle runner then applies the policy at once, as after a
   run (unload: everything goes; keep_pinned: what is not pinned goes). It reports
@@ -1905,14 +1918,20 @@ root, never `~/GenAI/models`.
 - **API keys** (Admin › API keys, docs/mock/ApiKeys.dc.html): the existing `GET /auth/admin/apikeys` and `DELETE
   /auth/admin/apikeys/{id}` are all the board needs (client, `prefix`, created, `last_used_at`, Active / Revoked with
   `revoked_at`); keys are made only on the server with `auth apikey <client>` (the board's command and "Shown once"),
-  so the web calls no create. No personal user keys: helm sends its client key plus the user's token (plan 17.3).
+  so the web calls no create. A revoked key is refused within 60 s (Kong caches a valid verdict that long per
+  worker). No personal user keys: helm sends its client key plus the user's token (plan 17.3).
 
 ## Import (API 1.16, M5a; plan 06-platform 9.3; normative)
 
-`helm import <path> --user <email> [--dry-run]` (admin CLI) brings an old helmstudio gallery into one user's gallery.
-- **Read-only source**: the CLI opens `<path>/helm.db` with SQLite URI `file:<abs path>?mode=ro&immutable=1` (no
-  -wal/-shm is created; if the driver cannot honour it, it copies helm.db to a temp dir first) and only reads
-  `assets/` and `cache/`. Nothing under `<path>` is ever written.
+`helm import <path> --user <email> [--dry-run] [--limit n]` (admin CLI) brings an old helmstudio gallery into one
+user's gallery. `--limit n` stops after n items not imported yet (a re-run goes on from there; a dry run, which makes
+no call, counts the first n).
+- **Read-only source**: the CLI copies `<path>/helm.db` and its `-wal` (rows not checkpointed yet: the old app may be
+  open) to a temp dir and opens the copy with SQLite URI `file:<abs path>?mode=ro`; it only reads `assets/` and
+  `cache/`. Nothing under `<path>` is ever written. A path the db names (`blob_path`, a poster's `path`) must be a
+  clean relative path with no `..` that stays, links resolved, inside `assets/` (`cache/derived/` for posters) and
+  names a regular file, not a link; else the item fails (`unsafe file path`, `not a regular file`) and nothing of it is
+  uploaded. ffprobe and ffmpeg get `file:` paths.
 - **Mapping** (general; the exact schema is read from the real db): one old gallery item (table `items`) of kind image
   or video → one take, `source: import`; its bytes = the asset blob it references (`assets/blobs/…`); a video's poster
   = the old derived poster under `cache/` (else frame 0 by ffmpeg when on PATH, else the item fails `no poster`);

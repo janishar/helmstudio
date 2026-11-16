@@ -78,7 +78,7 @@ func (e *env) modelsSetup(turbo string) {
 // release releases model jobs and drains the outbox: the subjects, Nats-Msg-Ids and commands' data.
 func (e *env) release() ([]string, []string, []map[string]any) {
 	e.t.Helper()
-	if err := studio.ReleaseModelJobs(context.Background(), e.pool, e.registry, time.Now()); err != nil {
+	if err := studio.ReleaseModelJobs(context.Background(), e.pool, e.registry, nil, time.Now()); err != nil {
 		e.t.Fatal(err)
 	}
 	var subjects, ids []string
@@ -359,6 +359,55 @@ func TestModelJobs(t *testing.T) {
 	}
 }
 
+// A released delete holds the runs that would load its model on that host until it ends; a released job studio no
+// longer hears of fails after JobSilence, its command purged, and the host's next job goes out.
+func TestModelJobGuards(t *testing.T) {
+	e := setup(t)
+	e.twoEnvs()
+	e.modelHost("torch", time.Now(), nil, nil)
+	e.modelHost("mlx", time.Now(), nil, nil)
+	var purged []string
+
+	del := e.call(admin, "DELETE", "/v1/studio/admin/models/qwen-image-2.1?host=mac&variant=base", nil, 202)
+	if s, _, _ := e.release(); len(s) != 1 {
+		t.Fatal(s)
+	}
+	runID, _ := e.start(userA, "qwen-image", turbo)
+	if subjects, _ := e.relay(); len(subjects) != 0 {
+		t.Fatal("a run was released to a host deleting its model", subjects)
+	}
+	e.modelEvent(del["id"].(string), "status", 1, 1, map[string]any{"status": "succeeded", "result": map[string]any{"files": 2, "freed_bytes": 100}})
+	if subjects, _ := e.relay(); !slices.Equal(subjects, []string{"cmd.run.mac.torch"}) {
+		t.Fatal(subjects, runID)
+	}
+	e.sql(`UPDATE runs SET status = 'cancelled', finished_at = now() WHERE id = $1`, runID)
+
+	first := e.call(admin, "DELETE", "/v1/studio/admin/models/qwen-image-2.1?host=mac&variant=turbo", nil, 202)
+	if s, _, _ := e.release(); len(s) != 1 {
+		t.Fatal(s)
+	}
+	second := e.call(admin, "DELETE", "/v1/studio/admin/models/ltx-2.5?host=mac", nil, 202)
+	e.modelEvent(first["id"].(string), "status", 1, 1, map[string]any{"status": "running"}) // heard: not silent
+	e.sql(`UPDATE model_jobs SET released_at = released_at - interval '1 hour' WHERE id = $1`, first["id"])
+	if s, _, _ := e.release(); len(s) != 0 {
+		t.Fatal("released behind a job heard of lately", s)
+	}
+	e.sql(`UPDATE model_jobs SET heard_at = now() - $2::interval WHERE id = $1`, first["id"], (studio.JobSilence + time.Minute).String())
+	purge := func(_ context.Context, subject string) error { purged = append(purged, subject); return nil }
+	if err := studio.ReleaseModelJobs(context.Background(), e.pool, e.registry, purge, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	subjects, _, data := e.release()
+	got := e.call(admin, "GET", "/v1/studio/admin/model-jobs/"+first["id"].(string), nil, 200)
+	if got["state"] != "failed" || got["failure"].(map[string]any)["detail"] != "the runner stopped reporting this job" ||
+		!slices.Equal(purged, []string{"cmd.model.mac.torch"}) {
+		t.Fatal(got, purged)
+	}
+	if len(subjects) != 1 || subjects[0] != "cmd.model.mac.mlx" || data[0]["model"] != "ltx-2.5" {
+		t.Fatal("the host's next job did not go out", subjects, data, second["id"])
+	}
+}
+
 // Settings and pins per host (stored, versioned, published to KV, applied when the runners report them), the admin's
 // view of GET /hosts, and the admin's unloads through the dispatcher, which hold the host until answered.
 func TestHostsAdmin(t *testing.T) {
@@ -389,6 +438,18 @@ func TestHostsAdmin(t *testing.T) {
 	if kv["schema_version"] != 1.0 || kv["version"] != 1.0 || kv["after_run"] != "keep_pinned" || kv["reserve_gb"] != 12.5 {
 		t.Fatal(kv)
 	}
+	// published under the host's lock before the commit: a KV failure stores nothing (the KV never lags the table)
+	e.service.SetModelOps(nil, func(context.Context, string, []byte) error { return context.DeadlineExceeded })
+	e.call(admin, "PUT", settings, map[string]any{"after_run": "unload", "idle_unload_min": 0, "reserve_gb": 8}, 503)
+	if n := e.count(`SELECT count(*) FROM host_settings WHERE host = 'mac' AND version = 1 AND after_run = 'keep_pinned'`); n != 1 {
+		t.Fatal("a change that did not reach the KV was stored", n)
+	}
+	e.service.SetModelOps(nil, func(_ context.Context, host string, value []byte) error {
+		mu.Lock()
+		defer mu.Unlock()
+		published[host] = value
+		return nil
+	})
 
 	pins := "/v1/studio/admin/hosts/mac/pins"
 	pin := map[string]any{"env": "torch", "component": "text_encoder", "model": "qwen-image-2.1", "variant": "base", "precision": "int8"}

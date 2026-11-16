@@ -137,6 +137,12 @@ export function downloadPlan(list: S<"ModelList">, v: Variant, host: string): Do
   };
 }
 
+/** Whether the job a "queued" notice names is still open (or not in the list yet): the notice goes when it ends. */
+export function jobOpen(jobs: S<"ModelJob">[], id: string): boolean {
+  const j = jobs.find((x) => x.id === id);
+  return !j || j.state === "queued" || j.state === "running";
+}
+
 /** Delete is offered when the variant has files on that host and no download of it is running there. */
 export function canDelete(v: Variant, host: string): boolean {
   const s = v.hosts.find((x) => x.host === host)?.state;

@@ -17,6 +17,7 @@ from messaging.publisher import now
 
 log = logging.getLogger(__name__)
 
+MODELS_BUDGET = 768 * 1024  # bytes of the models value (NATS max_payload 1 MB)
 KINDS = ("nodes", "workflows", "models", "loras", "looks")
 
 
@@ -75,6 +76,13 @@ def models_value(loaded, impls: dict, node_schemas: dict, env: str = ENV) -> dic
              "published_by": PUBLISHED_BY, "models": entries}  # fmt: skip
     if lic := models.licences(loaded):
         value["licences"] = lic
+    # NATS max_payload is 1 MB: the per-file manifests go first, largest first (the variant keeps its bytes)
+    variants = sorted((v for e in entries for v in e.get("variants", []) if "files" in v),
+                      key=lambda v: -len(v["files"]))  # fmt: skip
+    for v in variants:
+        if len(json.dumps(value)) <= MODELS_BUDGET:
+            break
+        del v["files"]
     return value
 
 

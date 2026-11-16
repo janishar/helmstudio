@@ -3679,6 +3679,7 @@ components:
         reason: {type: [string, 'null'], description: 'rejected: why (the complete call''s 422 detail); null otherwise'}
         thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the caller''s oldest take made with it; null when none'}
         created_at: {type: string, format: date-time, description: 'mine: the upload''s creation; shared: the file''s mtime (the oldest over its hosts)'}
+        prefused: {type: string, minLength: 1, description: 'from 1.16, shared only: the title of a model a host publishes with this LoRA pre-fused into its weights (its file cannot be deleted: delete the model instead); absent otherwise'}
     LoraList:
       type: object
       required: [loras]

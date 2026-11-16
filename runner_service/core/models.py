@@ -101,12 +101,18 @@ class Hashes:
 
     def drain(self) -> None:
         """Hash every queued file now."""
-        while self.queue:
+        while True:
             with self.lock:
-                p = next(iter(self.queue))
+                p = next(iter(self.queue), None)
+            if p is None:
+                return
             try:
                 self.compute(Path(p))
             except OSError:  # gone meanwhile
+                with self.lock:
+                    self.queue.pop(p, None)
+            except Exception:  # never end the hashes thread
+                log.exception("hashing %s failed", p)
                 with self.lock:
                     self.queue.pop(p, None)
 
@@ -141,14 +147,24 @@ hashes = Hashes()  # main replaces it with one kept on disk and started
 def is_safe(rel: str) -> bool:
     """A relative path that stays inside its folder: no absolute path, `..`, backslash, control character or
     `.cache` (the sidecars)."""
-    parts = rel.split("/")
-    return bool(rel) and not rel.startswith("/") and "\\" not in rel and parts[0] != ".cache" \
+    parts = rel.split("/")  # .cache in any case: macOS APFS folds case
+    return bool(rel) and not rel.startswith("/") and "\\" not in rel and parts[0].casefold() != ".cache" \
         and not any(ord(c) < 32 for c in rel) and all(p not in ("", ".", "..") for p in parts)  # fmt: skip
 
 
 def inside(root: Path, path: Path) -> bool:
     """Whether `path`, links resolved, is inside `root`."""
     return path.resolve().is_relative_to(root.resolve())
+
+
+def linked(base: Path, rel: str) -> bool:
+    """Whether `base` or a folder between it and `base/rel` is a symlink (a write there lands in another folder)."""
+    p = base
+    for part in ["", *rel.split("/")[:-1]]:
+        p = p / part
+        if p.is_symlink():
+            return True
+    return False
 
 
 def own_files(folder: Path) -> list[Path]:

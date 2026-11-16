@@ -811,6 +811,13 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 	if err != nil {
 		return snap, err
 	}
+	// a released delete (or lora_delete) unlinks files a run there would load: its host takes no such run until it
+	// ends (the rescan before its terminal status then says what is left)
+	deleting, err := collect[struct{ Host, Kind, Name string }](ctx, tx, `SELECT host, kind, coalesce(model, lora_id, '')
+		FROM model_jobs WHERE kind IN ('delete', 'lora_delete') AND state IN ('queued', 'running') AND released_at IS NOT NULL`)
+	if err != nil {
+		return snap, err
+	}
 	var owners []string
 	for _, run := range open {
 		if run.ReleasedAt != nil && run.Host != nil {
@@ -825,8 +832,13 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 			snap.stuck = append(snap.stuck, stuck{run, reason})
 			continue
 		}
-		if held[run.ID] {
-			continue
+		for _, d := range deleting {
+			if env, ok := slots[d.Host]; ok && deletes(reg, d.Host+"."+env, d.Kind, d.Name, run) {
+				delete(slots, d.Host)
+			}
+		}
+		if held[run.ID] || len(slots) == 0 {
+			continue // (no slot left: it waits for the delete to end, without a position)
 		}
 		snap.queue = append(snap.queue, queued{run, slots, resident})
 		owners = append(owners, run.OwnerID)
@@ -963,6 +975,20 @@ hosts:
 		return nil, nil, "no live host for env " + run.Env + " has LoRA " + used[at].Name
 	}
 	return nil, nil, "no live host for env " + run.Env
+}
+
+// deletes is whether a delete of model (kind delete) or of a shared LoRA (lora_delete) removes files run would load
+// on source.
+func deletes(reg *registry.Registry, source, kind, name string, run model.Run) bool {
+	if kind == "lora_delete" {
+		return slices.ContainsFunc(runUsed(run.Loras), func(u lora.Used) bool { return u.Source == "shared" && u.ID == name })
+	}
+	var graph map[string]registry.Node
+	_ = json.Unmarshal(run.Nodes, &graph)
+	return slices.ContainsFunc(runModels(graph), func(m runModel) bool {
+		found, listed := reg.Model(source, m.family)
+		return listed && found.ID == name
+	})
 }
 
 // runModel is what a <family>/model node of a run loads.

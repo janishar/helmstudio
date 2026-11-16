@@ -74,6 +74,7 @@ type Lora struct {
 	Reason    *string   `json:"reason"`
 	ThumbURL  *string   `json:"thumb_url"`
 	CreatedAt time.Time `json:"created_at"`
+	Prefused  string    `json:"prefused,omitempty"` // API 1.16, shared only: the model it is pre-fused into
 }
 
 // List is GET /loras.
@@ -177,10 +178,11 @@ func ownDTO(r row) Lora {
 }
 
 // sharedDTO maps a shared LoRA of the live hosts.
-func sharedDTO(l registry.LiveLora) Lora {
+func (s *Service) sharedDTO(l registry.LiveLora) Lora {
 	rank, style, sha := l.Rank, l.KeyStyle, l.ID
 	return Lora{ID: l.ID, Source: "shared", Name: l.Name, Family: l.Family, Rank: &rank, SizeBytes: l.Bytes,
-		KeyStyle: &style, Licence: l.Licence, SHA256: &sha, Hosts: l.Hosts, State: "ready", CreatedAt: l.ModifiedAt.UTC()}
+		KeyStyle: &style, Licence: l.Licence, SHA256: &sha, Hosts: l.Hosts, State: "ready", CreatedAt: l.ModifiedAt.UTC(),
+		Prefused: s.registry.PrefusedIn(l.ID)}
 }
 
 // thumbs signs, per LoRA id, the caller's oldest take made with it (RLS: never another user's take).
@@ -245,7 +247,7 @@ func (s *Service) List(ctx context.Context, caller common.Caller, q Query) (List
 		live := s.registry.Loras(time.Now(), "")
 		var shared []Lora
 		for _, l := range live {
-			if dto := sharedDTO(l); q.matches(dto) {
+			if dto := s.sharedDTO(l); q.matches(dto) {
 				shared = append(shared, dto)
 			}
 		}
@@ -284,7 +286,7 @@ func (s *Service) Get(ctx context.Context, caller common.Caller, id string) (Lor
 func (s *Service) find(ctx context.Context, tx pgx.Tx, caller common.Caller, id string) (Lora, error) {
 	if sharedID.MatchString(id) {
 		if live, ok := s.registry.Loras(time.Now(), "")[id]; ok {
-			return sharedDTO(live), nil
+			return s.sharedDTO(live), nil
 		}
 		return Lora{}, errNotFound
 	}

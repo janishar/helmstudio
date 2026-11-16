@@ -192,7 +192,9 @@ def test_a_file_whose_bytes_differ_from_the_hubs_hash_is_deleted(pack):
 
 
 @pytest.mark.parametrize("name", ["../evil.safetensors", "transformer/../../evil.safetensors",
-                                  ".cache/huggingface/download/x.metadata", "/etc/evil"])  # fmt: skip
+                                  ".cache/huggingface/download/x.metadata", "/etc/evil",
+                                  ".Cache/huggingface/download/vae/v.safetensors.metadata",
+                                  ".CACHE/helmstudio/download.json"])  # fmt: skip
 def test_unsafe_names_from_the_hub_write_nothing(pack, name):
     pack.spec["variants"]["base"]["source"]["allow_patterns"] = ["*"]
     hub = hub_of(t_tiny=Repo(files() | {name: b"x"}))
@@ -203,6 +205,74 @@ def test_unsafe_names_from_the_hub_write_nothing(pack, name):
         not (config.MODELS / "Tiny").exists()
         and not (config.MODELS.parent / "evil.safetensors").exists()
     )
+
+
+def test_names_equal_but_for_case_are_refused(pack):
+    pack.spec["variants"]["base"]["source"]["allow_patterns"] = ["*"]
+    hub = hub_of(t_tiny=Repo(files() | {"VAE/V.safetensors": b"x"}))
+    with hub, pytest.raises(JobError, match="lists (vae/v|VAE/V).safetensors twice"):
+        run(pack, hub=hub)
+
+
+def test_a_symlinked_folder_in_the_variant_is_never_written_through(pack):
+    turbo = files(b"t")
+    pack.spec["variants"]["turbo"]["source"]["allow_patterns"] = ["transformer/*"]
+    with hub_of(t_tiny=Repo(files()), t_tiny_turbo=Repo(turbo)) as hub:
+        run(pack, "base", hub=hub)
+        (config.MODELS / "Tiny-Turbo").mkdir()
+        (config.MODELS / "Tiny-Turbo/vae").symlink_to(
+            config.MODELS / "Tiny/vae"
+        )  # a hand-made share
+        assert not packs.owns_copy(
+            pack, "turbo", "vae"
+        )  # files under a linked folder are not its own
+        # the owner's hashes differ from turbo's repo: the vae is planned into turbo's own (linked) folder
+        with pytest.raises(JobError, match="under a symlinked folder") as e:
+            run(pack, "turbo", hub=hub)
+    assert e.value.cls == "internal"
+    assert (config.MODELS / "Tiny/vae/v.safetensors").read_bytes() == BLOB[
+        :999
+    ]  # base's file untouched
+
+
+def test_a_stream_longer_than_declared_or_a_filling_disk_fails(pack, monkeypatch):
+    progress = Progress()
+    progress.size, progress.file = 10, "a.bin"
+    bar = download.bar_class(progress)()
+    with pytest.raises(JobError, match="sent more than 10 bytes") as e:
+        bar.update(11)
+    assert e.value.cls == "network"
+    progress = Progress()
+    progress.left = 10 * 2**30
+    monkeypatch.setattr(download, "disk_free", lambda p: 2 * 2**30)
+    with pytest.raises(JobError, match="the disk is filling up") as e:
+        download.bar_class(progress)().update(download.DISK_EVERY)
+    assert e.value.cls == "disk_full"
+
+
+def test_a_hash_failure_never_ends_the_hashes_thread(tmp_path, monkeypatch):
+    h = models.Hashes()
+    h.queue = {str(tmp_path / "a"): None}
+
+    def broken(path, check=None):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(h, "compute", broken)
+    h.drain()  # returns: the path is dropped, the loop goes on
+    assert not h.queue
+    h.drain()  # an empty queue (another thread took the last path) returns too
+
+
+def test_the_models_value_drops_file_manifests_past_its_byte_budget(pack, monkeypatch):
+    from core import registry
+
+    (config.MODELS / "Tiny/transformer").mkdir(parents=True)
+    (config.MODELS / "Tiny/transformer/a.safetensors").write_bytes(b"x" * 10)
+    variant = registry.models_value([pack], {}, {})["models"][0]["variants"][0]
+    assert variant["files"] and variant["bytes"] == 10
+    monkeypatch.setattr(registry, "MODELS_BUDGET", 100)
+    variant = registry.models_value([pack], {}, {})["models"][0]["variants"][0]
+    assert "files" not in variant and variant["bytes"] == 10 and variant["presence"] == "partial"
 
 
 def test_missing_repo_and_revision_are_not_found(pack):
@@ -398,6 +468,24 @@ async def test_worker_delete_refuses_a_loaded_component_then_deletes(pack, tmp_p
         "detail": "Tiny base vae is loaded on fake.fake: unload it first",
     }
     assert ends[1]["result"]["files"] == 5 and not (config.MODELS / "Tiny").exists()
+
+
+async def test_worker_delete_keeps_a_resident_shared_component_it_keeps(pack, tmp_path):
+    with hub_of(t_tiny=Repo(files()), t_tiny_turbo=Repo(turbo_files())) as hub:
+        run(pack, "base", hub=hub)
+        run(pack, "turbo", hub=hub)
+    res = Residency(10)
+    res.get(
+        ("tiny-1", "base", "vae", "bf16"), 1, 0, object
+    )  # turbo's vae, named by its owner variant
+    js = FakeJS()
+    jobs, _ = worker(pack, None, tmp_path, residency=res, js=js)
+    await jobs.handle(
+        FakeMsg(job("delete", model="tiny-1", variant="base"), js, "cmd.model.t.fake")
+    )
+    end = next(e["data"] for e in js.events() if e["data"]["status"] in ("failed", "succeeded"))
+    assert end["status"] == "succeeded" and end["result"]["kept"] == ["vae"]
+    assert (config.MODELS / "Tiny/vae/v.safetensors").is_file()
 
 
 async def test_worker_lora_delete_refuses_a_prefused_file_and_deletes_a_shared_one(pack, tmp_path):

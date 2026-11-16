@@ -25,6 +25,7 @@ from core import pack as packs
 log = logging.getLogger("download")
 
 MARGIN = 2**30  # free space kept beyond the plan
+DISK_EVERY = 256 * 2**20  # bytes streamed between free-space checks
 
 
 class JobError(Exception):
@@ -58,6 +59,9 @@ class Progress:
     current: int = 0  # bytes of the file in flight
     file: str | None = None
     fetched: int = 0  # bytes this job transferred
+    size: int | None = None  # the declared size of the file in flight
+    left: int = 0  # bytes still to write (the files not yet complete), for the free-space checks
+    checked: int = 0  # `fetched` at the last free-space check
     started: float = field(default_factory=time.monotonic)
     cancel: threading.Event = field(default_factory=threading.Event)
 
@@ -177,13 +181,24 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
             ]
     seen = set()
     for it in items:
-        if not models.is_safe(it.path) or not models.inside(packs.models_root(), it.dest / it.path):
+        if not models.is_safe(it.path):
             raise JobError(
                 "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
             )
-        if (it.dest, it.path) in seen:
+        if models.linked(
+            it.dest, it.path
+        ):  # a linked folder: the write would land in another folder
+            raise JobError("internal", f"{it.dest.name}/{it.path[:200]} is under a symlinked folder: "
+                                       "remove the link by hand")  # fmt: skip
+        if not models.inside(packs.models_root(), it.dest) or not models.inside(
+            it.dest, it.dest / it.path
+        ):
+            raise JobError(
+                "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
+            )
+        if (it.dest, it.path.casefold()) in seen:  # APFS folds case: one file on disk
             raise JobError("internal", f"repo {it.repo} lists {it.path[:200]} twice")
-        seen.add((it.dest, it.path))
+        seen.add((it.dest, it.path.casefold()))
     return items, reused, separate
 
 
@@ -214,6 +229,18 @@ def bar_class(progress: Progress):
             progress.check()
             progress.current += n
             progress.fetched += n
+            if progress.size is not None and progress.current > progress.size:
+                raise JobError(
+                    "network", f"the hub sent more than {progress.size} bytes for {progress.file}"
+                )
+            if progress.fetched - progress.checked >= DISK_EVERY:
+                progress.checked = progress.fetched
+                if (
+                    free := disk_free(packs.models_root())
+                ) < progress.left - progress.current + MARGIN // 2:
+                    raise JobError(
+                        "disk_full", f"the disk is filling up ({free / 1e9:.1f} GB free)"
+                    )
 
         def __getattr__(self, name):  # set_description, refresh, close, ...: nothing to show
             return lambda *a, **kw: None
@@ -248,14 +275,14 @@ def download(pack, vid: str, *, endpoint: str, token: str | None, cache: Path, h
     for d in {it.dest for it in todo}:
         (d / models.MARKER).parent.mkdir(parents=True, exist_ok=True)
         (d / models.MARKER).write_text(f'{{"repo": "{src["repo"]}", "variant": "{vid}"}}\n')
-    written = 0
+    written, progress.left = 0, need
     cache.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
         prefix="hf-", dir=cache
     ) as tmp:  # never the Hugging Face cache
         for it in items:
             progress.check()
-            progress.file, progress.current = it.path, 0
+            progress.file, progress.current, progress.size = it.path, 0, it.size
             if it in todo:
                 (it.dest / it.path).unlink(
                     missing_ok=True
@@ -270,7 +297,7 @@ def download(pack, vid: str, *, endpoint: str, token: str | None, cache: Path, h
                 except Exception as e:  # noqa: BLE001
                     raise classify(e, it.repo, src["revision"], token) from None
                 verify(it, progress)
-                written += 1
+                written, progress.left = written + 1, progress.left - it.size
             progress.done_bytes += it.size
             progress.files_done += 1
             progress.current = 0

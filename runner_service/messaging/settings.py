@@ -44,6 +44,16 @@ class Settings:
         if value is not None and (errs := schemas.registry_errors("settings", value)):
             log.error("host_settings %s is off-contract, ignored: %s", HOST, "; ".join(errs[:3]))
             return
+        if value is not None:  # KV puts can land out of order: never go back to an older version
+            newest = max([self.version or 0] + [x["version"] for x in self.pending or () if x])
+            if value["version"] <= newest:
+                log.info(
+                    "host_settings %s v%d is older than v%d, ignored",
+                    HOST,
+                    value["version"],
+                    newest,
+                )
+                return
         if self.consumer.ctx is not None:
             self.pending = (value,)
             return
@@ -64,6 +74,8 @@ class Settings:
             self.pins = {ident(p) for p in value["pins"] if p["env"] == ENV}
         c, res = self.consumer, self.consumer.residency
         c.after_run = self.after_run
+        if self.after_run == "unload":  # cached node results would let the next run load nothing
+            c.cache.clear()
         c.idle_unload_s = self.idle_unload_min * 60 if value is not None else config.IDLE_UNLOAD_S
         if res is not None:
             res.budget_gb, res.pin_refs = ram_gb() - self.reserve_gb, self.pins

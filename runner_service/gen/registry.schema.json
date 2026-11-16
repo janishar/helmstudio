@@ -1286,7 +1286,7 @@
                         "files": {
                           "type": "array",
                           "maxItems": 4096,
-                          "description": "from API 1.16: the manifest of the variant's own folder: every file the runner found (or a download wrote), path relative to `dir`, sorted. Absent when missing",
+                          "description": "from API 1.16: the manifest of the variant's own folder: every file the runner found (or a download wrote), path relative to `dir`, sorted. Absent when missing, or left out while the models value would pass 768 KB (largest first)",
                           "items": {
                             "type": "object",
                             "required": [

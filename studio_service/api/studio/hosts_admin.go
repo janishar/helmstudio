@@ -77,29 +77,40 @@ func (s *Service) presentKeys(host string) ([]registry.Host, error) {
 	return out, nil
 }
 
-// publish writes the row to KV host_settings; a failure is a 503 (the row is stored: the next change or start
-// publishes it).
+// publish writes the row to KV host_settings, called under the host's lock so the KV never ends on an older version;
+// a failure is a 503 (the change is rolled back).
 func (s *Service) publish(ctx context.Context, row settingsRow) error {
 	if s.putSettings == nil {
 		return nil
 	}
 	if err := s.putSettings(ctx, row.Host, row.kv()); err != nil {
-		return network.NewServiceUnavailableError("the settings are saved but did not reach the runners; try again", err)
+		return network.NewServiceUnavailableError("the settings did not reach the runners; try again", err)
 	}
 	return nil
 }
 
-// PublishSettings writes every stored host's settings to KV host_settings (at start).
+// PublishSettings writes every stored host's settings to KV host_settings (at start), each read and written under
+// its host's lock.
 func (s *Service) PublishSettings(ctx context.Context) error {
-	var rows []settingsRow
+	var hosts []struct{ Host string }
 	err := common.System(ctx, s.db, func(tx pgx.Tx) (err error) {
-		rows, err = collect[settingsRow](ctx, tx, `SELECT `+settingsCols+` FROM host_settings ORDER BY host`)
+		hosts, err = collect[struct{ Host string }](ctx, tx, `SELECT host FROM host_settings ORDER BY host`)
 		return err
 	})
-	for _, row := range rows {
-		if err == nil {
-			err = s.publish(ctx, row)
+	for _, h := range hosts {
+		if err != nil {
+			break
 		}
+		err = common.System(ctx, s.db, func(tx pgx.Tx) error {
+			if err := lockHost(ctx, tx, h.Host); err != nil {
+				return err
+			}
+			row, err := one[settingsRow](ctx, tx, `SELECT `+settingsCols+` FROM host_settings WHERE host = $1`, h.Host)
+			if err != nil {
+				return err
+			}
+			return s.publish(ctx, row)
+		})
 	}
 	return err
 }
@@ -155,7 +166,7 @@ func (s *Service) PutHostPins(ctx context.Context, caller common.Caller, host st
 }
 
 // storeSettings applies change to the host's row (a new row starts from the freshest key's policy, no pins),
-// version + 1, and publishes it.
+// version + 1, and publishes it before the commit.
 func (s *Service) storeSettings(ctx context.Context, host string, change func(row *settingsRow), keys []registry.Host) (dto.HostSettings, error) {
 	var row settingsRow
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
@@ -177,12 +188,12 @@ func (s *Service) storeSettings(ctx context.Context, host string, change func(ro
 			after_run = excluded.after_run, idle_unload_min = excluded.idle_unload_min, reserve_gb = excluded.reserve_gb,
 			pins = excluded.pins, updated_at = clock_timestamp() RETURNING `+settingsCols,
 			host, row.Version+1, row.AfterRun, row.IdleUnloadMin, row.ReserveGB, row.Pins)
-		return err
+		if err != nil {
+			return err
+		}
+		return s.publish(ctx, row) // under the lock: two quick changes reach the KV in version order
 	})
 	if err != nil {
-		return dto.HostSettings{}, err
-	}
-	if err := s.publish(ctx, row); err != nil {
 		return dto.HostSettings{}, err
 	}
 	return row.dto(s.registry.Hosts(), time.Now()), nil
