@@ -23,6 +23,8 @@ NATS_URL = os.environ.get("NATS_URL", "nats://localhost:4222")  # nats://runner:
 # nats.conf lets each runner user subscribe only to _INBOX_<user>.>
 INBOX_PREFIX = f"_INBOX_{urlparse(NATS_URL).username or 'runner'}"
 HEALTH_PORT = int(os.environ.get("HEALTH_PORT", "8081"))
+# loopback only: the health check asks from inside the same host or container; a GPU host uses host networking
+HEALTH_HOST = os.environ.get("HEALTH_HOST", "127.0.0.1")
 # TLS (contracts/README.md "A remote GPU host"): NATS_URL tls://…, S3_ENDPOINT https://…; empty = the system CAs
 NATS_CA_FILE = os.environ.get("NATS_CA_FILE", "")  # verify the NATS server against this CA
 NATS_CERT_FILE = os.environ.get("NATS_CERT_FILE", "")  # optional client cert and key

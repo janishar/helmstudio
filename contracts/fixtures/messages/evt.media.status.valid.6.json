@@ -1,0 +1,63 @@
+{
+  "type": "evt.media.status",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001806",
+  "job_id": "9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:00:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 9,
+    "delivery": 1,
+    "status": "succeeded",
+    "encoder": "h264_nvenc",
+    "result": {
+      "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/exports/9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f/export.mp4",
+      "width": 256,
+      "height": 128,
+      "bytes": 512000,
+      "etag": "8b9caefd0c1e4a7b9d2f3e4a5b6c7d8e",
+      "mode": "conform",
+      "video": {
+        "duration_s": 3.5416666666666665,
+        "fps": 24,
+        "frames": 85,
+        "has_audio": true,
+        "poster": {
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/exports/9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f/export.poster.png",
+          "width": 256,
+          "height": 128,
+          "bytes": 40000
+        },
+        "last": {
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/exports/9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f/export.last.png",
+          "width": 256,
+          "height": 128,
+          "bytes": 41000
+        },
+        "stream": {
+          "container": "mp4",
+          "codec": "h264",
+          "profile": "High",
+          "level": 21,
+          "pix_fmt": "yuv420p",
+          "width": 256,
+          "height": 128,
+          "sar": "1:1",
+          "field_order": "progressive",
+          "frame_rate": "24/1",
+          "time_base": "1/12288",
+          "color": {
+            "range": null,
+            "space": null,
+            "primaries": null,
+            "transfer": null
+          },
+          "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+        }
+      }
+    }
+  }
+}

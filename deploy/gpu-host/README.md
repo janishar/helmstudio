@@ -36,6 +36,11 @@ docker info --format '{{json .Runtimes}}'    # lists "nvidia" (else: sudo nvidia
 docker compose version                       # Compose 2.20 or later
 ```
 
+NVENC for media jobs needs the driver's encode library, which a headless or compute-only driver install leaves out
+(Ubuntu: `sudo apt-get install libnvidia-encode-<branch>`, e.g. `libnvidia-encode-595-server`), then
+`sudo systemctl restart nvidia-cdi-refresh` so the toolkit's CDI spec mounts it. Without it the runner logs
+`media jobs on … (ffmpeg …, libx264)` and exports encode in software.
+
 ## 3. Copy the folder, the runner's source and the secrets
 
 From the repo root on the stack's machine (no secret is printed; the archive goes straight into ssh). Only tracked

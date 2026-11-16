@@ -46,10 +46,11 @@
         "encoder": {
           "enum": [
             "h264_videotoolbox",
+            "h264_nvenc",
             "libx264",
             "copy"
           ],
-          "description": "running and succeeded exports: the video encoder used"
+          "description": "running and succeeded exports: the video encoder used (h264_nvenc from API 1.18: a cuda container whose GPU encodes)"
         },
         "failure": {
           "type": "object",

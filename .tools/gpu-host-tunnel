@@ -29,6 +29,10 @@ loop) # the supervisor: one ssh at a time in its own process group, so stop ends
   trap '[ -z "$c" ] || { kill -TERM -"$c" 2>/dev/null; wait "$c" 2>/dev/null; }; exit 143' TERM INT
   while :; do
     echo "$(date '+%F %T') connecting"
+    # a dropped link leaves the old sshd session holding the GPU host's 4222/8333 until its TCP times out (sshd has
+    # no ClientAliveInterval by default), so every reconnect fails "remote port forwarding failed" (M6): free them
+    gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- \
+      'sudo -n fuser -k 4222/tcp 8333/tcp >/dev/null 2>&1; true' || :
     gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- -N \
       -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
       -R "127.0.0.1:4222:127.0.0.1:${NATS_HOST_PORT:-4322}" \

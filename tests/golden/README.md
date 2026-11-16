@@ -113,3 +113,10 @@ Sources: `qwen_image_2_1/generate.py` (`main`, `plan_size`, `noise_seed`) and di
 
 Prints `psnr_db` and `mean_abs_diff`; exit 0 if PSNR >= threshold, 1 below it, 2 on a size mismatch. Needs Pillow
 and numpy. `python compare.py --self-test` checks the maths.
+
+## CUDA goldens (`<case>.cuda.png`)
+
+The same cases made on CUDA by `runner_service/tests/test_qwen_golden.py <cases> --out DIR` (M6, 2026-11-16: RTX PRO
+6000 Blackwell, driver 595.91, torch 2.15 + CUDA 13.2, int8). On that stack they are bit-identical across processes
+and through the runner; the test compares a CUDA run with them at 50 dB and still with the MPS image at 30 dB. Why
+CUDA and MPS differ (31-49 dB): runner_service/packs/qwen_image/GOTCHAS.md.

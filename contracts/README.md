@@ -592,12 +592,15 @@ delete keys; a remote GPU host is therefore trusted like the stack's machine (th
 commands would close it but break the claim-check rule (never signed URLs in messages): not in v1.
 
 **TLS.**
-- NATS server: a `tls {cert_file, key_file, ca_file?, verify?, timeout: 2, handshake_first: "300ms"}` block on the
+- NATS server: a `tls {cert_file, key_file, ca_file?, verify?, timeout: 2, handshake_first: "1s"}` block on the
   client port with `allow_non_tls: true` (nats-server ≥ 2.10; the stack's own services stay plain on the compose
   network, a remote runner always uses TLS). `allow_non_tls` clears `tls_required` in the server's INFO, so a client
   that waits for INFO before upgrading (nats-py) would stay plain and send its password in clear: a runner on a
   `tls://` URL **starts with the TLS handshake** (nats-py `tls_handshake_first`), and the server's `handshake_first`
-  with a fallback delay serves TLS-first clients and, after the delay, plain ones. Server cert SANs: `DNS:localhost`, `IP:127.0.0.1` and the public name or address used by
+  with a fallback delay serves TLS-first clients and, after the delay, plain ones. The delay must exceed the remote
+  host's round trip (the ClientHello reaches the server about one RTT after the tunnel's connect; M6 measured 280-565
+  ms Mac to us-central1, where 300 ms made the server fall back to plain and the runner fail `WRONG_VERSION_NUMBER`):
+  1 s, below the 2 s connect timeout of the stack's own plain clients. Server cert SANs: `DNS:localhost`, `IP:127.0.0.1` and the public name or address used by
   remote hosts. Optional client certs: `verify: true` with `ca_file`, or `verify_and_map: true` to take the user from
   the cert (then TLS is required for that user). Cert, key and CA are files in `deploy/secrets/` (`stack_tls_cert`,
   `stack_tls_key`, `tls_ca` from `.tools/make-secrets`: a self-signed CA and one server cert for NATS and S3, in the

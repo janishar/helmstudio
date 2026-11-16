@@ -174,8 +174,10 @@ async def main() -> None:
     connected = False
 
     async def nats_error(e: Exception) -> None:
-        """A server cert that does not verify stops the start (else nats-py would retry it forever)."""
-        if not connected and isinstance(e, ssl.SSLCertVerificationError):
+        """A TLS failure before the first connect stops the start: a cert that does not verify, or (M6) a server
+        that fell back to plain before our ClientHello arrived (`WRONG_VERSION_NUMBER`, a slow link): nats-py would
+        otherwise hang in connect forever, unhealthy; exiting lets the container's restart policy try again."""
+        if not connected and isinstance(e, ssl.SSLError):
             raise e
         log.warning("NATS: %s", e)
 

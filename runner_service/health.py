@@ -27,7 +27,9 @@ async def _answer(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, nc
 
 async def serve(nc) -> asyncio.Server:
     """Start the health endpoint."""
-    return await asyncio.start_server(lambda r, w: _answer(r, w, nc), "0.0.0.0", config.HEALTH_PORT)
+    return await asyncio.start_server(
+        lambda r, w: _answer(r, w, nc), config.HEALTH_HOST, config.HEALTH_PORT
+    )
 
 
 def check() -> int:

@@ -250,6 +250,25 @@ def test_a_stream_longer_than_declared_or_a_filling_disk_fails(pack, monkeypatch
     assert e.value.cls == "disk_full"
 
 
+def test_a_xet_download_counts_each_byte_once():
+    """huggingface_hub's Xet reporter (real Hub files are Xet-backed; the fake hub's are not) with our bar: one bar,
+    written bytes counted once, network bytes ignored, its arithmetic on n/total works (M6: TypeError before)."""
+    from huggingface_hub.utils._xet_progress_reporting import XetDownloadProgressReporter
+
+    progress = Progress()
+    progress.size = 100
+    r = XetDownloadProgressReporter(reconstruction_desc="x", total=100, log_level=0,
+                                    tqdm_class=download.bar_class(progress))  # fmt: skip
+    report = types.SimpleNamespace(total_bytes=100, total_bytes_completed=60,
+                                   total_transfer_bytes_completed=90, total_bytes_completion_rate=None,
+                                   total_transfer_bytes_completion_rate=None)  # fmt: skip
+    r.update_progress(report)
+    report.total_bytes_completed = report.total_transfer_bytes_completed = 100
+    r.update_progress(report)
+    r.close()
+    assert progress.current == progress.fetched == 100
+
+
 def test_a_hash_failure_never_ends_the_hashes_thread(tmp_path, monkeypatch):
     h = models.Hashes()
     h.queue = {str(tmp_path / "a"): None}

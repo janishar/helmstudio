@@ -171,12 +171,21 @@ def compare(golden: Path, png: bytes) -> tuple[float, str]:
     return float(line.split()[0].split("=")[1]), line
 
 
+# CUDA goldens (<case>.cuda.png, recorded 2026-11-16 on an RTX PRO 6000 Blackwell, driver 595.91, torch 2.15 + CUDA
+# 13.2): bit-identical across processes and through the runner, so their bar is tight; another GPU, driver or torch
+# may need them recorded again (packs/qwen_image/GOTCHAS.md). The MPS goldens keep 30 dB on every device (CUDA: 31-49).
+CUDA_BAR = 50
+
+
 def case(bench: Bench, name: str, out_dir: Path | None = None) -> dict:
     settings = json.loads((folder(name) / f"{name}.json").read_text())
     t = time.monotonic()
     r = bench.run(bench.nodes(settings))
     r["total_s"] = round(time.monotonic() - t, 1)
     r["psnr"], r["compare"] = compare(folder(name) / f"{name}.png", r["png"])
+    if bench.lt.device() == "cuda" and (cuda := folder(name) / f"{name}.cuda.png").is_file():
+        r["psnr_cuda"], cuda_line = compare(cuda, r["png"])
+        r["compare"] += f" | cuda golden {cuda_line}"
     if out_dir:
         (out_dir / f"{name}.png").write_bytes(r["png"])
     return r
@@ -322,14 +331,14 @@ def test_edit_matches_the_golden(bench, name):
         pytest.skip(f"{name} is not recorded yet")
     r = case(bench, name)
     print(name, r["compare"], r["s"], r["peak_gb"])
-    assert r["psnr"] >= 30
+    assert r["psnr"] >= 30 and r.get("psnr_cuda", CUDA_BAR) >= CUDA_BAR
 
 
 @pytest.mark.gpu
 def test_turbo_768_matches_the_golden(bench):
     r = case(bench, CASES[0])
     print(r["compare"], r["s"], r["peak_gb"])
-    assert r["psnr"] >= 30
+    assert r["psnr"] >= 30 and r.get("psnr_cuda", CUDA_BAR) >= CUDA_BAR
 
 
 @pytest.mark.gpu
@@ -337,10 +346,18 @@ def test_seed_change_cache_cancel_and_unload(bench):
     case(bench, CASES[0])  # warm, and the cache holds encode
     c = checks(bench)
     print(c)
-    assert c["reseed_ran"] == ["seed", "sample", "decode", "output"]
-    assert c["cancel_steps_after_request"] in ([], [3])  # at most the step that was running
+    # nodes with a Model output (model, lora) always run (graph.run never caches them); encode is the cache hit
+    assert "encode" not in c["reseed_ran"] and c["reseed_ran"][-3:] == [
+        "sample",
+        "decode",
+        "output",
+    ]
+    # at most the step that was running (MPS: step 3; CUDA's 0.15 s steps run on through the 0.5 s delay)
+    assert len(c["cancel_steps_after_request"]) <= 1
     assert c["resident_after_unload"] == []
-    assert c["after_unload_gb"] < 1.0
+    # CUDA: measure_gb counts the context (the device's used memory at start, other processes' too)
+    context = bench.lt.context_gb() if bench.lt.device() == "cuda" else 0
+    assert c["after_unload_gb"] - context < 1.0
 
 
 if __name__ == "__main__":
@@ -354,7 +371,7 @@ if __name__ == "__main__":
     failed = False
     for name in args.cases:
         r = case(b, name, args.out)
-        failed |= r["psnr"] < 30
+        failed |= r["psnr"] < 30 or r.get("psnr_cuda", CUDA_BAR) < CUDA_BAR
         print(name, r["compare"], "s:", r["s"], "total:", r["total_s"], "peak_gb:", r["peak_gb"],
               "resident:", [(e["component"], e["variant"], e["gb"]) for e in b.residency.state()["resident"]],
               flush=True)  # fmt: skip

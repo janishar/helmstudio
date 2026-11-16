@@ -1,7 +1,6 @@
 """The torch loader (env torch only): Int8Linear, the per-tensor hook chain, direct-to-device loading.
 `pytest -m gpu` also loads the real Qwen-Image-2.1-Turbo transformer at int8 and prints its load time and peak."""
 
-import resource
 import time
 import types
 
@@ -161,37 +160,45 @@ def test_turbo_transformer_int8_load_peak_and_time(capsys):
     if not root.is_dir():
         pytest.skip(f"{root} is not there")
     cls = diffusers.QwenImage21Transformer2DModel
+    dev = lt.device()  # mps or cuda (M6): the device's own allocation counter
+    mem = torch.mps.driver_allocated_memory if dev == "mps" else torch.cuda.memory_reserved
     lt.free()
-    base = torch.mps.driver_allocated_memory()
-    peak = [0]
+    base = mem()
+    peak, rss_peak = [0], [0.0]
 
     def progress(done, total):
-        peak[0] = max(peak[0], torch.mps.driver_allocated_memory())
+        peak[0] = max(peak[0], mem())
+        rss_peak[0] = max(rss_peak[0], lt.rss_gb() or 0)
 
+    files = sorted(root.glob("*.safetensors"))
     t = time.monotonic()
     with accelerate.init_empty_weights(include_buffers=False):
         meta = cls.from_config(cls.load_config(root))
     m = lt.load(
         meta,
-        sorted(root.glob("*.safetensors")),
-        dev="mps",
+        files,
+        dev=dev,
         dtype=torch.bfloat16,
         quantize=lambda name: pack.fnmatch.fnmatchcase(name, "transformer_blocks.*"),
         progress=progress,
     )
-    torch.mps.synchronize()
+    getattr(torch, dev).synchronize()
     seconds = time.monotonic() - t
-    loaded = torch.mps.driver_allocated_memory()
+    loaded = mem()
     n_int8 = sum(isinstance(x, lt.Int8Linear) for x in m.modules())
     del m, meta
     lt.free()
-    after = torch.mps.driver_allocated_memory()
-    rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**30  # bytes on macOS
+    after = mem()
+    pinned = ""
+    if dev == "cuda":  # the pinned staging blocks go back at free() (plan 6.3)
+        st = torch.cuda.memory.host_memory_stats()
+        pinned = f", pinned after free {st.get('reserved_bytes.current', 0) / 2**30:.2f} GB"
+    gbps = sum(f.stat().st_size for f in files) / 2**30 / seconds
     with capsys.disabled():
         print(
-            f"\nturbo transformer int8: {seconds:.1f} s, {n_int8} Int8Linear, "
-            f"loaded {(loaded - base) / 2**30:.2f} GB, peak {(peak[0] - base) / 2**30:.2f} GB "
-            f"(MPS driver), max RSS {rss:.2f} GB, after free {(after - base) / 2**30:.2f} GB"
+            f"\nturbo transformer int8 on {dev}: {seconds:.1f} s ({gbps:.2f} GB/s read), {n_int8} Int8Linear, "
+            f"loaded {(loaded - base) / 2**30:.2f} GB, peak {(peak[0] - base) / 2**30:.2f} GB, "
+            f"RSS peak {rss_peak[0]:.2f} GB, after free {(after - base) / 2**30:.2f} GB{pinned}"
         )
     assert n_int8 > 0 and (after - base) / 2**30 < 1
 

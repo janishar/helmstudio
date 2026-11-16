@@ -216,8 +216,15 @@ def bar_class(progress: Progress):
     """A tqdm stand-in for huggingface_hub: counts the file in flight's bytes and is a cancel point."""
 
     class Bar:
-        def __init__(self, *a, initial: int = 0, **kw) -> None:
+        # Real `n`/`total` (huggingface_hub's Xet reporter does arithmetic on them), and a class-level
+        # update_transfer: the reporter then uses one bar, counting written bytes in update() and sending network
+        # bytes here (ignored), instead of a second bar whose update() would count every byte twice.
+        def __init__(self, *a, initial: int = 0, total: int | None = None, **kw) -> None:
+            self.n, self.total = initial, total
             progress.current = initial
+
+        def update_transfer(self, n: int = 1) -> None:
+            progress.check()
 
         def __enter__(self):
             return self
@@ -227,6 +234,7 @@ def bar_class(progress: Progress):
 
         def update(self, n: int = 1) -> None:
             progress.check()
+            self.n += n
             progress.current += n
             progress.fetched += n
             if progress.size is not None and progress.current > progress.size:
