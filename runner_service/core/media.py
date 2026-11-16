@@ -167,6 +167,11 @@ DENY = re.compile(r"\b(a?movie|subtitles|ass|lut1d|lut3d|haldclutsrc|a?sendcmd|a
 SLOT = re.compile(r"\{in:(\d+)\}")
 
 
+OUTPUT_LIMIT = (
+    32 << 30
+)  # bytes: the largest output ffmpeg may write (studio blocks an export estimated over 16 GiB)
+
+
 def build(
     args: list[str], inputs: list[Path], *, out: Path, venc_args: list[str], listfile: Path | None
 ) -> list[str]:
@@ -181,7 +186,11 @@ def build(
             result += venc_args
         elif a == "{out}":
             outs += 1
-            result.append(str(out))
+            result += [
+                "-fs",
+                str(OUTPUT_LIMIT),
+                str(out),
+            ]  # ffmpeg stops writing past it (verify then fails)
         elif a.startswith("-"):
             name = a.split(":")[0]
             if name not in OPTIONS:

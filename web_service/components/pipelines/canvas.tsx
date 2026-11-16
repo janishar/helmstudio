@@ -784,7 +784,9 @@ function AddMenu({
   ];
   const [active, setActive] = useState(0);
   const first = useRef<HTMLDivElement>(null);
-  useEffect(() => first.current?.focus(), []);
+  useEffect(() => {
+    first.current?.focus();
+  }, []);
   return (
     <div
       ref={first}

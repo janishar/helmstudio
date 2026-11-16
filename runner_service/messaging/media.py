@@ -38,11 +38,17 @@ DURABLE = f"media-{HOST}-{ENV}"
 SUBJECT = f"cmd.media.{HOST}.{ENV}"
 ACK_WAIT = 60  # seconds
 WIP = 10  # seconds between +WIP
-PROGRESS = 2.0  # seconds: progress at most this often
-HEARD = 30.0  # seconds: and at least this often
+PROGRESS = 2.0  # seconds: progress at most this often, and only when the frame count moved (a stall goes silent)
 POLL = 0.25  # seconds between looks at ffmpeg and the cancel flag
 KILL_AFTER = 10.0  # seconds from SIGTERM to SIGKILL
 LIMIT = 8 << 30  # bytes: the largest input
+BUDGET = 32 << 30  # bytes: every input of one job together
+RESERVE = 2 << 30  # bytes: the disk space a download never takes
+DEADLINE_BASE, DEADLINE_PER_FRAME, DEADLINE_MAX = (
+    600.0,
+    1.0,
+    6 * 3600.0,
+)  # seconds: how long ffmpeg may run
 IMAGE_EXT = {"png": "png", "mjpeg": "jpg", "webp": "webp", "bmp": "bmp", "tiff": "tif"}
 
 
@@ -92,7 +98,7 @@ class MediaJobs:
                     extra = {"encoder": encoder}
                 else:
                     await events.publish("status", {"status": "running"})
-                    result = await self.frame(data, tmp)
+                    result = await self.frame(data, tmp, cancel)
                 status = "succeeded"
         except Cancelled:
             status = "cancelled"
@@ -131,16 +137,37 @@ class MediaJobs:
             with contextlib.suppress(Exception):
                 await msg.in_progress()
 
-    async def _fetch(self, inputs: list[dict], tmp: Path) -> tuple[list[Path], list[dict]]:
-        """Each input downloaded once, probed, checked against its kind and named in<n>.<ext> by its content."""
-        paths, infos = [], []
+    async def _fetch(
+        self, inputs: list[dict], tmp: Path, cancel: asyncio.Event, done=None
+    ) -> tuple[list[Path], list[dict]]:
+        """Each input downloaded once (at most LIMIT each, BUDGET in all, never into the disk's last RESERVE; a cancel
+        stops it between and during downloads), probed, checked against its kind and named in<n>.<ext> by its
+        content; `done(n)` after each."""
+        paths, infos, total = [], [], 0
         for n, it in enumerate(inputs):
+            if cancel.is_set():
+                raise Cancelled
             raw = tmp / f"in{n}"
-            got = await self.store.download(it["key"], raw, LIMIT)
+            free = shutil.disk_usage(tmp).free - RESERVE
+            limit = min(LIMIT, BUDGET - total, free)
+            if limit < 1:
+                raise MediaError(
+                    "input",
+                    f"no room for input {n} (inputs over {BUDGET >> 30} GB or the disk full)",
+                )
+            got = await self.store.download(it["key"], raw, limit, stop=cancel.is_set)
+            if cancel.is_set():
+                raise Cancelled
             if got is None:
                 raise MediaError("input", f"input {n} is missing")
-            if got[0] > LIMIT:
-                raise MediaError("input", f"input {n} is larger than {LIMIT >> 30} GB")
+            if got[0] > limit:
+                why = (
+                    f"larger than {LIMIT >> 30} GB"
+                    if limit == LIMIT
+                    else "past the job's room on disk"
+                )
+                raise MediaError("input", f"input {n} is {why}")
+            total += got[0]
             info = await asyncio.to_thread(media.probe, raw)
             media.check_kind(info, it["kind"])
             ext = (
@@ -150,11 +177,22 @@ class MediaJobs:
             )
             paths.append(raw.rename(tmp / f"in{n}.{ext}"))
             infos.append(info)
+            if done:
+                await done(n)
         return paths, infos
 
     async def export(self, data: dict, events: MediaEvents, tmp: Path, cancel: asyncio.Event):
         ex = data["export"]
-        paths, infos = await self._fetch(data["inputs"], tmp)
+        last = [time.monotonic()]
+
+        async def fetched(
+            _n: int,
+        ) -> None:  # a download is progress too: frames 0 until ffmpeg runs
+            if time.monotonic() - last[0] >= PROGRESS:
+                await events.publish("progress", {"frames": 0, "total": ex["frames"]})
+                last[0] = time.monotonic()
+
+        paths, infos = await self._fetch(data["inputs"], tmp, cancel, fetched)
         mode, args, reason, listfile = ex["mode"], ex["args"], None, None
         if mode == "copy":
             for e in ex["expect"]:
@@ -199,15 +237,13 @@ class MediaJobs:
                 "height": v["height"],
                 "bytes": len(body),
             }
-        # ponytail: the whole file in memory for one single-part PUT (its ETag is the md5); stream it past ~1 GB
-        body = out.read_bytes()
         key = f"{prefix}export.mp4"
-        await self.store.put(key, body, "video/mp4")
+        size, etag = await self.store.upload(key, out, "video/mp4")
         fps = float(Fraction(target["rate"]))
         video = {"duration_s": frames / fps, "fps": fps, "frames": frames, "has_audio": info["audio"] is not None,
                  **pictures, "stream": info["stream"]}  # fmt: skip
-        result = {"key": key, "width": v["width"], "height": v["height"], "bytes": len(body),
-                  "etag": hashlib.md5(body).hexdigest(), "mode": mode, "video": video}  # fmt: skip
+        result = {"key": key, "width": v["width"], "height": v["height"], "bytes": size, "etag": etag, "mode": mode,
+                  "video": video}  # fmt: skip
         if reason:
             result["reason"] = reason
         return result, encoder
@@ -240,9 +276,10 @@ class MediaJobs:
     async def _ffmpeg(
         self, argv: list[str], total: int, events, cancel: asyncio.Event, tmp: Path
     ) -> None:
-        """ffmpeg in its own process group (a list, never a shell), progress from its `frame=N` lines; a cancel
-        stops the group (SIGTERM, KILL_AFTER, SIGKILL) and raises Cancelled; a non-zero exit is MediaError ffmpeg
-        with its last error line."""
+        """ffmpeg in its own process group (a list, never a shell), progress from its `frame=N` lines only when the
+        count moved; a cancel stops the group (SIGTERM, KILL_AFTER, SIGKILL) and raises Cancelled; past its deadline
+        (DEADLINE_BASE + DEADLINE_PER_FRAME × total, at most DEADLINE_MAX) it is stopped: MediaError ffmpeg; a
+        non-zero exit is MediaError ffmpeg with its last error line."""
         proc = await asyncio.create_subprocess_exec(
             media.FFMPEG, *argv, stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, cwd=tmp, start_new_session=True,
@@ -264,6 +301,7 @@ class MediaJobs:
         readers = asyncio.gather(read_progress(), read_err())
         waiter = asyncio.create_task(proc.wait())
         start = at = time.monotonic()
+        deadline = start + min(DEADLINE_BASE + DEADLINE_PER_FRAME * total, DEADLINE_MAX)
         sent = None
         try:
             while not waiter.done():
@@ -272,7 +310,12 @@ class MediaJobs:
                     await self._stop(proc, waiter)
                     raise Cancelled
                 n, now = state["frames"], time.monotonic()
-                if (n != sent and now - at >= PROGRESS) or now - at >= HEARD:
+                if now > deadline:
+                    await self._stop(proc, waiter)
+                    raise MediaError(
+                        "ffmpeg", f"timed out after {round(now - start)} s at frame {n} of {total}"
+                    )
+                if n != sent and now - at >= PROGRESS:
                     d = {"frames": n, "total": total}
                     if 0 < n < total:
                         d["eta_s"] = round((now - start) / n * (total - n), 1)
@@ -295,8 +338,8 @@ class MediaJobs:
             if done:
                 return
 
-    async def frame(self, data: dict, tmp: Path) -> dict:
-        paths, infos = await self._fetch(data["inputs"][:1], tmp)
+    async def frame(self, data: dict, tmp: Path, cancel: asyncio.Event) -> dict:
+        paths, infos = await self._fetch(data["inputs"][:1], tmp, cancel)
         index, frames = data["frame"]["index"], infos[0]["frames"]
         if index >= frames:
             raise MediaError("input", f"the video has {frames} frames, no frame {index}")

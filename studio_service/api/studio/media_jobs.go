@@ -38,6 +38,10 @@ import (
 // noHost is the refusal when no live env can run a media job.
 const noHost = "no live host can export (ffmpeg)"
 
+// MaxOpenMediaJobs is how many unfinished media jobs (exports and frames) one user may have: every user's jobs share
+// each env's one media worker.
+const MaxOpenMediaJobs = 4
+
 type mediaRow struct {
 	ID, OwnerID, Kind, Status, Host, Env string
 	TimelineID, TimelineName             *string
@@ -120,8 +124,20 @@ func (s *Service) mediaEnv(host *string) (registry.Host, bool) {
 	return envs[0], true
 }
 
-// insertMediaJob stores a queued job and sends its command.
+// insertMediaJob stores a queued job and sends its command; past MaxOpenMediaJobs open ones of the owner it is 409
+// (counted under a per-user lock, so concurrent requests cannot pass it together).
 func insertMediaJob(ctx context.Context, tx pgx.Tx, j mediaRow, command mediaCommand) (mediaRow, error) {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('media:' || $1::text))`, j.OwnerID); err != nil {
+		return mediaRow{}, err
+	}
+	var open int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM media_jobs WHERE owner_id = $1 AND status IN ('queued', 'running')`,
+		j.OwnerID).Scan(&open); err != nil {
+		return mediaRow{}, err
+	} else if open >= MaxOpenMediaJobs {
+		return mediaRow{}, network.NewConflictError(fmt.Sprintf("You have %d unfinished exports or frames; wait for one to finish.",
+			MaxOpenMediaJobs), nil)
+	}
 	row, err := one[mediaRow](ctx, tx, `INSERT INTO media_jobs (id, owner_id, kind, host, env, timeline_id, timeline_name,
 		revision, parents, source_take_id, at, mode, reason, frames) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
 		$12, $13, $14) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env, j.TimelineID, j.TimelineName,
@@ -201,7 +217,9 @@ func exportReason(r timeline.Reason, doc timeline.Doc, takes map[string]timeline
 	case "offline":
 		out.Message = "clip " + r.Clip + " is offline"
 	case "empty":
-		out.Message = "the sequence is empty"
+		out.Message = "the sequence has no clip on V1"
+	case "too_large":
+		out.Message = "the export is too large: at most 2 hours, an estimated 16 GB file and 32 GB of clips to read"
 	case "no_host":
 		out.Message = noHost
 	case "gap":
@@ -356,7 +374,8 @@ func (s *Service) GetMediaJob(ctx context.Context, caller common.Caller, id stri
 	return out.dto(), err
 }
 
-// CancelMediaJob asks the runner to stop the job (KV cancels); one whose env went silent is ended here.
+// CancelMediaJob asks the runner to stop the job (KV cancels); one whose env went silent is ended here with its
+// command purged, so a runner that comes back never runs it.
 func (s *Service) CancelMediaJob(ctx context.Context, caller common.Caller, id string) (dto.MediaJob, error) {
 	if !utility.IsUUID(id) {
 		return dto.MediaJob{}, errNotFound
@@ -373,6 +392,9 @@ func (s *Service) CancelMediaJob(ctx context.Context, caller common.Caller, id s
 		if s.mediaKeyLive(out, time.Now()) {
 			ask = true
 			return nil
+		}
+		if err := purgeMedia(ctx, s.purge, out); err != nil {
+			return network.NewServiceUnavailableError("could not reach the runner's queue; try again", err)
 		}
 		return endMedia(ctx, tx, &out, "cancelled", nil)
 	})
@@ -407,13 +429,25 @@ func endMedia(ctx context.Context, tx pgx.Tx, job *mediaRow, status string, fail
 	return err
 }
 
+// purgeMedia drops the commands queued for job's env (cmd.media.<host>.<env>), for a job whose env's key is stale: no
+// job is sent to an env that stale, and every open one on it is ended too. nil purge: not reachable (tests).
+func purgeMedia(ctx context.Context, purge func(ctx context.Context, subject string) error, job mediaRow) error {
+	if purge == nil {
+		return nil
+	}
+	return purge(ctx, "cmd.media."+job.Host+"."+job.Env)
+}
+
 // SweepMediaJobs ends the open jobs studio can no longer hear: an env's key gone or older than StaleJobKey is
-// cancelled, a job unheard for JobSilence fails (internal).
-func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, now time.Time) error {
+// cancelled with its command purged; a job unheard for JobSilence fails (internal) and its runner is asked to stop
+// it (KV cancels), so a hung ffmpeg never holds the env's media worker.
+func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error,
+	cancel Cancel, now time.Time) error {
 	if !reg.Ready() {
 		return nil
 	}
-	return common.System(ctx, pool, func(tx pgx.Tx) error {
+	var silent []string
+	err := common.System(ctx, pool, func(tx pgx.Tx) error {
 		open, err := collect[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE status IN ('queued', 'running')
 			FOR UPDATE SKIP LOCKED`)
 		if err != nil {
@@ -422,8 +456,13 @@ func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Regis
 		for _, job := range open {
 			switch {
 			case !mediaKeyLive(reg, job, now):
+				if err := purgeMedia(ctx, purge, job); err != nil {
+					log.Printf("media jobs: purge cmd.media.%s.%s: %v", job.Host, job.Env, err) // tried again next tick
+					continue
+				}
 				err = endMedia(ctx, tx, &job, "cancelled", nil)
 			case now.Sub(job.HeardAt) > JobSilence:
+				silent = append(silent, job.ID)
 				err = endMedia(ctx, tx, &job, "failed", map[string]string{"class": "internal", "detail": "the runner stopped reporting this job"})
 			}
 			if err != nil {
@@ -432,14 +471,23 @@ func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Regis
 		}
 		return nil
 	})
+	for _, id := range silent {
+		if cancel == nil {
+			break
+		}
+		if err := cancel(ctx, id); err != nil {
+			log.Printf("media jobs: cancel %s: %v", id, err) // ended here; the runner's events are ignored
+		}
+	}
+	return err
 }
 
 // RunMediaJobs sweeps media jobs every Tick until ctx ends.
-func RunMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry) {
+func RunMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error, cancel Cancel) {
 	tick := time.NewTicker(Tick)
 	defer tick.Stop()
 	for {
-		if err := SweepMediaJobs(ctx, pool, reg, time.Now()); err != nil && ctx.Err() == nil {
+		if err := SweepMediaJobs(ctx, pool, reg, purge, cancel, time.Now()); err != nil && ctx.Err() == nil {
 			log.Printf("media jobs: %v", err)
 		}
 		select {
@@ -501,9 +549,13 @@ func (s *Service) frameOf(ctx context.Context, tx pgx.Tx, ownerID string, video 
 	}
 	var v gallerydto.Video
 	_ = json.Unmarshal(video.Video, &v)
-	src := &v.Poster
-	if at == "last" {
+	var src *gallerydto.Poster
+	switch {
+	case at == "last":
 		src = v.Last
+	case video.Source == "create" || video.Source == "pipeline": // a run's poster is its frame 0; an export's is a
+		// tenth in, an upload's or import's is the client's
+		src = &v.Poster
 	}
 	if src != nil && !common.Owns(ownerID, src.Key) {
 		src = nil // never copy another user's object
@@ -518,9 +570,6 @@ func (s *Service) frameOf(ctx context.Context, tx pgx.Tx, ownerID string, video 
 		} else if !errors.Is(err, storage.ErrNotFound) {
 			return nil, nil, network.NewServiceUnavailableError("could not copy the frame; try again", err)
 		}
-	}
-	if at == "first" && (src == nil || src.Key == "") {
-		return nil, nil, network.NewUnprocessableError("take "+video.ID+" has no poster", nil)
 	}
 	job, err := one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE kind = 'frame' AND source_take_id = $1
 		AND at = $2 AND status IN ('queued', 'running') ORDER BY created_at DESC LIMIT 1`, video.ID, at)

@@ -103,13 +103,20 @@ class FakeStore:
     async def put(self, key: str, data: bytes, content_type: str) -> None:
         self.objects[key] = (data, content_type)
 
+    async def upload(self, key: str, path, content_type: str) -> tuple[int, str]:
+        import hashlib
+
+        data = Path(path).read_bytes()
+        self.objects[key] = (data, content_type)
+        return len(data), hashlib.md5(data).hexdigest()
+
     async def get(self, key: str, limit: int, etag: str | None = None) -> bytes | None:
         self.reads.append(key)
         if etag and self.etags.get(key, etag) != etag:
             return None
         return self.objects[key][0][: limit + 1] if key in self.objects else None
 
-    async def download(self, key: str, dest, limit: int):
+    async def download(self, key: str, dest, limit: int, stop=None):
         import hashlib
 
         self.reads.append(key)

@@ -237,7 +237,7 @@ func shotState(ctx context.Context, tx pgx.Tx, ownerID string, ref timeline.Shot
 		if err == nil && i < 0 {
 			var status string
 			err = tx.QueryRow(ctx, `SELECT status FROM batches WHERE id = $1`, ref.BatchID).Scan(&status)
-			if errors.Is(err, pgx.ErrNoRows) || slices.Contains([]string{"succeeded", "failed", "cancelled", "stopped"}, status) {
+			if errors.Is(err, pgx.ErrNoRows) || slices.Contains([]string{"done", "failed", "stopped"}, status) {
 				return "cancelled", nil, "", nil
 			}
 			return "queued", nil, "", err
@@ -477,7 +477,10 @@ func apply(doc timeline.Doc, op timeline.Op, takes map[string]timeline.Take) (ti
 func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body *dto.TimelineCreate) (dto.Timeline, error) {
 	var out dto.Timeline
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		var count int
+		var count int // under a per-user lock: concurrent creates cannot pass the cap together
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('timelines:' || $1::text))`, caller.ID); err != nil {
+			return err
+		}
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM timelines WHERE deleted_at IS NULL`).Scan(&count); err != nil {
 			return err
 		} else if count >= MaxTimelines {
@@ -670,9 +673,10 @@ func (s *Service) PatchTimeline(ctx context.Context, caller common.Caller, id st
 	})
 }
 
-// DeleteTimeline soft-deletes the sequence and cancels its unfinished exports (their runners are asked to stop).
+// DeleteTimeline soft-deletes the sequence, deletes its revisions and cancels its unfinished exports (their runners
+// are asked to stop; the command of one whose env went stale is purged).
 func (s *Service) DeleteTimeline(ctx context.Context, caller common.Caller, id string) error {
-	var jobs []string
+	var jobs []mediaRow
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		if _, err := readTimeline(ctx, tx, id, true); err != nil {
 			return err
@@ -680,15 +684,21 @@ func (s *Service) DeleteTimeline(ctx context.Context, caller common.Caller, id s
 		if _, err := tx.Exec(ctx, `UPDATE timelines SET deleted_at = clock_timestamp() WHERE id = $1`, id); err != nil {
 			return err
 		}
-		rows, _ := tx.Query(ctx, `UPDATE media_jobs SET status = 'cancelled', finished_at = clock_timestamp()
-			WHERE timeline_id = $1 AND status IN ('queued', 'running') RETURNING id::text`, id)
+		if _, err := tx.Exec(ctx, `DELETE FROM timeline_revisions WHERE timeline_id = $1`, id); err != nil {
+			return err
+		}
 		var err error
-		jobs, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		jobs, err = collect[mediaRow](ctx, tx, `UPDATE media_jobs SET status = 'cancelled', finished_at = clock_timestamp()
+			WHERE timeline_id = $1 AND status IN ('queued', 'running') RETURNING `+mediaCols, id)
 		return err
 	})
 	for _, job := range jobs {
-		if err := s.cancel(ctx, job); err != nil {
-			log.Printf("timelines: cancel export %s: %v", job, err) // ended here; the runner's events are ignored
+		stop := func() error { return s.cancel(ctx, job.ID) }
+		if !s.mediaKeyLive(job, time.Now()) {
+			stop = func() error { return purgeMedia(ctx, s.purge, job) }
+		}
+		if err := stop(); err != nil {
+			log.Printf("timelines: cancel export %s: %v", job.ID, err) // ended here; the runner's events are ignored
 		}
 	}
 	return err
@@ -962,16 +972,72 @@ func settleShot(ctx context.Context, tx pgx.Tx, run model.Run, extra []string,
 	return nil
 }
 
-// fillShot fills the slots of run's shot with its first take (the projector, after storing it).
+// fillShot fills the slots of run's shot with its first take (the projector, after storing it). A fill the rules
+// still refuse leaves the take as the slot's alternative and drops the shot: a succeeded shot never stays unfilled.
 func fillShot(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) error {
 	return settleShot(ctx, tx, run, []string{takeID}, func(doc timeline.Doc, clip string, takes map[string]timeline.Take) (timeline.Doc, bool) {
 		r := timeline.Apply(doc, timeline.Op{Op: "fill", Clip: clip, TakeID: takeID}, takes)
-		if r.Document == nil {
-			log.Printf("timelines: fill of clip %s with take %s: %v %v", clip, takeID, r.Error, r.Problems)
-			return doc, false
+		if r.Document != nil {
+			return *r.Document, true
 		}
-		return *r.Document, true
+		log.Printf("timelines: fill of clip %s with take %s: %v %v", clip, takeID, r.Error, r.Problems)
+		next := doc.Clone()
+		k := slices.IndexFunc(next.Tracks[0].Clips, func(c timeline.Clip) bool { return c.ID == clip })
+		next.Tracks[0].Clips[k].Shot = nil
+		next.Tracks[0].Clips[k].Alternatives = append(next.Tracks[0].Clips[k].Alternatives, takeID)
+		if n, probs := timeline.Normalize(next, takes, &doc); probs == nil {
+			return *n, true
+		}
+		next.Tracks[0].Clips[k].Alternatives = doc.Tracks[0].Clips[k].Alternatives
+		return next, true
 	})
+}
+
+// batchShotsEnded drops the shot of every slot whose re-render step can no longer run now that its batch ended (a
+// failed step ends its row, so the steps after it never run); a failed step's slot keeps its shot (shown failed).
+func batchShotsEnded(ctx context.Context, tx pgx.Tx, batchID, ownerID string) error {
+	type slot struct{ Timeline, Clip, Step string }
+	slots, err := collect[slot](ctx, tx, `SELECT timeline_id::text, clip, step FROM timeline_shots WHERE batch_id = $1
+		AND owner_id = $2 ORDER BY timeline_id`, batchID, ownerID)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < len(slots); {
+		j := i
+		for j < len(slots) && slots[j].Timeline == slots[i].Timeline {
+			j++
+		}
+		row, err := one[timelineRow](ctx, tx, `SELECT `+timelineCols+` FROM timelines WHERE id = $1 AND owner_id = $2
+			AND deleted_at IS NULL FOR UPDATE`, slots[i].Timeline, ownerID)
+		if errors.Is(err, errNotFound) {
+			i = j
+			continue
+		} else if err != nil {
+			return err
+		}
+		doc, changed := row.doc(), false
+		for _, sl := range slots[i:j] {
+			ref := timeline.ShotRef{BatchID: batchID, Step: sl.Step}
+			k := slices.IndexFunc(doc.Tracks[0].Clips, func(c timeline.Clip) bool {
+				return c.ID == sl.Clip && c.Shot != nil && c.Shot.Ref() == ref
+			})
+			if k < 0 {
+				continue
+			}
+			if status, _, _, err := shotState(ctx, tx, ownerID, ref); err != nil {
+				return err
+			} else if status == "cancelled" {
+				doc.Tracks[0].Clips[k].Shot, changed = nil, true
+			}
+		}
+		if changed {
+			if err := storeStudio(ctx, tx, &row, doc); err != nil {
+				return err
+			}
+		}
+		i = j
+	}
+	return nil
 }
 
 // shotEnded drops a cancelled run's shot from its slots (an empty slot stays as it is); a failed one keeps it.

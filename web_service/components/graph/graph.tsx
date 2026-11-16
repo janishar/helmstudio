@@ -245,7 +245,10 @@ function Graph({
     () => (server?.doc === doc ? mergeProblems(client, server.problems) : client),
     [client, server, doc],
   );
-  useEffect(() => onProblems(cur.id, problems), [cur.id, problems, onProblems]);
+  // a block body: whatever the callback returns never becomes the effect's cleanup
+  useEffect(() => {
+    onProblems(cur.id, problems);
+  }, [cur.id, problems, onProblems]);
 
   /** Checks `d` (a document of workflow `id`) with studio and saves it when it changed and nothing blocks saving;
    * a template is first copied as "<title> (mine)". Answers about a workflow no longer open only update the list. */

@@ -71,12 +71,16 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			tid, cid := op.TakeIDs[i], op.IDs[i]
 			tk := takes[tid]
 			switch {
-			case t.Name != "V1":
-				e := 0.0
+			case t.Name != "V1": // at the first frame at or after the track's end (in samples): never an overlap
+				e := 0
 				for _, c := range t.Clips {
-					e = max(e, val(c.At)+val(c.Out)-val(c.In))
+					e = max(e, g.Smp(val(c.At))+g.Smp(val(c.Out))-g.Smp(val(c.In)))
 				}
-				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, In: f64(0), Out: f64(tk.DurationS), At: f64(g.Snap(e))})
+				f := g.F(float64(e) / float64(g.sr))
+				if g.Smp(g.S(f)) < e {
+					f++
+				}
+				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, In: f64(0), Out: f64(tk.DurationS), At: f64(g.S(f))})
 			case tk.Kind == "image":
 				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, Hold: f64(ImageHoldS)})
 			default:
@@ -317,7 +321,8 @@ func split(t *Track, onV1 bool, op Op, takes map[string]Take, g Grid) string {
 	c2.TransitionIn, c2.Shot, c2.ID = nil, nil, op.ID
 	switch {
 	case !onV1:
-		cut := float64(g.Smp(val(c.In))+g.Smp(g.S(p))) / float64(g.sr)
+		// the left part ends on the right part's start sample
+		cut := float64(g.Smp(g.S(f))-g.Smp(val(c.At))+g.Smp(val(c.In))) / float64(g.sr)
 		c.Out, c2.In, c2.At = f64(cut), f64(cut), f64(g.S(f))
 	case Kind(*c, takes) == "video":
 		s := g.S(g.F(val(c.In)) + p)
@@ -337,7 +342,8 @@ type Result struct {
 }
 
 // Apply is an edit, then normalize against the document before it (t_apply). fill then drops a dissolve the new
-// take cannot carry (a fill never fails on one).
+// take cannot carry and cuts an audio-track clip a shorter V1 now ends inside (removed when it starts at or after
+// the end), so a fill never fails.
 func Apply(doc Doc, op Op, takes map[string]Take) Result {
 	raw, code := Edit(doc, op, takes)
 	if code != "" {
@@ -345,15 +351,31 @@ func Apply(doc Doc, op Op, takes map[string]Take) Result {
 	}
 	n, probs := Normalize(raw, takes, &doc)
 	if op.Op == "fill" && len(probs) > 0 {
-		bad := map[string]bool{}
+		g := NewGrid(raw.Target)
+		bad, past := map[string]bool{}, map[string]bool{}
 		for _, p := range probs {
-			if p.Code == "dissolve_handles" || p.Code == "dissolve_length" {
+			switch p.Code {
+			case "dissolve_handles", "dissolve_length":
 				bad[p.Clip] = true
+			case "past_end":
+				past[p.Clip] = true
 			}
 		}
+		frames := 0
 		for i, c := range raw.Tracks[0].Clips {
 			if bad[c.ID] {
 				raw.Tracks[0].Clips[i].TransitionIn = nil
+			}
+			frames += Len(c, Kind(c, takes), g, false)
+		}
+		end := g.Smp(g.S(frames))
+		for ti := 1; ti < len(raw.Tracks); ti++ {
+			t := &raw.Tracks[ti]
+			t.Clips = slices.DeleteFunc(t.Clips, func(c Clip) bool { return past[c.ID] && g.Smp(val(c.At)) >= end })
+			for i, c := range t.Clips {
+				if past[c.ID] {
+					t.Clips[i].Out = f64(float64(g.Smp(val(c.In))+end-g.Smp(val(c.At))) / float64(g.sr))
+				}
 			}
 		}
 		n, probs = Normalize(raw, takes, &doc)

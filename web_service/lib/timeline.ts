@@ -84,6 +84,9 @@ export class Grid {
 
 const tk = (takes: Takes, id: string | null | undefined) => (id ? takes[id] : undefined);
 
+/** A clip whose shot is queued or running: it cannot be edited until the shot ends (a failed one can, and retried). */
+export const shotBusy = (c: Clip) => !!c.shot && c.shot.status !== "failed";
+
 /** slot (no take), video or image; an offline clip by its fields (hold = image). */
 export function kindOf(c: Clip, takes: Takes): Kind {
   if (!c.take_id) return "slot";
@@ -319,8 +322,11 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
       if (cid === undefined) return;
       const take = takes[tid];
       if (t.name !== "V1") {
-        const end = Math.max(0, ...t.clips.map((c) => c.at! + c.out! - c.in!));
-        t.clips.push({ id: cid, take_id: tid, in: 0, out: take.duration_s, at: g.snap(end) });
+        // at the first frame at or after the track's end (in samples): never an overlap
+        const end = Math.max(0, ...t.clips.map((c) => g.smp(c.at!) + g.smp(c.out!) - g.smp(c.in!)));
+        let f = g.f(end / g.sr);
+        if (g.smp(g.s(f)) < end) f += 1;
+        t.clips.push({ id: cid, take_id: tid, in: 0, out: take.duration_s, at: g.s(f) });
       } else if (take.kind === "image") t.clips.push({ id: cid, take_id: tid, hold: IMAGE_HOLD_S });
       else t.clips.push({ id: cid, take_id: tid, in: 0, out: take.duration_s });
     });
@@ -476,7 +482,7 @@ function split(
   delete c2.transition_in;
   delete c2.shot;
   if (!onV1) {
-    const cut = g.smp(c.in!) + g.smp(g.s(p));
+    const cut = g.smp(g.s(f)) - g.smp(c.at!) + g.smp(c.in!); // the left part ends on the right part's start sample
     c.out = c2.in = cut / g.sr;
     c2.at = g.s(f);
   } else if (kindOf(c, takes) === "video") c.out = c2.in = g.s(g.f(c.in!) + p);
@@ -490,7 +496,9 @@ function split(
 
 export type Applied = { document: Norm } | { problems: Problem[] } | { error: string };
 
-/** An edit, then normalize against the edited document as the previous revision (t_apply). */
+/** An edit, then normalize against the edited document as the previous revision (t_apply). `fill` then drops a
+ * dissolve the new take cannot carry and cuts an audio-track clip a shorter V1 now ends inside (removed when it
+ * starts at or after the end), so a fill never fails. */
 export function apply(doc: Doc, op: Op, takes: Takes): Applied {
   const raw = edit(doc, op, takes);
   if (typeof raw === "string") return { error: raw };
@@ -501,7 +509,19 @@ export function apply(doc: Doc, op: Op, takes: Takes): Applied {
         .filter((p) => p[0] === "dissolve_handles" || p[0] === "dissolve_length")
         .map((p) => p[2]),
     );
-    for (const c of raw.tracks[0].clips) if (bad.has(c.id)) delete c.transition_in;
+    const past = new Set(r.problems.filter((p) => p[0] === "past_end").map((p) => p[2]));
+    const g = new Grid(raw.target);
+    let frames = 0;
+    for (const c of raw.tracks[0].clips) {
+      if (bad.has(c.id)) delete c.transition_in;
+      frames += lenOf(c, kindOf(c, takes), g);
+    }
+    const end = g.smp(g.s(frames));
+    for (const t of raw.tracks.slice(1)) {
+      t.clips = t.clips.filter((c) => !past.has(c.id) || g.smp(c.at!) < end);
+      for (const c of t.clips)
+        if (past.has(c.id)) c.out = (g.smp(c.in!) + end - g.smp(c.at!)) / g.sr;
+    }
     r = normalize(raw, takes, doc);
   }
   return r;

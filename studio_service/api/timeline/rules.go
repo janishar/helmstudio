@@ -21,6 +21,11 @@ const (
 	MaxBytes       = 262144
 	MaxAlts        = 32
 	MaxRerender    = 22
+
+	// an export: at most 2 hours, an estimated 16 GiB written and 32 GiB of distinct takes read
+	MaxExportS      = 7200
+	MaxExportBytes  = 16 << 30
+	MaxExportInputs = 32 << 30
 )
 
 // rates is the frame-rate table: fps as JSON writes it → the exact rate num/den.

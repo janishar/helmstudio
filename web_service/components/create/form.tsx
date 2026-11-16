@@ -690,7 +690,9 @@ function Editor({
   const id = idOf(f.key);
   const label = p.label ?? p.name;
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => ref.current?.querySelector<HTMLElement>("input, .opt")?.focus(), []);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>("input, .opt")?.focus();
+  }, []);
   const num = (
     <input
       id={id}

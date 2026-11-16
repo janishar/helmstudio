@@ -18,6 +18,7 @@ import {
   type Norm,
   type Op,
   type Takes,
+  shotBusy,
 } from "@/lib/timeline";
 
 type TTake = S<"TimelineTake">;
@@ -147,7 +148,7 @@ export function Lanes({
   };
 
   function down(e: React.PointerEvent<HTMLButtonElement>, c: Clip, ti: number) {
-    if (e.button !== 0 || c.shot) return;
+    if (e.button !== 0 || shotBusy(c)) return;
     const r = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - r.left;
     const mode = x < EDGE_PX ? "in" : r.width - x < EDGE_PX ? "out" : "move";
@@ -241,7 +242,7 @@ export function Lanes({
           backgroundSize: bg ? "auto, auto 100%" : undefined,
           backgroundPosition: bg ? "0 0, right center" : undefined,
           backgroundRepeat: "no-repeat",
-          cursor: c.shot ? "default" : undefined,
+          cursor: shotBusy(c) ? "default" : undefined,
         }}
       >
         {height > 40 && <b>{title}</b>}
@@ -258,7 +259,7 @@ export function Lanes({
         ) : (
           <small>{height > 40 ? line : `${title === "Clip" ? "" : title} · ${line}`}</small>
         )}
-        {!c.shot && (
+        {!shotBusy(c) && (
           <>
             <span aria-hidden className="tl-edge left-0" />
             <span aria-hidden className="tl-edge right-0" />

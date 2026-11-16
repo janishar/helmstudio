@@ -26,7 +26,9 @@ export function ApiKeysAdmin() {
       })
       .catch((e) => setError(message(e)));
   }, []);
-  useEffect(() => load(), [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   async function revoke(k: Key) {
     try {
       await ok(api.DELETE("/auth/admin/apikeys/{id}", { params: { path: { id: k.id } } }));

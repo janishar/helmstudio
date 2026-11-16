@@ -28,7 +28,9 @@ export function ProvidersAdmin() {
       })
       .catch((e) => setError(message(e)));
   }, []);
-  useEffect(() => load(), [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   const upsert = (p: Provider) =>
     setList(
       (l) =>

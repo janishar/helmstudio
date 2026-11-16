@@ -38,6 +38,19 @@ class Store:
             ContentType=content_type,
         )
 
+    async def upload(self, key: str, path, content_type: str) -> tuple[int, str]:
+        """Stream the file at `path` to `key` from disk (multipart past 1 GiB, so it is never held in memory and may
+        pass S3's 5 GB single-PUT cap): (bytes, the stored object's ETag)."""
+        from boto3.s3.transfer import TransferConfig
+
+        def send() -> tuple[int, str]:
+            self.s3.upload_file(str(path), config.S3_BUCKET, key, ExtraArgs={"ContentType": content_type},
+                                Config=TransferConfig(multipart_threshold=1 << 30, multipart_chunksize=64 << 20))  # fmt: skip
+            head = self.s3.head_object(Bucket=config.S3_BUCKET, Key=key)
+            return head["ContentLength"], head["ETag"].strip('"')
+
+        return await asyncio.to_thread(send)
+
     async def get(self, key: str, limit: int, etag: str | None = None) -> bytes | None:
         """The object at `key` (at most limit + 1 bytes, so a larger one shows), or None when it is missing or, with
         `etag`, its ETag is another (the object was replaced)."""
@@ -56,9 +69,9 @@ class Store:
 
         return await asyncio.to_thread(read)
 
-    async def download(self, key: str, dest, limit: int) -> tuple[int, str] | None:
+    async def download(self, key: str, dest, limit: int, stop=None) -> tuple[int, str] | None:
         """Stream the object at `key` into the file `dest` (at most limit + 1 bytes): (bytes, SHA-256 hex), or None
-        when it is missing."""
+        when it is missing; `stop()` true ends it early (the caller checks why)."""
 
         def read() -> tuple[int, str] | None:
             try:
@@ -69,7 +82,11 @@ class Store:
                 raise
             h, n = hashlib.sha256(), 0
             with r["Body"] as body, open(dest, "wb") as f:
-                while n <= limit and (chunk := body.read(min(1 << 22, limit + 1 - n))):
+                while (
+                    n <= limit
+                    and not (stop and stop())
+                    and (chunk := body.read(min(1 << 22, limit + 1 - n)))
+                ):
                     h.update(chunk)
                     f.write(chunk)
                     n += len(chunk)

@@ -45,6 +45,7 @@ import {
   type Op,
   type Problem,
   type Track,
+  shotBusy,
 } from "@/lib/timeline";
 
 type Timeline = S<"Timeline">;
@@ -307,7 +308,7 @@ export function TimelineEditor({ id }: { id?: string }) {
       .catch((e) => setError(message(e)));
 
   // ------------------------------------------------------------------ shots: progress and fills
-  const shots = (tl?.tracks[0].clips ?? []).filter((c) => c.shot && c.shot.status !== "failed");
+  const shots = (tl?.tracks[0].clips ?? []).filter(shotBusy);
   const live = shots.length > 0;
   useEffect(() => {
     if (!live) return;
@@ -369,7 +370,7 @@ export function TimelineEditor({ id }: { id?: string }) {
     commit({ op: "split", track: onAudio ? one.t.name! : "V1", at, id: newId(doc) });
   }
   function nudge(dir: -1 | 1) {
-    if (!one || !g || one.c.shot) return;
+    if (!one || !g || shotBusy(one.c)) return;
     if (one.ti === 0) {
       const i = v1.findIndex((c) => c.id === one.c.id);
       const index = Math.max(0, Math.min(v1.length - 1, i + dir));
@@ -377,7 +378,7 @@ export function TimelineEditor({ id }: { id?: string }) {
     } else commit({ op: "move", clip: one.c.id, at: Math.max(0, g.s(g.f(one.c.at!) + dir)) });
   }
   function remove() {
-    for (const x of selected) if (!x.c.shot) commit({ op: "remove", clip: x.c.id });
+    for (const x of selected) if (!shotBusy(x.c)) commit({ op: "remove", clip: x.c.id });
     setSel([]);
   }
 
@@ -405,7 +406,7 @@ export function TimelineEditor({ id }: { id?: string }) {
       e.preventDefault();
       const step = e.shiftKey ? g.f(1) : 1;
       pv.current?.seek(frame + (k === "ArrowLeft" ? -step : step));
-    } else if ((k === "[" || k === "]" || k === "{" || k === "}") && one && !one.c.shot) {
+    } else if ((k === "[" || k === "]" || k === "{" || k === "}") && one && !shotBusy(one.c)) {
       e.preventDefault();
       const rev = e.shiftKey ? -1 : 1;
       const edge = k === "[" || k === "{" ? "in" : "out";
@@ -924,7 +925,8 @@ function ClipPanel({
   const { title, line } = clipText(c, ti > 0, tl.takes, facts, g, progress);
   const first = ti === 0 && doc.tracks[0].clips[0]?.id === c.id;
   const alts = (c.alternatives ?? []).filter((a) => tl.takes[a]);
-  const busy = !!c.shot;
+  const busy = shotBusy(c);
+  const others = alts.some((a) => a !== c.take_id); // Replace needs a take besides the current one
   const [gain, setGain] = useDraft(String(c.gain_db ?? 0));
   const [hold, setHold] = useDraft(c.hold !== undefined ? c.hold.toFixed(2) : "");
   const sub = take
@@ -1042,7 +1044,7 @@ function ClipPanel({
               {c.shot?.status === "failed" ? "Try this shot again" : "New shot here"}
             </button>
           )}
-          {alts.length > 1 && (
+          {others && (
             <button
               type="button"
               className="act"
@@ -1066,7 +1068,7 @@ function ClipPanel({
         </div>
       )}
 
-      {replacing && alts.length > 1 && (
+      {replacing && others && (
         <div className="flex flex-col gap-2">
           <h3 className="heading">Replace with another take</h3>
           <div className="grid grid-cols-3 gap-2">

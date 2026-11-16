@@ -175,7 +175,7 @@ func ExportPlan(doc Doc, takes map[string]Take) Plan {
 			}
 		}
 	}
-	if doc.Frames == 0 {
+	if len(doc.Tracks[0].Clips) == 0 { // sound alone has no picture to export
 		p.Blocked = append(p.Blocked, Reason{Code: "empty"})
 	}
 	var first *Stream
@@ -251,6 +251,17 @@ func ExportPlan(doc Doc, takes map[string]Take) Plan {
 		bitrate := p.Bitrate
 		p.VideoBitrate = &bitrate
 		p.EstimatedBytes = Rnd(float64(bitrate+192000) * dur / 8)
+	}
+	inputs, seen := int64(0), map[string]bool{}
+	for _, t := range doc.Tracks {
+		for _, c := range t.Clips {
+			if tk, ok := takes[c.Take()]; ok && !seen[c.Take()] {
+				seen[c.Take()], inputs = true, inputs+tk.Bytes
+			}
+		}
+	}
+	if dur > MaxExportS || p.EstimatedBytes > MaxExportBytes || inputs > MaxExportInputs {
+		p.Blocked = append(p.Blocked, Reason{Code: "too_large"})
 	}
 	return p
 }

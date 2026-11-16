@@ -1617,6 +1617,8 @@ RATES = [(23.976, 24000, 1001), (24, 24, 1), (25, 25, 1), (29.97, 30000, 1001), 
 T_MAGNET_PX = 6  # an edge lands on a cut within this many screen pixels
 T_IMAGE_HOLD_S = 3.0  # an image take added to V1 holds this long
 T_MAX_AUDIO_TRACKS, T_MAX_CLIPS, T_MAX_BYTES, T_MAX_ALTERNATIVES, T_MAX_RERENDER = 8, 1000, 262144, 32, 22
+# an export: at most 2 hours, an estimated 16 GiB written and 32 GiB of distinct takes read (cmd.media.job, runner)
+T_MAX_EXPORT_S, T_MAX_EXPORT_BYTES, T_MAX_EXPORT_INPUTS = 7200, 16 << 30, 32 << 30
 
 
 def rnd(x: float) -> int:
@@ -1813,9 +1815,11 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
         t = tracks[op.get("track", "V1")]
         for tid, cid in zip(op["take_ids"], op["ids"]):
             tk = takes[tid]
-            if t["name"] != "V1":
-                end = max((c["at"] + c["out"] - c["in"] for c in t["clips"]), default=0)
-                t["clips"].append({"id": cid, "take_id": tid, "in": 0, "out": tk["duration_s"], "at": g.snap(end)})
+            if t["name"] != "V1":  # at the first frame at or after the track's end (in samples): never an overlap
+                end = max((g.smp(c["at"]) + g.smp(c["out"]) - g.smp(c["in"]) for c in t["clips"]), default=0)
+                f = g.f(end / g.sr)
+                f += g.smp(g.s(f)) < end
+                t["clips"].append({"id": cid, "take_id": tid, "in": 0, "out": tk["duration_s"], "at": g.s(f)})
             elif tk["kind"] == "image":
                 t["clips"].append({"id": cid, "take_id": tid, "hold": T_IMAGE_HOLD_S})
             else:
@@ -1948,7 +1952,7 @@ def t_split(d: dict, t: dict, op: dict, takes: dict, g: Grid) -> dict | str:
         return "split_shot"
     c2 = {x: v for x, v in copy.deepcopy(c).items() if x not in ("transition_in", "shot")} | {"id": op["id"]}
     if not on_v1:
-        cut = g.smp(c["in"]) + g.smp(g.s(p))
+        cut = g.smp(g.s(f)) - g.smp(c["at"]) + g.smp(c["in"])  # the left part ends on the right part's start sample
         c["out"], c2["in"], c2["at"] = cut / g.sr, cut / g.sr, g.s(f)
     elif t_kind(c, takes) == "video":
         c["out"] = c2["in"] = g.s(g.f(c["in"]) + p)
@@ -1960,16 +1964,26 @@ def t_split(d: dict, t: dict, op: dict, takes: dict, g: Grid) -> dict | str:
 
 def t_apply(doc: dict, op: dict, takes: dict) -> dict:
     """An edit, then normalize against the edited document as the previous revision. `fill` then drops a dissolve
-    the new take cannot carry (a fill never fails)."""
+    the new take cannot carry and cuts an audio-track clip a shorter V1 now ends inside (removed when it starts at
+    or after the end), so a fill never fails."""
     raw = t_edit(doc, op, takes)
     if isinstance(raw, str):
         return {"error": raw}
     n, probs = t_normalize(raw, takes, doc)
     if op["op"] == "fill" and probs:
+        g = Grid(raw["target"])
         bad = {p[2] for p in probs if p[0] in ("dissolve_handles", "dissolve_length")}
+        past = {p[2] for p in probs if p[0] == "past_end"}
+        end = g.smp(g.s(sum(t_len(c, t_kind(c, takes), g) for c in raw["tracks"][0]["clips"])))
         for c in raw["tracks"][0]["clips"]:
             if c["id"] in bad:
                 c.pop("transition_in", None)
+        for t in raw["tracks"][1:]:
+            for c in [c for c in t["clips"] if c["id"] in past]:
+                if (a := g.smp(c["at"])) >= end:
+                    t["clips"].remove(c)
+                else:
+                    c["out"] = (g.smp(c["in"]) + end - a) / g.sr
         n, probs = t_normalize(raw, takes, doc)
     return {"document": n} if n else {"problems": probs}
 
@@ -2046,7 +2060,7 @@ def export_plan(doc: dict, takes: dict) -> dict:
     whole, probed H.264 take in MP4/MOV matching the target and the first clip; sound is always re-encoded."""
     g, tg = Grid(doc["target"]), doc["target"]
     blocked = [["offline", c["id"]] for t in doc["tracks"] for c in t["clips"] if c.get("offline")]
-    if doc["frames"] == 0:
+    if not doc["tracks"][0]["clips"]:  # sound alone has no picture to export
         blocked.append(["empty", None])
     reasons, first = [], None
     why = lambda code, cid: reasons.append([code, cid])
@@ -2089,6 +2103,9 @@ def export_plan(doc: dict, takes: dict) -> dict:
     audio = rnd(192000 * dur / 8)
     est = (sum(takes[c["take_id"]]["bytes"] for c in doc["tracks"][0]["clips"]) + audio if copy_ok
            else rnd((bitrate + 192000) * dur / 8))
+    inputs = sum(takes[x]["bytes"] for x in {c.get("take_id") for t in doc["tracks"] for c in t["clips"]} if x in takes)
+    if dur > T_MAX_EXPORT_S or est > T_MAX_EXPORT_BYTES or inputs > T_MAX_EXPORT_INPUTS:
+        blocked.append(["too_large", None])
     return {"stream_copy": copy_ok, "reasons": reasons, "blocked": blocked,
             "video_bitrate": None if copy_ok else bitrate, "estimated_bytes": est}
 

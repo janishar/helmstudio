@@ -1961,7 +1961,8 @@ no call, counts the first n).
 ## Timeline (API 1.17, M5b; plan 11-timeline section 15; normative)
 
 A **sequence** (`Timeline`) is one owner's edit: `target {width, height, fps, sample_rate}`, `tracks`, `defaults`,
-`revision`, its own `session_id`. Owner-scoped by RLS (another user's id is 404); at most 100 per user; soft delete.
+`revision`, its own `session_id`. Owner-scoped by RLS (another user's id is 404); at most 100 per user (counted under a per-user lock); soft delete,
+which also deletes its revisions.
 Storage (studio internal): `timelines(id, owner_id, name, target, tracks jsonb, defaults, revision, session_id,
 deleted_at, …)`, `timeline_revisions(timeline_id, revision, target, tracks, by user|studio, undo_to, redo_to,
 saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot index `(owner, run_id | batch_id+step) →
@@ -2010,7 +2011,8 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
 - **The result fills the slot** (studio, when the projector stores the run's first take): the `fill` edit (`t_apply`):
   `take_id` = the new take, appended to `alternatives`, `shot` removed; a video take: `in` 0, `out` = min(its length,
   the slot's length) (the rest is handle; a shorter take shrinks the slot and V1 ripples); an image: `hold` = the slot's
-  length; a dissolve the new take cannot carry is dropped. A failed run keeps the shot (`status: failed`, `error`: the
+  length; a dissolve the new take cannot carry is dropped; an audio-track clip the shorter V1 now ends inside is cut at
+  the end (one that starts at or after it is removed), so a fill never fails. A failed run keeps the shot (`status: failed`, `error`: the
   placeholder shows it; the user retries or removes it); a cancelled one drops it (studio revision). A slot removed
   meanwhile: nothing (the take is in the gallery, with lineage to its keyframes).
 - **Options, offered only when the workflow has the template for them** (`Workflow.keyframes`, computed with
@@ -2032,7 +2034,9 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
 
 An image take (`source: frame`, `frame_of {take_id, at}`, `parents` = [the video take], title `<title> · first
 frame|last frame`, the video's size) of a video take's first or last frame, idempotent per (take, at). **Studio makes it
-at once** by a server-side object copy to `u/<owner>/frames/<new take id>.png`: `first` = the poster (frame 0), `last`
+at once** by a server-side object copy to `u/<owner>/frames/<new take id>.png`: `first` = the poster of a run's video
+(`source` create or pipeline: frame 0; an export's poster is a tenth in and an upload's or import's is the client's,
+so theirs is a frame job with `index` 0), `last`
 = the stored last frame (from 1.17 every runner writes `<output_prefix><index>.last.png` beside the poster and reports
 it as `evt.run.output` `video.last`; exports write `export.last.png`). Why studio and a copy: the runner already has
 both frames as pixels when it writes the MP4, so a keyframe is exact (never re-decoded) and instant, with no queue
@@ -2057,7 +2061,9 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   keep timeline order; a cycle is 422 (`rerender_cycle`). pipelines_service sends such a source to `studio.runs.create`
   as a `frameRef {frame_of: <that step's first take>, at}`; studio resolves it to the frame take (a copy, as above).
 - every selected clip gets `shot {batch_id, step}`; each step's take fills its slot when the projector stores it (a
-  take with that `batch_id` and `made_with.pipeline.node`), becoming the slot's current alternative. Refusals: 422 for an
+  take with that `batch_id` and `made_with.pipeline.node`), becoming the slot's current alternative. A row runs its
+  steps one after another and a failed or cancelled step ends it: when the batch ends (done, failed or stopped), every
+  step that never ran loses its shot (studio revision), and a failed step's slot shows `failed` (neither locks the clip). Refusals: 422 for an
   empty slot, an offline clip, a take not made by a workflow, a workflow gone, a preset a workflow lacks; 409 for a
   clip whose shot is running.
 
@@ -2075,8 +2081,11 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   picture, placed at its exact sample with a silence prefix, mixed with `amix normalize=0`, encoded once). `blocked`:
   `offline` (per clip), `empty`, `no_host`. `video_bitrate` (conform) = clamp(rnd(w × h × num / den × 0.15), 1 Mb/s, 40
   Mb/s); `estimated_bytes` = copy: Σ clip take bytes + rnd(192000 × duration / 8), else rnd((bitrate + 192000) ×
-  duration / 8). `host` / `env` / `hardware`: the env that would run it now.
-- **Export** (`POST …/export {revision, host?}` → 202 `MediaJob`): at most one unfinished export per sequence (409).
+  duration / 8). `too_large`: longer than 2 hours, `estimated_bytes` over 16 GiB, or the distinct takes it reads (every
+  track) over 32 GiB in all. `empty`: no V1 clip (sound alone has no picture). `host` / `env` / `hardware`: the env
+  that would run it now.
+- **Export** (`POST …/export {revision, host?}` → 202 `MediaJob`): at most one unfinished export per sequence (409), and
+  at most 4 unfinished media jobs (exports and frame jobs) per user, counted under a per-user lock (409).
   Studio builds the ffmpeg arguments (the one filter graph, ported from the old `internal/timeline` Build/EncodeArgs:
   conform chain per clip `trim, setpts, scale(in_color_matrix bt601 for untagged), pad, setsar=1, fps, format=yuv420p,
   settb=AVTB, setparams bt709`; cuts `concat`, dissolves `xfade` centred on the cut; sound as above; `-fflags +bitexact
@@ -2103,15 +2112,23 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   the hosts key's `state`, `resident` and the hand-over do not count it, and the Hosts admin never asks it to unload.
 - **The runner** consumes durable `media-<host>-<env>` in a worker apart from runs and model jobs (one at a time), sends
   `+WIP` every 10 s, publishes `evt.media.status` running (with `encoder`), `evt.media.progress` (`frame=N` of
-  `-progress pipe:1`; at most every 2 s, at least every 30 s), then one terminal status, waits for its ack, then acks.
-  It downloads each input once into a 0700 temp dir (an export of empty slots only has none), writes the concat
+  `-progress pipe:1`; at most every 2 s and only when the count moved, or an input finished downloading: a stalled
+  job goes silent and studio fails it), then one terminal status, waits for its ack, then acks. A command naming a
+  key or `output_prefix` outside `u/<owner_id>/` or with a `..` segment is dead-lettered (`objectKey`, the claim-check
+  rule). It downloads each input once into a 0700 temp dir (an export of empty slots only has none; at most 8 GB each and 32 GiB
+  in all, never past the disk's free space less 2 GiB: else `input`; a cancel is checked between and during
+  downloads), writes the concat
   list (copy; each file with its picture's `duration`, so the next starts where the picture ends, not its sound),
-  substitutes the placeholders, checks the argument allowlist (`invalid`), runs ffmpeg in its own process group, then verifies the output (size, fps
+  substitutes the placeholders, checks the argument allowlist (`invalid`), runs ffmpeg in its own process group (output
+  capped by `-fs` 32 GiB; a deadline of 600 s + 1 s per frame, at most 6 hours: `ffmpeg`, `timed out`), then verifies the output (size, fps
   and sample rate equal the target; duration within one frame of `frames`: else `verify`), writes the poster (frame at
-  a tenth of the length) and the last frame, uploads them under `output_prefix`, removes the temp dir (on success,
+  a tenth of the length) and the last frame, uploads them under `output_prefix` (the MP4 streamed from disk), removes the temp dir (on success,
   failure and cancel). Cancel: KV `cancels` key `<job_id>` (checked before start and every 2 s): SIGTERM to the group,
   10 s, SIGKILL; `cancelled`. A redelivery starts over. Studio: a job whose env's hosts key is gone or older than 60 s is
-  cancelled by studio; one with no event for 10 minutes fails `internal` (`the runner stopped reporting this job`).
+  cancelled by studio (on a cancel, a delete of its sequence or the sweep) with its command purged (the subject
+  `cmd.media.<host>.<env>`: no job is sent to an env that stale, and every open one on it ends too), so a runner that
+  comes back never runs it; one with no event for 10 minutes fails `internal` (`the runner stopped reporting this job`)
+  and its id is written to KV cancels, so the runner stops it.
 - Failure classes: `input`, `invalid`, `ffmpeg` (its last error line), `verify`, `internal`.
 
 ## Timeline rules (normative)
@@ -2170,12 +2187,13 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
   hold ± delta, ≥ least; V1 ripples; audio: in clamped to [0, out − 1 frame] and `at` moves with it so the end stays,
   out clamped to [in + 1 frame, take length], no ripple); `split {track, at, id}` (the clip under the playhead `at`,
   frame p inside it: p = 0 is `split_edge`, none `split_none`, a clip with a shot `split_shot`; video: out = in' = in + p;
-  image and slot: holds p and length − p; audio: at a sample, the right part at `at`; the right part gets `id`, keeps
+  image and slot: holds p and length − p; audio: the right part at `at` (frame f) with `in` = the left part's `out` = `in` + (samples(seconds(f)) −
+  samples(clip `at`)), so the left part ends on the right part's first sample; the right part gets `id`, keeps
   take and alternatives, never the dissolve or the shot); `remove {clip}` (V1 ripples; the next clip's dissolve goes);
   `lift {clip}` (V1 only, else `lift_track`: an empty slot of its length with the same id); `replace {clip, take_id}`
   (one of its alternatives, else `not_alternative`: in kept within the new take, length kept within it; an image: hold
   = the length); `set {clip, gain_db?, mute?, hold?, transition_in?}` (null removes); `add {take_ids, track, ids}` (V1:
-  video whole, image hold 3 s; audio track: whole, at the track's end snapped); `insert {at, hold, id}` (an empty slot
+  video whole, image hold 3 s; audio track: whole, at the first frame at or after the track's end in samples, so it never overlaps); `insert {at, hold, id}` (an empty slot
   at the V1 cut nearest frames(at), a tie: the later cut; the next clip's dissolve goes); `fill {clip, take_id}` (New
   shot, above); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
   {track, gain_db?, mute?}`.

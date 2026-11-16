@@ -5302,7 +5302,7 @@ components:
       type: object
       required: [code, clip, message]
       properties:
-        code: {type: string, enum: [gap, image, transition, not_probed, container, codec, pixel_format, size, aspect, field_order, frame_rate, trimmed, profile, level, time_base, colour, parameter_sets, offline, empty, no_host], description: 'contracts/README.md, Timeline: export plan (may grow in a minor version)'}
+        code: {type: string, enum: [gap, image, transition, not_probed, container, codec, pixel_format, size, aspect, field_order, frame_rate, trimmed, profile, level, time_base, colour, parameter_sets, offline, empty, too_large, no_host], description: 'contracts/README.md, Timeline: export plan (may grow in a minor version)'}
         clip: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}]}
         message: {type: string, examples: ['Shot 2 is 704 × 448; the sequence is 1280 × 704']}
     ExportPlan:

@@ -272,7 +272,10 @@ def test_add_clips_in_order(api, live, takes):
     tl = ok(api.post(f"{TL}/{tl['id']}/clips", json={"take_ids": [img, b]}))
     assert tl["revision"] == 2 and tl["can_undo"]
     assert [(c["take_id"], c.get("hold"), c["at"]) for c in clips(tl)] == [
-        (a, None, 0), (img, 3, 49 / 24), (b, None, (49 + 72) / 24)]  # fmt: skip  (at = frames × den / num)
+        (a, None, 0),
+        (img, 3, 49 / 24),
+        (b, None, (49 + 72) / 24),
+    ]  # fmt: skip  (at = frames × den / num)
     assert len({c["id"] for c in clips(tl)}) == 3
     r = api.post(f"{TL}/{tl['id']}/clips", json={"take_ids": [a], "track": "A2"})
     assert r.status_code == 422 and r.json()["detail"] == "unknown track A2"
@@ -373,6 +376,8 @@ def reproducible(case: dict) -> str | None:
     s = json.dumps(case)
     if any(t in s for t in FIXTURE_TAKES - LIVE_FIXTURE_TAKES):
         return "names a take the fake cannot make (a silent video, a 50-frame 25 fps one)"
+    if case.get("takes"):
+        return "names takes of its own (lengths the fake cannot make; studio and web run it on the fixtures)"
     if case.get("previous"):
         return "needs a stored revision with a shot or a since-deleted take (test_offline_clip covers it)"
     return None
@@ -854,7 +859,10 @@ def test_cancel_mid_export(api, media):
 
 
 def test_isolation(api, api_b, live, shot):
-    tl, take = get(api, shot["tl"]), live["v24a"]["id"]  # as it is now: earlier tests edit the shot's sequence
+    tl, take = (
+        get(api, shot["tl"]),
+        live["v24a"]["id"],
+    )  # as it is now: earlier tests edit the shot's sequence
     base = f"{TL}/{tl['id']}"
     rev = {"revision": tl["revision"]}
     for method, path, body in [

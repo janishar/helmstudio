@@ -40,8 +40,10 @@ export function Logo({ size = 44 }: { size?: number }) {
 export function ThemeSelect({ id, className }: { id: string; className?: string }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored theme is only known in the browser
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored theme is only known in the browser
+    setMounted(true);
+  }, []);
   return (
     <select
       id={id}

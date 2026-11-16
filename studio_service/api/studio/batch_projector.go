@@ -84,7 +84,7 @@ var batchStatuses = map[string]bool{"running": true, "paused": true, "done": tru
 // applyPipelineBatch sets the batch's status when the event is newer than the last one applied: reason with paused or
 // failed, started_at at the first running, finished_at while done, failed or stopped; done is stopped once the
 // user stopped the batch.
-func applyPipelineBatch(ctx context.Context, tx pgx.Tx, batchID, _ string, data message.PipelineBatch) (int, bool, error) {
+func applyPipelineBatch(ctx context.Context, tx pgx.Tx, batchID, ownerID string, data message.PipelineBatch) (int, bool, error) {
 	if !batchStatuses[data.Status] {
 		log.Printf("batch projector: batch %s: unknown status %q", batchID, data.Status)
 		return 0, false, nil
@@ -109,7 +109,11 @@ func applyPipelineBatch(ctx context.Context, tx pgx.Tx, batchID, _ string, data 
 		remote = CASE WHEN remote IS NULL THEN NULL ELSE coalesce($7::jsonb, remote) END
 		WHERE id = $1 AND pipeline_seq < $4`, batchID, data.Status, data.Reason, data.Seq, memory,
 		directorState(data.Director), remoteCounts(data.Remote))
-	return 0, err == nil && tag.RowsAffected() == 1, err
+	changed := err == nil && tag.RowsAffected() == 1
+	if changed && (data.Status == "done" || data.Status == "failed" || data.Status == "stopped") {
+		err = batchShotsEnded(ctx, tx, batchID, ownerID) // API 1.17: a re-render's steps that never ran leave their slots
+	}
+	return 0, changed, err
 }
 
 // directorState is an evt.pipeline.batch's director when it is the contract's, else nil (the stored one stays).

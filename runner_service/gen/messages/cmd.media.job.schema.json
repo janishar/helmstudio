@@ -135,7 +135,8 @@
             "frames": {
               "type": "integer",
               "minimum": 1,
-              "description": "the sequence's length in frames (the progress total; the output must be within one frame of it)"
+              "maximum": 432000,
+              "description": "the sequence's length in frames (the progress total; the output must be within one frame of it); at most 2 hours at 60 fps (an export is at most 2 hours: contracts/README.md, Timeline: export plan)"
             },
             "samples": {
               "type": "integer",

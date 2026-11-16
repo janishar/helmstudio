@@ -5412,7 +5412,7 @@ export interface components {
              * @description contracts/README.md, Timeline: export plan (may grow in a minor version)
              * @enum {string}
              */
-            code: "gap" | "image" | "transition" | "not_probed" | "container" | "codec" | "pixel_format" | "size" | "aspect" | "field_order" | "frame_rate" | "trimmed" | "profile" | "level" | "time_base" | "colour" | "parameter_sets" | "offline" | "empty" | "no_host";
+            code: "gap" | "image" | "transition" | "not_probed" | "container" | "codec" | "pixel_format" | "size" | "aspect" | "field_order" | "frame_rate" | "trimmed" | "profile" | "level" | "time_base" | "colour" | "parameter_sets" | "offline" | "empty" | "too_large" | "no_host";
             clip: components["schemas"]["TimelineClipId"] | null;
             /** @example Shot 2 is 704 × 448; the sequence is 1280 × 704 */
             message: string;

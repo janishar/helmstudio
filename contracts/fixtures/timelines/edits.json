@@ -6890,6 +6890,532 @@
       "expect": {
         "error": "video_track"
       }
+    },
+    {
+      "description": "add two sounds to an audio track: the second starts at the first frame after the first ends",
+      "takes": {
+        "cccccccc-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.01,
+          "fps": 24,
+          "frames": 48,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 2.0,
+          "fps": 24,
+          "frames": 48,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000003": {
+          "kind": "video",
+          "duration_s": 2.7083333333333335,
+          "fps": 24,
+          "frames": 65,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000004": {
+          "kind": "video",
+          "duration_s": 5.0,
+          "fps": 24,
+          "frames": 120,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        }
+      },
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "v",
+                "take_id": "cccccccc-0000-4000-8000-000000000004",
+                "in": 0.0,
+                "out": 5.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "cccccccc-0000-4000-8000-000000000004"
+                ],
+                "at": 0.0
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": []
+          }
+        ],
+        "duration_s": 5.0,
+        "frames": 120
+      },
+      "op": {
+        "op": "add",
+        "take_ids": [
+          "cccccccc-0000-4000-8000-000000000001",
+          "cccccccc-0000-4000-8000-000000000002"
+        ],
+        "track": "A2",
+        "ids": [
+          "p",
+          "q"
+        ]
+      },
+      "expect": {
+        "document": {
+          "target": {
+            "width": 256,
+            "height": 128,
+            "fps": 24,
+            "sample_rate": 48000
+          },
+          "tracks": [
+            {
+              "name": "V1",
+              "kind": "video",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "v",
+                  "take_id": "cccccccc-0000-4000-8000-000000000004",
+                  "in": 0.0,
+                  "out": 5.0,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "cccccccc-0000-4000-8000-000000000004"
+                  ],
+                  "at": 0.0
+                }
+              ]
+            },
+            {
+              "name": "A2",
+              "kind": "audio",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "p",
+                  "take_id": "cccccccc-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 2.01,
+                  "at": 0.0,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "cccccccc-0000-4000-8000-000000000001"
+                  ]
+                },
+                {
+                  "id": "q",
+                  "take_id": "cccccccc-0000-4000-8000-000000000002",
+                  "in": 0.0,
+                  "out": 2.0,
+                  "at": 2.0416666666666665,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "cccccccc-0000-4000-8000-000000000002"
+                  ]
+                }
+              ]
+            }
+          ],
+          "duration_s": 5.0,
+          "frames": 120
+        }
+      }
+    },
+    {
+      "description": "split an audio clip at 29.97 fps: the left part ends on the right part's first sample",
+      "takes": {
+        "cccccccc-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.01,
+          "fps": 24,
+          "frames": 48,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 2.0,
+          "fps": 24,
+          "frames": 48,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000003": {
+          "kind": "video",
+          "duration_s": 2.7083333333333335,
+          "fps": 24,
+          "frames": 65,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000004": {
+          "kind": "video",
+          "duration_s": 5.0,
+          "fps": 24,
+          "frames": 120,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        }
+      },
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 29.97,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "v",
+                "take_id": "cccccccc-0000-4000-8000-000000000004",
+                "in": 0.0,
+                "out": 5.005,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "cccccccc-0000-4000-8000-000000000004"
+                ],
+                "at": 0.0
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a2",
+                "take_id": "cccccccc-0000-4000-8000-000000000004",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 0.03336666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "cccccccc-0000-4000-8000-000000000004"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 5.005,
+        "frames": 150
+      },
+      "op": {
+        "op": "split",
+        "track": "A2",
+        "at": 0.06673333333333334,
+        "id": "b2"
+      },
+      "expect": {
+        "document": {
+          "target": {
+            "width": 256,
+            "height": 128,
+            "fps": 29.97,
+            "sample_rate": 48000
+          },
+          "tracks": [
+            {
+              "name": "V1",
+              "kind": "video",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "v",
+                  "take_id": "cccccccc-0000-4000-8000-000000000004",
+                  "in": 0.0,
+                  "out": 5.005,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "cccccccc-0000-4000-8000-000000000004"
+                  ],
+                  "at": 0.0
+                }
+              ]
+            },
+            {
+              "name": "A2",
+              "kind": "audio",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "a2",
+                  "take_id": "cccccccc-0000-4000-8000-000000000004",
+                  "in": 0.0,
+                  "out": 0.033354166666666664,
+                  "at": 0.03336666666666667,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "cccccccc-0000-4000-8000-000000000004"
+                  ]
+                },
+                {
+                  "id": "b2",
+                  "take_id": "cccccccc-0000-4000-8000-000000000004",
+                  "in": 0.033354166666666664,
+                  "out": 1.0,
+                  "at": 0.06673333333333334,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "cccccccc-0000-4000-8000-000000000004"
+                  ]
+                }
+              ]
+            }
+          ],
+          "duration_s": 5.005,
+          "frames": 150
+        }
+      }
+    },
+    {
+      "description": "fill with a take shorter than the slot: a sound past the new end is cut there, one starting after it goes",
+      "takes": {
+        "cccccccc-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.01,
+          "fps": 24,
+          "frames": 48,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 2.0,
+          "fps": 24,
+          "frames": 48,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000003": {
+          "kind": "video",
+          "duration_s": 2.7083333333333335,
+          "fps": 24,
+          "frames": 65,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        },
+        "cccccccc-0000-4000-8000-000000000004": {
+          "kind": "video",
+          "duration_s": 5.0,
+          "fps": 24,
+          "frames": 120,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 300000,
+          "stream": null
+        }
+      },
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "s",
+                "take_id": null,
+                "hold": 3.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "shot": {
+                  "run_id": "dddddddd-0000-4000-8000-000000000001"
+                },
+                "at": 0.0
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "m",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0,
+                "at": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "n",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 0.25,
+                "at": 2.75,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.0,
+        "frames": 72
+      },
+      "op": {
+        "op": "fill",
+        "clip": "s",
+        "take_id": "cccccccc-0000-4000-8000-000000000003"
+      },
+      "expect": {
+        "document": {
+          "target": {
+            "width": 256,
+            "height": 128,
+            "fps": 24,
+            "sample_rate": 48000
+          },
+          "tracks": [
+            {
+              "name": "V1",
+              "kind": "video",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "s",
+                  "take_id": "cccccccc-0000-4000-8000-000000000003",
+                  "in": 0.0,
+                  "out": 2.7083333333333335,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "cccccccc-0000-4000-8000-000000000003"
+                  ],
+                  "at": 0.0
+                }
+              ]
+            },
+            {
+              "name": "A2",
+              "kind": "audio",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "m",
+                  "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 1.7083333333333333,
+                  "at": 1.0,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "aaaaaaaa-0000-4000-8000-000000000001"
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "A3",
+              "kind": "audio",
+              "gain_db": 0,
+              "mute": false,
+              "clips": []
+            }
+          ],
+          "duration_s": 2.7083333333333335,
+          "frames": 65
+        }
+      }
     }
   ]
 }

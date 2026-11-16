@@ -285,6 +285,8 @@ def test_placeholders_become_runner_paths_and_concat_quotes(tmp_path):
         str(p),
         "-c:v",
         "x",
+        "-fs",
+        str(media.OUTPUT_LIMIT),
         str(tmp_path / "o.mp4"),
     ]
     assert media.concat_list([p]) == "file '" + str(tmp_path) + "/it'\\''s.mp4'\n"
@@ -382,3 +384,78 @@ def test_the_fake_reports_the_stream_facts_ffprobe_reads():
 def test_detect_names_the_hosts_key_media():
     value = media.detect()
     assert value["encoders"][-1] == "libx264" and value["ffmpeg"][0].isdigit()
+
+
+LOOP = {"mode": "conform", "frames": 86400, "samples": 172800000,
+        "args": [*HEAD, "-loop", "1", "-framerate", "24", "-t", "3600", "-i", "{in:0}",
+                 "-vf", CONFORM, "-an", "{venc}", "-f", "mp4", "{out}"]}  # fmt: skip
+
+
+async def test_an_export_past_its_deadline_is_stopped(clips, tmp_path, monkeypatch):
+    """A long (or hung) ffmpeg cannot hold the env's one media worker: it is stopped at its deadline."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    monkeypatch.setattr(media_jobs, "DEADLINE_BASE", 1.0)
+    monkeypatch.setattr(media_jobs, "DEADLINE_PER_FRAME", 0.0)
+    store = FakeStore()
+    store.objects[f"{U}uploads/d.png"] = (clips["d"], "image/png")
+    events = await asyncio.wait_for(run(command([("uploads/d.png", "image")], LOOP), store), 30)
+    end = events[-1]["data"]
+    assert end["status"] == "failed" and end["failure"]["class"] == "ffmpeg", end
+    assert "timed out" in end["failure"]["detail"] and list(tmp_path.iterdir()) == []
+    frames = [e["data"]["frames"] for e in events if e["type"] == "evt.media.progress"]
+    assert frames == sorted(set(frames))  # progress only when the count moved: a stall goes silent
+
+
+@pytest.mark.parametrize("where", ["input", "prefix", "dots"])
+def test_keys_outside_the_owners_prefix_dead_letter_the_command(where):
+    """Never another user's objects: the schema's objectKey and foreign_keys refuse the command (DLQ, term)."""
+    cmd = command([("runs/a/1/0.mp4", "video")], {"mode": "conform", "frames": 24, "samples": 48000,
+                                                  "args": ["-i", "{in:0}", "{out}"]})  # fmt: skip
+    other = "u/bbbbbbbb-0000-4000-8000-000000000009/"
+    if where == "input":
+        cmd["data"]["inputs"][0]["key"] = other + "runs/a/1/0.mp4"
+    elif where == "prefix":
+        cmd["data"]["output_prefix"] = other + "exports/x/"
+    else:
+        cmd["data"]["inputs"][0]["key"] = f"{U}runs/../../{other}runs/a/1/0.mp4"
+    assert schemas.message_errors(cmd) != []
+
+
+async def test_inputs_past_the_jobs_budget_fail_input(clips, monkeypatch):
+    monkeypatch.setattr(media_jobs, "BUDGET", len(clips["a"]) + 10)
+    store = store_of(clips, **{"runs/a/1/0.mp4": "a", "runs/b/1/0.mp4": "a"})
+    ok = {
+        "mode": "conform",
+        "frames": 24,
+        "samples": 48000,
+        "args": ["-i", "{in:0}", "-i", "{in:1}", "{out}"],
+    }
+    end = (
+        await run(command([("runs/a/1/0.mp4", "video"), ("runs/b/1/0.mp4", "video")], ok), store)
+    )[-1]["data"]
+    assert end["failure"] == {
+        "class": "input",
+        "detail": "input 1 is past the job's room on disk",
+    }, end
+
+
+async def test_a_cancel_during_the_downloads_stops_before_the_next(clips):
+    kv = FakeKV()
+    cmd = command([("runs/a/1/0.mp4", "video"), ("runs/b/1/0.mp4", "video")],
+                  {"mode": "conform", "frames": 24, "samples": 48000,
+                   "args": ["-i", "{in:0}", "-i", "{in:1}", "{out}"]})  # fmt: skip
+
+    class Slow(FakeStore):
+        async def download(self, key, dest, limit, stop=None):
+            await kv.put(cmd["job_id"], b"now")
+            for _ in range(100):
+                if stop and stop():
+                    break
+                await asyncio.sleep(0.01)
+            return await super().download(key, dest, limit, stop)
+
+    store = Slow()
+    for k in ("runs/a/1/0.mp4", "runs/b/1/0.mp4"):
+        store.objects[f"{U}{k}"] = (clips["a"], "video/mp4")
+    events = await asyncio.wait_for(run(cmd, store, kv=kv), 10)
+    assert events[-1]["data"]["status"] == "cancelled" and store.reads == [f"{U}runs/a/1/0.mp4"]

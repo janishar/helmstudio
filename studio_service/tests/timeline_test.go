@@ -201,6 +201,9 @@ func TestTimelineEditing(t *testing.T) {
 
 	e.call(userA, "DELETE", base, nil, 204)
 	e.call(userA, "GET", base, nil, 404)
+	if n := e.count(`SELECT count(*) FROM timeline_revisions WHERE timeline_id = $1`, id); n != 0 {
+		t.Fatal("a deleted sequence keeps its revisions", n)
+	}
 }
 
 func TestTimelineCap(t *testing.T) {
@@ -294,11 +297,23 @@ func TestTimelineExport(t *testing.T) {
 		t.Fatal(e.cancelled)
 	}
 	e.mediaHost(2 * time.Minute)
-	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, time.Now()); err != nil {
+	var purged []string
+	purge := func(_ context.Context, subject string) error { purged = append(purged, subject); return nil }
+	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, nil, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.call(userA, "GET", "/v1/studio/media-jobs/"+job["id"].(string), nil, 200); got["status"] != "cancelled" {
-		t.Fatal(got)
+	if got := e.call(userA, "GET", "/v1/studio/media-jobs/"+job["id"].(string), nil, 200); got["status"] != "cancelled" ||
+		fmt.Sprint(purged) != "[cmd.media.fake.fake]" { // a runner that comes back never runs it
+		t.Fatal(got, purged)
+	}
+
+	// at most MaxOpenMediaJobs unfinished media jobs per user (exports and frames share every env's one worker)
+	e.mediaHost(0)
+	for range studio.MaxOpenMediaJobs {
+		e.exec(`INSERT INTO media_jobs (id, owner_id, kind, host, env) VALUES ($1, $2, 'frame', 'fake', 'fake')`, utility.NewID(), userA)
+	}
+	if out := e.call(userA, "POST", base+"/export", map[string]any{"revision": 1}, 409); !strings.Contains(out["detail"].(string), "unfinished") {
+		t.Fatal(out)
 	}
 }
 
@@ -306,7 +321,8 @@ func TestTakeFrame(t *testing.T) {
 	e := setup(t)
 	group := &micro.NatsJetStreamGroup{}
 	studio.NewProjector(e.pool).MountMedia(group)
-	video, old := e.clipTake(userA, 2, true, nil), e.clipTake(userA, 2, false, nil)
+	made := map[string]any{"workflow_id": "echo-video", "inputs": map[string]any{}}
+	video, old, upload := e.clipTake(userA, 2, true, made), e.clipTake(userA, 2, false, nil), e.clipTake(userA, 2, true, nil)
 	first := e.call(userA, "POST", "/v1/studio/takes/"+video+"/frame", map[string]any{"at": "first"}, 200)["take"].(map[string]any)
 	if first["source"] != "frame" || first["kind"] != "image" || first["frame_of"].(map[string]any)["at"] != "first" ||
 		first["title"] != "a fox · first frame" || fmt.Sprint(first["parents"]) != fmt.Sprint([]any{video}) {
@@ -333,9 +349,20 @@ func TestTakeFrame(t *testing.T) {
 	e.media(group, userA, jobID, "status", 2, map[string]any{"status": "succeeded", "result": map[string]any{
 		"key": "u/" + userA + "/frames/" + jobID + "/frame.png", "width": 256, "height": 128, "bytes": 5}})
 	done := e.call(userA, "GET", "/v1/studio/media-jobs/"+jobID, nil, 200)
-	made := e.call(userA, "POST", "/v1/studio/takes/"+old+"/frame", map[string]any{"at": "last"}, 200)["take"].(map[string]any)
-	if done["status"] != "succeeded" || done["take_id"] != made["id"] {
-		t.Fatal(done, made)
+	stored := e.call(userA, "POST", "/v1/studio/takes/"+old+"/frame", map[string]any{"at": "last"}, 200)["take"].(map[string]any)
+	if done["status"] != "succeeded" || done["take_id"] != stored["id"] {
+		t.Fatal(done, stored)
+	}
+
+	// an upload's (or an export's) poster is not its frame 0: a frame job decodes frame 0
+	job = e.call(userA, "POST", "/v1/studio/takes/"+upload+"/frame", map[string]any{"at": "first"}, 202)["job"].(map[string]any)
+	_, sent := e.relay()
+	var command struct {
+		Frame map[string]any `json:"frame"`
+	}
+	_ = json.Unmarshal(sent[len(sent)-1].Data, &command)
+	if job["kind"] != "frame" || command.Frame["at"] != "first" || command.Frame["index"] != float64(0) {
+		t.Fatal(job, command)
 	}
 }
 
@@ -453,5 +480,17 @@ func TestRerender(t *testing.T) {
 	madeWith := e.call(userA, "GET", "/v1/studio/takes/"+clip["take_id"].(string), nil, 200)["made_with"].(map[string]any)
 	if p, _ := madeWith["pipeline"].(map[string]any); p == nil || p["id"] != tl["id"] || p["node"] != "clip_"+first || p["version"] != float64(1) {
 		t.Fatal("re-render take's made_with.pipeline", madeWith["pipeline"])
+	}
+
+	// a step that never ran (a failed step before it ends the row) leaves its slot when the batch ends
+	tl = e.call(userA, "GET", base, nil, 200)
+	out = e.call(userA, "POST", base+"/rerender", map[string]any{"revision": tl["revision"], "clips": []string{first}}, 202)
+	again := out["batch"].(map[string]any)["id"].(string)
+	if v1(e.call(userA, "GET", base, nil, 200))[0].(map[string]any)["shot"] == nil {
+		t.Fatal("no shot")
+	}
+	e.pipeline(userA, again, "batch", map[string]any{"seq": 1, "status": "done"})
+	if clip := v1(e.call(userA, "GET", base, nil, 200))[0].(map[string]any); clip["shot"] != nil {
+		t.Fatal("a step that never ran keeps its slot locked", clip)
 	}
 }
