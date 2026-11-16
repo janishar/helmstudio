@@ -55,6 +55,9 @@ func batchCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-c
 	if len(args) > 0 && args[0] == "decisions" {
 		return batchDecisions(args[1:], stdout)
 	}
+	if len(args) > 0 && args[0] == "chat" {
+		return batchChat(args[1:], stdout)
+	}
 	fs := flag.NewFlagSet("batch", flag.ContinueOnError)
 	pipelineID := fs.String("pipeline", "", "run one of your pipelines instead of a workflow; its inputs are the columns (inputs.<name>)")
 	fs.SetOutput(stderr)

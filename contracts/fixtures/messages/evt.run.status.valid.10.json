@@ -1,0 +1,35 @@
+{
+  "type": "evt.run.status",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001530",
+  "job_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b40",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:20:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 4,
+    "status": "succeeded",
+    "error": null,
+    "answer": {
+      "tries": [
+        {
+          "text": "",
+          "error": null,
+          "tool_calls": [
+            {
+              "id": "call_1",
+              "name": "rows_add",
+              "arguments": "{\"inputs\":{\"script\":\"The den at dawn.\"}}"
+            }
+          ]
+        }
+      ],
+      "seen": [],
+      "tokens_in": 812,
+      "tokens_out": 31,
+      "seconds": 1.2
+    }
+  }
+}

@@ -1275,7 +1275,7 @@ export interface paths {
          * Batch events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`
          * @description Like the session events, numbered by a per-batch `seq`: JSON gives the events with `seq > since` (at most
          *     500) and `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq,
-         *     `event:` = `batch` or `row`, `data:` = the `BatchEvent` JSON, `: keep-alive` every 15 s. Studio appends a
+         *     `event:` = `batch`, `row` or (from 1.15) `chat`, `data:` = the `BatchEvent` JSON, `: keep-alive` every 15 s. Studio appends a
          *     `row` event (the whole row) whenever a row changes and a `batch` event (the whole batch, counts included)
          *     whenever the batch's status, control or counts change. Step progress of a row's run is in the session's
          *     events (`session_id`).
@@ -1283,6 +1283,146 @@ export interface paths {
         get: operations["studioBatchEvents"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/batches/{batch_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The batch's director chat (the newest 500 messages, oldest first), with the director's state
+         * @description From 1.15 (plan 16.4 Chat). Every message of the chat (at most 500). New ones arrive on the batch's event
+         *     stream as `chat` events (`GET …/events`); the director's state on `batch` events (`Batch.director`). 404 for a
+         *     batch whose pipeline has no director, and for another user's batch.
+         */
+        get: operations["studioGetBatchChat"];
+        put?: never;
+        /**
+         * Say something to the batch's director
+         * @description From 1.15. Studio stores the message and writes `cmd.pipeline.chat` in one transaction, then answers 202 with
+         *     it; the director wakes (the messages that arrive while it thinks are read on its next wake) and answers with a
+         *     `chat` event. It never waits on runs: it answers, searches, reads and writes memory, adds rows and changes rows
+         *     not yet started (each through Submit's checks; a rejected row gets a notice with the reason). 409 when the
+         *     batch has ended or the director is `off` (`the director is off: <why>`), and when the chat holds 500 user messages
+         *     (`this chat is full`; the director's replies and notices never count); 429 above 6 messages a minute per batch (`at most 6 messages a minute`); 422 for a
+         *     blank text.
+         */
+        post: operations["studioPostBatchChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/model-sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The local servers and remote providers a pipeline may name (names and models only)
+         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on.
+         */
+        get: operations["studioListModelSources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/custom-nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The custom nodes pipelines_service's packs registered (the editor's palette)
+         * @description From 1.15. From registry key `pipelines.engine.custom`; [] before pipelines published it.
+         */
+        get: operations["studioListCustomNodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every model provider, as the admin sees it
+         * @description From 1.15. Admin role only (403 `admin role required`).
+         */
+        get: operations["studioAdminListProviders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/providers/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Create or replace a local server or a remote provider
+         * @description From 1.15. Admin only (403). 201 when created, 200 when replaced; a change applies to batches submitted after
+         *     it (a batch calls the provider as it was at Submit). 422 for a base_url that breaks the host rule
+         *     (contracts/README.md, Model sources: hosts), a default_model not in models, a server without host or
+         *     memory_gb, a remote without key_secret. 409 `remote models are off on this deployment` for kind remote while
+         *     the deployment's switch is off, and `<name> is a <kind>; delete it first` to change a provider's kind.
+         */
+        put: operations["studioAdminPutProvider"];
+        post?: never;
+        /**
+         * Delete a provider
+         * @description From 1.15. Admin only. 409 while a batch that names it is unfinished (`<name> is in use by an unfinished batch`).
+         */
+        delete: operations["studioAdminDeleteProvider"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/providers/{name}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check that a provider answers (made by pipelines_service, the only service that calls providers)
+         * @description From 1.15. Admin only. Studio asks `pipelines.providers.test` (30 s, else 503); `?model=` adds one tiny chat completion. A failed test is 200 with ok false and `failure`.
+         */
+        post: operations["studioAdminTestProvider"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1906,7 +2046,7 @@ export interface components {
             label?: string;
         };
         /**
-         * @description `$<input>` (a pipeline input), `<step>.takes` (that step's takes from its latest visit), `<gate>.picked` / `<judge>.picked` (its latest pick); from 1.14 the text sources `<judge>.reasons` (its latest reasons, one line per take) and `<memory>.notes` (a memory read node's notes), for write, decide and memory write `from` only
+         * @description `$<input>` (a pipeline input), `<step>.takes` (that step's takes from its latest visit), `<gate>.picked` / `<judge>.picked` (its latest pick); from 1.14 the text sources `<judge>.reasons` (its latest reasons, one line per take) and `<memory>.notes` (a memory read node's notes), for write, decide and memory write `from` only; from 1.15 `<producer>.item` (a fanned-out step's binds: this branch's item) and `<custom>.<field>` (a custom node's output field). Which source is allowed where: contracts/README.md, Pipeline rules (bind_source)
          * @example $prompt
          * @example still.takes
          * @example review.picked
@@ -1953,6 +2093,11 @@ export interface components {
             };
             /** @description the looks every run of this step is made with (as RunRequest.looks); missing = [] */
             looks?: components["schemas"]["LookIds"];
+            /**
+             * @description from 1.15: fan out: one branch per item of this agent's or write's list (`<producer>.items`), at most its `list.max`; binds read the branch's item as `<producer>.item`. Later nodes read `<step>.takes` as every branch's takes, branch order then seed order
+             * @example director.items
+             */
+            each?: string;
             position?: components["schemas"]["NodePosition"];
         };
         PipelineGateNode: {
@@ -2004,8 +2149,12 @@ export interface components {
             nice?: string[];
         };
         /**
-         * @description `auto` (resolved at Submit: contracts/README.md, Agent nodes: model) or an ask workflow (`media: text`) the caller can run: `qwen-image-ask` (Qwen Image's own text encoder, no extra load after a Qwen step), `llm-ask` (Qwen3.8 27B)
+         * @description `auto` (resolved at Submit: contracts/README.md, Agent nodes: model) or an ask workflow (`media: text`) the caller can run: `qwen-image-ask` (Qwen Image's own text encoder, no extra load after a Qwen step), `llm-ask` (Qwen3.8 27B); from 1.15 `server:<name>` or `server:<name>/<model>` (a local server the admin set up; absent model = its default) and `remote:<provider>/<model>` (a remote provider: needs the pipeline's `remote` switch). A judge needs a local model (it sends thumbnails; server and remote models get text only)
          * @default auto
+         * @example auto
+         * @example llm-ask
+         * @example server:ollama/qwen2.5:7b
+         * @example remote:openai/gpt-4.1-mini
          */
         PipelineModel: string;
         /** @description text sources, in order: `$<Text input>`, `<judge>.reasons`, `<memory>.notes` */
@@ -2046,8 +2195,9 @@ export interface components {
             kind: "write";
             title?: components["schemas"]["PipelineNodeTitle"];
             from: components["schemas"]["PipelineTextSources"];
-            /** @description the Text input it overwrites (`$prompt`): later binds of it read the new text */
-            to: string;
+            /** @description the Text input it overwrites (`$prompt`): later binds of it read the new text. Required without `list`, absent with it (write_target) */
+            to?: string;
+            list?: components["schemas"]["PipelineListSpec"];
             /** @default Fix what the reviewer found; keep everything else. */
             instruction?: string;
             model?: components["schemas"]["PipelineModel"];
@@ -2101,9 +2251,130 @@ export interface components {
             from: components["schemas"]["PipelineTextSources"];
             position?: components["schemas"]["NodePosition"];
         };
+        /** @description from 1.15: the node answers a list of texts (a shot list), 1 to `max` items, read only by a step's `each` (`<node>.items`; each branch binds `<node>.item`). Its mentions follow the write rule */
+        PipelineListSpec: {
+            /** @description the fan-out's declared maximum: Submit's worst case uses it */
+            max: number;
+        };
+        /** @description from 1.15: hard caps per visit (the director's chat: per wake). Reaching one ends the visit: an item failure (`<node>: stopped at <n> turns`), counted in the worst case */
+        PipelineAgentCaps: {
+            /**
+             * @description model calls (each a queue item, or a remote request)
+             * @default 6
+             */
+            max_turns?: number;
+            /** @default 12 */
+            max_tool_calls?: number;
+            /**
+             * @description prompt + answer tokens over the visit's turns
+             * @default 16000
+             */
+            max_tokens?: number;
+        };
+        /** @description from 1.15 (plan 16.2): an LLM agent with tools, a loop of model turns (contracts/README.md, Agents). It ends a visit with no tool call (one plain edge), with `route` (a routes edge, like a decide's), and with `set_items` before that when it has a `list`. `director: true` also gives the batch a chat with it */
+        PipelineAgentNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /** @description what it is for (`Turn the script into a shot list, one prompt per shot, using the @elements in it.`) */
+            instruction: string;
+            /** @description text sources it reads, as a write's; missing = [] */
+            from?: components["schemas"]["PipelineSource"][];
+            /** @description from the fixed set (contracts/README.md, Agents: tools); rows.edit only with director (agent_tools); missing = [] */
+            tools?: ("gallery.search" | "memory.read" | "memory.write" | "library.read" | "rows.add" | "rows.edit")[];
+            /** @description route label → meaning; present: its only edge is a routes edge with these labels (decide_routes) */
+            routes?: {
+                [key: string]: string;
+            };
+            list?: components["schemas"]["PipelineListSpec"];
+            caps?: components["schemas"]["PipelineAgentCaps"];
+            model?: components["schemas"]["PipelineModel"];
+            /**
+             * @description the pipeline's director (at most one: director_count): its batches get a chat
+             * @default false
+             */
+            director?: boolean;
+            /**
+             * @description director only: which row ends wake it (a message always does)
+             * @default all
+             * @enum {string}
+             */
+            wake_on_rows?: "all" | "failed" | "none";
+            /**
+             * @description director only: wakes per batch; then its chat is off
+             * @default 100
+             */
+            max_wakes?: number;
+            position?: components["schemas"]["NodePosition"];
+        };
+        /** @description from 1.15 (plan 16.5): a pack's registered runnable, run in pipelines_service (orchestration only). Fields as GET /v1/studio/custom-nodes lists them; its output fields are sources `<id>.<field>`. One plain edge */
+        PipelineCustomNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "custom";
+            title?: components["schemas"]["PipelineNodeTitle"];
+            /**
+             * @description the registered name
+             * @example text/prefix
+             */
+            node: string;
+            /** @description fixed input field values (JSON); missing = {} */
+            inputs?: Record<string, never>;
+            /** @description input field ← a source (a string field: a text source or Text input; a take-id list field: a takes source); missing = {} */
+            bind?: {
+                [key: string]: components["schemas"]["PipelineSource"];
+            };
+            position?: components["schemas"]["NodePosition"];
+        };
+        /** @description from 1.15: calls that leave the machine. Off by default (absent = off); a `remote:` model or a network custom node needs `enabled` and its provider in `providers` (remote_not_enabled), and the deployment's remote switch (remote_off). The caps are per batch, over every row and the director's chat; a call past one fails its row (`remote cap reached`) */
+        PipelineRemote: {
+            /** @default false */
+            enabled?: boolean;
+            /** @description remote providers this pipeline may call; missing = [] */
+            providers?: string[];
+            /** @default 200 */
+            max_calls?: number;
+            /** @default 400000 */
+            max_tokens?: number;
+        };
+        /** @description from 1.15: one node whose calls leave this process for a model server: exactly what is sent (Submit shows it). `fields`: the parts of the prompt, by name: `instruction`, `question`, `routes`, each `from` source, `items`, `tool:<tool>` (tool results go back to the model), `chat` (the director's chat), `input:<field>` (a custom node's); thumbnails are never sent to a server or remote model in 1.15 */
+        PipelineEgress: {
+            node: string;
+            /**
+             * @description server: a local server (its calls are queue items); remote: a remote provider; network: a custom node that calls the network
+             * @enum {string}
+             */
+            where: "server" | "remote" | "network";
+            provider: string | null;
+            model: string | null;
+            fields: string[];
+            /** @constant */
+            thumbnails: 0;
+            /** @description the worst case per row (a re-ask included) */
+            per_row: {
+                calls: number;
+                tokens: number;
+            };
+            /** @description the director: its chat's worst case per batch (max_wakes × max_turns × 2 calls, max_wakes × max_tokens); null otherwise */
+            chat: {
+                calls: number;
+                tokens: number;
+            } | null;
+        };
+        /** @description from 1.15: a local server the pipeline uses, and the memory the host reserves for it (always, while the provider is enabled) */
+        PipelineReserved: {
+            provider: string;
+            host: string;
+            memory_gb: number;
+        };
         /** @description the card's title; absent = derived by the client */
         PipelineNodeTitle: string;
-        PipelineNode: components["schemas"]["PipelineInputsNode"] | components["schemas"]["PipelineStepNode"] | components["schemas"]["PipelineGateNode"] | components["schemas"]["PipelineOutputNode"] | components["schemas"]["PipelineJudgeNode"] | components["schemas"]["PipelineWriteNode"] | components["schemas"]["PipelineDecideNode"] | components["schemas"]["PipelineMemoryNode"];
+        PipelineNode: components["schemas"]["PipelineInputsNode"] | components["schemas"]["PipelineStepNode"] | components["schemas"]["PipelineGateNode"] | components["schemas"]["PipelineOutputNode"] | components["schemas"]["PipelineJudgeNode"] | components["schemas"]["PipelineWriteNode"] | components["schemas"]["PipelineDecideNode"] | components["schemas"]["PipelineMemoryNode"] | components["schemas"]["PipelineAgentNode"] | components["schemas"]["PipelineCustomNode"];
         /** @description a gate's or (1.14) a judge's branch: pass = a pick was made (a judge: its verdict pass, or the user's pick); fail = every candidate rejected (a judge: verdict fail), taken at most `max` times per row; on the next reject the row goes to `then` */
         PipelineBranch: {
             pass: string;
@@ -2142,7 +2413,7 @@ export interface components {
             string,
             string | components["schemas"]["PipelineBranch"] | components["schemas"]["PipelineRoutes"]
         ];
-        /** @description from 1.14, a decide's only edge: route label → node (the same labels as the node's `routes`). Every route but `then` counts against `max` per row; once taken `max` times, `then` is taken whatever the answer */
+        /** @description from 1.14, a decide's only edge (from 1.15 also an agent's with `routes`): route label → node (the same labels as the node's `routes`). Every route but `then` counts against `max` per row; once taken `max` times, `then` is taken whatever the answer */
         PipelineRoutes: {
             routes: {
                 [key: string]: string;
@@ -2153,7 +2424,7 @@ export interface components {
         };
         /**
          * @description A pipeline as the editor saves or validates it (plan 16.2: inputs, step, gate and output; from 1.14 judge,
-         *     write, decide and memory; agent and custom come later).
+         *     write, decide and memory; from 1.15 agent and custom, fan-out (`each`), model sources and `remote`).
          *     Node ids are stable slugs. At most 24 nodes and 64 KB (problems, not the schema). Other top-level keys are
          *     ignored by validate; PipelineCreate and PipelineUpdate are closed.
          */
@@ -2164,6 +2435,7 @@ export interface components {
                 [key: string]: components["schemas"]["PipelineNode"];
             };
             edges: components["schemas"]["PipelineEdge"][];
+            remote?: components["schemas"]["PipelineRemote"];
         };
         Pipeline: {
             /** Format: uuid */
@@ -2186,6 +2458,10 @@ export interface components {
             problems?: components["schemas"]["PipelineProblem"][];
             /** @description from 1.14, with problems when nothing blocks saving */
             bounds?: components["schemas"]["PipelineBounds"];
+            /** @description from 1.15, with bounds */
+            egress?: components["schemas"]["PipelineEgress"][];
+            /** @description from 1.15, with bounds */
+            reserved?: components["schemas"]["PipelineReserved"][];
         } & components["schemas"]["PipelineDoc"];
         PipelineList: {
             pipelines: components["schemas"]["Pipeline"][];
@@ -2215,7 +2491,7 @@ export interface components {
          * @description meaning and which block saving: contracts/README.md, Pipeline rules. May grow in a minor version; an unknown code blocks running
          * @enum {string}
          */
-        PipelineProblemCode: "too_many_nodes" | "too_large" | "inputs_node" | "duplicate_input" | "unknown_node" | "edge_invalid" | "branch_not_gate" | "uncapped_cycle" | "too_many_runs" | "unreachable" | "dead_end" | "no_output" | "gate_takes" | "gate_keep" | "bind_source" | "unknown_workflow" | "workflow_cannot_run" | "unknown_preset" | "step_input_invalid" | "bind_unknown" | "bind_type" | "unbound_input" | "step_seeds" | "unknown_look" | "look_fit" | "too_many_calls" | "judge_criteria" | "decide_routes" | "write_target" | "unknown_model";
+        PipelineProblemCode: "too_many_nodes" | "too_large" | "inputs_node" | "duplicate_input" | "unknown_node" | "edge_invalid" | "branch_not_gate" | "uncapped_cycle" | "too_many_runs" | "unreachable" | "dead_end" | "no_output" | "gate_takes" | "gate_keep" | "bind_source" | "unknown_workflow" | "workflow_cannot_run" | "unknown_preset" | "step_input_invalid" | "bind_unknown" | "bind_type" | "unbound_input" | "step_seeds" | "unknown_look" | "look_fit" | "too_many_calls" | "judge_criteria" | "decide_routes" | "write_target" | "unknown_model" | "agent_tools" | "director_count" | "fanout_source" | "fanout_takes" | "model_media" | "remote_not_enabled" | "remote_off" | "unknown_custom" | "custom_input";
         /** @description one broken pipeline rule, the same shape as Problem: `node` the pipeline node, `port` a bind key (`<node>.<param>` of the step's workflow) or `from` for an output, `param` an input name or a step input key */
         PipelineProblem: {
             code: components["schemas"]["PipelineProblemCode"];
@@ -2233,17 +2509,35 @@ export interface components {
             can_save: boolean;
             can_run: boolean;
             bounds?: components["schemas"]["PipelineBounds"];
-            /** @description from 1.14: judge, write and decide node id → the ask workflow its model resolves to now (auto included); a node without one is left out */
+            /** @description from 1.14: judge, write and decide node id → the ask workflow its model resolves to now (auto included); a node without one is left out. From 1.15 also agent nodes, and a server or remote model as `server:<name>/<model>` (default model filled) or `remote:<provider>/<model>` */
             models?: {
                 [key: string]: string;
             };
+            /** @description from 1.15: what leaves the machine, per node whose model is a server or remote one (or a custom node that calls the network), by node id; sent with bounds; [] = nothing leaves */
+            egress?: components["schemas"]["PipelineEgress"][];
+            /** @description from 1.15: the memory reserved for the local servers it uses */
+            reserved?: components["schemas"]["PipelineReserved"][];
         };
-        /** @description from 1.14: the worst case per row (contracts/README.md, Pipeline rules: worst case), sent when nothing blocks saving. Submit multiplies by the rows for its estimate */
+        /** @description from 1.14: the worst case per row (contracts/README.md, Pipeline rules: worst case), sent when nothing blocks saving. Submit multiplies by the rows for its estimate. The 1.15 fields are always sent from 1.15 */
         PipelineBounds: {
-            /** @description generation runs: Σ over steps of seeds × visits */
+            /** @description generation runs: Σ over steps of seeds × branches × visits (branches: a fanned-out step's list max, else 1) */
             runs: number;
-            /** @description judge, write and decide visits (each one ask run, at most 2 tries; a re-ask after a failed check is a second run) */
+            /** @description judge, write and decide visits (each one ask run, at most 2 tries; a re-ask after a failed check is a second run); from 1.15 plus agent visits × max_turns */
             llm_calls: number;
+            /** @description from 1.15: agent visits × max_tool_calls */
+            tool_calls?: number;
+            /** @description from 1.15: requests to remote providers (a re-ask included), per row; the director's chat is per batch (egress) */
+            remote_calls?: number;
+            /** @description from 1.15: their token bound per row */
+            remote_tokens?: number;
+            /** @description from 1.15, with a director only, whatever its model source: its chat's worst case per batch (not per row): calls max_wakes × max_turns × 2 (a re-ask included; local models: queue items), tokens max_wakes × max_tokens, tool_calls max_wakes × max_tool_calls */
+            chat?: {
+                calls: number;
+                tokens: number;
+                tool_calls: number;
+            };
+            /** @description from 1.15, when an agent declares rows.add: the most rows agents may add to a batch (100), each with the per-row worst case */
+            added_rows?: number;
         };
         PipelineError: {
             /** @description `pipeline has <n> problems: <first message>` for pipeline problems */
@@ -3076,6 +3370,35 @@ export interface components {
             again_of?: string | null;
             /** @description from 1.14, with again_of: it reuses that batch's decisions */
             same_decisions?: boolean;
+            /** @description from 1.15, a pipeline batch: what leaves the machine, as at Submit */
+            egress?: components["schemas"]["PipelineEgress"][];
+            /** @description from 1.15, a pipeline batch: local servers' reserved memory */
+            reserved?: components["schemas"]["PipelineReserved"][];
+            /** @description from 1.15: the batch's director chat; null when its pipeline has no director */
+            director?: components["schemas"]["BatchDirector"] | null;
+            /** @description from 1.15: remote calls so far against the caps; null when the pipeline's remote is off */
+            remote?: components["schemas"]["BatchRemote"] | null;
+        };
+        BatchDirector: {
+            /** @description the director agent node */
+            node: string;
+            /**
+             * @description idle: asleep until a message or a row ends; waiting: its turn's call is queued or held (Pause); thinking: a call or its tools run; off: the batch ended or max_wakes reached (POST …/chat is 409)
+             * @enum {string}
+             */
+            state: "idle" | "waiting" | "thinking" | "off";
+            wakes: number;
+            max_wakes: number;
+        };
+        BatchRemote: {
+            /** @description requests sent (re-asks included; network retries not) */
+            calls: number;
+            /** @description tokens the providers reported */
+            tokens: number;
+            /** @description transport failures (retried); counted apart from answers and verdicts */
+            network_failures: number;
+            max_calls: number;
+            max_tokens: number;
         };
         BatchMemory: {
             examples: number;
@@ -3160,10 +3483,10 @@ export interface components {
             /** @description the pipeline node id */
             node: string;
             /**
-             * @description judge, write, decide, memory from 1.14
+             * @description judge, write, decide, memory from 1.14; agent, custom from 1.15
              * @enum {string}
              */
-            kind: "step" | "gate" | "output" | "judge" | "write" | "decide" | "memory";
+            kind: "step" | "gate" | "output" | "judge" | "write" | "decide" | "memory" | "agent" | "custom";
             /** @description one per visit (loop attempts stacked), oldest first */
             attempts: components["schemas"]["BatchCellAttempt"][];
             /** @description from 1.14, a judge with a branch or a decide: its capped loop for the cell's "retried <turns> of <max>", "gave up → <then>" */
@@ -3194,10 +3517,21 @@ export interface components {
             /** @description from 1.14, judge, write, decide: the visit's decision */
             decision_id?: string;
             judged?: components["schemas"]["CellJudged"];
-            /** @description from 1.14, a decide: the route taken */
+            /** @description from 1.14, a decide (from 1.15 an agent with routes): the route taken */
             route?: {
                 label: string;
                 to: string;
+            };
+            /** @description from 1.15, a fanned-out step: one attempt per (visit, branch); branch = the item index */
+            branch?: number;
+            /** @description from 1.15, an agent attempt (`4 turns · 6 tools · 14 shots`) */
+            agent?: {
+                turns: number;
+                tool_calls: number;
+                tokens: number;
+                /** @description its list's length (0 without one) */
+                items: number;
+                route: string | null;
             };
         };
         /** @description from 1.14, a judge attempt (the run table's judged cell: "picked 1 of 4", the first failed criterion; the attempts side by side with each take's reason) */
@@ -3292,7 +3626,7 @@ export interface components {
             looks?: components["schemas"]["LookIds"];
         } & (unknown | unknown);
         /** @description one stored event of the batch: the whole batch, or one whole row */
-        BatchEvent: components["schemas"]["BatchStatusEvent"] | components["schemas"]["BatchRowEvent"];
+        BatchEvent: components["schemas"]["BatchStatusEvent"] | components["schemas"]["BatchRowEvent"] | components["schemas"]["BatchChatEvent"];
         BatchStatusEvent: {
             /** @description per-batch cursor */
             seq: number;
@@ -3315,6 +3649,48 @@ export interface components {
             /** Format: date-time */
             ts: string;
             data: components["schemas"]["BatchRow"];
+        };
+        /** @description from 1.15: one new chat message (the user's, the director's or a notice); the director's state rides on `batch` events (Batch.director) */
+        BatchChatEvent: {
+            seq: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "chat";
+            /** Format: date-time */
+            ts: string;
+            data: components["schemas"]["ChatMessage"];
+        };
+        /** @description from 1.15: one message of a batch's director chat */
+        ChatMessage: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description notice: the director's system line (a row it added or changed was rejected, with the reason; a cap ended its wake)
+             * @enum {string}
+             */
+            role: "user" | "director" | "notice";
+            text: string;
+            /** Format: date-time */
+            at: string;
+            /** @description director and notice: the wake it came from; null for the user's */
+            wake: number | null;
+            /** @description director: the wake's tool calls */
+            tool_calls: components["schemas"]["ToolCall"][];
+            /** @description rows it added or changed in that wake */
+            rows: number[];
+        };
+        ChatPage: {
+            /** Format: uuid */
+            batch_id: string;
+            director: components["schemas"]["BatchDirector"];
+            /** @description the newest 500, oldest first */
+            messages: components["schemas"]["ChatMessage"][];
+        };
+        ChatPost: {
+            /** @description trimmed; blank = 422 */
+            text: string;
         };
         BatchEventPage: {
             events: components["schemas"]["BatchEvent"][];
@@ -3406,10 +3782,10 @@ export interface components {
             items: components["schemas"]["BatchReviewItem"][];
         };
         /**
-         * @description which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step's or, from 1.14, a judge's, write's or decide's two halves: its runs), gate (parked for a pick: a gate, or a judge in Suggest), route (the pick or the verdict applied, the edge chosen; a decide's route), output (the row ends); from 1.14 verdict (a judge's answer checked and its decision derived), apply (a write's text set), memory (a memory node read or wrote)
+         * @description which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step's or, from 1.14, a judge's, write's or decide's two halves: its runs), gate (parked for a pick: a gate, or a judge in Suggest), route (the pick or the verdict applied, the edge chosen; a decide's route), output (the row ends); from 1.14 verdict (a judge's answer checked and its decision derived), apply (a write's text set), memory (a memory node read or wrote); from 1.15 an agent's submit / wait / tools per turn (tools: that turn's tool calls ran) and route (the visit ended), a custom node's custom
          * @enum {string}
          */
-        ExecutionPart: "inputs" | "submit" | "wait" | "gate" | "route" | "output" | "verdict" | "apply" | "memory";
+        ExecutionPart: "inputs" | "submit" | "wait" | "gate" | "route" | "output" | "verdict" | "apply" | "memory" | "tools" | "custom";
         ExecutionEdge: {
             to: string;
             /**
@@ -3453,6 +3829,21 @@ export interface components {
                 read: string[];
                 wrote: string[];
             };
+            /** @description from 1.15, a fanned-out step's parts */
+            branch?: number;
+            /** @description from 1.15, an agent's submit / wait / tools */
+            turn?: number;
+            /** @description from 1.15, an agent's tools part: its messages' tool calls with results */
+            tool_calls?: components["schemas"]["ToolCall"][];
+        };
+        /** @description from 1.15: one tool call an agent made, as run (messages tools.schema.json toolCall) */
+        ToolCall: {
+            id: string;
+            /** @enum {string} */
+            tool: "gallery_search" | "memory_read" | "memory_write" | "library_read" | "rows_add" | "rows_edit" | "route" | "set_items";
+            args: Record<string, never>;
+            result: Record<string, never> | null;
+            error: string | null;
         };
         /**
          * @description From 1.14 (plan 16.7): one judge, write or decide visit, as pipelines recorded it (messages defs `decision`),
@@ -3467,15 +3858,32 @@ export interface components {
             batch_id: string;
             row: number;
             node: string;
-            /** @enum {string} */
-            kind: "judge" | "write" | "decide";
+            /**
+             * @description agent from 1.15
+             * @enum {string}
+             */
+            kind: "judge" | "write" | "decide" | "agent";
             visit: number;
             attempt: number;
+            /** @description from 1.15: where the model ran (absent = local, an ask workflow) */
+            source?: {
+                /** @enum {string} */
+                kind: "local" | "server" | "remote";
+                workflow?: string;
+                provider?: string;
+                model?: string;
+                host?: string;
+            };
+            /** @description from 1.15: false for a remote decision: Run again with the same decisions asks it again */
+            replayable?: boolean;
+            /** @description from 1.15, remote: transport failures retried in the visit (never verdicts) */
+            network_failures?: number;
             /** @description reused a stored decision (Resume, Retry, Run again: same decisions); no model was asked */
             replayed: boolean;
             replayed_from: string | null;
+            /** @description the ask runs (an agent: one per turn and re-ask; a remote call: none) */
             run_ids: string[];
-            /** @description the ask workflow */
+            /** @description the ask workflow (from 1.15 `server-ask` for a local server, `remote` for a remote provider) */
             workflow: string;
             /** @description "Ask Qwen Image (Qwen3-VL 8B)": what the panel shows as Model */
             workflow_title?: string;
@@ -3544,6 +3952,25 @@ export interface components {
                 to: string;
                 reason: string;
                 forced: boolean;
+            };
+            /** @description from 1.15, an agent visit: its messages and tool calls per turn, and how it ended */
+            agent?: {
+                turns: {
+                    turn: number;
+                    say: string;
+                    calls: components["schemas"]["ToolCall"][];
+                    tokens_in: number;
+                    tokens_out: number;
+                }[];
+                route: string | null;
+                to?: string | null;
+                forced?: boolean;
+                items: string[];
+                say: string;
+                /** @enum {string|null} */
+                stopped: "turns" | "tool_calls" | "tokens" | "remote_cap" | null;
+                tool_calls: number;
+                tokens: number;
             };
         };
         DecisionList: {
@@ -3642,6 +4069,111 @@ export interface components {
             node: string;
             /** @description the thread's state after the step, read-only plain JSON (row inputs, run and take ids, picks, loop counters; never media) */
             state: Record<string, never>;
+        };
+        /**
+         * @description server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on)
+         * @enum {string}
+         */
+        ProviderKind: "server" | "remote";
+        /** @description from 1.15: one model provider as the admin sees it. A remote provider's key is never in the API: `key_secret` names a file under pipelines_service's secrets directory */
+        Provider: {
+            name: string;
+            kind: components["schemas"]["ProviderKind"];
+            /**
+             * @description OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…))
+             * @constant
+             */
+            api: "openai";
+            /** @description what users see (`Ollama on the Mac`); absent = name */
+            title?: string;
+            /**
+             * @example http://host.docker.internal:11434/v1
+             * @example https://api.example.com/v1
+             */
+            base_url: string;
+            /** @description the models pipelines may name */
+            models: string[];
+            /** @description one of models (`server:<name>` without a model) */
+            default_model: string;
+            enabled: boolean;
+            timeout_s: number;
+            /** @description server: the GPU host whose memory it shares */
+            host?: string;
+            /** @description server: declared; the host reserves it while enabled */
+            memory_gb?: number;
+            /** @description remote: the secret file's name */
+            key_secret?: string;
+            /** @description remote: calls in flight at once (default 2) */
+            max_in_flight?: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on */
+        ProviderPut: {
+            kind: components["schemas"]["ProviderKind"];
+            title?: string;
+            base_url: string;
+            models: string[];
+            /** @description absent = the first of models */
+            default_model?: string;
+            /** @default true */
+            enabled?: boolean;
+            /** @default 120 */
+            timeout_s?: number;
+            host?: string;
+            memory_gb?: number;
+            /** @example provider-openai */
+            key_secret?: string;
+            /** @default 2 */
+            max_in_flight?: number;
+        };
+        ProviderList: {
+            /** @description the deployment's remote switch (REMOTE_MODELS, off by default) */
+            remote_enabled: boolean;
+            providers: components["schemas"]["Provider"][];
+        };
+        ProviderTest: {
+            ok: boolean;
+            /** @description what its /models listed */
+            models: string[];
+            /** @description with ?model=: its answer to a tiny prompt */
+            answer?: string | null;
+            error: string | null;
+            /**
+             * @description network: unreachable, TLS, timeout, 5xx, 429; answer: a 4xx (401: the key) or not OpenAI-shaped; refused: the host rule; off: remote models are off
+             * @enum {string|null}
+             */
+            failure: "network" | "answer" | "refused" | "off" | null;
+            seconds: number;
+        };
+        /** @description from 1.15: what a user may name as a model (the editor's "Runs on"): enabled providers, redacted to names and models */
+        ModelSourceList: {
+            remote_enabled: boolean;
+            sources: {
+                name: string;
+                kind: components["schemas"]["ProviderKind"];
+                title: string;
+                models: string[];
+                default_model: string;
+            }[];
+        };
+        /** @description from 1.15: a custom node a pack registered (registry key pipelines.engine.custom) */
+        CustomNode: {
+            name: string;
+            title: string;
+            help: string;
+            /** @description JSON schema of its input (an object; its properties are the fields) */
+            input: Record<string, never>;
+            /** @description JSON schema of its output */
+            output: Record<string, never>;
+            /** @description calls the network: needs the pipeline's remote switch */
+            network: boolean;
+            version: string;
+        };
+        CustomNodeList: {
+            nodes: components["schemas"]["CustomNode"][];
         };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
@@ -3870,6 +4402,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description a per-resource rate limit (from 1.15: chat messages) */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description the range starts past the end of the file (`Content-Range: bytes *\/<size>`) */
         RangeNotSatisfiable: {
             headers: {
@@ -3952,6 +4493,8 @@ export interface components {
         BatchRowN: string;
         /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
         Cursor: string;
+        /** @description a provider's name (unknown = 404 on DELETE and test; malformed = 404) */
+        ProviderName: string;
         Limit: number;
     };
     requestBodies: never;
@@ -5941,6 +6484,228 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetBatchChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatPage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPostBatchChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description batch UUID (malformed = 404) */
+                batch_id: components["parameters"]["BatchId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatPost"];
+            };
+        };
+        responses: {
+            /** @description your message, stored */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessage"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListModelSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the sources */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelSourceList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListCustomNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the custom nodes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomNodeList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminListProviders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the providers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminPutProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a provider's name (unknown = 404 on DELETE and test; malformed = 404) */
+                name: components["parameters"]["ProviderName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderPut"];
+            };
+        };
+        responses: {
+            /** @description replaced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Provider"];
+                };
+            };
+            /** @description created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Provider"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminDeleteProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a provider's name (unknown = 404 on DELETE and test; malformed = 404) */
+                name: components["parameters"]["ProviderName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminTestProvider: {
+        parameters: {
+            query?: {
+                model?: string;
+            };
+            header?: never;
+            path: {
+                /** @description a provider's name (unknown = 404 on DELETE and test; malformed = 404) */
+                name: components["parameters"]["ProviderName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderTest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["Unavailable"];
         };
     };

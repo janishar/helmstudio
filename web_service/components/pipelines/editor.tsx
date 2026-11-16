@@ -4,8 +4,10 @@
 // checked by lib/pipeline and POST /pipelines/validate, saved with debounce by PUT with the version (409 reloads),
 // and undone with ⌘Z / ⇧⌘Z. Run opens New batch with the pipeline's inputs as columns. Agent nodes (M4b stage A):
 // the Judge panel (checklist, keep, retry, mode, model, memory: PipelineGraph.dc.html's aside), Write and Decide
-// (docs/mock/AgentNodes.dc.html), Memory (read or write) and the Memory dialog. The mock's director chat (stage B),
-// Studio | Graph switch, memory meter, "Remote agents" and "Test on takes" have no backend yet and are left out.
+// (docs/mock/AgentNodes.dc.html), Memory (read or write) and the Memory dialog. Stage B (docs/mock/AgentSettings.dc.html,
+// DirectorChat.dc.html): the Agent panel (instruction, reads, tools, how it ends, caps, model source, director), a
+// step's fan-out, a custom node's fields, the pipeline's Remote calls, and Chat with director for the last batch. The
+// mock's Studio | Graph switch, memory meter and "Test on takes" have no backend yet and are left out.
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -16,6 +18,8 @@ import { Head, Problems } from "@/components/graph/panel";
 import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
 import { followBatch } from "@/components/pipelines/pipelines";
+import { ChatPanel, useChat } from "@/components/pipelines/chat";
+import { rowMarks } from "@/lib/chat";
 import { RunTable } from "@/components/pipelines/run-table";
 import type { CanvasProps } from "@/components/pipelines/canvas";
 import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
@@ -23,7 +27,13 @@ import { applyBatchEvent, type BatchView } from "@/lib/batches";
 import { docOf, mergeProblems, paletteOf, type Doc, type Palette, type Problem } from "@/lib/graph";
 import { history, historyOf } from "@/lib/graph-edit";
 import {
+  AGENT_TOOLS,
+  agentCaps,
   bindCandidates,
+  customOutputs,
+  directorOf,
+  fanCandidates,
+  fieldKind,
   chooseWorkflow,
   connectNodes,
   disconnectNodes,
@@ -43,10 +53,12 @@ import {
   setThen,
   settable,
   stepNumbers,
+  stepTakes,
   textCandidates,
   WRITE_INSTRUCTION,
   type PDoc,
   type PProblem,
+  type RuleEnv,
 } from "@/lib/pipeline";
 
 type Pipeline = S<"Pipeline">;
@@ -64,7 +76,12 @@ const PipelineCanvas = dynamic<CanvasProps>(
 );
 
 const SAVE_MS = 700;
-const docOfPipeline = (p: Pipeline): PDoc => ({ title: p.title, nodes: p.nodes, edges: p.edges });
+const docOfPipeline = (p: Pipeline): PDoc => ({
+  title: p.title,
+  nodes: p.nodes,
+  edges: p.edges,
+  ...(p.remote ? { remote: p.remote } : {}), // its Remote calls setting is part of the document
+});
 const asProblems = (ps: PProblem[]) => ps as unknown as Problem[];
 
 /** The palette from the workflows' own node schemas, when GET /nodes can't answer. */
@@ -95,12 +112,18 @@ export function PipelineEditor({
   workflows,
   asks = [],
   nodes,
+  sources = null,
+  custom = [],
 }: {
   pipeline: Pipeline;
   workflows: Workflow[];
   /** the ask workflows a judge, write or decide may run (never listed: read by id) */
   asks?: Workflow[];
   nodes: S<"NodePalette"> | null;
+  /** the local servers and remote providers a model may name (GET /model-sources) */
+  sources?: S<"ModelSourceList"> | null;
+  /** the custom nodes pipelines_service registered (GET /custom-nodes) */
+  custom?: S<"CustomNode">[];
 }) {
   const [h, dispatch] = useReducer(history<PDoc>, pipeline, (p) => historyOf(docOfPipeline(p)));
   const doc = h.present;
@@ -120,8 +143,17 @@ export function PipelineEditor({
     () => ({
       ...pipeline.workflow_titles,
       ...Object.fromEntries([...workflows, ...asks].map((w) => [w.id, w.title])),
+      ...Object.fromEntries(custom.map((c) => [`custom:${c.name}`, c.title])),
     }),
-    [pipeline.workflow_titles, workflows, asks],
+    [pipeline.workflow_titles, workflows, asks, custom],
+  );
+  const env: RuleEnv = useMemo(
+    () => ({
+      providers: sources?.sources ?? [],
+      remoteOn: sources?.remote_enabled ?? false,
+      custom,
+    }),
+    [sources, custom],
   );
 
   const [cur, setCur] = useState(pipeline);
@@ -145,7 +177,10 @@ export function PipelineEditor({
   const [flowKey, setFlowKey] = useState(0);
   const [running, setRunning] = useState(false);
 
-  const client = useMemo(() => pipelineProblems(doc, wfDocs, palette), [doc, wfDocs, palette]);
+  const client = useMemo(
+    () => pipelineProblems(doc, wfDocs, palette, undefined, {}, undefined, env),
+    [doc, wfDocs, palette, env],
+  );
   const problems = useMemo(
     () =>
       (server?.doc === doc
@@ -162,7 +197,9 @@ export function PipelineEditor({
   // ---------------------------------------------------------------- check and save
   const save = useCallback(
     async (d: PDoc) => {
-      let canSave = !pipelineProblems(d, wfDocs, palette).some((p) => p.blocks === "save");
+      let canSave = !pipelineProblems(d, wfDocs, palette, undefined, {}, undefined, env).some(
+        (p) => p.blocks === "save",
+      );
       try {
         const v = await ok(api.POST("/v1/studio/pipelines/validate", { body: d }));
         setServer({ doc: d, problems: v.problems, models: v.models });
@@ -207,7 +244,7 @@ export function PipelineEditor({
         setError(message(e));
       }
     },
-    [wfDocs, palette],
+    [wfDocs, palette, env],
   );
   const queue = useRef<Promise<void>>(Promise.resolve());
   const flush = useCallback(() => {
@@ -310,12 +347,18 @@ export function PipelineEditor({
   const count = (k: string) => ns.filter((n) => n.kind === k).length;
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   // the models as studio resolves them (the client's own until it has answered for this document)
-  const models = server?.doc === doc && server.models ? server.models : resolveModels(doc, wfDocs);
+  const models =
+    server?.doc === doc && server.models ? server.models : resolveModels(doc, wfDocs, env);
+  // the director's chat with the last batch (docs/mock/DirectorChat.dc.html)
+  const director = directorOf(doc);
+  const [chatOpen, setChatOpen] = useState(false);
+  const chat = useChat(run?.batch.director ? (lastId ?? null) : null);
   const badge = [
     "Unattended",
     plural(count("step"), "step"),
     count("gate") ? plural(count("gate"), "gate") : "",
     count("judge") ? plural(count("judge"), "judge") : "",
+    count("agent") ? plural(count("agent"), "agent") : "",
     problems.length ? plural(problems.length, "problem") : "valid",
     saving === "saving" ? "saving…" : saving === "failed" ? "not saved" : "",
   ]
@@ -340,6 +383,16 @@ export function PipelineEditor({
           <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
             {badge}
           </span>
+          {director && run?.batch.director && (
+            <button
+              type="button"
+              className={`chip bevel ${chatOpen ? "bg-t1 font-semibold text-panel" : ""}`}
+              aria-pressed={chatOpen}
+              onClick={() => setChatOpen((o) => !o)}
+            >
+              Chat with director
+            </button>
+          )}
           {last && (
             <Link
               href={`/pipelines/batches/${last.id}/rows/1`}
@@ -375,6 +428,8 @@ export function PipelineEditor({
             edit={edit}
             defaultWorkflow={firstWorkflow}
             flowKey={String(flowKey)}
+            custom={custom}
+            models={models}
           />
         </div>
         {last && run && (
@@ -394,6 +449,7 @@ export function PipelineEditor({
                 busy=""
                 onRetry={(r) => void retryRow(r)}
                 onOpen={(ids) => void openTakes(ids)}
+                marks={chat.view ? rowMarks(chat.view.messages) : undefined}
               />
             </div>
           </>
@@ -403,7 +459,9 @@ export function PipelineEditor({
         aria-label="Inspector"
         className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[18px] px-[18px] pt-4 pb-6 md:ml-0"
       >
-        {sel ? (
+        {chatOpen && run?.batch.director ? (
+          <ChatPanel batch={run.batch} chat={chat} onClose={() => setChatOpen(false)} />
+        ) : sel ? (
           <NodePanel
             key={sel}
             doc={doc}
@@ -419,6 +477,8 @@ export function PipelineEditor({
             models={models}
             memory={memory.list?.counts ?? null}
             onOpenMemory={() => setMemoryOpen(true)}
+            sources={sources}
+            custom={custom}
           />
         ) : (
           <>
@@ -435,6 +495,7 @@ export function PipelineEditor({
                 on the cards.
               </p>
             )}
+            <RemotePanel doc={doc} sources={sources} edit={edit} />
             <p className="m-0 text-[13px] text-t2">
               Select a node to edit it. Add one with Add node, A, a double-click or a right-click;
               drag from a port to connect it, or drop the wire on the canvas to add the next node. A
@@ -522,6 +583,8 @@ type PanelProps = {
   models: Record<string, string>;
   memory: S<"MemoryList">["counts"] | null;
   onOpenMemory: () => void;
+  sources: S<"ModelSourceList"> | null;
+  custom: S<"CustomNode">[];
 };
 
 /** A labelled select, the panel's one control for a choice. */
@@ -613,8 +676,15 @@ function NodePanel(props: PanelProps) {
       {n.kind === "write" && <WritePanel {...props} />}
       {n.kind === "decide" && <DecidePanel {...props} targets={targets} />}
       {n.kind === "memory" && <MemoryNodePanel {...props} />}
+      {n.kind === "agent" && <AgentPanel {...props} targets={targets} />}
+      {n.kind === "custom" && <CustomPanel {...props} />}
       {n.kind === "output" && <OutputPanel {...props} />}
-      {(n.kind === "inputs" || n.kind === "step" || n.kind === "write" || n.kind === "memory") && (
+      {(n.kind === "inputs" ||
+        n.kind === "step" ||
+        n.kind === "write" ||
+        n.kind === "memory" ||
+        n.kind === "custom" ||
+        (n.kind === "agent" && !n.routes)) && (
         <Choice
           id="pp-next"
           label="Then goes to"
@@ -730,7 +800,17 @@ function InputsPanel({ doc, id, problems, edit }: PanelProps) {
   );
 }
 
-function StepPanel({ doc, id, problems, workflows, wfDocs, palette, titles, edit }: PanelProps) {
+function StepPanel({
+  doc,
+  id,
+  problems,
+  workflows,
+  wfDocs,
+  palette,
+  titles,
+  edit,
+  custom,
+}: PanelProps) {
   const n = doc.nodes[id] as S<"PipelineStepNode">;
   const wf = workflows.find((w) => w.id === n.workflow);
   const wd = wfDocs[n.workflow];
@@ -738,7 +818,7 @@ function StepPanel({ doc, id, problems, workflows, wfDocs, palette, titles, edit
   const presets = Object.keys(wf?.studio?.presets ?? {});
   const bind = n.bind ?? {};
   const rows = Object.entries(params)
-    .map(([k, p]) => ({ k, p, c: bindCandidates(doc, id, p) }))
+    .map(([k, p]) => ({ k, p, c: bindCandidates(doc, id, p, custom) }))
     .filter((r) => r.c.length || r.k in bind);
   const set = (v: Partial<S<"PipelineStepNode">>) => edit((d) => setNode(d, id, { ...n, ...v }));
   const nodeTitle = (k: string) =>
@@ -810,6 +890,7 @@ function StepPanel({ doc, id, problems, workflows, wfDocs, palette, titles, edit
           </label>
         )}
       </div>
+      <FanOut {...{ doc, id, problems, titles, edit }} />
       {Object.keys(n.inputs ?? {}).length > 0 && (
         <p className="m-0 text-[12px] text-t2">
           Fixed settings:{" "}
@@ -886,6 +967,54 @@ function StepPanel({ doc, id, problems, workflows, wfDocs, palette, titles, edit
   );
 }
 
+/** A step's fan-out (docs/mock/AgentSettings.dc.html "Runs once per"): once per row, or once per item of a Write's or
+ * Agent's list (one branch per item, at most its declared max; binds read the branch's `<producer>.item`). */
+function FanOut({
+  doc,
+  id,
+  problems,
+  titles,
+  edit,
+}: Pick<PanelProps, "doc" | "id" | "problems" | "titles" | "edit">) {
+  const n = doc.nodes[id] as S<"PipelineStepNode">;
+  const c = fanCandidates(doc, id);
+  const each = n.each?.split(".")[0];
+  if (!c.length && !each) return null;
+  const p = each ? doc.nodes[each] : undefined;
+  const max = p && (p.kind === "write" || p.kind === "agent") ? (p.list?.max ?? 0) : 0;
+  const seeds = n.seeds ?? 1;
+  return (
+    <>
+      <Choice
+        id="pp-each"
+        label="Runs once per"
+        value={n.each ?? ""}
+        error={problems.find((x) => x.port === "each")?.message}
+        options={[
+          ["", "row"],
+          ...[...new Set([...c, ...(each ? [each] : [])])].map(
+            (x) => [`${x}.items`, `${nodeLabel(doc, x, titles)} · items`] as [string, string],
+          ),
+        ]}
+        onChange={(v) => {
+          const { each: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+          // binds of the old producer's item go with it
+          const bind = Object.fromEntries(
+            Object.entries(n.bind ?? {}).filter(([, s]) => !s.endsWith(".item")),
+          );
+          edit((d) => setNode(d, id, v ? { ...rest, bind, each: v } : { ...rest, bind }));
+        }}
+      />
+      {each && max > 0 && (
+        <div className="set flex items-center justify-between gap-2 py-2 text-[13px]">
+          at most {max} branches × {seeds} seed{seeds === 1 ? "" : "s"}
+          <span className="text-[11px] text-t2">{max * seeds} runs a row</span>
+        </div>
+      )}
+    </>
+  );
+}
+
 function GatePanel({
   doc,
   id,
@@ -897,10 +1026,7 @@ function GatePanel({
   const judge = n.kind === "judge";
   const steps = gateCandidates(doc, id);
   const opts = n.takes && !steps.includes(n.takes) ? [n.takes, ...steps] : steps;
-  const made =
-    doc.nodes[n.takes]?.kind === "step"
-      ? ((doc.nodes[n.takes] as S<"PipelineStepNode">).seeds ?? 1)
-      : 8;
+  const made = doc.nodes[n.takes]?.kind === "step" ? stepTakes(doc)[n.takes] : 8; // seeds × fan-out
   const out = edgeOut(doc, id)?.[1];
   const branch = typeof out === "object" && "pass" in out ? out : null;
   const pass = typeof out === "string" ? out : (branch?.pass ?? "");
@@ -1017,8 +1143,9 @@ function GatePanel({
   );
 }
 
-/** The model a judge, write or decide runs on: Auto (the step's family's own vision model, else the llm pack's) or
- * a named ask workflow. */
+/** The model a judge, write, decide or agent runs on (docs/mock/AgentSettings.dc.html "Runs on"): Auto (the step's
+ * family's own vision model, else the llm pack's), a named ask workflow, and (not for a judge, which sends
+ * thumbnails) a local server's or, when this deployment allows them, a remote provider's models. */
 function ModelChoice({
   doc,
   id,
@@ -1027,12 +1154,28 @@ function ModelChoice({
   titles,
   edit,
   label,
+  sources,
 }: PanelProps & { label: string }) {
   const n = doc.nodes[id] as
-    S<"PipelineJudgeNode"> | S<"PipelineWriteNode"> | S<"PipelineDecideNode">;
+    | S<"PipelineJudgeNode">
+    | S<"PipelineWriteNode">
+    | S<"PipelineDecideNode">
+    | S<"PipelineAgentNode">;
   const m = n.model ?? "auto";
   const now = models[id];
   const title = (w: string) => titles[w] ?? w;
+  const others = n.kind === "judge" ? [] : (sources?.sources ?? []);
+  const group = (kind: "server" | "remote") =>
+    others
+      .filter((p) => p.kind === kind)
+      .flatMap((p) =>
+        p.models.map((x) => [`${kind}:${p.name}/${x}`, `${p.title || p.name} · ${x}`] as const),
+      );
+  const servers = group("server");
+  const remotes = group("remote");
+  const known = [...asks.map((w) => w.id), ...servers, ...remotes].map((x) =>
+    typeof x === "string" ? x : x[0],
+  );
   return (
     <label className="set flex flex-col gap-1">
       <small className="text-[12px] text-t2">{label}</small>
@@ -1050,24 +1193,45 @@ function ModelChoice({
           );
         }}
       >
-        <option value="auto">{now ? `Auto · ${title(now)}` : "Auto · none found"}</option>
-        {asks.map((w) => (
-          <option key={w.id} value={w.id}>
-            {w.title}
-          </option>
-        ))}
-        {m !== "auto" && !asks.some((w) => w.id === m) && <option value={m}>{title(m)}</option>}
+        <optgroup label="Local">
+          <option value="auto">{now && m === "auto" ? `Auto · ${title(now)}` : "Auto"}</option>
+          {asks.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.title}
+            </option>
+          ))}
+        </optgroup>
+        {servers.length > 0 && (
+          <optgroup label="Local server">
+            {servers.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {remotes.length > 0 && (
+          <optgroup label="Remote">
+            {remotes.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {m !== "auto" && !known.includes(m) && <option value={m}>{title(m)}</option>}
       </select>
     </label>
   );
 }
 type PNodeOf = S<"PipelineNode">;
 
-/** A write's, decide's or memory write's sources (`from`): a list with remove, and Add a source. */
+/** A write's, decide's, agent's or memory write's sources (`from`): a list with remove, and Add a source. */
 function TextSources(props: PanelProps) {
-  const { doc, id, titles, edit, problems } = props;
-  const n = doc.nodes[id] as { from: string[] } & PNodeOf;
-  const c = textCandidates(doc, id).filter((x) => !n.from.includes(x));
+  const { doc, id, titles, edit, problems, custom } = props;
+  const n0 = doc.nodes[id] as { from?: string[] } & PNodeOf;
+  const n = { ...n0, from: n0.from ?? [] };
+  const c = textCandidates(doc, id, custom).filter((x) => !n.from.includes(x));
   const set = (from: string[]) => edit((d) => setNode(d, id, { ...n, from } as PNodeOf));
   return (
     <section aria-labelledby={`pp-reads-${id}`} className="flex flex-col gap-1.5">
@@ -1293,14 +1457,35 @@ function WritePanel(props: PanelProps) {
       <Choice
         id="pp-to"
         label="Writes to"
-        value={n.to}
+        value={n.list ? "list" : (n.to ?? "")}
         error={problems.find((p) => p.code === "write_target")?.message}
         options={[
-          ...(texts.includes(n.to) ? [] : ([[n.to, n.to]] as [string, string][])),
+          ...(n.to === undefined || texts.includes(n.to)
+            ? []
+            : ([[n.to, n.to]] as [string, string][])),
           ...texts.map((t) => [t, sourceLabel(doc, t, {})] as [string, string]),
+          ["list", "a list (a step fans out over it)"],
         ]}
-        onChange={(v) => edit((d) => setNode(d, id, { ...n, to: v }))}
+        onChange={(v) => {
+          const { to: _t, list: _l, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+          edit((d) =>
+            setNode(
+              d,
+              id,
+              v === "list" ? { ...rest, list: n.list ?? { max: 12 } } : { ...rest, to: v },
+            ),
+          );
+        }}
       />
+      {n.list && (
+        <Choice
+          id="pp-wlist"
+          label="Items at most"
+          value={String(n.list.max)}
+          options={range(24).map((i) => [String(i), String(i)])}
+          onChange={(v) => edit((d) => setNode(d, id, { ...n, list: { max: Number(v) } }))}
+        />
+      )}
       <label className="flex flex-col gap-1.5">
         <span className="heading">Instruction</span>
         <textarea
@@ -1319,11 +1504,39 @@ function WritePanel(props: PanelProps) {
 /** The Decide panel (docs/mock/AgentNodes.dc.html): the question, what it reads, its routes (label, meaning, where
  * each goes), the cap and the route the cap forces. */
 function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
-  const { doc, id, edit, targets, problems } = props;
+  const { doc, id, edit } = props;
   const n = doc.nodes[id] as S<"PipelineDecideNode">;
+  return (
+    <>
+      <label className="flex flex-col gap-1.5">
+        <span className="heading">Question</span>
+        <textarea
+          className="in h-auto py-2"
+          rows={2}
+          maxLength={1000}
+          value={n.question}
+          onChange={(e) => edit((d) => setNode(d, id, { ...n, question: e.target.value }))}
+        />
+      </label>
+      <TextSources {...props} />
+      <RoutesEditor {...props} />
+      <ModelChoice {...props} label="Runs on" />
+    </>
+  );
+}
+
+/** A decide's or an agent's routes: label, meaning and where each goes, the cap and the route the cap forces. */
+function RoutesEditor({
+  doc,
+  id,
+  edit,
+  targets,
+  problems,
+}: PanelProps & { targets: [string, string][] }) {
+  const n = doc.nodes[id] as S<"PipelineDecideNode"> | S<"PipelineAgentNode">;
   const out = edgeOut(doc, id)?.[1];
   const edge = typeof out === "object" && "routes" in out ? out : null;
-  const routes = Object.entries(n.routes);
+  const routes = Object.entries(n.routes ?? {});
   const relabel = (i: number, label: string, meaning: string) => {
     const next = Object.fromEntries(
       routes.map(([l, m], j) => (j === i ? [label, meaning] : [l, m])),
@@ -1332,19 +1545,8 @@ function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
   };
   return (
     <>
-      <label className="flex flex-col gap-1.5">
-        <span className="heading">Question</span>
-        <textarea
-          className="in h-auto py-2"
-          rows={2}
-          maxLength={2000}
-          value={n.question}
-          onChange={(e) => edit((d) => setNode(d, id, { ...n, question: e.target.value }))}
-        />
-      </label>
-      <TextSources {...props} />
-      <section aria-labelledby="pp-routes" className="flex flex-col gap-1.5">
-        <h3 id="pp-routes" className="heading">
+      <section aria-labelledby={`pp-routes-${id}`} className="flex flex-col gap-1.5">
+        <h3 id={`pp-routes-${id}`} className="heading">
           Routes
         </h3>
         {routes.map(([label, meaning], i) => (
@@ -1359,8 +1561,9 @@ function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
                     i,
                     e.target.value
                       .toLowerCase()
-                      .replace(/[^a-z0-9_-]/g, "_")
-                      .slice(0, 40) || "x",
+                      .replace(/[^a-z0-9_]/g, "_")
+                      .replace(/^[^a-z]+/, "")
+                      .slice(0, 32) || "x",
                     meaning,
                   )
                 }
@@ -1409,7 +1612,7 @@ function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
             className="h-9 rounded-[10px] border border-dashed border-dash bg-transparent text-[13px]"
             onClick={() => {
               let k = routes.length + 1;
-              while (`route_${k}` in n.routes) k++;
+              while (`route_${k}` in (n.routes ?? {})) k++;
               edit((d) => setRoutes(d, id, { ...n.routes, [`route_${k}`]: "" }));
             }}
           >
@@ -1449,8 +1652,497 @@ function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
           </label>
         </div>
       )}
-      <ModelChoice {...props} label="Runs on" />
     </>
+  );
+}
+
+const TOKEN_CAPS = [4000, 8000, 16000, 32000, 64000, 100000, 200000];
+const WAKES = [10, 25, 50, 100, 200, 500];
+type AgentEnd = "next" | "routes" | "list" | "both";
+
+/** The Agent panel (docs/mock/AgentSettings.dc.html): instruction, what it reads, its tools, how a visit ends (the
+ * next node, a route, a list for a fan-out), its caps per visit, the model, and whether it is the director. */
+function AgentPanel(props: PanelProps & { targets: [string, string][] }) {
+  const { doc, id, edit, problems } = props;
+  const n = doc.nodes[id] as S<"PipelineAgentNode">;
+  const set = (v: Partial<S<"PipelineAgentNode">>) => edit((d) => setNode(d, id, { ...n, ...v }));
+  const caps = agentCaps(n);
+  const tools = n.tools ?? [];
+  const end: AgentEnd = n.routes ? (n.list ? "both" : "routes") : n.list ? "list" : "next";
+  const setEnd = (e: AgentEnd) =>
+    edit((d) => {
+      const { routes: _r, list: _l, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+      const withRoutes = e === "routes" || e === "both";
+      const next: S<"PipelineAgentNode"> = {
+        ...rest,
+        ...(withRoutes && { routes: n.routes ?? { again: "one more try", done: "finish" } }),
+        ...((e === "list" || e === "both") && { list: n.list ?? { max: 12 } }),
+      };
+      // a routes edge needs routes and a plain edge needs none: the old edge goes when that changes
+      const old = edgeOut(d, id)?.[1];
+      const isRoutes = typeof old === "object" && "routes" in old;
+      const keep = old === undefined || isRoutes === withRoutes;
+      const d2 = setNode(d, id, next);
+      return keep ? d2 : { ...d2, edges: d2.edges.filter((x) => x[0] !== id) };
+    });
+  const setCaps = (v: Partial<typeof caps>) => set({ caps: { ...caps, ...v } });
+  return (
+    <>
+      <p className="m-0 flex items-center text-[12px] text-t2">
+        An LLM with tools, in a loop of turns.
+        <Info>
+          Each turn is a queue item like any step. A visit ends with no tool call, with a route, or
+          with its list; reaching a cap fails the row.
+        </Info>
+      </p>
+      <label className="flex flex-col gap-1.5">
+        <span className="heading">Instruction</span>
+        <textarea
+          className="in h-auto py-2"
+          rows={3}
+          maxLength={4000}
+          value={n.instruction}
+          onChange={(e) => set({ instruction: e.target.value })}
+        />
+      </label>
+      <TextSources {...props} />
+      <section aria-labelledby={`pp-tools-${id}`} className="flex flex-col gap-1">
+        <h3 id={`pp-tools-${id}`} className="heading">
+          Tools
+        </h3>
+        {AGENT_TOOLS.map(([t, label]) => {
+          const off = t === "rows.edit" && !n.director && !tools.includes(t);
+          return (
+            <label key={t} className="flex min-h-[30px] items-center gap-2.5 text-[13px]">
+              <input
+                type="checkbox"
+                className="accent-[var(--a2)]"
+                checked={tools.includes(t)}
+                disabled={off}
+                onChange={(e) =>
+                  set({
+                    tools: e.target.checked
+                      ? AGENT_TOOLS.map(([x]) => x).filter((x) => x === t || tools.includes(x))
+                      : tools.filter((x) => x !== t),
+                  })
+                }
+              />
+              {label}
+            </label>
+          );
+        })}
+        {problems
+          .filter((p) => p.code === "agent_tools")
+          .map((p) => (
+            <span key={p.code} className="text-[12px] text-bad">
+              {p.message}
+            </span>
+          ))}
+      </section>
+      <Choice
+        id="pp-end"
+        label="Ends with"
+        value={end}
+        options={[
+          ["next", "one next node"],
+          ["routes", "a route"],
+          ["list", `a list · at most ${n.list?.max ?? 12}`],
+          ...(end === "both" ? ([["both", "a list, then a route"]] as [string, string][]) : []),
+        ]}
+        onChange={(v) => setEnd(v as AgentEnd)}
+      />
+      {n.list && (
+        <Choice
+          id="pp-list"
+          label="Items at most"
+          value={String(n.list.max)}
+          options={range(24).map((i) => [String(i), String(i)])}
+          onChange={(v) => set({ list: { max: Number(v) } })}
+        />
+      )}
+      {n.routes && <RoutesEditor {...props} />}
+      <section aria-labelledby={`pp-caps-${id}`} className="flex flex-col gap-2">
+        <h3 id={`pp-caps-${id}`} className="heading flex items-center">
+          Caps per visit
+          <Info>
+            Hard limits; reaching one ends the visit and fails the row. Submit&apos;s worst case
+            counts them.
+          </Info>
+        </h3>
+        <div className="grid grid-cols-3 gap-2">
+          <label className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Turns</small>
+            <select
+              className="bg-transparent font-semibold text-t1"
+              value={caps.max_turns}
+              onChange={(e) => setCaps({ max_turns: Number(e.target.value) })}
+            >
+              {range(16).map((i) => (
+                <option key={i}>{i}</option>
+              ))}
+            </select>
+          </label>
+          <label className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Tool calls</small>
+            <select
+              className="bg-transparent font-semibold text-t1"
+              value={caps.max_tool_calls}
+              onChange={(e) => setCaps({ max_tool_calls: Number(e.target.value) })}
+            >
+              {[0, ...range(32)].map((i) => (
+                <option key={i}>{i}</option>
+              ))}
+            </select>
+          </label>
+          <label className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Tokens</small>
+            <select
+              className="bg-transparent font-semibold text-t1"
+              value={caps.max_tokens}
+              onChange={(e) => setCaps({ max_tokens: Number(e.target.value) })}
+            >
+              {[...new Set([...TOKEN_CAPS, caps.max_tokens])]
+                .sort((a, b) => a - b)
+                .map((i) => (
+                  <option key={i} value={i}>
+                    {i.toLocaleString("en-US")}
+                  </option>
+                ))}
+            </select>
+          </label>
+        </div>
+      </section>
+      <ModelChoice {...props} label="Runs on" />
+      {problems
+        .filter((p) => p.code === "unknown_model" || p.code.startsWith("remote_"))
+        .map((p) => (
+          <span key={p.code} className="text-[12px] text-bad">
+            {p.message}
+          </span>
+        ))}
+      <label className="flex min-h-[30px] items-center gap-2.5 text-[13px] font-semibold">
+        <input
+          type="checkbox"
+          className="accent-[var(--a2)]"
+          checked={!!n.director}
+          onChange={(e) => {
+            const {
+              director: _d, // eslint-disable-line @typescript-eslint/no-unused-vars
+              wake_on_rows: _w, // eslint-disable-line @typescript-eslint/no-unused-vars
+              max_wakes: _m, // eslint-disable-line @typescript-eslint/no-unused-vars
+              ...rest
+            } = n;
+            edit((d) =>
+              setNode(
+                d,
+                id,
+                e.target.checked
+                  ? { ...rest, director: true }
+                  : { ...rest, tools: tools.filter((t) => t !== "rows.edit") },
+              ),
+            );
+          }}
+        />
+        Director: its batches get a chat
+      </label>
+      {problems
+        .filter((p) => p.code === "director_count")
+        .map((p) => (
+          <span key={p.code} className="text-[12px] text-bad">
+            {p.message}
+          </span>
+        ))}
+      {n.director && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Rows that wake it</small>
+            <select
+              className="bg-transparent font-semibold text-t1"
+              value={n.wake_on_rows ?? "all"}
+              onChange={(e) =>
+                set({ wake_on_rows: e.target.value as S<"PipelineAgentNode">["wake_on_rows"] })
+              }
+            >
+              <option value="all">Every row</option>
+              <option value="failed">Failed rows</option>
+              <option value="none">None (messages only)</option>
+            </select>
+          </label>
+          <label className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Wakes at most</small>
+            <select
+              className="bg-transparent font-semibold text-t1"
+              value={n.max_wakes ?? 100}
+              onChange={(e) => set({ max_wakes: Number(e.target.value) })}
+            >
+              {[...new Set([...WAKES, n.max_wakes ?? 100])]
+                .sort((a, b) => a - b)
+                .map((i) => (
+                  <option key={i}>{i}</option>
+                ))}
+            </select>
+          </label>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** A custom node (docs/mock/AgentSettings.dc.html "Prefix text"): its registered fields, each from a source or a
+ * fixed value, and the fields it gives. */
+function CustomPanel({ doc, id, problems, titles, edit, custom }: PanelProps) {
+  const n = doc.nodes[id] as S<"PipelineCustomNode">;
+  const reg = custom.find((c) => c.name === n.node);
+  type F = { type?: string; maxItems?: number; maxLength?: number };
+  const fields = Object.entries(
+    ((reg?.input as { properties?: Record<string, F> } | undefined)?.properties ?? {}) as Record<
+      string,
+      F
+    >,
+  );
+  const required = new Set((reg?.input as { required?: string[] } | undefined)?.required ?? []);
+  const text = textCandidates(doc, id, custom);
+  const setField = (f: string, v: { bind: string } | { value: unknown } | null) =>
+    edit((d) => {
+      const bind = { ...(n.bind ?? {}) };
+      const inputs: Record<string, unknown> = { ...(n.inputs ?? {}) };
+      delete bind[f];
+      delete inputs[f];
+      if (v && "bind" in v) bind[f] = v.bind;
+      if (v && "value" in v) inputs[f] = v.value;
+      return setNode(d, id, { ...n, bind, inputs } as S<"PipelineCustomNode">);
+    });
+  if (!reg)
+    return (
+      <p className="m-0 text-[13px] text-t2">
+        {n.node} is not registered on this server now, so it can&apos;t run.
+      </p>
+    );
+  return (
+    <>
+      <p className="m-0 flex items-center text-[12px] text-t2">
+        Custom · {reg.name} · {reg.version}
+        <Info>
+          {reg.help ||
+            "A custom node from a pack on this server: plain code on the row's state, no model."}{" "}
+          {reg.network
+            ? "It calls the network, so it needs the pipeline's remote calls."
+            : "It makes no network call."}
+        </Info>
+      </p>
+      <section aria-labelledby={`pp-fields-${id}`} className="flex flex-col gap-2">
+        <h3 id={`pp-fields-${id}`} className="heading">
+          Fields
+        </h3>
+        {fields.map(([f, schema]) => {
+          const k = fieldKind(schema as Parameters<typeof fieldKind>[0]);
+          const bound = n.bind?.[f];
+          const fixed = n.inputs?.[f];
+          const err = problems.find((p) => p.port === f)?.message;
+          const takes =
+            k === "takes"
+              ? order(doc).flatMap((x) => {
+                  const m = doc.nodes[x];
+                  if (x === id) return [];
+                  if (m.kind === "step") return [`${x}.takes`];
+                  if (m.kind === "gate" || m.kind === "judge") return [`${x}.picked`];
+                  return [];
+                })
+              : [];
+          const opts = k === "text" ? text : takes;
+          return (
+            <div key={f} className="set flex flex-col gap-1.5">
+              <small className="text-[12px] text-t2">
+                {f}
+                {required.has(f) ? "" : " · optional"}
+              </small>
+              <select
+                aria-label={`${f} comes from`}
+                className="h-[34px] rounded-lg border border-line bg-s1 px-2 text-[13px] text-t1"
+                value={bound ?? (fixed !== undefined ? "=" : "")}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setField(
+                    f,
+                    v === ""
+                      ? null
+                      : v === "="
+                        ? { value: schema.type === "string" ? "" : 0 }
+                        : { bind: v },
+                  );
+                }}
+              >
+                <option value="">{required.has(f) ? "Choose" : "Not set"}</option>
+                {k !== "takes" && <option value="=">A fixed value</option>}
+                {[...new Set([...opts, ...(bound ? [bound] : [])])].map((s) => (
+                  <option key={s} value={s}>
+                    {sourceLabel(doc, s, titles)}
+                  </option>
+                ))}
+              </select>
+              {fixed !== undefined && bound === undefined && (
+                <input
+                  aria-label={f}
+                  className="in h-[34px]"
+                  maxLength={schema.maxLength}
+                  value={typeof fixed === "string" ? fixed : JSON.stringify(fixed)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    let value: unknown = raw;
+                    if (schema.type !== "string")
+                      try {
+                        value = JSON.parse(raw);
+                      } catch {
+                        value = raw;
+                      }
+                    setField(f, { value });
+                  }}
+                />
+              )}
+              {err && <span className="text-[12px] text-bad">{err}</span>}
+            </div>
+          );
+        })}
+      </section>
+      <section aria-labelledby={`pp-gives-${id}`} className="flex flex-col gap-1.5">
+        <h3 id={`pp-gives-${id}`} className="heading">
+          Gives
+        </h3>
+        {customOutputs(reg).map((f) => (
+          <div key={f} className="set flex items-center justify-between gap-2 py-2 text-[13px]">
+            {f}
+            <span className="text-[11px] text-t2">
+              {fieldKind(
+                (
+                  reg.output as unknown as {
+                    properties: Record<string, Parameters<typeof fieldKind>[0]>;
+                  }
+                ).properties[f],
+              ) === "text"
+                ? "a text source"
+                : "takes"}
+            </span>
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}
+
+const CALL_CAPS = [50, 100, 200, 500, 1000, 5000, 10000];
+const BATCH_TOKENS = [100000, 200000, 400000, 1000000, 4000000, 10000000];
+
+/** The pipeline's Remote calls (docs/mock/AgentSettings.dc.html): off by default; on, its nodes may call the remote
+ * providers allowed here, within the batch's caps. Disabled while the deployment's remote switch is off. */
+function RemotePanel({
+  doc,
+  sources,
+  edit,
+}: {
+  doc: PDoc;
+  sources: S<"ModelSourceList"> | null;
+  edit: Edit;
+}) {
+  const r = doc.remote ?? {};
+  const on = !!r.enabled;
+  const allowed = sources?.remote_enabled ?? false;
+  const remotes = (sources?.sources ?? []).filter((p) => p.kind === "remote");
+  const set = (v: Partial<S<"PipelineRemote">>) =>
+    edit((d) => ({ ...d, remote: { ...(d.remote ?? {}), ...v } }));
+  const calls = r.max_calls ?? 200;
+  const tokens = r.max_tokens ?? 400000;
+  if (!allowed && !on) return null;
+  return (
+    <section aria-labelledby="pp-remote" className="flex flex-col gap-2.5">
+      <h3 id="pp-remote" className="heading flex items-center">
+        Remote calls
+        <Info>
+          Off by default. On, nodes may call the remote providers you allow here; Submit shows
+          exactly what leaves the machine. The caps stop the batch. Remote answers are never reused
+          by Run again.
+        </Info>
+      </h3>
+      {!allowed && (
+        <p className="m-0 text-[12px] text-bad">Remote models are off on this deployment.</p>
+      )}
+      <div
+        role="group"
+        aria-label="Remote calls"
+        className="flex rounded-[10px] border border-s3 bg-s1 p-[3px]"
+      >
+        {[false, true].map((v) => (
+          <button
+            key={String(v)}
+            type="button"
+            aria-pressed={on === v}
+            disabled={!allowed && v}
+            className="h-[34px] flex-1 rounded-lg border-0 font-medium text-t2 aria-pressed:bg-s5 aria-pressed:text-t1"
+            onClick={() => on !== v && set({ enabled: v })}
+          >
+            {v ? "On" : "Off"}
+          </button>
+        ))}
+      </div>
+      {on && (
+        <>
+          <span className="label">Allowed providers</span>
+          {remotes.length === 0 && (
+            <p className="m-0 text-[12px] text-t2">The admin has set up no remote provider.</p>
+          )}
+          {remotes.map((p) => (
+            <label key={p.name} className="flex min-h-[30px] items-center gap-2.5 text-[13px]">
+              <input
+                type="checkbox"
+                className="accent-[var(--a2)]"
+                checked={(r.providers ?? []).includes(p.name)}
+                onChange={(e) =>
+                  set({
+                    providers: e.target.checked
+                      ? [...(r.providers ?? []), p.name]
+                      : (r.providers ?? []).filter((x) => x !== p.name),
+                  })
+                }
+              />
+              {p.name} · {p.title}
+            </label>
+          ))}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="set flex flex-col gap-1">
+              <small className="text-[12px] text-t2">Calls a batch</small>
+              <select
+                className="bg-transparent font-semibold text-t1"
+                value={calls}
+                onChange={(e) => set({ max_calls: Number(e.target.value) })}
+              >
+                {[...new Set([...CALL_CAPS, calls])]
+                  .sort((a, b) => a - b)
+                  .map((i) => (
+                    <option key={i} value={i}>
+                      {i.toLocaleString("en-US")}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="set flex flex-col gap-1">
+              <small className="text-[12px] text-t2">Tokens a batch</small>
+              <select
+                className="bg-transparent font-semibold text-t1"
+                value={tokens}
+                onChange={(e) => set({ max_tokens: Number(e.target.value) })}
+              >
+                {[...new Set([...BATCH_TOKENS, tokens])]
+                  .sort((a, b) => a - b)
+                  .map((i) => (
+                    <option key={i} value={i}>
+                      {i.toLocaleString("en-US")}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

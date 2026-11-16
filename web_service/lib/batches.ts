@@ -163,10 +163,14 @@ const label = (f: Field) => f.param.label ?? f.param.name;
 export type BatchView = { batch: Batch; rows: Row[] };
 
 /** The view after one event: a `batch` event is the whole batch; a `row` event replaces that row if it is loaded
- * (a later page brings the others), unless the row already holds a later attempt. */
+ * (a later page brings the others), unless the row already holds a later attempt; a new row right after every row
+ * loaded (one the director added) is appended. `chat` events are the chat's (lib/chat). */
 export function applyBatchEvent(v: BatchView, e: S<"BatchEvent">): BatchView {
   if (e.type === "batch") return e.data.id === v.batch.id ? { ...v, batch: e.data } : v;
+  if (e.type !== "row") return v;
   const i = v.rows.findIndex((r) => r.row === e.data.row);
+  if (i < 0 && e.data.row === v.rows.length + 1 && v.rows.at(-1)?.row === v.rows.length)
+    return { ...v, rows: [...v.rows, e.data] };
   if (i < 0 || v.rows[i].attempt > e.data.attempt) return v;
   const rows = v.rows.slice();
   rows[i] = e.data;

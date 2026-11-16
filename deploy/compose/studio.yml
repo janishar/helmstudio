@@ -16,6 +16,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-helmstudio}
       S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
       S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
+      STUDIO_REMOTE_MODELS: ${REMOTE_MODELS:-off}       # API 1.15: kind remote providers only while on
     secrets: [studio_database_url, nats_studio_url, file_url_secret, s3_access_key_id, s3_secret_access_key]
     healthcheck: {test: [CMD, /app/studio, health], interval: 5s, timeout: 3s, retries: 20}
     depends_on:

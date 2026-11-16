@@ -114,6 +114,7 @@ func withPipeline(ctx context.Context, tx pgx.Tx, run model.Run, made gallerydto
 		return made, nil
 	}
 	key, ok := parsePipelineKey(*run.Key)
+	ok = ok && key.Turn < 0
 	var pipeline gallerydto.MadeWithPipeline
 	err := tx.QueryRow(ctx, `SELECT pipeline_id::text, pipeline_title, pipeline_version FROM batches WHERE id = $1
 		AND pipeline_id IS NOT NULL`, *run.BatchID).Scan(&pipeline.ID, &pipeline.Title, &pipeline.Version)

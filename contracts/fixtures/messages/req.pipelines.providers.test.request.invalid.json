@@ -1,0 +1,12 @@
+{
+  "name": "fakeai",
+  "provider": {
+    "kind": "remote",
+    "api": "openai",
+    "base_url": "https://fake-openai.test/v1",
+    "timeout_s": 60,
+    "key_secret": "provider-fakeai",
+    "max_in_flight": 2,
+    "key": "sk-not-allowed"
+  }
+}

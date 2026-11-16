@@ -1,0 +1,91 @@
+{
+  "description": "the shot list director (Pipelines board: Script → Director → Qwen Image → Output, chat, fan-out max 24): a director agent on the local 27B reads the script, may search the gallery, read the library and memory, add rows, and answers a list of up to 24 shot prompts; the step fans out over it (one branch per shot, 1 seed each) and binds each branch's item as its prompt. Worst case: 24 runs; the agent 6 turns × 1 visit = 6 LLM calls, 12 tool calls. Nothing leaves the machine; per batch its chat asks at most 100 wakes x 6 turns x 2 = 1200 calls (16000 tokens and 12 tool calls a wake) and agents may add up to 100 rows",
+  "pipeline": {
+    "title": "Shot list director",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "script",
+            "type": "Text"
+          }
+        ]
+      },
+      "director": {
+        "kind": "agent",
+        "title": "Director",
+        "director": true,
+        "instruction": "Turn the script into a shot list: one image prompt per shot, using the @elements the script names. Keep shots short and concrete.",
+        "from": [
+          "$script"
+        ],
+        "tools": [
+          "gallery.search",
+          "library.read",
+          "memory.read",
+          "memory.write",
+          "rows.add",
+          "rows.edit"
+        ],
+        "list": {
+          "max": 24
+        },
+        "model": "llm-ask"
+      },
+      "shots": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "each": "director.items",
+        "bind": {
+          "prompt.text": "director.item"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "shots.takes",
+        "collection": "Shot list"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "director"
+      ],
+      [
+        "director",
+        "shots"
+      ],
+      [
+        "shots",
+        "out"
+      ]
+    ]
+  },
+  "problems": [],
+  "bounds": {
+    "runs": 24,
+    "llm_calls": 6,
+    "tool_calls": 12,
+    "remote_calls": 0,
+    "remote_tokens": 0,
+    "chat": {
+      "calls": 1200,
+      "tokens": 1600000,
+      "tool_calls": 1200
+    },
+    "added_rows": 100
+  },
+  "models": {
+    "director": "llm-ask"
+  },
+  "egress": [],
+  "reserved": []
+}

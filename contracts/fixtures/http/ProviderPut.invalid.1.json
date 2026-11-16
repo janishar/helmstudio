@@ -1,0 +1,8 @@
+{
+  "kind": "remote",
+  "base_url": "https://fake-openai.test/v1",
+  "models": [
+    "fake-large"
+  ],
+  "key": "sk-a-key-is-never-a-value-here"
+}

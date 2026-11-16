@@ -126,7 +126,10 @@
   "problems": [],
   "bounds": {
     "runs": 13,
-    "llm_calls": 6
+    "llm_calls": 6,
+    "tool_calls": 0,
+    "remote_calls": 0,
+    "remote_tokens": 0
   },
   "models": {
     "judge": "qwen-image-ask",

@@ -1,0 +1,9 @@
+{
+  "kind": "server",
+  "base_url": "ftp://10.0.0.5/v1",
+  "models": [
+    "m"
+  ],
+  "host": "mac",
+  "memory_gb": 4
+}

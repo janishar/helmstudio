@@ -29,6 +29,8 @@ type cellIn struct {
 		DecisionID string          `json:"decision_id"`
 		Judged     json.RawMessage `json:"judged"`
 		Route      json.RawMessage `json:"route"`
+		Branch     *int            `json:"branch"` // API 1.15: a fanned-out step's branch
+		Agent      json.RawMessage `json:"agent"`  // API 1.15: an agent attempt
 	} `json:"attempts"`
 }
 
@@ -88,7 +90,8 @@ func (s *Service) rowsDTO(ctx context.Context, tx pgx.Tx, rows []model.BatchRow)
 			for _, a := range cell.Attempts {
 				attempt := dto.BatchCellAttempt{Visit: a.Visit, Status: a.Status, RunIDs: nonNil(a.RunIDs),
 					TakeIDs: nonNil(a.TakeIDs), Candidates: a.Candidates, Seeds: a.Seeds, Error: a.Error,
-					DecisionID: a.DecisionID, Judged: rawOrNil(a.Judged), Route: rawOrNil(a.Route)}
+					DecisionID: a.DecisionID, Judged: rawOrNil(a.Judged), Route: rawOrNil(a.Route), Branch: a.Branch,
+					Agent: rawOrNil(a.Agent)}
 				if attempt.Seeds == nil {
 					attempt.Seeds = []int64{}
 				}
@@ -104,7 +107,7 @@ func (s *Service) rowsDTO(ctx context.Context, tx pgx.Tx, rows []model.BatchRow)
 						attempt.Seconds = &seconds
 					}
 				}
-				if (cell.Kind == "step" || dto.Asks(cell.Kind)) && attempt.Status == "running" && !started {
+				if (cell.Kind == "step" || dto.HasModel(cell.Kind)) && attempt.Status == "running" && !started {
 					attempt.Status = "queued"
 				}
 				for _, id := range append(append([]string{}, a.TakeIDs...), a.Candidates...) {

@@ -63,6 +63,7 @@ export function Review({
     () =>
       followBatch(id, ["batch", "row"], (e) => {
         if (e.type === "batch") return setBatch(e.data);
+        if (e.type !== "row") return;
         const r = e.data;
         const have = itemsRef.current?.find((x) => x.row === r.row);
         // pipelines took a pick (and wrote its judge example) only now: the memory reads again

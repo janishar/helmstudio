@@ -114,6 +114,19 @@ func Run() error {
 			}
 			return reply, err
 		},
+		remoteModels: env.RemoteModels,
+		// a provider test makes one or two HTTP calls in pipelines: 30 s (API 1.15)
+		providerTest: func(ctx context.Context, req message.ProviderTestRequest) (message.ProviderTestReply, error) {
+			var reply message.ProviderTestReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectProviderTest, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	if module.store, err = objectStore(ctx, env); err != nil {
 		return err

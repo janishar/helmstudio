@@ -66,9 +66,11 @@
             "output",
             "verdict",
             "apply",
-            "memory"
+            "memory",
+            "tools",
+            "custom"
           ],
-          "description": "which graph node of it: inputs, a step's submit / wait, a gate's gate (parked) / route (pick applied, edge chosen), output; from API 1.14 a judge's submit / wait (its ask run), verdict (the answer checked, the decision derived), gate (Suggest: parked for a pick), route; a write's submit / wait / apply (the text set); a decide's submit / wait / route; a memory node's memory. A replayed decision: submit is followed by the next part at once (no wait)"
+          "description": "which graph node of it: inputs, a step's submit / wait, a gate's gate (parked) / route (pick applied, edge chosen), output; from API 1.14 a judge's submit / wait (its ask run), verdict (the answer checked, the decision derived), gate (Suggest: parked for a pick), route; a write's submit / wait / apply (the text set); a decide's submit / wait / route; a memory node's memory. A replayed decision: submit is followed by the next part at once (no wait); from API 1.15 an agent's submit / wait (one turn's call) and tools (that turn's tool calls run), repeated per turn, then route (the visit ends: route, list, or its one plain edge); a custom node's custom"
         },
         "visit": {
           "type": "integer",
@@ -180,12 +182,32 @@
             },
             "wrote": {
               "type": "array",
-              "maxItems": 1,
+              "maxItems": 4,
               "items": {
                 "$ref": "defs.schema.json#/$defs/uuid"
               }
             }
           }
+        },
+        "branch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23,
+          "description": "from API 1.15, a fanned-out step's parts: the branch (item index)"
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "description": "from API 1.15, an agent's submit / wait / tools: the turn"
+        },
+        "tool_calls": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "$ref": "tools.schema.json#/$defs/toolCall"
+          },
+          "description": "from API 1.15, an agent's tools part: the calls run, with results"
         }
       }
     }

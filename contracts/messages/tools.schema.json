@@ -1,0 +1,593 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/tools.schema.json",
+  "title": "Agent tools (API 1.15): each tool's arguments and result, one agent turn, one tool call",
+  "description": "Not a message: the definitions an Agent node's tools are built from (contracts/README.md, Agents: tools). The `*Args` defs are model-facing: self-contained (no $ref), so pipelines inlines them, descriptions dropped, into the turn schema it sends (local asks: `ask.schema`; a local server or remote provider: OpenAI `tools[].function.parameters`). The model sees the wire names (OpenAI function names allow no dot); documents and events use the dotted names. Every answer is validated against these before anything runs.",
+  "$defs": {
+    "tool": {
+      "enum": [
+        "gallery.search",
+        "memory.read",
+        "memory.write",
+        "library.read",
+        "rows.add",
+        "rows.edit"
+      ],
+      "description": "a tool an Agent node may declare (`tools`); rows.edit only with director: true and only in the director's chat turns. `route` and `set_items` are never declared: they are offered when the node has routes or a list"
+    },
+    "wireName": {
+      "enum": [
+        "gallery_search",
+        "memory_read",
+        "memory_write",
+        "library_read",
+        "rows_add",
+        "rows_edit",
+        "route",
+        "set_items"
+      ],
+      "description": "the name the model sees: the tool's name with `.` → `_`, plus route and set_items"
+    },
+    "gallerySearchArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the owner's takes (completed, not deleted), newest first. text: case-insensitive substring of the title or the prompt",
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "kind": {
+          "enum": [
+            "image",
+            "video"
+          ]
+        },
+        "collection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "starred": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    },
+    "gallerySearchResult": {
+      "type": "object",
+      "required": [
+        "takes",
+        "more"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "takes": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": [
+              "take_id",
+              "kind",
+              "title",
+              "prompt",
+              "width",
+              "height",
+              "collection",
+              "starred",
+              "created_at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "$ref": "defs.schema.json#/$defs/uuid"
+              },
+              "kind": {
+                "enum": [
+                  "image",
+                  "video"
+                ]
+              },
+              "title": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "prompt": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 500,
+                "description": "made_with's prompt text cut to 500; null for an upload"
+              },
+              "width": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "height": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "collection": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 80
+              },
+              "starred": {
+                "type": "boolean"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "more": {
+          "type": "boolean",
+          "description": "more takes matched than limit"
+        }
+      }
+    },
+    "libraryReadArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "the owner's elements and the looks the owner can use, by name",
+      "properties": {
+        "kind": {
+          "enum": [
+            "element",
+            "look"
+          ]
+        },
+        "group": {
+          "enum": [
+            "character",
+            "location",
+            "prop",
+            "film",
+            "camera",
+            "colour",
+            "lighting"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    },
+    "libraryReadResult": {
+      "type": "object",
+      "required": [
+        "items",
+        "more"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "group",
+              "name",
+              "handle",
+              "text"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 130
+              },
+              "kind": {
+                "enum": [
+                  "element",
+                  "look"
+                ]
+              },
+              "group": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "handle": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "an element's: what `@<handle>` mentions; null for a look"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 500,
+                "description": "cut to 500"
+              }
+            }
+          }
+        },
+        "more": {
+          "type": "boolean"
+        }
+      }
+    },
+    "memoryReadArgs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+        },
+        "kind": {
+          "enum": [
+            "note",
+            "judge_example"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        }
+      }
+    },
+    "memoryReadResult": {
+      "type": "object",
+      "required": [
+        "items",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "kind",
+              "key",
+              "text",
+              "created_at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "defs.schema.json#/$defs/uuid"
+              },
+              "kind": {
+                "enum": [
+                  "note",
+                  "judge_example"
+                ]
+              },
+              "key": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 2000
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        },
+        "from": {
+          "enum": [
+            "snapshot",
+            "live"
+          ],
+          "description": "a row's agent reads the batch's snapshot; only the director's chat reads live"
+        }
+      }
+    },
+    "memoryWriteArgs": {
+      "type": "object",
+      "required": [
+        "key",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "memoryWriteResult": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        }
+      }
+    },
+    "rowsAddArgs": {
+      "type": "object",
+      "required": [
+        "inputs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "inputs": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "take_id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "take_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "rowsAddResult": {
+      "type": "object",
+      "required": [
+        "row",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "status": {
+          "const": "queued"
+        }
+      }
+    },
+    "rowsEditArgs": {
+      "type": "object",
+      "required": [
+        "row",
+        "inputs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "inputs": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "take_id"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "take_id": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "rowsEditResult": {
+      "type": "object",
+      "required": [
+        "row",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "$ref": "defs.schema.json#/$defs/batchRow"
+        },
+        "status": {
+          "const": "queued"
+        }
+      }
+    },
+    "routeArgs": {
+      "type": "object",
+      "required": [
+        "to",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "description": "ends the visit along one declared route; pipelines sets `to.enum` to the node's route labels in document order",
+      "properties": {
+        "to": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    },
+    "setItemsArgs": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false,
+      "description": "the node's list (a shot list): replaces any earlier one of the visit; pipelines sets `items.maxItems` to the node's list max",
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 24,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        }
+      }
+    },
+    "toolError": {
+      "type": "object",
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "description": "what the model is told when a tool refuses (a rejected row: Submit's reason; a cap; another user's or an unknown id: `not found`)"
+    },
+    "turn": {
+      "type": "object",
+      "required": [
+        "say",
+        "calls"
+      ],
+      "additionalProperties": false,
+      "description": "one agent turn as a local ask answers it (the turn schema), and as pipelines normalises a native OpenAI answer (`content` → say, `tool_calls[].function` → calls). calls [] = the final answer",
+      "properties": {
+        "say": {
+          "type": "string",
+          "maxLength": 4000
+        },
+        "calls": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": [
+              "tool",
+              "args"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "$ref": "#/$defs/wireName"
+              },
+              "args": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "toolCall": {
+      "type": "object",
+      "required": [
+        "id",
+        "tool",
+        "args",
+        "result",
+        "error"
+      ],
+      "additionalProperties": false,
+      "description": "one executed call of a turn, as the decision and the execution view record it",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_.:-]{1,200}$",
+          "description": "<turn's idempotency key>:<call index from 0> (also studio.tools call_id)"
+        },
+        "tool": {
+          "$ref": "#/$defs/wireName"
+        },
+        "args": {
+          "type": "object"
+        },
+        "result": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "the tool's result as the model saw it (cut to 8000 characters of JSON); null on error"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      }
+    }
+  }
+}

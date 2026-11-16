@@ -1,11 +1,12 @@
 "use client";
 // New batch (plan 7.2): a workflow (or a saved pipeline, whose inputs are the columns), its base settings (Create's
 // inspector), the rows as pasted lines, a CSV table or a grid, seeds per row, and Submit. Rows are built and checked
-// here; the server's 422 is shown against its row.
+// here; the server's 422 is shown against its row. A pipeline's Submit shows what leaves the machine and the memory
+// local servers keep reserved (docs/mock/SubmitEgress.dc.html), as POST /pipelines/validate answers for it.
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import { ErrorNote, Modal } from "@/components/kit";
+import { ErrorNote, Info, Modal } from "@/components/kit";
 import { Inspector, TextFields } from "@/components/create/form";
 import { MentionText, PromptArea } from "@/components/create/prompt";
 import { useRefUploads } from "@/components/create/refs";
@@ -18,7 +19,8 @@ import { chosenIds, liveChosen, reasonOf, tilesOf, type Chosen } from "@/lib/loo
 import { withInputs } from "@/lib/mentions";
 import { imageInputs } from "@/lib/refs";
 import { remember } from "@/lib/take-cache";
-import { pipelineBounds, pipelineFields } from "@/lib/pipeline";
+import { MODEL_KINDS, nodeLabel, pipelineBounds, pipelineFields } from "@/lib/pipeline";
+import { egressLines, remoteLine, reservedLines } from "@/lib/egress";
 import { boundsLine } from "@/lib/pipeline-run";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
@@ -103,6 +105,25 @@ export function NewBatch({
   const looks = useLooks();
   const looksChosen = liveChosen(looksPicked, looks);
   const loras = useLoras();
+  // what leaves the machine, as studio sees it now (a listed pipeline carries none)
+  const [check, setCheck] = useState<S<"PipelineValidation"> | null>(null);
+  const pipeDoc = pipeline && {
+    title: pipeline.title,
+    nodes: pipeline.nodes,
+    edges: pipeline.edges,
+    ...(pipeline.remote && { remote: pipeline.remote }),
+  };
+  const pipeKey = pipeDoc ? JSON.stringify(pipeDoc) : "";
+  useEffect(() => {
+    if (!open || !pipeKey) return;
+    let stop = false;
+    ok(api.POST("/v1/studio/pipelines/validate", { body: JSON.parse(pipeKey) }))
+      .then((v) => !stop && setCheck(v))
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [open, pipeKey]);
 
   useEffect(() => {
     if (!open || workflows || pipeline) return;
@@ -626,6 +647,14 @@ export function NewBatch({
           </section>
         </div>
 
+        {pipeline && (
+          <Egress
+            pipeline={pipeline}
+            egress={check?.egress ?? pipeline.egress}
+            reserved={check?.reserved ?? pipeline.reserved}
+            rows={built.count * (seedField ? seedCount : 1)}
+          />
+        )}
         {error && <ErrorNote>{error}</ErrorNote>}
         <div className="flex flex-wrap items-center justify-end gap-3">
           <span className="mono mr-auto text-[12px] text-t2" aria-live="polite">
@@ -674,5 +703,68 @@ export function NewBatch({
         />
       )}
     </Modal>
+  );
+}
+
+/** Submit's "What leaves the machine" (docs/mock/SubmitEgress.dc.html): per node where its calls go and exactly what
+ * it sends, the remote worst case beside the caps, and the local servers' reserved memory. Shown for a pipeline with
+ * a model or custom node; "Nothing leaves the machine" when none of them calls out. */
+function Egress({
+  pipeline,
+  egress,
+  reserved,
+  rows,
+}: {
+  pipeline: S<"Pipeline">;
+  egress?: S<"PipelineEgress">[];
+  reserved?: S<"PipelineReserved">[];
+  rows: number;
+}) {
+  const kinds = Object.values(pipeline.nodes).map((n) => n.kind);
+  if (!kinds.some((k) => MODEL_KINDS.includes(k) || k === "custom")) return null;
+  const name = (id: string) => nodeLabel(pipeline, id, pipeline.workflow_titles);
+  const heading = (id: string) => (name(id) === id ? id : `${name(id)} · ${id}`); // the board's "Decide · check"
+  const source = (src: string) =>
+    src.startsWith("$")
+      ? `Input · ${src.slice(1)}`
+      : `${name(src.split(".")[0])} · ${src.split(".")[1]}`;
+  const lines = egress ? egressLines(egress, Math.max(1, rows), source) : [];
+  const remote = egress ? remoteLine(egress, Math.max(1, rows), pipeline.remote) : "";
+  return (
+    <section aria-labelledby="nb-egress" className="flex flex-col gap-2">
+      <h3 id="nb-egress" className="heading flex items-center">
+        What leaves the machine
+        <Info>
+          Exactly what each node sends to a model outside this app. Thumbnails are never sent. The
+          caps, not the estimate, stop the batch.
+        </Info>
+      </h3>
+      {!egress && <p className="m-0 text-[13px] text-t2">Checking…</p>}
+      {egress && !lines.length && (
+        <p className="m-0 text-[13px] text-t2">Nothing leaves the machine.</p>
+      )}
+      {lines.map((l) => (
+        <div key={l.node} className="set flex flex-col gap-1.5 text-[13px]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <b className="font-semibold">{heading(l.node)}</b>
+            <span className={`st ${l.remote ? "st-run" : ""}`}>{l.where}</span>
+          </div>
+          <small className="text-[12px] text-t2">sends {l.sends}</small>
+          {l.load && <small className="text-[12px] text-t2">{l.load}</small>}
+        </div>
+      ))}
+      {remote && (
+        <div className="set flex items-center justify-between gap-2 py-2 text-[13px]">
+          {remote}
+          <span className="text-[11px] text-t2">caps</span>
+        </div>
+      )}
+      {reservedLines(reserved ?? []).map((r) => (
+        <div key={r} className="set flex items-center justify-between gap-2 py-2 text-[13px]">
+          {r}
+          <span className="text-[11px] text-t2">reserved memory</span>
+        </div>
+      ))}
+    </section>
   );
 }

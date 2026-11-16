@@ -44,6 +44,74 @@
         "memory": {
           "$ref": "defs.schema.json#/$defs/memorySnapshot",
           "description": "from API 1.14, a pipeline batch: the memory snapshot it reads, sent from its first running event on"
+        },
+        "director": {
+          "type": "object",
+          "required": [
+            "node",
+            "state",
+            "wakes",
+            "max_wakes"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.15, a batch whose pipeline has a director: its chat's state",
+          "properties": {
+            "node": {
+              "$ref": "defs.schema.json#/$defs/nodeId"
+            },
+            "state": {
+              "enum": [
+                "idle",
+                "waiting",
+                "thinking",
+                "off"
+              ],
+              "description": "idle: asleep until a message or a row ends; waiting: a turn's call is queued or held (Pause); thinking: a call or its tools are running; off: the batch ended or max_wakes was reached"
+            },
+            "wakes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_wakes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        },
+        "remote": {
+          "type": "object",
+          "required": [
+            "calls",
+            "tokens",
+            "network_failures",
+            "max_calls",
+            "max_tokens"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.15, a batch with remote enabled: what left the machine so far against the per-batch caps",
+          "properties": {
+            "calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "network_failures": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_calls": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_tokens": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       },
       "if": {

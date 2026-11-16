@@ -38,7 +38,15 @@
           "$ref": "defs.schema.json#/$defs/uuid"
         },
         "row": {
-          "$ref": "defs.schema.json#/$defs/batchRow"
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/batchRow"
+            },
+            {
+              "const": 0
+            }
+          ],
+          "description": "the row; from API 1.15 0 = the director's chat thread (its turns' ask runs)"
         },
         "idempotency_key": {
           "$ref": "defs.schema.json#/$defs/idempotencyKey",

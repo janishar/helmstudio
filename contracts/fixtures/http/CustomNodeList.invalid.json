@@ -1,0 +1,40 @@
+{
+  "nodes": [
+    {
+      "name": "Prefix",
+      "title": "Prefix text",
+      "help": "Puts a fixed prefix before a text (an example custom node: plain Python, no model, no network).",
+      "input": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "prefix": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "text",
+          "prefix"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4201
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "network": false,
+      "version": "3f9c2a1b7d40"
+    }
+  ]
+}

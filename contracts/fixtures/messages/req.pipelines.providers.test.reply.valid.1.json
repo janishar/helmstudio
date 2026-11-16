@@ -1,0 +1,8 @@
+{
+  "models": [
+    "qwen2.5:7b",
+    "llama3.2:3b"
+  ],
+  "answer": "OK",
+  "seconds": 0.8
+}

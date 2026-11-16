@@ -1783,6 +1783,96 @@
           }
         }
       }
+    },
+    "custom": {
+      "description": "from API 1.15: registry key `pipelines.engine.custom` (host token `pipelines`, env token `engine`; no hosts key, no nodes): the custom nodes pipelines_service's packs register (contracts/README.md, Custom nodes), written by pipelines at start. studio reads it for the pipeline rules and GET /v1/studio/custom-nodes",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "nodes"
+          ],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "title",
+                  "help",
+                  "input",
+                  "output",
+                  "network",
+                  "version"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "$ref": "messages/defs.schema.json#/$defs/customName"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "help": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "input": {
+                    "$ref": "#/$defs/customFields",
+                    "description": "the pydantic input model's JSON schema (model_json_schema(), refs inlined)"
+                  },
+                  "output": {
+                    "$ref": "#/$defs/customFields",
+                    "description": "the pydantic output model's JSON schema"
+                  },
+                  "network": {
+                    "type": "boolean",
+                    "description": "it calls the network: counted as a remote model (off by default, shown at Submit)"
+                  },
+                  "version": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{12}$",
+                    "description": "the first 12 hex of the sha256 of the pack's code: Resume asks when it changed"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "customFields": {
+      "type": "object",
+      "required": [
+        "type",
+        "properties"
+      ],
+      "description": "an object JSON schema whose top-level properties are the fields; a field a pipeline may bind is `{type: string}` (text) or `{type: array, items: {type: string, format: uuid}, maxItems ≤ 8}` (take ids); any other field takes only a fixed value",
+      "properties": {
+        "type": {
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }

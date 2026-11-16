@@ -162,6 +162,9 @@ type PipelineSnapshot struct {
 	Nodes     map[string]map[string]any   `json:"nodes"`
 	Edges     json.RawMessage             `json:"edges"`
 	Workflows map[string]SnapshotWorkflow `json:"workflows"`
+	// API 1.15: every provider a node's source names, as it was at Submit; the pipeline's remote switch
+	Providers map[string]map[string]any `json:"providers,omitempty"`
+	Remote    any                       `json:"remote,omitempty"`
 }
 
 // SubmitRow is one row of cmd.pipeline.submit: its full inputs; a pipeline batch's also its base seed per step.
@@ -249,6 +252,9 @@ type PipelineBatch struct {
 	Status string          `json:"status"`
 	Reason *string         `json:"reason"`
 	Memory json.RawMessage `json:"memory"` // a pipeline batch's memory snapshot (API 1.14)
+	// API 1.15: the director chat's state, and remote calls so far against the caps
+	Director json.RawMessage `json:"director"`
+	Remote   json.RawMessage `json:"remote"`
 }
 
 // PipelineRow is evt.pipeline.row's data: the row's whole state.
@@ -286,6 +292,10 @@ type PipelineStep struct {
 	CheckpointID *string         `json:"checkpoint_id"`
 	Decision     json.RawMessage `json:"decision"` // API 1.14: defs decision, on the part that derived it
 	Memory       json.RawMessage `json:"memory"`   // API 1.14: {read, wrote}
+	// API 1.15: a fanned-out step's branch; an agent's turn and, on tools, its calls with results
+	Branch    *int            `json:"branch"`
+	Turn      *int            `json:"turn"`
+	ToolCalls json.RawMessage `json:"tool_calls"`
 }
 
 // PipelineSeq is the event's seq (per batch, over every kind).
@@ -384,3 +394,83 @@ type MemoryReply struct {
 	Error     string `json:"error"`
 	Code      string `json:"code"`
 }
+
+// ------------------------------------------------------------------ API 1.15: providers, tools, the director's chat
+
+// SubjectProviderTest is pipelines' request/reply subject for testing a model provider.
+const SubjectProviderTest = "pipelines.providers.test"
+
+// ProviderTestRequest is the pipelines.providers.test request: the provider as a batch would call it (defs
+// providerSnapshot) and, optionally, a model for one tiny completion.
+type ProviderTestRequest struct {
+	Name     string         `json:"name"`
+	Provider map[string]any `json:"provider"`
+	Model    *string        `json:"model,omitempty"`
+}
+
+// ProviderTestReply is its reply: {models, answer?, seconds} or {error, code: network | answer | refused | off | internal}.
+type ProviderTestReply struct {
+	Models  []string `json:"models"`
+	Answer  *string  `json:"answer"`
+	Seconds float64  `json:"seconds"`
+	Error   string   `json:"error"`
+	Code    string   `json:"code"`
+}
+
+// ToolsRequest is the studio.tools request (pipelines → studio): one agent tool call, as the batch's owner.
+type ToolsRequest struct {
+	OwnerID string          `json:"owner_id"`
+	BatchID string          `json:"batch_id"`
+	Row     int             `json:"row"`
+	Node    string          `json:"node"`
+	CallID  string          `json:"call_id"`
+	Tool    string          `json:"tool"`
+	Args    json.RawMessage `json:"args"`
+}
+
+// ToolsReply is its reply: {result, row?} or {error, code: invalid | conflict | cap | not_found | internal}.
+type ToolsReply struct {
+	Result any       `json:"result,omitempty"`
+	Row    *ToolsRow `json:"row,omitempty"`
+	Error  string    `json:"error,omitempty"`
+	Code   string    `json:"code,omitempty"`
+}
+
+// ToolsRow is the stored row of a rows.add / rows.edit reply, as cmd.pipeline.submit carries rows but with seeds
+// always present (the reply schema requires them; {} when no step has a seed param).
+type ToolsRow struct {
+	Row    int              `json:"row"`
+	Inputs map[string]any   `json:"inputs"`
+	Seeds  map[string]int64 `json:"seeds"`
+}
+
+// Chat is cmd.pipeline.chat's data: a user's message to the batch's director.
+type Chat struct {
+	BatchID   string `json:"batch_id"`
+	MessageID string `json:"message_id"`
+	Text      string `json:"text"`
+	At        string `json:"at"`
+}
+
+// Type is the envelope type.
+func (Chat) Type() string { return "cmd.pipeline.chat" }
+
+// Subject is the type.
+func (Chat) Subject() string { return "cmd.pipeline.chat" }
+
+// PipelineChat is evt.pipeline.chat's data: one message of the director.
+type PipelineChat struct {
+	Seq     int64 `json:"seq"`
+	Message struct {
+		ID        string            `json:"id"`
+		Role      string            `json:"role"` // director | notice
+		Text      string            `json:"text"`
+		Wake      int               `json:"wake"`
+		ToolCalls []json.RawMessage `json:"tool_calls"`
+		Rows      []int             `json:"rows"`
+		At        string            `json:"at"`
+	} `json:"message"`
+}
+
+// PipelineSeq is the event's seq (per batch, over every kind).
+func (c PipelineChat) PipelineSeq() int64 { return c.Seq }

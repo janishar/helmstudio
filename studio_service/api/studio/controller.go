@@ -93,6 +93,14 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PATCH("/pipelines/:id", c.renamePipelineHandler)
 	group.DELETE("/pipelines/:id", c.deletePipelineHandler)
 	group.POST("/takes/:id/pipeline", c.saveTakeAsPipelineHandler)
+	group.GET("/batches/:id/chat", c.getChatHandler)
+	group.POST("/batches/:id/chat", c.postChatHandler)
+	group.GET("/model-sources", c.modelSourcesHandler)
+	group.GET("/custom-nodes", c.customNodesHandler)
+	group.GET("/admin/providers", c.listProvidersHandler)
+	group.PUT("/admin/providers/:name", c.putProviderHandler)
+	group.DELETE("/admin/providers/:name", c.deleteProviderHandler)
+	group.POST("/admin/providers/:name/test", c.testProviderHandler)
 	group.GET("/library", c.listLibraryHandler)
 	group.POST("/library", c.createLibraryItemHandler)
 	group.GET("/library/:id", c.getLibraryItemHandler)
@@ -104,9 +112,25 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 }
 
 // MountNats registers studio.runs.create (the service's group is "studio"), pipelines_service's request for a batch
-// run.
+// run, and studio.tools (API 1.15), an agent's tool call that needs studio's data.
 func (c *controller) MountNats(group micro.NatsGroup) error {
-	return group.AddGroup("runs").AddEndpoint("create", micro.NatsHandlerFunc(c.runsCreateHandler))
+	if err := group.AddGroup("runs").AddEndpoint("create", micro.NatsHandlerFunc(c.runsCreateHandler)); err != nil {
+		return err
+	}
+	return group.AddEndpoint("tools", micro.NatsHandlerFunc(c.toolsHandler))
+}
+
+// toolsHandler answers studio.tools with {result, row?}, or {error, code}.
+func (c *controller) toolsHandler(request micro.NatsRequest) {
+	body := new(message.ToolsRequest)
+	if err := json.Unmarshal(request.Data(), body); err != nil {
+		micro.RespondNatsMessage(request, &message.ToolsReply{Error: "bad request: invalid JSON", Code: "invalid"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out := c.service.Tool(ctx, body)
+	micro.RespondNatsMessage(request, &out)
 }
 
 // runsCreateHandler answers studio.runs.create with the run, or {error, code}.
@@ -632,7 +656,7 @@ func (c *controller) createPipelineHandler(ctx *gin.Context) {
 
 // validatePipelineHandler: POST /pipelines/validate — other top-level keys are ignored.
 func (c *controller) validatePipelineHandler(ctx *gin.Context) {
-	body, err := strictBodyKeeping[dto.PipelineDoc](ctx, "title", "nodes", "edges")
+	body, err := strictBodyKeeping[dto.PipelineDoc](ctx, "title", "nodes", "edges", "remote")
 	var out dto.PipelineValidation
 	if err == nil {
 		out, err = c.service.ValidatePipeline(ctx.Request.Context(), common.MustCaller(ctx), *body)
@@ -792,4 +816,71 @@ func (c *controller) deleteLibraryItemHandler(ctx *gin.Context) {
 		return
 	}
 	network.SendNoContent(ctx)
+}
+
+// ------------------------------------------------------------------ API 1.15: the director's chat, model sources
+
+// getChatHandler: GET /batches/{id}/chat.
+func (c *controller) getChatHandler(ctx *gin.Context) {
+	out, err := c.service.Chat(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// postChatHandler: POST /batches/{id}/chat — 202 with the message, stored.
+func (c *controller) postChatHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.ChatPost](ctx, false)
+	var out dto.ChatMessage
+	if err == nil {
+		out, err = c.service.PostChat(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusAccepted, out, err)
+}
+
+// modelSourcesHandler: GET /model-sources.
+func (c *controller) modelSourcesHandler(ctx *gin.Context) {
+	out, err := c.service.ModelSources(ctx.Request.Context(), common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// customNodesHandler: GET /custom-nodes.
+func (c *controller) customNodesHandler(ctx *gin.Context) {
+	out, err := c.service.CustomNodes()
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// listProvidersHandler: GET /admin/providers.
+func (c *controller) listProvidersHandler(ctx *gin.Context) {
+	out, err := c.service.ListProviders(ctx.Request.Context(), common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// putProviderHandler: PUT /admin/providers/{name} — 201 created, 200 replaced; 403 before the body is read.
+func (c *controller) putProviderHandler(ctx *gin.Context) {
+	caller := common.MustCaller(ctx)
+	if !caller.IsAdmin() {
+		network.SendMixedError(ctx, errAdmin)
+		return
+	}
+	body, err := strictBody[dto.ProviderPut](ctx, false)
+	var out dto.Provider
+	created := false
+	if err == nil {
+		out, created, err = c.service.PutProvider(ctx.Request.Context(), caller, ctx.Param("name"), body)
+	}
+	reply(ctx, map[bool]int{true: http.StatusCreated, false: http.StatusOK}[created], out, err)
+}
+
+// deleteProviderHandler: DELETE /admin/providers/{name} — 204.
+func (c *controller) deleteProviderHandler(ctx *gin.Context) {
+	if err := c.service.DeleteProvider(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("name")); err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	network.SendNoContent(ctx)
+}
+
+// testProviderHandler: POST /admin/providers/{name}/test[?model=].
+func (c *controller) testProviderHandler(ctx *gin.Context) {
+	out, err := c.service.TestProvider(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("name"), ctx.Query("model"))
+	reply(ctx, http.StatusOK, out, err)
 }

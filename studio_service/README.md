@@ -216,6 +216,37 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
   the caller (5 s, else 503); deleting a pipeline asks `clear`. DELETE `/memory/{id}` asks each of the caller's
   pipelines (the request needs a pipeline id).
 
+## Agents, fan-out, model sources and custom nodes (API 1.15, M4b stage B)
+
+- Pipeline rules (`pipeline_rules.go`, every fixture incl. `egress` and `reserved`): agent and custom nodes, fan-out
+  (`each`, `<producer>.item`, `fanout_source`, `fanout_takes`, runs × the list max), agent routes edges, `agent_tools`,
+  `director_count`, `model_media`, `server:`/`remote:` models (`remote_off`, `remote_not_enabled`), `unknown_custom`,
+  `custom_input` (`fitsSchema`: the JSON-schema subset pydantic writes). The rules read `ruleEnv`: enabled providers, the
+  deployment switch `STUDIO_REMOTE_MODELS` (off by default) and `pipelines.engine.custom` (registry `Custom`).
+- Providers (`providers.go`, migration 00016, admin only, 403 otherwise): `/admin/providers` (PUT 201/200, kind never
+  changes in place, DELETE 409 while an unfinished batch names it, `test` asks `pipelines.providers.test`, 30 s).
+  The host rule at PUT: a server's base_url is a loopback or private address or a name resolving only to such
+  (link-local, IPv4-mapped public, any non-canonical numeric host such as `2130706433`, `0x7f000001`, `127.1` refused);
+  a remote one is https and not a loopback or link-local literal, and only while the switch is on. Keys are only a
+  `key_secret` file name. `GET /model-sources` is names and models only (remote ones while the switch is on);
+  `GET /custom-nodes` is the registry's list.
+- Submit: each model node's `source` and `workflow` (`server-ask`, `remote`, or the ask workflow), the providers
+  snapshot, the filled `remote`, agent and custom defaults, a fanned step's `fanout_max`; `batches.egress`, `reserved`,
+  `director` (idle), `remote` (counters, when enabled), `providers` (names). A server's runs are pinned to its host
+  (`runs.pin_host`, eligible nowhere else); the dispatcher releases env `server` with no admission and subtracts every
+  enabled server's `memory_gb` from its host's budget in every admission (`reservedOn`).
+- `studio.runs.create`: row 0 (the director's chat: attempt 1, the wake below `max_wakes`), agent turn keys
+  `t<turn>[r]` below `max_turns`, fanned branches `<item>-<seed>` below the list max, a server run's `ask.provider` and
+  `ask.model` equal to its node's; a remote node never runs.
+- `studio.tools` (`tools.go`): the owner is the batch's (a forged one is not_found), reads run under row-level security
+  as that owner; gallery.search, library.read, rows.add (Submit's row checks, next number, 100 added, 500 rows), rows.edit
+  (row 0 only, rows not started); idempotent on `call_id` (`tool_calls`); row events for the run table.
+- Chat (`chat.go`): `GET/POST /batches/{id}/chat` (owner only, 404 without a director; 1-2000 characters; 409 ended,
+  off or 500 messages; 429 above 6 a minute), `cmd.pipeline.chat` in the same transaction, `chat` batch events;
+  `evt.pipeline.chat` stored (a republish replaces; its rows kept only when the batch's), `evt.pipeline.batch`
+  `director` and `remote` kept. Step events keep `branch`, `turn` and `tool_calls` (the execution view); cells keep
+  `branch` and `agent`; a decision whose source is remote is shown `replayable: false` whatever was sent.
+
 ## Layout
 
 | Path | What |
@@ -233,4 +264,4 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 | `api/lora/` | the LoRA library (`/v1/studio/loras`: list, get, upload by signed PUT, complete, rename, delete, the sweep), `safetensors.go` (the bounded header parser: 8 MB, 20000 tensors, offsets, dtypes; no tensor data held), `normalise.go` (key styles, the normaliser, upload checks, family detection; tests run `contracts/fixtures/loras` as real files), `Usable` (what runs may use) |
 | `api/studio/loras.go` | LoRA values of a run: checked as the owner in `runGraphs`, kept as `runs.loras`, resolved into the command at release; the dispatcher's shared-LoRA host rule, baked residency and deleted-LoRA failure |
 | `api/studio/batch*.go` | batches: `batches.go` (Submit, reads, control, events, `studio.runs.create`), `batch_rows.go` (rows from lines/table/grid/seeds), `batch_projector.go` (`evt.pipeline.*`), `batch_record.go` (`run_finished`, the batch log) |
-| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras`, `00013` looks (`library_items.loras`, `from_take_id`, `runs.looks`, `batches.looks`, `batch_rows.looks`) |
+| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras`, `00013` looks (`library_items.loras`, `from_take_id`, `runs.looks`, `batches.looks`, `batch_rows.looks`), … `00016` providers, batch_chat, tool_calls, stage B columns |

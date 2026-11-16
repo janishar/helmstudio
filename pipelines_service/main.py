@@ -4,7 +4,11 @@ Opens the `pipelines` database (migrations, then LangGraph's checkpoint tables),
 running as paused (engine.start), then pulls cmd.pipeline.> from CMD (durable `pipelines`, one at a time, in
 order) and evt.studio.> from EVT (durable `pipelines-runs`), and answers pipelines.state.get and pipelines.memory
 (LangGraph's Postgres store). LangSmith tracing is forced off (plan 16.4: no network call). SIGINT/SIGTERM stop pulling and exit; threads
-continue from their checkpoints on the next start (after the user's Resume)."""
+continue from their checkpoints on the next start (after the user's Resume).
+
+Stage B: publishes the custom nodes (registry `pipelines.engine.custom`), answers pipelines.providers.test, sends
+queued remote calls (remote.py; only with PIPELINES_REMOTE_MODELS on and a pipeline that enables them) and is the
+`server` env runner of each host in PIPELINES_SERVER_HOSTS (server.py). Agent tools reach studio by studio.tools."""
 
 import asyncio
 import contextlib
@@ -33,9 +37,12 @@ from psycopg_pool import AsyncConnectionPool
 
 import config
 import consumer
+import custom
 import events
 import health
 import memory
+import providers
+import server as server_env
 import states
 from engine import Engine
 from messaging.publisher import Publisher
@@ -128,9 +135,17 @@ async def main() -> None:
         await migrate(pool, saver)
         js = nc.jetstream()
         store = AsyncPostgresStore(pool)
+        studio = Studio(nc)
         engine = Engine(
-            pool, saver, Publisher(js), Studio(nc).create_run, config.DRIVE_CONCURRENCY, store=store
+            pool,
+            saver,
+            Publisher(js),
+            studio.create_run,
+            config.DRIVE_CONCURRENCY,
+            store=store,
+            tool=studio.tool,
         )
+        await custom.publish(js)
         await engine.start()
         cmds = await durable(
             js,
@@ -145,6 +160,9 @@ async def main() -> None:
         server = await health.serve(nc, pool)
         state_sub = await states.serve(nc, engine)
         memory_sub = await memory.serve(nc, store)
+        test_sub = await providers.serve(nc)
+        executors = [server_env.Executor(js, pool, h.strip()) for h in config.SERVER_HOSTS]
+        server_subs = [await x.start() for x in executors]
 
         stop = asyncio.Event()
         loop = asyncio.get_running_loop()
@@ -154,11 +172,15 @@ async def main() -> None:
         await asyncio.gather(
             pull(cmds, consumer.Commands(engine, pool, js).handle, stop, 1),
             pull(runs, events.RunEvents(engine).handle, stop, 16),
+            engine.remote.run(stop),
+            *[pull(sub, x.handle, stop, 1) for x, sub in zip(executors, server_subs)],
+            *[x.beat(stop) for x in executors],
         )
         log.info("shutting down")
         server.close()
         await state_sub.unsubscribe()
         await memory_sub.unsubscribe()
+        await test_sub.unsubscribe()
         await engine.close()
     finally:
         # close, not drain: every publish was awaited; draining pull subscriptions is slow

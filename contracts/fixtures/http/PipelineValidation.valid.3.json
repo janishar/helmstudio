@@ -1,0 +1,61 @@
+{
+  "problems": [],
+  "can_save": true,
+  "can_run": true,
+  "bounds": {
+    "runs": 6,
+    "llm_calls": 15,
+    "tool_calls": 0,
+    "remote_calls": 6,
+    "remote_tokens": 53952
+  },
+  "models": {
+    "judge": "qwen-image-ask",
+    "rewrite": "server:ollama/qwen2.5:7b",
+    "check": "remote:fakeai/fake-large",
+    "boss": "qwen-image-ask"
+  },
+  "egress": [
+    {
+      "node": "check",
+      "where": "remote",
+      "provider": "fakeai",
+      "model": "fake-large",
+      "fields": [
+        "question",
+        "routes",
+        "judge.reasons"
+      ],
+      "thumbnails": 0,
+      "per_row": {
+        "calls": 6,
+        "tokens": 53952
+      },
+      "chat": null
+    },
+    {
+      "node": "rewrite",
+      "where": "server",
+      "provider": "ollama",
+      "model": "qwen2.5:7b",
+      "fields": [
+        "instruction",
+        "$prompt",
+        "judge.reasons"
+      ],
+      "thumbnails": 0,
+      "per_row": {
+        "calls": 6,
+        "tokens": 57552
+      },
+      "chat": null
+    }
+  ],
+  "reserved": [
+    {
+      "provider": "ollama",
+      "host": "mac",
+      "memory_gb": 6.5
+    }
+  ]
+}

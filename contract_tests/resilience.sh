@@ -5,7 +5,7 @@
 #   make resilience                (from the repo root: brings the test stack up and runs this)
 #   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats
-# batch-postgres batch-kill pipeline-parked agents-parked handover-studio; studio-queued restarts studio while a second run is still queued behind the first (not yet
+# batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio; studio-queued restarts studio while a second run is still queued behind the first (not yet
 # released) and requires that it then succeeds. batch-<svc> restarts <svc> during a 12-row slow echo batch (batch-kill:
 # SIGKILL the pipelines container, then start it), presses Resume whenever the batch is paused (pipelines pauses its
 # batches after a restart) and requires the batch to end done with exactly 12 runs (one per row) and 12 takes.
@@ -17,6 +17,10 @@
 # row 1 is parked on the judge's suggestion restarts pipelines and studio while the other rows make stills or wait
 # on their judge calls; it presses Resume when paused and picks every suggestion: the batch must end done with
 # exactly 3 still runs, 3 judge runs and one decision per row (no decision asked twice) and 3 rows succeeded:1.
+# director-mid (API 1.15) runs a 1-row pipeline director (echo-ask, a list of 3 shots) -> shots (fan-out, slow echo) ->
+# out, and once one shot is done tells the director in its chat to add a row of 2 shots, then restarts pipelines while
+# the director is mid-reply and the fan-out half done; it presses Resume when paused: the batch must end done with
+# exactly 2 rows (succeeded with 3 and 2 takes), 5 distinct shot runs and takes, and one director reply.
 # handover-studio restarts studio while a run waits for an unload (see handover_check; skipped on the fake stack).
 # Needs curl and python3. Exit 1 when any service fails.
 set -eu
@@ -234,6 +238,81 @@ print(" ".join(r["status"] + ":" + str(len(r["take_ids"])) for r in json.load(sy
   api DELETE "/v1/studio/pipelines/$pid" >/dev/null || true
 }
 
+# director_check: restart pipelines while the director is mid-reply and a fan-out is half done (see the header)
+director_check() {
+  if ! api GET /v1/studio/workflows/echo-ask >/dev/null; then
+    echo "SKIP $1: the fake runner has no echo-ask"
+    return
+  fi
+  # a row's visit is one turn (set_items, route); the chat's turn 1 adds a row, its turn 2 answers. A script nested in
+  # the chat's args is written with \u003a for its colon, so it stays inert until the args are decoded
+  scripts=$(python3 -c 'import json,re
+q = lambda v: re.sub(r"(ECHO-TURN \d+):", r"\1\\u003a", json.dumps(v, separators=(",", ":")))
+go = {"tool": "route", "args": {"to": "go", "reason": "set"}}
+row = lambda name, n: name + " ECHO-TURN 1: " + q({"say": "", "calls": [
+  {"tool": "set_items", "args": {"items": [f"{name} shot {i}" for i in range(n)]}}, go]})
+add = {"say": "", "calls": [{"tool": "rows_add", "args": {"inputs": {"script": row("director added", 2)}}}]}
+print(json.dumps({"row": row("director first", 3), "chat": "Add a row ECHO-TURN 1: " + q(add) +
+  " ECHO-TURN 2: " + q({"say": "Added.", "calls": []})}))')
+  doc=$(python3 -c 'import json
+print(json.dumps({"title": "resilience director", "nodes": {
+  "inputs": {"kind": "inputs", "inputs": [{"name": "script", "type": "Text"}]},
+  "director": {"kind": "agent", "instruction": "Make the shots.", "from": ["$script"], "model": "echo-ask",
+               "director": True, "tools": ["rows.add"], "list": {"max": 3}, "wake_on_rows": "none",
+               "routes": {"go": "make them", "stop": "none"}},
+  "shots": {"kind": "step", "workflow": "echo", "each": "director.items", "bind": {"prompt.text": "director.item"},
+            "inputs": {"echo.steps": 12, "echo.delay_ms": 300}},
+  "out": {"kind": "output", "from": "shots.takes", "collection": "resilience director"}},
+  "edges": [["inputs", "director"], ["director", {"routes": {"go": "shots", "stop": "out"}, "max": 1, "then": "go"}],
+            ["shots", "out"]]}))')
+  pid=$(api POST /v1/studio/pipelines "$doc" | field id) || pid=""
+  bsid=$(api POST /v1/studio/sessions '{"title":"resilience director"}' | field id)
+  body=$(printf "%s\n" "$scripts" | python3 -c 'import json,sys
+s = json.load(sys.stdin)
+print(json.dumps({"pipeline_id": sys.argv[1], "session_id": sys.argv[2],
+  "rows": {"lines": {"param": "inputs.script", "values": [s["row"]]}}}))' "$pid" "$bsid")
+  bid=$(api POST /v1/studio/batches "$body" | field id) || bid=""
+  [ -n "$bid" ] || { fails=$((fails + 1)); echo "FAIL $1: the pipeline batch was not accepted"; return; }
+  for _ in $(seq 60); do                     # one of row 1's three shots done
+    [ "$(api GET "/v1/studio/batches/$bid/rows" | python3 -c 'import json,sys
+r = json.load(sys.stdin)["rows"][0]
+print(sum(a["status"] == "succeeded" for c in r.get("cells", []) if c["node"] == "shots" for a in c["attempts"]))' 2>/dev/null || echo 0)" -ge 1 ] && break
+    sleep 1
+  done
+  api POST "/v1/studio/batches/$bid/chat" "$(printf "%s\n" "$scripts" | python3 -c 'import json,sys
+print(json.dumps({"text": json.load(sys.stdin)["chat"]}))')" >/dev/null || true
+  sleep 1                                    # its turn waits behind the shots on the fake host: mid-reply
+  dc restart pipelines >/dev/null 2>&1
+  dc up -d --wait >/dev/null 2>&1
+  signin
+  status=unknown
+  for _ in $(seq $((END_TIMEOUT * 2))); do
+    status=$(api GET "/v1/studio/batches/$bid" | field status) || status=unreachable
+    case $status in
+      done | failed | stopped) break ;;
+      paused) api POST "/v1/studio/batches/$bid/resume" >/dev/null || true ;;
+    esac
+    sleep 1
+  done
+  runs=$(api GET "/v1/studio/sessions/$bsid/runs" | python3 -c 'import json,sys
+r=[x for x in json.load(sys.stdin)["runs"] if x.get("batch_id")==sys.argv[1] and x["workflow_id"]=="echo"]
+print(len(r), len({x["id"] for x in r}))' "$bid" 2>/dev/null) || runs="? ?"
+  takes=$(api GET "/v1/studio/sessions/$bsid/takes?limit=200" | python3 -c 'import json,sys
+t=[x for x in json.load(sys.stdin)["takes"] if x.get("batch_id")==sys.argv[1]]
+print(len(t), len({x["id"] for x in t}))' "$bid" 2>/dev/null) || takes="? ?"
+  rows=$(api GET "/v1/studio/batches/$bid/rows" | python3 -c 'import json,sys
+print(" ".join(r["status"] + ":" + str(len(r["take_ids"])) for r in json.load(sys.stdin)["rows"]))' 2>/dev/null) || rows="?"
+  replies=$(api GET "/v1/studio/batches/$bid/chat" | python3 -c 'import json,sys
+print(sum(m["role"] == "director" for m in json.load(sys.stdin)["messages"]))' 2>/dev/null) || replies="?"
+  verdict=PASS
+  [ "$status" = done ] && [ "$runs" = "5 5" ] && [ "$takes" = "5 5" ] && [ "$replies" = 1 ] &&
+    [ "$rows" = "succeeded:3 succeeded:2" ] || verdict=FAIL
+  [ $verdict = PASS ] || fails=$((fails + 1))
+  echo "$verdict $1: batch -> $status; shot runs (distinct) $runs; takes (distinct) $takes; rows $rows; director replies $replies"
+  api DELETE "/v1/studio/sessions/$bsid" >/dev/null || true
+  api DELETE "/v1/studio/pipelines/$pid" >/dev/null || true
+}
+
 # handover_check: restart studio while a run waits for another env of its host to unload (contracts/README.md, Two
 # envs on one host: the hand-over). HANDOVER_HOLD runs first on one env and leaves its weights resident; HANDOVER_WAIT
 # (another env of that host, too big to fit beside them) then waits for the unload while studio restarts. It must
@@ -269,11 +348,12 @@ print(sum(1 for e in json.load(sys.stdin)["events"] if e["run_id"]==sys.argv[1] 
 signin
 SID=$(api POST /v1/studio/sessions '{"title":"resilience"}' | field id)
 fails=0
-for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked handover-studio}; do
+for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio}; do
   case $svc in
     batch-*) batch_check "$svc"; continue ;;
     pipeline-parked) pipeline_check "$svc"; continue ;;
     agents-parked) agents_check "$svc"; continue ;;
+    director-mid) director_check "$svc"; continue ;;
     handover-studio) handover_check "$svc"; continue ;;
   esac
   rid=$(run "$SID" 40)                       # 40 steps x 300 ms: ~12 s of work

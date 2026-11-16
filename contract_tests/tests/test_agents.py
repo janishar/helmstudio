@@ -24,6 +24,7 @@ from test_pipelines import (
     ended,
     execution,
     inputs_node,
+    live_sources,
     live_workflows,
     parked,
 )
@@ -36,6 +37,7 @@ CRITERIA = {"must": ["Shows the subject"], "nice": ["Sharp"]}
 PASS, NICE_FAILS, FAILS = [True, True], [True, False], [False, True]
 CLIP_INPUTS = {"sample.delay_ms": 50, "duration.frames": 17, "duration.fps": 8}
 AGENT_KINDS = {"judge", "write", "decide", "memory"}
+NO_TOOLS = {"tool_calls": 0, "remote_calls": 0, "remote_tokens": 0}  # the 1.15 bounds, always sent
 AGENT_FIXTURES = [
     p
     for p in PIPELINE_FIXTURES
@@ -216,7 +218,9 @@ def judge_pick(client, bid: str, n: int, take_ids: list[str], note: str | None =
 
 def expected(doc_: dict, client, palette: dict) -> tuple[set, dict]:
     info = {}
-    problems = check.pipeline_problems(doc_, live_workflows(client, doc_), palette, [], {}, info)
+    problems = check.pipeline_problems(
+        doc_, live_workflows(client, doc_), palette, [], {}, info, **live_sources(client)
+    )
     return problems, info
 
 
@@ -238,13 +242,13 @@ def test_agent_fixture_rules(api, palette, path):
 @pytest.mark.parametrize(
     "make, bounds",
     [
-        (lambda wid: judged_clip(wid, "Contract rules"), {"runs": 2, "llm_calls": 1}),
+        (lambda wid: judged_clip(wid, "Contract rules"), {"runs": 2, "llm_calls": 1} | NO_TOOLS),
         (
             lambda wid: judged_clip(wid, "Contract rules", "suggest", True),
-            {"runs": 2, "llm_calls": 1},
+            {"runs": 2, "llm_calls": 1} | NO_TOOLS,
         ),
-        (lambda wid: rewrite_loop(), {"runs": 2, "llm_calls": 4}),
-        (lambda wid: routed(), {"runs": 2, "llm_calls": 2}),
+        (lambda wid: rewrite_loop(), {"runs": 2, "llm_calls": 4} | NO_TOOLS),
+        (lambda wid: routed(), {"runs": 2, "llm_calls": 2} | NO_TOOLS),
     ],
     ids=["judge", "judge-memory", "rewrite", "decide"],
 )
@@ -322,7 +326,9 @@ def auto_batch(api, four, i2v) -> dict:
 def test_best_of_4_auto(api, api_b, auto_batch, ask_live):
     batch, bid = auto_batch["batch"], auto_batch["batch"]["id"]
     assert auto_batch["done"]["status"] == "done" and auto_batch["done"]["counts"]["succeeded"] == 3
-    assert batch["bounds"] == {"runs": 2, "llm_calls": 1} and batch["models"] == {"judge": ASK}
+    assert batch["bounds"] == {"runs": 2, "llm_calls": 1} | NO_TOOLS and batch["models"] == {
+        "judge": ASK
+    }
     assert (
         len(batch_takes(api, bid)) == 3 * 4 + 3
     )  # four stills and a clip per row; the judge makes none

@@ -1,0 +1,316 @@
+{
+  "type": "cmd.pipeline.submit",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001540",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "snapshot": {
+      "workflow_id": "qwen-image",
+      "workflow": {
+        "id": "qwen-image",
+        "title": "Qwen Image",
+        "family": "qwen-image",
+        "env": "torch",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "canvas",
+            "params": {
+              "mode": "auto",
+              "width": 1024,
+              "height": 1024
+            }
+          },
+          "model": {
+            "kind": "qwen-image/model",
+            "params": {
+              "variant": "base",
+              "precision": "int8"
+            }
+          },
+          "encode": {
+            "kind": "qwen-image/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "transparent": false,
+              "refs": []
+            }
+          },
+          "sample": {
+            "kind": "qwen-image/sample",
+            "in": {
+              "model": "model.model",
+              "cond": "encode.cond",
+              "canvas": "canvas.canvas",
+              "seed": "seed.seed"
+            },
+            "params": {
+              "steps": 40
+            }
+          },
+          "decode": {
+            "kind": "qwen-image/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample.latent"
+            },
+            "params": {
+              "tiled": "auto"
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.image"
+            }
+          }
+        }
+      },
+      "pipeline": {
+        "id": "2c4e6a8b-0d1f-4a3c-8e5b-7d9f1a3c5e70",
+        "title": "Shot list director",
+        "version": 3,
+        "nodes": {
+          "inputs": {
+            "kind": "inputs",
+            "inputs": [
+              {
+                "name": "script",
+                "type": "Text"
+              }
+            ]
+          },
+          "director": {
+            "kind": "agent",
+            "instruction": "Turn the script into a shot list.",
+            "from": [
+              "$script"
+            ],
+            "tools": [
+              "gallery.search",
+              "rows.add",
+              "rows.edit"
+            ],
+            "list": {
+              "max": 24
+            },
+            "caps": {
+              "max_turns": 6,
+              "max_tool_calls": 12,
+              "max_tokens": 16000
+            },
+            "director": true,
+            "wake_on_rows": "all",
+            "max_wakes": 100,
+            "model": "server:ollama",
+            "workflow": "server-ask",
+            "source": {
+              "kind": "server",
+              "provider": "ollama",
+              "model": "qwen2.5:7b",
+              "host": "mac"
+            }
+          },
+          "prefix": {
+            "kind": "custom",
+            "node": "text/prefix",
+            "version": "3f9c2a1b7d40",
+            "inputs": {
+              "prefix": "cinematic still, "
+            },
+            "bind": {
+              "text": "director.item"
+            },
+            "network": false
+          },
+          "shots": {
+            "kind": "step",
+            "workflow": "qwen-image",
+            "seeds": 1,
+            "inputs": {
+              "model.variant": "turbo",
+              "model.precision": "int8",
+              "canvas.mode": "fixed",
+              "canvas.width": 1024,
+              "canvas.height": 1024
+            },
+            "bind": {
+              "prompt.text": "director.item"
+            },
+            "seed_param": "seed.seed",
+            "each": "director.items",
+            "fanout_max": 24
+          },
+          "out": {
+            "kind": "output",
+            "from": "shots.takes",
+            "collection": "Shot list"
+          }
+        },
+        "edges": [
+          [
+            "inputs",
+            "director"
+          ],
+          [
+            "director",
+            "shots"
+          ],
+          [
+            "shots",
+            "out"
+          ]
+        ],
+        "workflows": {
+          "qwen-image": {
+            "id": "qwen-image",
+            "title": "Qwen Image",
+            "family": "qwen-image",
+            "env": "torch",
+            "nodes": {
+              "prompt": {
+                "kind": "prompt",
+                "params": {
+                  "text": ""
+                }
+              },
+              "seed": {
+                "kind": "seed",
+                "params": {
+                  "seed": -1
+                }
+              },
+              "canvas": {
+                "kind": "canvas",
+                "params": {
+                  "mode": "auto",
+                  "width": 1024,
+                  "height": 1024
+                }
+              },
+              "model": {
+                "kind": "qwen-image/model",
+                "params": {
+                  "variant": "base",
+                  "precision": "int8"
+                }
+              },
+              "encode": {
+                "kind": "qwen-image/encode",
+                "in": {
+                  "model": "model.model",
+                  "prompt": "prompt.text"
+                },
+                "params": {
+                  "transparent": false,
+                  "refs": []
+                }
+              },
+              "sample": {
+                "kind": "qwen-image/sample",
+                "in": {
+                  "model": "model.model",
+                  "cond": "encode.cond",
+                  "canvas": "canvas.canvas",
+                  "seed": "seed.seed"
+                },
+                "params": {
+                  "steps": 40
+                }
+              },
+              "decode": {
+                "kind": "qwen-image/decode",
+                "in": {
+                  "model": "model.model",
+                  "latent": "sample.latent"
+                },
+                "params": {
+                  "tiled": "auto"
+                }
+              },
+              "output": {
+                "kind": "output",
+                "in": {
+                  "media": "decode.image"
+                }
+              }
+            }
+          },
+          "server-ask": {
+            "id": "server-ask",
+            "title": "Ask a local server",
+            "family": "server",
+            "env": "server",
+            "nodes": {
+              "ask": {
+                "kind": "server/ask",
+                "params": {
+                  "max_tokens": 800
+                }
+              },
+              "answer": {
+                "kind": "answer",
+                "in": {
+                  "text": "ask.answer"
+                }
+              }
+            }
+          }
+        },
+        "providers": {
+          "ollama": {
+            "kind": "server",
+            "api": "openai",
+            "base_url": "http://host.docker.internal:11434/v1",
+            "timeout_s": 120,
+            "host": "mac",
+            "memory_gb": 6.5,
+            "key_secret": null
+          }
+        },
+        "remote": {
+          "enabled": false,
+          "providers": [],
+          "max_calls": 200,
+          "max_tokens": 400000
+        }
+      }
+    },
+    "inputs": {
+      "inputs.edit": "make it night"
+    },
+    "rows": [
+      {
+        "row": 1,
+        "inputs": {
+          "inputs.script": "A fox wakes in its den, trots through snow, and watches the sunrise."
+        },
+        "seeds": {
+          "shots": 918273
+        }
+      }
+    ],
+    "replay_from": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c40"
+  }
+}

@@ -6,3 +6,31 @@ services:
     environment:
       ADMIN_EMAIL: admin@helm.test
       ADMIN_PASSWORD: ${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}
+
+  # The fake OpenAI-compatible server (API 1.15; contract_tests/fake_openai): local servers and remote providers are
+  # proven against it, never a real one. Inside the compose network only (no host port): http://fake-openai:8000/v1
+  # (a server) and https://fake-openai:8443/v1 (a remote; its self-signed certificate is fake-openai.pem on the
+  # fakeai-certs volume, for pipelines to trust). Tests script it with docker exec (server.py call).
+  fake-openai:
+    build: ../contract_tests/fake_openai
+    image: helmstudio/fake-openai:${IMAGE_TAG:-dev}
+    volumes: [fakeai-certs:/certs]
+
+  # pipelines is the server executor of host fake, trusts only the fake's certificate (SSL_CERT_FILE replaces the CA
+  # bundle) and finds a placeholder (not a key) under key_secret fake-openai
+  pipelines:
+    environment:
+      PIPELINES_SERVER_HOSTS: ${SERVER_HOSTS:-fake}
+      PIPELINES_PROVIDER_KEYS_DIR: /fake-keys
+      PIPELINES_REMOTE_ALLOW_PRIVATE: "on"  # the fake's remote (https://fake-openai:8443) is a compose address
+      SSL_CERT_FILE: /certs/fake-openai.pem
+    volumes: [fakeai-certs:/certs:ro]
+    configs: [{source: fake_provider_key, target: /fake-keys/fake-openai}]
+    depends_on:
+      fake-openai: {condition: service_healthy}
+
+configs:
+  fake_provider_key: {content: "placeholder-not-a-key"}
+
+volumes:
+  fakeai-certs:

@@ -49,12 +49,13 @@ type Run struct {
 	Looks           json.RawMessage // the look ids it was asked with (Run.looks); null when none
 	Answer          json.RawMessage // an ask run's defs answer; null otherwise
 	Thumbs          *int            // an ask run: the thumbnails it sends (an image 1, a video 3); nil otherwise
+	PinHost         *string         // a server-ask run: the only host it may go to (its provider's; API 1.15)
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
-	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks, answer, thumbs`
+	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks, answer, thumbs, pin_host`
 
 // Output is a run_outputs row.
 type Output struct {
@@ -106,6 +107,10 @@ type Batch struct {
 	Memory          json.RawMessage // pipelines' memory snapshot; null until taken
 	AgainOf         *string
 	SameDecisions   bool
+	Egress          json.RawMessage // API 1.15: [PipelineEgress] at Submit; null for a workflow batch
+	Reserved        json.RawMessage // API 1.15: [PipelineReserved]
+	Director        json.RawMessage // API 1.15: {node, state, wakes, max_wakes}; null without a director
+	Remote          json.RawMessage // API 1.15: {calls, tokens, network_failures, max_calls, max_tokens}; null when off
 	Total           int
 	Queued          int
 	Running         int
@@ -123,7 +128,8 @@ const RowShown = `CASE WHEN br.status IN ('succeeded', 'failed', 'cancelled', 'w
 // BatchFrom selects Batch's columns, in order, from batches aliased b; append WHERE … to it.
 const BatchFrom = `SELECT b.id::text, b.owner_id::text, b.session_id::text, b.title, b.workflow_id, b.workflow_title, b.status,
 	b.control, b.reason, b.commands, b.created_at, b.started_at, b.finished_at, b.pipeline_id::text, b.pipeline_title,
-	b.pipeline_version, b.collection, b.bounds, b.models, b.memory, b.again_of::text, b.same_decisions, c.* FROM batches b, LATERAL (
+	b.pipeline_version, b.collection, b.bounds, b.models, b.memory, b.again_of::text, b.same_decisions, b.egress, b.reserved,
+	b.director, b.remote, c.* FROM batches b, LATERAL (
 	SELECT count(*)::int, count(*) FILTER (WHERE s = 'queued')::int, count(*) FILTER (WHERE s = 'running')::int,
 	count(*) FILTER (WHERE s = 'waiting')::int, count(*) FILTER (WHERE s = 'succeeded')::int, count(*) FILTER (WHERE s = 'failed')::int,
 	count(*) FILTER (WHERE s = 'cancelled')::int
@@ -179,6 +185,7 @@ type UserPipeline struct {
 	Title     string
 	Nodes     json.RawMessage
 	Edges     json.RawMessage
+	Remote    json.RawMessage // API 1.15: the document's remote switch; null without
 	BasedOn   *string
 	Version   int
 	CreatedAt time.Time
@@ -186,7 +193,7 @@ type UserPipeline struct {
 }
 
 // UserPipelineCols are the columns UserPipeline scans, in order.
-const UserPipelineCols = `id::text, title, nodes, edges, based_on, version, created_at, updated_at`
+const UserPipelineCols = `id::text, title, nodes, edges, remote, based_on, version, created_at, updated_at`
 
 // BatchStep is a batch_steps row: one graph step of a pipeline row attempt.
 type BatchStep struct {
@@ -206,8 +213,11 @@ type BatchStep struct {
 	At           time.Time
 	DecisionID   *string
 	Memory       json.RawMessage // {read, wrote}; null without
+	Branch       *int            // API 1.15: a fanned-out step's branch
+	Turn         *int            // API 1.15: an agent's turn
+	ToolCalls    json.RawMessage // API 1.15: an agent's tools part: its calls with results
 }
 
 // BatchStepCols are the columns BatchStep scans, in order.
 const BatchStepCols = `step, node, part, visit, status, what, changed, edge, loops, run_ids::text[], take_ids::text[], error,
-	checkpoint_id, at, decision_id, memory`
+	checkpoint_id, at, decision_id, memory, branch, turn, tool_calls`

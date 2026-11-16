@@ -432,7 +432,8 @@ func (s *Service) RowExecution(ctx context.Context, caller common.Caller, batchI
 		for _, step := range steps {
 			shown := dto.ExecutionStep{Step: step.Step, Node: step.Node, Part: step.Part, Visit: step.Visit, What: step.What,
 				Changed: []string{}, Status: step.Status, Loops: map[string]int{}, RunIDs: nonNil(step.RunIDs),
-				TakeIDs: nonNil(step.TakeIDs), Error: step.Error, At: step.At, HasState: threads && step.CheckpointID != nil}
+				TakeIDs: nonNil(step.TakeIDs), Error: step.Error, At: step.At, HasState: threads && step.CheckpointID != nil,
+				Branch: step.Branch, Turn: step.Turn, ToolCalls: rawOrNil(step.ToolCalls)}
 			_ = json.Unmarshal(step.Changed, &shown.Changed)
 			_ = json.Unmarshal(step.Loops, &shown.Loops)
 			_ = json.Unmarshal(step.Memory, &shown.Memory) // null leaves it out

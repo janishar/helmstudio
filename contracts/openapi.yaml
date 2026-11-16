@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.14.0
+  version: 1.15.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -1402,7 +1402,7 @@ paths:
       description: |
         Like the session events, numbered by a per-batch `seq`: JSON gives the events with `seq > since` (at most
         500) and `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq,
-        `event:` = `batch` or `row`, `data:` = the `BatchEvent` JSON, `: keep-alive` every 15 s. Studio appends a
+        `event:` = `batch`, `row` or (from 1.15) `chat`, `data:` = the `BatchEvent` JSON, `: keep-alive` every 15 s. Studio appends a
         `row` event (the whole row) whenever a row changes and a `batch` event (the whole batch, counts included)
         whenever the batch's status, control or counts change. Step progress of a row's run is in the session's
         events (`session_id`).
@@ -1420,6 +1420,133 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/batches/{batch_id}/chat:
+    get:
+      tags: [studio]
+      operationId: studioGetBatchChat
+      summary: The batch's director chat (the newest 500 messages, oldest first), with the director's state
+      description: |
+        From 1.15 (plan 16.4 Chat). Every message of the chat (at most 500). New ones arrive on the batch's event
+        stream as `chat` events (`GET …/events`); the director's state on `batch` events (`Batch.director`). 404 for a
+        batch whose pipeline has no director, and for another user's batch.
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      responses:
+        '200': {description: the chat, content: {application/json: {schema: {$ref: '#/components/schemas/ChatPage'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioPostBatchChat
+      summary: Say something to the batch's director
+      description: |
+        From 1.15. Studio stores the message and writes `cmd.pipeline.chat` in one transaction, then answers 202 with
+        it; the director wakes (the messages that arrive while it thinks are read on its next wake) and answers with a
+        `chat` event. It never waits on runs: it answers, searches, reads and writes memory, adds rows and changes rows
+        not yet started (each through Submit's checks; a rejected row gets a notice with the reason). 409 when the
+        batch has ended or the director is `off` (`the director is off: <why>`), and when the chat holds 500 user messages
+        (`this chat is full`; the director's replies and notices never count); 429 above 6 messages a minute per batch (`at most 6 messages a minute`); 422 for a
+        blank text.
+      parameters: [{$ref: '#/components/parameters/BatchId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChatPost'}}}
+      responses:
+        '202': {description: 'your message, stored', content: {application/json: {schema: {$ref: '#/components/schemas/ChatMessage'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/model-sources:
+    get:
+      tags: [studio]
+      operationId: studioListModelSources
+      summary: The local servers and remote providers a pipeline may name (names and models only)
+      description: 'From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on.'
+      responses:
+        '200': {description: the sources, content: {application/json: {schema: {$ref: '#/components/schemas/ModelSourceList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/custom-nodes:
+    get:
+      tags: [studio]
+      operationId: studioListCustomNodes
+      summary: The custom nodes pipelines_service's packs registered (the editor's palette)
+      description: 'From 1.15. From registry key `pipelines.engine.custom`; [] before pipelines published it.'
+      responses:
+        '200': {description: the custom nodes, content: {application/json: {schema: {$ref: '#/components/schemas/CustomNodeList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/providers:
+    get:
+      tags: [studio]
+      operationId: studioAdminListProviders
+      summary: Every model provider, as the admin sees it
+      description: 'From 1.15. Admin role only (403 `admin role required`).'
+      responses:
+        '200': {description: the providers, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/providers/{name}:
+    put:
+      tags: [studio]
+      operationId: studioAdminPutProvider
+      summary: Create or replace a local server or a remote provider
+      description: |
+        From 1.15. Admin only (403). 201 when created, 200 when replaced; a change applies to batches submitted after
+        it (a batch calls the provider as it was at Submit). 422 for a base_url that breaks the host rule
+        (contracts/README.md, Model sources: hosts), a default_model not in models, a server without host or
+        memory_gb, a remote without key_secret. 409 `remote models are off on this deployment` for kind remote while
+        the deployment's switch is off, and `<name> is a <kind>; delete it first` to change a provider's kind.
+      parameters: [{$ref: '#/components/parameters/ProviderName'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ProviderPut'}}}
+      responses:
+        '200': {description: replaced, content: {application/json: {schema: {$ref: '#/components/schemas/Provider'}}}}
+        '201': {description: created, content: {application/json: {schema: {$ref: '#/components/schemas/Provider'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioAdminDeleteProvider
+      summary: Delete a provider
+      description: 'From 1.15. Admin only. 409 while a batch that names it is unfinished (`<name> is in use by an unfinished batch`).'
+      parameters: [{$ref: '#/components/parameters/ProviderName'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/providers/{name}/test:
+    post:
+      tags: [studio]
+      operationId: studioAdminTestProvider
+      summary: Check that a provider answers (made by pipelines_service, the only service that calls providers)
+      description: 'From 1.15. Admin only. Studio asks `pipelines.providers.test` (30 s, else 503); `?model=` adds one tiny chat completion. A failed test is 200 with ok false and `failure`.'
+      parameters:
+        - {$ref: '#/components/parameters/ProviderName'}
+        - {name: model, in: query, required: false, schema: {type: string}}
+      responses:
+        '200': {description: the result, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderTest'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ files
   /files/{path}:
     get:
@@ -1753,6 +1880,7 @@ components:
     StarterLookId: {name: look_id, in: path, required: true, schema: {type: string}, description: 'the pack''s look id (the part after `/`; malformed = 404)'}
     BatchRowN: {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
+    ProviderName: {name: name, in: path, required: true, schema: {type: string}, description: 'a provider''s name (unknown = 404 on DELETE and test; malformed = 404)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
 
   responses:
@@ -1768,6 +1896,7 @@ components:
     EmailTaken: {description: '"email already registered"', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     AdminRequired: {description: 'valid token without the admin role: "admin role required"', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     AuthUnprocessable: {description: 'invalid input: "invalid JSON body", or the failed rule ("invalid email", "name must be 1-200 characters", "password must be at least 10 characters", "password is too common", "roles must not be empty", …)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    TooManyRequests: {description: 'a per-resource rate limit (from 1.15: chat messages)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     RangeNotSatisfiable: {description: 'the range starts past the end of the file (`Content-Range: bytes */<size>`)', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     LengthRequired: {description: '"Content-Length must be the signed bytes": missing, chunked, or another size', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     WrongContentType: {description: '"Content-Type must be the signed type"', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -2158,8 +2287,8 @@ components:
         label: {type: string, minLength: 1, maxLength: 60, description: absent = the name}
     PipelineSource:
       type: string
-      pattern: '^(\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\.(takes|picked|reasons|notes))$'
-      description: '`$<input>` (a pipeline input), `<step>.takes` (that step''s takes from its latest visit), `<gate>.picked` / `<judge>.picked` (its latest pick); from 1.14 the text sources `<judge>.reasons` (its latest reasons, one line per take) and `<memory>.notes` (a memory read node''s notes), for write, decide and memory write `from` only'
+      pattern: '^(\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63})$'
+      description: '`$<input>` (a pipeline input), `<step>.takes` (that step''s takes from its latest visit), `<gate>.picked` / `<judge>.picked` (its latest pick); from 1.14 the text sources `<judge>.reasons` (its latest reasons, one line per take) and `<memory>.notes` (a memory read node''s notes), for write, decide and memory write `from` only; from 1.15 `<producer>.item` (a fanned-out step''s binds: this branch''s item) and `<custom>.<field>` (a custom node''s output field). Which source is allowed where: contracts/README.md, Pipeline rules (bind_source)'
       examples: [$prompt, still.takes, review.picked]
     PipelineInputsNode:
       type: object
@@ -2189,6 +2318,7 @@ components:
           description: 'workflow param `<node>.<param>` ← a source, applied last'
           examples: [{prompt.text: $prompt, encode.refs: review.picked}]
         looks: {$ref: '#/components/schemas/LookIds', description: 'the looks every run of this step is made with (as RunRequest.looks); missing = []'}
+        each: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}\.items$', description: 'from 1.15: fan out: one branch per item of this agent''s or write''s list (`<producer>.items`), at most its `list.max`; binds read the branch''s item as `<producer>.item`. Later nodes read `<step>.takes` as every branch''s takes, branch order then seed order', examples: [director.items]}
         position: {$ref: '#/components/schemas/NodePosition'}
     PipelineGateNode:
       type: object
@@ -2219,9 +2349,10 @@ components:
         nice: {type: array, maxItems: 12, items: {type: string, minLength: 1, maxLength: 200}, examples: [[Subject is sharp]]}
     PipelineModel:
       type: string
-      pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'
+      pattern: '^(auto|[a-z0-9][a-z0-9_-]{0,63}|server:[a-z][a-z0-9-]{0,31}(/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?|remote:[a-z][a-z0-9-]{0,31}/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})$'
       default: auto
-      description: '`auto` (resolved at Submit: contracts/README.md, Agent nodes: model) or an ask workflow (`media: text`) the caller can run: `qwen-image-ask` (Qwen Image''s own text encoder, no extra load after a Qwen step), `llm-ask` (Qwen3.8 27B)'
+      description: '`auto` (resolved at Submit: contracts/README.md, Agent nodes: model) or an ask workflow (`media: text`) the caller can run: `qwen-image-ask` (Qwen Image''s own text encoder, no extra load after a Qwen step), `llm-ask` (Qwen3.8 27B); from 1.15 `server:<name>` or `server:<name>/<model>` (a local server the admin set up; absent model = its default) and `remote:<provider>/<model>` (a remote provider: needs the pipeline''s `remote` switch). A judge needs a local model (it sends thumbnails; server and remote models get text only)'
+      examples: [auto, llm-ask, 'server:ollama/qwen2.5:7b', 'remote:openai/gpt-4.1-mini']
     PipelineTextSources: {type: array, minItems: 1, maxItems: 4, items: {$ref: '#/components/schemas/PipelineSource'}, description: 'text sources, in order: `$<Text input>`, `<judge>.reasons`, `<memory>.notes`'}
     PipelineJudgeNode:
       type: object
@@ -2240,14 +2371,15 @@ components:
         position: {$ref: '#/components/schemas/NodePosition'}
     PipelineWriteNode:
       type: object
-      required: [kind, from, to]
+      required: [kind, from]
       additionalProperties: false
       description: 'from 1.14: writes text from its sources (a rewritten prompt from a judge''s reasons) into a Text input for the rest of the row; mentions in the answer are expanded by studio like any prompt'
       properties:
         kind: {type: string, const: write}
         title: {$ref: '#/components/schemas/PipelineNodeTitle'}
         from: {$ref: '#/components/schemas/PipelineTextSources'}
-        to: {type: string, pattern: '^\$[a-z][a-z0-9_]{0,63}$', description: 'the Text input it overwrites (`$prompt`): later binds of it read the new text'}
+        to: {type: string, pattern: '^\$[a-z][a-z0-9_]{0,63}$', description: 'the Text input it overwrites (`$prompt`): later binds of it read the new text. Required without `list`, absent with it (write_target)'}
+        list: {$ref: '#/components/schemas/PipelineListSpec'}
         instruction: {type: string, minLength: 1, maxLength: 1000, default: 'Fix what the reviewer found; keep everything else.'}
         model: {$ref: '#/components/schemas/PipelineModel'}
         position: {$ref: '#/components/schemas/NodePosition'}
@@ -2294,6 +2426,95 @@ components:
             key: {type: string, pattern: '^[a-z][a-z0-9_-]{0,63}$'}
             from: {$ref: '#/components/schemas/PipelineTextSources'}
             position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineListSpec:
+      type: object
+      required: [max]
+      additionalProperties: false
+      description: 'from 1.15: the node answers a list of texts (a shot list), 1 to `max` items, read only by a step''s `each` (`<node>.items`; each branch binds `<node>.item`). Its mentions follow the write rule'
+      properties:
+        max: {type: integer, minimum: 1, maximum: 24, description: 'the fan-out''s declared maximum: Submit''s worst case uses it'}
+    PipelineAgentCaps:
+      type: object
+      additionalProperties: false
+      description: 'from 1.15: hard caps per visit (the director''s chat: per wake). Reaching one ends the visit: an item failure (`<node>: stopped at <n> turns`), counted in the worst case'
+      properties:
+        max_turns: {type: integer, minimum: 1, maximum: 16, default: 6, description: 'model calls (each a queue item, or a remote request)'}
+        max_tool_calls: {type: integer, minimum: 0, maximum: 32, default: 12}
+        max_tokens: {type: integer, minimum: 1000, maximum: 200000, default: 16000, description: 'prompt + answer tokens over the visit''s turns'}
+    PipelineAgentNode:
+      type: object
+      required: [kind, instruction]
+      additionalProperties: false
+      description: 'from 1.15 (plan 16.2): an LLM agent with tools, a loop of model turns (contracts/README.md, Agents). It ends a visit with no tool call (one plain edge), with `route` (a routes edge, like a decide''s), and with `set_items` before that when it has a `list`. `director: true` also gives the batch a chat with it'
+      properties:
+        kind: {type: string, const: agent}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        instruction: {type: string, minLength: 1, maxLength: 4000, description: 'what it is for (`Turn the script into a shot list, one prompt per shot, using the @elements in it.`)'}
+        from: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/PipelineSource'}, description: 'text sources it reads, as a write''s; missing = []'}
+        tools:
+          type: array
+          maxItems: 6
+          uniqueItems: true
+          items: {type: string, enum: [gallery.search, memory.read, memory.write, library.read, rows.add, rows.edit]}
+          description: 'from the fixed set (contracts/README.md, Agents: tools); rows.edit only with director (agent_tools); missing = []'
+        routes:
+          type: object
+          minProperties: 2
+          maxProperties: 6
+          propertyNames: {pattern: '^[a-z][a-z0-9_]{0,31}$'}
+          additionalProperties: {type: string, minLength: 1, maxLength: 200}
+          description: 'route label → meaning; present: its only edge is a routes edge with these labels (decide_routes)'
+        list: {$ref: '#/components/schemas/PipelineListSpec'}
+        caps: {$ref: '#/components/schemas/PipelineAgentCaps'}
+        model: {$ref: '#/components/schemas/PipelineModel'}
+        director: {type: boolean, default: false, description: 'the pipeline''s director (at most one: director_count): its batches get a chat'}
+        wake_on_rows: {type: string, enum: [all, failed, none], default: all, description: 'director only: which row ends wake it (a message always does)'}
+        max_wakes: {type: integer, minimum: 1, maximum: 500, default: 100, description: 'director only: wakes per batch; then its chat is off'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineCustomNode:
+      type: object
+      required: [kind, node]
+      additionalProperties: false
+      description: 'from 1.15 (plan 16.5): a pack''s registered runnable, run in pipelines_service (orchestration only). Fields as GET /v1/studio/custom-nodes lists them; its output fields are sources `<id>.<field>`. One plain edge'
+      properties:
+        kind: {type: string, const: custom}
+        title: {$ref: '#/components/schemas/PipelineNodeTitle'}
+        node: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}/[a-z][a-z0-9-]{0,31}$', description: 'the registered name', examples: [text/prefix]}
+        inputs: {type: object, maxProperties: 16, propertyNames: {pattern: '^[a-z][a-z0-9_]{0,63}$'}, description: 'fixed input field values (JSON); missing = {}'}
+        bind: {type: object, maxProperties: 16, propertyNames: {pattern: '^[a-z][a-z0-9_]{0,63}$'}, additionalProperties: {$ref: '#/components/schemas/PipelineSource'}, description: 'input field ← a source (a string field: a text source or Text input; a take-id list field: a takes source); missing = {}'}
+        position: {$ref: '#/components/schemas/NodePosition'}
+    PipelineRemote:
+      type: object
+      additionalProperties: false
+      description: 'from 1.15: calls that leave the machine. Off by default (absent = off); a `remote:` model or a network custom node needs `enabled` and its provider in `providers` (remote_not_enabled), and the deployment''s remote switch (remote_off). The caps are per batch, over every row and the director''s chat; a call past one fails its row (`remote cap reached`)'
+      properties:
+        enabled: {type: boolean, default: false}
+        providers: {type: array, maxItems: 8, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$'}, description: 'remote providers this pipeline may call; missing = []'}
+        max_calls: {type: integer, minimum: 1, maximum: 10000, default: 200}
+        max_tokens: {type: integer, minimum: 1000, maximum: 10000000, default: 400000}
+    PipelineEgress:
+      type: object
+      required: [node, where, provider, model, fields, thumbnails, per_row, chat]
+      additionalProperties: false
+      description: 'from 1.15: one node whose calls leave this process for a model server: exactly what is sent (Submit shows it). `fields`: the parts of the prompt, by name: `instruction`, `question`, `routes`, each `from` source, `items`, `tool:<tool>` (tool results go back to the model), `chat` (the director''s chat), `input:<field>` (a custom node''s); thumbnails are never sent to a server or remote model in 1.15'
+      properties:
+        node: {type: string}
+        where: {type: string, enum: [server, remote, network], description: 'server: a local server (its calls are queue items); remote: a remote provider; network: a custom node that calls the network'}
+        provider: {type: [string, 'null']}
+        model: {type: [string, 'null']}
+        fields: {type: array, maxItems: 32, items: {type: string}}
+        thumbnails: {type: integer, const: 0}
+        per_row: {type: object, required: [calls, tokens], properties: {calls: {type: integer, minimum: 0}, tokens: {type: integer, minimum: 0}}, description: 'the worst case per row (a re-ask included)'}
+        chat: {oneOf: [{type: object, required: [calls, tokens], properties: {calls: {type: integer, minimum: 0}, tokens: {type: integer, minimum: 0}}}, {type: 'null'}], description: 'the director: its chat''s worst case per batch (max_wakes × max_turns × 2 calls, max_wakes × max_tokens); null otherwise'}
+    PipelineReserved:
+      type: object
+      required: [provider, host, memory_gb]
+      additionalProperties: false
+      description: 'from 1.15: a local server the pipeline uses, and the memory the host reserves for it (always, while the provider is enabled)'
+      properties:
+        provider: {type: string}
+        host: {type: string}
+        memory_gb: {type: number, minimum: 0.5}
     PipelineNodeTitle: {type: string, minLength: 1, maxLength: 60, description: 'the card''s title; absent = derived by the client'}
     PipelineNode:
       oneOf:
@@ -2305,6 +2526,8 @@ components:
         - {$ref: '#/components/schemas/PipelineWriteNode'}
         - {$ref: '#/components/schemas/PipelineDecideNode'}
         - {$ref: '#/components/schemas/PipelineMemoryNode'}
+        - {$ref: '#/components/schemas/PipelineAgentNode'}
+        - {$ref: '#/components/schemas/PipelineCustomNode'}
       discriminator:
         propertyName: kind
         mapping:
@@ -2316,6 +2539,8 @@ components:
           write: '#/components/schemas/PipelineWriteNode'
           decide: '#/components/schemas/PipelineDecideNode'
           memory: '#/components/schemas/PipelineMemoryNode'
+          agent: '#/components/schemas/PipelineAgentNode'
+          custom: '#/components/schemas/PipelineCustomNode'
     PipelineBranch:
       type: object
       required: [pass, fail, max, then]
@@ -2341,7 +2566,7 @@ components:
       type: object
       required: [routes, max, then]
       additionalProperties: false
-      description: 'from 1.14, a decide''s only edge: route label → node (the same labels as the node''s `routes`). Every route but `then` counts against `max` per row; once taken `max` times, `then` is taken whatever the answer'
+      description: 'from 1.14, a decide''s only edge (from 1.15 also an agent''s with `routes`): route label → node (the same labels as the node''s `routes`). Every route but `then` counts against `max` per row; once taken `max` times, `then` is taken whatever the answer'
       properties:
         routes:
           type: object
@@ -2356,7 +2581,7 @@ components:
       required: [title, nodes, edges]
       description: |
         A pipeline as the editor saves or validates it (plan 16.2: inputs, step, gate and output; from 1.14 judge,
-        write, decide and memory; agent and custom come later).
+        write, decide and memory; from 1.15 agent and custom, fan-out (`each`), model sources and `remote`).
         Node ids are stable slugs. At most 24 nodes and 64 KB (problems, not the schema). Other top-level keys are
         ignored by validate; PipelineCreate and PipelineUpdate are closed.
       properties:
@@ -2367,6 +2592,7 @@ components:
           propertyNames: {pattern: '^[a-z][a-z0-9_]{0,63}$'}
           additionalProperties: {$ref: '#/components/schemas/PipelineNode'}
         edges: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/PipelineEdge'}}
+        remote: {$ref: '#/components/schemas/PipelineRemote'}
     Pipeline:
       allOf:
         - {$ref: '#/components/schemas/PipelineDoc'}
@@ -2382,6 +2608,8 @@ components:
         last_batch: {oneOf: [{$ref: '#/components/schemas/Batch'}, {type: 'null'}], description: 'the newest batch of it; null when it never ran'}
         problems: {type: array, items: {$ref: '#/components/schemas/PipelineProblem'}, description: 'only from GET /v1/studio/pipelines/{pipeline_id}, POST and PUT; empty = it can run'}
         bounds: {$ref: '#/components/schemas/PipelineBounds', description: 'from 1.14, with problems when nothing blocks saving'}
+        egress: {type: array, items: {$ref: '#/components/schemas/PipelineEgress'}, description: 'from 1.15, with bounds'}
+        reserved: {type: array, items: {$ref: '#/components/schemas/PipelineReserved'}, description: 'from 1.15, with bounds'}
     PipelineList:
       type: object
       required: [pipelines]
@@ -2417,7 +2645,7 @@ components:
         title: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
     PipelineProblemCode:
       type: string
-      enum: [too_many_nodes, too_large, inputs_node, duplicate_input, unknown_node, edge_invalid, branch_not_gate, uncapped_cycle, too_many_runs, unreachable, dead_end, no_output, gate_takes, gate_keep, bind_source, unknown_workflow, workflow_cannot_run, unknown_preset, step_input_invalid, bind_unknown, bind_type, unbound_input, step_seeds, unknown_look, look_fit, too_many_calls, judge_criteria, decide_routes, write_target, unknown_model]
+      enum: [too_many_nodes, too_large, inputs_node, duplicate_input, unknown_node, edge_invalid, branch_not_gate, uncapped_cycle, too_many_runs, unreachable, dead_end, no_output, gate_takes, gate_keep, bind_source, unknown_workflow, workflow_cannot_run, unknown_preset, step_input_invalid, bind_unknown, bind_type, unbound_input, step_seeds, unknown_look, look_fit, too_many_calls, judge_criteria, decide_routes, write_target, unknown_model, agent_tools, director_count, fanout_source, fanout_takes, model_media, remote_not_enabled, remote_off, unknown_custom, custom_input]
       description: 'meaning and which block saving: contracts/README.md, Pipeline rules. May grow in a minor version; an unknown code blocks running'
     PipelineProblem:
       type: object
@@ -2440,15 +2668,30 @@ components:
         can_save: {type: boolean}
         can_run: {type: boolean}
         bounds: {$ref: '#/components/schemas/PipelineBounds'}
-        models: {type: object, additionalProperties: {type: string}, description: 'from 1.14: judge, write and decide node id → the ask workflow its model resolves to now (auto included); a node without one is left out'}
+        models: {type: object, additionalProperties: {type: string}, description: 'from 1.14: judge, write and decide node id → the ask workflow its model resolves to now (auto included); a node without one is left out. From 1.15 also agent nodes, and a server or remote model as `server:<name>/<model>` (default model filled) or `remote:<provider>/<model>`'}
+        egress: {type: array, items: {$ref: '#/components/schemas/PipelineEgress'}, description: 'from 1.15: what leaves the machine, per node whose model is a server or remote one (or a custom node that calls the network), by node id; sent with bounds; [] = nothing leaves'}
+        reserved: {type: array, items: {$ref: '#/components/schemas/PipelineReserved'}, description: 'from 1.15: the memory reserved for the local servers it uses'}
     PipelineBounds:
       type: object
       required: [runs, llm_calls]
       additionalProperties: false
-      description: 'from 1.14: the worst case per row (contracts/README.md, Pipeline rules: worst case), sent when nothing blocks saving. Submit multiplies by the rows for its estimate'
+      description: 'from 1.14: the worst case per row (contracts/README.md, Pipeline rules: worst case), sent when nothing blocks saving. Submit multiplies by the rows for its estimate. The 1.15 fields are always sent from 1.15'
       properties:
-        runs: {type: integer, minimum: 0, maximum: 64, description: 'generation runs: Σ over steps of seeds × visits'}
-        llm_calls: {type: integer, minimum: 0, maximum: 32, description: 'judge, write and decide visits (each one ask run, at most 2 tries; a re-ask after a failed check is a second run)'}
+        runs: {type: integer, minimum: 0, maximum: 64, description: 'generation runs: Σ over steps of seeds × branches × visits (branches: a fanned-out step''s list max, else 1)'}
+        llm_calls: {type: integer, minimum: 0, maximum: 32, description: 'judge, write and decide visits (each one ask run, at most 2 tries; a re-ask after a failed check is a second run); from 1.15 plus agent visits × max_turns'}
+        tool_calls: {type: integer, minimum: 0, description: 'from 1.15: agent visits × max_tool_calls'}
+        remote_calls: {type: integer, minimum: 0, description: 'from 1.15: requests to remote providers (a re-ask included), per row; the director''s chat is per batch (egress)'}
+        remote_tokens: {type: integer, minimum: 0, description: 'from 1.15: their token bound per row'}
+        chat:
+          type: object
+          required: [calls, tokens, tool_calls]
+          additionalProperties: false
+          description: 'from 1.15, with a director only, whatever its model source: its chat''s worst case per batch (not per row): calls max_wakes × max_turns × 2 (a re-ask included; local models: queue items), tokens max_wakes × max_tokens, tool_calls max_wakes × max_tool_calls'
+          properties:
+            calls: {type: integer, minimum: 0}
+            tokens: {type: integer, minimum: 0}
+            tool_calls: {type: integer, minimum: 0}
+        added_rows: {type: integer, minimum: 1, maximum: 100, description: 'from 1.15, when an agent declares rows.add: the most rows agents may add to a batch (100), each with the per-row worst case'}
     PipelineError:
       type: object
       required: [detail]
@@ -3165,6 +3408,27 @@ components:
         memory: {oneOf: [{$ref: '#/components/schemas/BatchMemory'}, {type: 'null'}], description: 'from 1.14, a pipeline batch: the memory snapshot it reads; null until pipelines took it'}
         again_of: {type: [string, 'null'], format: uuid, description: 'from 1.14: made by "Run again" of this batch'}
         same_decisions: {type: boolean, description: 'from 1.14, with again_of: it reuses that batch''s decisions'}
+        egress: {type: array, items: {$ref: '#/components/schemas/PipelineEgress'}, description: 'from 1.15, a pipeline batch: what leaves the machine, as at Submit'}
+        reserved: {type: array, items: {$ref: '#/components/schemas/PipelineReserved'}, description: 'from 1.15, a pipeline batch: local servers'' reserved memory'}
+        director: {oneOf: [{$ref: '#/components/schemas/BatchDirector'}, {type: 'null'}], description: 'from 1.15: the batch''s director chat; null when its pipeline has no director'}
+        remote: {oneOf: [{$ref: '#/components/schemas/BatchRemote'}, {type: 'null'}], description: 'from 1.15: remote calls so far against the caps; null when the pipeline''s remote is off'}
+    BatchDirector:
+      type: object
+      required: [node, state, wakes, max_wakes]
+      properties:
+        node: {type: string, description: the director agent node}
+        state: {type: string, enum: [idle, waiting, thinking, 'off'], description: 'idle: asleep until a message or a row ends; waiting: its turn''s call is queued or held (Pause); thinking: a call or its tools run; off: the batch ended or max_wakes reached (POST …/chat is 409)'}
+        wakes: {type: integer, minimum: 0}
+        max_wakes: {type: integer, minimum: 1, maximum: 500}
+    BatchRemote:
+      type: object
+      required: [calls, tokens, network_failures, max_calls, max_tokens]
+      properties:
+        calls: {type: integer, minimum: 0, description: requests sent (re-asks included; network retries not)}
+        tokens: {type: integer, minimum: 0, description: tokens the providers reported}
+        network_failures: {type: integer, minimum: 0, description: 'transport failures (retried); counted apart from answers and verdicts'}
+        max_calls: {type: integer, minimum: 1}
+        max_tokens: {type: integer, minimum: 1}
     BatchMemory:
       type: object
       required: [examples, notes, taken_at]
@@ -3221,7 +3485,7 @@ components:
       required: [node, kind, attempts]
       properties:
         node: {type: string, description: the pipeline node id}
-        kind: {type: string, enum: [step, gate, output, judge, write, decide, memory], description: 'judge, write, decide, memory from 1.14'}
+        kind: {type: string, enum: [step, gate, output, judge, write, decide, memory, agent, custom], description: 'judge, write, decide, memory from 1.14; agent, custom from 1.15'}
         attempts: {type: array, minItems: 1, maxItems: 64, items: {$ref: '#/components/schemas/BatchCellAttempt'}, description: 'one per visit (loop attempts stacked), oldest first'}
         loop:
           description: 'from 1.14, a judge with a branch or a decide: its capped loop for the cell''s "retried <turns> of <max>", "gave up → <then>"'
@@ -3247,7 +3511,18 @@ components:
         thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first of take_ids (else candidates)'}
         decision_id: {type: string, description: 'from 1.14, judge, write, decide: the visit''s decision'}
         judged: {$ref: '#/components/schemas/CellJudged'}
-        route: {type: object, required: [label, to], properties: {label: {type: string}, to: {type: string}}, description: 'from 1.14, a decide: the route taken'}
+        route: {type: object, required: [label, to], properties: {label: {type: string}, to: {type: string}}, description: 'from 1.14, a decide (from 1.15 an agent with routes): the route taken'}
+        branch: {type: integer, minimum: 0, maximum: 23, description: 'from 1.15, a fanned-out step: one attempt per (visit, branch); branch = the item index'}
+        agent:
+          description: 'from 1.15, an agent attempt (`4 turns · 6 tools · 14 shots`)'
+          type: object
+          required: [turns, tool_calls, tokens, items, route]
+          properties:
+            turns: {type: integer, minimum: 0}
+            tool_calls: {type: integer, minimum: 0}
+            tokens: {type: integer, minimum: 0}
+            items: {type: integer, minimum: 0, maximum: 24, description: 'its list''s length (0 without one)'}
+            route: {type: [string, 'null']}
     CellJudged:
       type: object
       required: [verdict, picked, of, keep, first_failed, suggested, agreed, takes]
@@ -3355,11 +3630,13 @@ components:
       oneOf:
         - {$ref: '#/components/schemas/BatchStatusEvent'}
         - {$ref: '#/components/schemas/BatchRowEvent'}
+        - {$ref: '#/components/schemas/BatchChatEvent'}
       discriminator:
         propertyName: type
         mapping:
           batch: '#/components/schemas/BatchStatusEvent'
           row: '#/components/schemas/BatchRowEvent'
+          chat: '#/components/schemas/BatchChatEvent'
     BatchStatusEvent:
       type: object
       required: [seq, type, ts, data]
@@ -3376,6 +3653,40 @@ components:
         type: {type: string, const: row}
         ts: {type: string, format: date-time}
         data: {$ref: '#/components/schemas/BatchRow'}
+    BatchChatEvent:
+      type: object
+      required: [seq, type, ts, data]
+      description: 'from 1.15: one new chat message (the user''s, the director''s or a notice); the director''s state rides on `batch` events (Batch.director)'
+      properties:
+        seq: {type: integer, minimum: 1}
+        type: {type: string, const: chat}
+        ts: {type: string, format: date-time}
+        data: {$ref: '#/components/schemas/ChatMessage'}
+    ChatMessage:
+      type: object
+      required: [id, role, text, at, wake, tool_calls, rows]
+      description: 'from 1.15: one message of a batch''s director chat'
+      properties:
+        id: {type: string, format: uuid}
+        role: {type: string, enum: [user, director, notice], description: 'notice: the director''s system line (a row it added or changed was rejected, with the reason; a cap ended its wake)'}
+        text: {type: string, maxLength: 4000}
+        at: {type: string, format: date-time}
+        wake: {type: [integer, 'null'], minimum: 1, description: 'director and notice: the wake it came from; null for the user''s'}
+        tool_calls: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/ToolCall'}, description: 'director: the wake''s tool calls'}
+        rows: {type: array, maxItems: 64, items: {type: integer, minimum: 1, maximum: 500}, description: 'rows it added or changed in that wake'}
+    ChatPage:
+      type: object
+      required: [batch_id, director, messages]
+      properties:
+        batch_id: {type: string, format: uuid}
+        director: {$ref: '#/components/schemas/BatchDirector'}
+        messages: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/ChatMessage'}, description: 'the newest 500, oldest first'}
+    ChatPost:
+      type: object
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: {type: string, minLength: 1, maxLength: 2000, description: 'trimmed; blank = 422'}
     BatchEventPage:
       type: object
       required: [events, last_seq]
@@ -3464,8 +3775,8 @@ components:
         items: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/BatchReviewItem'}, description: 'every waiting row, by row number'}
     ExecutionPart:
       type: string
-      enum: [inputs, submit, wait, gate, route, output, verdict, apply, memory]
-      description: 'which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step''s or, from 1.14, a judge''s, write''s or decide''s two halves: its runs), gate (parked for a pick: a gate, or a judge in Suggest), route (the pick or the verdict applied, the edge chosen; a decide''s route), output (the row ends); from 1.14 verdict (a judge''s answer checked and its decision derived), apply (a write''s text set), memory (a memory node read or wrote)'
+      enum: [inputs, submit, wait, gate, route, output, verdict, apply, memory, tools, custom]
+      description: 'which graph node of the pipeline node ran: inputs (load the row), submit / wait (a step''s or, from 1.14, a judge''s, write''s or decide''s two halves: its runs), gate (parked for a pick: a gate, or a judge in Suggest), route (the pick or the verdict applied, the edge chosen; a decide''s route), output (the row ends); from 1.14 verdict (a judge''s answer checked and its decision derived), apply (a write''s text set), memory (a memory node read or wrote); from 1.15 an agent''s submit / wait / tools per turn (tools: that turn''s tool calls ran) and route (the visit ended), a custom node''s custom'
     ExecutionEdge:
       type: object
       required: [to, via]
@@ -3498,6 +3809,19 @@ components:
           properties:
             read: {type: array, items: {type: string, format: uuid}}
             wrote: {type: array, items: {type: string, format: uuid}}
+        branch: {type: integer, minimum: 0, maximum: 23, description: 'from 1.15, a fanned-out step''s parts'}
+        turn: {type: integer, minimum: 1, maximum: 16, description: 'from 1.15, an agent''s submit / wait / tools'}
+        tool_calls: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/ToolCall'}, description: 'from 1.15, an agent''s tools part: its messages'' tool calls with results'}
+    ToolCall:
+      type: object
+      required: [id, tool, args, result, error]
+      description: 'from 1.15: one tool call an agent made, as run (messages tools.schema.json toolCall)'
+      properties:
+        id: {type: string}
+        tool: {type: string, enum: [gallery_search, memory_read, memory_write, library_read, rows_add, rows_edit, route, set_items]}
+        args: {type: object}
+        result: {type: [object, 'null']}
+        error: {type: [string, 'null']}
     Decision:
       type: object
       required: [id, batch_id, row, node, kind, visit, attempt, replayed, replayed_from, run_ids, workflow, model, template, prompt, seen, answers, tokens_in, tokens_out, seconds, memory_read, error, at]
@@ -3511,13 +3835,25 @@ components:
         batch_id: {type: string, format: uuid}
         row: {type: integer, minimum: 1, maximum: 500}
         node: {type: string}
-        kind: {type: string, enum: [judge, write, decide]}
+        kind: {type: string, enum: [judge, write, decide, agent], description: 'agent from 1.15'}
         visit: {type: integer, minimum: 1}
         attempt: {type: integer, minimum: 1}
+        source:
+          description: 'from 1.15: where the model ran (absent = local, an ask workflow)'
+          type: object
+          required: [kind]
+          properties:
+            kind: {type: string, enum: [local, server, remote]}
+            workflow: {type: string}
+            provider: {type: string}
+            model: {type: string}
+            host: {type: string}
+        replayable: {type: boolean, description: 'from 1.15: false for a remote decision: Run again with the same decisions asks it again'}
+        network_failures: {type: integer, minimum: 0, description: 'from 1.15, remote: transport failures retried in the visit (never verdicts)'}
         replayed: {type: boolean, description: 'reused a stored decision (Resume, Retry, Run again: same decisions); no model was asked'}
         replayed_from: {type: [string, 'null']}
-        run_ids: {type: array, maxItems: 2, items: {type: string, format: uuid}}
-        workflow: {type: string, description: the ask workflow}
+        run_ids: {type: array, maxItems: 64, items: {type: string, format: uuid}, description: 'the ask runs (an agent: one per turn and re-ask; a remote call: none)'}
+        workflow: {type: string, description: 'the ask workflow (from 1.15 `server-ask` for a local server, `remote` for a remote provider)'}
         workflow_title: {type: string, description: '"Ask Qwen Image (Qwen3-VL 8B)": what the panel shows as Model'}
         model:
           oneOf:
@@ -3538,7 +3874,7 @@ components:
               width: {type: integer}
               height: {type: integer}
               thumb_url: {$ref: '#/components/schemas/SignedUrl', description: 'the derived thumbnail the model saw'}
-        answers: {type: array, maxItems: 4, items: {type: object, required: [text, error], properties: {text: {type: string, maxLength: 32768}, error: {type: [string, 'null']}}}}
+        answers: {type: array, maxItems: 64, items: {type: object, required: [text, error], properties: {text: {type: string, maxLength: 32768}, error: {type: [string, 'null']}}}}
         tokens_in: {type: integer, minimum: 0}
         tokens_out: {type: integer, minimum: 0}
         seconds: {type: number, minimum: 0}
@@ -3586,6 +3922,31 @@ components:
             to: {type: string}
             reason: {type: string}
             forced: {type: boolean}
+        agent:
+          description: 'from 1.15, an agent visit: its messages and tool calls per turn, and how it ended'
+          type: object
+          required: [turns, route, items, say, stopped, tool_calls, tokens]
+          properties:
+            turns:
+              type: array
+              maxItems: 16
+              items:
+                type: object
+                required: [turn, say, calls, tokens_in, tokens_out]
+                properties:
+                  turn: {type: integer, minimum: 1}
+                  say: {type: string, maxLength: 4000}
+                  calls: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/ToolCall'}}
+                  tokens_in: {type: integer, minimum: 0}
+                  tokens_out: {type: integer, minimum: 0}
+            route: {type: [string, 'null']}
+            to: {type: [string, 'null']}
+            forced: {type: boolean}
+            items: {type: array, maxItems: 24, items: {type: string}}
+            say: {type: string, maxLength: 4000}
+            stopped: {type: [string, 'null'], enum: [turns, tool_calls, tokens, remote_cap, null]}
+            tool_calls: {type: integer, minimum: 0}
+            tokens: {type: integer, minimum: 0}
     DecisionList:
       type: object
       required: [decisions]
@@ -3656,6 +4017,97 @@ components:
         step: {type: integer, minimum: 1}
         node: {type: string}
         state: {type: object, description: 'the thread''s state after the step, read-only plain JSON (row inputs, run and take ids, picks, loop counters; never media)'}
+
+    # ---------------------------------------------------------- studio: model providers, custom nodes (1.15)
+    ProviderKind: {type: string, enum: [server, remote], description: 'server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on)'}
+    Provider:
+      type: object
+      required: [name, kind, api, base_url, models, default_model, enabled, timeout_s, created_at, updated_at]
+      description: 'from 1.15: one model provider as the admin sees it. A remote provider''s key is never in the API: `key_secret` names a file under pipelines_service''s secrets directory'
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$'}
+        kind: {$ref: '#/components/schemas/ProviderKind'}
+        api: {type: string, const: openai, description: 'OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…))'}
+        title: {type: string, maxLength: 60, description: 'what users see (`Ollama on the Mac`); absent = name'}
+        base_url: {type: string, maxLength: 300, examples: ['http://host.docker.internal:11434/v1', 'https://api.example.com/v1']}
+        models: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}, description: 'the models pipelines may name'}
+        default_model: {type: string, description: 'one of models (`server:<name>` without a model)'}
+        enabled: {type: boolean}
+        timeout_s: {type: integer, minimum: 5, maximum: 600}
+        host: {type: string, description: 'server: the GPU host whose memory it shares'}
+        memory_gb: {type: number, minimum: 0.5, maximum: 1024, description: 'server: declared; the host reserves it while enabled'}
+        key_secret: {type: string, description: 'remote: the secret file''s name'}
+        max_in_flight: {type: integer, minimum: 1, maximum: 8, description: 'remote: calls in flight at once (default 2)'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ProviderPut:
+      type: object
+      required: [kind, base_url, models]
+      additionalProperties: false
+      description: 'create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on'
+      properties:
+        kind: {$ref: '#/components/schemas/ProviderKind'}
+        title: {type: string, minLength: 1, maxLength: 60}
+        base_url: {type: string, minLength: 8, maxLength: 300, pattern: '^https?://[^\s/?#@]+(/[^\s?#]*)?$'}
+        models: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}}
+        default_model: {type: string, description: 'absent = the first of models'}
+        enabled: {type: boolean, default: true}
+        timeout_s: {type: integer, minimum: 5, maximum: 600, default: 120}
+        host: {type: string, pattern: '^[a-z0-9]{1,32}$'}
+        memory_gb: {type: number, minimum: 0.5, maximum: 1024}
+        key_secret: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$', examples: [provider-openai]}
+        max_in_flight: {type: integer, minimum: 1, maximum: 8, default: 2}
+    ProviderList:
+      type: object
+      required: [remote_enabled, providers]
+      properties:
+        remote_enabled: {type: boolean, description: 'the deployment''s remote switch (REMOTE_MODELS, off by default)'}
+        providers: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/Provider'}}
+    ProviderTest:
+      type: object
+      required: [ok, models, error, failure, seconds]
+      properties:
+        ok: {type: boolean}
+        models: {type: array, items: {type: string}, description: 'what its /models listed'}
+        answer: {type: [string, 'null'], description: 'with ?model=: its answer to a tiny prompt'}
+        error: {type: [string, 'null']}
+        failure: {type: [string, 'null'], enum: [network, answer, refused, 'off', null], description: 'network: unreachable, TLS, timeout, 5xx, 429; answer: a 4xx (401: the key) or not OpenAI-shaped; refused: the host rule; off: remote models are off'}
+        seconds: {type: number, minimum: 0}
+    ModelSourceList:
+      type: object
+      required: [remote_enabled, sources]
+      description: 'from 1.15: what a user may name as a model (the editor''s "Runs on"): enabled providers, redacted to names and models'
+      properties:
+        remote_enabled: {type: boolean}
+        sources:
+          type: array
+          items:
+            type: object
+            required: [name, kind, title, models, default_model]
+            additionalProperties: false
+            properties:
+              name: {type: string}
+              kind: {$ref: '#/components/schemas/ProviderKind'}
+              title: {type: string}
+              models: {type: array, items: {type: string}}
+              default_model: {type: string}
+    CustomNode:
+      type: object
+      required: [name, title, help, input, output, network, version]
+      description: 'from 1.15: a custom node a pack registered (registry key pipelines.engine.custom)'
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}/[a-z][a-z0-9-]{0,31}$'}
+        title: {type: string}
+        help: {type: string}
+        input: {type: object, description: 'JSON schema of its input (an object; its properties are the fields)'}
+        output: {type: object, description: 'JSON schema of its output'}
+        network: {type: boolean, description: 'calls the network: needs the pipeline''s remote switch'}
+        version: {type: string}
+    CustomNodeList:
+      type: object
+      required: [nodes]
+      properties:
+        nodes: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/CustomNode'}}
 
     # ---------------------------------------------------------- auth_service
     SigninRequest:

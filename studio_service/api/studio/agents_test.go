@@ -93,12 +93,12 @@ func TestAskRunKey(t *testing.T) {
 	batch := "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47"
 	for key, ok := range map[string]bool{":1:1:judge:0:0": true, ":1:1:judge:3:1": true, ":1:1:judge:0:2": false,
 		":1:2:judge:0:0": false, ":1:1:judge:32:0": false} {
-		_, detail := pipelineStepRun(p, &message.RunsCreate{WorkflowID: "echo-ask", IdempotencyKey: batch + key}, 1)
+		_, detail := pipelineStepRun(p, &message.RunsCreate{WorkflowID: "echo-ask", Row: 1, IdempotencyKey: batch + key}, 1)
 		if (detail == "") != ok {
 			t.Error(key, detail)
 		}
 	}
-	if _, detail := pipelineStepRun(p, &message.RunsCreate{WorkflowID: "echo", IdempotencyKey: batch + ":1:1:judge:0:0"}, 1); detail == "" {
+	if _, detail := pipelineStepRun(p, &message.RunsCreate{WorkflowID: "echo", Row: 1, IdempotencyKey: batch + ":1:1:judge:0:0"}, 1); detail == "" {
 		t.Error("a step workflow for a judge")
 	}
 }

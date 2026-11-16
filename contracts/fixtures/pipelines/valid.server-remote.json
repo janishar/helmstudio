@@ -1,0 +1,214 @@
+{
+  "description": "model sources (API 1.15): a judge on the local Qwen ask, a write on a local server (ollama, default model filled), a decide on a remote provider (the pipeline's remote switch on and the deployment's too), an agent (routes, auto model → the step's family ask) that may route back. Egress lists the server write and the remote decide with exactly what they send; the server reserves 6.5 GB on mac. Visits: still 1 + decide 1 + agent 1 = 3, so the rewrite and decide run up to 3 times",
+  "remote_deployment": true,
+  "providers": [
+    {
+      "name": "ollama",
+      "kind": "server",
+      "enabled": true,
+      "models": [
+        "qwen2.5:7b",
+        "llama3.2:3b"
+      ],
+      "default_model": "qwen2.5:7b",
+      "host": "mac",
+      "memory_gb": 6.5
+    },
+    {
+      "name": "fakeai",
+      "kind": "remote",
+      "enabled": true,
+      "models": [
+        "fake-large"
+      ],
+      "default_model": "fake-large"
+    }
+  ],
+  "pipeline": {
+    "title": "Sources",
+    "remote": {
+      "enabled": true,
+      "providers": [
+        "fakeai"
+      ],
+      "max_calls": 100,
+      "max_tokens": 200000
+    },
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          }
+        ]
+      },
+      "still": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "seeds": 2,
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "judge": {
+        "kind": "judge",
+        "takes": "still",
+        "criteria": {
+          "must": [
+            "Matches the brief"
+          ]
+        },
+        "mode": "auto",
+        "model": "qwen-image-ask"
+      },
+      "rewrite": {
+        "kind": "write",
+        "from": [
+          "$prompt",
+          "judge.reasons"
+        ],
+        "to": "$prompt",
+        "model": "server:ollama"
+      },
+      "check": {
+        "kind": "decide",
+        "question": "Good enough?",
+        "from": [
+          "judge.reasons"
+        ],
+        "routes": {
+          "retry": "make it again",
+          "accept": "keep it"
+        },
+        "model": "remote:fakeai/fake-large"
+      },
+      "boss": {
+        "kind": "agent",
+        "instruction": "Decide whether to try once more.",
+        "from": [
+          "$prompt"
+        ],
+        "routes": {
+          "again": "one more try",
+          "done": "finish"
+        },
+        "caps": {
+          "max_turns": 2,
+          "max_tool_calls": 0,
+          "max_tokens": 4000
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "judge.picked",
+        "collection": "Sources"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "still"
+      ],
+      [
+        "still",
+        "judge"
+      ],
+      [
+        "judge",
+        "rewrite"
+      ],
+      [
+        "rewrite",
+        "check"
+      ],
+      [
+        "check",
+        {
+          "routes": {
+            "retry": "still",
+            "accept": "boss"
+          },
+          "max": 1,
+          "then": "accept"
+        }
+      ],
+      [
+        "boss",
+        {
+          "routes": {
+            "again": "still",
+            "done": "out"
+          },
+          "max": 1,
+          "then": "done"
+        }
+      ]
+    ]
+  },
+  "problems": [],
+  "bounds": {
+    "runs": 6,
+    "llm_calls": 15,
+    "tool_calls": 0,
+    "remote_calls": 6,
+    "remote_tokens": 53952
+  },
+  "models": {
+    "judge": "qwen-image-ask",
+    "rewrite": "server:ollama/qwen2.5:7b",
+    "check": "remote:fakeai/fake-large",
+    "boss": "qwen-image-ask"
+  },
+  "egress": [
+    {
+      "node": "check",
+      "where": "remote",
+      "provider": "fakeai",
+      "model": "fake-large",
+      "fields": [
+        "question",
+        "routes",
+        "judge.reasons"
+      ],
+      "thumbnails": 0,
+      "per_row": {
+        "calls": 6,
+        "tokens": 53952
+      },
+      "chat": null
+    },
+    {
+      "node": "rewrite",
+      "where": "server",
+      "provider": "ollama",
+      "model": "qwen2.5:7b",
+      "fields": [
+        "instruction",
+        "$prompt",
+        "judge.reasons"
+      ],
+      "thumbnails": 0,
+      "per_row": {
+        "calls": 6,
+        "tokens": 57552
+      },
+      "chat": null
+    }
+  ],
+  "reserved": [
+    {
+      "provider": "ollama",
+      "host": "mac",
+      "memory_gb": 6.5
+    }
+  ]
+}

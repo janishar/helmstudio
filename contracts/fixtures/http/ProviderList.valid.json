@@ -1,0 +1,23 @@
+{
+  "remote_enabled": false,
+  "providers": [
+    {
+      "name": "ollama",
+      "kind": "server",
+      "api": "openai",
+      "title": "Ollama on the Mac",
+      "base_url": "http://host.docker.internal:11434/v1",
+      "models": [
+        "qwen2.5:7b",
+        "llama3.2:3b"
+      ],
+      "default_model": "qwen2.5:7b",
+      "enabled": true,
+      "timeout_s": 120,
+      "host": "mac",
+      "memory_gb": 6.5,
+      "created_at": "2026-11-16T09:00:00Z",
+      "updated_at": "2026-11-16T09:00:00Z"
+    }
+  ]
+}

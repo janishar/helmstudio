@@ -9,6 +9,7 @@ from conftest import CONTRACTS, OWNER, SESSION, FakeStudio, fixture
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
+import custom
 import graph
 import pipeline
 
@@ -136,10 +137,14 @@ def fx_problems(name, with_bounds=False):
 )
 def test_pipeline_rules_match_the_fixtures(name):
     doc, want, bounds = fx_problems(name, with_bounds=True)
+    fx = json.loads((CONTRACTS / "fixtures/pipelines" / name).read_text())
     info = {}
-    assert pipeline.problems(doc, info) == want
-    if bounds:  # Submit's worst case per row: runs and LLM calls
+    got = pipeline.problems(doc, info, fx.get("custom") or custom.registry(), fx.get("providers"))
+    assert got == want
+    if bounds:  # Submit's worst case per row: runs, LLM calls, tool calls, remote calls and tokens
         assert info["bounds"] == bounds
+    if "egress" in fx:  # what leaves the machine, and what the servers reserve
+        assert (info["egress"], info["reserved"]) == (fx["egress"], fx["reserved"])
 
 
 def test_an_uncapped_loop_does_not_validate():

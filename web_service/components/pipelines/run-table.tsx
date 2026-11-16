@@ -1,9 +1,10 @@
 "use client";
 // The run table of a pipeline batch (plan 8.3, docs/mock/PipelineGraph.dc.html's table): one line per row, one cell
-// per step, gate, judge, write and decide the row reached (loop attempts stacked, each with its thumbnail, seed and
+// per step, gate, judge, write, decide, agent and custom node the row reached (loop attempts stacked, a fanned-out
+// step's shots one per line, the first few then the rest summed up, each with its thumbnail, seed and
 // time; a judge's one line: its verdict and first failed criterion, opening its attempts side by side with each
 // take's reason per criterion, docs/mock/AgentNodes.dc.html), the takes it ended with, and per row Pick, Retry and
-// the execution view.
+// the execution view. Rows the director added or changed are marked (docs/mock/DirectorChat.dc.html).
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Activity } from "lucide-react";
@@ -43,6 +44,7 @@ export function RunTable({
   busy,
   onRetry,
   onOpen,
+  marks = {},
 }: {
   batch: S<"Batch">;
   rows: Row[];
@@ -52,6 +54,8 @@ export function RunTable({
   onRetry: (r: Row) => void;
   /** opens takes full screen */
   onOpen: (ids: string[]) => void;
+  /** the rows the director added or changed (lib/chat rowMarks) */
+  marks?: Record<number, { how: "added" | "changed" }>;
 }) {
   const cols = runColumns(doc, rows, titles);
   const summarise = inputSummary(rows);
@@ -83,8 +87,13 @@ export function RunTable({
             return (
               <tr key={r.row} className="align-top">
                 <td className="m">{r.row}</td>
-                <td className="max-w-[320px] truncate" title={inputs}>
-                  {inputs || "—"}
+                <td className="max-w-[320px]" title={inputs}>
+                  <span className="block truncate">{inputs || "—"}</span>
+                  {marks[r.row] && (
+                    <span className="st mt-1 text-[#c1a8f5] shadow-[inset_0_0_0_1px_#c1a8f5]">
+                      {marks[r.row].how} by the director
+                    </span>
+                  )}
                 </td>
                 {cols.map((c) => {
                   const cell = settledCell(
@@ -108,6 +117,7 @@ export function RunTable({
                     );
                   }
                   const lines = cellLines(cell);
+                  const visits = new Set(lines.map((l) => l.visit)).size;
                   if (!lines.length)
                     return (
                       <td key={c.node} className="m">
@@ -117,13 +127,16 @@ export function RunTable({
                   return (
                     <td key={c.node}>
                       <div className="flex flex-col gap-1">
-                        {lines.map((l) => (
-                          <div key={l.visit} className="flex items-center gap-2">
+                        {lines.map((l, i) => (
+                          <div
+                            key={`${l.visit}:${l.branch ?? ""}:${i}`}
+                            className="flex items-center gap-2"
+                          >
                             {l.thumb && (
                               <button
                                 type="button"
                                 className="shrink-0 p-0"
-                                aria-label={`Open the takes of row ${r.row}, ${c.title}${lines.length > 1 ? `, attempt ${l.visit}` : ""}`}
+                                aria-label={`Open the takes of row ${r.row}, ${c.title}${visits > 1 ? `, attempt ${l.visit}` : ""}${l.branch !== undefined ? `, shot ${l.branch + 1}` : ""}`}
                                 onClick={() => onOpen(l.takes)}
                               >
                                 <img
@@ -138,7 +151,7 @@ export function RunTable({
                                 className={`max-w-[260px] truncate ${TONE[l.tone]}`}
                                 title={l.error ?? undefined}
                               >
-                                {lines.length > 1 && `${l.visit} · `}
+                                {visits > 1 && `${l.visit} · `}
                                 {l.text}
                               </span>
                               {(l.seed || l.time) && (

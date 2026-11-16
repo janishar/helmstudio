@@ -1,0 +1,9 @@
+{
+  "id": "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5e",
+  "role": "notice",
+  "text": "Row 16 was not added: row: inputs.script: a value is required",
+  "at": "2026-11-16T10:20:04Z",
+  "wake": 3,
+  "tool_calls": [],
+  "rows": []
+}

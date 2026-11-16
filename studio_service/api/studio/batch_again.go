@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,6 +58,11 @@ func (s *Service) AgainBatch(ctx context.Context, caller common.Caller, batchID 
 		if err := s.againHosts(first, stored, isPipeline); err != nil {
 			return err
 		}
+		if isPipeline {
+			if err := s.againProviders(ctx, tx, &stored); err != nil {
+				return err
+			}
+		}
 		sessionID := ""
 		if source.SessionID != nil { // its session, unless deleted since
 			if tag, err := tx.Exec(ctx, `UPDATE sessions SET updated_at = clock_timestamp() WHERE id = $1`, *source.SessionID); err != nil {
@@ -78,11 +85,18 @@ func (s *Service) AgainBatch(ctx context.Context, caller common.Caller, batchID 
 		newID := utility.NewID()
 		if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
 			inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements, looks, bounds,
-			models, again_of, same_decisions)
+			models, again_of, same_decisions, providers, egress, reserved, director, remote)
 			SELECT $2, owner_id, $3, $4, workflow_id, workflow_title, snapshot, inputs, workflow_version, pipeline_id,
-			pipeline_title, pipeline_version, collection, pipeline, elements, looks, bounds, models, id, $5
+			pipeline_title, pipeline_version, collection, pipeline, elements, looks, bounds, models, id, $5, providers, egress,
+			reserved, CASE WHEN director IS NULL THEN NULL ELSE jsonb_set(jsonb_set(director, '{state}', '"idle"'), '{wakes}', '0') END,
+			CASE WHEN remote IS NULL THEN NULL ELSE remote || '{"calls": 0, "tokens": 0, "network_failures": 0}' END
 			FROM batches WHERE id = $1`, batchID, newID, sessionID, title, same); err != nil {
 			return err
+		}
+		if isPipeline && len(stored.Providers) > 0 { // the providers as they are now (againProviders)
+			if _, err := tx.Exec(ctx, `UPDATE batches SET pipeline = $2 WHERE id = $1`, newID, stored); err != nil {
+				return err
+			}
 		}
 		rows, err := collect[message.SubmitRow](ctx, tx, `INSERT INTO batch_rows (batch_id, n, owner_id, inputs, seeds, looks, cells)
 			SELECT $2, n, owner_id, inputs, seeds, looks, CASE WHEN cells IS NULL THEN NULL ELSE '[]'::jsonb END
@@ -135,6 +149,39 @@ func (s *Service) againHosts(first registry.Workflow, stored storedPipeline, isP
 	}
 	if isPipeline {
 		return s.askHosts(stored)
+	}
+	return nil
+}
+
+// againProviders refreshes the providers of a batch run again as they are now, with Submit's checks (422 otherwise):
+// each still exists and is enabled, keeps its kind (a server its host), and a remote one needs the deployment's
+// switch. The new batch calls them as they are now, never with a deleted or disabled provider's base_url or key.
+func (s *Service) againProviders(ctx context.Context, tx pgx.Tx, stored *storedPipeline) error {
+	if len(stored.Providers) == 0 {
+		return nil
+	}
+	rows, err := readProviders(ctx, tx, true)
+	if err != nil {
+		return err
+	}
+	for _, name := range slices.Sorted(maps.Keys(stored.Providers)) {
+		old := stored.Providers[name]
+		at := slices.IndexFunc(rows, func(p providerRow) bool { return p.Name == name })
+		detail := ""
+		switch {
+		case at < 0:
+			detail = fmt.Sprintf("provider %s is gone or disabled", name)
+		case old["kind"] != rows[at].Kind:
+			detail = fmt.Sprintf("provider %s is no longer a %v", name, old["kind"])
+		case rows[at].Kind == "remote" && !s.remoteOn:
+			detail = "remote models are off on this deployment"
+		case rows[at].Kind == "server" && old["host"] != deref(rows[at].Host):
+			detail = fmt.Sprintf("provider %s moved to another host", name)
+		}
+		if detail != "" {
+			return network.NewUnprocessableError("pipeline cannot run again: "+detail+"; submit it again", nil)
+		}
+		stored.Providers[name] = rows[at].snapshot()
 	}
 	return nil
 }

@@ -30,6 +30,7 @@ const usage = `usage:
   helm batch pick <batch_id> <row> (<take_id>... | --reject) [--note text]   answer the gate (or Suggest judge) the
              row waits at; review shows the judge's suggestion; --note (a judge) becomes an example in its memory
   helm batch decisions <batch_id> [row]   judge, write and decide decisions (verdicts, reasons, routes, replays)
+  helm batch chat <batch_id> [text ...]   the director's chat (state, messages, its tool calls); with a text, say it
   helm batches [--limit n] [--cursor c]
   helm batch-stop <batch_id>
   helm takes [--kind image|video|audio] [--source create|upload] [--starred] [--session <id>] [--q <text>] [--limit n] [--cursor c]
@@ -61,6 +62,8 @@ A prompt may mention your elements as @handle (@@ is a literal @): helm sends it
   helm loras [--source shared|mine] [--family f] [--q words]   LoRAs you can use (id, source, state, family, rank, size, name)
   helm lora upload <file.safetensors>   your own LoRA: uploaded, checked and indexed
   helm lora rm <id>
+  helm providers                      (admin) local servers and remote providers; remote models on or off
+  helm providers set <name> file.json | rm <name> | test <name> [--model m]   a ProviderPut file; keys are never sent
   helm hosts                          each host's shared memory (used / budget), its envs and what each holds
   helm whoami
   helm logout
@@ -120,6 +123,8 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = lorasCmd(args[1:], stdout, stderr)
 	case "lora":
 		err = loraCmd(args[1:], stdout)
+	case "providers":
+		err = providersCmd(args[1:], stdout, stderr)
 	case "hosts":
 		err = hostsCmd(stdout)
 	case "whoami":

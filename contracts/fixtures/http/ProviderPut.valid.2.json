@@ -1,0 +1,9 @@
+{
+  "kind": "remote",
+  "base_url": "https://fake-openai.test/v1",
+  "models": [
+    "fake-large"
+  ],
+  "key_secret": "provider-fakeai",
+  "max_in_flight": 2
+}

@@ -1,0 +1,17 @@
+{
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "workflow_id": "server-ask",
+  "inputs": {
+    "ask.provider": "ollama",
+    "ask.model": "qwen2.5:7b",
+    "ask.system": "You are the director of a batch in an image and video studio.",
+    "ask.prompt": "Chat so far: ... This is turn 1 of at most 6.",
+    "ask.tools": "[{\"type\":\"function\",\"function\":{\"name\":\"rows_add\",\"parameters\":{\"type\":\"object\"}}}]",
+    "ask.max_tokens": 1200
+  },
+  "lane": "batch",
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "row": 0,
+  "idempotency_key": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:0:1:director:2:t0"
+}

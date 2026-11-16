@@ -349,6 +349,32 @@ type Registry struct {
 	looksAt   map[string]time.Time     // "<host>.<env>" → when its looks were published
 	hosts     map[string]Host          // "<host>.<env>" → its state
 	awaiting  map[string]bool          // watched buckets whose current values have not all arrived yet
+	custom    []CustomNode             // pipelines.engine.custom: the custom nodes pipelines' packs register (API 1.15)
+}
+
+// CustomNode is one custom node pipelines_service's packs register (registry.schema.json custom, API 1.15).
+type CustomNode struct {
+	Name    string       `json:"name"`
+	Title   string       `json:"title"`
+	Help    string       `json:"help"`
+	Input   CustomFields `json:"input"`
+	Output  CustomFields `json:"output"`
+	Network bool         `json:"network"`
+	Version string       `json:"version"`
+}
+
+// CustomFields is a custom node's input or output model as a JSON schema: its top-level fields.
+type CustomFields struct {
+	Type       string                     `json:"type"`
+	Properties map[string]json.RawMessage `json:"properties"`
+	Required   []string                   `json:"required,omitempty"`
+}
+
+// Custom returns the registered custom nodes (pipelines.engine.custom); nil before pipelines published them.
+func (r *Registry) Custom() []CustomNode {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.custom
 }
 
 // Await marks buckets as not loaded yet: Ready is false until Loaded was called for each.
@@ -466,6 +492,21 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 		}
 		set(&r.looks, source, kept)
 		set(&r.looksAt, source, parsed.PublishedAt)
+	case "custom":
+		if source != "pipelines.engine" {
+			return nil
+		}
+		r.custom = nil
+		if value == nil {
+			return nil
+		}
+		var parsed struct {
+			Nodes []CustomNode `json:"nodes"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		r.custom = parsed.Nodes
 	case "loras":
 		if value == nil {
 			delete(r.loras, source)

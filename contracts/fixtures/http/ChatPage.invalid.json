@@ -1,0 +1,10 @@
+{
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "director": {
+    "node": "director",
+    "state": "asleep",
+    "wakes": 3,
+    "max_wakes": 100
+  },
+  "messages": []
+}

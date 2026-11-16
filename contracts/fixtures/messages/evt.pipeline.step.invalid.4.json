@@ -1,0 +1,59 @@
+{
+  "type": "evt.pipeline.step",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001512",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 30,
+    "row": 6,
+    "attempt": 1,
+    "step": 3,
+    "node": "director",
+    "part": "tools",
+    "visit": 1,
+    "turn": 1,
+    "status": "finished",
+    "what": "2 tool calls: gallery.search (3 takes), library.read (2 elements)",
+    "changed": [
+      "agent.director.turns = 1"
+    ],
+    "edge": null,
+    "loops": {},
+    "run_ids": [],
+    "take_ids": [],
+    "error": null,
+    "checkpoint_id": "1ef9a2b3-0001",
+    "tool_calls": [
+      {
+        "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:director:0:t0:0",
+        "tool": "gallery_search",
+        "args": {
+          "text": "fox"
+        },
+        "result": {
+          "takes": [],
+          "more": false
+        },
+        "error": null
+      },
+      {
+        "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:6:1:director:0:t0:1",
+        "tool": "library_read",
+        "args": {
+          "kind": "element"
+        },
+        "result": {
+          "items": [],
+          "more": false
+        },
+        "error": null
+      }
+    ],
+    "branch": 24
+  }
+}

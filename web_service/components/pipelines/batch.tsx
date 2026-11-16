@@ -12,6 +12,8 @@ import { ErrorNote, Modal } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { RowsDone, StateChip, controlBatch, followBatch } from "@/components/pipelines/pipelines";
 import { RunTable } from "@/components/pipelines/run-table";
+import { ChatPanel, useChat } from "@/components/pipelines/chat";
+import { rowMarks } from "@/lib/chat";
 import { api, message, ok, type S } from "@/lib/api";
 import {
   appendRows,
@@ -190,6 +192,8 @@ export function BatchRun({
   }
 
   const hydrated = useHydrated();
+  // the director's chat, when the batch's pipeline has a director (Batch.director)
+  const chat = useChat(view?.batch.director ? id : null);
   if (!view)
     return (
       <main id="main" className="flex min-w-0 flex-1 flex-col gap-4 px-5 pt-4 pb-6">
@@ -218,284 +222,297 @@ export function BatchRun({
     took && `took ${took}`,
     b.memory && `memory read: ${b.memory.examples} examples, ${b.memory.notes} notes`,
     b.again_of && (b.same_decisions ? "same decisions as its source" : "run again"),
+    b.remote &&
+      `remote: ${b.remote.calls} of ${b.remote.max_calls} calls, ${b.remote.tokens.toLocaleString("en-US")} of ${b.remote.max_tokens.toLocaleString("en-US")} tokens${b.remote.network_failures ? `, ${b.remote.network_failures} network failures retried` : ""}`,
   ].filter(Boolean);
 
   return (
-    <main id="main" className="flex min-w-0 flex-1 flex-col gap-3.5 px-5 pt-4 pb-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href="/pipelines"
-          aria-label="Pipelines"
-          className="grid size-9 place-items-center rounded-[10px] text-t2 hover:bg-s2"
-        >
-          <ChevronLeft size={18} aria-hidden />
-        </Link>
-        <h1 className="m-0 font-display text-[18px] font-bold tracking-[0.01em]">{b.title}</h1>
-        <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
-          Unattended ·{" "}
-          {isPipeline ? `${b.pipeline_title} · v${b.pipeline_version}` : b.workflow_title} ·{" "}
-          {c.total} row{c.total === 1 ? "" : "s"}
-        </span>
-        <StateChip batch={b} />
-        <div className="grow" />
-        {isPipeline && canPick(b) && (
+    <>
+      <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
+        <div className="flex flex-wrap items-center gap-3">
           <Link
-            href={`/pipelines/batches/${b.id}/review`}
-            className="chip bevel bg-a1 font-semibold text-on1"
+            href="/pipelines"
+            aria-label="Pipelines"
+            className="grid size-9 place-items-center rounded-[10px] text-t2 hover:bg-s2"
           >
-            Pick · {c.waiting}
+            <ChevronLeft size={18} aria-hidden />
           </Link>
-        )}
-        {isPipeline && failedRows > 0 && (
-          <button
-            type="button"
-            className="chip bevel"
-            disabled={!!busy}
-            onClick={() => void retryFailed()}
-          >
-            Retry failed
-          </button>
-        )}
-        {canPause(b) && (
-          <button
-            type="button"
-            className="chip bevel"
-            disabled={!!busy}
-            onClick={() => void control("pause")}
-          >
-            Pause
-          </button>
-        )}
-        {canResume(b) && (
-          <button
-            type="button"
-            className="chip bevel"
-            disabled={!!busy}
-            onClick={() => void control("resume")}
-          >
-            Resume
-          </button>
-        )}
-        {canStop(b) && (
-          <button
-            type="button"
-            className="chip bevel"
-            disabled={!!busy}
-            onClick={() => setStopping(true)}
-          >
-            {isPipeline ? "Cancel remaining" : "Stop"}
-          </button>
-        )}
-        {isPipeline && ended && (
-          <button
-            type="button"
-            className="chip bevel"
-            disabled={!!busy}
-            onClick={() => setAgain("same")}
-          >
-            Run again
-          </button>
-        )}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <span className="mono text-[12px] text-t2">
-          <RowsDone counts={c} />
-        </span>
-        <span className="mono text-[12px] text-t2">{facts.join(" · ")}</span>
-      </div>
-      {b.reason && (b.status === "paused" || b.status === "failed") && (
-        <p className="rounded-xl bg-s2 px-3 py-2 text-[13px]">
-          {b.status === "paused" ? "Paused: " : "Failed: "}
-          {b.reason}
-        </p>
-      )}
-      {error && <ErrorNote>{error}</ErrorNote>}
-
-      <div className="panel overflow-x-auto px-2 py-1.5">
-        {isPipeline ? (
-          <RunTable
-            batch={b}
-            rows={rows}
-            doc={(pipeline as PDoc | null) ?? null}
-            titles={pipeline?.workflow_titles ?? {}}
-            busy={busy}
-            onRetry={(r) => void retry(r)}
-            onOpen={(ids) => void openTakes(ids)}
-          />
-        ) : (
-          <table className="grid-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Inputs</th>
-                <th>Step 1 · {b.workflow_title}</th>
-                <th>Takes</th>
-                <th>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const inputs = summarise(r);
-                return (
-                  <tr key={r.row}>
-                    <td className="m">{r.row}</td>
-                    <td className="max-w-[420px] truncate" title={inputs}>
-                      {inputs || "—"}
-                    </td>
-                    <td
-                      className={
-                        r.status === "failed"
-                          ? "max-w-[360px] truncate text-[#f2c14e]"
-                          : r.status === "running"
-                            ? "font-medium text-a2"
-                            : "m"
-                      }
-                      title={r.error ?? undefined}
-                    >
-                      {rowState(r)}
-                      {r.attempt > 1 && ` · attempt ${r.attempt}`}
-                    </td>
-                    <td>
-                      {r.thumb_url ? (
-                        <button
-                          type="button"
-                          className="flex items-center gap-1.5 p-0"
-                          aria-label={`Open row ${r.row}'s takes full screen`}
-                          onClick={() => void openTakes(r)}
-                        >
-                          <img
-                            src={safeUrl(r.thumb_url)}
-                            alt=""
-                            className="h-10 w-16 rounded-md bg-s3 object-cover"
-                          />
-                          {r.take_ids.length > 1 && (
-                            <span className="mono text-[11px] text-t2">
-                              +{r.take_ids.length - 1}
-                            </span>
-                          )}
-                        </button>
-                      ) : (
-                        <span className="mono text-[12px] text-t2">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {canRetry(b, r) && (
-                        <button
-                          type="button"
-                          className="chip bevel h-[30px]"
-                          disabled={busy === `row${r.row}`}
-                          onClick={() => void retry(r)}
-                        >
-                          Retry
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-        {cursor && (
-          <div className="flex justify-center p-2">
+          <h1 className="m-0 font-display text-[18px] font-bold tracking-[0.01em]">{b.title}</h1>
+          <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
+            Unattended ·{" "}
+            {isPipeline ? `${b.pipeline_title} · v${b.pipeline_version}` : b.workflow_title} ·{" "}
+            {c.total} row{c.total === 1 ? "" : "s"}
+          </span>
+          <StateChip batch={b} />
+          <div className="grow" />
+          {isPipeline && canPick(b) && (
+            <Link
+              href={`/pipelines/batches/${b.id}/review`}
+              className="chip bevel bg-a1 font-semibold text-on1"
+            >
+              Pick · {c.waiting}
+            </Link>
+          )}
+          {isPipeline && failedRows > 0 && (
             <button
               type="button"
-              className="chip bevel h-[30px]"
-              disabled={busy === "more"}
-              onClick={() => void more()}
+              className="chip bevel"
+              disabled={!!busy}
+              onClick={() => void retryFailed()}
             >
-              More rows
+              Retry failed
             </button>
-          </div>
-        )}
-      </div>
-
-      <Modal
-        open={stopping}
-        onClose={() => setStopping(false)}
-        title={isPipeline ? "Cancel the remaining rows?" : "Stop this batch?"}
-      >
-        <p className="mb-4 text-[13px] text-t2">
-          Rows not finished are cancelled, rows waiting for a pick too. Finished rows and their
-          takes stay.
-        </p>
-        <div className="flex justify-end gap-2">
-          <button type="button" className="chip bevel" onClick={() => setStopping(false)}>
-            Keep running
-          </button>
-          <button
-            type="button"
-            className="chip bevel bg-a1 font-semibold text-on1"
-            disabled={busy === "stop"}
-            onClick={() => void control("stop")}
-          >
-            {isPipeline ? "Cancel remaining" : "Stop"}
-          </button>
-        </div>
-      </Modal>
-
-      <Modal open={!!again} onClose={() => setAgain(null)} title="Run this batch again">
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (again) void runAgain(again);
-          }}
-        >
-          <p className="m-0 text-[13px] text-t2">
-            A new batch with the same pipeline version, rows and seeds.
-          </p>
-          {(
-            [
-              [
-                "same",
-                "Same decisions",
-                "Judge, write and decide answers are reused where their inputs match; no model is asked. Your picks are asked again.",
-              ],
-              ["again", "Decide again", "Every judge, write and decide asks its model again."],
-            ] as const
-          ).map(([v, t, help]) => (
-            <label key={v} className="flex items-start gap-2.5">
-              <input
-                type="radio"
-                name="again"
-                className="mt-1 accent-[var(--a2)]"
-                checked={again === v}
-                onChange={() => setAgain(v)}
-              />
-              <span>
-                <b className="font-semibold">{t}</b>
-                <br />
-                <small className="text-t2">{help}</small>
-              </span>
-            </label>
-          ))}
-          <div className="flex justify-end gap-2">
-            <button type="button" className="chip bevel" onClick={() => setAgain(null)}>
-              Cancel
-            </button>
+          )}
+          {canPause(b) && (
             <button
-              type="submit"
-              className="chip bevel bg-a1 font-semibold text-on1"
-              disabled={busy === "again"}
+              type="button"
+              className="chip bevel"
+              disabled={!!busy}
+              onClick={() => void control("pause")}
+            >
+              Pause
+            </button>
+          )}
+          {canResume(b) && (
+            <button
+              type="button"
+              className="chip bevel"
+              disabled={!!busy}
+              onClick={() => void control("resume")}
+            >
+              Resume
+            </button>
+          )}
+          {canStop(b) && (
+            <button
+              type="button"
+              className="chip bevel"
+              disabled={!!busy}
+              onClick={() => setStopping(true)}
+            >
+              {isPipeline ? "Cancel remaining" : "Stop"}
+            </button>
+          )}
+          {isPipeline && ended && (
+            <button
+              type="button"
+              className="chip bevel"
+              disabled={!!busy}
+              onClick={() => setAgain("same")}
             >
               Run again
             </button>
-          </div>
-        </form>
-      </Modal>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="mono text-[12px] text-t2">
+            <RowsDone counts={c} />
+          </span>
+          <span className="mono text-[12px] text-t2">{facts.join(" · ")}</span>
+        </div>
+        {b.reason && (b.status === "paused" || b.status === "failed") && (
+          <p className="rounded-xl bg-s2 px-3 py-2 text-[13px]">
+            {b.status === "paused" ? "Paused: " : "Failed: "}
+            {b.reason}
+          </p>
+        )}
+        {error && <ErrorNote>{error}</ErrorNote>}
 
-      {viewer && (
-        <FullScreen
-          take={viewer.takes[viewer.i]}
-          onClose={() => setViewer(null)}
-          onStep={(d) =>
-            setViewer((v) => v && { ...v, i: (v.i + d + v.takes.length) % v.takes.length })
-          }
-        />
+        <div className="panel overflow-x-auto px-2 py-1.5">
+          {isPipeline ? (
+            <RunTable
+              batch={b}
+              rows={rows}
+              doc={(pipeline as PDoc | null) ?? null}
+              titles={pipeline?.workflow_titles ?? {}}
+              busy={busy}
+              onRetry={(r) => void retry(r)}
+              onOpen={(ids) => void openTakes(ids)}
+              marks={chat.view ? rowMarks(chat.view.messages) : undefined}
+            />
+          ) : (
+            <table className="grid-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Inputs</th>
+                  <th>Step 1 · {b.workflow_title}</th>
+                  <th>Takes</th>
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const inputs = summarise(r);
+                  return (
+                    <tr key={r.row}>
+                      <td className="m">{r.row}</td>
+                      <td className="max-w-[420px] truncate" title={inputs}>
+                        {inputs || "—"}
+                      </td>
+                      <td
+                        className={
+                          r.status === "failed"
+                            ? "max-w-[360px] truncate text-[#f2c14e]"
+                            : r.status === "running"
+                              ? "font-medium text-a2"
+                              : "m"
+                        }
+                        title={r.error ?? undefined}
+                      >
+                        {rowState(r)}
+                        {r.attempt > 1 && ` · attempt ${r.attempt}`}
+                      </td>
+                      <td>
+                        {r.thumb_url ? (
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 p-0"
+                            aria-label={`Open row ${r.row}'s takes full screen`}
+                            onClick={() => void openTakes(r)}
+                          >
+                            <img
+                              src={safeUrl(r.thumb_url)}
+                              alt=""
+                              className="h-10 w-16 rounded-md bg-s3 object-cover"
+                            />
+                            {r.take_ids.length > 1 && (
+                              <span className="mono text-[11px] text-t2">
+                                +{r.take_ids.length - 1}
+                              </span>
+                            )}
+                          </button>
+                        ) : (
+                          <span className="mono text-[12px] text-t2">—</span>
+                        )}
+                      </td>
+                      <td>
+                        {canRetry(b, r) && (
+                          <button
+                            type="button"
+                            className="chip bevel h-[30px]"
+                            disabled={busy === `row${r.row}`}
+                            onClick={() => void retry(r)}
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          {cursor && (
+            <div className="flex justify-center p-2">
+              <button
+                type="button"
+                className="chip bevel h-[30px]"
+                disabled={busy === "more"}
+                onClick={() => void more()}
+              >
+                More rows
+              </button>
+            </div>
+          )}
+        </div>
+
+        <Modal
+          open={stopping}
+          onClose={() => setStopping(false)}
+          title={isPipeline ? "Cancel the remaining rows?" : "Stop this batch?"}
+        >
+          <p className="mb-4 text-[13px] text-t2">
+            Rows not finished are cancelled, rows waiting for a pick too. Finished rows and their
+            takes stay.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="chip bevel" onClick={() => setStopping(false)}>
+              Keep running
+            </button>
+            <button
+              type="button"
+              className="chip bevel bg-a1 font-semibold text-on1"
+              disabled={busy === "stop"}
+              onClick={() => void control("stop")}
+            >
+              {isPipeline ? "Cancel remaining" : "Stop"}
+            </button>
+          </div>
+        </Modal>
+
+        <Modal open={!!again} onClose={() => setAgain(null)} title="Run this batch again">
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (again) void runAgain(again);
+            }}
+          >
+            <p className="m-0 text-[13px] text-t2">
+              A new batch with the same pipeline version, rows and seeds.
+            </p>
+            {(
+              [
+                [
+                  "same",
+                  "Same decisions",
+                  "Judge, write and decide answers are reused where their inputs match; no model is asked. Your picks are asked again.",
+                ],
+                ["again", "Decide again", "Every judge, write and decide asks its model again."],
+              ] as const
+            ).map(([v, t, help]) => (
+              <label key={v} className="flex items-start gap-2.5">
+                <input
+                  type="radio"
+                  name="again"
+                  className="mt-1 accent-[var(--a2)]"
+                  checked={again === v}
+                  onChange={() => setAgain(v)}
+                />
+                <span>
+                  <b className="font-semibold">{t}</b>
+                  <br />
+                  <small className="text-t2">{help}</small>
+                </span>
+              </label>
+            ))}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="chip bevel" onClick={() => setAgain(null)}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="chip bevel bg-a1 font-semibold text-on1"
+                disabled={busy === "again"}
+              >
+                Run again
+              </button>
+            </div>
+          </form>
+        </Modal>
+
+        {viewer && (
+          <FullScreen
+            take={viewer.takes[viewer.i]}
+            onClose={() => setViewer(null)}
+            onStep={(d) =>
+              setViewer((v) => v && { ...v, i: (v.i + d + v.takes.length) % v.takes.length })
+            }
+          />
+        )}
+      </main>
+      {b.director && (
+        <aside
+          aria-label="Chat with director"
+          className="aside m-3.5 flex max-h-[calc(100dvh-28px)] flex-[1_1_340px] flex-col gap-3 px-[18px] pt-4 pb-5 md:ml-0"
+        >
+          <ChatPanel batch={b} chat={chat} />
+        </aside>
       )}
-    </main>
+    </>
   );
 }

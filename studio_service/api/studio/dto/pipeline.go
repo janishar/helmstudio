@@ -53,14 +53,81 @@ type PipelineNode struct {
 	// write, decide, memory write: their text sources
 	Sources     []string
 	To          string  // write: the $<Text input> it overwrites
-	Instruction *string // write
+	Instruction *string // write, agent
 	Question    string  // decide
 	Routes      map[string]string
 	// memory
 	Op    string // read | write
 	Key   *string
 	Limit *int
+	// API 1.15: a step's fan-out, a write's or agent's list, the agent, the custom node
+	Each       *string   // step: `<producer>.items`
+	List       *ListSpec // write, agent
+	Tools      []string  // agent
+	Caps       *AgentCaps
+	Director   *bool
+	WakeOnRows *string
+	MaxWakes   *int
+	CustomNode string // custom: the registered `<pack>/<node>`
 }
+
+// ListSpec is a write's or agent's list: 1 to Max texts, read by a step's `each` (API 1.15).
+type ListSpec struct {
+	Max int `json:"max"`
+}
+
+// AgentCaps are an agent's hard caps per visit (the director's chat: per wake).
+type AgentCaps struct {
+	MaxTurns     *int `json:"max_turns,omitempty"`
+	MaxToolCalls *int `json:"max_tool_calls,omitempty"`
+	MaxTokens    *int `json:"max_tokens,omitempty"`
+}
+
+// Filled is the caps with every default (6 turns, 12 tool calls, 16000 tokens).
+func (c *AgentCaps) Filled() AgentCapsFilled {
+	out := AgentCapsFilled{MaxTurns: 6, MaxToolCalls: 12, MaxTokens: 16000}
+	if c != nil {
+		if c.MaxTurns != nil {
+			out.MaxTurns = *c.MaxTurns
+		}
+		if c.MaxToolCalls != nil {
+			out.MaxToolCalls = *c.MaxToolCalls
+		}
+		if c.MaxTokens != nil {
+			out.MaxTokens = *c.MaxTokens
+		}
+	}
+	return out
+}
+
+// AgentCapsFilled is defs agentCaps.
+type AgentCapsFilled struct {
+	MaxTurns     int `json:"max_turns"`
+	MaxToolCalls int `json:"max_tool_calls"`
+	MaxTokens    int `json:"max_tokens"`
+}
+
+// IsDirector reports whether the node is the pipeline's director agent.
+func (n PipelineNode) IsDirector() bool { return n.Kind == "agent" && n.Director != nil && *n.Director }
+
+// MaxWakesOr is a director's wakes per batch, 100 when absent.
+func (n PipelineNode) MaxWakesOr() int {
+	if n.MaxWakes == nil {
+		return 100
+	}
+	return *n.MaxWakes
+}
+
+// WakeOnRowsOr is a director's row wake rule, all when absent.
+func (n PipelineNode) WakeOnRowsOr() string {
+	if n.WakeOnRows == nil {
+		return "all"
+	}
+	return *n.WakeOnRows
+}
+
+// HasModel reports whether the node kind names a model (judge, write, decide, agent).
+func HasModel(kind string) bool { return Asks(kind) || kind == "agent" }
 
 // PipelineCriteria is a judge's checklist: every must line holds for a take to pass; nice lines order those that do.
 type PipelineCriteria struct {
@@ -125,13 +192,16 @@ func (n PipelineNode) KeepOr1() int {
 // nodeFields are the keys each kind allows (the schemas are closed).
 var nodeFields = map[string][]string{
 	"inputs": {"kind", "title", "position", "inputs"},
-	"step":   {"kind", "title", "position", "workflow", "seeds", "preset", "inputs", "bind", "looks"},
+	"step":   {"kind", "title", "position", "workflow", "seeds", "preset", "inputs", "bind", "looks", "each"},
 	"gate":   {"kind", "title", "position", "takes", "keep"},
 	"output": {"kind", "title", "position", "from", "collection"},
 	"judge":  {"kind", "title", "position", "takes", "criteria", "keep", "mode", "model", "memory"},
-	"write":  {"kind", "title", "position", "from", "to", "instruction", "model"},
+	"write":  {"kind", "title", "position", "from", "to", "instruction", "model", "list"},
 	"decide": {"kind", "title", "position", "question", "from", "routes", "model"},
 	"memory": {"kind", "title", "position", "op", "key", "limit", "from"},
+	"agent": {"kind", "title", "position", "instruction", "from", "tools", "routes", "list", "caps", "model", "director",
+		"wake_on_rows", "max_wakes"},
+	"custom": {"kind", "title", "position", "node", "inputs", "bind"},
 }
 
 // UnmarshalJSON decodes the fields of the node's kind; another kind's field, or an unknown one, is an error.
@@ -141,7 +211,7 @@ func (n *PipelineNode) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if err := json.Unmarshal(raw["kind"], &n.Kind); err != nil || nodeFields[n.Kind] == nil {
-		return fmt.Errorf("kind must be inputs, step, gate, output, judge, write, decide or memory")
+		return fmt.Errorf("kind must be inputs, step, gate, output, judge, write, decide, memory, agent or custom")
 	}
 	for key := range raw {
 		if !slices.Contains(nodeFields[n.Kind], key) {
@@ -151,7 +221,9 @@ func (n *PipelineNode) UnmarshalJSON(data []byte) error {
 	targets := map[string]any{"title": &n.Title, "position": &n.Position, "workflow": &n.Workflow, "seeds": &n.Seeds,
 		"preset": &n.Preset, "bind": &n.Bind, "looks": &n.Looks, "takes": &n.Takes, "keep": &n.Keep, "from": &n.From, "collection": &n.Collection,
 		"criteria": &n.Criteria, "mode": &n.Mode, "model": &n.Model, "memory": &n.Memory, "to": &n.To, "instruction": &n.Instruction,
-		"question": &n.Question, "routes": &n.Routes, "op": &n.Op, "key": &n.Key, "limit": &n.Limit}
+		"question": &n.Question, "routes": &n.Routes, "op": &n.Op, "key": &n.Key, "limit": &n.Limit,
+		"each": &n.Each, "list": &n.List, "tools": &n.Tools, "caps": &n.Caps, "director": &n.Director,
+		"wake_on_rows": &n.WakeOnRows, "max_wakes": &n.MaxWakes, "node": &n.CustomNode}
 	if n.Kind != "output" {
 		targets["from"] = &n.Sources
 	}
@@ -193,6 +265,7 @@ func (n PipelineNode) MarshalJSON() ([]byte, error) {
 		set("inputs", n.Fixed, n.Fixed != nil)
 		set("bind", n.Bind, n.Bind != nil)
 		set("looks", n.Looks, n.Looks != nil)
+		set("each", n.Each, n.Each != nil)
 	case "gate":
 		out["takes"] = n.Takes
 		set("keep", n.Keep, n.Keep != nil)
@@ -205,7 +278,9 @@ func (n PipelineNode) MarshalJSON() ([]byte, error) {
 		set("model", n.Model, n.Model != nil)
 		set("memory", n.Memory, n.Memory != nil)
 	case "write":
-		out["from"], out["to"] = n.Sources, n.To
+		out["from"] = n.Sources
+		set("to", n.To, n.To != "")
+		set("list", n.List, n.List != nil)
 		set("instruction", n.Instruction, n.Instruction != nil)
 		set("model", n.Model, n.Model != nil)
 	case "decide":
@@ -216,6 +291,21 @@ func (n PipelineNode) MarshalJSON() ([]byte, error) {
 		set("key", n.Key, n.Key != nil)
 		set("limit", n.Limit, n.Limit != nil)
 		set("from", n.Sources, n.Sources != nil)
+	case "agent":
+		out["instruction"] = n.Instruction
+		set("from", n.Sources, n.Sources != nil)
+		set("tools", n.Tools, n.Tools != nil)
+		set("routes", n.Routes, n.Routes != nil)
+		set("list", n.List, n.List != nil)
+		set("caps", n.Caps, n.Caps != nil)
+		set("model", n.Model, n.Model != nil)
+		set("director", n.Director, n.Director != nil)
+		set("wake_on_rows", n.WakeOnRows, n.WakeOnRows != nil)
+		set("max_wakes", n.MaxWakes, n.MaxWakes != nil)
+	case "custom":
+		out["node"] = n.CustomNode
+		set("inputs", n.Fixed, n.Fixed != nil)
+		set("bind", n.Bind, n.Bind != nil)
 	}
 	return json.Marshal(out)
 }
@@ -312,38 +402,115 @@ func (e PipelineEdge) MarshalJSON() ([]byte, error) {
 
 // PipelineDoc is a pipeline as the editor saves or validates it.
 type PipelineDoc struct {
-	Title string                  `json:"title"`
-	Nodes map[string]PipelineNode `json:"nodes"`
-	Edges []PipelineEdge          `json:"edges"`
+	Title  string                  `json:"title"`
+	Nodes  map[string]PipelineNode `json:"nodes"`
+	Edges  []PipelineEdge          `json:"edges"`
+	Remote *PipelineRemote         `json:"remote,omitempty"` // API 1.15: calls that leave the machine (absent = off)
+}
+
+// PipelineRemote is a pipeline's switch for remote models and its per-batch caps (API 1.15).
+type PipelineRemote struct {
+	Enabled   *bool    `json:"enabled,omitempty"`
+	Providers []string `json:"providers,omitempty"`
+	MaxCalls  *int     `json:"max_calls,omitempty"`
+	MaxTokens *int     `json:"max_tokens,omitempty"`
+}
+
+// RemoteSettings is defs remoteSettings: the switch with every default filled (off without one).
+type RemoteSettings struct {
+	Enabled   bool     `json:"enabled"`
+	Providers []string `json:"providers"`
+	MaxCalls  int      `json:"max_calls"`
+	MaxTokens int      `json:"max_tokens"`
+}
+
+// RemoteFilled is the document's remote switch with its defaults.
+func (d PipelineDoc) RemoteFilled() RemoteSettings {
+	out := RemoteSettings{Providers: []string{}, MaxCalls: 200, MaxTokens: 400000}
+	if r := d.Remote; r != nil {
+		out.Enabled = r.Enabled != nil && *r.Enabled
+		if r.Providers != nil {
+			out.Providers = r.Providers
+		}
+		if r.MaxCalls != nil {
+			out.MaxCalls = *r.MaxCalls
+		}
+		if r.MaxTokens != nil {
+			out.MaxTokens = *r.MaxTokens
+		}
+	}
+	return out
 }
 
 // Pipeline is one of the caller's pipelines.
 type Pipeline struct {
 	PipelineDoc
-	ID             string            `json:"id"`
-	BasedOn        *string           `json:"based_on"`
-	Version        int               `json:"version"`
-	CreatedAt      time.Time         `json:"created_at"`
-	UpdatedAt      time.Time         `json:"updated_at"`
-	WorkflowTitles map[string]string `json:"workflow_titles"`
-	LastBatch      *Batch            `json:"last_batch"`
-	Problems       *[]Problem        `json:"problems,omitempty"` // only from get, create, replace and save-as
-	Bounds         *PipelineBounds   `json:"bounds,omitempty"`   // with problems, when nothing blocks saving
+	ID             string              `json:"id"`
+	BasedOn        *string             `json:"based_on"`
+	Version        int                 `json:"version"`
+	CreatedAt      time.Time           `json:"created_at"`
+	UpdatedAt      time.Time           `json:"updated_at"`
+	WorkflowTitles map[string]string   `json:"workflow_titles"`
+	LastBatch      *Batch              `json:"last_batch"`
+	Problems       *[]Problem          `json:"problems,omitempty"` // only from get, create, replace and save-as
+	Bounds         *PipelineBounds     `json:"bounds,omitempty"`   // with problems, when nothing blocks saving
+	Egress         *[]PipelineEgress   `json:"egress,omitempty"`   // API 1.15, with bounds
+	Reserved       *[]PipelineReserved `json:"reserved,omitempty"` // API 1.15, with bounds
 }
 
 // PipelineBounds is a pipeline's worst case per row: generation runs and LLM calls (API 1.14).
 type PipelineBounds struct {
-	Runs     int `json:"runs"`
-	LLMCalls int `json:"llm_calls"`
+	Runs         int `json:"runs"`
+	LLMCalls     int `json:"llm_calls"`
+	ToolCalls    int `json:"tool_calls"`    // API 1.15: agent visits × max_tool_calls
+	RemoteCalls  int `json:"remote_calls"`  // API 1.15: requests to remote providers per row
+	RemoteTokens int `json:"remote_tokens"` // API 1.15: their token bound per row
+	// API 1.15, per batch: a director's chat (any model source) and the rows agents may add (with rows.add)
+	Chat      *ChatBound `json:"chat,omitempty"`
+	AddedRows int        `json:"added_rows,omitempty"`
+}
+
+// ChatBound is a director's chat worst case per batch.
+type ChatBound struct {
+	Calls     int `json:"calls"`
+	Tokens    int `json:"tokens"`
+	ToolCalls int `json:"tool_calls"`
+}
+
+// EgressCount is a worst case of calls and tokens.
+type EgressCount struct {
+	Calls  int `json:"calls"`
+	Tokens int `json:"tokens"`
+}
+
+// PipelineEgress is one node whose calls leave the process for a model server (API 1.15): exactly what is sent.
+type PipelineEgress struct {
+	Node       string       `json:"node"`
+	Where      string       `json:"where"` // server | remote | network
+	Provider   *string      `json:"provider"`
+	Model      *string      `json:"model"`
+	Fields     []string     `json:"fields"`
+	Thumbnails int          `json:"thumbnails"`
+	PerRow     EgressCount  `json:"per_row"`
+	Chat       *EgressCount `json:"chat"`
+}
+
+// PipelineReserved is a local server a pipeline uses and the memory its host reserves (API 1.15).
+type PipelineReserved struct {
+	Provider string  `json:"provider"`
+	Host     string  `json:"host"`
+	MemoryGB float64 `json:"memory_gb"`
 }
 
 // PipelineValidation is POST /pipelines/validate's answer.
 type PipelineValidation struct {
-	Problems []Problem         `json:"problems"`
-	CanSave  bool              `json:"can_save"`
-	CanRun   bool              `json:"can_run"`
-	Bounds   *PipelineBounds   `json:"bounds,omitempty"` // when nothing blocks saving
-	Models   map[string]string `json:"models"`
+	Problems []Problem           `json:"problems"`
+	CanSave  bool                `json:"can_save"`
+	CanRun   bool                `json:"can_run"`
+	Bounds   *PipelineBounds     `json:"bounds,omitempty"` // when nothing blocks saving
+	Models   map[string]string   `json:"models"`
+	Egress   *[]PipelineEgress   `json:"egress,omitempty"`   // API 1.15, with bounds
+	Reserved *[]PipelineReserved `json:"reserved,omitempty"` // API 1.15, with bounds
 }
 
 // PipelineList is the caller's pipelines, newest first.
@@ -415,13 +582,19 @@ func (b *TakePipeline) Validate() string {
 var (
 	uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	workflowRef = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
-	sourceRef   = regexp.MustCompile(`^(\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\.(takes|picked|reasons|notes))$`)
-	inputRef    = regexp.MustCompile(`^\$[a-z][a-z0-9_]{0,63}$`)
-	routeLabel  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-	memoryKey   = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
-	fromRef     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}\.(takes|picked)$`)
-	inputTypes  = []string{"Text", "Image", "Int", "Float", "Seed"}
-	maxEdges    = 64
+	modelRef    = regexp.MustCompile(`^(auto|[a-z0-9][a-z0-9_-]{0,63}|server:[a-z][a-z0-9-]{0,31}(/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?|remote:[a-z][a-z0-9-]{0,31}/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})$`)
+	sourceRef   = regexp.MustCompile(`^(\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63})$`)
+	eachRef     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}\.items$`)
+	customRef   = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}/[a-z][a-z0-9-]{0,31}$`)
+	// ProviderName is a model provider's name (API 1.15).
+	ProviderName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+	agentTools   = []string{"gallery.search", "memory.read", "memory.write", "library.read", "rows.add", "rows.edit"}
+	inputRef     = regexp.MustCompile(`^\$[a-z][a-z0-9_]{0,63}$`)
+	routeLabel   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	memoryKey    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+	fromRef      = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}\.(takes|picked)$`)
+	inputTypes   = []string{"Text", "Image", "Int", "Float", "Seed"}
+	maxEdges     = 64
 )
 
 // between reports whether text has lo..hi characters.
@@ -447,6 +620,21 @@ func (d *PipelineDoc) Validate() string {
 	for _, id := range slices.Sorted(maps.Keys(d.Nodes)) {
 		if detail := validNode(id, d.Nodes[id]); detail != "" {
 			return detail
+		}
+	}
+	if r := d.Remote; r != nil {
+		switch {
+		case len(r.Providers) > 8 || len(slices.Compact(slices.Sorted(slices.Values(r.Providers)))) < len(r.Providers):
+			return "remote.providers: at most 8, none twice"
+		case r.MaxCalls != nil && (*r.MaxCalls < 1 || *r.MaxCalls > 10000):
+			return "remote.max_calls must be 1 to 10000"
+		case r.MaxTokens != nil && (*r.MaxTokens < 1000 || *r.MaxTokens > 10000000):
+			return "remote.max_tokens must be 1000 to 10000000"
+		}
+		for _, name := range r.Providers {
+			if !ProviderName.MatchString(name) {
+				return "remote.providers: each a provider name"
+			}
 		}
 	}
 	for i, edge := range d.Edges {
@@ -513,6 +701,9 @@ func validNode(id string, n PipelineNode) string {
 				return fmt.Sprintf("%s.looks[%d]: not a look id", at, i+1)
 			}
 		}
+		if n.Each != nil && !eachRef.MatchString(*n.Each) {
+			return at + ".each must be <producer>.items"
+		}
 		for key := range n.Fixed {
 			if !reference.MatchString(key) {
 				return fmt.Sprintf("%s.inputs: %q is not <node>.<param>", at, key)
@@ -521,6 +712,58 @@ func validNode(id string, n PipelineNode) string {
 		for key, source := range n.Bind {
 			if !reference.MatchString(key) || !sourceRef.MatchString(source) {
 				return fmt.Sprintf("%s.bind.%s: a <node>.<param> key and a source ($input, step.takes or gate.picked)", at, key)
+			}
+		}
+	case "custom":
+		switch {
+		case !customRef.MatchString(n.CustomNode):
+			return at + ".node must be <pack>/<node>"
+		case len(n.Fixed) > 16 || len(n.Bind) > 16:
+			return at + ": at most 16 inputs and 16 binds"
+		}
+		for key := range n.Fixed {
+			if !slug.MatchString(key) {
+				return fmt.Sprintf("%s.inputs: %q is not a field name", at, key)
+			}
+		}
+		for key, source := range n.Bind {
+			if !slug.MatchString(key) || !sourceRef.MatchString(source) {
+				return fmt.Sprintf("%s.bind.%s: a field name and a source", at, key)
+			}
+		}
+	case "agent":
+		switch {
+		case n.Instruction == nil || !between(*n.Instruction, 1, 4000):
+			return at + ".instruction must be 1-4000 characters"
+		case len(n.Tools) > 6 || len(slices.Compact(slices.Sorted(slices.Values(n.Tools)))) < len(n.Tools):
+			return at + ".tools: at most 6, none twice"
+		case n.Routes != nil && (len(n.Routes) < 2 || len(n.Routes) > 6):
+			return at + ".routes: 2 to 6"
+		case n.WakeOnRows != nil && !slices.Contains([]string{"all", "failed", "none"}, *n.WakeOnRows):
+			return at + ".wake_on_rows must be all, failed or none"
+		case n.MaxWakes != nil && (*n.MaxWakes < 1 || *n.MaxWakes > 500):
+			return at + ".max_wakes must be 1 to 500"
+		case len(n.Sources) > 4:
+			return at + ".from: at most 4 sources"
+		}
+		for _, tool := range n.Tools {
+			if !slices.Contains(agentTools, tool) {
+				return at + ".tools: each one of " + strings.Join(agentTools, ", ")
+			}
+		}
+		for label, meaning := range n.Routes {
+			if !routeLabel.MatchString(label) || !between(meaning, 1, 200) {
+				return at + ".routes: each a label like retry and a meaning of 1-200 characters"
+			}
+		}
+		if c := n.Caps; c != nil && ((c.MaxTurns != nil && (*c.MaxTurns < 1 || *c.MaxTurns > 16)) ||
+			(c.MaxToolCalls != nil && (*c.MaxToolCalls < 0 || *c.MaxToolCalls > 32)) ||
+			(c.MaxTokens != nil && (*c.MaxTokens < 1000 || *c.MaxTokens > 200000))) {
+			return at + ".caps: max_turns 1-16, max_tool_calls 0-32, max_tokens 1000-200000"
+		}
+		for _, src := range n.Sources {
+			if !sourceRef.MatchString(src) {
+				return at + ".from: each a source"
 			}
 		}
 	case "gate":
@@ -557,7 +800,7 @@ func validNode(id string, n PipelineNode) string {
 		}
 	case "write":
 		switch {
-		case !inputRef.MatchString(n.To):
+		case n.To != "" && !inputRef.MatchString(n.To):
 			return at + ".to must be a $<input>"
 		case n.Instruction != nil && !between(*n.Instruction, 1, 1000):
 			return at + ".instruction must be 1-1000 characters"
@@ -583,10 +826,13 @@ func validNode(id string, n PipelineNode) string {
 			return at + ": a write has a key and from, no limit"
 		}
 	}
-	if n.Model != nil && !workflowRef.MatchString(*n.Model) {
-		return at + ".model must be auto or an ask workflow id"
+	if n.List != nil && (n.List.Max < 1 || n.List.Max > 24) {
+		return at + ".list.max must be 1 to 24"
 	}
-	if n.Sources != nil || n.Kind == "write" || n.Kind == "decide" {
+	if n.Model != nil && !modelRef.MatchString(*n.Model) {
+		return at + ".model must be auto, an ask workflow id, server:<name>[/<model>] or remote:<provider>/<model>"
+	}
+	if n.Kind != "agent" && (n.Sources != nil || n.Kind == "write" || n.Kind == "decide") {
 		if len(n.Sources) < 1 || len(n.Sources) > 4 {
 			return at + ".from must have 1 to 4 sources"
 		}
@@ -637,6 +883,9 @@ type BatchCellAttempt struct {
 	DecisionID string          `json:"decision_id,omitempty"`
 	Judged     json.RawMessage `json:"judged,omitempty"`
 	Route      json.RawMessage `json:"route,omitempty"`
+	// API 1.15: a fanned-out step's branch; an agent attempt's {turns, tool_calls, tokens, items, route}
+	Branch *int            `json:"branch,omitempty"`
+	Agent  json.RawMessage `json:"agent,omitempty"`
 }
 
 // BatchPick is POST …/rows/{n}/pick: take_ids, or reject.
@@ -743,6 +992,10 @@ type ExecutionStep struct {
 	HasState bool           `json:"has_state"`
 	Decision *Decision      `json:"decision,omitempty"` // API 1.14: the step details of a judge, write or decide
 	Memory   *StepMemory    `json:"memory,omitempty"`
+	// API 1.15: a fanned-out step's branch; an agent's turn and, on its tools part, the calls with results
+	Branch    *int            `json:"branch,omitempty"`
+	Turn      *int            `json:"turn,omitempty"`
+	ToolCalls json.RawMessage `json:"tool_calls,omitempty"`
 }
 
 // ExecutionNode is a node the row passed.
@@ -868,6 +1121,11 @@ type Decision struct {
 	Judge         *DecisionJudge    `json:"judge,omitempty"`
 	Write         json.RawMessage   `json:"write,omitempty"`
 	Decide        json.RawMessage   `json:"decide,omitempty"`
+	// API 1.15
+	Source          json.RawMessage `json:"source,omitempty"`
+	Replayable      *bool           `json:"replayable,omitempty"`
+	NetworkFailures *int            `json:"network_failures,omitempty"`
+	Agent           json.RawMessage `json:"agent,omitempty"` // an agent visit: {turns, route, to, forced, items, say, stopped, tool_calls, tokens}
 }
 
 // DecisionList is a row's or a take's decisions.

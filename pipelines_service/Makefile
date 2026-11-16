@@ -19,6 +19,7 @@ lint:
 gen:
 	rm -rf gen && mkdir -p gen/messages
 	cp ../contracts/messages/*.schema.json gen/messages/
+	cp ../contracts/registry.schema.json gen/
 
 image:
 	docker build -t helmstudio/pipelines:dev .

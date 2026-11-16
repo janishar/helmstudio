@@ -18,13 +18,16 @@ import type { CanvasProps } from "@/components/pipelines/canvas";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
 import { nodeLabel } from "@/lib/pipeline";
 import {
+  agentEnd,
   asRun,
   canRetryFrom,
   criterionLines,
+  decisionModel,
   stepDetail,
   stepLines,
   wordDiff,
 } from "@/lib/pipeline-run";
+import { callLine } from "@/lib/chat";
 import { safeUrl } from "@/lib/format";
 import { useTakes } from "@/lib/take-cache";
 
@@ -96,7 +99,7 @@ export function Execution({
     () =>
       followBatch(x.batch_id, ["batch", "row"], (e) => {
         if (e.type === "batch") return setBatch(e.data);
-        if (e.data.row !== x.row) return;
+        if (e.type !== "row" || e.data.row !== x.row) return;
         clearTimeout(timer.current);
         timer.current = setTimeout(() => void load(), 300);
       }),
@@ -325,6 +328,14 @@ export function Execution({
               </span>
             </div>
             {s.error && <p className="m-0 text-[13px] text-[#f2c14e]">{s.error}</p>}
+            {s.tool_calls && s.tool_calls.length > 0 && !s.decision && (
+              <details className="text-[12px] text-t2">
+                <summary className="cursor-pointer">
+                  {s.tool_calls.length} tool call{s.tool_calls.length === 1 ? "" : "s"}
+                </summary>
+                <ToolCalls calls={s.tool_calls} />
+              </details>
+            )}
             {detail && "decision" in detail && detail.decision ? (
               <DecisionDetail d={detail.decision} name={(id) => nodeLabel(doc, id, titles)} />
             ) : (
@@ -468,6 +479,21 @@ export function Execution({
   );
 }
 
+/** An agent's tool calls, each in words with its arguments and result as JSON text (never HTML). */
+function ToolCalls({ calls }: { calls: S<"ToolCall">[] }) {
+  return calls.map((c) => (
+    <details key={c.id} className="mt-1 pl-3">
+      <summary className="mono cursor-pointer text-[11px]">{callLine(c)}</summary>
+      <pre
+        className="m-0 mt-1 max-h-48 overflow-auto rounded-lg px-2 py-1.5 font-mono text-[11px] leading-4 break-words whitespace-pre-wrap text-[var(--t1b)]"
+        style={{ background: "var(--in)" }}
+      >
+        {JSON.stringify({ args: c.args, result: c.result, error: c.error }, null, 2)}
+      </pre>
+    </details>
+  ));
+}
+
 const tile = (label: string, value: React.ReactNode) => (
   <div className="set flex min-w-0 flex-col gap-0.5">
     <small className="text-[12px] text-t2">{label}</small>
@@ -477,13 +503,65 @@ const tile = (label: string, value: React.ReactNode) => (
 
 /** A judge's, write's or decide's step details from its decision. */
 function DecisionDetail({ d, name }: { d: S<"Decision">; name: (id: string) => string }) {
-  const model = d.workflow_title ?? d.workflow;
+  const model = decisionModel(d);
   const answer = d.replayed
     ? tile("Reused", d.replayed_from ? `from ${d.replayed_from.split(":")[0].slice(0, 8)}` : "yes")
-    : tile("Answer", `${Math.round(d.seconds * 10) / 10} s · ${d.tokens_out} tokens`);
+    : d.replayable === false
+      ? tile("Reused", "never: a remote answer")
+      : tile("Answer", `${Math.round(d.seconds * 10) / 10} s · ${d.tokens_out} tokens`);
   return (
     <>
       {d.error && <p className="m-0 text-[13px] text-[#f2c14e]">{d.error}</p>}
+      {d.agent && (
+        <>
+          <div className="set flex items-center justify-between gap-2 py-2 text-[13px]">
+            {agentEnd(d.agent)}
+            <span className="text-[11px] whitespace-nowrap text-t2">
+              {d.agent.turns.length} turns · {d.agent.tool_calls} tools ·{" "}
+              {d.agent.tokens.toLocaleString("en-US")} tokens
+            </span>
+          </div>
+          <div className="flex flex-col gap-2">
+            <h3 className="heading">Messages and tool calls</h3>
+            {d.agent.turns.map((t) => (
+              <details key={t.turn} className="text-[12px] text-t2">
+                <summary className="cursor-pointer">
+                  Turn {t.turn} ·{" "}
+                  {t.calls.length
+                    ? `${t.calls.length} tool call${t.calls.length === 1 ? "" : "s"}`
+                    : "the end"}
+                </summary>
+                {t.say && (
+                  <p className="my-1.5 text-[13px] break-words whitespace-pre-wrap text-[var(--t1b)]">
+                    {t.say}
+                  </p>
+                )}
+                <ToolCalls calls={t.calls} />
+              </details>
+            ))}
+            {d.agent.items.length > 0 && (
+              <details className="text-[12px] text-t2">
+                <summary className="cursor-pointer">
+                  Its list · {d.agent.items.length} items
+                </summary>
+                <ol className="m-0 mt-1 flex flex-col gap-1 pl-5 text-[13px] text-[var(--t1b)]">
+                  {d.agent.items.map((x, i) => (
+                    <li key={i} className="break-words whitespace-pre-wrap">
+                      {x}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {tile("Model", model)}
+            {d.network_failures
+              ? tile("Network failures", `${d.network_failures} retried`)
+              : answer}
+          </div>
+        </>
+      )}
       {d.judge && (
         <>
           <div className="flex flex-col gap-1.5">

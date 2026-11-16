@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.pipeline.chat.schema.json",
+  "title": "pipelines → studio's projector: one message of the director",
+  "description": "From API 1.15. Subject `evt.pipeline.<batch_id>.chat` (stream EVT), Nats-Msg-Id `<batch_id>:<seq>` (seq shared with the other evt.pipeline.* of the batch). The director's reply after a wake, or a notice (a row it added or changed that Submit's checks rejected, with the reason; a cap that ended a wake). Studio stores it in the batch's chat (GET …/chat) and appends a `chat` batch event. id is stable (uuid5 of the wake's key), so a republish replaces, never duplicates.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.pipeline.chat"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "message"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "message": {
+          "type": "object",
+          "required": [
+            "id",
+            "role",
+            "text",
+            "wake",
+            "tool_calls",
+            "rows",
+            "at"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "defs.schema.json#/$defs/uuid"
+            },
+            "role": {
+              "enum": [
+                "director",
+                "notice"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "wake": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "the wake it came from, from 1"
+            },
+            "tool_calls": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "tools.schema.json#/$defs/toolCall"
+              },
+              "description": "every tool call of the wake, in order"
+            },
+            "rows": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "$ref": "defs.schema.json#/$defs/batchRow"
+              },
+              "description": "rows it added or changed in this wake"
+            },
+            "reply_to": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "$ref": "defs.schema.json#/$defs/uuid"
+              },
+              "description": "the user messages this wake read"
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "ollama",
+  "provider": {
+    "kind": "server",
+    "api": "openai",
+    "base_url": "http://host.docker.internal:11434/v1",
+    "timeout_s": 120,
+    "host": "mac",
+    "memory_gb": 6.5,
+    "key_secret": null
+  }
+}

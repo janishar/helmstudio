@@ -10,7 +10,14 @@ services:
       DATABASE_URL_FILE: /run/secrets/pipelines_database_url
       NATS_URL_FILE: /run/secrets/nats_pipelines_url
       HEALTH_PORT: "8082"
+      # API 1.15: calls that leave the machine, off unless deploy/.env sets REMOTE_MODELS=on; remote providers' key
+      # files (the admin puts them in deploy/secrets/providers/, named by key_secret); hosts whose local servers
+      # this service calls (cmd.run.<host>.server; nats.conf grants hosts fake and mac)
+      PIPELINES_REMOTE_MODELS: ${REMOTE_MODELS:-off}
+      PIPELINES_PROVIDER_KEYS_DIR: /run/secrets/providers
+      PIPELINES_SERVER_HOSTS: ${SERVER_HOSTS:-}
     secrets: [pipelines_database_url, nats_pipelines_url]
+    volumes: [./secrets/providers:/run/secrets/providers:ro]
     healthcheck:                                      # GET /health on 8082 (the slim image has no curl)
       test: [CMD, python, -c, "import urllib.request as u; u.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
       interval: 5s

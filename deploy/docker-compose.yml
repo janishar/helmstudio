@@ -43,10 +43,11 @@ secrets:
   file_url_secret: {file: secrets/file_url_secret}  # studio signs /files links with it, files verifies them
 
 # Fixed addresses for the two hops allowed to set X-Forwarded-For: Kong (trusted by auth) and the web BFF (trusted
-# by Kong and auth), so sign-in rate limits key on the browser's IP and a header sent from outside is ignored.
+# by Kong and auth), so sign-in rate limits key on the browser's IP and a header sent from outside is ignored. Every
+# other container gets an address from .128/25, so a new service can never take .10 or .11 first.
 networks:
   default:
-    ipam: {config: [{subnet: "${HELM_NET:-172.30.97}.0/24"}]}
+    ipam: {config: [{subnet: "${HELM_NET:-172.30.97}.0/24", ip_range: "${HELM_NET:-172.30.97}.128/25"}]}
 
 services:
   kong:

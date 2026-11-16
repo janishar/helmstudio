@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.chat.schema.json",
+  "title": "studio → pipelines: a message to the batch's director",
+  "description": "From API 1.15. Written by studio's outbox in the transaction that stores the user's chat message (POST /v1/studio/batches/{id}/chat); subject `cmd.pipeline.chat` (stream CMD, the batch's command counter, Nats-Msg-Id `<batch_id>:<n>`). pipelines appends it to the director's thread (`<batch_id>:director`) and wakes it; messages that arrive while it thinks are read together on its next wake. A redelivered message (same message_id) is appended once.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.pipeline.chat"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the batch id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "batch_id",
+        "message_id",
+        "text",
+        "at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "message_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

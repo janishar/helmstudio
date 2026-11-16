@@ -1,4 +1,4 @@
-"""cmd.pipeline.{submit,resume,pause,stop,retry,pick} from CMD (durable `pipelines`, one at a time, in order).
+"""cmd.pipeline.{submit,resume,pause,stop,retry,pick,chat} from CMD (durable `pipelines`, one at a time, in order).
 
 One `handle(msg)` per delivery: off-contract → copied to dlq.<subject> and termed; already handled (inbox, by
 Nats-Msg-Id) → acked; else the engine's handler, the inbox row, ack. Every handler is idempotent too, so a
@@ -12,7 +12,9 @@ from messaging import schemas
 
 log = logging.getLogger(__name__)
 
-TYPES = {f"cmd.pipeline.{k}" for k in ("submit", "resume", "pause", "stop", "retry", "pick")}
+TYPES = {
+    f"cmd.pipeline.{k}" for k in ("submit", "resume", "pause", "stop", "retry", "pick", "chat")
+}
 ACK_WAIT = 60  # seconds
 RETRY_DELAY = 5  # seconds before a failed delivery comes back
 
@@ -56,6 +58,8 @@ class Commands:
             await self.engine.retry(
                 d["batch_id"], d["row"], d["attempt"], d.get("from_step"), d.get("checkpoint_id")
             )
+        elif kind == "chat":
+            await self.engine.chat(d)
         elif kind == "pick":
             if not await self.engine.pick(d):
                 log.info("pick for %s row %s dropped: not parked there", d["batch_id"], d["row"])

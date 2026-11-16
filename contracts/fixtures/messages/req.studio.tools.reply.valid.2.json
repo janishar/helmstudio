@@ -1,0 +1,18 @@
+{
+  "result": {
+    "row": 15,
+    "status": "queued"
+  },
+  "row": {
+    "row": 15,
+    "inputs": {
+      "inputs.script": "The den at dawn.",
+      "inputs.ref": {
+        "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60"
+      }
+    },
+    "seeds": {
+      "shots": 918273
+    }
+  }
+}

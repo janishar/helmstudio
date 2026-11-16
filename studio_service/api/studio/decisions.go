@@ -66,6 +66,11 @@ type decisionIn struct {
 	Judge      *judgeIn          `json:"judge"`
 	Write      json.RawMessage   `json:"write"`
 	Decide     json.RawMessage   `json:"decide"`
+	// API 1.15: where the model ran, whether it may be replayed, transport failures, an agent visit's turns
+	Source          json.RawMessage `json:"source"`
+	Replayable      *bool           `json:"replayable"`
+	NetworkFailures *int            `json:"network_failures"`
+	Agent           json.RawMessage `json:"agent"`
 }
 
 // judgeIn is a judge decision's result as pipelines sent it: one check per criterion (must lines, then nice).
@@ -126,7 +131,15 @@ func (s *Service) decisionsDTO(ctx context.Context, tx pgx.Tx, rows []decisionRo
 			Workflow: d.Workflow, WorkflowTitle: deref(row.WorkflowTitle), Model: rawOrNil(d.Model), Template: d.Template,
 			Prompt: d.Prompt, Seen: []dto.DecisionSeen{}, Answers: d.Answers, TokensIn: d.TokensIn, TokensOut: d.TokensOut,
 			Seconds: d.Seconds, MemoryRead: nonNil(d.MemoryRead), Error: d.Error, At: row.CreatedAt,
-			Write: rawOrNil(d.Write), Decide: rawOrNil(d.Decide)}
+			Write: rawOrNil(d.Write), Decide: rawOrNil(d.Decide), Source: rawOrNil(d.Source), Agent: rawOrNil(d.Agent),
+			NetworkFailures: d.NetworkFailures}
+		// a remote answer is never reproducible, whatever was sent (plan 16.7)
+		var source struct {
+			Kind string `json:"kind"`
+		}
+		_ = json.Unmarshal(d.Source, &source)
+		replayable := source.Kind != "remote" && (d.Replayable == nil || *d.Replayable)
+		shown.Replayable = &replayable
 		if shown.Model == nil {
 			shown.Model = json.RawMessage("null")
 		}

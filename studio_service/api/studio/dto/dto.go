@@ -248,6 +248,12 @@ type Batch struct {
 	Memory        json.RawMessage   `json:"memory,omitempty"`
 	AgainOf       *string           `json:"again_of,omitempty"`
 	SameDecisions *bool             `json:"same_decisions,omitempty"`
+	// API 1.15, a pipeline batch: what leaves the machine, servers' reserved memory, the director's chat (null
+	// without one), the remote calls so far (null when off)
+	Egress   *[]PipelineEgress   `json:"egress,omitempty"`
+	Reserved *[]PipelineReserved `json:"reserved,omitempty"`
+	Director json.RawMessage     `json:"director,omitempty"`
+	Remote   json.RawMessage     `json:"remote,omitempty"`
 }
 
 // BatchRow is one row of a batch.

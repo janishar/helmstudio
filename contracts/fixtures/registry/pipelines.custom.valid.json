@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "host": "pipelines",
+  "env": "engine",
+  "published_at": "2026-11-16T12:00:00Z",
+  "published_by": "pipelines 0.5.0",
+  "nodes": [
+    {
+      "name": "text/prefix",
+      "title": "Prefix text",
+      "help": "Puts a fixed prefix before a text (an example custom node: plain Python, no model, no network).",
+      "input": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "prefix": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "text",
+          "prefix"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 4201
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "network": false,
+      "version": "3f9c2a1b7d40"
+    }
+  ]
+}

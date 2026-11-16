@@ -1,0 +1,5 @@
+{
+  "error": "host.example.com resolves to 93.184.216.34, which is not a loopback or private address",
+  "code": "refused",
+  "seconds": 0.0
+}

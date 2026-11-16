@@ -296,6 +296,16 @@ encoder has no vision blocks. Name text workflow files `text-<id>.json` (they so
   phase `loading <component>` and the size from the headers stay the core's; packed `U32` weights count 4 bytes).
 - The fake `echo/ask` answers the first JSON value after the last `ECHO-ANSWER:` in its prompt (a JSON string: its
   text), else `{}` with a schema and `echo` without; its retry answers the one after `ECHO-RETRY:` when present.
+  An agent turn (API 1.15): when the prompt's last `This is turn <n> of` line has a matching `ECHO-TURN <n>:`, it
+  answers the JSON after that marker instead, so a test scripts a whole tool loop turn by turn.
+- **Tool calling** (API 1.15, contracts/README.md "Tool calling on the ask contract"): no ask kind changes. An agent's
+  turn rides in `schema` (the canonical turn schema `{say, calls ≤ 4 × {tool, args}}`, `calls: []` = the final
+  answer), so the tool set is in the node cache key like any schema and the caps (4 calls, `say` ≤ 4000, args) are
+  checked by the schema validation and its one retry. Every ask stage supports it: `llm/ask` constrains decoding
+  with llguidance, dropping only the keywords llguidance does not implement (`propertyNames` on `rows_add` /
+  `rows_edit` inputs) from the grammar, never from the check; `qwen-image/ask` (no constrained decoding) by the
+  schema in the prompt and the check. Tools are not rendered through the model's own tool-calling chat template:
+  the turn JSON is the answer. Native OpenAI tools belong to `server-ask` (pipelines_service), not a pack.
 
 ## workflows/*.json
 

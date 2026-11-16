@@ -40,6 +40,10 @@ const RUN_ONLY = new Set<Code>([
   "unknown_look",
   "look_fit",
   "unknown_model",
+  "remote_not_enabled",
+  "remote_off",
+  "unknown_custom",
+  "custom_input",
 ]);
 /** the param types a pipeline input of each type fills */
 const INPUT_FITS: Record<InputType, string[]> = {
@@ -82,14 +86,40 @@ export const targets = (to: PEdge[1]) =>
       ? Object.values(to.routes)
       : [to.pass, to.fail, to.then];
 
-/** The kinds that ask a model (README, The llm pack and agent nodes). */
+/** The kinds that ask a model once per visit (README, The llm pack and agent nodes); an agent asks up to max_turns. */
 export const LLM_KINDS: Kind[] = ["judge", "write", "decide"];
+/** The kinds with a `model` (README, Model sources). */
+export const MODEL_KINDS: Kind[] = ["judge", "write", "decide", "agent"];
 export const P_MAX_CALLS = 32;
+/** a prompt's token bound for the remote worst case: 32768 characters / 4 (README, Model sources) */
+const PROMPT_TOKENS = 8192;
+const OUT_TOKENS = { write: 1400, "write-list": 4096, decide: 800 } as const;
+/** An agent's caps with the defaults filled (README, Agent node). */
+export const agentCaps = (n: S<"PipelineAgentNode">) => ({
+  max_turns: 6,
+  max_tool_calls: 12,
+  max_tokens: 16000,
+  ...n.caps,
+});
 const sameSet = (a: string[], b: string[]) =>
   a.length === b.length && new Set([...a, ...b]).size === a.length;
+/** A node that routes: a decide, or an agent with routes. */
+const routes = (n: PNode | undefined): Record<string, string> | null =>
+  n?.kind === "decide" || (n?.kind === "agent" && n.routes) ? n.routes! : null;
 
-/** The edges as the rules read them (refused edges dropped), the inputs, reach and dominance. A capped edge is a
- * branch's fail edge or a decide route other than its `then`. */
+/** The takes a step makes per visit: seeds × its fan-out's list maximum (0 for any other node). */
+export function stepTakes(doc: PDoc): Record<string, number> {
+  const a = analyse(doc);
+  return Object.fromEntries(
+    Object.entries(doc.nodes).map(([id, n]) => [
+      id,
+      n.kind === "step" ? (n.seeds ?? 1) * a.branches(id) : 0,
+    ]),
+  );
+}
+
+/** The edges as the rules read them (refused edges dropped), the inputs, reach and dominance, and the fan-outs. A
+ * capped edge is a branch's fail edge or a route other than its `then`. */
 export function analyse(doc: PDoc) {
   const nodes = doc.nodes;
   const ids = Object.keys(nodes);
@@ -112,20 +142,19 @@ export function analyse(doc: PDoc) {
     const kind = typeof to === "string" ? "plain" : "routes" in to ? "routes" : "branch";
     if (
       (kind === "branch" && fk !== "gate" && fk !== "judge") ||
-      (kind === "routes" && fk !== "decide")
+      (kind === "routes" && fk !== "decide" && fk !== "agent")
     ) {
       refused.push(["branch_not_gate", from]);
       continue;
     }
+    const r = routes(nodes[from]);
     if (
-      fk === "decide" &&
-      (typeof to !== "object" ||
-        !("routes" in to) ||
-        !sameSet(
-          Object.keys(to.routes),
-          Object.keys((nodes[from] as S<"PipelineDecideNode">).routes),
-        ) ||
-        !(to.then in to.routes))
+      (r &&
+        (typeof to !== "object" ||
+          !("routes" in to) ||
+          !sameSet(Object.keys(to.routes), Object.keys(r)) ||
+          !(to.then in to.routes))) ||
+      (fk === "agent" && kind === "routes" && !r)
     ) {
       refused.push(["decide_routes", from]);
       continue;
@@ -148,7 +177,7 @@ export function analyse(doc: PDoc) {
     }
   }
   for (const id of ids)
-    if (nodes[id].kind === "decide" && !routed.has(id)) refused.push(["decide_routes", id]);
+    if (routes(nodes[id]) && !routed.has(id)) refused.push(["decide_routes", id]);
   /** nodes reachable from src in one edge or more, never through `avoid` */
   const reach = (src: string, avoid?: string, uncappedOnly = false) => {
     const seen = new Set<string>();
@@ -171,39 +200,183 @@ export function analyse(doc: PDoc) {
     capped
       .filter(([g, f]) => (id === f || reach(f).has(id)) && reach(id).has(g))
       .reduce((s, [, , m]) => s + m, 0);
-  return { nodes, ids, roots, root, inputs, succ, capped, refused, reach, dominates, visits };
+  /** list producers (a write or agent with a list) → their declared maximum */
+  const lists: Record<string, number> = {};
+  for (const id of ids) {
+    const n = nodes[id];
+    if ((n.kind === "write" || n.kind === "agent") && n.list) lists[id] = n.list.max;
+  }
+  /** fanned-out step → its producer; `badFan`: steps whose `each` names no producer before them */
+  const fan: Record<string, string> = {};
+  const badFan: string[] = [];
+  for (const id of ids) {
+    const n = nodes[id];
+    if (n.kind !== "step" || !n.each) continue;
+    const p = n.each.split(".")[0];
+    if (!(p in lists) || !dominates(p, id)) badFan.push(id);
+    else fan[id] = p;
+  }
+  const branches = (id: string) => (id in fan ? lists[fan[id]] : 1);
+  return {
+    nodes,
+    ids,
+    roots,
+    root,
+    inputs,
+    succ,
+    capped,
+    refused,
+    reach,
+    dominates,
+    visits,
+    lists,
+    fan,
+    badFan,
+    branches,
+  };
 }
 
-/** The worst case per row (README, Pipeline rules: worst case): generation runs and LLM calls. */
-export function pipelineBounds(doc: PDoc): S<"PipelineBounds"> {
-  const a = analyse(doc);
+/** The worst case per row (README, Pipeline rules: worst case): generation runs, LLM calls and tool calls. The remote
+ * fields need the model sources: pipelineProblems fills them. */
+export function pipelineBounds(doc: PDoc, a = analyse(doc)): S<"PipelineBounds"> {
   let runs = 0;
   let calls = 0;
+  let tools = 0;
   for (const id of a.ids) {
     const n = a.nodes[id];
-    if (n.kind === "step") runs += (n.seeds ?? 1) * a.visits(id);
+    if (n.kind === "step") runs += (n.seeds ?? 1) * a.branches(id) * a.visits(id);
     if (LLM_KINDS.includes(n.kind)) calls += a.visits(id);
+    if (n.kind === "agent") {
+      const c = agentCaps(n);
+      calls += a.visits(id) * c.max_turns;
+      tools += a.visits(id) * c.max_tool_calls;
+    }
   }
-  return { runs, llm_calls: calls };
+  const out: S<"PipelineBounds"> = {
+    runs,
+    llm_calls: calls,
+    tool_calls: tools,
+    remote_calls: 0,
+    remote_tokens: 0,
+  };
+  for (const id of a.ids) {
+    const n = a.nodes[id];
+    if (n.kind !== "agent") continue;
+    if (n.director) {
+      // per batch, whatever its model source
+      const c = agentCaps(n);
+      const w = n.max_wakes ?? 100;
+      out.chat = {
+        calls: w * c.max_turns * 2,
+        tokens: w * c.max_tokens,
+        tool_calls: w * c.max_tool_calls,
+      };
+    }
+    if (n.tools?.includes("rows.add")) out.added_rows = 100;
+  }
+  return out;
 }
 
-type Source = { input: InputType } | { takes: number } | { text: true };
+type Source =
+  | { input: InputType }
+  | { takes: number }
+  | { text: true; custom?: true }
+  | { item: string }
+  | { items: string }
+  | { any: true };
+type Custom = S<"CustomNode">;
+type JSchema = {
+  type?: string;
+  format?: string;
+  items?: JSchema;
+  maxItems?: number;
+  minItems?: number;
+  maxLength?: number;
+  minLength?: number;
+  minimum?: number;
+  maximum?: number;
+  enum?: unknown[];
+  properties?: Record<string, JSchema>;
+  required?: string[];
+};
 
-/** What a source gives: an input of a type, at most n takes, or text (a judge's reasons, a memory read's notes);
- * null when it names nothing of the right kind. */
-function sourceOf(a: ReturnType<typeof analyse>, src: string): Source | null {
+/** A custom node's field a source may fill: text (a string), takes (a list of take ids, at most 8), else null. */
+export function fieldKind(f: JSchema | undefined): "text" | "takes" | null {
+  if (f?.type === "string") return "text";
+  if (
+    f?.type === "array" &&
+    f.items?.type === "string" &&
+    f.items.format === "uuid" &&
+    (f.maxItems ?? 99) <= 8
+  )
+    return "takes";
+  return null;
+}
+
+/** Whether a JSON value fails a (small) JSON schema: type, enum, lengths, ranges, items, required (README, custom
+ * nodes: an `inputs` value is checked against its field's schema). */
+export function schemaError(s: JSchema, v: unknown): boolean {
+  const t = s.type;
+  if (t === "string" && typeof v !== "string") return true;
+  if ((t === "number" || t === "integer") && typeof v !== "number") return true;
+  if (t === "integer" && !Number.isInteger(v)) return true;
+  if (t === "boolean" && typeof v !== "boolean") return true;
+  if (t === "array" && !Array.isArray(v)) return true;
+  if (t === "object" && (typeof v !== "object" || v === null || Array.isArray(v))) return true;
+  if (s.enum && !s.enum.some((e) => JSON.stringify(e) === JSON.stringify(v))) return true;
+  if (typeof v === "string") {
+    const n = [...v].length;
+    if (n > (s.maxLength ?? Infinity) || n < (s.minLength ?? 0)) return true;
+    if (s.format === "uuid" && !UUID.test(v)) return true;
+  }
+  if (typeof v === "number" && (v > (s.maximum ?? Infinity) || v < (s.minimum ?? -Infinity)))
+    return true;
+  if (Array.isArray(v)) {
+    if (v.length > (s.maxItems ?? Infinity) || v.length < (s.minItems ?? 0)) return true;
+    if (s.items && v.some((x) => schemaError(s.items!, x))) return true;
+  }
+  if (t === "object" && v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    if ((s.required ?? []).some((k) => !(k in o))) return true;
+    for (const [k, p] of Object.entries(s.properties ?? {}))
+      if (k in o && schemaError(p, o[k])) return true;
+  }
+  return false;
+}
+
+/** What a source gives: an input of a type, at most n takes, text (a judge's reasons, a memory read's notes, a custom
+ * string field), a producer's item or items, or anything (a field of an unknown custom node); null when it names
+ * nothing of the right kind. */
+function sourceOf(
+  a: ReturnType<typeof analyse>,
+  src: string,
+  custom: Record<string, Custom> = {},
+): Source | null {
   if (src.startsWith("$"))
     return src.slice(1) in a.inputs ? { input: a.inputs[src.slice(1)] } : null;
   const [id, what] = src.split(".");
   const n = a.nodes[id];
   if (!n) return null;
-  if (what === "takes" && n.kind === "step") return { takes: n.seeds ?? 1 };
+  if (what === "takes" && n.kind === "step") return { takes: (n.seeds ?? 1) * a.branches(id) };
   if (what === "picked" && (n.kind === "gate" || n.kind === "judge")) return { takes: n.keep ?? 1 };
   if (
     (what === "reasons" && n.kind === "judge") ||
     (what === "notes" && n.kind === "memory" && n.op === "read")
   )
     return { text: true };
+  if (what === "item" && id in a.lists) return { item: id };
+  if (what === "items" && id in a.lists) return { items: id };
+  if (n.kind === "custom") {
+    const reg = custom[n.node];
+    if (!reg) return { any: true };
+    const f = (reg.output as JSchema).properties?.[what];
+    const k = fieldKind(f);
+    return k === "text"
+      ? { text: true, custom: true }
+      : k === "takes"
+        ? { takes: f!.maxItems! }
+        : null;
+  }
   return null;
 }
 
@@ -213,10 +386,31 @@ export const isTextWorkflow = (wf: Doc | undefined) =>
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** The ask workflow each judge, write and decide node runs (README, Model): a named one when the caller can run it;
- * `auto`: a judge → the ask template of its takes step's family, write and decide → that of the nearest step before
- * them, else `llm-ask`. A node with none is left out (`unknown_model`). */
-export function resolveModels(doc: PDoc, workflows: Record<string, Doc>): Record<string, string> {
+/** A provider as the rules read it (ModelSourceList's sources, or the admin's Provider): kind, models, default. */
+export type ModelProvider = {
+  name: string;
+  kind: "server" | "remote";
+  models: string[];
+  default_model: string;
+  enabled?: boolean;
+  host?: string;
+  memory_gb?: number;
+};
+/** What the rules need besides the documents (README, Model sources and Custom nodes): the enabled providers, the
+ * deployment's remote switch, the registered custom nodes. */
+export type RuleEnv = { providers?: ModelProvider[]; remoteOn?: boolean; custom?: Custom[] };
+
+/** The model each judge, write, decide and agent node runs (README, Model): a named ask workflow the caller can run;
+ * `auto`: a judge → the ask template of its takes step's family, the others → that of the nearest step before them,
+ * else `llm-ask`; `server:<n>[/<m>]` → `server:<n>/<m>` (default filled) and `remote:<p>/<m>` when that provider is
+ * enabled with that model. A node with none is left out (`unknown_model`); `blocked` gets the remote ones the
+ * switches refuse (they are not resolved). */
+export function resolveModels(
+  doc: PDoc,
+  workflows: Record<string, Doc>,
+  env: RuleEnv = {},
+  blocked?: (id: string, why: "remote_off" | "remote_not_enabled") => void,
+): Record<string, string> {
   const a = analyse(doc);
   const text = (w: string) => isTextWorkflow(workflows[w]);
   const familyAsk = (step: string | undefined) => {
@@ -227,14 +421,30 @@ export function resolveModels(doc: PDoc, workflows: Record<string, Doc>): Record
       .sort();
     return fam && own.length ? own[0] : text("llm-ask") ? "llm-ask" : undefined;
   };
+  const provs = new Map(
+    (env.providers ?? []).filter((p) => p.enabled !== false).map((p) => [p.name, p]),
+  );
   const steps = a.ids.filter((id) => a.nodes[id].kind === "step");
   const out: Record<string, string> = {};
   for (const id of a.ids) {
     const n = a.nodes[id];
-    if (n.kind !== "judge" && n.kind !== "write" && n.kind !== "decide") continue;
-    const m = n.model ?? "auto";
+    if (!MODEL_KINDS.includes(n.kind)) continue;
+    const m = (n as { model?: string }).model ?? "auto";
     let wid: string | undefined;
-    if (m !== "auto") wid = text(m) ? m : undefined;
+    if (m.startsWith("server:") || m.startsWith("remote:")) {
+      const [where, rest] = [m.slice(0, 6), m.slice(7)];
+      const [name, ...mm] = rest.split("/");
+      const model = mm.join("/") || provs.get(name)?.default_model || "";
+      if (where === "remote") {
+        const why = remoteRefusal(doc, env, name);
+        if (why) {
+          blocked?.(id, why);
+          continue;
+        }
+      }
+      const p = provs.get(name);
+      if (p && p.kind === where && p.models.includes(model)) wid = `${where}:${name}/${model}`;
+    } else if (m !== "auto") wid = text(m) ? m : undefined;
     else if (n.kind === "judge") wid = familyAsk(n.takes);
     else {
       const doms = steps.filter((s) => s !== id && a.dominates(s, id));
@@ -245,9 +455,21 @@ export function resolveModels(doc: PDoc, workflows: Record<string, Doc>): Record
   return out;
 }
 
+/** Why a remote call (provider `name`; null for a network custom node) is refused: the deployment's switch, then the
+ * pipeline's (README, Model sources); null when both allow it. */
+function remoteRefusal(doc: PDoc, env: RuleEnv, name: string | null) {
+  if (!env.remoteOn) return "remote_off" as const;
+  const r = doc.remote;
+  if (!r?.enabled || (name !== null && !(r.providers ?? []).includes(name)))
+    return "remote_not_enabled" as const;
+  return null;
+}
+
 /** Whether a source fits a workflow param (README, `bind_type`). */
 export function fits(p: Param, src: Source): boolean {
-  if ("text" in src) return false;
+  if ("text" in src || "item" in src) return INPUT_FITS.Text.includes(p.type);
+  if ("any" in src) return true;
+  if ("items" in src) return false;
   if ("input" in src)
     return INPUT_FITS[src.input].includes(p.type) || (src.input === "Image" && !!imageField(p));
   return (
@@ -256,18 +478,94 @@ export function fits(p: Param, src: Source): boolean {
   );
 }
 
+/** What leaves the machine (README, Model sources: egress) and the local servers' reserved memory, from the resolved
+ * models. */
+export function egressOf(
+  doc: PDoc,
+  models: Record<string, string>,
+  env: RuleEnv = {},
+  a = analyse(doc),
+): { egress: S<"PipelineEgress">[]; reserved: S<"PipelineReserved">[] } {
+  const custom = Object.fromEntries((env.custom ?? []).map((c) => [c.name, c]));
+  const provs = new Map((env.providers ?? []).map((p) => [p.name, p]));
+  const egress: S<"PipelineEgress">[] = [];
+  const reserved = new Map<string, S<"PipelineReserved">>();
+  for (const id of [...a.ids].sort()) {
+    const n = a.nodes[id];
+    if (n.kind === "custom" && custom[n.node]?.network)
+      egress.push({
+        node: id,
+        where: "network",
+        provider: null,
+        model: null,
+        fields: [...new Set([...Object.keys(n.inputs ?? {}), ...Object.keys(n.bind ?? {})])]
+          .sort()
+          .map((f) => `input:${f}`),
+        thumbnails: 0,
+        per_row: { calls: 0, tokens: 0 },
+        chat: null,
+      });
+    const src = models[id] ?? "";
+    if (n.kind === "judge" || !/^(server|remote):/.test(src)) continue;
+    const where = src.slice(0, 6) as "server" | "remote";
+    const [name, ...mm] = src.slice(7).split("/");
+    const p = provs.get(name);
+    if (where === "server" && p?.host && p.memory_gb)
+      reserved.set(name, { provider: name, host: p.host, memory_gb: p.memory_gb });
+    const v = a.visits(id);
+    let fields: string[];
+    let per_row: { calls: number; tokens: number };
+    let chat: { calls: number; tokens: number } | null = null;
+    if (n.kind === "agent") {
+      const c = agentCaps(n);
+      fields = [
+        "instruction",
+        ...(n.from ?? []),
+        ...(n.routes ? ["routes"] : []),
+        ...(n.tools ?? []).map((t) => `tool:${t}`),
+        ...(n.director ? ["chat"] : []),
+      ];
+      per_row = { calls: v * c.max_turns * 2, tokens: v * c.max_tokens };
+      const w = n.max_wakes ?? 100;
+      if (n.director) chat = { calls: w * c.max_turns * 2, tokens: w * c.max_tokens };
+    } else {
+      const k = n as S<"PipelineWriteNode"> | S<"PipelineDecideNode">;
+      fields = [...(k.kind === "write" ? ["instruction"] : ["question", "routes"]), ...k.from];
+      const out =
+        OUT_TOKENS[k.kind === "write" && k.list ? "write-list" : (k.kind as "write" | "decide")];
+      per_row = { calls: v * 2, tokens: v * 2 * (PROMPT_TOKENS + out) };
+    }
+    egress.push({
+      node: id,
+      where,
+      provider: name,
+      model: mm.join("/"),
+      fields,
+      thumbnails: 0,
+      per_row,
+      chat,
+    });
+  }
+  return { egress, reserved: [...reserved.keys()].sort().map((k) => reserved.get(k)!) };
+}
+
 /** Every problem of a pipeline document; `workflows`: id → the workflow documents the caller can run. Sorted as the
- * API sorts them. */
-/** `looks` / `loras`: the looks and LoRAs (id → family) the caller can use now; without `looks` (not known yet) a step's
- * looks are not checked. */
+ * API sorts them. `looks` / `loras`: the looks and LoRAs (id → family) the caller can use now; without `looks` (not
+ * known yet) a step's looks are not checked. `env`: the providers, the remote switch and the custom nodes. */
 export function pipelineProblems(
   doc: PDoc,
   workflows: Record<string, Doc>,
   palette: Palette,
   looks?: ResolvableLook[],
   loras: Record<string, string> = {},
-  /** receives the worst case per row and the resolved models (as PipelineValidation's) */
-  info?: { bounds?: S<"PipelineBounds">; models?: Record<string, string> },
+  /** receives the worst case per row, the resolved models, egress and reserved memory (as PipelineValidation's) */
+  info?: {
+    bounds?: S<"PipelineBounds">;
+    models?: Record<string, string>;
+    egress?: S<"PipelineEgress">[];
+    reserved?: S<"PipelineReserved">[];
+  },
+  env: RuleEnv = {},
 ): PProblem[] {
   const out = new Map<string, PProblem>();
   const add = (code: Code, message: string, node?: string, port?: string, param?: string) => {
@@ -288,6 +586,8 @@ export function pipelineProblems(
 
   const a = analyse(doc);
   const { nodes, ids, root, reach, dominates } = a;
+  const custom = Object.fromEntries((env.custom ?? []).map((c) => [c.name, c]));
+  const src = (s: string) => sourceOf(a, s, custom);
   const of = (k: Kind) => ids.filter((id) => nodes[id].kind === k);
   const name = (id: string) => nodes[id]?.title ?? id;
   if (a.roots.length !== 1) add("inputs_node", "a pipeline needs exactly one Inputs node");
@@ -301,8 +601,8 @@ export function pipelineProblems(
       code,
       {
         unknown_node: `${from}: an edge names a node that is not in the pipeline`,
-        branch_not_gate: `${from}: only a gate or a judge can branch, and only a decide routes`,
-        decide_routes: `${from}: a decide needs one routes edge with its own labels`,
+        branch_not_gate: `${from}: only a gate or a judge can branch, and only a decide or an agent routes`,
+        decide_routes: `${from}: it needs one routes edge with its own labels`,
         edge_invalid: `${from}: this edge is not allowed (one edge out of a node, none out of an output, none into the inputs)`,
       }[code as "unknown_node"],
       from,
@@ -310,11 +610,14 @@ export function pipelineProblems(
   for (const id of ids)
     if (reach(id, undefined, true).has(id))
       add("uncapped_cycle", `${name(id)}: it loops back without a capped fail edge`, id);
-  const { runs, llm_calls } = pipelineBounds(doc);
-  if (runs > P_MAX_RUNS)
-    add("too_many_runs", `a row could make ${runs} runs; at most ${P_MAX_RUNS}`);
-  if (llm_calls > P_MAX_CALLS)
-    add("too_many_calls", `a row could ask a model ${llm_calls} times; at most ${P_MAX_CALLS}`);
+  const bounds = pipelineBounds(doc, a);
+  if (bounds.runs > P_MAX_RUNS)
+    add("too_many_runs", `a row could make ${bounds.runs} runs; at most ${P_MAX_RUNS}`);
+  if (bounds.llm_calls > P_MAX_CALLS)
+    add(
+      "too_many_calls",
+      `a row could ask a model ${bounds.llm_calls} times; at most ${P_MAX_CALLS}`,
+    );
   if (root) {
     const r = reach(root);
     for (const id of ids)
@@ -330,13 +633,23 @@ export function pipelineProblems(
       ![...reach(id)].some((x) => outputs.includes(x))
     )
       add("dead_end", `${name(id)}: it leads to no Output`, id);
+  for (const id of a.badFan)
+    add(
+      "fanout_source",
+      `${name(id)}: it fans out over the list of a Write or Agent every row passes first`,
+      id,
+      "each",
+    );
 
   for (const id of [...of("gate"), ...of("judge")]) {
     const g = nodes[id] as S<"PipelineGateNode"> | S<"PipelineJudgeNode">;
     const t = nodes[g.takes];
+    const made = t?.kind === "step" ? (t.seeds ?? 1) * a.branches(g.takes) : 0;
     if (!t || t.kind !== "step" || !dominates(g.takes, id))
       add("gate_takes", `${name(id)}: its takes must come from a step every row passes first`, id);
-    else if ((g.keep ?? 1) > (t.seeds ?? 1))
+    else if (g.takes in a.fan && made > 8)
+      add("fanout_takes", `${name(id)}: ${name(g.takes)} can make ${made} takes; at most 8`, id);
+    else if ((g.keep ?? 1) > made)
       add("gate_keep", `${name(id)}: it keeps more than ${name(g.takes)} makes`, id);
   }
   for (const id of of("judge")) {
@@ -355,45 +668,144 @@ export function pipelineProblems(
         id,
         "memory",
       );
+    if (/^(server|remote):/.test(j.model ?? ""))
+      add("model_media", `${name(id)}: a judge sends thumbnails, so it needs a local model`, id);
   }
-  for (const id of of("write"))
-    if (a.inputs[(nodes[id] as S<"PipelineWriteNode">).to.slice(1)] !== "Text")
-      add("write_target", `${name(id)}: it must write a Text input`, id);
+  for (const id of of("write")) {
+    const w = nodes[id] as S<"PipelineWriteNode">;
+    if (!!w.list === (w.to !== undefined) || (w.to && a.inputs[w.to.slice(1)] !== "Text"))
+      add(
+        "write_target",
+        `${name(id)}: it writes a Text input, or answers a list (one of the two)`,
+        id,
+      );
+  }
   for (const id of ids) {
     const n = nodes[id];
-    if (n.kind !== "write" && n.kind !== "decide" && !(n.kind === "memory" && n.op === "write"))
+    if (
+      n.kind !== "write" &&
+      n.kind !== "decide" &&
+      n.kind !== "agent" &&
+      !(n.kind === "memory" && n.op === "write")
+    )
       continue;
-    for (const src of n.from) {
-      const s = sourceOf(a, src);
+    for (const s of n.from ?? []) {
+      const x = src(s);
       if (
-        !s ||
-        "takes" in s ||
-        ("input" in s && s.input !== "Text") ||
-        (!src.startsWith("$") && !dominates(src.split(".")[0], id))
+        !x ||
+        "takes" in x ||
+        "item" in x ||
+        "items" in x ||
+        ("input" in x && x.input !== "Text") ||
+        (!s.startsWith("$") && !dominates(s.split(".")[0], id))
       )
-        add("bind_source", `${name(id)}: ${src} is not text set before it`, id, "from");
+        add("bind_source", `${name(id)}: ${s} is not text set before it`, id, "from");
     }
   }
-  const models = resolveModels(doc, workflows);
-  if (info) info.bounds = { runs, llm_calls };
-  if (info) info.models = models;
+  const agents = of("agent");
+  const directors = agents.filter((x) => (nodes[x] as S<"PipelineAgentNode">).director);
+  for (const id of agents) {
+    const n = nodes[id] as S<"PipelineAgentNode">;
+    if ((n.tools ?? []).includes("rows.edit") && !n.director)
+      add("agent_tools", `${name(id)}: only the director may change rows`, id);
+    if (directors.length > 1 && n.director)
+      add("director_count", `${name(id)}: a pipeline has at most one director`, id);
+  }
+  const models = resolveModels(doc, workflows, env, (id, why) =>
+    add(
+      why,
+      why === "remote_off"
+        ? `${name(id)}: remote models are off on this deployment`
+        : `${name(id)}: turn on remote calls for this pipeline and allow its provider`,
+      id,
+    ),
+  );
   for (const id of ids)
-    if (LLM_KINDS.includes(nodes[id].kind) && !(id in models))
-      add("unknown_model", `${name(id)}: its model is not an ask workflow you can run`, id);
+    if (
+      MODEL_KINDS.includes(nodes[id].kind) &&
+      !(id in models) &&
+      ![...out.values()].some((p) => p.node === id && p.code.startsWith("remote_"))
+    )
+      add("unknown_model", `${name(id)}: its model is not one you can run`, id);
+  for (const id of of("custom")) {
+    const n = nodes[id] as S<"PipelineCustomNode">;
+    const reg = custom[n.node];
+    if (!reg) {
+      add("unknown_custom", `${name(id)}: ${n.node} is not a custom node of this server now`, id);
+      continue;
+    }
+    if (reg.network) {
+      const why = remoteRefusal(doc, env, null);
+      if (why)
+        add(
+          why,
+          why === "remote_off"
+            ? `${name(id)}: it calls the network, and remote calls are off on this deployment`
+            : `${name(id)}: it calls the network; turn on remote calls for this pipeline`,
+          id,
+        );
+    }
+    const inSchema = reg.input as JSchema;
+    const fields = inSchema.properties ?? {};
+    const fixed = n.inputs ?? {};
+    const bind = n.bind ?? {};
+    for (const f of inSchema.required ?? [])
+      if (!(f in fixed) && !(f in bind))
+        add("custom_input", `${name(id)}: ${f} needs a value or a source`, id, f);
+    for (const [f, v] of Object.entries(fixed))
+      if (!(f in fields) || schemaError(fields[f], v))
+        add("custom_input", `${name(id)}: ${f} cannot be set to that`, id, f);
+    for (const [f, s] of Object.entries(bind)) {
+      const x = src(s);
+      if (
+        !x ||
+        "item" in x ||
+        "items" in x ||
+        (!s.startsWith("$") && !dominates(s.split(".")[0], id))
+      ) {
+        add("bind_source", `${name(id)}: ${f} ← ${s} is not set before it`, id, f);
+        continue;
+      }
+      const fk = fieldKind(fields[f]);
+      const isText = "text" in x || ("input" in x && x.input === "Text");
+      if (
+        !("any" in x) &&
+        (fk === null ||
+          (fk === "text") !== isText ||
+          (fk === "takes" && (!("takes" in x) || x.takes > fields[f].maxItems!)))
+      )
+        add("custom_input", `${name(id)}: ${s} does not fit ${f}`, id, f);
+    }
+  }
+  if (info) {
+    const e = egressOf(doc, models, env, a);
+    const remote = e.egress.filter((x) => x.where === "remote").map((x) => x.per_row);
+    info.bounds = {
+      ...bounds,
+      remote_calls: remote.reduce((s, r) => s + r.calls, 0),
+      remote_tokens: remote.reduce((s, r) => s + r.tokens, 0),
+    };
+    info.models = models;
+    info.egress = e.egress;
+    info.reserved = e.reserved;
+  }
   for (const id of outputs) {
-    const src = (nodes[id] as S<"PipelineOutputNode">).from;
-    if (!sourceOf(a, src) || (root && !reach(src.split(".")[0]).has(id)))
-      add("bind_source", `${name(id)}: ${src} does not lead here`, id, "from");
+    const s = (nodes[id] as S<"PipelineOutputNode">).from;
+    if (!src(s) || (root && !reach(s.split(".")[0]).has(id)))
+      add("bind_source", `${name(id)}: ${s} does not lead here`, id, "from");
   }
   for (const id of of("step")) {
     const n = nodes[id] as S<"PipelineStepNode">;
-    const binds: Record<string, ReturnType<typeof sourceOf>> = {};
+    const binds: Record<string, Source | null> = {};
     for (const [k, v] of Object.entries(n.bind ?? {})) {
-      binds[k] = sourceOf(a, v);
+      const x = src(v);
+      binds[k] = x;
       if (
-        !binds[k] ||
-        "text" in binds[k] ||
-        (!v.startsWith("$") && !dominates(v.split(".")[0], id))
+        !x ||
+        ("text" in x && !x.custom) ||
+        "items" in x ||
+        ("item" in x && a.fan[id] !== x.item) ||
+        (!v.startsWith("$") && !("item" in x) && !dominates(v.split(".")[0], id))
       ) {
         add("bind_source", `${name(id)}: ${k} ← ${v} is not set before this step`, id, k);
         binds[k] = null;
@@ -409,7 +821,7 @@ export function pipelineProblems(
     else if (isTextWorkflow(wf))
       add(
         "workflow_cannot_run",
-        `${name(id)}: ${wf.title} answers text; only a judge, write or decide runs it`,
+        `${name(id)}: ${wf.title} answers text; only a judge, write, decide or agent runs it`,
         id,
       );
     if (n.preset !== undefined && !(n.preset in (wf.studio?.presets ?? {})))
@@ -444,12 +856,12 @@ export function pipelineProblems(
       if (bad)
         add("step_input_invalid", `${name(id)}: ${k} cannot be set to that`, id, undefined, k);
     }
-    for (const [k, src] of Object.entries(binds)) {
+    for (const [k, x] of Object.entries(binds)) {
       if (!(k in params)) {
         add("bind_unknown", `${name(id)}: ${k} is not a setting of ${wf.title}`, id, k);
         continue;
       }
-      if (src && !fits(params[k], src))
+      if (x && !fits(params[k], x))
         add("bind_type", `${name(id)}: ${n.bind![k]} does not fit ${k}`, id, k);
     }
     for (const [k, p] of Object.entries(params))
@@ -465,25 +877,41 @@ export function pipelineProblems(
 
 /** The sources a step may bind to a workflow param, in order: the inputs, then upstream steps' takes and gates'
  * picks (those every row passes before the step), each only when it fits the param's type. */
-export function bindCandidates(doc: PDoc, step: string, p: Param): string[] {
+export function bindCandidates(doc: PDoc, step: string, p: Param, custom: Custom[] = []): string[] {
   const a = analyse(doc);
+  const reg = Object.fromEntries(custom.map((c) => [c.name, c]));
   const out: string[] = [];
   for (const [name, type] of Object.entries(a.inputs))
     if (fits(p, { input: type })) out.push(`$${name}`);
+  const fan = a.fan[step];
+  if (fan && fits(p, { item: fan })) out.push(`${fan}.item`);
   for (const id of order(doc)) {
     const n = a.nodes[id];
     if (id === step || !a.dominates(id, step)) continue;
-    if (n.kind === "step" && fits(p, { takes: n.seeds ?? 1 })) out.push(`${id}.takes`);
+    if (n.kind === "step" && fits(p, { takes: (n.seeds ?? 1) * a.branches(id) }))
+      out.push(`${id}.takes`);
     if ((n.kind === "gate" || n.kind === "judge") && fits(p, { takes: n.keep ?? 1 }))
       out.push(`${id}.picked`);
+    if (n.kind === "custom")
+      for (const f of customOutputs(reg[n.node])) {
+        const x = sourceOf(a, `${id}.${f}`, reg);
+        if (x && fits(p, x)) out.push(`${id}.${f}`);
+      }
   }
   return out;
 }
 
-/** The text a write, decide or memory write may read (its `from`): Text inputs, then the reasons of judges and the
- * notes of memory reads every row passes before it. */
-export function textCandidates(doc: PDoc, node: string): string[] {
+/** A custom node's output fields a source may name (strings and take-id lists). */
+export const customOutputs = (c: Custom | undefined) =>
+  Object.entries((c?.output as JSchema | undefined)?.properties ?? {})
+    .filter(([, f]) => fieldKind(f))
+    .map(([k]) => k);
+
+/** The text a write, decide, agent or memory write may read (its `from`): Text inputs, then the reasons of judges, the
+ * notes of memory reads and the text fields of custom nodes every row passes before it. */
+export function textCandidates(doc: PDoc, node: string, custom: Custom[] = []): string[] {
   const a = analyse(doc);
+  const reg = Object.fromEntries(custom.map((c) => [c.name, c]));
   const out = Object.entries(a.inputs)
     .filter(([, t]) => t === "Text")
     .map(([name]) => `$${name}`);
@@ -492,9 +920,19 @@ export function textCandidates(doc: PDoc, node: string): string[] {
     if (id === node || !a.dominates(id, node)) continue;
     if (n.kind === "judge") out.push(`${id}.reasons`);
     if (n.kind === "memory" && n.op === "read") out.push(`${id}.notes`);
+    if (n.kind === "custom")
+      for (const f of customOutputs(reg[n.node]))
+        if (fieldKind((reg[n.node].output as JSchema).properties?.[f]) === "text")
+          out.push(`${id}.${f}`);
   }
   return out;
 }
+
+/** The list producers (a write or agent with a list) a step may fan out over: each one every row passes first. */
+export const fanCandidates = (doc: PDoc, step: string) => {
+  const a = analyse(doc);
+  return order(doc).filter((id) => id in a.lists && a.dominates(id, step));
+};
 
 /** The memory read nodes a judge may learn from (each one every row passes before it). */
 export const memoryCandidates = (doc: PDoc, judge: string) => {
@@ -542,6 +980,8 @@ export function nodeLabel(doc: PDoc, id: string, titles: Record<string, string> 
   if (!n) return id;
   if (n.title) return n.title;
   if (n.kind === "step") return titles[n.workflow] ?? n.workflow;
+  if (n.kind === "custom") return titles[`custom:${n.node}`] ?? n.node;
+  if (n.kind === "agent" && n.director) return "Director";
   return KIND_NAMES[n.kind];
 }
 
@@ -554,10 +994,19 @@ export const KIND_NAMES: Record<Kind, string> = {
   write: "Write",
   decide: "Decide",
   memory: "Memory",
+  agent: "Agent",
+  custom: "Custom",
 };
 /** Whether a node is an agent node (the mock's `.pl.ag`). */
 export const isAgent = (k: Kind) =>
-  k === "judge" || k === "write" || k === "decide" || k === "memory";
+  k === "judge" || k === "write" || k === "decide" || k === "memory" || k === "agent";
+
+/** The pipeline's director agent, if any. */
+export const directorOf = (doc: PDoc) =>
+  Object.keys(doc.nodes).find((id) => {
+    const n = doc.nodes[id];
+    return n.kind === "agent" && n.director;
+  }) ?? null;
 
 /** Steps numbered in row order: "1 · Qwen Image". */
 export function stepNumbers(doc: PDoc): Record<string, number> {
@@ -575,6 +1024,13 @@ export function facts(doc: PDoc): string[] {
   if (agents) out.push(s(agents, "agent node"));
   for (const [, to] of doc.edges)
     if (typeof to !== "string") out.push(`retry loop · cap ${to.max}`);
+  if (directorOf(doc)) out.push("chat");
+  const fans = ns.flatMap((n) => {
+    const p = n.kind === "step" && n.each ? doc.nodes[n.each.split(".")[0]] : undefined;
+    return p && (p.kind === "write" || p.kind === "agent") && p.list ? [p.list.max] : [];
+  });
+  if (fans.length) out.push(`fan-out · max ${Math.max(...fans)}`);
+  if (doc.remote?.enabled) out.push("remote model on");
   return out;
 }
 
@@ -610,6 +1066,20 @@ export function newNodeId(doc: PDoc, base: string): string {
 
 /** A write's instruction when none is given (README, write). */
 export const WRITE_INSTRUCTION = "Fix what the reviewer found; keep everything else.";
+/** A new agent's instruction. */
+export const AGENT_INSTRUCTION =
+  "Turn the script into a shot list, one prompt per shot, using the @elements in it.";
+
+/** The tools an agent may be given (README, Agents: tools), with what each lets it do. */
+export type AgentTool = NonNullable<S<"PipelineAgentNode">["tools"]>[number];
+export const AGENT_TOOLS: [AgentTool, string][] = [
+  ["gallery.search", "Search the gallery"],
+  ["library.read", "Read the library (elements, looks)"],
+  ["memory.read", "Read memory"],
+  ["memory.write", "Write memory"],
+  ["rows.add", "Add rows to the batch"],
+  ["rows.edit", "Change rows not yet started (director only)"],
+];
 
 /** A new pipeline: inputs with a prompt, no steps yet. */
 export const blankPipeline = (title: string): PDoc => ({
@@ -630,7 +1100,7 @@ export function addPipelineNode(
   doc: PDoc,
   kind: Kind,
   at: Pos,
-  opts: { workflow?: string; selected?: string | null } = {},
+  opts: { workflow?: string; selected?: string | null; custom?: Custom } = {},
 ): { doc: PDoc; id: string } {
   const id = newNodeId(doc, kind);
   const position = { x: Math.round(at.x), y: Math.round(at.y) };
@@ -676,6 +1146,33 @@ export function addPipelineNode(
         position,
       };
     else node = { kind, op: "read", limit: 8, position };
+  } else if (kind === "agent") {
+    const draft = {
+      ...doc,
+      nodes: { ...doc.nodes, [id]: { kind: "memory", op: "read" } as PNode },
+    };
+    const prompt = textCandidates(draft, id).find((x) => x.startsWith("$"));
+    node = {
+      kind,
+      instruction: AGENT_INSTRUCTION,
+      from: prompt ? [prompt] : [],
+      tools: ["library.read"],
+      position,
+    };
+  } else if (kind === "custom") {
+    const c = opts.custom;
+    const draft = {
+      ...doc,
+      nodes: { ...doc.nodes, [id]: { kind: "memory", op: "read" } as PNode },
+    };
+    const text = textCandidates(draft, id);
+    // each required string field reads the first Text input; the rest is the user's
+    const bind: Record<string, string> = {};
+    const ins = (c?.input ?? {}) as JSchema;
+    for (const f of ins.required ?? [])
+      if (fieldKind(ins.properties?.[f]) === "text" && text[0] && !Object.keys(bind).length)
+        bind[f] = text[0];
+    node = { kind, node: c?.name ?? "", bind, position };
   } else {
     const from =
       sel && (doc.nodes[sel].kind === "gate" || doc.nodes[sel].kind === "judge")
@@ -707,11 +1204,12 @@ export function connectNodes(doc: PDoc, from: string, via: Via, to: string): PDo
   const cur = i >= 0 ? doc.edges[i][1] : undefined;
   const n = doc.nodes[from];
   let next: PEdge[1];
-  if (n?.kind === "decide") {
-    // a decide has only its routes edge: every label of the node, the first one's node until each is set
-    const label = via.startsWith("r:") ? via.slice(2) : Object.keys(n.routes)[0];
+  const own = routes(n);
+  if (own) {
+    // a decide (or an agent with routes) has only its routes edge: every label, the first one's node until each is set
+    const label = via.startsWith("r:") ? via.slice(2) : Object.keys(own)[0];
     const old = typeof cur === "object" && "routes" in cur ? cur : null;
-    const labels = Object.keys(n.routes);
+    const labels = Object.keys(own);
     const routes = Object.fromEntries(
       labels.map((l) => [l, l === label ? to : (old?.routes[l] ?? to)]),
     );
@@ -750,7 +1248,7 @@ export function disconnectNodes(doc: PDoc, from: string, via: Via): PDoc {
 /** A decide's routes changed (labels → meanings): its edge keeps the routes still there; a new label goes where the
  * first route goes. */
 export function setRoutes(doc: PDoc, id: string, routes: Record<string, string>): PDoc {
-  const n = doc.nodes[id] as S<"PipelineDecideNode">;
+  const n = doc.nodes[id] as S<"PipelineDecideNode"> | S<"PipelineAgentNode">;
   const d = setNode(doc, id, { ...n, routes });
   const e = edgeOut(doc, id)?.[1];
   if (typeof e !== "object" || !("routes" in e)) return d;
@@ -793,14 +1291,15 @@ export function removePipelineNodes(doc: PDoc, ids: string[]): PDoc {
   const kept = (v: string) => v.startsWith("$") || !gone.has(v.split(".")[0]);
   for (const [id, n] of Object.entries(doc.nodes)) {
     if (gone.has(id)) continue;
-    if (n.kind === "step" && n.bind) {
-      const bind = Object.fromEntries(Object.entries(n.bind).filter(([, v]) => kept(v)));
+    if (n.kind === "step") {
+      const bind = Object.fromEntries(Object.entries(n.bind ?? {}).filter(([, v]) => kept(v)));
+      const { each, ...rest } = n;
+      nodes[id] = { ...rest, ...(n.bind && { bind }), ...(each && kept(each) && { each }) };
+    } else if (n.kind === "custom") {
+      const bind = Object.fromEntries(Object.entries(n.bind ?? {}).filter(([, v]) => kept(v)));
       nodes[id] = { ...n, bind };
-    } else if (
-      n.kind === "write" ||
-      n.kind === "decide" ||
-      (n.kind === "memory" && n.op === "write")
-    )
+    } else if (n.kind === "agent") nodes[id] = { ...n, from: (n.from ?? []).filter(kept) };
+    else if (n.kind === "write" || n.kind === "decide" || (n.kind === "memory" && n.op === "write"))
       nodes[id] = { ...n, from: n.from.filter(kept) };
     else if (n.kind === "judge" && n.memory && gone.has(n.memory)) {
       const { memory: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars

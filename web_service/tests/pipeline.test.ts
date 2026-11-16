@@ -2,14 +2,17 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import paletteFixture from "../../contracts/fixtures/graphs/palette.json";
 import workflowsFixture from "../../contracts/fixtures/pipelines/workflows.json";
+import customFixture from "../../contracts/fixtures/registry/pipelines.custom.valid.json";
 import type { S } from "@/lib/api";
 import { paletteOf, type Doc } from "@/lib/graph";
 import {
   addPipelineNode,
+  stepTakes,
   bindCandidates,
   blankPipeline,
   chooseWorkflow,
   connectNodes,
+  fanCandidates,
   disconnectNodes,
   gateCandidates,
   order,
@@ -38,11 +41,17 @@ describe("pipeline rules against contracts/fixtures/pipelines", () => {
     it(f, () => {
       const fx = load(f);
       const info: Parameters<typeof pipelineProblems>[5] = {};
-      const got = pipelineProblems(fx.pipeline, workflows, palette, fx.looks, fx.loras, info);
+      const got = pipelineProblems(fx.pipeline, workflows, palette, fx.looks, fx.loras, info, {
+        providers: fx.providers,
+        remoteOn: fx.remote_deployment ?? false,
+        custom: fx.custom ?? customFixture.nodes,
+      });
       expect(new Set(got.map(key))).toEqual(new Set(fx.problems.map(key)));
       for (const p of got) expect(p.message).toBeTruthy();
       if (fx.bounds) expect(info.bounds).toEqual(fx.bounds);
       if (fx.models) expect(info.models).toEqual(fx.models);
+      if (fx.egress) expect(info.egress).toEqual(fx.egress);
+      if (fx.reserved) expect(info.reserved).toEqual(fx.reserved);
     });
   it("marks run-only problems", () => {
     const got = pipelineProblems(load("invalid.reach.json").pipeline, workflows, palette);
@@ -152,7 +161,7 @@ describe("agent nodes", () => {
     expect(textCandidates(best, "judge")).toEqual(["$prompt", "$motion", "mem.notes"]);
     expect(memoryCandidates(best, "judge")).toEqual(["mem"]);
     expect(outputCandidates(best, "out")).toContain("judge.picked");
-    expect(pipelineBounds(best)).toEqual({ runs: 13, llm_calls: 6 });
+    expect(pipelineBounds(best)).toMatchObject({ runs: 13, llm_calls: 6, tool_calls: 0 });
   });
   it("adds a judge on the selected step and wires its branch like a gate's", () => {
     let d = removePipelineNodes(best, ["judge", "rewrite", "review"]);
@@ -212,5 +221,54 @@ describe("agent nodes", () => {
     // a decide losing a route's node loses its edge (decide_routes then says so)
     const f = removePipelineNodes(decide, ["note"]);
     expect(f.edges.find((x) => x[0] === "check")).toBeUndefined();
+  });
+});
+
+describe("stage B edits", () => {
+  const shots = load("valid.director-shots.json").pipeline as PDoc;
+  const custom = customFixture.nodes as unknown as S<"CustomNode">[];
+  it("a fanned step binds its producer's item; removing the producer drops each and the bind", () => {
+    const qwen = settable(workflows["qwen-image"], palette);
+    const step = Object.keys(shots.nodes).find((id) => shots.nodes[id].kind === "step")!;
+    expect(bindCandidates(shots, step, qwen["prompt.text"])).toContain("director.item");
+    expect(fanCandidates(shots, step)).toEqual(["director"]);
+    const d = removePipelineNodes(shots, ["director"]);
+    const n = d.nodes[step] as S<"PipelineStepNode">;
+    expect(n.each).toBeUndefined();
+    expect(Object.values(n.bind ?? {}).some((v) => v.startsWith("director."))).toBe(false);
+  });
+  it("a fanned step makes seeds × its list maximum takes (a judge's Keep counts them)", () => {
+    expect(stepTakes(shots)).toMatchObject({ shots: 24, director: 0 });
+  });
+  it("an agent with routes connects like a decide", () => {
+    let d = blankPipeline("Agents");
+    let r = addPipelineNode(d, "agent", { x: 200, y: 40 });
+    expect(r.doc.nodes.agent).toMatchObject({ kind: "agent", from: ["$prompt"] });
+    d = setRoutes(r.doc, "agent", { again: "one more try", done: "finish" });
+    r = addPipelineNode(d, "output", { x: 400, y: 40 });
+    d = connectNodes(r.doc, "agent", "r:done", "output");
+    expect(d.edges).toEqual([
+      ["agent", { routes: { again: "output", done: "output" }, max: 2, then: "done" }],
+    ]);
+    d = connectNodes(d, "inputs", "next", "agent");
+    d = connectNodes(d, "agent", "r:again", "agent");
+    const codes = pipelineProblems(d, workflows, palette).map((p) => p.code);
+    expect(codes).not.toContain("decide_routes");
+    expect(codes).not.toContain("uncapped_cycle");
+  });
+  it("a custom node binds its required text field and gives a text source", () => {
+    let d = blankPipeline("Prefix");
+    const r = addPipelineNode(d, "custom", { x: 200, y: 40 }, { custom: custom[0] });
+    expect(r.doc.nodes.custom).toMatchObject({ node: "text/prefix", bind: { text: "$prompt" } });
+    d = connectNodes(r.doc, "inputs", "next", "custom");
+    const p = pipelineProblems(d, workflows, palette, undefined, {}, undefined, { custom });
+    expect(p.filter((x) => x.node === "custom").map((x) => [x.code, x.port])).toEqual([
+      ["custom_input", "prefix"],
+    ]);
+    d = { ...d, nodes: { ...d.nodes, step: { kind: "step", workflow: "qwen-image" } } };
+    d = connectNodes(d, "custom", "next", "step");
+    const qwen = settable(workflows["qwen-image"], palette);
+    expect(bindCandidates(d, "step", qwen["prompt.text"], custom)).toContain("custom.text");
+    expect(textCandidates(d, "step", custom)).toContain("custom.text");
   });
 });

@@ -1,0 +1,42 @@
+{
+  "id": "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d",
+  "role": "director",
+  "text": "Row 3 is a close-up now, and row 15 adds the den at dawn.",
+  "at": "2026-11-16T10:20:04Z",
+  "wake": 3,
+  "tool_calls": [
+    {
+      "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:0:1:director:2:t0:0",
+      "tool": "rows_edit",
+      "args": {
+        "row": 3,
+        "inputs": {
+          "script": "Close-up of @fox."
+        }
+      },
+      "result": {
+        "row": 3,
+        "status": "queued"
+      },
+      "error": null
+    },
+    {
+      "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:0:1:director:2:t0:1",
+      "tool": "rows_add",
+      "args": {
+        "inputs": {
+          "script": "The den at dawn."
+        }
+      },
+      "result": {
+        "row": 15,
+        "status": "queued"
+      },
+      "error": null
+    }
+  ],
+  "rows": [
+    3,
+    15
+  ]
+}

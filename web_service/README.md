@@ -60,9 +60,17 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   lines, a CSV file or pasted table mapped to params, or a grid of up to 2 axes, seeds per row, Submit (a 422 that
   names a row is shown against it). `/pipelines/batches/[id]`: the batch run view, header with Pause / Resume / Stop
   and one line per row (state, takes opening full screen, Retry), live over `.../events`, rows paged by cursor.
+- Agents (M4b stage B, `lib/pipeline.ts` rules on `contracts/fixtures/pipelines`, `lib/chat.ts`, `lib/egress.ts`;
+  boards DirectorChat, AgentSettings, SubmitEgress): the editor's Agent panel (instruction, reads, tools, how a visit
+  ends, caps, director), custom nodes from `GET /custom-nodes` in Add node, a step's fan-out over a list, model sources
+  from `GET /model-sources` (local, local server, remote when the deployment allows), the pipeline's Remote calls;
+  Submit's "What leaves the machine" and reserved memory (`POST /pipelines/validate`); the director's chat beside the
+  batch (and in the editor for the last batch), rows it added or changed marked; fanned-out cells; an agent step's
+  messages and tool calls in the execution view. Model text is always rendered as text.
 - `/timeline`, `/models` — placeholders until their milestone.
 - `/admin` (admins only in the dock) — Users: add, roles (`user`, `dev`), reset password, disable/enable; the
-  `ADMIN_EMAIL` account is locked.
+  `ADMIN_EMAIL` account is locked. `/admin?tab=providers` — Model providers (docs/mock/Providers.dc.html, `lib/providers.ts`):
+  local servers and remote providers, Test, Edit, Enable/Disable, Delete; a key is only its secret file's name.
 
 ## Run
 

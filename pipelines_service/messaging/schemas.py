@@ -10,13 +10,14 @@ from referencing import Registry, Resource
 
 GEN = Path(__file__).resolve().parent.parent / "gen"
 BASE = "https://helmstudio.local/contracts/messages/"
+REGISTRY = "https://helmstudio.local/contracts/registry.schema.json"
 
 
 @functools.cache
 def _registry() -> Registry:
     """The message schemas from gen/, loaded once."""
     resources = []
-    for p in GEN.glob("messages/*.schema.json"):
+    for p in [*GEN.glob("messages/*.schema.json"), GEN / "registry.schema.json"]:
         schema = json.loads(p.read_text())
         resources.append((schema["$id"], Resource.from_contents(schema)))
     return Registry().with_resources(resources)
@@ -58,3 +59,23 @@ def state_get_errors(part: str, value) -> list[str]:
 def memory_errors(part: str, value) -> list[str]:
     """Errors of a pipelines.memory `request` or `reply`."""
     return errors(f"{BASE}req.pipelines.memory.schema.json#/$defs/{part}", value)
+
+
+def tools_errors(part: str, value) -> list[str]:
+    """Errors of a studio.tools `request` or `reply`."""
+    return errors(f"{BASE}req.studio.tools.schema.json#/$defs/{part}", value)
+
+
+def providers_test_errors(part: str, value) -> list[str]:
+    """Errors of a pipelines.providers.test `request` or `reply`."""
+    return errors(f"{BASE}req.pipelines.providers.test.schema.json#/$defs/{part}", value)
+
+
+def tool_errors(name: str, value) -> list[str]:
+    """Errors of a value against tools.schema.json#/$defs/<name> (an agent tool's args or result)."""
+    return errors(f"{BASE}tools.schema.json#/$defs/{name}", value)
+
+
+def registry_errors(kind: str, value) -> list[str]:
+    """Errors of a registry KV value against registry.schema.json#/$defs/<kind>."""
+    return errors(f"{REGISTRY}#/$defs/{kind}", value)

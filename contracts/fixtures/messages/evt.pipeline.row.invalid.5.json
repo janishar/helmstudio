@@ -60,7 +60,7 @@
       },
       {
         "node": "judge",
-        "kind": "agent",
+        "kind": "planner",
         "loop": {
           "turns": 0,
           "max": 2,

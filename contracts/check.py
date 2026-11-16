@@ -42,7 +42,7 @@ REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
 # Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
-CANONICAL = ["", "qwen-image.", "ltx.", "llm."]
+CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",
@@ -50,6 +50,7 @@ REGISTRY_KEYS = [
     "loras",
     "looks",
     "host",
+    "custom",
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
 # openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
 HTTP_SCHEMAS = [
@@ -62,6 +63,8 @@ HTTP_SCHEMAS = [
     "Lora", "LoraList", "LoraPatch", "LoraUploadCreate", "LoraUpload",
     "HostList",
     "Decision", "DecisionList", "MemoryItem", "MemoryList", "MemoryCreate", "BatchAgain",
+    "ChatMessage", "ChatPage", "ChatPost", "Provider", "ProviderPut", "ProviderList", "ProviderTest", "ModelSourceList",
+    "CustomNodeList",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -565,9 +568,12 @@ def check_graphs(registry: Registry) -> dict:
 P_MAX_NODES, P_MAX_BYTES, P_MAX_RUNS, P_MAX_CALLS = 24, 65536, 64, 32
 P_RUN_ONLY = {"unreachable", "dead_end", "no_output", "unknown_workflow", "workflow_cannot_run", "unknown_preset",
               "step_input_invalid", "bind_unknown", "bind_type", "unbound_input", "step_seeds", "unknown_look", "look_fit",
-              "unknown_model"}
+              "unknown_model", "remote_not_enabled", "remote_off", "unknown_custom", "custom_input"}
 INPUT_FITS = {"Text": {"string", "text"}, "Int": {"int"}, "Float": {"float"}, "Seed": {"seed"}, "Image": {"image"}}
-LLM_KINDS = ("judge", "write", "decide")  # nodes that ask a model (README, Agent nodes)
+LLM_KINDS = ("judge", "write", "decide")  # nodes that ask a model once per visit (README, Agent nodes)
+MODEL_KINDS = LLM_KINDS + ("agent",)  # nodes with a `model` (README, Model sources)
+PROMPT_TOKENS = 8192  # a prompt's token bound for the remote worst case: 32768 characters / 4 (README, Model sources)
+WRITE_TOKENS = {"write": 1400, "write-list": 4096, "decide": 800}
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -589,10 +595,13 @@ def settable(wf: dict, palette: dict) -> dict[str, dict]:
 
 
 def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, looks: list[dict] | None = None,
-                      loras: dict[str, str] | None = None, info: dict | None = None) -> set[tuple]:
+                      loras: dict[str, str] | None = None, info: dict | None = None, providers: list[dict] | None = None,
+                      remote_on: bool = False, custom: list[dict] | None = None) -> set[tuple]:
     """Every problem as (code, node, port, param); workflows: the id → WorkflowDoc the caller can run; looks, loras:
-    the looks and LoRAs the caller can use now (as resolve_mentions takes them). `info`, when given, receives the
-    worst case per row (`bounds`: runs, llm_calls) and the judge/write/decide models as resolved (`models`)."""
+    the looks and LoRAs the caller can use now (as resolve_mentions takes them); providers: the enabled model
+    providers (name, kind, models, default_model, host, memory_gb); remote_on: the deployment's remote switch;
+    custom: the registered custom nodes. `info`, when given, receives the worst case per row (`bounds`), the model
+    nodes' models as resolved (`models`), what leaves the machine (`egress`) and the servers' memory (`reserved`)."""
     out, nodes = set(), doc["nodes"]
     add = lambda code, node=None, port=None, param=None: out.add((code, node, port, param))
     if len(nodes) > P_MAX_NODES:
@@ -610,6 +619,7 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         for name in {x for x in names if names.count(x) > 1}:
             add("duplicate_input", nid, param=name)
         inputs |= {i["name"]: i["type"] for i in nodes[nid]["inputs"]}
+    routers = lambda nid: nodes[nid]["kind"] == "decide" or (nodes[nid]["kind"] == "agent" and "routes" in nodes[nid])
     succ, outdeg, capped, routed = {nid: [] for nid in nodes}, {}, [], set()  # succ: node → [(to, capped)]
     for frm, to in doc["edges"]:
         kind = "plain" if isinstance(to, str) else "routes" if "routes" in to else "branch"
@@ -619,11 +629,11 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
             add("unknown_node", frm)
             continue
         fk = nodes[frm]["kind"]
-        if (kind == "branch" and fk not in ("gate", "judge")) or (kind == "routes" and fk != "decide"):
+        if (kind == "branch" and fk not in ("gate", "judge")) or (kind == "routes" and fk not in ("decide", "agent")):
             add("branch_not_gate", frm)
             continue
-        if fk == "decide" and (kind != "routes" or set(to["routes"]) != set(nodes[frm]["routes"])
-                               or to["then"] not in to["routes"]):
+        if (routers(frm) and (kind != "routes" or set(to["routes"]) != set(nodes[frm]["routes"])
+                              or to["then"] not in to["routes"])) or (fk == "agent" and kind == "routes" and not routers(frm)):
             add("decide_routes", frm)
             continue
         outdeg[frm] = outdeg.get(frm, 0) + 1
@@ -635,14 +645,14 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         elif kind == "branch":
             succ[frm] += [(to["pass"], False), (to["fail"], True), (to["then"], False)]
             capped.append((frm, to["fail"], to["max"]))
-        else:  # every route but then counts against the decide's max
+        else:  # every route but then counts against the decide's (or agent's) max
             routed.add(frm)
             for label, t in to["routes"].items():
                 succ[frm].append((t, label != to["then"]))
                 if label != to["then"]:
                     capped.append((frm, t, to["max"]))
-    for nid in of("decide"):
-        if nid not in routed:
+    for nid in nodes:
+        if routers(nid) and nid not in routed:
             add("decide_routes", nid)
 
     def reach(src: str, avoid: str | None = None, uncapped_only: bool = False) -> set[str]:
@@ -659,13 +669,29 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         if nid in reach(nid, uncapped_only=True):
             add("uncapped_cycle", nid)
     visits = lambda nid: 1 + sum(m for g, f, m in capped if (nid == f or nid in reach(f)) and g in reach(nid))
-    runs = sum(n.get("seeds", 1) * visits(nid) for nid, n in nodes.items() if n["kind"] == "step")
-    calls = sum(visits(nid) for nid, n in nodes.items() if n["kind"] in LLM_KINDS)
+    root = roots[0] if len(roots) == 1 else None
+    # a before b on every path from the inputs node (unchecked without exactly one inputs node)
+    dominates = lambda a, b: root is None or a == root or (a != b and b not in reach(root, avoid=a))
+    lists = {nid: n["list"]["max"] for nid, n in nodes.items() if n["kind"] in ("write", "agent") and "list" in n}
+    fan = {}  # fanned-out step → its producer
+    for nid in of("step"):
+        if "each" in nodes[nid]:
+            prod = nodes[nid]["each"].split(".")[0]
+            if prod not in lists or not dominates(prod, nid):
+                add("fanout_source", nid, "each")
+            else:
+                fan[nid] = prod
+    branches = lambda s: lists[fan[s]] if s in fan else 1
+    caps = lambda n: {"max_turns": 6, "max_tool_calls": 12, "max_tokens": 16000} | n.get("caps", {})
+    agents = of("agent")
+    runs = sum(n.get("seeds", 1) * branches(nid) * visits(nid) for nid, n in nodes.items() if n["kind"] == "step")
+    calls = sum(visits(nid) for nid, n in nodes.items() if n["kind"] in LLM_KINDS) + sum(
+        visits(a) * caps(nodes[a])["max_turns"] for a in agents)
+    tool_calls = sum(visits(a) * caps(nodes[a])["max_tool_calls"] for a in agents)
     if runs > P_MAX_RUNS:
         add("too_many_runs")
     if calls > P_MAX_CALLS:
         add("too_many_calls")
-    root = roots[0] if len(roots) == 1 else None
     if root:
         for nid in set(nodes) - reach(root) - {root}:
             add("unreachable", nid)
@@ -675,28 +701,45 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
     for nid in nodes:
         if outputs and nodes[nid]["kind"] != "output" and not reach(nid) & set(outputs):
             add("dead_end", nid)
-    # a before b on every path from the inputs node (unchecked without exactly one inputs node)
-    dominates = lambda a, b: root is None or a == root or (a != b and b not in reach(root, avoid=a))
+    registered = {c["name"]: c for c in (custom or [])}
+
+    def field_kind(schema: dict) -> str | None:
+        """A custom field a source may fill: text (a string), takes (a list of take ids, n = maxItems ≤ 8), else None."""
+        if schema.get("type") == "string":
+            return "text"
+        it = schema.get("items", {})
+        if schema.get("type") == "array" and it.get("type") == "string" and it.get("format") == "uuid" and schema.get("maxItems", 99) <= 8:
+            return "takes"
+        return None
 
     def source(src: str) -> tuple[str, str | int | None] | None:
-        """('input', type), ('takes', how many at most) or ('text', None); None when it names nothing of that kind."""
+        """('input', type), ('takes', how many at most), ('text', None), ('item', producer), ('items', producer),
+        ('any', None) for a field of an unknown custom node; None when it names nothing of that kind."""
         if src.startswith("$"):
             return ("input", inputs[src[1:]]) if src[1:] in inputs else None
         nid, what = src.split(".")
         k, n = nodes.get(nid, {}).get("kind"), nodes.get(nid, {})
         if what == "takes" and k == "step":
-            return "takes", n.get("seeds", 1)
+            return "takes", n.get("seeds", 1) * branches(nid)
         if what == "picked" and k in ("gate", "judge"):
             return "takes", n.get("keep", 1)
         if (what == "reasons" and k == "judge") or (what == "notes" and k == "memory" and n["op"] == "read"):
             return "text", None
+        if what in ("item", "items") and nid in lists:
+            return what, nid
+        if k == "custom":
+            if n["node"] not in registered:
+                return "any", None
+            f = registered[n["node"]]["output"]["properties"].get(what)
+            fk = field_kind(f) if f else None
+            return ("text", "custom") if fk == "text" else ("takes", f["maxItems"]) if fk == "takes" else None
         return None
 
     def text_sources(nid: str) -> None:
-        """write, decide and memory write `from`: Text inputs and text sources that come before the node."""
+        """write, decide, memory write and agent `from`: Text inputs and text sources that come before the node."""
         for src in nodes[nid].get("from", []):
             s = source(src)
-            if not s or s[0] == "takes" or (s[0] == "input" and s[1] != "Text") or (
+            if not s or s[0] in ("takes", "item", "items") or (s[0] == "input" and s[1] != "Text") or (
                     not src.startswith("$") and not dominates(src.split(".")[0], nid)):
                 add("bind_source", nid, "from")
 
@@ -705,7 +748,9 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         t = nodes.get(g["takes"])
         if not t or t["kind"] != "step" or not dominates(g["takes"], nid):
             add("gate_takes", nid)
-        elif g.get("keep", 1) > t.get("seeds", 1):
+        elif g["takes"] in fan and t.get("seeds", 1) * branches(g["takes"]) > 8:
+            add("fanout_takes", nid)
+        elif g.get("keep", 1) > t.get("seeds", 1) * branches(g["takes"]):
             add("gate_keep", nid)
     for nid in of("judge"):
         c = nodes[nid]["criteria"]
@@ -715,11 +760,20 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         m = nodes[nid].get("memory")
         if m is not None and (nodes.get(m, {}).get("kind") != "memory" or nodes[m]["op"] != "read" or not dominates(m, nid)):
             add("bind_source", nid, "memory")
+        if nodes[nid].get("model", "auto").startswith(("server:", "remote:")):
+            add("model_media", nid)
     for nid in of("write"):
-        if inputs.get(nodes[nid]["to"][1:]) != "Text":
+        n = nodes[nid]
+        if ("list" in n) == ("to" in n) or ("to" in n and inputs.get(n["to"][1:]) != "Text"):
             add("write_target", nid)
-    for nid in of("write") + of("decide") + [m for m in of("memory") if nodes[m]["op"] == "write"]:
+    for nid in of("write") + of("decide") + of("agent") + [m for m in of("memory") if nodes[m]["op"] == "write"]:
         text_sources(nid)
+    directors = [a for a in agents if nodes[a].get("director")]
+    for a in agents:
+        if "rows.edit" in nodes[a].get("tools", []) and not nodes[a].get("director"):
+            add("agent_tools", a)
+        if len(directors) > 1 and a in directors:
+            add("director_count", a)
 
     def text_workflow(wid: str) -> bool:
         return wid in workflows and workflow_media(workflows[wid]["nodes"], palette) == "text"
@@ -730,10 +784,31 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         own = sorted(w for w in workflows if not UUID.match(w) and workflows[w]["family"] == fam and text_workflow(w))
         return own[0] if fam and own else "llm-ask" if text_workflow("llm-ask") else None
 
+    remote = {"enabled": False, "providers": []} | doc.get("remote", {})
+    provs = {p["name"]: p for p in providers or [] if p.get("enabled", True)}
+
+    def remote_ok(nid: str, name: str | None) -> bool:
+        """The deployment's switch, then the pipeline's (README, Model sources); adds the problem when not."""
+        if not remote_on:
+            add("remote_off", nid)
+        elif not remote["enabled"] or (name is not None and name not in remote["providers"]):
+            add("remote_not_enabled", nid)
+        else:
+            return True
+        return False
+
     models = {}
-    for nid in [n for n in nodes if nodes[n]["kind"] in LLM_KINDS]:
+    for nid in [n for n in nodes if nodes[n]["kind"] in MODEL_KINDS]:
         n, m = nodes[nid], nodes[nid].get("model", "auto")
-        if m != "auto":
+        if m.startswith(("server:", "remote:")):
+            where, _, rest = m.partition(":")
+            name, _, model = rest.partition("/")
+            p = provs.get(name)
+            if where == "remote" and not remote_ok(nid, name):
+                continue
+            wid = f"{where}:{name}/{model or p['default_model']}" if p and p["kind"] == where and (
+                model or p["default_model"]) in p["models"] else None
+        elif m != "auto":
             wid = m if text_workflow(m) else None
         elif n["kind"] == "judge":
             wid = family_ask(n["takes"])
@@ -744,8 +819,71 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
             models[nid] = wid
         else:
             add("unknown_model", nid)
+    for nid in of("custom"):
+        n = nodes[nid]
+        reg = registered.get(n["node"])
+        if not reg:
+            add("unknown_custom", nid)
+            continue
+        if reg["network"]:
+            remote_ok(nid, None)
+        fields, required = reg["input"]["properties"], set(reg["input"].get("required", []))
+        for f in required - set(n.get("inputs", {})) - set(n.get("bind", {})):
+            add("custom_input", nid, f)
+        for f, v in n.get("inputs", {}).items():
+            if f not in fields or next(Draft202012Validator(fields[f], format_checker=FormatChecker()).iter_errors(v), None):
+                add("custom_input", nid, f)
+        for f, src in n.get("bind", {}).items():
+            s = source(src)
+            if not s or s[0] in ("item", "items") or (not src.startswith("$") and not dominates(src.split(".")[0], nid)):
+                add("bind_source", nid, f)
+                continue
+            fk = field_kind(fields[f]) if f in fields else None
+            if s[0] != "any" and (fk is None or (fk == "text") != (s[0] == "text" or s == ("input", "Text"))
+                                  or (fk == "takes" and (s[0] != "takes" or s[1] > fields[f]["maxItems"]))):
+                add("custom_input", nid, f)
+
+    egress, reserved = [], {}
+    for nid in sorted(nodes):
+        n = nodes[nid]
+        src = models.get(nid, "")
+        if n["kind"] == "custom" and registered.get(n["node"], {}).get("network"):
+            egress.append({"node": nid, "where": "network", "provider": None, "model": None,
+                           "fields": [f"input:{f}" for f in sorted(set(n.get("inputs", {})) | set(n.get("bind", {})))],
+                           "thumbnails": 0, "per_row": {"calls": 0, "tokens": 0}, "chat": None})
+        if not src.startswith(("server:", "remote:")) or n["kind"] == "judge":  # a judge on one is model_media
+            continue
+        where, _, rest = src.partition(":")
+        name, _, model = rest.partition("/")
+        if where == "server":
+            reserved[name] = {"provider": name, "host": provs[name]["host"], "memory_gb": provs[name]["memory_gb"]}
+        v = visits(nid)
+        if n["kind"] == "agent":
+            c = caps(n)
+            fields = ["instruction"] + n.get("from", []) + (["routes"] if "routes" in n else []) + [
+                f"tool:{x}" for x in n.get("tools", [])] + (["chat"] if n.get("director") else [])
+            per_row = {"calls": v * c["max_turns"] * 2, "tokens": v * c["max_tokens"]}
+            mw = n.get("max_wakes", 100)
+            chat = {"calls": mw * c["max_turns"] * 2, "tokens": mw * c["max_tokens"]} if n.get("director") else None
+        else:
+            fields = (["instruction"] if n["kind"] == "write" else ["question", "routes"]) + n.get("from", [])
+            out_tokens = WRITE_TOKENS["write-list" if "list" in n else n["kind"]]
+            per_row, chat = {"calls": v * 2, "tokens": v * 2 * (PROMPT_TOKENS + out_tokens)}, None
+        egress.append({"node": nid, "where": where, "provider": name, "model": model, "fields": fields,
+                       "thumbnails": 0, "per_row": per_row, "chat": chat})
     if info is not None:
-        info.update(bounds={"runs": runs, "llm_calls": calls}, models=models)
+        remote_rows = [e["per_row"] for e in egress if e["where"] == "remote"]
+        bounds = {"runs": runs, "llm_calls": calls, "tool_calls": tool_calls,
+                  "remote_calls": sum(r["calls"] for r in remote_rows),
+                  "remote_tokens": sum(r["tokens"] for r in remote_rows)}
+        for d in sorted(nid for nid, n in nodes.items() if n["kind"] == "agent" and n.get("director")):
+            c, w = caps(nodes[d]), nodes[d].get("max_wakes", 100)
+            bounds["chat"] = {"calls": w * c["max_turns"] * 2, "tokens": w * c["max_tokens"],
+                              "tool_calls": w * c["max_tool_calls"]}
+        if any(n["kind"] == "agent" and "rows.add" in n.get("tools", []) for n in nodes.values()):
+            bounds["added_rows"] = 100
+        info.update(bounds=bounds,
+                    models=models, egress=egress, reserved=[reserved[k] for k in sorted(reserved)])
     for nid in outputs:
         src = nodes[nid]["from"]
         if not source(src) or (root and nid not in reach(src.split(".")[0])):
@@ -754,9 +892,14 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         n = nodes[nid]
         binds = {k: source(v) for k, v in n.get("bind", {}).items()}
         for k, v in n.get("bind", {}).items():
-            if not binds[k] or binds[k][0] == "text" or (not v.startswith("$") and not dominates(v.split(".")[0], nid)):
+            s = binds[k]
+            if (not s or (s[0] == "text" and s[1] != "custom") or s[0] == "items"
+                    or (s[0] == "item" and fan.get(nid) != s[1])
+                    or (not v.startswith("$") and s[0] != "item" and not dominates(v.split(".")[0], nid))):
                 add("bind_source", nid, k)
                 binds[k] = None
+            elif s[0] in ("item", "text"):
+                binds[k] = ("input", "Text")  # a branch's item, a custom text: bound like a Text input
         wf = workflows.get(n["workflow"])
         if not wf:
             add("unknown_workflow", nid)
@@ -784,6 +927,8 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
                 add("bind_unknown", nid, k)
                 continue
             p = params[k]
+            if src and src[0] == "any":
+                continue
             if src and src[0] == "input":
                 fits = p["type"] in INPUT_FITS[src[1]] or (src[1] == "Image" and image_field(p) is not None)
             elif src:
@@ -807,6 +952,7 @@ def check_pipelines(registry: Registry, palette: dict) -> None:
     for wid, wf in workflows.items():
         for e in ref("WorkflowDoc").iter_errors(wf):
             fail(f"fixtures/pipelines/workflows.json {wid}: {e.json_path}: {e.message}")
+    custom = json.loads((HERE / "fixtures" / "registry" / "pipelines.custom.valid.json").read_text())["nodes"]
     doc_v = ref("PipelineDoc")
     for p in sorted(g.glob("*.json")):
         if p.name == "workflows.json":
@@ -816,14 +962,15 @@ def check_pipelines(registry: Registry, palette: dict) -> None:
             fail(f"{name}: pipeline is not a PipelineDoc: {errs[0].json_path}: {errs[0].message}")
             continue
         info = {}
-        got = pipeline_problems(fx["pipeline"], workflows, palette, fx.get("looks"), fx.get("loras"), info)
+        got = pipeline_problems(fx["pipeline"], workflows, palette, fx.get("looks"), fx.get("loras"), info,
+                                fx.get("providers"), fx.get("remote_deployment", False), fx.get("custom", custom))
         want = {(x["code"], x.get("node"), x.get("port"), x.get("param")) for x in fx["problems"]}
         if not p.name.startswith(("valid.", "invalid.")) or p.name.startswith("valid.") != (not want):
             fail(f"{name}: valid.* has no problems, invalid.* has some")
         if got != want:
             fail(f"{name}: got {sorted(got, key=str)}, want {sorted(want, key=str)}")
-        elif any(k in fx and fx[k] != info.get(k) for k in ("bounds", "models")):
-            fail(f"{name}: got bounds {info.get('bounds')} models {info.get('models')}, want {fx.get('bounds')} {fx.get('models')}")
+        elif bad := [k for k in ("bounds", "models", "egress", "reserved") if k in fx and fx[k] != info.get(k)]:
+            fail(f"{name}: got {', '.join(f'{k} {info.get(k)}' for k in bad)}; want {', '.join(f'{k} {fx[k]}' for k in bad)}")
         else:
             print(f"ok   {name}")
 
@@ -856,8 +1003,96 @@ def inputs_hash(call: dict) -> str:
     return hashlib.sha256(json.dumps(call, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
+WIRE = {"gallery.search": "gallery_search", "memory.read": "memory_read", "memory.write": "memory_write",
+        "library.read": "library_read", "rows.add": "rows_add", "rows.edit": "rows_edit"}
+ARGS = {"gallery_search": "gallerySearchArgs", "memory_read": "memoryReadArgs", "memory_write": "memoryWriteArgs",
+        "library_read": "libraryReadArgs", "rows_add": "rowsAddArgs", "rows_edit": "rowsEditArgs",
+        "route": "routeArgs", "set_items": "setItemsArgs"}
+
+
+def strip_descriptions(node):
+    if isinstance(node, dict):
+        return {k: strip_descriptions(v) for k, v in node.items() if k != "description"}
+    return [strip_descriptions(x) for x in node] if isinstance(node, list) else node
+
+
+def offered(node: dict, chat: bool = False) -> list[str]:
+    """The wire names an agent turn may call (README, Agents: tools): its tools (rows.edit only in the director's
+    chat), route with routes (never in the chat), set_items with a list (never in the chat)."""
+    tools = [WIRE[x] for x in node.get("tools", []) if x != "rows.edit" or chat]
+    return tools + ([] if chat else (["route"] if node.get("routes") else []) + (["set_items"] if node.get("list") else []))
+
+
+def turn_schema(node: dict, chat: bool = False) -> dict:
+    """The JSON schema of one agent turn (a local ask's `ask.schema`, as canonical JSON: sorted keys, no spaces)."""
+    defs = json.loads((HERE / "messages" / "tools.schema.json").read_text())["$defs"]
+
+    def args(w: str) -> dict:
+        a = strip_descriptions(defs[ARGS[w]])
+        if w == "route":
+            a["properties"]["to"]["enum"] = list(node["routes"])
+        if w == "set_items":
+            a["properties"]["items"]["maxItems"] = node["list"]["max"]
+        return a
+    names = offered(node, chat)
+    calls = {"type": "array", "maxItems": 4 if names else 0}
+    if names:
+        calls["items"] = {"anyOf": [{"type": "object", "additionalProperties": False, "required": ["tool", "args"],
+                                     "properties": {"tool": {"const": w}, "args": args(w)}} for w in names]}
+    return {"type": "object", "additionalProperties": False, "required": ["say", "calls"],
+            "properties": {"say": {"type": "string", "maxLength": 4000}, "calls": calls}}
+
+
+def normalise_native(msg: dict) -> dict:
+    """A native OpenAI assistant message (a server or remote answer) as a turn, or {error}."""
+    calls = []
+    for c in msg.get("tool_calls") or []:
+        try:
+            a = json.loads(c["function"]["arguments"] or "{}")
+        except ValueError:
+            return {"error": f"tool call {c['function']['name']}: arguments are not JSON"}
+        calls.append({"tool": c["function"]["name"], "args": a})
+    return {"say": msg.get("content") or "", "calls": calls}
+
+
+def agent_turn(turn: dict, node: dict, calls_left: int, items_set: bool, chat: bool = False) -> dict:
+    """What one turn does (README, Agents: a turn), checked before anything runs: {calls, final, route} or {error}
+    (the error is the re-ask's text)."""
+    if "error" in turn:
+        return turn
+    if err := next(Draft202012Validator(turn_schema(node, chat)).iter_errors(turn), None):
+        return {"error": f"answer did not match the schema: {err.message[:200]}"}
+    calls = turn["calls"]
+    routes = [i for i, c in enumerate(calls) if c["tool"] == "route"]
+    if len(routes) > 1 or (routes and routes[0] != len(calls) - 1):
+        return {"error": "call route once, as the last call"}
+    work = [c for c in calls if c["tool"] != "route"]
+    if len(work) > calls_left:
+        return {"error": f"at most {calls_left} more tool calls in this visit"}
+    items_set = items_set or any(c["tool"] == "set_items" for c in calls)
+    if node.get("list") and not chat and not items_set and (routes or not calls):
+        return {"error": "call set_items before you finish"}
+    if not calls and node.get("routes") and not chat:
+        return {"error": "call route to finish"}
+    return {"calls": calls, "final": bool(routes) or not calls, "route": calls[-1]["args"]["to"] if routes else None}
+
+
 def check_decisions() -> None:
     g = HERE / "fixtures" / "decisions"
+    for c in json.loads((g / "agent-turn.json").read_text())["cases"]:
+        turn = normalise_native(c["native"]) if "native" in c else c["answer"]
+        got = agent_turn(turn, c["node"], c["calls_left"], c.get("items_set", False), c.get("chat", False))
+        want = c["expect"]
+        if not (got == want or ("error" in want and got.get("error", "").startswith(want["error"]))):
+            fail(f"fixtures/decisions/agent-turn.json {c['description']}: got {got}, want {c['expect']}")
+        else:
+            print(f"ok   fixtures/decisions/agent-turn.json {c['description']}")
+    for c in json.loads((g / "agent-schema.json").read_text())["cases"]:
+        got = json.dumps(turn_schema(c["node"], c.get("chat", False)), sort_keys=True, separators=(",", ":"))
+        if got != c["expect"]:
+            fail(f"fixtures/decisions/agent-schema.json {c['description']}: got {got}")
+        else:
+            print(f"ok   fixtures/decisions/agent-schema.json {c['description']}")
     for c in json.loads((g / "verdict.json").read_text())["cases"]:
         got = judge_verdict(c["answer"], c["criteria"], c["keep"], c["candidates"])
         if got != c["expect"]:
@@ -1251,7 +1486,9 @@ def check_loras() -> None:
     lora block of the fixture's `family` (default qwen-image; an optional `ignore` replaces its ignore list)."""
     blocks = {}
     for prefix in CANONICAL[1:]:
-        m = json.loads((HERE / "fixtures" / "registry" / f"{prefix}models.valid.json").read_text())["models"][0]
+        if not (f := HERE / "fixtures" / "registry" / f"{prefix}models.valid.json").exists():
+            continue  # server: no models of its own
+        m = json.loads(f.read_text())["models"][0]
         if "lora" not in m:
             continue  # a family without LoRAs (llm)
         blocks[m["family"]] = spec = m["lora"]

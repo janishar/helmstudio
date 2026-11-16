@@ -27,6 +27,7 @@ func (p *Projector) MountPipeline(group *micro.NatsJetStreamGroup) {
 	group.AddHandler("evt.pipeline.*.batch", pipelineHandler(p, applyPipelineBatch))
 	group.AddHandler("evt.pipeline.*.row", pipelineHandler(p, applyPipelineRow))
 	group.AddHandler("evt.pipeline.*.step", pipelineHandler(p, applyPipelineStep))
+	group.AddHandler("evt.pipeline.*.chat", pipelineHandler(p, applyPipelineChat))
 }
 
 // pipelineApply applies one event to its batch, locked and checked; it returns the row it changed (0: none) and
@@ -103,9 +104,31 @@ func applyPipelineBatch(ctx context.Context, tx pgx.Tx, batchID, _ string, data 
 		reason = $3, pipeline_seq = $4,
 		started_at = CASE WHEN $2 = 'running' THEN coalesce(started_at, clock_timestamp()) ELSE started_at END,
 		finished_at = CASE WHEN $2 IN ('done', 'failed', 'stopped') THEN coalesce(finished_at, clock_timestamp()) END,
-		memory = coalesce($5::jsonb, memory)
-		WHERE id = $1 AND pipeline_seq < $4`, batchID, data.Status, data.Reason, data.Seq, memory)
+		memory = coalesce($5::jsonb, memory),
+		director = CASE WHEN director IS NULL THEN NULL ELSE coalesce($6::jsonb, director) END,
+		remote = CASE WHEN remote IS NULL THEN NULL ELSE coalesce($7::jsonb, remote) END
+		WHERE id = $1 AND pipeline_seq < $4`, batchID, data.Status, data.Reason, data.Seq, memory,
+		directorState(data.Director), remoteCounts(data.Remote))
 	return 0, err == nil && tag.RowsAffected() == 1, err
+}
+
+// directorState is an evt.pipeline.batch's director when it is the contract's, else nil (the stored one stays).
+func directorState(raw json.RawMessage) any {
+	var d dto.BatchDirector
+	if json.Unmarshal(raw, &d) != nil || d.Node == "" || !slices.Contains([]string{"idle", "waiting", "thinking", "off"}, d.State) ||
+		d.Wakes < 0 || d.MaxWakes < 1 {
+		return nil
+	}
+	return d
+}
+
+// remoteCounts is an evt.pipeline.batch's remote counters when they are the contract's, else nil.
+func remoteCounts(raw json.RawMessage) any {
+	var r dto.BatchRemote
+	if json.Unmarshal(raw, &r) != nil || r.MaxCalls < 1 || r.MaxTokens < 1 || r.Calls < 0 || r.Tokens < 0 || r.NetworkFailures < 0 {
+		return nil
+	}
+	return r
 }
 
 // rowStatuses are the statuses pipelines reports for a row.
@@ -164,7 +187,7 @@ func applyPipelineRow(ctx context.Context, tx pgx.Tx, batchID, ownerID string, d
 // stepParts and stepStatuses are what evt.pipeline.step may carry.
 var (
 	stepParts = map[string]bool{"inputs": true, "submit": true, "wait": true, "gate": true, "route": true, "output": true,
-		"verdict": true, "apply": true, "memory": true}
+		"verdict": true, "apply": true, "memory": true, "tools": true, "custom": true}
 	stepStatuses = map[string]bool{"finished": true, "resumed": true, "current": true}
 )
 
@@ -197,25 +220,64 @@ func applyPipelineStep(ctx context.Context, tx pgx.Tx, batchID, ownerID string, 
 		stepMemory.Wrote != nil {
 		memory = dto.StepMemory{Read: keep(stepMemory.Read), Wrote: keep(stepMemory.Wrote)}
 	}
+	branch, turn, calls := data.Branch, data.Turn, toolCalls(data.ToolCalls, 4)
+	if branch != nil && (*branch < 0 || *branch > 23) {
+		branch = nil
+	}
+	if turn != nil && (*turn < 1 || *turn > 16) {
+		turn = nil
+	}
 	tag, err := tx.Exec(ctx, `INSERT INTO batch_steps (batch_id, n, attempt, step, owner_id, seq, node, part, visit, status,
-		what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, decision_id, memory)
+		what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, decision_id, memory, branch, turn, tool_calls)
 		SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14,
 		coalesce((SELECT array_agg(r.id ORDER BY u.ord) FROM unnest($15::uuid[]) WITH ORDINALITY u(id, ord)
 			JOIN runs r ON r.id = u.id AND r.batch_id = $1 AND r.batch_row = $2), '{}'),
 		coalesce((SELECT array_agg(t.id ORDER BY u.ord) FROM unnest($16::uuid[]) WITH ORDINALITY u(id, ord)
-			JOIN takes t ON t.id = u.id AND t.owner_id = $5), '{}'), $17, $18, $19, $20::jsonb
+			JOIN takes t ON t.id = u.id AND t.owner_id = $5), '{}'), $17, $18, $19, $20::jsonb, $21, $22, $23::jsonb
 		FROM batch_rows WHERE batch_id = $1 AND n = $2
 		ON CONFLICT (batch_id, n, attempt, step) DO UPDATE SET seq = excluded.seq, node = excluded.node, part = excluded.part,
 		visit = excluded.visit, status = excluded.status, what = excluded.what, changed = excluded.changed,
 		edge = excluded.edge, loops = excluded.loops, run_ids = excluded.run_ids, take_ids = excluded.take_ids,
 		error = excluded.error, checkpoint_id = excluded.checkpoint_id, at = excluded.at,
-		decision_id = coalesce(excluded.decision_id, batch_steps.decision_id), memory = coalesce(excluded.memory, batch_steps.memory)
+		decision_id = coalesce(excluded.decision_id, batch_steps.decision_id), memory = coalesce(excluded.memory, batch_steps.memory),
+		branch = excluded.branch, turn = excluded.turn, tool_calls = coalesce(excluded.tool_calls, batch_steps.tool_calls)
 		WHERE batch_steps.seq < excluded.seq`,
 		batchID, data.Row, data.Attempt, data.Step, ownerID, data.Seq, data.Node, data.Part, max(data.Visit, 1), data.Status,
 		data.What, data.Changed, edge, data.Loops, keep(data.RunIDs), keep(data.TakeIDs), data.Error, data.CheckpointID,
-		decisionID, memory)
+		decisionID, memory, branch, turn, calls)
 	return data.Row, err == nil && tag.RowsAffected() == 1, err
 }
+
+// toolCalls keeps at most max tool calls (tools.schema.json toolCall) that are the contract's shape, each result cut to
+// 8000 characters of JSON (null when longer, as pipelines would have cut it); nil when absent.
+func toolCalls(raw json.RawMessage, max int) any {
+	var calls []struct {
+		ID     string          `json:"id"`
+		Tool   string          `json:"tool"`
+		Args   json.RawMessage `json:"args"`
+		Result json.RawMessage `json:"result"`
+		Error  *string         `json:"error"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &calls) != nil {
+		return nil
+	}
+	out := []map[string]any{}
+	for _, c := range calls {
+		if len(out) == max || !wireTools[c.Tool] || c.ID == "" || len(c.ID) > 200 || len(c.Args) == 0 || c.Args[0] != '{' {
+			continue
+		}
+		result := any(nil)
+		if len(c.Result) > 0 && c.Result[0] == '{' && len(c.Result) <= 8000 {
+			result = c.Result
+		}
+		out = append(out, map[string]any{"id": c.ID, "tool": c.Tool, "args": c.Args, "result": result, "error": c.Error})
+	}
+	return out
+}
+
+// wireTools are the tool names a model sees (tools.schema.json wireName).
+var wireTools = map[string]bool{"gallery_search": true, "memory_read": true, "memory_write": true, "library_read": true,
+	"rows_add": true, "rows_edit": true, "route": true, "set_items": true}
 
 // storeDecision keeps a step event's decision (the newest seq per id) when its id names this batch, row, attempt and
 // node; a judge's candidates (the owner's takes) are the takes it affected. It returns the id, nil without one.
@@ -236,7 +298,7 @@ func storeDecision(ctx context.Context, tx pgx.Tx, batchID, ownerID string, data
 	if len(data.Decision) == 0 || string(data.Decision) == "null" {
 		return nil, nil
 	}
-	if json.Unmarshal(data.Decision, &d) != nil || !dto.Asks(d.Kind) || d.Node != data.Node || d.Attempt != data.Attempt ||
+	if json.Unmarshal(data.Decision, &d) != nil || !dto.HasModel(d.Kind) || d.Node != data.Node || d.Attempt != data.Attempt ||
 		d.ID != fmt.Sprintf("%s:%d:%d:%s:%d", batchID, data.Row, d.Attempt, d.Node, d.Visit) {
 		log.Printf("batch projector: batch %s row %d: dropping a decision that is not this row's", batchID, data.Row)
 		return nil, nil

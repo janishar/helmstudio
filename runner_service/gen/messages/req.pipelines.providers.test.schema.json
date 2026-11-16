@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.pipelines.providers.test.schema.json",
+  "title": "NATS request/reply pipelines.providers.test (studio → pipelines)",
+  "description": "From API 1.15. Core NATS request/reply on subject `pipelines.providers.test` (queue group `pipelines`), bare JSON, for POST /v1/studio/admin/providers/{name}/test. Only pipelines_service ever calls a model provider, so the test is made there: `GET <base_url>/models`, then, with `model`, one chat completion of at most 8 tokens (`Answer with OK.`). The host rule is applied first (a server's base_url must resolve only to loopback or private addresses; a remote one must be https, and remote models must be on in pipelines' own setting). Studio waits 30 s (no answer: 503).",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "name",
+        "provider"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "defs.schema.json#/$defs/providerName"
+        },
+        "provider": {
+          "$ref": "defs.schema.json#/$defs/providerSnapshot"
+        },
+        "model": {
+          "$ref": "defs.schema.json#/$defs/providerModel"
+        }
+      }
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "required": [
+        "models",
+        "seconds"
+      ],
+      "additionalProperties": false,
+      "not": {
+        "required": [
+          "code"
+        ]
+      },
+      "properties": {
+        "models": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "description": "what GET /models listed (first 64)"
+        },
+        "answer": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "with model: its answer"
+        },
+        "seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error",
+        "code"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "never the key, never a response body longer than 300 characters"
+        },
+        "code": {
+          "enum": [
+            "network",
+            "answer",
+            "refused",
+            "off",
+            "internal"
+          ],
+          "description": "network: connect, TLS, timeout, 5xx or 429; answer: a 4xx (401: the key) or an answer that is not OpenAI-shaped; refused: the host rule refused the address; off: remote models are off on this deployment; internal"
+        },
+        "seconds": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

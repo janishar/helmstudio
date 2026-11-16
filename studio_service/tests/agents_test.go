@@ -54,13 +54,13 @@ func TestAgentNodes(t *testing.T) {
 
 	// validate: the worst case per row and auto resolved to the family's ask
 	check := e.call(userA, "POST", "/v1/studio/pipelines/validate", judgePipeline("Foxes"), 200)
-	if check["can_run"] != true || fmt.Sprint(check["bounds"]) != "map[llm_calls:4 runs:2]" ||
+	if check["can_run"] != true || fmt.Sprint(check["bounds"]) != "map[llm_calls:4 remote_calls:0 remote_tokens:0 runs:2 tool_calls:0]" ||
 		fmt.Sprint(check["models"]) != "map[judge:echo-ask rewrite:echo-ask]" {
 		t.Fatal(check)
 	}
 	pipeline := e.call(userA, "POST", "/v1/studio/pipelines", judgePipeline("Foxes"), 201)
 	pipelineID := pipeline["id"].(string)
-	if fmt.Sprint(pipeline["bounds"]) != "map[llm_calls:4 runs:2]" {
+	if fmt.Sprint(pipeline["bounds"]) != "map[llm_calls:4 remote_calls:0 remote_tokens:0 runs:2 tool_calls:0]" {
 		t.Fatal(pipeline)
 	}
 	batch := e.submit(userA, map[string]any{"pipeline_id": pipelineID,

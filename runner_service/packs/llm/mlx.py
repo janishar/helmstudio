@@ -7,7 +7,9 @@ constrained to the schema by llguidance where it compiles (else prompt + strict 
 mlx-vlm is imported inside the functions, so the runner starts without the extra; a run then fails saying so."""
 
 import functools
+import json
 import logging
+import re
 from pathlib import Path
 
 from core import ask as asks
@@ -39,17 +41,42 @@ def processor(folder: str, eos):
     return proc
 
 
+UNIMPLEMENTED = re.compile(r"Unimplemented keys: \[([^\]]*)\]")
+
+
+def without(value, keys: set[str]):
+    """The schema with every `keys` keyword dropped at any depth (a looser grammar; the answer is still validated)."""
+    if isinstance(value, dict):
+        return {k: without(v, keys) for k, v in value.items() if k not in keys}
+    if isinstance(value, list):
+        return [without(v, keys) for v in value]
+    return value
+
+
 def constrained(proc, schema: str) -> list:
-    """llguidance's JSON-schema logits processor, or none when the schema has no grammar there (checked after)."""
+    """llguidance's JSON-schema logits processor, or none when the schema has no grammar there (checked after).
+    Keywords llguidance does not implement (the agent turn schema's `propertyNames` on rows.add / rows.edit inputs)
+    are dropped from the grammar only, so the rest of the turn (tool names, args, caps) stays constrained."""
     if not schema.strip():
         return []
     from mlx_vlm.structured import build_json_schema_logits_processor
 
-    try:
-        return [build_json_schema_logits_processor(proc.tokenizer, schema)]
-    except Exception as e:  # noqa: BLE001 (an unsupported keyword: the answer is still validated)
-        log.warning("llguidance cannot constrain this schema (%s): prompt + check only", e)
-        return []
+    grammar, dropped = schema, set()
+    for _ in range(4):
+        try:
+            return [build_json_schema_logits_processor(proc.tokenizer, grammar)]
+        except Exception as e:  # noqa: BLE001 (an unsupported keyword: the answer is still validated)
+            keys = (
+                set(re.findall(r'"([^"]+)"', m.group(1)))
+                if (m := UNIMPLEMENTED.search(str(e)))
+                else set()
+            )
+            if not keys or keys <= dropped:
+                log.warning("llguidance cannot constrain this schema (%s): prompt + check only", e)
+                return []
+            dropped |= keys
+            grammar = json.dumps(without(json.loads(schema), dropped))
+    return []
 
 
 def ask(ctx, params: dict, inputs: dict) -> dict:

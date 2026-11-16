@@ -1,0 +1,59 @@
+{
+  "type": "evt.pipeline.chat",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001503",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:20:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 41,
+    "message": {
+      "id": "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d",
+      "role": "director",
+      "text": "Row 3 is a close-up now, and row 15 adds the den at dawn.",
+      "wake": 3,
+      "tool_calls": [
+        {
+          "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:0:1:director:2:t0:0",
+          "tool": "rows_edit",
+          "args": {
+            "row": 3,
+            "inputs": {
+              "script": "Close-up of @fox, eyes catching the light."
+            }
+          },
+          "result": {
+            "row": 3,
+            "status": "queued"
+          },
+          "error": null
+        },
+        {
+          "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:0:1:director:2:t0:1",
+          "tool": "rows_add",
+          "args": {
+            "inputs": {
+              "script": "The den at dawn, @fox asleep."
+            }
+          },
+          "result": {
+            "row": 15,
+            "status": "queued"
+          },
+          "error": null
+        }
+      ],
+      "rows": [
+        3,
+        15
+      ],
+      "reply_to": [
+        "1e2d3c4b-5a69-4788-9a1b-2c3d4e5f6a70"
+      ],
+      "at": "2026-11-16T10:20:04Z"
+    }
+  }
+}

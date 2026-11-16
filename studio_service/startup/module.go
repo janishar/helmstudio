@@ -25,11 +25,14 @@ type Module struct {
 	recheck        studio.Recheck  // the token check an open event stream repeats
 	shutdown       <-chan struct{} // closes when the service stops, which ends open SSE streams
 	health         micro.Controller
-	maxBody        int64              // bytes
-	store          storage.Store      // read to check uploads and reference images
-	stateGet       studio.StateGet    // pipelines.state.get (a row's checkpoint state)
-	memory         studio.MemoryAsk   // pipelines.memory (a pipeline's memory)
-	dispatcher     *studio.Dispatcher // positions use its skip counts; nil in tests
+	maxBody        int64                  // bytes
+	store          storage.Store          // read to check uploads and reference images
+	stateGet       studio.StateGet        // pipelines.state.get (a row's checkpoint state)
+	memory         studio.MemoryAsk       // pipelines.memory (a pipeline's memory)
+	dispatcher     *studio.Dispatcher     // positions use its skip counts; nil in tests
+	remoteModels   bool                   // the deployment's remote switch (API 1.15)
+	providerTest   studio.ProviderTestAsk // pipelines.providers.test
+	lookup         studio.Lookup          // a server provider's host name (nil: the system resolver)
 }
 
 // RootMiddlewares returns the middlewares in load order. The body limit comes before the guard, so 411 and 413 come
@@ -50,6 +53,9 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetStateGet(m.stateGet)
 	service.SetMemory(m.memory)
 	service.SetDispatcher(m.dispatcher)
+	service.SetRemote(m.remoteModels)
+	service.SetProviderTest(m.providerTest)
+	service.SetLookup(m.lookup)
 	return []micro.Controller{
 		m.health,
 		studio.NewController(service, m.recheck, m.shutdown),

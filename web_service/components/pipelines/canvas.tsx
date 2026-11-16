@@ -3,6 +3,8 @@
 // @xyflow/react, laid out by elkjs when nodes have no positions; a gate's fail edge is the dashed loop over the top
 // with its cap. Editable (drag to connect from a port, drop a wire on the canvas to add a node, Backspace deletes,
 // A or a double- or right-click adds) or read-only with the marks of one row's execution. Loaded with next/dynamic.
+// Stage B (docs/mock/DirectorChat.dc.html): Agent cards (tools, how a visit ends, caps, chat), custom nodes from the
+// published list in Add node, and a fanned-out step drawn as a stack of cards with "× item · max N".
 import "@xyflow/react/dist/base.css";
 import "@/components/graph/graph.css";
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +38,7 @@ import {
   nodeLabel,
   removePipelineNodes,
   stepNumbers,
+  stepTakes,
   type PDoc,
   type PProblem,
   type Via,
@@ -63,6 +66,8 @@ type Ctx = {
   steps: Record<string, number>;
   /** the node the panel shows (outlined; xyflow's own selection stays the user's, so the two never fight) */
   selected: string | null;
+  /** node id → the model it resolves to (an agent's "runs on") */
+  models?: Record<string, string>;
 };
 const CanvasCtx = createContext<Ctx | null>(null);
 
@@ -80,6 +85,10 @@ export type CanvasProps = {
   defaultWorkflow?: string;
   /** a key for the flow: a new one fits the view again */
   flowKey?: string;
+  /** the custom nodes Add node offers (GET /custom-nodes) */
+  custom?: S<"CustomNode">[];
+  /** node id → the model it resolves to */
+  models?: Record<string, string>;
 };
 
 export function PipelineCanvas(props: CanvasProps) {
@@ -100,6 +109,8 @@ function Canvas({
   edit,
   defaultWorkflow,
   flowKey,
+  custom = [],
+  models,
 }: CanvasProps) {
   const rf = useReactFlow();
   const readOnly = !edit;
@@ -151,7 +162,7 @@ function Canvas({
     return () => window.removeEventListener("keydown", onKey);
   }, [openMenu, readOnly]);
 
-  const add = (kind: Kind) => {
+  const add = (kind: Kind, node?: S<"CustomNode">) => {
     if (!menu) return;
     const from = menu.from;
     let added = "";
@@ -159,6 +170,7 @@ function Canvas({
       const r = addPipelineNode(d, kind, menu.at, {
         workflow: defaultWorkflow,
         selected: from?.[0] ?? selected,
+        custom: node,
       });
       added = r.id;
       onSelect(r.id);
@@ -178,14 +190,8 @@ function Canvas({
     }, 50);
   };
 
-  const steps = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(doc.nodes).map(([id, n]) => [id, n.kind === "step" ? (n.seeds ?? 1) : 0]),
-      ),
-    [doc],
-  );
-  const ctx: Ctx = { doc, titles, problems, marks, readOnly, steps, selected };
+  const steps = useMemo(() => stepTakes(doc), [doc]);
+  const ctx: Ctx = { doc, titles, problems, marks, readOnly, steps, selected, models };
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -307,6 +313,7 @@ function Canvas({
             x={menu.x}
             y={menu.y}
             hasInputs={Object.values(doc.nodes).some((n) => n.kind === "inputs")}
+            custom={custom}
             onPick={add}
             onClose={() => setMenu(null)}
           />
@@ -332,7 +339,9 @@ function Canvas({
 function edgesOf(doc: PDoc, marks?: Marks): Edge[] {
   const out: Edge[] = [];
   const color = (from: string) =>
-    ["inputs", "write", "memory"].includes(doc.nodes[from]?.kind ?? "") ? TEXT : IMAGE;
+    ["inputs", "write", "memory", "agent", "custom"].includes(doc.nodes[from]?.kind ?? "")
+      ? TEXT
+      : IMAGE;
   const a = analyse(doc);
   const ok = (from: string) => !a.refused.some(([, f]) => f === from);
   const add = (from: string, to: string, via: Via | "pass", extra: Partial<Edge>) => {
@@ -451,6 +460,12 @@ function Card({ id }: NodeProps) {
   const out = g.doc.edges.find((e) => e[0] === id)?.[1];
   const label = nodeLabel(g.doc, id, g.titles);
   const head = n.kind === "step" ? `${nums[id]} · ${label}` : label;
+  const fanned = n.kind === "step" && n.each ? n.each.split(".")[0] : null;
+  const producer = fanned ? g.doc.nodes[fanned] : undefined;
+  const fanMax =
+    producer && (producer.kind === "write" || producer.kind === "agent")
+      ? (producer.list?.max ?? 0)
+      : 0;
   const tag = m
     ? m.current
       ? ({ running: "running", waiting: "parked", queued: "queued" }[m.status] ?? m.status)
@@ -461,9 +476,13 @@ function Card({ id }: NodeProps) {
           : "done"
     : g.marks
       ? "not reached"
-      : isAgent(n.kind)
-        ? "agent node"
-        : { inputs: "list", step: "step", gate: "gate", output: "" }[n.kind as "step"];
+      : n.kind === "agent" || n.kind === "custom"
+        ? n.kind
+        : fanned
+          ? `× item · max ${fanMax}`
+          : isAgent(n.kind)
+            ? "agent node"
+            : { inputs: "list", step: "step", gate: "gate", output: "" }[n.kind as "step"];
   const port = (side: "source" | "target", via: string, color: string, label?: string) => (
     <Handle
       type={side}
@@ -475,7 +494,7 @@ function Card({ id }: NodeProps) {
       aria-label={label ?? (side === "target" ? "in" : via)}
     />
   );
-  const color = n.kind === "inputs" || n.kind === "write" || n.kind === "memory" ? TEXT : IMAGE;
+  const color = ["inputs", "write", "memory", "agent", "custom"].includes(n.kind) ? TEXT : IMAGE;
   const row = (k: string, v: React.ReactNode, bad?: boolean) => (
     <div className="gn-r">
       <span>{k}</span>
@@ -495,6 +514,10 @@ function Card({ id }: NodeProps) {
         borderColor: m?.current ? "var(--a2)" : isAgent(n.kind) ? AGENT : undefined,
         outline: g.selected === id ? "2px solid var(--t2)" : undefined,
         outlineOffset: 2,
+        // a fanned-out step: two cards behind it, as the mock draws the branches
+        boxShadow: fanned
+          ? "7px -6px 0 -1px var(--s2), 7px -6px 0 0 var(--ln), 14px -12px 0 -1px var(--s1), 14px -12px 0 0 var(--s5)"
+          : undefined,
       }}
       data-bad={mine.length ? true : undefined}
     >
@@ -525,6 +548,7 @@ function Card({ id }: NodeProps) {
             <span>takes</span>
             {port("source", "next", color)}
           </div>
+          {fanned && row("each", "items")}
           {row("seeds", n.seeds ?? 1)}
           {n.preset && row("preset", n.preset)}
           {Object.entries(n.bind ?? {}).map(([k, v]) =>
@@ -593,10 +617,66 @@ function Card({ id }: NodeProps) {
             <b>{n.from.length}</b>
           </div>
           <div className="gn-r">
-            <span>writes</span>
-            <b>{n.to.slice(1)}</b>
+            <span>{n.list ? "answers" : "writes"}</span>
+            <b>{n.list ? `list · max ${n.list.max}` : (n.to ?? "").slice(1)}</b>
             {port("source", "next", TEXT)}
           </div>
+        </>
+      )}
+      {n.kind === "agent" && (
+        <>
+          <div className="gn-r">
+            {port("target", "in", TEXT)}
+            <span>reads</span>
+            <b>{(n.from ?? []).length}</b>
+          </div>
+          {row("tools", (n.tools ?? []).length)}
+          {n.list && row("list", `max ${n.list.max}`)}
+          {n.routes ? (
+            Object.keys(n.routes).map((r) => (
+              <div key={r} className="gn-r">
+                <span>route</span>
+                <b>{r}</b>
+                {port(
+                  "source",
+                  `r:${r}`,
+                  typeof out === "object" && "routes" in out && out.then === r ? AGENT : LOOP,
+                  `route ${r}`,
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="gn-r">
+              <span>then</span>
+              {port("source", "next", TEXT)}
+            </div>
+          )}
+          {row("turns", n.caps?.max_turns ?? 6)}
+          {g.models?.[id] &&
+            row(
+              "runs on",
+              /^(server|remote):/.test(g.models[id])
+                ? g.models[id].split("/").slice(1).join("/")
+                : (g.titles[g.models[id]] ?? g.models[id]),
+            )}
+          {n.director && row("chat", "on")}
+        </>
+      )}
+      {n.kind === "custom" && (
+        <>
+          <div className="gn-r">
+            {port("target", "in", TEXT)}
+            <span>node</span>
+            <b>{n.node}</b>
+            {port("source", "next", TEXT)}
+          </div>
+          {Object.entries(n.bind ?? {}).map(([k, v]) =>
+            row(
+              k,
+              v.startsWith("$") ? v.slice(1) : ref(v),
+              mine.some((p) => p.port === k),
+            ),
+          )}
         </>
       )}
       {n.kind === "decide" && (
@@ -674,16 +754,18 @@ function AddMenu({
   x,
   y,
   hasInputs,
+  custom,
   onPick,
   onClose,
 }: {
   x: number;
   y: number;
   hasInputs: boolean;
-  onPick: (k: Kind) => void;
+  custom: S<"CustomNode">[];
+  onPick: (k: Kind, node?: S<"CustomNode">) => void;
   onClose: () => void;
 }) {
-  const kinds: [Kind, string, string][] = [
+  const kinds: [Kind, string, string, S<"CustomNode">?][] = [
     ...(hasInputs ? [] : [["inputs", "Inputs", "the batch's columns"] as [Kind, string, string]]),
     ["step", "Step", "runs a workflow"],
     ["gate", "Gate", "stops the row for your pick"],
@@ -691,7 +773,14 @@ function AddMenu({
     ["write", "Write", "rewrites a text input"],
     ["decide", "Decide", "routes the row by an answer"],
     ["memory", "Memory", "reads what past batches learnt"],
+    ["agent", "Agent", "an LLM with tools; can direct"],
     ["output", "Output", "names the collection"],
+    ...custom.map((c): [Kind, string, string, S<"CustomNode">] => [
+      "custom",
+      c.title,
+      c.network ? "custom · calls the network" : "custom",
+      c,
+    ]),
   ];
   const [active, setActive] = useState(0);
   const first = useRef<HTMLDivElement>(null);
@@ -717,21 +806,21 @@ function AddMenu({
           );
         } else if (e.key === "Enter") {
           e.preventDefault();
-          onPick(kinds[active][0]);
+          onPick(kinds[active][0], kinds[active][3]);
         }
       }}
     >
       <span className="heading px-2 pt-1">Add node</span>
-      {kinds.map(([k, title, help], i) => (
+      {kinds.map(([k, title, help, c], i) => (
         <div
-          key={k}
+          key={c ? `custom:${c.name}` : k}
           id={`pk-${i}`}
           role="option"
           aria-selected={i === active}
           className="flex cursor-pointer justify-between gap-2 rounded-[10px] px-2 py-1.5 text-[13px] aria-selected:bg-s4"
           onMouseDown={(e) => e.preventDefault()}
           onMouseEnter={() => setActive(i)}
-          onClick={() => onPick(k)}
+          onClick={() => onPick(k, c)}
         >
           <span>{title}</span>
           <span className="truncate text-[11px] text-t2">{help}</span>
@@ -756,7 +845,9 @@ async function layout(doc: PDoc): Promise<Record<string, Pos>> {
             ? 7
             : n.kind === "decide"
               ? 2 + Object.keys(n.routes).length
-              : 2;
+              : n.kind === "agent"
+                ? 4 + Object.keys(n.routes ?? {}).length
+                : 2;
     return 45 + rows * 26 + 10;
   };
   const edges = doc.edges.flatMap(([from, to], i) =>

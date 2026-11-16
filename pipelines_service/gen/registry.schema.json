@@ -1,0 +1,1878 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/registry.schema.json",
+  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras|looks) and bucket hosts (key <host>.<env>)",
+  "description": "Each runner writes only its own keys: the five registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
+  "$defs": {
+    "meta": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "host",
+        "env",
+        "published_at",
+        "published_by"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName",
+          "description": "= the key's <host>"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName",
+          "description": "= the key's <env>"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "published_by": {
+          "type": "string",
+          "minLength": 1,
+          "description": "the runner's version / image tag"
+        }
+      }
+    },
+    "portType": {
+      "enum": [
+        "Text",
+        "Image",
+        "Int",
+        "Float",
+        "Seed",
+        "Canvas",
+        "Model",
+        "Conditioning",
+        "Latent",
+        "Video",
+        "Duration",
+        "Media"
+      ],
+      "description": "a port's value type; an input accepts an output of the same type, and an input of type Media also accepts Image and Video (contracts/README.md, Graph rules: fits). Text, Image, Video (an MP4, may carry audio), Int, Float, Seed, Canvas, Duration ({frames, fps}) are plain values; Media is an input type only (the output node's `media`), never an output or a param; Model, Conditioning, Latent are family-scoped handles: they only wire nodes of one family inside one workflow and never cross a process (Latent[ltx] carries the video and audio latents together)"
+    },
+    "port": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "type": {
+          "$ref": "#/$defs/portType"
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "inputs only: true = may be left unwired (the feature is off; the stage gets no such key); absent = false, a required input"
+        }
+      }
+    },
+    "paramSchema": {
+      "type": "object",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k × step (k ≥ 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role)",
+      "required": [
+        "name",
+        "type",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "not": {
+            "const": "bypass"
+          },
+          "description": "unique among the kind's params and inputs; `bypass` is reserved (the Studio path <node>.bypass)"
+        },
+        "type": {
+          "enum": [
+            "int",
+            "float",
+            "bool",
+            "string",
+            "text",
+            "enum",
+            "seed",
+            "image",
+            "rows",
+            "frames"
+          ]
+        },
+        "fps": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "description": "frames only: the name of the same node's int or float param that holds frames per second; the UI shows the length as frames / fps seconds"
+        },
+        "auto": {
+          "type": "object",
+          "required": [
+            "min_s",
+            "max_s"
+          ],
+          "additionalProperties": false,
+          "description": "frames only: present = the model can predict the clip's length from the prompt; the value \"auto\" asks for it. The prediction is clamped to min_s..max_s seconds and to the param's min..max frames, then put on the grid (contracts/README.md, Video: auto length). The UI draws the Duration slider's Auto length switch from it",
+          "properties": {
+            "min_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "the field label; absent = the name"
+        },
+        "default": {
+          "$ref": "messages/defs.schema.json#/$defs/paramValue"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "int, float, seed: the field's increment (int: an integer)"
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer"
+          },
+          "description": "int only: the only allowed values, ascending, each within min..max, the default among them; the UI draws a choice (one allowed value: a read-only readout), studio refuses others (`<node>.<param>: must be one of <values>`)"
+        },
+        "values_by": {
+          "type": "object",
+          "required": [
+            "param",
+            "values"
+          ],
+          "additionalProperties": false,
+          "description": "int with `values` only: the allowed values depend on the node's value of enum param `param`: values[that value] (a subset of `values`; an enum value not listed allows all of `values`). The message names that subset (LTX sample: role stage1 -> [8], stage2 -> [3])",
+          "properties": {
+            "param": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+            },
+            "values": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "when": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "visibility expression over the graph, e.g. \"model.variant != 'turbo'\" (<node id>.<param>); absent = always shown. Carried through as is; studio evaluates it in a later stage, the runner ignores it"
+        },
+        "item": {
+          "type": "object",
+          "description": "rows only: field name → a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows)",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "const": "Image"
+              },
+              {
+                "const": "Media"
+              },
+              {
+                "const": "Lora"
+              },
+              {
+                "$ref": "#/$defs/itemParam"
+              }
+            ]
+          }
+        },
+        "mention": {
+          "type": "string",
+          "pattern": "\\{n\\}",
+          "maxLength": 40,
+          "description": "rows only: the text by which a prompt refers to item n (from 1), e.g. <image{n}>; the prompt carries it as is, the pack does not rewrite it"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "seed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": -1
+              },
+              "min": {
+                "type": "integer",
+                "minimum": -1
+              },
+              "max": {
+                "type": "integer",
+                "maximum": 9007199254740991
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                },
+                {
+                  "required": [
+                    "step"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "text"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "enum"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "enum"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "enum"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "int",
+                  "float",
+                  "seed",
+                  "frames"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "step"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "frames"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "min",
+              "max",
+              "step",
+              "fps"
+            ],
+            "properties": {
+              "default": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "fps"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "image"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "null"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "rows"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "item",
+              "max"
+            ],
+            "properties": {
+              "default": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "item"
+                  ]
+                },
+                {
+                  "required": [
+                    "mention"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "frames"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "auto"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "dependentRequired": {
+              "values_by": [
+                "values"
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "values"
+                  ]
+                },
+                {
+                  "required": [
+                    "values_by"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "itemParam": {
+      "type": "object",
+      "description": "a rows item field that is a param: a paramSchema without name, not rows or image (an item may add `position`)",
+      "required": [
+        "type",
+        "default"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "int",
+            "float",
+            "bool",
+            "string",
+            "text",
+            "enum",
+            "seed"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "the field label; absent = the name"
+        },
+        "default": {
+          "$ref": "messages/defs.schema.json#/$defs/paramValue"
+        },
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "int, float, seed: the field's increment (int: an integer)"
+        },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "position": {
+          "enum": [
+            "seconds"
+          ],
+          "description": "float only: the field is a time on the clip in seconds (a keyframe's place): studio turns it into the pixel frame min(round(s * fps), F - 1) of the workflow's frames param and refuses rows past the clip or on a frame another row uses (contracts/README.md, Video: keyframes); the rows editor draws it on the clip's length"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "int"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "integer"
+              },
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "seed"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": -1
+              },
+              "min": {
+                "type": "integer",
+                "minimum": -1
+              },
+              "max": {
+                "type": "integer",
+                "maximum": 9007199254740991
+              },
+              "step": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "boolean"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                },
+                {
+                  "required": [
+                    "step"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "string",
+                  "text"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "string"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "enum"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "enum"
+            ],
+            "properties": {
+              "default": {
+                "type": "string"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "enum"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "int",
+                  "float",
+                  "seed"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "step"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "position"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nodeSchema": {
+      "type": "object",
+      "required": [
+        "kind",
+        "title",
+        "family",
+        "params",
+        "inputs",
+        "outputs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "messages/defs.schema.json#/$defs/nodeKind"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "family": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "description": "the model family (the kind's prefix); null for a core node"
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "params": {
+          "type": "array",
+          "description": "in form order",
+          "items": {
+            "$ref": "#/$defs/paramSchema"
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/port"
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/port"
+          }
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "family",
+        "env",
+        "nodes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "messages/defs.schema.json#/$defs/workflowId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "family": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName"
+        },
+        "media": {
+          "enum": [
+            "image",
+            "video",
+            "text"
+          ],
+          "description": "what its runs make: image / video takes (the Image / Video switch filters templates by it), or from API 1.14 `text`: an answer stored on the run, no take (an ask workflow: its `answer` node; contracts/README.md, The llm pack). Absent = image. Must equal what studio computes from the graph (contracts/README.md, Video: a workflow's media). A text workflow is internal: never listed for Create, never run from Create or a workflow batch; only a pipeline's judge, write and decide nodes run it"
+        },
+        "nodes": {
+          "$ref": "messages/defs.schema.json#/$defs/graph",
+          "description": "params here override the node schema's defaults; the run's inputs override both"
+        },
+        "studio": {
+          "$ref": "#/$defs/studioLayout",
+          "description": "the Studio (Create) layout studio sends as the template's Workflow.studio; absent = the derived form. Its paths obey the graph rules for a user workflow's block (studio_unknown_path, studio_duplicate)"
+        }
+      }
+    },
+    "nodes": {
+      "description": "registry key <host>.<env>.nodes: every node kind this runner can execute",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "nodes"
+          ],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/nodeSchema"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "workflows": {
+      "description": "registry key <host>.<env>.workflows: the workflows this runner offers; each workflow's env is the key's env and uses only kinds in its .nodes",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "workflows"
+          ],
+          "properties": {
+            "workflows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/workflow"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "models": {
+      "description": "registry key <host>.<env>.models: the models present on this host for this env",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "models"
+          ],
+          "properties": {
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "family",
+                  "title"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+                  },
+                  "family": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "variants": {
+                    "type": "array",
+                    "description": "the model's variants on this host (section 9.2 of docs/plan/06-platform.md); absent for a model without variants (echo)",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "presence",
+                        "precisions"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                          "description": "the value of the family's model node variant param"
+                        },
+                        "presence": {
+                          "enum": [
+                            "present",
+                            "missing"
+                          ]
+                        },
+                        "bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "size on disk of the variant's own files (shared files counted once, in the variant that owns them); absent when missing"
+                        },
+                        "precisions": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "items": {
+                            "enum": [
+                              "bf16",
+                              "fp16",
+                              "int8",
+                              "int4"
+                            ]
+                          },
+                          "description": "what it can load as, first = native. A full-precision variant lists its dtype then the load-time quantizations (bf16, int8; MLX also int4); an already-quantized one lists only its own (int8): no choice, nothing quantized at load"
+                        },
+                        "memory": {
+                          "type": "array",
+                          "description": "from API 1.13 (contracts/README.md, The hand-over): per precision of `precisions`, what a run of this variant loaded at that precision holds. The dispatcher's host admission reads it; a precision not listed is planned at the whole host budget. Native runners publish it for every present variant and precision",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "precision",
+                              "peak_gb",
+                              "components"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "precision": {
+                                "enum": [
+                                  "bf16",
+                                  "fp16",
+                                  "int8",
+                                  "int4"
+                                ],
+                                "description": "the model node's precision param"
+                              },
+                              "peak_gb": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "description": "the planned peak: the most this env holds at once during such a run at the canonical workflow's default sizes, starting warm (every component without unloads_after resident): max over its stages of the resident components + the stage's own + the stage's peak_gb formula. LoRAs not included"
+                              },
+                              "planned_at": {
+                                "type": "object",
+                                "required": [
+                                  "mp",
+                                  "frames"
+                                ],
+                                "additionalProperties": false,
+                                "description": "from API 1.13: the largest sizes peak_gb was planned at, over its stages (the formulas' mp and frames). A run larger than either (any node's width × height / 10^6, any numeric frames) has no plan: it is planned at the whole host budget. Absent: every run uses peak_gb",
+                                "properties": {
+                                  "mp": {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  "frames": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "images": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "description": "from API 1.14, ask workflows: the most thumbnails (each image take 1, each video take 3 keyframes) peak_gb was planned at; a run sending more has no plan (planned at the whole budget). Absent: not a limit"
+                                  }
+                                }
+                              },
+                              "components": {
+                                "type": "array",
+                                "minItems": 1,
+                                "description": "every component such a run loads, in the order of their last use in the run (the hosts value's resident entries of the same key)",
+                                "items": {
+                                  "type": "object",
+                                  "required": [
+                                    "component",
+                                    "variant",
+                                    "precision",
+                                    "gb"
+                                  ],
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "component": {
+                                      "type": "string",
+                                      "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                                    },
+                                    "variant": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                                      "description": "the variant that owns the files (Qwen turbo's text_encoder and vae: base): the resident entry's variant"
+                                    },
+                                    "precision": {
+                                      "enum": [
+                                        "bf16",
+                                        "fp16",
+                                        "int8",
+                                        "int4"
+                                      ],
+                                      "description": "what it is loaded at (a vae stays bf16 in an int8 run): the resident entry's precision"
+                                    },
+                                    "gb": {
+                                      "type": "number",
+                                      "minimum": 0
+                                    },
+                                    "unloads_after": {
+                                      "type": "boolean",
+                                      "description": "true: the run unloads it after its stage (a stage's unload_after), so it is not resident after the run; absent = false"
+                                    }
+                                  }
+                                }
+                              },
+                              "workflow": {
+                                "$ref": "messages/defs.schema.json#/$defs/workflowId",
+                                "description": "from API 1.14: this item plans only runs of that workflow (an ask workflow that loads one component of the family: `qwen-image-ask` loads the text encoder only). The dispatcher takes the item of the run's precision and workflow, else the item of its precision without `workflow`. Items are unique by (precision, workflow)"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "lora": {
+                    "$ref": "#/$defs/loraBlock",
+                    "description": "present when the family takes LoRAs (it publishes a <family>/lora-stack node)"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "loras": {
+      "description": "registry key <host>.<env>.loras: the shared LoRAs this runner indexed on its host (every *.safetensors under <models>/loras/ and under any loras/ folder inside a model folder), written at start. Studio's LoRA library lists the union over live hosts; the dispatcher sends a run that names a shared LoRA only to a host whose key lists it",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "loras"
+          ],
+          "properties": {
+            "loras": {
+              "type": "array",
+              "maxItems": 2000,
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "family",
+                  "rank",
+                  "bytes",
+                  "key_style",
+                  "licence",
+                  "modified_at"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "$ref": "messages/defs.schema.json#/$defs/sha256",
+                    "description": "the file's SHA-256 (the runner hashes it once and keeps the hash by path, size and mtime): the LoRA's id everywhere"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "description": "the file name without .safetensors, cut to 80"
+                  },
+                  "family": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "description": "the first family of this runner's packs (by name) the normaliser fits it to (every key applied or ignored, at least one applied); unknown when none"
+                  },
+                  "rank": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4096,
+                    "description": "the largest A/B pair rank"
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "key_style": {
+                    "enum": [
+                      "peft",
+                      "kohya",
+                      "comfyui"
+                    ]
+                  },
+                  "licence": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200,
+                    "description": "__metadata__ modelspec.license, else license, trimmed; null when neither"
+                  },
+                  "modified_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "the file's mtime"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "host": {
+      "description": "bucket hosts, key <host>.<env>: the runner's live state, rewritten every 10 s. Never shown to users as is: GET /v1/studio/hosts redacts it.",
+      "type": "object",
+      "required": [
+        "schema_version",
+        "host",
+        "env",
+        "state",
+        "run_id",
+        "updated_at",
+        "published_by"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName"
+        },
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName"
+        },
+        "state": {
+          "enum": [
+            "idle",
+            "busy"
+          ]
+        },
+        "run_id": {
+          "oneOf": [
+            {
+              "$ref": "messages/defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the run in progress (busy), else null"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "published_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "memory": {
+          "type": "object",
+          "required": [
+            "budget_gb",
+            "used_gb"
+          ],
+          "additionalProperties": false,
+          "description": "GPU / unified memory the runner may use and uses now. budget_gb = physical RAM minus the runner's reserve; the host's shared budget is the smallest budget_gb of its envs (contracts/README.md, The hand-over)",
+          "properties": {
+            "budget_gb": {
+              "type": "number",
+              "minimum": 0
+            },
+            "used_gb": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "resident": {
+          "type": "array",
+          "description": "model components loaded now (the residency manager's view)",
+          "items": {
+            "type": "object",
+            "required": [
+              "component",
+              "model",
+              "variant",
+              "precision",
+              "gb",
+              "pinned"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "component": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "description": "transformer, text_encoder, vae, ..."
+              },
+              "model": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+                "description": "a model id of the models key"
+              },
+              "variant": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+              },
+              "precision": {
+                "enum": [
+                  "bf16",
+                  "fp16",
+                  "int8",
+                  "int4"
+                ]
+              },
+              "gb": {
+                "type": "number",
+                "minimum": 0
+              },
+              "pinned": {
+                "type": "boolean",
+                "description": "in use by the running run, or pinned by the host's setting (RUNNER_PIN): not evictable. In an idle runner's value only the setting's pins are true"
+              },
+              "last_used": {
+                "type": "string",
+                "format": "date-time",
+                "description": "from API 1.13: when a stage last used it (its load counts as a use); the dispatcher's victims go least recently used first. Native runners always send it; absent = used before any entry that has it"
+              },
+              "loras": {
+                "type": "array",
+                "maxItems": 32,
+                "description": "a component with LoRAs baked in (mode bake) is its own entry: those LoRAs, in order; absent or empty = the plain component. Adapter LoRAs are not listed. GET /v1/studio/hosts shows another user's own LoRA only as its size",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "lora_id",
+                    "name",
+                    "strength",
+                    "bytes"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "lora_id": {
+                      "$ref": "messages/defs.schema.json#/$defs/loraId"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 80
+                    },
+                    "strength": {
+                      "type": "number"
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "attempt": {
+          "$ref": "messages/defs.schema.json#/$defs/attempt",
+          "description": "the attempt of run_id in progress (busy); absent when idle. The dispatcher's lease check compares (run_id, attempt)"
+        }
+      },
+      "if": {
+        "properties": {
+          "state": {
+            "const": "busy"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "run_id": {
+            "$ref": "messages/defs.schema.json#/$defs/uuid"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "run_id": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "loraBlock": {
+      "type": "object",
+      "description": "a family's LoRA rules (the `lora:` block of its model.yaml): what the normaliser needs to apply a LoRA file to this family, and what studio needs to detect a file's family (contracts/README.md, LoRA normaliser). The stack node's row cap, strength range and modes are in the <family>/lora-stack node schema",
+      "required": [
+        "component",
+        "modules",
+        "renames",
+        "ignore"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "description": "the weight component LoRAs patch (transformer); a stage whose `uses` holds it sees the Model's LoRA set"
+        },
+        "modules": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+|\\.\\{[0-9]+\\.\\.[0-9]+\\})*$",
+            "maxLength": 200
+          },
+          "description": "the component's Linear module names a LoRA may target (canonical, dotted, as the model's named_modules), sorted; one numeric range `{a..b}` per entry expands to a..b inclusive (transformer_blocks.{0..31}.attn.to_q). The runner generates it from the meta-device model; with every `.` read as `_` the expanded names must still be unique (kohya)"
+        },
+        "renames": {
+          "type": "array",
+          "maxItems": 64,
+          "description": "family-specific key fixes, in order: the first that matches a key's module part (after the style's prefix and suffix are cut) replaces the matched part with `to`. `at: start` (default): `from` starts the part (a prefix rewrite); `at: end`: `from` ends it (LTX: `.to_out.0` -> `.to_out`). Most families: []",
+          "items": {
+            "type": "object",
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "to": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "at": {
+                "enum": [
+                  "start",
+                  "end"
+                ],
+                "description": "where `from` must match: start (default) or end of the module part"
+              }
+            }
+          }
+        },
+        "ignore": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "glob patterns (fnmatch: `*` any run, `?` one character; case-sensitive) over raw tensor keys that are counted as ignored instead of unapplied. Empty = every key must apply"
+        },
+        "prefused": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "LoRAs already fused into a variant's weights (LTX: the distilled LoRA is part of the distilled transformer): a stack row naming one on a model of that variant is 422 at run (`<node>.<param>[<i>].lora: LoRA <name> is already part of the <variant> weights`), so it is never applied twice. The runner fills lora_id from its LoRA index (model.yaml names the file); absent = none",
+          "items": {
+            "type": "object",
+            "required": [
+              "lora_id",
+              "variant"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "lora_id": {
+                "$ref": "messages/defs.schema.json#/$defs/sha256"
+              },
+              "variant": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "looks": {
+      "description": "registry key <host>.<env>.looks: the starter looks of this runner's packs (runner_service/packs/<pack>/looks/*.yaml, contracts/README.md Looks: starter looks), written at start (an empty list when its packs ship none). Studio lists the union over live hosts to every user, read-only; a look's id is the same on every host",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "looks"
+          ],
+          "properties": {
+            "looks": {
+              "type": "array",
+              "maxItems": 1000,
+              "description": "every look of every pack of this env, by pack, then file name, then file order; ids unique",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "family",
+                  "group",
+                  "name",
+                  "text",
+                  "version",
+                  "loras",
+                  "thumb"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63}$",
+                    "description": "<family>/<the YAML id>: the look's id everywhere (LibraryItem.id, RunRequest.looks), stable across hosts"
+                  },
+                  "family": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "description": "the pack's family (= the id's first part)"
+                  },
+                  "group": {
+                    "enum": [
+                      "film",
+                      "camera",
+                      "colour",
+                      "lighting"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "appended to the prompt; may be empty only when the look has a LoRA"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "the YAML version (default 1); a pack bumps it when it changes the look, so reuse can say changed"
+                  },
+                  "loras": {
+                    "type": "array",
+                    "maxItems": 1,
+                    "description": "the YAML lora, when it has one",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "file",
+                        "name",
+                        "strength",
+                        "lora_id"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "file": {
+                          "type": "string",
+                          "pattern": "^[^/\\\\]{1,200}\\.safetensors$",
+                          "description": "the file name as written in the YAML, looked up in the folders the LoRA index scans (contracts/README.md, LoRAs: shared)"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "description": "the file name without .safetensors, cut to 80 (the index's name)"
+                        },
+                        "strength": {
+                          "type": "number",
+                          "minimum": -4,
+                          "maximum": 4
+                        },
+                        "lora_id": {
+                          "oneOf": [
+                            {
+                              "$ref": "messages/defs.schema.json#/$defs/sha256"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "the file's SHA-256 = its shared LoRA id in <host>.<env>.loras; null when this host has no such file (studio then takes another live host's)"
+                        }
+                      }
+                    }
+                  },
+                  "thumb": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "key",
+                          "content_type",
+                          "width",
+                          "height",
+                          "bytes"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "pattern": "^packs/[a-z0-9][a-z0-9_-]{0,63}/looks/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\\.(png|jpg|webp)$",
+                            "description": "packs/<family>/looks/<id>-<first 16 hex of the file's SHA-256>.<ext>: the YAML image, which the runner PUTs to the object store at start unless that key exists (content-addressed, never overwritten). Shown only as the look's thumb_url; never a reference image"
+                          },
+                          "content_type": {
+                            "enum": [
+                              "image/png",
+                              "image/jpeg",
+                              "image/webp"
+                            ]
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2097152
+                          }
+                        }
+                      }
+                    ],
+                    "description": "null without an image"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "studioLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "openapi.yaml StudioLayout (check.py keeps the two equal): which params Create shows and where. Absent = the derived form",
+      "properties": {
+        "composer": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+          }
+        },
+        "quick": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "elements",
+                  "look:film",
+                  "look:camera",
+                  "look:colour",
+                  "look:lighting"
+                ]
+              }
+            ]
+          }
+        },
+        "inspector": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": [
+              "title",
+              "items"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "items": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+                }
+              }
+            }
+          }
+        },
+        "labels": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          }
+        },
+        "presets": {
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 32,
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "$ref": "messages/defs.schema.json#/$defs/paramValue"
+            }
+          }
+        }
+      }
+    },
+    "custom": {
+      "description": "from API 1.15: registry key `pipelines.engine.custom` (host token `pipelines`, env token `engine`; no hosts key, no nodes): the custom nodes pipelines_service's packs register (contracts/README.md, Custom nodes), written by pipelines at start. studio reads it for the pipeline rules and GET /v1/studio/custom-nodes",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "nodes"
+          ],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "title",
+                  "help",
+                  "input",
+                  "output",
+                  "network",
+                  "version"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "$ref": "messages/defs.schema.json#/$defs/customName"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "help": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "input": {
+                    "$ref": "#/$defs/customFields",
+                    "description": "the pydantic input model's JSON schema (model_json_schema(), refs inlined)"
+                  },
+                  "output": {
+                    "$ref": "#/$defs/customFields",
+                    "description": "the pydantic output model's JSON schema"
+                  },
+                  "network": {
+                    "type": "boolean",
+                    "description": "it calls the network: counted as a remote model (off by default, shown at Submit)"
+                  },
+                  "version": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{12}$",
+                    "description": "the first 12 hex of the sha256 of the pack's code: Resume asks when it changed"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "customFields": {
+      "type": "object",
+      "required": [
+        "type",
+        "properties"
+      ],
+      "description": "an object JSON schema whose top-level properties are the fields; a field a pipeline may bind is `{type: string}` (text) or `{type: array, items: {type: string, format: uuid}, maxItems ≤ 8}` (take ids); any other field takes only a fixed value",
+      "properties": {
+        "type": {
+          "const": "object"
+        },
+        "properties": {
+          "type": "object",
+          "maxProperties": 16,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          }
+        },
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

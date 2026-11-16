@@ -7,8 +7,10 @@ fixtures/decisions/verdict.json), the replay key's inputs hash (`inputs_hash`, f
 the mention scan a write's answer is checked with (check.py `scan`). A template change bumps its version: the
 replay key changes with the prompt."""
 
+import functools
 import hashlib
 import json
+from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
@@ -92,8 +94,14 @@ def decide_schema(labels: list[str]) -> dict:
 # --- prompts
 
 
+def fence(value: str) -> str:
+    """An untrusted text as it may sit in a data block: the fence's marks inside it become look-alikes (‹‹‹ ›››), so
+    it can never close its block or open another."""
+    return value.replace("<<<", "\u2039\u2039\u2039").replace(">>>", "\u203a\u203a\u203a")
+
+
 def _block(label: str, value: str) -> str:
-    return f"\n\n{label}:\n<<<\n{value}\n>>>"
+    return f"\n\n{label}:\n<<<\n{fence(value)}\n>>>"
 
 
 def _fit(values: list[str], room: int) -> list[str]:
@@ -237,3 +245,234 @@ def mentions(text: str) -> list[str]:
                 continue
         i += 1
     return out
+
+
+# --- agents (contracts/README.md "Agents, fan-out, model sources and custom nodes"; check.py offered, turn_schema,
+# normalise_native, agent_turn: tested on fixtures/decisions/agent-{turn,schema}.json)
+
+AGENT, DIRECTOR, WRITE_LIST = "agent/v1", "director/v1", "write-list/v1"
+AGENT_SYSTEM = (
+    "You are an agent in an image and video studio. Use only the tools you are given. "
+    "Answer only with JSON that matches the given schema."
+)
+LIST_TOKENS = 4096
+RESULT_MAX = 8000  # a tool result's JSON in the transcript
+CHAT_MAX = 16000  # the director's conversation in its prompt
+WIRE = {"gallery.search": "gallery_search", "memory.read": "memory_read", "memory.write": "memory_write",
+        "library.read": "library_read", "rows.add": "rows_add", "rows.edit": "rows_edit"}  # fmt: skip
+DOTTED = {w: t for t, w in WIRE.items()}
+ARGS = {"gallery_search": "gallerySearchArgs", "memory_read": "memoryReadArgs", "memory_write": "memoryWriteArgs",
+        "library_read": "libraryReadArgs", "rows_add": "rowsAddArgs", "rows_edit": "rowsEditArgs",
+        "route": "routeArgs", "set_items": "setItemsArgs"}  # fmt: skip
+_TOOLS = Path(__file__).resolve().parent / "gen" / "messages" / "tools.schema.json"
+
+
+@functools.cache
+def _tool_defs() -> dict:
+    return json.loads(_TOOLS.read_text())["$defs"]
+
+
+def _strip(node):
+    if isinstance(node, dict):
+        return {k: _strip(v) for k, v in node.items() if k != "description"}
+    return [_strip(x) for x in node] if isinstance(node, list) else node
+
+
+def offered(node: dict, chat: bool = False) -> list[str]:
+    """The wire names a turn may call: the declared tools (rows.edit only in the director's chat), route with
+    routes and set_items with a list (never in the chat)."""
+    tools = [WIRE[x] for x in node.get("tools", []) if x != "rows.edit" or chat]
+    if chat:
+        return tools
+    return (
+        tools
+        + (["route"] if node.get("routes") else [])
+        + (["set_items"] if node.get("list") else [])
+    )
+
+
+def tool_args(node: dict, wire: str) -> dict:
+    """A tool's args schema as the model sees it (descriptions dropped; route's labels, set_items' max filled)."""
+    a = _strip(_tool_defs()[ARGS[wire]])
+    if wire == "route":
+        a["properties"]["to"]["enum"] = list(node["routes"])
+    if wire == "set_items":
+        a["properties"]["items"]["maxItems"] = node["list"]["max"]
+    return a
+
+
+def turn_schema(node: dict, chat: bool = False) -> dict:
+    """One turn's JSON schema (a local ask's `ask.schema`, sent as canonical JSON: `canonical`)."""
+    names = offered(node, chat)
+    calls: dict = {"type": "array", "maxItems": 4 if names else 0}
+    if names:
+        calls["items"] = {"anyOf": [{"type": "object", "additionalProperties": False, "required": ["tool", "args"],
+                                     "properties": {"tool": {"const": w}, "args": tool_args(node, w)}}
+                                    for w in names]}  # fmt: skip
+    return {"type": "object", "additionalProperties": False, "required": ["say", "calls"],
+            "properties": {"say": {"type": "string", "maxLength": 4000}, "calls": calls}}  # fmt: skip
+
+
+def canonical(v) -> str:
+    return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def native_tools(node: dict, chat: bool = False) -> list[dict]:
+    """The same tools as OpenAI tool definitions (a local server's `ask.tools`, a remote call's `tools`)."""
+    return [{"type": "function", "function": {"name": w, "parameters": tool_args(node, w)}}
+            for w in offered(node, chat)]  # fmt: skip
+
+
+def normalise_native(msg: dict) -> dict:
+    """A native assistant message ({content, tool_calls: [{function: {name, arguments}}]}) as a turn, or {error}."""
+    calls = []
+    for c in msg.get("tool_calls") or []:
+        f = c.get("function") or c
+        try:
+            a = json.loads(f.get("arguments") or "{}")
+        except ValueError:
+            return {"error": f"tool call {f.get('name')}: arguments are not JSON"}
+        calls.append({"tool": f.get("name"), "args": a})
+    return {"say": msg.get("content") or "", "calls": calls}
+
+
+def agent_turn(
+    turn: dict, node: dict, calls_left: int, items_set: bool, chat: bool = False
+) -> dict:
+    """What one turn does, checked before anything runs: {calls, final, route} or {error} (the re-ask's text)."""
+    if "error" in turn:
+        return turn
+    if err := next(Draft202012Validator(turn_schema(node, chat)).iter_errors(turn), None):
+        return {"error": f"answer did not match the schema: {err.message[:200]}"}
+    calls = turn["calls"]
+    routes = [i for i, c in enumerate(calls) if c["tool"] == "route"]
+    if len(routes) > 1 or (routes and routes[0] != len(calls) - 1):
+        return {"error": "call route once, as the last call"}
+    work = [c for c in calls if c["tool"] != "route"]
+    if len(work) > calls_left:
+        return {"error": f"at most {calls_left} more tool calls in this visit"}
+    items_set = items_set or any(c["tool"] == "set_items" for c in calls)
+    if node.get("list") and not chat and not items_set and (routes or not calls):
+        return {"error": "call set_items before you finish"}
+    if not calls and node.get("routes") and not chat:
+        return {"error": "call route to finish"}
+    return {"calls": calls, "final": bool(routes) or not calls,
+            "route": calls[-1]["args"]["to"] if routes else None}  # fmt: skip
+
+
+def cut_result(result: dict | None) -> dict | None:
+    """A tool result as the transcript keeps it: at most RESULT_MAX characters of JSON."""
+    if result is None:
+        return None
+    text = compact(result)
+    return result if len(text) <= RESULT_MAX else {"cut": text[: RESULT_MAX - 20] + "…"}
+
+
+def _transcript(turns: list[dict]) -> list[tuple[str, str]]:
+    """The visit's earlier turns as (label, untrusted text) blocks: what the agent said, called and got back. A label
+    holds only fixed words, the turn number and a declared tool's name; the call's arguments (model output) sit in
+    the fenced value with its result."""
+    out = []
+    for t in turns:
+        out.append((f"Turn {t['turn']}: you said", t["say"]))
+        for c in t["calls"]:
+            got = {"result": c["result"]} if c["error"] is None else {"error": c["error"]}
+            out.append(
+                (f"Turn {t['turn']}: you called {c['tool']}; its arguments and what it returned",
+                 compact({"args": c["args"]} | got))
+            )  # fmt: skip
+    return out
+
+
+def _fit_oldest(blocks: list[tuple[str, str]], room: int) -> list[tuple[str, str]]:
+    """Drop the oldest tool results first (then cut the rest) until the blocks fit in `room` characters."""
+    blocks, size = list(blocks), lambda bs: sum(len(_block(k, v)) for k, v in bs)
+    for i, (k, v) in enumerate(blocks):
+        if size(blocks) <= room:
+            break
+        if k.endswith("what it returned"):
+            blocks[i] = (k, "(dropped to fit)")
+    return list(
+        zip(
+            [k for k, _ in blocks],
+            _fit([v for _, v in blocks], room - size([(k, "") for k, _ in blocks])),
+        )
+    )
+
+
+def agent_prompt(node: dict, sources: list[tuple[str, str]], turns: list[dict], turn: int) -> str:
+    """agent/v1: the instruction, the `from` texts and every earlier turn of the visit, each fenced as data; the
+    routes with their meanings; `This is turn <n> of at most <max>.`"""
+    caps = node["caps"]
+    head = f"{node['instruction']}\n\n{DATA}"
+    tail = ""
+    if node.get("routes"):
+        tail += "\n\nFinish by calling route with one of: " + " ".join(
+            f'"{k}": {v}' for k, v in node["routes"].items()
+        )
+    if node.get("list"):
+        tail += f"\n\nCall set_items with your list (at most {node['list']['max']} items) before you finish."
+    tail += f"\n\nCall tools with `calls`; answer with no calls when you are done.\n\nThis is turn {turn} of at most {caps['max_turns']}."
+    blocks = [(_label(n), v) for n, v in sources] + _transcript(turns)
+    room = PROMPT_MAX - RESERVE - len(head) - len(tail)
+    return (head + "".join(_block(k, v) for k, v in _fit_oldest(blocks, room)) + tail)[
+        : PROMPT_MAX - RESERVE
+    ]
+
+
+def director_prompt(node: dict, chat: list[dict], counts: dict, woken: list[dict], turns: list[dict],
+                    turn: int) -> str:  # fmt: skip
+    """director/v1: the instruction, the newest chat messages that fit CHAT_MAX characters, the batch's counts and
+    the rows that woke it, this wake's earlier turns (all fenced); `This is turn <n> of at most <max>.`"""
+    caps = node["caps"]
+    lines, size = [], 0
+    for m in reversed(chat):
+        line = f"{m['role']}: {m['text']}"
+        if size + len(line) > CHAT_MAX:
+            break
+        lines.insert(0, line)
+        size += len(line) + 1
+    head = (
+        f"You are the director of a batch in an image and video studio. {node['instruction']}\n\n"
+        "Answer the user's newest messages. You may add rows, or change rows that have not started, with your "
+        f"tools.\n\n{DATA}"
+    )
+    rows = "\n".join(f"row {r['row']}: {r['status']}" + (f" ({r['error']})" if r.get("error") else "")
+                     for r in woken)  # fmt: skip
+    blocks = [("The chat so far", "\n".join(lines) or "(no messages)"),
+              ("The batch", " ".join(f"{k} {v}" for k, v in counts.items()))]  # fmt: skip
+    if rows:
+        blocks.append(("Rows that ended", rows))
+    blocks += _transcript(turns)
+    tail = f"\n\nCall tools with `calls`; answer with no calls to reply.\n\nThis is turn {turn} of at most {caps['max_turns']}."
+    room = PROMPT_MAX - RESERVE - len(head) - len(tail)
+    return (head + "".join(_block(k, v) for k, v in _fit_oldest(blocks, room)) + tail)[
+        : PROMPT_MAX - RESERVE
+    ]
+
+
+def list_schema(n: int) -> dict:
+    """write-list/v1: 1..n texts and a note."""
+    item = {"type": "string", "minLength": 1, "maxLength": 4000}
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["items"],
+        "properties": {"items": {"type": "array", "minItems": 1, "maxItems": n, "items": item},
+                       "note": {"type": "string", "maxLength": 300}},
+    }  # fmt: skip
+
+
+def write_list_prompt(
+    instruction: str, texts: list[tuple[str, str]], n: int, allowed: list[str]
+) -> str:
+    mentions = " ".join(f"@{h}" for h in allowed) or "none"
+
+    def render(*values):
+        ctx = "".join(_block(_label(name), v) for (name, _), v in zip(texts, values))
+        return (
+            f"Write a list of at most {n} items. {instruction}\n\n{DATA}{ctx}"
+            f"\n\nAllowed mentions (keep them exactly; add no others): {mentions}"
+        )
+
+    return _assemble(render, [v for _, v in texts])

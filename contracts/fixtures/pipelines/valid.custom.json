@@ -1,0 +1,70 @@
+{
+  "description": "a custom node (API 1.15, plan 16.5): the shipped example text/prefix puts a fixed prefix before the prompt; its output field `text` is a text source a step binds as a Text input. No model, nothing leaves the machine",
+  "pipeline": {
+    "title": "Prefixed",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          }
+        ]
+      },
+      "prefix": {
+        "kind": "custom",
+        "node": "text/prefix",
+        "inputs": {
+          "prefix": "cinematic still, "
+        },
+        "bind": {
+          "text": "$prompt"
+        }
+      },
+      "still": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "bind": {
+          "prompt.text": "prefix.text"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "still.takes",
+        "collection": "Prefixed"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "prefix"
+      ],
+      [
+        "prefix",
+        "still"
+      ],
+      [
+        "still",
+        "out"
+      ]
+    ]
+  },
+  "problems": [],
+  "bounds": {
+    "runs": 1,
+    "llm_calls": 0,
+    "tool_calls": 0,
+    "remote_calls": 0,
+    "remote_tokens": 0
+  },
+  "egress": [],
+  "reserved": []
+}

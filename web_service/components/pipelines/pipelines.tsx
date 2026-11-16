@@ -1,8 +1,9 @@
 "use client";
 // Pipelines (docs/mock/Pipelines.dc.html, plan 7.2): the saved pipelines (search, filter chips, a card each with its
 // chain of nodes and its last batch), the selected pipeline's panel (its steps, its Memory box with Open memory, Run,
-// Open graph, Duplicate, Rename, Delete), New pipeline and New batch, and the Recent batches table. The mock's "Models
-// it will load" box is left out: a listed pipeline carries no resolved models (the editor and New batch show them).
+// Open graph, Duplicate, Rename, Delete), New pipeline and New batch, and the Recent batches table. The "Models it
+// will load" box lists each step's workflow and each model a node names, and whether remote calls are on (a listed
+// pipeline carries no resolved models: auto stays "auto"); the cards' tags mark a director ("chat") and remote calls.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -41,7 +42,7 @@ export const batchEvents = (id: string, since: number) =>
 /** Follows a batch's event log (SSE, else polling) while mounted; `types` picks the SSE event types. */
 export function followBatch(
   id: string,
-  types: ("batch" | "row")[],
+  types: ("batch" | "row" | "chat")[],
   onEvent: (e: S<"BatchEvent">) => void,
 ) {
   return followEvents<S<"BatchEvent">>(
@@ -534,6 +535,7 @@ export function Pipelines({
           </div>
           <h3 className="heading">Steps</h3>
           <Steps p={selected} />
+          <ModelsBox p={selected} />
           {hasAgents(selected) && <MemoryBox key={selected.id} p={selected} />}
           <div className="grow" />
           <button
@@ -670,7 +672,25 @@ function Steps({ p }: { p: Pipeline }) {
         ];
       }
       case "write":
-        return ["Write", n.title ?? `Rewrite ${n.to.slice(1)}`, ""];
+        return [
+          "Write",
+          n.title ?? (n.list ? "Write a list" : `Rewrite ${(n.to ?? "").slice(1)}`),
+          n.list ? `list · max ${n.list.max}` : "",
+        ];
+      case "agent":
+        return [
+          "Agent",
+          nodeLabel(doc, id),
+          [
+            n.director && "chat",
+            n.list && `list · max ${n.list.max}`,
+            `${(n.tools ?? []).length} tools`,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        ];
+      case "custom":
+        return ["Custom", n.title ?? n.node, ""];
       case "decide":
         return ["Decide", n.title ?? n.question, `${Object.keys(n.routes).length} routes`];
       case "memory":
@@ -699,6 +719,46 @@ function Steps({ p }: { p: Pipeline }) {
         );
       })}
     </ol>
+  );
+}
+
+/** The selected pipeline's "Models it will load" (docs/mock/Pipelines.dc.html): each step's workflow, each model a
+ * node names (local, a local server, remote) and whether remote calls are on. */
+function ModelsBox({ p }: { p: Pipeline }) {
+  const rows = new Map<string, string>();
+  for (const id of order(p)) {
+    const n = p.nodes[id];
+    if (n.kind === "step") rows.set(p.workflow_titles[n.workflow] ?? n.workflow, "local");
+    if (n.kind === "judge" || n.kind === "write" || n.kind === "decide" || n.kind === "agent") {
+      const m = n.model ?? "auto";
+      if (m.startsWith("server:")) rows.set(m.slice(7), "local server");
+      else if (m.startsWith("remote:")) rows.set(m.slice(7), "remote");
+      else if (m !== "auto") rows.set(p.workflow_titles[m] ?? m, "local");
+    }
+  }
+  return (
+    <>
+      <div className="flex items-center">
+        <h3 className="heading">Models it will load</h3>
+        <Info>
+          Auto models are resolved at Submit: a judge reuses its step&apos;s own vision model when
+          its family has one. Submit checks memory for the worst case across every branch and shows
+          what leaves the machine.
+        </Info>
+      </div>
+      <div className="flex flex-col gap-2 rounded-xl bg-s1 px-3 py-2.5">
+        {[...rows].map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-2 text-[13px]">
+            <span className="truncate">{k}</span>
+            <span className="mono text-[12px] text-t2">{v}</span>
+          </div>
+        ))}
+        <div className="flex justify-between text-[13px]">
+          <span>Remote calls</span>
+          <span className="mono text-[12px] text-t2">{p.remote?.enabled ? "on" : "off"}</span>
+        </div>
+      </div>
+    </>
   );
 }
 

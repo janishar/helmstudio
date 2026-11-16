@@ -459,8 +459,8 @@
     },
     "idempotencyKey": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$",
-      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key. A pipeline batch: <graph node> = the step node id, <loop count> = its visit in the row attempt from 0, <branch> = the seed index from 0. A judge, write or decide node of a pipeline batch (an LLM call): <graph node> = that node id, <loop count> = its visit from 0, <branch> = the call's run: 0, or 1 for the one re-ask after pipelines' own answer checks failed (contracts/README.md, Agent nodes)"
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,2}):[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$",
+      "description": "<batch_id>:<row>:<row attempt>:<graph node>:<loop count>:<branch>, e.g. …:3:1:step:0:0. A batch of one workflow uses node `step`, loop 0, branch `0`. studio.runs.create returns the same run for the same key. A pipeline batch: <graph node> = the step node id, <loop count> = its visit in the row attempt from 0, <branch> = the seed index from 0. A judge, write or decide node of a pipeline batch (an LLM call): <graph node> = that node id, <loop count> = its visit from 0, <branch> = the call's run: 0, or 1 for the one re-ask after pipelines' own answer checks failed (contracts/README.md, Agent nodes). From API 1.15: a fanned-out step's run: <branch> = `<item index>-<seed index>` (both from 0); an Agent turn: <loop count> = the visit from 0, <branch> = `t<turn from 0>` (`t<turn>r` for its one re-ask); the director's chat: <row> = 0, <row attempt> = 1, <loop count> = the wake from 0, <branch> = `t<turn>` / `t<turn>r`"
     },
     "takeIds": {
       "type": "array",
@@ -507,11 +507,11 @@
     },
     "pipelineSource": {
       "type": "string",
-      "pattern": "^(\\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\\.(takes|picked|reasons|notes))$",
-      "description": "`$<input>`, `<step>.takes`, `<gate or judge>.picked`, from API 1.14 `<judge>.reasons` and `<memory read node>.notes` (text sources: write, decide and memory write `from` only) (contracts/README.md, Pipeline rules)"
+      "pattern": "^(\\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63})$",
+      "description": "`$<input>`, `<step>.takes`, `<gate or judge>.picked`, from API 1.14 `<judge>.reasons` and `<memory read node>.notes` (text sources: write, decide and memory write `from` only) (contracts/README.md, Pipeline rules); from API 1.15 `<producer>.item` (in the binds of a step whose `each` is `<producer>.items`: this branch's item) and `<custom>.<output field>` (a custom node's output: a string field is a text source, a list of take ids a takes source). Which are allowed where: contracts/README.md, Pipeline rules"
     },
     "pipelineNode": {
-      "description": "a node of a pipeline snapshot: the document's node, a step's `inputs` already merged over its preset by studio at Submit, plus `seed_param`; from API 1.14 judge, write and decide nodes add `workflow` (the resolved ask workflow) and a judge's `criteria` is always both lists",
+      "description": "a node of a pipeline snapshot: the document's node, a step's `inputs` already merged over its preset by studio at Submit, plus `seed_param`; from API 1.14 judge, write and decide nodes add `workflow` (the resolved ask workflow) and a judge's `criteria` is always both lists; from API 1.15 agent and custom nodes, a fanned-out step's `each` / `fanout_max`, a write's `list`, and every model node's `source`",
       "oneOf": [
         {
           "type": "object",
@@ -657,6 +657,17 @@
                 }
               ],
               "description": "the workflow's one unwired seed param that seeds vary; null without one"
+            },
+            "each": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.items$",
+              "description": "from API 1.15: fan out over this producer's list: one branch per item (Send), at most fanout_max"
+            },
+            "fanout_max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24,
+              "description": "with each: the producer's list max"
             }
           }
         },
@@ -803,16 +814,20 @@
             },
             "model": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-              "description": "as in the document: auto or an ask workflow id"
+              "pattern": "^(auto|[a-z0-9][a-z0-9_-]{0,63}|server:[a-z][a-z0-9-]{0,31}(/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?|remote:[a-z][a-z0-9-]{0,31}/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})$",
+              "description": "as in the document: auto, an ask workflow id, server:<name>[/<model>] or remote:<provider>/<model>"
             },
             "workflow": {
               "$ref": "#/$defs/workflowId",
-              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model)"
+              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model); from API 1.15 `server-ask` for a local server, `remote` for a remote provider (no run)"
             },
             "memory": {
               "$ref": "#/$defs/nodeId",
               "description": "a memory read node: its examples (key = this judge's id) and notes go into the prompt"
+            },
+            "source": {
+              "$ref": "#/$defs/modelSource",
+              "description": "from API 1.15: where it runs (always sent from 1.15)"
             }
           }
         },
@@ -821,7 +836,6 @@
           "required": [
             "kind",
             "from",
-            "to",
             "instruction",
             "model",
             "workflow"
@@ -871,14 +885,22 @@
             },
             "model": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-              "description": "as in the document: auto or an ask workflow id"
+              "pattern": "^(auto|[a-z0-9][a-z0-9_-]{0,63}|server:[a-z][a-z0-9-]{0,31}(/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?|remote:[a-z][a-z0-9-]{0,31}/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})$",
+              "description": "as in the document: auto, an ask workflow id, server:<name>[/<model>] or remote:<provider>/<model>"
             },
             "workflow": {
               "$ref": "#/$defs/workflowId",
-              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model)"
+              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model); from API 1.15 `server-ask` for a local server, `remote` for a remote provider (no run)"
+            },
+            "source": {
+              "$ref": "#/$defs/modelSource",
+              "description": "from API 1.15: where it runs (always sent from 1.15)"
+            },
+            "list": {
+              "$ref": "#/$defs/listSpec"
             }
-          }
+          },
+          "description": "from API 1.15 a write with `list` has no `to`: it answers a list (its `<write>.items`)"
         },
         {
           "type": "object",
@@ -944,12 +966,16 @@
             },
             "model": {
               "type": "string",
-              "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
-              "description": "as in the document: auto or an ask workflow id"
+              "pattern": "^(auto|[a-z0-9][a-z0-9_-]{0,63}|server:[a-z][a-z0-9-]{0,31}(/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?|remote:[a-z][a-z0-9-]{0,31}/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})$",
+              "description": "as in the document: auto, an ask workflow id, server:<name>[/<model>] or remote:<provider>/<model>"
             },
             "workflow": {
               "$ref": "#/$defs/workflowId",
-              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model)"
+              "description": "the ask workflow `model` resolved to at Submit (auto: contracts/README.md, Agent nodes: model); from API 1.15 `server-ask` for a local server, `remote` for a remote provider (no run)"
+            },
+            "source": {
+              "$ref": "#/$defs/modelSource",
+              "description": "from API 1.15: where it runs (always sent from 1.15)"
             }
           }
         },
@@ -1007,6 +1033,151 @@
               "items": {
                 "$ref": "#/$defs/pipelineSource"
               }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "from API 1.15: an Agent (contracts/README.md, Agents), every default filled",
+          "required": [
+            "kind",
+            "instruction",
+            "from",
+            "tools",
+            "caps",
+            "director",
+            "model",
+            "workflow",
+            "source"
+          ],
+          "properties": {
+            "kind": {
+              "const": "agent"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            },
+            "from": {
+              "type": "array",
+              "maxItems": 4,
+              "items": {
+                "$ref": "#/$defs/pipelineSource"
+              }
+            },
+            "tools": {
+              "type": "array",
+              "maxItems": 6,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "tools.schema.json#/$defs/tool"
+              }
+            },
+            "routes": {
+              "type": "object",
+              "minProperties": 2,
+              "maxProperties": 6,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,31}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "description": "label → meaning; with a routes edge"
+            },
+            "list": {
+              "$ref": "#/$defs/listSpec"
+            },
+            "caps": {
+              "$ref": "#/$defs/agentCaps"
+            },
+            "director": {
+              "type": "boolean"
+            },
+            "wake_on_rows": {
+              "enum": [
+                "all",
+                "failed",
+                "none"
+              ],
+              "description": "director: which row ends wake its chat"
+            },
+            "max_wakes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "description": "director: wakes per batch"
+            },
+            "model": {
+              "type": "string",
+              "pattern": "^(auto|[a-z0-9][a-z0-9_-]{0,63}|server:[a-z][a-z0-9-]{0,31}(/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})?|remote:[a-z][a-z0-9-]{0,31}/[A-Za-z0-9][A-Za-z0-9._:/-]{0,127})$"
+            },
+            "workflow": {
+              "$ref": "#/$defs/workflowId",
+              "description": "the ask workflow (local), `server-ask` or `remote`"
+            },
+            "source": {
+              "$ref": "#/$defs/modelSource"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "description": "from API 1.15: a custom node (a pack's runnable in pipelines_service, contracts/README.md, Custom nodes)",
+          "required": [
+            "kind",
+            "node",
+            "version",
+            "inputs",
+            "bind",
+            "network"
+          ],
+          "properties": {
+            "kind": {
+              "const": "custom"
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60
+            },
+            "node": {
+              "$ref": "#/$defs/customName"
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{12}$",
+              "description": "the registered node's version at Submit"
+            },
+            "inputs": {
+              "type": "object",
+              "maxProperties": 16,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "description": "fixed input field values (JSON)"
+            },
+            "bind": {
+              "type": "object",
+              "maxProperties": 16,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/pipelineSource"
+              }
+            },
+            "network": {
+              "type": "boolean",
+              "description": "it calls the network: counted as a remote model"
             }
           }
         }
@@ -1138,6 +1309,21 @@
             "$ref": "#/$defs/workflowSnapshot"
           },
           "description": "workflow id → its snapshot (as for a batch of one workflow)"
+        },
+        "providers": {
+          "type": "object",
+          "maxProperties": 8,
+          "propertyNames": {
+            "$ref": "#/$defs/providerName"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/providerSnapshot"
+          },
+          "description": "from API 1.15: every provider a node's source names, as it was at Submit"
+        },
+        "remote": {
+          "$ref": "#/$defs/remoteSettings",
+          "description": "from API 1.15 (always sent): the pipeline's remote switch and per-batch caps"
         }
       }
     },
@@ -1319,6 +1505,49 @@
             }
           },
           "description": "a decide attempt: the route taken"
+        },
+        "branch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23,
+          "description": "from API 1.15, a fanned-out step: one attempt per (visit, branch), branch = the item index"
+        },
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "turns",
+            "tool_calls",
+            "tokens",
+            "items",
+            "route"
+          ],
+          "description": "from API 1.15, an agent attempt: the run table's cell (`4 turns · 6 tools · 14 shots`)",
+          "properties": {
+            "turns": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 24
+            },
+            "route": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
         }
       }
     },
@@ -1341,7 +1570,9 @@
             "judge",
             "write",
             "decide",
-            "memory"
+            "memory",
+            "agent",
+            "custom"
           ]
         },
         "attempts": {
@@ -1496,6 +1727,35 @@
           ],
           "maxLength": 2000,
           "description": "why it did not pass (`answer did not match the schema: <validator error>`); null: it passed"
+        },
+        "tool_calls": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "from API 1.15, a server-ask run (or a remote call) with `tools`: the native OpenAI tool calls of the answer, as sent (pipelines normalises them into a turn)",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "arguments"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "arguments": {
+                "type": "string",
+                "maxLength": 16384,
+                "description": "the arguments as the model wrote them (JSON text)"
+              }
+            }
+          }
         }
       }
     },
@@ -1633,7 +1893,8 @@
           "enum": [
             "judge",
             "write",
-            "decide"
+            "decide",
+            "agent"
           ]
         },
         "visit": {
@@ -1660,11 +1921,11 @@
         },
         "run_ids": {
           "type": "array",
-          "maxItems": 2,
+          "maxItems": 64,
           "items": {
             "$ref": "#/$defs/uuid"
           },
-          "description": "the ask runs (branch 0, and 1 after pipelines' own checks failed); empty when replayed"
+          "description": "the ask runs (branch 0, and 1 after pipelines' own checks failed); empty when replayed; an agent: one per turn (and re-ask)"
         },
         "workflow": {
           "$ref": "#/$defs/workflowId",
@@ -1675,7 +1936,7 @@
         },
         "template": {
           "type": "string",
-          "pattern": "^(judge|write|decide)/v[1-9][0-9]{0,2}$",
+          "pattern": "^(judge|write|decide|agent|write-list)/v[1-9][0-9]{0,2}$",
           "description": "the prompt template and its version"
         },
         "system": {
@@ -1702,7 +1963,7 @@
         },
         "answers": {
           "type": "array",
-          "maxItems": 4,
+          "maxItems": 64,
           "items": {
             "$ref": "#/$defs/answerTry"
           },
@@ -1886,6 +2147,127 @@
               "description": "the loop cap forced the `then` route; the model's route was not followed"
             }
           }
+        },
+        "source": {
+          "$ref": "#/$defs/modelSource",
+          "description": "from API 1.15: where the model ran (absent = local)"
+        },
+        "replayable": {
+          "type": "boolean",
+          "description": "from API 1.15: false for a remote decision (never reused: Run again with the same decisions asks it again)"
+        },
+        "network_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "from API 1.15, remote: transport failures retried during the visit (never verdicts)"
+        },
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "turns",
+            "route",
+            "items",
+            "say",
+            "stopped",
+            "tool_calls",
+            "tokens"
+          ],
+          "description": "from API 1.15, an agent visit: its turns (the execution view's messages and tool calls) and what it ended with",
+          "properties": {
+            "turns": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "turn",
+                  "say",
+                  "calls",
+                  "tokens_in",
+                  "tokens_out"
+                ],
+                "properties": {
+                  "turn": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16
+                  },
+                  "say": {
+                    "type": "string",
+                    "maxLength": 4000
+                  },
+                  "calls": {
+                    "type": "array",
+                    "maxItems": 4,
+                    "items": {
+                      "$ref": "tools.schema.json#/$defs/toolCall"
+                    }
+                  },
+                  "tokens_in": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "tokens_out": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            },
+            "route": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "the route label taken (forced: then)"
+            },
+            "to": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/nodeId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "forced": {
+              "type": "boolean"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 24,
+              "items": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "say": {
+              "type": "string",
+              "maxLength": 4000,
+              "description": "the final turn's text"
+            },
+            "stopped": {
+              "enum": [
+                null,
+                "turns",
+                "tool_calls",
+                "tokens",
+                "remote_cap"
+              ],
+              "description": "null: it finished; else the cap that ended it (an item failure)"
+            },
+            "tool_calls": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         }
       }
     },
@@ -2041,6 +2423,219 @@
           "format": "date-time"
         }
       }
+    },
+    "modelSource": {
+      "description": "from API 1.15: where a judge, write, decide or agent node's model runs, resolved at Submit (contracts/README.md, Model sources). local: an ask workflow run by a runner; server: a local server you run (its calls are runs of the built-in `server-ask` workflow, released by the dispatcher on `host`); remote: a provider outside the machine (calls made by pipelines_service, never a run, never replayed)",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "workflow"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "local"
+            },
+            "workflow": {
+              "$ref": "#/$defs/workflowId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "provider",
+            "model",
+            "host"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "server"
+            },
+            "provider": {
+              "$ref": "#/$defs/providerName"
+            },
+            "model": {
+              "$ref": "#/$defs/providerModel"
+            },
+            "host": {
+              "$ref": "#/$defs/hostName"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "provider",
+            "model"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "remote"
+            },
+            "provider": {
+              "$ref": "#/$defs/providerName"
+            },
+            "model": {
+              "$ref": "#/$defs/providerModel"
+            }
+          }
+        }
+      ]
+    },
+    "providerName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,31}$",
+      "description": "a model provider's name (a local server or a remote provider), set by the admin"
+    },
+    "providerModel": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",
+      "description": "a model name as the provider's OpenAI-compatible API takes it (`qwen2.5vl:7b`, `gpt-4.1-mini`)"
+    },
+    "providerSnapshot": {
+      "type": "object",
+      "required": [
+        "kind",
+        "api",
+        "base_url",
+        "timeout_s"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.15: a provider as it was at Submit (pipelines calls it from this, never from the live settings). base_url is configuration, not a media link (the claim-check rule is about object keys). key_secret names a file in pipelines_service's secrets directory; the key itself never travels",
+      "properties": {
+        "kind": {
+          "enum": [
+            "server",
+            "remote"
+          ]
+        },
+        "api": {
+          "const": "openai"
+        },
+        "base_url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$",
+          "maxLength": 300
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 600
+        },
+        "host": {
+          "$ref": "#/$defs/hostName",
+          "description": "server: the GPU host whose memory it shares"
+        },
+        "memory_gb": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 1024,
+          "description": "server: the memory reserved for it on host"
+        },
+        "key_secret": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "remote: the secret file's name; server: null (no key)"
+        },
+        "max_in_flight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "remote: calls in flight at once over every batch (default 2)"
+        }
+      }
+    },
+    "remoteSettings": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "providers",
+        "max_calls",
+        "max_tokens"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.15: the pipeline's switch for calls that leave the machine, filled by studio (off when the document has none). The caps are per batch, over every row and the director's chat",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "providers": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/providerName"
+          }
+        },
+        "max_calls": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 10000000
+        }
+      }
+    },
+    "agentCaps": {
+      "type": "object",
+      "required": [
+        "max_turns",
+        "max_tool_calls",
+        "max_tokens"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.15: an Agent's hard caps per visit (the director's chat: per wake)",
+      "properties": {
+        "max_turns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "max_tool_calls": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 200000,
+          "description": "prompt + answer tokens over the visit's turns, as the model reported them"
+        }
+      }
+    },
+    "listSpec": {
+      "type": "object",
+      "required": [
+        "max"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.15: the node answers a list of texts (a shot list), 1 to max items: `<node>.items`, which a step fans out over (`each`)",
+      "properties": {
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        }
+      }
+    },
+    "customName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,31}/[a-z][a-z0-9-]{0,31}$",
+      "description": "a custom node's registered name `<pack>/<node>`"
     }
   }
 }

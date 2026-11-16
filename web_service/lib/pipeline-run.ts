@@ -14,7 +14,7 @@ type Kind = Cell["kind"];
 /** A run table column: one per step, gate, judge, write and decide, in row order. */
 export type Column = { node: string; kind: Kind; title: string };
 /** the kinds with a column (a memory node and the output have none: the takes column is the output's) */
-const COLUMN_KINDS = new Set<Kind>(["step", "gate", "judge", "write", "decide"]);
+const COLUMN_KINDS = new Set<Kind>(["step", "gate", "judge", "write", "decide", "agent", "custom"]);
 
 /** The columns: the pipeline's steps and gates in the order a row meets them ("Step 1 · Qwen Image", the gate's
  * title), then any node a row reached that the document no longer has (cells name it). Without the document, the
@@ -46,6 +46,8 @@ export function runColumns(
  * wait (waiting for a pick), plain. */
 export type CellLine = {
   visit: number;
+  /** a fanned-out step's branch (the item index, from 0); a line summing the branches not shown has none */
+  branch?: number;
   text: string;
   tone: "" | "ok" | "run" | "warn" | "wait";
   thumb: string | null;
@@ -75,9 +77,44 @@ export function settledCell(
   };
 }
 
+/** Branches shown per visit of a fanned-out step before the rest are summed up in one line. */
+export const SHOWN_BRANCHES = 3;
+
 export function cellLines(cell: Cell | undefined): CellLine[] {
   if (!cell) return [];
-  return cell.attempts.map((a) => lineOf(cell, a));
+  const out: CellLine[] = [];
+  const visits = [...new Set(cell.attempts.map((a) => a.visit))];
+  for (const v of visits) {
+    const as = cell.attempts.filter((a) => a.visit === v);
+    if (as.every((a) => a.branch === undefined)) {
+      out.push(...as.map((a) => lineOf(cell, a)));
+      continue;
+    }
+    // a fanned-out step: a line per shot, the first few, then the rest summed up
+    const lines = as
+      .toSorted((a, b) => (a.branch ?? 0) - (b.branch ?? 0))
+      .map((a) => {
+        const l = lineOf(cell, a);
+        return { ...l, branch: a.branch, text: `shot ${(a.branch ?? 0) + 1} · ${l.text}` };
+      });
+    out.push(...lines.slice(0, SHOWN_BRANCHES));
+    const rest = as.toSorted((a, b) => (a.branch ?? 0) - (b.branch ?? 0)).slice(SHOWN_BRANCHES);
+    if (rest.length) {
+      const done = rest.filter((a) => a.status === "succeeded").length;
+      const failed = rest.filter((a) => a.status === "failed").length;
+      out.push({
+        visit: v,
+        text: `+ ${plural(rest.length, "shot")} · ${done} done${failed ? ` · ${failed} failed` : ""}`,
+        tone: failed ? "warn" : "",
+        thumb: null,
+        seed: "",
+        time: "",
+        takes: rest.flatMap((a) => a.take_ids),
+        error: null,
+      });
+    }
+  }
+  return out;
 }
 
 function lineOf(cell: Cell, a: Attempt): CellLine {
@@ -100,6 +137,18 @@ function lineOf(cell: Cell, a: Attempt): CellLine {
     return { ...base, text: `${a.route.label} → ${a.route.to}`, tone: "" };
   if (cell.kind === "write" && a.status === "succeeded")
     return { ...base, text: "rewritten", tone: "" };
+  if (cell.kind === "agent" && a.agent && a.status !== "running" && a.status !== "queued") {
+    const g = a.agent;
+    const parts = [
+      plural(g.turns, "turn"),
+      plural(g.tool_calls, "tool"),
+      g.items ? plural(g.items, "shot") : "",
+      g.route ? `→ ${g.route}` : "",
+    ].filter(Boolean);
+    return a.status === "failed"
+      ? { ...base, text: a.error ? `failed · ${a.error}` : "failed", tone: "warn" }
+      : { ...base, text: parts.join(" · "), tone: "" };
+  }
   switch (a.status) {
     case "succeeded":
       return {
@@ -237,7 +286,28 @@ export function wordDiff(
   return out;
 }
 
-/** Submit's worst case: "at most 13 runs and 6 LLM calls per row (130 runs, 60 calls in all)". */
+/** An agent visit's end in words (Decision.agent): "answered 14 items", "routed done", "stopped at its turns cap". */
+export function agentEnd(a: NonNullable<S<"Decision">["agent"]>): string {
+  if (a.stopped)
+    return a.stopped === "remote_cap"
+      ? "stopped: the batch's remote cap"
+      : `stopped at its ${a.stopped.replace("_", " ")} cap`;
+  if (a.route) return `routed ${a.route}${a.forced ? " (forced by the cap)" : ""}`;
+  if (a.items.length) return `answered ${plural(a.items.length, "item")}`;
+  return "answered";
+}
+
+/** Where a decision's model ran: "Remote · fakeai · fake-large", "Local server · ollama · qwen2.5:7b", else the ask
+ * workflow's title. */
+export function decisionModel(d: S<"Decision">): string {
+  const s = d.source;
+  if (s?.kind === "remote") return `Remote · ${s.provider} · ${s.model}`;
+  if (s?.kind === "server") return `Local server · ${s.provider} · ${s.model}`;
+  return d.workflow_title ?? d.workflow;
+}
+
+/** Submit's worst case: "at most 13 runs and 6 LLM calls per row (130 runs, 60 calls in all)", then a director's
+ * chat and the rows agents may add (per batch). */
 export function boundsLine(b: S<"PipelineBounds">, rows: number): string {
   const s = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const per = [s(b.runs, "run"), b.llm_calls ? s(b.llm_calls, "LLM call") : ""].filter(Boolean);
@@ -245,7 +315,14 @@ export function boundsLine(b: S<"PipelineBounds">, rows: number): string {
     rows > 1
       ? ` (${[s(b.runs * rows, "run"), b.llm_calls ? s(b.llm_calls * rows, "call") : ""].filter(Boolean).join(", ")} in all)`
       : "";
-  return `at most ${per.join(" and ")} per row${all}`;
+  const tools = b.tool_calls ? `; agents make at most ${s(b.tool_calls, "tool call")} a row` : "";
+  const chat = b.chat
+    ? `; the director's chat asks a model at most ${s(b.chat.calls, "time")} in all`
+    : "";
+  const added = b.added_rows
+    ? `; agents may add up to ${s(b.added_rows, "row")}, each with the same worst case`
+    : "";
+  return `at most ${per.join(" and ")} per row${all}${tools}${chat}${added}`;
 }
 
 /** Where a memory item came from, for the Memory panel. */
@@ -320,9 +397,12 @@ export function stepLines(x: Exec, titles: Record<string, string> = {}): StepLin
   return x.steps.map((s) => ({
     step: s.step,
     node: s.node,
-    label: ["submit", "wait", "route"].includes(s.part)
-      ? `${name(s.node)} · ${s.part}`
-      : name(s.node),
+    label:
+      (["submit", "wait", "route", "tools"].includes(s.part)
+        ? `${name(s.node)} · ${s.part}`
+        : name(s.node)) +
+      (s.branch !== undefined ? ` · shot ${s.branch + 1}` : "") +
+      (s.turn ? ` · turn ${s.turn}` : ""),
     what: s.what,
     changed: s.changed.length ? s.changed.join(", ") : "—",
     status: s.status === "finished" ? "done" : s.status === "resumed" ? "resumed" : "now",

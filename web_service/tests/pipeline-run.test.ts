@@ -7,12 +7,15 @@ import decision1 from "../../contracts/fixtures/http/Decision.valid.1.json";
 import memory1 from "../../contracts/fixtures/http/MemoryItem.valid.1.json";
 import review2 from "../../contracts/fixtures/http/BatchReview.valid.2.json";
 import exec2 from "../../contracts/fixtures/http/RowExecution.valid.2.json";
+import decision3 from "../../contracts/fixtures/http/Decision.valid.3.json";
 import type { S } from "@/lib/api";
 import {
+  agentEnd,
   asRun,
   boundsLine,
   canPick,
   criterionLines,
+  decisionModel,
   initialPick,
   judgeLine,
   judgeSummary,
@@ -282,5 +285,74 @@ describe("a row that ended while parked", () => {
     const ended = settledCell(cell, "cancelled")!;
     expect(ended.attempts.map((a) => a.status)).toEqual(cell.attempts.map(() => "cancelled"));
     expect(judgeSummary(ended)).toEqual({ text: "cancelled", tone: "" });
+  });
+});
+
+describe("stage B cells and agent steps", () => {
+  const attempt = (o: Partial<S<"BatchCellAttempt">>): S<"BatchCellAttempt"> => ({
+    visit: 1,
+    status: "succeeded",
+    run_ids: [],
+    take_ids: ["t"],
+    seeds: [40],
+    seconds: 3,
+    error: null,
+    thumb_url: null,
+    ...o,
+  });
+  it("lists a fanned-out step's first shots, then sums up the rest", () => {
+    const cell: S<"BatchCell"> = {
+      node: "shot",
+      kind: "step",
+      attempts: [0, 1, 2, 3, 4].map((b) =>
+        attempt({ branch: b, seeds: [40 + b], status: b === 4 ? "failed" : "succeeded" }),
+      ),
+    };
+    const lines = cellLines(cell);
+    expect(lines.map((l) => l.text)).toEqual([
+      "shot 1 · done · 1 take",
+      "shot 2 · done · 1 take",
+      "shot 3 · done · 1 take",
+      "+ 2 shots · 1 done · 1 failed",
+    ]);
+    expect(lines.map((l) => l.branch)).toEqual([0, 1, 2, undefined]);
+    expect(lines[3].tone).toBe("warn");
+  });
+  it("says an agent attempt in counts", () => {
+    const cell: S<"BatchCell"> = {
+      node: "director",
+      kind: "agent",
+      attempts: [
+        attempt({
+          take_ids: [],
+          seeds: [],
+          agent: { turns: 4, tool_calls: 6, tokens: 9210, items: 14, route: null },
+        }),
+      ],
+    };
+    expect(cellLines(cell)[0].text).toBe("4 turns · 6 tools · 14 shots");
+  });
+  it("tells an agent visit's end and where its model ran", () => {
+    const d = decision3 as unknown as S<"Decision">;
+    expect(agentEnd(d.agent!)).toBe("answered 1 item");
+    expect(agentEnd({ ...d.agent!, stopped: "tool_calls" })).toBe("stopped at its tool calls cap");
+    expect(agentEnd({ ...d.agent!, route: "done", forced: true })).toBe(
+      "routed done (forced by the cap)",
+    );
+    expect(
+      decisionModel({ ...d, source: { kind: "remote", provider: "fakeai", model: "x" } }),
+    ).toBe("Remote · fakeai · x");
+  });
+  it("counts agents' tool calls in Submit's worst case", () => {
+    expect(boundsLine({ runs: 24, llm_calls: 6, tool_calls: 12 }, 1)).toBe(
+      "at most 24 runs and 6 LLM calls per row; agents make at most 12 tool calls a row",
+    );
+  });
+  it("shows a director's chat and the rows agents may add, per batch", () => {
+    const b = { runs: 24, llm_calls: 6, tool_calls: 12, added_rows: 100 };
+    expect(boundsLine({ ...b, chat: { calls: 1200, tokens: 1600000, tool_calls: 1200 } }, 1)).toBe(
+      "at most 24 runs and 6 LLM calls per row; agents make at most 12 tool calls a row; the director's chat " +
+        "asks a model at most 1200 times in all; agents may add up to 100 rows, each with the same worst case",
+    );
   });
 });

@@ -17,6 +17,12 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
 | `events.py` | `evt.studio.<session>.run_finished`, durable `pipelines-runs` on `EVT`: resumes the waiting thread |
 | `messaging/` | contract validation (`gen/`), `evt.pipeline.<batch_id>.{batch,row}` publisher, `studio.runs.create` client |
 | `migrations/` | `batches` (snapshot, control, seq, fail streak, memory snapshot, replay_from), `batch_rows`, `inbox`, `decisions` (the replay source); LangGraph's checkpoint and store tables via `setup()` |
+| `agent_loop.py` | (1.15) the Agent node as plain graph nodes: per turn `submit` (one model call) `wait` `tools` (checked turn, tools run as the owner), then `route`; the director's `wake` … `reply` on its own thread |
+| `remote.py` | (1.15) remote calls queued in pipelines' DB and sent by its worker: per-provider in-flight limit, per-batch caps, Pause holds, Stop cancels |
+| `providers.py` | (1.15) the only code that calls a model provider (`ChatOpenAI(base_url=…)`, built inside a call): the host rule, key files, failure classes and retries, `pipelines.providers.test` |
+| `server.py` | (1.15) the `server` env runner for each host in `PIPELINES_SERVER_HOSTS`: registry, hosts key, `cmd.run.<host>.server` → one local-server call → `evt.run.status` |
+| `custom.py`, `packs/` | (1.15) custom nodes (pydantic in/out; example `text/prefix`), published to registry `pipelines.engine.custom` |
+| `tests/fake_openai.py` | the fake OpenAI-compatible server (stdlib; `python tests/fake_openai.py --port 8399` for the fake overlay) |
 | `health.py` | `GET /health`: 200 while NATS is connected and the database answers |
 
 ## How a batch runs
@@ -59,6 +65,20 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
   `LANGSMITH_TRACING` is set.
 - When every row has ended the batch is `done` (or `stopped`) and its threads are deleted; the batch row and
   snapshot stay.
+
+## Stage B (API 1.15)
+
+- **Agent**: each turn is a queue item (local: the turn schema in `ask.schema`; a server: `server-ask` with native
+  tools; remote: a queued call), key `…:<node>:<visit>:t<turn>[r]`; tool calls `<key>:<i>` reach studio by
+  `studio.tools` or pipelines' memory; caps on turns, tool calls and tokens end the visit (`<node>: stopped at …`).
+  A local or server visit replays its end without running its tools again; a remote one never replays.
+- **Fan-out**: a step with `each` is `fan` → one `Send` per item to `branch` → `wait`, branch runs keyed
+  `<item>-<seed>`, merged in `fan` by a reducer; the thread resumes once every branch's runs ended.
+- **Director**: thread `<batch>:director`, one wake per message or row end (`director_inbox`), row 0's queue items;
+  its reply and notices go out as `evt.pipeline.chat`; the batch does not end mid-wake (unless stopped).
+- **Egress**: remote calls need `PIPELINES_REMOTE_MODELS` and the pipeline's `remote`; servers must resolve to
+  loopback or private addresses. `tests/test_stage_b.py` runs every node kind with the switch off under a socket
+  guard and asserts no connection left loopback and private ranges.
 
 ## Commands
 

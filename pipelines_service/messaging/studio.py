@@ -41,3 +41,30 @@ class Studio:
                 log.warning("%s %s: %r", SUBJECT, request["idempotency_key"], e)
             await asyncio.sleep(delay)
             delay = min(delay * 2, BACKOFF_MAX)
+
+    async def tool(self, request: dict) -> dict:
+        return await tool(self.nc, request)
+
+
+TOOLS = "studio.tools"
+
+
+async def tool(nc, request: dict) -> dict:
+    """studio.tools: one agent tool call as the batch's owner ({result, row?} or {error, code}). Idempotent on
+    call_id, so a timeout, no responder, an off-contract reply or `internal` is asked again with backoff; the
+    other codes are final. ValueError when the request itself is off-contract."""
+    if errs := schemas.tools_errors("request", request):
+        raise ValueError(f"{TOOLS} request is off-contract: {'; '.join(errs[:3])}")
+    body, delay = json.dumps(request).encode(), 0.5
+    while True:
+        try:
+            msg = await nc.request(TOOLS, body, timeout=TIMEOUT)
+            reply = json.loads(msg.data)
+            errs = schemas.tools_errors("reply", reply)
+            if not errs and reply.get("code") != "internal":
+                return reply
+            log.warning("%s %s: %s", TOOLS, request["call_id"], errs or reply)
+        except (nats.errors.Error, OSError, ValueError) as e:
+            log.warning("%s %s: %r", TOOLS, request["call_id"], e)
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, BACKOFF_MAX)

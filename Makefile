@@ -4,7 +4,9 @@
 # helmstudio-test (Kong on 8390, Postgres on 5464, image tag gate), never on the dev stack.
 
 DEV  := docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml
+# the test stack turns remote models on: its pipelines trusts only the fake OpenAI server's certificate (fake.yml)
 TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 HELM_NET=172.30.98 IMAGE_TAG=gate \
+        REMOTE_MODELS=on \
         docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml
 # the test admin set by deploy/compose/fake.yml
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
@@ -45,9 +47,9 @@ test: secrets envs contract_tests/.venv  ## the contract suite on the helmstudio
 	key=$$($(TEST) run --rm -T auth apikey contract) && \
 	  $(MAKE) -C contract_tests test BASE_URL=http://localhost:8390 API_KEY="$$key" CONTRACT_SCHEMAS=1 $(TEST_ADMIN)
 
-resilience: secrets envs  ## contract_tests/resilience.sh on the helmstudio-test stack (restarts its services)
+resilience: secrets envs  ## contract_tests/resilience.sh on the helmstudio-test stack (restarts its services); SCENARIOS="a b" runs only those
 	$(TEST) up -d --build --wait
-	key=$$($(TEST) run --rm -T auth apikey contract) && API_KEY="$$key" $(TEST_ADMIN) contract_tests/resilience.sh
+	key=$$($(TEST) run --rm -T auth apikey contract) && API_KEY="$$key" $(TEST_ADMIN) contract_tests/resilience.sh $(SCENARIOS)
 
 test-down:        ## stop the test stack; its volumes stay
 	$(TEST) down

@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "server",
+  "published_at": "2026-11-16T12:00:00Z",
+  "published_by": "pipelines 0.5.0",
+  "workflows": [
+    {
+      "id": "server-ask",
+      "title": "Ask a local server",
+      "family": "server",
+      "env": "server",
+      "media": "text",
+      "nodes": {
+        "ask": {
+          "kind": "server/ask",
+          "params": {
+            "max_tokens": 800
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "ask.answer"
+          }
+        }
+      }
+    }
+  ]
+}

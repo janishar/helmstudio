@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "models": [
+    "qwen2.5:7b"
+  ],
+  "answer": "OK",
+  "error": null,
+  "failure": null,
+  "seconds": 0.8
+}

@@ -32,13 +32,16 @@ type Cancel func(ctx context.Context, runID string) error
 // Service owns the studio tables. registry is what the runners publish, signer turns output keys into links, cancel
 // reaches the runners, store is read to check a run's reference images.
 type Service struct {
-	db       *pgxpool.Pool
-	signer   *common.Signer
-	registry *registry.Registry
-	cancel   Cancel
-	store    storage.Store
-	stateGet StateGet  // pipelines.state.get; nil answers 503
-	memory   MemoryAsk // pipelines.memory; nil answers 503
+	db           *pgxpool.Pool
+	signer       *common.Signer
+	registry     *registry.Registry
+	cancel       Cancel
+	store        storage.Store
+	stateGet     StateGet        // pipelines.state.get; nil answers 503
+	memory       MemoryAsk       // pipelines.memory; nil answers 503
+	lookup       Lookup          // resolves a server provider's host (nil: the system resolver)
+	providerTest ProviderTestAsk // pipelines.providers.test; nil answers 503
+	remoteOn     bool            // the deployment's remote switch (STUDIO_REMOTE_MODELS, off by default; API 1.15)
 	// the dispatcher whose skip counts positions use; nil: none
 	dispatcher *Dispatcher
 }

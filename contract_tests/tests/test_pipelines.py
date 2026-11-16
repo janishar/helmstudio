@@ -233,14 +233,27 @@ def live_workflows(client, pipeline: dict) -> dict:
         if n["kind"] == "step":
             fetch(n["workflow"])
     for n in nodes:
-        if n["kind"] in ("judge", "write", "decide") and n.get("model", "auto") != "auto":
-            fetch(n["model"])
+        m = n.get("model", "auto")
+        if n["kind"] in ("judge", "write", "decide", "agent") and m != "auto" and ":" not in m:
+            fetch(m)  # server:/remote: sources are providers, not workflows (API 1.15)
     for fam in sorted({w["family"] for w in out.values() if w.get("family")}):
         fetch(
             f"{fam}-ask"
         )  # ponytail: the templates' naming (echo-ask, qwen-image-ask); a list route would be exact
     fetch("llm-ask")
     return out
+
+
+def live_sources(client) -> dict:
+    """check.pipeline_problems' 1.15 context as the caller sees it now: the enabled providers (GET /model-sources,
+    redacted: no host or memory_gb, so `reserved` needs the admin's list), the deployment's remote switch and the
+    registered custom nodes."""
+    ms = ok(client.get(f"{STUDIO}/model-sources"))
+    return {
+        "providers": [s | {"enabled": True} for s in ms["sources"]],
+        "remote_on": ms["remote_enabled"],
+        "custom": ok(client.get(f"{STUDIO}/custom-nodes"))["nodes"],
+    }
 
 
 @pytest.mark.parametrize("path", PIPELINE_FIXTURES, ids=lambda p: p.stem)
@@ -252,6 +265,7 @@ def test_fixture_validate_and_save(api, palette, path):
         palette,
         usable_looks(api),
         usable_loras(api),
+        **live_sources(api),
     )
     save_blocking = {k for k in want if k[0] not in check.P_RUN_ONLY}
     assert save_blocking == {k for k in keys(fx["problems"]) if k[0] not in check.P_RUN_ONLY}

@@ -1,0 +1,18 @@
+{
+  "result": {
+    "takes": [
+      {
+        "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+        "kind": "image",
+        "title": "Fox in snow",
+        "prompt": "@fox in snow, four legs",
+        "width": 1024,
+        "height": 1024,
+        "collection": "Fox at night",
+        "starred": true,
+        "created_at": "2026-11-15T10:21:00Z"
+      }
+    ],
+    "more": false
+  }
+}

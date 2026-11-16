@@ -229,6 +229,9 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 func (d *Dispatcher) handover(ctx context.Context, snap snapshot, next placed, now time.Time) admission {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if next.env == "server" { // a local server's call loads nothing: its memory is reserved already (API 1.15)
+		return admission{decision: "release"}
+	}
 	var entries []entry
 	budget, running := -1, ""
 	for _, value := range snap.values {
@@ -255,6 +258,7 @@ func (d *Dispatcher) handover(ctx context.Context, snap snapshot, next placed, n
 	if budget < 0 {
 		return admission{decision: "release"} // no key reports memory (the fake host): no admission
 	}
+	budget -= snap.reserved[next.host] // enabled local servers' declared memory is outside the app's control
 	referenced := map[string]bool{}
 	for _, q := range snap.queue {
 		if _, ok := q.slots[next.host]; ok && q.run.ID != next.run.ID {
@@ -746,6 +750,7 @@ type snapshot struct {
 	hosts    []string
 	last     map[string]time.Time
 	held     map[string]bool // waiting runs of a paused batch: no position, skip counts kept
+	reserved map[string]int  // host → hundredths of a GB its enabled local servers reserve (API 1.15)
 }
 
 // look reads the open runs and the history the order needs, in tx (as System: it sees every user's queue).
@@ -770,6 +775,9 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 		held[id] = true
 	}
 	snap.held = held
+	if snap.reserved, err = reservedOn(ctx, tx); err != nil {
+		return snap, err
+	}
 	deleted, err := deletedLoras(ctx, tx, open)
 	if err != nil {
 		return snap, err
@@ -879,8 +887,8 @@ func eligible(reg *registry.Registry, values []registry.Host, run model.Run, now
 hosts:
 	for _, value := range values {
 		source := value.Host + "." + value.Env
-		if value.Env != run.Env || !value.Live(now) {
-			continue
+		if value.Env != run.Env || !value.Live(now) || (run.PinHost != nil && value.Host != *run.PinHost) {
+			continue // (a local server's call goes only to its provider's host)
 		}
 		if run.WorkflowVersion == nil && !reg.Publishes(source, run.WorkflowID) {
 			continue

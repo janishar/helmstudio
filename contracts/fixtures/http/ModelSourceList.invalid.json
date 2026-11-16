@@ -1,0 +1,15 @@
+{
+  "remote_enabled": false,
+  "sources": [
+    {
+      "name": "ollama",
+      "kind": "server",
+      "title": "Ollama",
+      "models": [
+        "qwen2.5:7b"
+      ],
+      "default_model": "qwen2.5:7b",
+      "base_url": "http://10.0.0.5:11434/v1"
+    }
+  ]
+}

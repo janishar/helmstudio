@@ -1,0 +1,10 @@
+{
+  "kind": "server",
+  "title": "Ollama on the Mac",
+  "base_url": "http://host.docker.internal:11434/v1",
+  "models": [
+    "qwen2.5:7b"
+  ],
+  "host": "mac",
+  "memory_gb": 6.5
+}

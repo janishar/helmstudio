@@ -1,0 +1,525 @@
+{
+  "description": "agent turns (contracts/README.md, Agents: a turn): an answer (local: the turn JSON; server or remote: a native OpenAI assistant message, normalised) against the node's offered tools, routes, list, the visit's remaining tool calls and whether set_items was called earlier in the visit → the calls to run, whether the visit ends and its route, or the error the one re-ask is told. pipelines_service runs them. An expected error is a prefix of the actual one (a schema error adds the validator's text after `: `)",
+  "cases": [
+    {
+      "description": "a tool call: runs, not final",
+      "node": {
+        "tools": [
+          "memory.write"
+        ]
+      },
+      "calls_left": 12,
+      "answer": {
+        "say": "Noting it.",
+        "calls": [
+          {
+            "tool": "memory_write",
+            "args": {
+              "key": "briefs",
+              "text": "Foxes look better in snow."
+            }
+          }
+        ]
+      },
+      "expect": {
+        "calls": [
+          {
+            "tool": "memory_write",
+            "args": {
+              "key": "briefs",
+              "text": "Foxes look better in snow."
+            }
+          }
+        ],
+        "final": false,
+        "route": null
+      }
+    },
+    {
+      "description": "no calls on a plain agent: the final answer",
+      "node": {
+        "tools": [
+          "memory.write"
+        ]
+      },
+      "calls_left": 3,
+      "answer": {
+        "say": "Done.",
+        "calls": []
+      },
+      "expect": {
+        "calls": [],
+        "final": true,
+        "route": null
+      }
+    },
+    {
+      "description": "a tool it did not declare fails the schema",
+      "node": {
+        "tools": [
+          "memory.write"
+        ]
+      },
+      "calls_left": 3,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "rows_add",
+            "args": {
+              "inputs": {
+                "prompt": "x"
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "answer did not match the schema"
+      }
+    },
+    {
+      "description": "bad arguments fail the schema",
+      "node": {
+        "tools": [
+          "memory.write"
+        ]
+      },
+      "calls_left": 3,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "memory_write",
+            "args": {
+              "key": "Briefs!",
+              "text": ""
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "answer did not match the schema"
+      }
+    },
+    {
+      "description": "route ends the visit along a declared label",
+      "node": {
+        "tools": [
+          "memory.read"
+        ],
+        "routes": {
+          "again": "one more try",
+          "done": "finish"
+        }
+      },
+      "calls_left": 5,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "memory_read",
+            "args": {
+              "limit": 4
+            }
+          },
+          {
+            "tool": "route",
+            "args": {
+              "to": "done",
+              "reason": "The take matches."
+            }
+          }
+        ]
+      },
+      "expect": {
+        "calls": [
+          {
+            "tool": "memory_read",
+            "args": {
+              "limit": 4
+            }
+          },
+          {
+            "tool": "route",
+            "args": {
+              "to": "done",
+              "reason": "The take matches."
+            }
+          }
+        ],
+        "final": true,
+        "route": "done"
+      }
+    },
+    {
+      "description": "an undeclared route label fails the schema",
+      "node": {
+        "tools": [
+          "memory.read"
+        ],
+        "routes": {
+          "again": "one more try",
+          "done": "finish"
+        }
+      },
+      "calls_left": 5,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "route",
+            "args": {
+              "to": "elsewhere",
+              "reason": ""
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "answer did not match the schema"
+      }
+    },
+    {
+      "description": "route not last",
+      "node": {
+        "tools": [
+          "memory.read"
+        ],
+        "routes": {
+          "again": "one more try",
+          "done": "finish"
+        }
+      },
+      "calls_left": 5,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "route",
+            "args": {
+              "to": "done",
+              "reason": ""
+            }
+          },
+          {
+            "tool": "memory_read",
+            "args": {}
+          }
+        ]
+      },
+      "expect": {
+        "error": "call route once, as the last call"
+      }
+    },
+    {
+      "description": "an agent with routes must route to finish",
+      "node": {
+        "tools": [
+          "memory.read"
+        ],
+        "routes": {
+          "again": "one more try",
+          "done": "finish"
+        }
+      },
+      "calls_left": 5,
+      "answer": {
+        "say": "All good.",
+        "calls": []
+      },
+      "expect": {
+        "error": "call route to finish"
+      }
+    },
+    {
+      "description": "over the visit's tool-call budget",
+      "node": {
+        "tools": [
+          "memory.write"
+        ]
+      },
+      "calls_left": 1,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "memory_write",
+            "args": {
+              "key": "a",
+              "text": "x"
+            }
+          },
+          {
+            "tool": "memory_write",
+            "args": {
+              "key": "b",
+              "text": "y"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "at most 1 more tool calls in this visit"
+      }
+    },
+    {
+      "description": "a list agent must set_items before finishing",
+      "node": {
+        "tools": [
+          "gallery.search",
+          "library.read",
+          "rows.add",
+          "rows.edit"
+        ],
+        "list": {
+          "max": 3
+        }
+      },
+      "calls_left": 12,
+      "answer": {
+        "say": "Here is the plan.",
+        "calls": []
+      },
+      "expect": {
+        "error": "call set_items before you finish"
+      }
+    },
+    {
+      "description": "set_items then final in a later turn",
+      "node": {
+        "tools": [
+          "gallery.search",
+          "library.read",
+          "rows.add",
+          "rows.edit"
+        ],
+        "list": {
+          "max": 3
+        }
+      },
+      "calls_left": 12,
+      "items_set": true,
+      "answer": {
+        "say": "3 shots.",
+        "calls": []
+      },
+      "expect": {
+        "calls": [],
+        "final": true,
+        "route": null
+      }
+    },
+    {
+      "description": "too many items for the list max",
+      "node": {
+        "tools": [
+          "gallery.search",
+          "library.read",
+          "rows.add",
+          "rows.edit"
+        ],
+        "list": {
+          "max": 3
+        }
+      },
+      "calls_left": 12,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "set_items",
+            "args": {
+              "items": [
+                "a",
+                "b",
+                "c",
+                "d"
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "answer did not match the schema"
+      }
+    },
+    {
+      "description": "rows.edit is offered only in the director's chat",
+      "node": {
+        "tools": [
+          "gallery.search",
+          "library.read",
+          "rows.add",
+          "rows.edit"
+        ],
+        "list": {
+          "max": 3
+        }
+      },
+      "calls_left": 12,
+      "items_set": true,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "rows_edit",
+            "args": {
+              "row": 3,
+              "inputs": {
+                "script": "a fox"
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "answer did not match the schema"
+      }
+    },
+    {
+      "description": "the director's chat: rows_edit, no set_items needed, no calls = the reply",
+      "node": {
+        "tools": [
+          "gallery.search",
+          "library.read",
+          "rows.add",
+          "rows.edit"
+        ],
+        "list": {
+          "max": 3
+        }
+      },
+      "calls_left": 12,
+      "chat": true,
+      "answer": {
+        "say": "",
+        "calls": [
+          {
+            "tool": "rows_edit",
+            "args": {
+              "row": 3,
+              "inputs": {
+                "script": "a fox at dawn"
+              }
+            }
+          }
+        ]
+      },
+      "expect": {
+        "calls": [
+          {
+            "tool": "rows_edit",
+            "args": {
+              "row": 3,
+              "inputs": {
+                "script": "a fox at dawn"
+              }
+            }
+          }
+        ],
+        "final": false,
+        "route": null
+      }
+    },
+    {
+      "description": "a native answer (server or remote) normalised: tool calls",
+      "node": {
+        "tools": [
+          "memory.write"
+        ]
+      },
+      "calls_left": 4,
+      "native": {
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+              "name": "memory_write",
+              "arguments": "{\"key\":\"briefs\",\"text\":\"snow\"}"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "calls": [
+          {
+            "tool": "memory_write",
+            "args": {
+              "key": "briefs",
+              "text": "snow"
+            }
+          }
+        ],
+        "final": false,
+        "route": null
+      }
+    },
+    {
+      "description": "a native answer whose arguments are not JSON",
+      "node": {
+        "tools": [
+          "memory.write"
+        ]
+      },
+      "calls_left": 4,
+      "native": {
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+              "name": "memory_write",
+              "arguments": "{key: briefs"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "tool call memory_write: arguments are not JSON"
+      }
+    },
+    {
+      "description": "a native final answer",
+      "node": {
+        "tools": [
+          "memory.read"
+        ],
+        "routes": {
+          "again": "one more try",
+          "done": "finish"
+        }
+      },
+      "calls_left": 4,
+      "native": {
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "c",
+            "type": "function",
+            "function": {
+              "name": "route",
+              "arguments": "{\"to\":\"again\",\"reason\":\"blurry\"}"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "calls": [
+          {
+            "tool": "route",
+            "args": {
+              "to": "again",
+              "reason": "blurry"
+            }
+          }
+        ],
+        "final": true,
+        "route": "again"
+      }
+    }
+  ]
+}

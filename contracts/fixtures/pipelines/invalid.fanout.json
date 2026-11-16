@@ -1,0 +1,122 @@
+{
+  "description": "fan-out rules (API 1.15): a step fanning over a node with no list (fanout_source); a branch item bound in a step that does not fan over it (bind_source); a judge over a fanned step of 24 × 1 takes (fanout_takes: more than 8 candidates); a write with a list and a `to` (write_target); runs 24 × 3 visits = 72 > 64 (too_many_runs)",
+  "pipeline": {
+    "title": "Broken fan-out",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "script",
+            "type": "Text"
+          }
+        ]
+      },
+      "plan": {
+        "kind": "write",
+        "from": [
+          "$script"
+        ],
+        "list": {
+          "max": 24
+        },
+        "to": "$script"
+      },
+      "shots": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "each": "plan.items",
+        "bind": {
+          "prompt.text": "plan.item"
+        }
+      },
+      "judge": {
+        "kind": "judge",
+        "takes": "shots",
+        "criteria": {
+          "must": [
+            "Clean"
+          ]
+        },
+        "mode": "auto"
+      },
+      "again": {
+        "kind": "step",
+        "workflow": "qwen-image",
+        "inputs": {
+          "model.variant": "turbo",
+          "model.precision": "int8",
+          "canvas.mode": "fixed",
+          "canvas.width": 1024,
+          "canvas.height": 1024
+        },
+        "each": "judge.items",
+        "bind": {
+          "prompt.text": "plan.item"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "again.takes",
+        "collection": "Broken"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "plan"
+      ],
+      [
+        "plan",
+        "shots"
+      ],
+      [
+        "shots",
+        "judge"
+      ],
+      [
+        "judge",
+        {
+          "pass": "again",
+          "fail": "shots",
+          "max": 2,
+          "then": "again"
+        }
+      ],
+      [
+        "again",
+        "out"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "write_target",
+      "node": "plan"
+    },
+    {
+      "code": "fanout_source",
+      "node": "again",
+      "port": "each"
+    },
+    {
+      "code": "bind_source",
+      "node": "again",
+      "port": "prompt.text"
+    },
+    {
+      "code": "fanout_takes",
+      "node": "judge"
+    },
+    {
+      "code": "too_many_runs"
+    }
+  ]
+}

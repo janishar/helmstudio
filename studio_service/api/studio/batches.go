@@ -198,7 +198,27 @@ func batchDTO(row model.Batch) dto.Batch {
 	if row.AgainOf != nil {
 		out.SameDecisions = &row.SameDecisions
 	}
+	if row.PipelineID != nil { // API 1.15
+		egress, reserved := []dto.PipelineEgress{}, []dto.PipelineReserved{}
+		_ = json.Unmarshal(row.Egress, &egress)
+		_ = json.Unmarshal(row.Reserved, &reserved)
+		out.Egress, out.Reserved = &egress, &reserved
+		out.Director, out.Remote = nullOr(row.Director), nullOr(row.Remote)
+		var director dto.BatchDirector
+		if json.Unmarshal(row.Director, &director) == nil && director.Node != "" && (ended(out.Status) || director.Wakes >= director.MaxWakes) {
+			director.State = "off" // the batch ended, or max_wakes: POST …/chat is 409
+			out.Director, _ = json.Marshal(director)
+		}
+	}
 	return out
+}
+
+// nullOr is raw, or JSON null when absent.
+func nullOr(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage("null")
+	}
+	return raw
 }
 
 // rowDTO maps a row, signing its first take's key for the thumbnail.
@@ -528,9 +548,9 @@ func (s *Service) RetryBatchRow(ctx context.Context, caller common.Caller, batch
 		if checkpoint != nil {
 			command.CheckpointID = checkpoint
 			if _, err := tx.Exec(ctx, `INSERT INTO batch_steps (batch_id, n, attempt, step, owner_id, seq, node, part, visit,
-				status, what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, at, decision_id, memory)
-				SELECT batch_id, n, $3, step, owner_id, 0, node, part, visit, status, what, changed, edge, loops, run_ids,
-				take_ids, error, checkpoint_id, at, decision_id, memory FROM batch_steps WHERE batch_id = $1 AND n = $2 AND attempt = $3 - 1
+				status, what, changed, edge, loops, run_ids, take_ids, error, checkpoint_id, at, decision_id, memory, branch, turn,
+				tool_calls) SELECT batch_id, n, $3, step, owner_id, 0, node, part, visit, status, what, changed, edge, loops, run_ids,
+				take_ids, error, checkpoint_id, at, decision_id, memory, branch, turn, tool_calls FROM batch_steps WHERE batch_id = $1 AND n = $2 AND attempt = $3 - 1
 				AND step < $4`, batchID, row, attempt, fromStep); err != nil {
 				return err
 			}
@@ -565,13 +585,14 @@ func (s *Service) BatchEvents(ctx context.Context, caller common.Caller, batchID
 			return err
 		}
 		type event struct {
-			Seq  int64
-			Type string
-			Row  *int
-			TS   time.Time
+			Seq     int64
+			Type    string
+			Row     *int
+			TS      time.Time
+			Message *string // a chat event's message (API 1.15)
 		}
-		events, err := collect[event](ctx, tx, `SELECT seq, type, n, ts FROM batch_events WHERE batch_id = $1 AND seq > $2
-			ORDER BY seq LIMIT 500`, batchID, since)
+		events, err := collect[event](ctx, tx, `SELECT seq, type, n, ts, message_id::text FROM batch_events WHERE batch_id = $1
+			AND seq > $2 ORDER BY seq LIMIT 500`, batchID, since)
 		if err != nil || len(events) == 0 {
 			return err
 		}
@@ -584,6 +605,9 @@ func (s *Service) BatchEvents(ctx context.Context, caller common.Caller, batchID
 		lastOf := map[int]int64{} // row (0: the batch) → its last event's seq in the page
 		for _, e := range events {
 			n := 0
+			if e.Type == "chat" {
+				continue
+			}
 			if e.Type == "row" && e.Row != nil {
 				n = *e.Row
 				numbers = append(numbers, n)
@@ -602,7 +626,23 @@ func (s *Service) BatchEvents(ctx context.Context, caller common.Caller, batchID
 		for _, row := range shown {
 			byRow[row.Row] = row
 		}
+		var said []string
 		for _, e := range events {
+			if e.Type == "chat" && e.Message != nil {
+				said = append(said, *e.Message)
+			}
+		}
+		messages, err := chatMessages(ctx, tx, said)
+		if err != nil {
+			return err
+		}
+		for _, e := range events {
+			if e.Type == "chat" { // every message once, as it is now
+				if m, ok := messages[deref(e.Message)]; ok {
+					out.Events = append(out.Events, dto.BatchEvent{Seq: e.Seq, Type: e.Type, TS: e.TS, Data: m})
+				}
+				continue
+			}
 			n, data := 0, any(batch)
 			if e.Type == "row" && e.Row != nil {
 				n, data = *e.Row, byRow[*e.Row]
@@ -619,7 +659,7 @@ func (s *Service) BatchEvents(ctx context.Context, caller common.Caller, batchID
 // ------------------------------------------------------------------ studio.runs.create
 
 // runsCreateKey is the idempotency key's shape (contracts defs idempotencyKey).
-var runsCreateKey = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,2}:[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$`)
+var runsCreateKey = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,2}):[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):[a-z0-9_-]{1,64}$`)
 
 // CreateBatchRun answers studio.runs.create as System: the run of a batch row's step, made once per idempotency key.
 // Owner, session and graph come from the batch record (its snapshot); the request must name them. A stopped batch's
@@ -680,17 +720,23 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 		}
 		// the row's current attempt and the inputs stored at Submit: the run is made from those, never from the request
 		// (a pipeline step's from the request: pipelines fills its binds from earlier steps' takes)
-		var attempt int
+		attempt := 1 // row 0 (API 1.15): the director's chat, of a pipeline batch only
 		var stored0 map[string]any
 		var looks []string // the row's looks (a workflow batch), else its step's
-		if err := tx.QueryRow(ctx, `SELECT attempt, inputs, looks FROM batch_rows WHERE batch_id = $1 AND n = $2`, req.BatchID,
-			req.Row).Scan(&attempt, &stored0, &looks); errors.Is(err, pgx.ErrNoRows) {
+		if req.Row == 0 && !isPipeline {
 			refused = notFound
 			return nil
-		} else if err != nil {
-			return err
+		} else if req.Row > 0 {
+			if err := tx.QueryRow(ctx, `SELECT attempt, inputs, looks FROM batch_rows WHERE batch_id = $1 AND n = $2`, req.BatchID,
+				req.Row).Scan(&attempt, &stored0, &looks); errors.Is(err, pgx.ErrNoRows) {
+				refused = notFound
+				return nil
+			} else if err != nil {
+				return err
+			}
 		}
 		version := batch.Version
+		var pin *string // a local server's run: its provider's host
 		if isPipeline {
 			var detail string
 			if workflow, detail = pipelineStepRun(stored, req, attempt); detail != "" {
@@ -700,6 +746,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			version = stored.version(workflow.ID)
 			if key, ok := parsePipelineKey(req.IdempotencyKey); ok {
 				looks = stored.Doc.Nodes[key.Step].Looks
+				pin = stored.pinHost(key.Step)
 			}
 		} else {
 			if !strings.HasSuffix(req.IdempotencyKey, fmt.Sprintf(":%d:step:0:0", attempt)) { // one step, no loops or branches
@@ -731,7 +778,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				return err
 			}
 			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, graphs[0], looks, batch.Status, batch.Control, req,
-				thumbs); err != nil {
+				thumbs, pin); err != nil {
 				return err
 			}
 		} else if err != nil {
@@ -757,22 +804,22 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 // createBatchRun stores the run of a batch row's step: cancelled for a stopped batch, failed with no eligible host,
 // else queued (lane batch); its status event goes to the session's log, and a terminal one to pipelines.
 func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, workflow registry.Workflow, version *int,
-	built built, looks []string, batchStatus, control string, req *message.RunsCreate, thumbs *int) (model.Run, error) {
+	built built, looks []string, batchStatus, control string, req *message.RunsCreate, thumbs *int, pin *string) (model.Run, error) {
 	graph, _ := json.Marshal(built.Nodes)
 	status, failure := "queued", (*string)(nil)
 	if control == "stop" || batchStatus == "stopped" {
 		status = "cancelled"
 	} else if _, _, reason := eligible(reg, reg.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph,
-		WorkflowVersion: version, Loras: lorasJSON(built.Loras)}, time.Now()); reason != "" {
+		WorkflowVersion: version, Loras: lorasJSON(built.Loras), PinHost: pin}, time.Now()); reason != "" {
 		status, failure = "failed", &reason
 	}
 	inputs, _ := json.Marshal(req.Inputs)
 	run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
 		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions, loras, looks,
-		thumbs) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
-		$13, $14, $15, $16, $17, $18) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env,
+		thumbs, pin_host) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
+		$13, $14, $15, $16, $17, $18, $19) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env,
 		inputs, status, failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion),
-		lorasJSON(built.Loras), looksJSON(looks), thumbs)
+		lorasJSON(built.Loras), looksJSON(looks), thumbs, pin)
 	if err != nil {
 		return run, err
 	}

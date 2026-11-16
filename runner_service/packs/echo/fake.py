@@ -1,6 +1,7 @@
 """Stage functions of the echo pack (runtime fake): see model.yaml."""
 
 import json
+import re
 import textwrap
 import time
 
@@ -138,6 +139,16 @@ def scripted(prompt: str, marker: str) -> str | None:
     return value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
 
 
+TURN = re.compile(r"This is turn (\d+) of")
+
+
+def turn(prompt: str) -> str | None:
+    """An agent turn's script: the JSON after `ECHO-TURN <n>:` for the <n> of the prompt's last `This is turn <n> of`
+    line (contracts/README.md "Tool calling on the ask contract"), so a test scripts a whole tool loop turn by turn."""
+    found = TURN.findall(prompt)
+    return scripted(prompt, f"ECHO-TURN {found[-1]}:") if found else None
+
+
 def ask(ctx, params: dict, inputs: dict) -> dict:
     """The fake ask (contracts/README.md, the fake): the scripted answer after the last ECHO-ANSWER: in the prompt,
     else `{}` with a schema and `echo` without; checked and retried as the real one (core.ask). The retry answers
@@ -148,7 +159,11 @@ def ask(ctx, params: dict, inputs: dict) -> dict:
     def generate(prompt: str, thumbs: list) -> tuple[str, int, int]:
         tries.append(prompt)
         original = params["prompt"]
-        text = (len(tries) > 1 and scripted(original, RETRY)) or scripted(original, ANSWER)
+        text = (
+            (len(tries) > 1 and scripted(original, RETRY))
+            or turn(original)
+            or scripted(original, ANSWER)
+        )
         if text is None:
             text = "{}" if params["schema"].strip() else "echo"
         return text, 0, 0

@@ -1,0 +1,14 @@
+{
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "row": 0,
+  "node": "director",
+  "call_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:0:1:director:2:t0:0",
+  "tool": "rows.edit",
+  "args": {
+    "row": 3,
+    "inputs": {
+      "script": "Close-up."
+    }
+  }
+}

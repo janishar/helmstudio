@@ -1,0 +1,36 @@
+{
+  "type": "evt.pipeline.chat",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001504",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:20:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 42,
+    "message": {
+      "id": "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5e",
+      "role": "notice",
+      "text": "Row 2 was not changed: row 2 has started; only rows not yet started can change.",
+      "wake": 3,
+      "tool_calls": [
+        {
+          "id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:0:1:director:2:t0:2",
+          "tool": "rows_edit",
+          "args": {
+            "row": 2,
+            "inputs": {
+              "script": "x"
+            }
+          },
+          "result": null,
+          "error": "row 2 has started; only rows not yet started can change"
+        }
+      ],
+      "rows": [],
+      "at": "2026-11-16T10:20:04Z"
+    }
+  }
+}

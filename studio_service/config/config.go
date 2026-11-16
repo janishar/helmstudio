@@ -4,7 +4,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	helmgoconfig "github.com/helmstudio/helmgo/config"
@@ -30,10 +32,18 @@ type Env struct {
 	S3AccessKey   string
 	S3SecretKey   string
 	S3PathStyle   bool
+
+	// RemoteModels is the deployment's switch for remote model providers (API 1.15): off unless 1, true, on or yes (SwitchOn)
+	RemoteModels bool
 }
 
 // Load resolves *_FILE secrets, then reads every variable with its default. It fails when DATABASE_URL is missing,
 // FILE_URL_SECRET is under 16 characters, or a number or duration is invalid.
+// SwitchOn reads an on/off switch as pipelines_service does (config.REMOTE_MODELS): 1, true, on or yes, any case.
+func SwitchOn(v string) bool {
+	return slices.Contains([]string{"1", "true", "on", "yes"}, strings.ToLower(v))
+}
+
 func Load() (Env, error) {
 	if err := helmgoconfig.LoadFileSecrets(); err != nil {
 		return Env{}, err
@@ -53,6 +63,7 @@ func Load() (Env, error) {
 		S3AccessKey:   os.Getenv("S3_ACCESS_KEY_ID"),
 		S3SecretKey:   os.Getenv("S3_SECRET_ACCESS_KEY"),
 		S3PathStyle:   helmgoconfig.Get("S3_FORCE_PATH_STYLE", "true") == "true",
+		RemoteModels:  SwitchOn(os.Getenv("STUDIO_REMOTE_MODELS")),
 	}
 	var err error
 	if e.FileURLTTL, err = time.ParseDuration(helmgoconfig.Get("FILE_URL_TTL", "1h")); err != nil {

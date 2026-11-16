@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.studio.tools.schema.json",
+  "title": "NATS request/reply studio.tools (pipelines → studio)",
+  "description": "From API 1.15. Core NATS request/reply on subject `studio.tools` (queue group `studio`), bare JSON: one Agent tool call that needs studio's data, made as the batch's owner (row-level security, WithUser). Studio serves gallery.search and library.read (read-only views of the owner's data, result caps in tools.schema.json) and rows.add / rows.edit (the batch's rows, through Submit's checks for that row); memory.read and memory.write never come here (pipelines owns memory). Nothing else is reachable. owner_id, batch_id must be one batch of that owner (else not_found); rows.edit only for row 0 (the director's chat). Idempotent on call_id: asking again returns the first reply (a re-run node after a crash adds no second row). Studio answers within 5 s; a timeout or `internal` is retried under the same call_id with backoff.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": [
+        "owner_id",
+        "batch_id",
+        "row",
+        "node",
+        "call_id",
+        "tool",
+        "args"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "owner_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "batch_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "row": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500,
+          "description": "the calling row, 0 = the director's chat"
+        },
+        "node": {
+          "$ref": "defs.schema.json#/$defs/nodeId",
+          "description": "the agent node"
+        },
+        "call_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,2}):[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):t[0-9]{1,2}r?:[0-3]$",
+          "description": "<the turn's idempotency key>:<call index from 0>"
+        },
+        "tool": {
+          "enum": [
+            "gallery.search",
+            "library.read",
+            "rows.add",
+            "rows.edit"
+          ]
+        },
+        "args": {
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "gallery.search"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "tools.schema.json#/$defs/gallerySearchArgs"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "library.read"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "tools.schema.json#/$defs/libraryReadArgs"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "rows.add"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "tools.schema.json#/$defs/rowsAddArgs"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "rows.edit"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "tools.schema.json#/$defs/rowsEditArgs"
+              },
+              "row": {
+                "const": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ok"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "ok": {
+      "type": "object",
+      "required": [
+        "result"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "anyOf": [
+            {
+              "$ref": "tools.schema.json#/$defs/gallerySearchResult"
+            },
+            {
+              "$ref": "tools.schema.json#/$defs/libraryReadResult"
+            },
+            {
+              "$ref": "tools.schema.json#/$defs/rowsAddResult"
+            }
+          ]
+        },
+        "row": {
+          "type": "object",
+          "required": [
+            "row",
+            "inputs",
+            "seeds"
+          ],
+          "additionalProperties": false,
+          "description": "rows.add, rows.edit: the stored row as cmd.pipeline.submit carries rows (inputs `<inputs node>.<name>`, every input set; seeds drawn), so pipelines starts or updates its thread",
+          "properties": {
+            "row": {
+              "$ref": "defs.schema.json#/$defs/batchRow"
+            },
+            "inputs": {
+              "$ref": "defs.schema.json#/$defs/inputs"
+            },
+            "seeds": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "defs.schema.json#/$defs/seed"
+              }
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error",
+        "code"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "told to the model as the tool's error; for rows.add / rows.edit Submit's reason (`row: inputs.prompt: a value is required`)"
+        },
+        "code": {
+          "enum": [
+            "invalid",
+            "conflict",
+            "cap",
+            "not_found",
+            "internal"
+          ],
+          "description": "invalid: the args or the row fail Submit's checks (final); conflict: rows.edit of a row that has started, or the batch has ended (final); cap: 500 rows, or 100 rows added to this batch (final); not_found: no such batch for this owner, or rows.edit of an unknown row (final); internal: retry"
+        }
+      }
+    }
+  }
+}

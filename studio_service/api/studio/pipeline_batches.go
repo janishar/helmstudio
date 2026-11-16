@@ -39,10 +39,23 @@ type storedPipeline struct {
 	Versions   map[string]int               `json:"versions"`         // a user workflow's version at Submit
 	Presets    map[string]map[string]any    `json:"presets"`          // step → its preset's values
 	SeedParams map[string]string            `json:"seed_params"`      // step → its workflow's one unwired seed param
-	Models     map[string]string            `json:"models,omitempty"` // judge, write, decide → its ask workflow (API 1.14)
+	Models     map[string]string            `json:"models,omitempty"` // judge, write, decide, agent → its ask workflow (API 1.14)
 	Near       map[string]string            `json:"near,omitempty"`   // such a node → the step whose model a family ask reuses
 	Bounds     dto.PipelineBounds           `json:"bounds"`
+	// API 1.15: each model node's model as listed (server:<n>/<m>, remote:<p>/<m>) and where it runs (defs
+	// modelSource), the providers as they were, the remote switch, the fan-outs, the custom nodes' registrations
+	Listed    map[string]string              `json:"listed,omitempty"`
+	Sources   map[string]map[string]string   `json:"sources,omitempty"`
+	Providers map[string]map[string]any      `json:"providers,omitempty"`
+	Remote    dto.RemoteSettings             `json:"remote"`
+	Fan       map[string]string              `json:"fan,omitempty"`
+	Lists     map[string]int                 `json:"lists,omitempty"`
+	Custom    map[string]registry.CustomNode `json:"custom,omitempty"`
 }
+
+// placeholderText stands in for a text a step will get from an earlier node (a fanned-out item, a custom node's
+// field): Submit checks the rest of the row.
+const placeholderText = "a shot"
 
 // placeholderTake stands in for a take a step will get from an earlier step: Submit checks the rest of the row.
 const placeholderTake = "00000000-0000-4000-8000-000000000000"
@@ -113,6 +126,12 @@ func (p storedPipeline) stepInputs(step string, row map[string]any, seed int64) 
 			inputs[key] = value
 			continue
 		}
+		if from, field, _ := strings.Cut(source, "."); field == "item" || p.Doc.Nodes[from].Kind == "custom" {
+			if param.Type == "string" || param.Type == "text" { // a branch's item or a custom text (a custom take list: takes)
+				inputs[key] = placeholderText
+				continue
+			}
+		}
 		ref := map[string]any{"take_id": placeholderTake}
 		if rowsOfImages {
 			inputs[key] = []any{map[string]any{field: ref}}
@@ -159,6 +178,9 @@ func (p storedPipeline) snapshot() *message.PipelineSnapshot {
 			if key := p.SeedParams[id]; key != "" {
 				fields["seed_param"] = key
 			}
+			if producer, ok := p.Fan[id]; ok {
+				fields["fanout_max"] = p.Lists[producer]
+			}
 		case "gate":
 			fields["keep"] = node.KeepOr1()
 		case "judge":
@@ -173,14 +195,34 @@ func (p storedPipeline) snapshot() *message.PipelineSnapshot {
 			if node.Op == "read" {
 				fields["limit"] = node.LimitOr()
 			}
+		case "agent":
+			fields["from"], fields["tools"], fields["caps"] = nonNil(node.Sources), nonNil(node.Tools), node.Caps.Filled()
+			fields["director"], fields["model"] = node.IsDirector(), node.ModelOr()
+			if node.IsDirector() {
+				fields["wake_on_rows"], fields["max_wakes"] = node.WakeOnRowsOr(), node.MaxWakesOr()
+			}
+		case "custom":
+			c := p.Custom[id]
+			fields["version"], fields["network"] = c.Version, c.Network
+			fields["inputs"], fields["bind"] = node.Fixed, node.Bind
+			if node.Fixed == nil {
+				fields["inputs"] = map[string]any{}
+			}
+			if node.Bind == nil {
+				fields["bind"] = map[string]string{}
+			}
 		}
-		if dto.Asks(node.Kind) {
-			fields["workflow"] = p.Models[id]
+		if dto.HasModel(node.Kind) {
+			fields["workflow"], fields["source"] = p.Models[id], p.Sources[id]
 		}
 		out.Nodes[id] = fields
 	}
 	for id, workflow := range p.Workflows {
 		out.Workflows[id] = snapshotWorkflow(workflow)
+	}
+	out.Providers, out.Remote = p.Providers, &p.Remote
+	if out.Providers == nil {
+		out.Providers = map[string]map[string]any{}
 	}
 	return out
 }
@@ -242,7 +284,12 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	stored := storedPipeline{ID: row.ID, Title: row.Title, Version: row.Version, Doc: doc,
 		Workflows: map[string]registry.Workflow{}, Versions: map[string]int{}, Presets: map[string]map[string]any{},
-		SeedParams: map[string]string{}, Models: info.Models, Near: info.Near, Bounds: info.Bounds}
+		SeedParams: map[string]string{}, Models: map[string]string{}, Near: info.Near, Bounds: info.Bounds,
+		Listed: info.Models, Sources: map[string]map[string]string{}, Providers: map[string]map[string]any{},
+		Remote: doc.RemoteFilled(), Fan: info.Fan, Lists: info.Lists, Custom: map[string]registry.CustomNode{}}
+	if err := s.modelSources(ctx, tx, &stored); err != nil {
+		return dto.Batch{}, err
+	}
 	palette := s.palette()
 	for _, step := range stored.steps() {
 		node := doc.Nodes[step]
@@ -368,11 +415,22 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 		base = map[string]any{}
 	}
 	batchID := utility.NewID()
+	var director, remote any // API 1.15: the director's chat, the remote counters
+	for _, id := range slices.Sorted(maps.Keys(doc.Nodes)) {
+		if n := doc.Nodes[id]; n.IsDirector() {
+			director = dto.BatchDirector{Node: id, State: "idle", MaxWakes: n.MaxWakesOr()}
+		}
+	}
+	if stored.Remote.Enabled {
+		remote = dto.BatchRemote{MaxCalls: stored.Remote.MaxCalls, MaxTokens: stored.Remote.MaxTokens}
+	}
 	if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
 		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements, looks, bounds,
-		models) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`, batchID, caller.ID,
+		models, providers, egress, reserved, director, remote) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+		$14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`, batchID, caller.ID,
 		sessionID, title, first.ID, first.Title, first, base, stored.version(first.ID), row.ID, row.Title, row.Version,
-		collection, stored, lib, looks, stored.Bounds, stored.Models); err != nil {
+		collection, stored, lib, looks, stored.Bounds, stored.Listed, append([]string{}, slices.Sorted(maps.Keys(stored.Providers))...), info.Egress,
+		info.Reserved, director, remote); err != nil {
 		return dto.Batch{}, err
 	}
 	numbers := make([]int, len(rows))
@@ -398,11 +456,58 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	return getBatch(ctx, tx, batchID, false)
 }
 
+// modelSources fills where each model node runs (contracts/README.md, Model sources): a local ask workflow, the
+// built-in server-ask on a local server's host, or a remote provider (workflow `remote`, no run); the providers as
+// they are now (the batch calls them as at Submit); and the custom nodes' registrations.
+func (s *Service) modelSources(ctx context.Context, tx pgx.Tx, stored *storedPipeline) error {
+	providers, err := readProviders(ctx, tx, true)
+	if err != nil {
+		return err
+	}
+	for _, node := range slices.Sorted(maps.Keys(stored.Listed)) {
+		listed := stored.Listed[node]
+		where, rest, ok := strings.Cut(listed, ":")
+		if !ok {
+			stored.Models[node] = listed
+			stored.Sources[node] = map[string]string{"kind": "local", "workflow": listed}
+			continue
+		}
+		name, model, _ := strings.Cut(rest, "/")
+		at := slices.IndexFunc(providers, func(p providerRow) bool { return p.Name == name })
+		if at < 0 { // deleted since the rules read it (same transaction: never), kept for safety
+			return network.NewUnprocessableError(fmt.Sprintf("pipeline cannot run: %s: provider %s is gone", node, name), nil)
+		}
+		p := providers[at]
+		stored.Providers[name] = p.snapshot()
+		stored.Sources[node] = map[string]string{"kind": where, "provider": name, "model": model}
+		stored.Models[node] = "remote"
+		if where == "server" {
+			stored.Models[node], stored.Sources[node]["host"] = ServerAsk, deref(p.Host)
+		}
+	}
+	for id, n := range stored.Doc.Nodes {
+		if n.Kind == "custom" {
+			for _, c := range s.registry.Custom() {
+				if c.Name == n.CustomNode {
+					stored.Custom[id] = c
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ServerAsk is the built-in text workflow a local server's calls run as (pipelines' server executor publishes it).
+const ServerAsk = "server-ask"
+
 // askWorkflows adds every resolved ask workflow to the stored pipeline (as runnable reads it now) and checks a live
-// host for each (askHosts).
+// host for each (askHosts). A remote model has none: pipelines calls it, never as a run.
 func (s *Service) askWorkflows(ctx context.Context, tx pgx.Tx, stored *storedPipeline) error {
 	for _, node := range slices.Sorted(maps.Keys(stored.Models)) {
 		id := stored.Models[node]
+		if id == "remote" {
+			continue
+		}
 		if _, done := stored.Workflows[id]; !done {
 			workflow, version, err := s.runnable(ctx, tx, id)
 			if err != nil {
@@ -422,16 +527,29 @@ func (s *Service) askWorkflows(ctx context.Context, tx pgx.Tx, stored *storedPip
 func (s *Service) askHosts(stored storedPipeline) error {
 	for _, node := range slices.Sorted(maps.Keys(stored.Models)) {
 		id := stored.Models[node]
+		if id == "remote" {
+			continue
+		}
 		workflow := stored.Workflows[id]
 		nodes, detail := resolve(workflow, stored.askModel(node))
 		if detail != "" {
 			return network.NewUnprocessableError(fmt.Sprintf("%s: %s", node, detail), nil)
 		}
 		graph, _ := json.Marshal(nodes)
-		probe := model.Run{WorkflowID: id, Env: workflow.Env, Nodes: graph, WorkflowVersion: stored.version(id)}
+		probe := model.Run{WorkflowID: id, Env: workflow.Env, Nodes: graph, WorkflowVersion: stored.version(id),
+			PinHost: stored.pinHost(node)}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			return network.NewUnprocessableError(reason, nil)
 		}
+	}
+	return nil
+}
+
+// pinHost is the host a model node's server-ask runs must go to (its provider's), nil for any other source.
+func (p storedPipeline) pinHost(node string) *string {
+	if source := p.Sources[node]; source["kind"] == "server" {
+		host := source["host"]
+		return &host
 	}
 	return nil
 }
@@ -597,35 +715,8 @@ func pipelineRows(p storedPipeline, body *dto.BatchCreate, randomStart func() in
 			if seedKey != "" {
 				inputs[seedKey] = float64(start + int64(r))
 			}
-			for _, key := range slices.Sorted(maps.Keys(inputs)) {
-				typ, known := types[key]
-				if !known {
-					return nil, fmt.Sprintf("row %d: %s: not an input of this pipeline", i+1, key)
-				}
-				value, detail := check(inputParams[typ], inputs[key])
-				if whole, ok := value.(int64); ok {
-					value = float64(whole) // as JSON decodes it, like every other row value
-				}
-				if detail == "" && value == nil { // a seed's (or an image's) null: drawn below, or required
-					delete(inputs, key)
-					continue
-				}
-				if detail == "" && typ == "Seed" && value.(float64) < 0 {
-					detail = "must be a seed from 0"
-				}
-				if detail != "" {
-					return nil, fmt.Sprintf("row %d: %s", i+1, join(key, detail))
-				}
-				inputs[key] = value
-			}
-			for _, key := range slices.Sorted(maps.Keys(types)) {
-				if _, given := inputs[key]; given {
-					continue
-				}
-				if types[key] != "Seed" {
-					return nil, fmt.Sprintf("row %d: %s: a value is required", i+1, key)
-				}
-				inputs[key] = float64(randomStart())
+			if detail := typedRow(types, inputs, randomStart); detail != "" {
+				return nil, fmt.Sprintf("row %d: %s", i+1, detail)
 			}
 			rows = append(rows, inputs)
 		}
@@ -633,48 +724,139 @@ func pipelineRows(p storedPipeline, body *dto.BatchCreate, randomStart func() in
 	return rows, ""
 }
 
+// inputTypes is the pipeline's columns (`<inputs node>.<name>`) → their types.
+func (p storedPipeline) inputTypes() map[string]string {
+	root, out := p.root(), map[string]string{}
+	for _, column := range p.Doc.Nodes[root].Columns {
+		out[root+"."+column.Name] = column.Type
+	}
+	return out
+}
+
+// typedRow checks one row's values in place by type (an Image as {take_id}, whole numbers as JSON decodes them), every
+// input given, a Seed drawn when missing; the detail names the input.
+func typedRow(types map[string]string, inputs map[string]any, randomStart func() int64) string {
+	for _, key := range slices.Sorted(maps.Keys(inputs)) {
+		typ, known := types[key]
+		if !known {
+			return key + ": not an input of this pipeline"
+		}
+		value, detail := check(inputParams[typ], inputs[key])
+		if whole, ok := value.(int64); ok {
+			value = float64(whole) // as JSON decodes it, like every other row value
+		}
+		if detail == "" && value == nil { // a seed's (or an image's) null: drawn below, or required
+			delete(inputs, key)
+			continue
+		}
+		if detail == "" && typ == "Seed" && value.(float64) < 0 {
+			detail = "must be a seed from 0"
+		}
+		if detail != "" {
+			return join(key, detail)
+		}
+		inputs[key] = value
+	}
+	for _, key := range slices.Sorted(maps.Keys(types)) {
+		if _, given := inputs[key]; given {
+			continue
+		}
+		if types[key] != "Seed" {
+			return key + ": a value is required"
+		}
+		inputs[key] = float64(randomStart())
+	}
+	return ""
+}
+
 // ------------------------------------------------------------------ studio.runs.create for a pipeline step
 
-// pipelineKey is a pipeline batch's idempotency key, parsed: <batch>:<row>:<attempt>:<step>:<visit>:<seed index>.
+// pipelineKey is a pipeline batch's idempotency key, parsed: <batch>:<row>:<attempt>:<node>:<visit>:<branch>, the
+// branch a seed index (`<i>`), a fanned-out step's `<item>-<i>` (API 1.15), or an agent turn's `t<turn>` and its
+// re-ask's `t<turn>r` (API 1.15; then Index is -1).
 type pipelineKey struct {
 	Attempt, Visit, Index int
 	Step                  string
+	Item                  int  // a fanned-out step's branch, -1 otherwise
+	Turn                  int  // an agent's turn from 0, -1 otherwise
+	ReAsk                 bool // an agent turn's re-ask
 }
 
-// parsePipelineKey reads a key runsCreateKey already matched; ok false when the branch is not a seed index.
+// parsePipelineKey reads a key runsCreateKey already matched; ok false when the branch is none of those forms.
 func parsePipelineKey(key string) (pipelineKey, bool) {
 	parts := strings.Split(key, ":")
 	attempt, _ := strconv.Atoi(parts[2])
 	visit, _ := strconv.Atoi(parts[4])
-	index, err := strconv.Atoi(parts[5])
-	return pipelineKey{Attempt: attempt, Step: parts[3], Visit: visit, Index: index}, err == nil && index >= 0
+	out := pipelineKey{Attempt: attempt, Step: parts[3], Visit: visit, Index: -1, Item: -1, Turn: -1}
+	number := func(text string) (int, bool) {
+		n, err := strconv.Atoi(text)
+		return n, err == nil && n >= 0 && strconv.Itoa(n) == text
+	}
+	branch := parts[5]
+	if turn, ok := strings.CutPrefix(branch, "t"); ok {
+		turn, out.ReAsk = strings.CutSuffix(turn, "r")
+		n, ok := number(turn)
+		out.Turn = n
+		return out, ok
+	}
+	if item, index, fanned := strings.Cut(branch, "-"); fanned {
+		n, ok1 := number(item)
+		i, ok2 := number(index)
+		out.Item, out.Index = n, i
+		return out, ok1 && ok2
+	}
+	n, ok := number(branch)
+	out.Index = n
+	return out, ok
 }
 
 // pipelineStepRun picks what a pipeline batch's run is made from: the step the key names must be one of the
-// snapshot's, its workflow the request's, the attempt the row's current one and the seed index below its seeds. The
-// inputs are the request's (pipelines fills the binds from earlier steps), resolved against that workflow's snapshot.
+// snapshot's, its workflow the request's, the attempt the row's current one and the seed index below its seeds (a
+// fanned-out step's item below its list max). The inputs are the request's (pipelines fills the binds from earlier
+// steps), resolved against that workflow's snapshot.
 //
 // A judge, write or decide node's ask run (API 1.14): its workflow must be the node's resolved ask workflow, the branch
-// 0 or 1 (the re-ask), the visit within the LLM-call bound.
+// 0 or 1 (the re-ask), the visit within the LLM-call bound. An agent's turn (API 1.15): branch t<turn>[r], the turn
+// below its max_turns; row 0 is the director's chat (attempt 1, loop = the wake, below max_wakes). A local server's
+// run must name the node's provider and model (ask.provider, ask.model); a remote model has no run.
 func pipelineStepRun(p storedPipeline, req *message.RunsCreate, attempt int) (registry.Workflow, string) {
 	key, ok := parsePipelineKey(req.IdempotencyKey)
 	node, known := p.Doc.Nodes[key.Step]
-	if known && dto.Asks(node.Kind) {
+	if req.Row == 0 && (!known || !node.IsDirector()) {
+		return registry.Workflow{}, "row 0 is the director's chat: idempotency_key must name the director"
+	}
+	if known && dto.HasModel(node.Kind) {
+		caps := node.Caps.Filled()
 		switch {
-		case !ok || key.Index > 1:
+		case !ok || (node.Kind == "agent") != (key.Turn >= 0):
+			return registry.Workflow{}, "idempotency_key's branch must be 0 or 1 (a judge, write or decide), or t<turn>[r] (an agent)"
+		case node.Kind != "agent" && key.Index > 1:
 			return registry.Workflow{}, "idempotency_key's branch must be 0, or 1 for the re-ask"
+		case node.Kind == "agent" && key.Turn >= caps.MaxTurns:
+			return registry.Workflow{}, fmt.Sprintf("idempotency_key's turn must be below %s's %d turns", key.Step, caps.MaxTurns)
+		case p.Models[key.Step] == "remote":
+			return registry.Workflow{}, fmt.Sprintf("%s calls a remote model: pipelines calls it, never as a run", key.Step)
 		case p.Models[key.Step] != req.WorkflowID:
 			return registry.Workflow{}, fmt.Sprintf("workflow_id must be %s, the ask workflow of %s", p.Models[key.Step], key.Step)
 		case key.Attempt != attempt:
 			return registry.Workflow{}, fmt.Sprintf("idempotency_key must carry the row's attempt %d", attempt)
-		case key.Visit >= MaxPipelineCalls:
+		case req.Row == 0 && key.Visit >= node.MaxWakesOr():
+			return registry.Workflow{}, "idempotency_key's wake is beyond the director's max_wakes"
+		case req.Row > 0 && key.Visit >= MaxPipelineCalls:
 			return registry.Workflow{}, "idempotency_key's visit is beyond any cap"
+		}
+		if source := p.Sources[key.Step]; source["kind"] == "server" &&
+			(req.Inputs["ask.provider"] != source["provider"] || req.Inputs["ask.model"] != source["model"]) {
+			return registry.Workflow{}, fmt.Sprintf("ask.provider and ask.model must be %s and %s, %s's", source["provider"],
+				source["model"], key.Step)
 		}
 		return p.Workflows[req.WorkflowID], ""
 	}
+	_, fanned := p.Fan[key.Step]
 	switch {
-	case !ok || !known || node.Kind != "step" || key.Index >= node.SeedsOr1():
-		return registry.Workflow{}, "idempotency_key must name a step of this pipeline and a seed index below its seeds"
+	case !ok || !known || node.Kind != "step" || key.Turn >= 0 || key.Index >= node.SeedsOr1() || fanned != (key.Item >= 0) ||
+		(fanned && key.Item >= p.Lists[p.Fan[key.Step]]):
+		return registry.Workflow{}, "idempotency_key must name a step of this pipeline, a seed index below its seeds and, for a fan-out, an item below its max"
 	case node.Workflow != req.WorkflowID:
 		return registry.Workflow{}, fmt.Sprintf("workflow_id must be %s, the workflow of step %s", node.Workflow, key.Step)
 	case key.Attempt != attempt:

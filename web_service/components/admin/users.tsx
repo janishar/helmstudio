@@ -1,6 +1,7 @@
 "use client";
 // Admin > Users: every account, add one, set roles, reset a password, disable or enable. The root admin's row is
 // locked: its roles, password and state come from ADMIN_EMAIL / ADMIN_PASSWORD in auth_service's .env.
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { useUser } from "@/components/shell";
@@ -60,17 +61,7 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
           <div className="grow" />
           <span className="tag tag-accent">Signed in as root admin</span>
         </div>
-        {/* the mock's Hosts and API keys tabs are left out until their backends exist */}
-        <div role="tablist" aria-label="Admin sections" className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            role="tab"
-            aria-selected="true"
-            className="chip bg-t1 font-semibold text-panel"
-          >
-            Users
-          </button>
-        </div>
+        <AdminTabs current="users" />
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
         <div className="panel min-h-0 overflow-auto px-2 py-1.5" aria-busy={!users && !error}>
           <table className="w-full min-w-[760px] border-collapse text-[13px]">
@@ -107,6 +98,30 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
       </main>
       <AddUser onAdded={(u) => setUsers((list) => [u, ...(list ?? [])])} />
     </>
+  );
+}
+
+/** The Admin sections (docs/mock/Users.dc.html, Providers.dc.html): Users and Model providers; the mock's Hosts and
+ * API keys tabs are left out until their backends exist. */
+export function AdminTabs({ current }: { current: "users" | "providers" }) {
+  const tabs = [
+    ["users", "Users", "/admin"],
+    ["providers", "Model providers", "/admin?tab=providers"],
+  ] as const;
+  return (
+    <div role="tablist" aria-label="Admin sections" className="flex flex-wrap gap-2">
+      {tabs.map(([id, label, href]) => (
+        <Link
+          key={id}
+          href={href}
+          role="tab"
+          aria-selected={current === id}
+          className={`chip ${current === id ? "bg-t1 font-semibold text-panel" : "bevel"}`}
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
   );
 }
 

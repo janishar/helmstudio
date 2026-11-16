@@ -56,6 +56,8 @@ def test_hosts_data_shape(api):
         )
         assert used == pytest.approx(held, abs=0.1), (name, used, held)
     fake = by_host["fake"]
+    # API 1.15: pipelines' server executor reports env server on the fake host too (its servers' memory)
+    fake = [e for e in fake if e["env"] != "server"]
     assert [e["env"] for e in fake] == ["fake"] and "host_memory" not in fake[0], fake
 
 
