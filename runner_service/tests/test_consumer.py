@@ -293,6 +293,9 @@ async def test_after_run_unload_empties_the_residency(tmp_path, monkeypatch):
     c, _ = qwen_consumer(q, js, after_run="unload")
     await c.handle(FakeMsg(qwen_command(seed=3), js))
     assert kinds(js)[-1] == "succeeded" and not c.residency.entries
+    assert (
+        len(c.cache) == 0
+    )  # cached node results go too: the same run again loads its components again
 
 
 async def test_a_run_that_does_not_fit_fails_with_numbers(tmp_path, monkeypatch):
@@ -458,23 +461,20 @@ async def test_runner_unload_frees_the_named_components_and_replies_what_remains
     }
     request = {"for_env": "torch", "run_id": RUN, "components": [
         name | {"loras": [{"lora_id": LORA, "strength": 0.8}]},
-        {"component": "vae", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16"},  # pinned
+        {"component": "vae", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16"},  # pinned: goes too
         name | {"precision": "int4"},  # not held
     ]}  # fmt: skip
     assert schemas.errors(UNLOAD + "request", request) == []
     reply = await main.unload_reply(c, c.host, request)
     assert schemas.errors(UNLOAD + "reply", reply) == []
-    assert reply["unloaded_gb"] == 19.4 and reply["freed"] == [request["components"][0]]
-    assert [(r["component"], r.get("loras")) for r in reply["resident"]] == [
-        ("transformer", None),
-        ("vae", None),
-    ]
+    assert reply["unloaded_gb"] == 20.4 and reply["freed"] == request["components"][:2]
+    assert [(r["component"], r.get("loras")) for r in reply["resident"]] == [("transformer", None)]
     assert reply["resident"] == json.loads(c.host.kv.data["fake.fake"])["resident"]
     assert not c.cache  # cached node results go too: the other env needs the memory
     again = await main.unload_reply(c, c.host, request)
-    assert again["unloaded_gb"] == 0 and again["freed"] == [] and len(again["resident"]) == 2
+    assert again["unloaded_gb"] == 0 and again["freed"] == [] and len(again["resident"]) == 1
     bad = await main.unload_reply(c, c.host, {"for_env": "torch", "components": []})
-    assert bad["code"] == "internal" and len(res.entries) == 2
+    assert bad["code"] == "internal" and len(res.entries) == 1
 
 
 async def test_budget_gb_caps_the_run_and_ends_with_it(tmp_path, monkeypatch):

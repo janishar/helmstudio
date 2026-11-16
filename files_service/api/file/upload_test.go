@@ -133,4 +133,15 @@ func TestLoraUpload(t *testing.T) {
 	if got := put(key, 5, "application/octet-stream", "hello"); got != 204 {
 		t.Fatalf("LoRA PUT: %d", got)
 	}
+	// an imported video (Import): video/mp4 up to 2 GiB on u/<owner>/imports/<id>.mp4 only
+	video := "u/" + owner + "/imports/" + id + ".mp4"
+	if got := put(video, MaxImportVideo+1, "video/mp4", ""); got != 403 {
+		t.Errorf("video over 2 GiB: %d", got)
+	}
+	if got := put("u/"+owner+"/uploads/"+id+".mp4", 5, "video/mp4", "hello"); got != 415 {
+		t.Errorf("video/mp4 outside imports: %d", got)
+	}
+	if got := put(video, 5, "video/mp4", "hello"); got != 204 {
+		t.Fatalf("import video PUT: %d", got)
+	}
 }

@@ -51,6 +51,7 @@ REGISTRY_KEYS = [
     "looks",
     "host",
     "custom",
+    "settings",
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
 # openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
 HTTP_SCHEMAS = [
@@ -65,6 +66,8 @@ HTTP_SCHEMAS = [
     "Decision", "DecisionList", "MemoryItem", "MemoryList", "MemoryCreate", "BatchAgain",
     "ChatMessage", "ChatPage", "ChatPost", "Provider", "ProviderPut", "ProviderList", "ProviderTest", "ModelSourceList",
     "CustomNodeList",
+    "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "HostPins", "HostUnload",
+    "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -1630,11 +1633,8 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
     counted = [x for x in entries if not (x[0] == env and x[1] in needs)]
     c = sum(x[2] for x in counted)
     own = sum(x[2] for x in counted if x[0] == env and x[1][0] == "(measured)")  # the run's own runner's excess
-    pinned = sum(x[2] for x in counted if x[3] and x[4])
-    if p + pinned > budget:
+    if p > budget:  # a pin never fails a run: pinned entries are victims too, the last ones (below)
         error = f"needs {p / 100:.1f} GB at its peak; host {host} has {budget / 100:.1f} GB"
-        if p <= budget:
-            error += f", {pinned / 100:.1f} GB of it pinned"
         return {"decision": "fail", "unload": {}, "budget_gb": None, "error": error}
     if running:
         return {"decision": "wait", "unload": {}, "budget_gb": None, "error": None}
@@ -1643,8 +1643,8 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
     if c + p <= budget:
         return released
     tier = lambda x: 0 if x[1][4] and (x[0], x[1]) not in referenced else 1  # an unreferenced baked set first
-    victims = sorted((x for x in counted if x[4] and not x[3]),
-                     key=lambda x: (tier(x), x[5] is not None, x[5] or 0, -x[2], x[0], x[1][:4]))
+    victims = sorted((x for x in counted if x[4]),  # pinned ones last: taken only when nothing else makes it fit
+                     key=lambda x: (x[3], tier(x), x[5] is not None, x[5] or 0, -x[2], x[0], x[1][:4]))
     unload: dict[str, list] = {}
     for x in victims:
         if c + p <= budget:
@@ -1744,7 +1744,7 @@ def simulate(fx: dict) -> dict:
         if got["decision"] == "fail":
             fails[pick["id"]] = got["error"]
         else:
-            assert got["decision"] != "wait", "nothing in a simulation is stale or pinned"
+            assert got["decision"] != "wait", "nothing in a simulation is stale"
             for env, ks in got["unload"].items():
                 unloads.append({"before": pick["id"], "env": env, "components": [k[0] for k in ks]})
                 for k in ks:

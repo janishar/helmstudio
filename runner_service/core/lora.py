@@ -303,7 +303,12 @@ class Library:
             known = {}
         files = sorted({*self.models.glob("loras/*.safetensors"), *self.models.glob("*/loras/*.safetensors")})  # fmt: skip
         ignore = [g for b in blocks.values() for g in b["ignore"]]
-        self.shared, self.files, self.entries, kept = {}, {}, [], {}
+        shared, files_, entries, kept = (
+            {},
+            {},
+            [],
+            {},
+        )  # swapped in at the end: a run may read them meanwhile
         for p in files:
             try:
                 tensors, meta = read_header(p, ignore)
@@ -318,14 +323,14 @@ class Library:
                 log.info("hashing shared LoRA %s (%.1f GB)", p, st.st_size / 2**30)
                 sha = sha256_file(p)
             kept[str(p)] = [*stamp, sha]
-            self.files[p] = sha
-            if sha in self.shared:
+            files_[p] = sha
+            if sha in shared:
                 continue  # the same file twice on this host is one LoRA
             # family detection: this runner's packs are one env, so the fake-last rule leaves name order
             fits = [f for f in sorted(blocks) if normalise(p.stem, tensors, blocks[f], f)["error"] is None]  # fmt: skip
             res = normalise(p.stem, tensors, _NO_BLOCK, "")  # style and rank need no family
-            self.shared[sha] = p
-            self.entries.append(
+            shared[sha] = p
+            entries.append(
                 {
                     "id": sha,
                     "name": p.stem[:80],
@@ -339,6 +344,7 @@ class Library:
                     ),
                 }
             )
+        self.shared, self.files, self.entries = shared, files_, entries
         try:
             self.dir.mkdir(parents=True, exist_ok=True)
             known_path.write_text(json.dumps(kept))

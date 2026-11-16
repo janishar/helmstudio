@@ -39,6 +39,8 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 const (
 	MaxUpload     = 52428800
 	MaxLoraUpload = 2147483648
+	// MaxImportVideo caps an imported video (contracts/README.md, Import: mp4 at most 2 GB)
+	MaxImportVideo = 2147483648
 )
 
 // uploadTypes are the content types an image upload may have.
@@ -47,11 +49,17 @@ var uploadTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/
 // loraKey is the only key shape a LoRA upload may have: u/<owner>/loras/<lora_id>.safetensors.
 var loraKey = regexp.MustCompile(`^u/[0-9a-f-]{36}/loras/[0-9a-f-]{36}\.safetensors$`)
 
+// importVideoKey is the only key shape a video upload may have: an imported take, u/<owner>/imports/<take_id>.mp4.
+var importVideoKey = regexp.MustCompile(`^u/[0-9a-f-]{36}/imports/[0-9a-f-]{36}\.mp4$`)
+
 // uploadLimit is the cap and the allowed content types of a key: a LoRA key takes application/octet-stream up to
-// 2 GiB, any other key an image up to 50 MB.
+// 2 GiB, an import's video key video/mp4 up to 2 GiB, any other key an image up to 50 MB.
 func uploadLimit(key string) (int64, func(string) bool) {
 	if loraKey.MatchString(key) {
 		return MaxLoraUpload, func(ct string) bool { return ct == "application/octet-stream" }
+	}
+	if importVideoKey.MatchString(key) {
+		return MaxImportVideo, func(ct string) bool { return ct == "video/mp4" }
 	}
 	return MaxUpload, func(ct string) bool { return uploadTypes[ct] }
 }

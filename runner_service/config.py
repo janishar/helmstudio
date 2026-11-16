@@ -6,7 +6,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 for _k, _v in list(os.environ.items()):
-    if _k.endswith("_FILE") and _v:
+    if (
+        _k.endswith("_FILE") and _v and _k != "RUNNER_HF_TOKEN_FILE"
+    ):  # the Hub token is read per job only
         os.environ[_k.removesuffix("_FILE")] = Path(_v).read_text().strip()
 
 VERSION = "0.3.0"
@@ -42,3 +44,11 @@ IDLE_UNLOAD_S = float(
 CACHE = Path(os.environ.get("RUNNER_CACHE", "~/.cache/helmstudio-runner")).expanduser()
 LORA_CACHE_GB = float(os.environ.get("RUNNER_LORA_CACHE_GB", "20"))
 PINS = {c for c in os.environ.get("RUNNER_PIN", "").split(",") if c}  # components keep_pinned keeps
+
+# model jobs (contracts/README.md "Models and model jobs"): the Hub (the fake hub in tests and the fake overlay) and
+# its token, a file read only when a gated repo is downloaded; absent = anonymous. Never logged or published.
+HF_ENDPOINT = (os.environ.get("HF_ENDPOINT") or "https://huggingface.co").rstrip("/")
+HF_TOKEN_FILE = Path(
+    os.environ.get("RUNNER_HF_TOKEN_FILE")
+    or Path(__file__).resolve().parent.parent / "deploy/secrets/hf_token"
+)

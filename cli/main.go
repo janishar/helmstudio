@@ -65,6 +65,15 @@ A prompt may mention your elements as @handle (@@ is a literal @): helm sends it
   helm providers                      (admin) local servers and remote providers; remote models on or off
   helm providers set <name> file.json | rm <name> | test <name> [--model m]   a ProviderPut file; keys are never sent
   helm hosts                          each host's shared memory (used / budget), its envs and what each holds
+  helm hosts pin|unpin <host> <env> <component> <model> <variant> <precision>   (admin) keep it loaded
+  helm hosts unload <host> (--all | --cached <env> | <env> <component> <model> <variant> <precision>)   (admin)
+  helm hosts after-run <host> unload|keep_warm|keep_pinned [--idle-min n] [--reserve-gb x]   (admin) every env of it
+  helm models                         every model variant: precisions, size, state per host
+  helm model download <model> --host <h> [--variant v] [--accept-licence]   (admin) a queued job; prints the job
+  helm model rm <model> --host <h> [--variant v]   (admin) delete its files there (no variant: every one)
+  helm keys list | new <client> | revoke <id>   (admin) application API keys; a new key is shown once
+  helm import <path> --user <email> [--dry-run] [--limit n]   (admin) an old helmstudio gallery (~/.helmstudio,
+             read only) into the user's gallery; idempotent; --dry-run only counts
   helm whoami
   helm logout
 
@@ -126,7 +135,19 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 	case "providers":
 		err = providersCmd(args[1:], stdout, stderr)
 	case "hosts":
-		err = hostsCmd(stdout)
+		if len(args) == 1 {
+			err = hostsCmd(stdout)
+		} else {
+			err = hostsAdminCmd(args[1:], stdout, stderr)
+		}
+	case "models":
+		err = modelsCmd(stdout)
+	case "model":
+		err = modelCmd(args[1:], stdout, stderr)
+	case "keys":
+		err = keysCmd(args[1:], stdout)
+	case "import":
+		err = importCmd(args[1:], stdout, stderr)
 	case "whoami":
 		err = whoami(stdout)
 	case "logout":
@@ -141,12 +162,27 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 	if errors.Is(err, flag.ErrHelp) {
 		return 2
 	}
+	var ee *exitErr
+	if errors.As(err, &ee) {
+		if ee.err != nil {
+			fmt.Fprintln(stderr, "helm:", ee.err)
+		}
+		return ee.code
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "helm:", err)
 		return 1
 	}
 	return 0
 }
+
+// exitErr ends helm with its code (and its message, when it has one).
+type exitErr struct {
+	code int
+	err  error
+}
+
+func (e *exitErr) Error() string { return fmt.Sprint(e.err) }
 
 func login(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)

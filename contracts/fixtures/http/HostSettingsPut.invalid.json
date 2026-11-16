@@ -1,0 +1,5 @@
+{
+  "after_run": "keep_warm",
+  "idle_unload_min": 10,
+  "reserve_gb": 12.3
+}

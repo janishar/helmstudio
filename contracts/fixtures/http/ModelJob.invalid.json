@@ -1,0 +1,33 @@
+{
+  "id": "5b2e8c41-7a3d-4f9e-b6c0-1d2e3f4a5b6c",
+  "kind": "download",
+  "host": "mac",
+  "env": "torch",
+  "model": "qwen-image-2.1",
+  "variant": "turbo",
+  "lora_id": null,
+  "title": "Qwen Image 2.1 · Turbo",
+  "state": "running",
+  "progress": {
+    "done_bytes": 25360000000,
+    "total_bytes": 40900000000,
+    "files_done": 3,
+    "files_total": 6,
+    "file": "transformer/diffusion_pytorch_model-00004-of-00005.safetensors",
+    "eta_s": 540
+  },
+  "failure": {
+    "class": "oops",
+    "detail": "x"
+  },
+  "result": null,
+  "keeps": [],
+  "licence": {
+    "id": "qwen-research",
+    "sha256": "9f2c1a7e5b3d4c6f8a0e1b2d3c4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f"
+  },
+  "requested_by": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "created_at": "2026-11-16T09:40:00Z",
+  "started_at": "2026-11-16T09:40:02Z",
+  "ended_at": null
+}

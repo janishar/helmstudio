@@ -101,11 +101,13 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
   );
 }
 
-/** The Admin sections (docs/mock/Users.dc.html, Providers.dc.html): Users and Model providers; the mock's Hosts and
- * API keys tabs are left out until their backends exist. */
-export function AdminTabs({ current }: { current: "users" | "providers" }) {
+/** The Admin sections, in the boards' order (docs/mock/Users.dc.html, Hosts.dc.html, ApiKeys.dc.html,
+ * Providers.dc.html). */
+export function AdminTabs({ current }: { current: "users" | "hosts" | "keys" | "providers" }) {
   const tabs = [
     ["users", "Users", "/admin"],
+    ["hosts", "Hosts", "/admin?tab=hosts"],
+    ["keys", "API keys", "/admin?tab=keys"],
     ["providers", "Model providers", "/admin?tab=providers"],
   ] as const;
   return (

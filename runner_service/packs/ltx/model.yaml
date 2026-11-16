@@ -25,8 +25,28 @@ model:
     default: int8
     enum: [int8, int4, bf16]
     help: "Quantized at load: int8 about 19 GB for the transformer, bf16 about 38 GB."
+media: [video, audio]
+licences:
+  ltx-2-community: {title: LTX-2 Community License, url: https://huggingface.co/Lightricks/LTX-2.5}
 variants:
-  distilled: {dir: ltx-2.5}
+  distilled:
+    dir: ltx-2.5
+    title: Distilled
+    source:
+      repo: Lightricks/LTX-2.5
+      revision: 5e6e71018ee1756ed329b697a7b4aedc934dfce9
+      allow_patterns:
+        - diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors
+        - text_encoders/gemma4-12b-with-proj-ltx-2.5-bf16.safetensors
+        - latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors
+        - vae/ltx-2.5-video-vae-conv-bf16.safetensors
+        - vae/ltx-2.5-audio-vae-bf16.safetensors
+        - model_patches/ltx-2.5-duration-head-bf16.safetensors
+        - loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors
+      licence: ltx-2-community
+      must_accept: true
+      gated: false
+      bytes: 79998697238
 components:
   # Gemma 4 12B tower (`model.*` of the text encoder file): ~12.7 GB at int8, ~23 GB at bf16
   text_encoder:

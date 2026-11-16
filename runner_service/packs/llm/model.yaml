@@ -19,8 +19,15 @@ model:
   precision:
     label: Precision
     help: "Stored 4-bit; nothing is quantized at load."
+licences:
+  apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
 variants:
-  4bit: {dir: Qwen3.8-27B-4bit}
+  4bit:
+    dir: Qwen3.8-27B-4bit
+    title: 4-bit
+    source: {repo: mlx-community/Qwen3.8-27B-4bit, revision: b935172e4bb5dcd0543774a34748fb92422e3027,
+             allow_patterns: ["*.safetensors", "*.json", "*.jinja"],
+             licence: apache-2.0, must_accept: false, gated: false, bytes: 16074309358}
 components:
   model: {files: "*.safetensors", dtype: stored, precision: [int4]}   # loaded whole by mlx-vlm (mlx.py)
 stages:

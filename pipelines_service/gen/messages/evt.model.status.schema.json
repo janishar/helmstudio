@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.model.status.schema.json",
+  "title": "runner → studio: a model job's lifecycle",
+  "description": "From API 1.16. Subject evt.model.<host>.status (stream EVT), Nats-Msg-Id <job_id>:<delivery>:<seq>. `running` when the runner starts the job (each delivery), then one terminal status. The projector (durable studio-models, filter evt.model.>) dedupes on (job_id, delivery, seq) and ignores every event of a job that is already terminal.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.model.status"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the model job id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "delivery",
+        "status"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq",
+          "description": "per delivery, from 1, over status and progress"
+        },
+        "delivery": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the command's JetStream delivery count (1, or more after a runner restart)"
+        },
+        "status": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "failure": {
+          "type": "object",
+          "required": [
+            "class",
+            "detail"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "class": {
+              "enum": [
+                "not_found",
+                "gated",
+                "licence",
+                "disk_full",
+                "hash_mismatch",
+                "network",
+                "in_use",
+                "not_downloadable",
+                "internal"
+              ]
+            },
+            "detail": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "one line for the admin (contracts/README.md, Model jobs: failures); never a token, a signed URL or a stack trace"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "succeeded: what changed on disk",
+          "properties": {
+            "bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "download: bytes fetched by this job (resumed bytes from an earlier one not counted)"
+            },
+            "files": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "download: files written; delete: files removed"
+            },
+            "freed_bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "delete, lora_delete: bytes removed"
+            },
+            "reused": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "description": "download: shared components already on the host with matching hashes, not fetched"
+            },
+            "separate": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "description": "download: shared components whose hashes differed from the owner's, fetched into the variant's own folder"
+            },
+            "kept": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              },
+              "description": "delete: shared components kept for another present variant"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "failure"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "failure"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

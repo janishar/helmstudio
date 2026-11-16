@@ -1,0 +1,7 @@
+{
+  "for_env": "mlx",
+  "by": "admin",
+  "components": [
+    {"component": "transformer", "model": "ltx-2.5", "variant": "distilled", "precision": "int8"}
+  ]
+}

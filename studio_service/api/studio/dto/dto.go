@@ -126,6 +126,16 @@ type RunOutput struct {
 	Video *gallery.VideoInfo `json:"video,omitempty"`
 }
 
+// PinnedUnload is one pinned entry a queued run's admission would unload (Run.unloads_pinned).
+type PinnedUnload struct {
+	Env       string  `json:"env"`
+	Component string  `json:"component"`
+	Model     string  `json:"model"`
+	Variant   string  `json:"variant"`
+	Precision string  `json:"precision"`
+	GB        float64 `json:"gb"`
+}
+
 // Run is one run of a workflow.
 type Run struct {
 	ID         string         `json:"id"`
@@ -140,12 +150,14 @@ type Run struct {
 	Lane       string         `json:"lane"`
 	Attempt    int            `json:"attempt"`
 	Position   *int           `json:"position,omitempty"` // only while queued
-	Resolved   map[string]any `json:"resolved,omitempty"` // values the runner chose (a random seed), from succeeded
-	CreatedAt  time.Time      `json:"created_at"`
-	StartedAt  *time.Time     `json:"started_at"`
-	FinishedAt *time.Time     `json:"finished_at"`
-	BatchID    *string        `json:"batch_id,omitempty"`
-	BatchRow   *int           `json:"batch_row,omitempty"`
+	// only while queued: the pinned entries admitting it on Host now would unload (last-resort victims)
+	UnloadsPinned []PinnedUnload `json:"unloads_pinned,omitempty"`
+	Resolved      map[string]any `json:"resolved,omitempty"` // values the runner chose (a random seed), from succeeded
+	CreatedAt     time.Time      `json:"created_at"`
+	StartedAt     *time.Time     `json:"started_at"`
+	FinishedAt    *time.Time     `json:"finished_at"`
+	BatchID       *string        `json:"batch_id,omitempty"`
+	BatchRow      *int           `json:"batch_row,omitempty"`
 	// a user workflow: the version it ran
 	WorkflowVersion *int `json:"workflow_version,omitempty"`
 	// the looks it was asked with, as requested
@@ -192,6 +204,9 @@ type Host struct {
 	// the host's shared budget and what all its envs hold (the same on each of its envs); nil: no key reports memory
 	HostMemory *registry.Memory    `json:"host_memory,omitempty"`
 	Resident   []registry.Resident `json:"resident,omitempty"`
+	CachedGB   *float64            `json:"cached_gb,omitempty"` // API 1.16
+	Machine    *registry.Machine   `json:"machine,omitempty"`
+	Admin      *HostAdmin          `json:"admin,omitempty"` // admins only
 }
 
 // HostList is every runner, by key.

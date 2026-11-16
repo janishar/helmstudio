@@ -1,0 +1,31 @@
+{
+  "id": "9b2f4d6a-1c3e-4a5b-8c7d-6e5f4a3b2c1d",
+  "kind": "image",
+  "source": "import",
+  "title": "fox reference 1",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/9b2f4d6a-1c3e-4a5b-8c7d-6e5f4a3b2c1d.jpg?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/9b2f4d6a-1c3e-4a5b-8c7d-6e5f4a3b2c1d.jpg?exp=1767225600&sig=ab12",
+  "content_type": "image/jpeg",
+  "width": 1024,
+  "height": 1365,
+  "bytes": 48213,
+  "created_at": "2025-09-12T18:04:11Z",
+  "starred": true,
+  "session_id": null,
+  "run_id": null,
+  "made_with": null,
+  "parents": [],
+  "legacy": {
+    "settings": {
+      "studio": "iris-studio",
+      "old_id": "01JBX9Q4Z7K3M2N8P5R6S1T0VW",
+      "params": {
+        "prompt": "a quiet harbour at dawn",
+        "seed": 42,
+        "steps": 4,
+        "checkpoint": "flux-2-klein-4b"
+      }
+    },
+    "imported_at": "2026-11-16T10:00:00Z"
+  }
+}

@@ -183,6 +183,34 @@ type Host struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 	Memory    *Memory    `json:"memory,omitempty"`
 	Resident  []Resident `json:"resident,omitempty"`
+	// API 1.16: the models root's volume, the machine, whether a Hub token file exists, the residency settings in effect
+	ModelsDisk *ModelsDisk `json:"models_disk,omitempty"`
+	Machine    *Machine    `json:"machine,omitempty"`
+	HubToken   bool        `json:"hub_token,omitempty"`
+	Policy     *Policy     `json:"policy,omitempty"`
+}
+
+// ModelsDisk is the volume holding a runner's models root (API 1.16).
+type ModelsDisk struct {
+	Root       string `json:"root"`
+	FreeBytes  int64  `json:"free_bytes"`
+	TotalBytes int64  `json:"total_bytes"`
+}
+
+// Machine is what a runner runs on (API 1.16).
+type Machine struct {
+	OS        string  `json:"os"`
+	Accel     string  `json:"accel"`
+	Packaging string  `json:"packaging"`
+	RAMGB     float64 `json:"ram_gb"`
+}
+
+// Policy is the residency settings a runner applies now (API 1.16): host_settings, else its env defaults.
+type Policy struct {
+	AfterRun        string  `json:"after_run"`
+	IdleUnloadMin   int     `json:"idle_unload_min"`
+	ReserveGB       float64 `json:"reserve_gb"`
+	SettingsVersion *int    `json:"settings_version"`
 }
 
 // Memory is a runner's model memory: what it may use and uses now.
@@ -203,6 +231,8 @@ type Resident struct {
 	LastUsed *time.Time `json:"last_used,omitempty"`
 	// a component with LoRAs baked in: those LoRAs in order (absent = the plain component)
 	Loras []ResidentLora `json:"loras,omitempty"`
+	// API 1.16, with Pinned: in_use (the running run uses it) or pin (a pin of the host)
+	PinnedWhy string `json:"pinned_why,omitempty"`
 }
 
 // ResidentLora is a LoRA baked into a resident component. The runner always fills every field; GET /hosts nulls the
@@ -267,13 +297,63 @@ type Model struct {
 	Title    string     `json:"title"`
 	Variants []Variant  `json:"variants"` // absent for a model without variants (echo)
 	Lora     *LoraBlock `json:"lora,omitempty"`
+	Media    []string   `json:"media,omitempty"`    // API 1.16
+	Runtimes []Runtime  `json:"runtimes,omitempty"` // API 1.16: every runtime of the pack
+}
+
+// Runtime is one runtime of a model's pack and its env.
+type Runtime struct {
+	Runtime string `json:"runtime"`
+	Env     string `json:"env"`
 }
 
 // Variant is one variant of a model on a host.
 type Variant struct {
 	ID       string       `json:"id"`
-	Presence string       `json:"presence"`         // present | missing
+	Presence string       `json:"presence"`         // present | partial | missing | mismatch
 	Memory   []MemoryPlan `json:"memory,omitempty"` // per precision: what a run holds (the hand-over)
+	// API 1.16 (the Models screen and model jobs)
+	Title      string      `json:"title,omitempty"`
+	Bytes      *int64      `json:"bytes,omitempty"`
+	Precisions []string    `json:"precisions,omitempty"`
+	Dir        string      `json:"dir,omitempty"`
+	Source     *Source     `json:"source,omitempty"`
+	Components []Component `json:"components,omitempty"`
+	Mismatch   []string    `json:"mismatch,omitempty"`
+}
+
+// Source is where a download fetches a variant's own files; nil: not downloadable.
+type Source struct {
+	Repo       string `json:"repo"`
+	Revision   string `json:"revision"`
+	Licence    string `json:"licence"`
+	MustAccept bool   `json:"must_accept"`
+	Gated      bool   `json:"gated"`
+	Bytes      *int64 `json:"bytes,omitempty"`
+}
+
+// Component is one weight component a variant loads: from its own folder or its owner variant's.
+type Component struct {
+	Component   string   `json:"component"`
+	FromVariant string   `json:"from_variant"`
+	Precisions  []string `json:"precisions"`
+	Bytes       *int64   `json:"bytes,omitempty"`
+	Separate    bool     `json:"separate,omitempty"`
+}
+
+// Licence is one licence text a models key publishes (API 1.16).
+type Licence struct {
+	ID    string  `json:"id"`
+	Title string  `json:"title"`
+	URL   *string `json:"url"`
+	Text  string  `json:"text"`
+}
+
+// Published is what one runner's registry keys say about weights: its models, their licences and its shared LoRAs.
+type Published struct {
+	Models   []Model
+	Licences []Licence
+	Loras    []SharedLora
 }
 
 // MemoryPlan is what a run of a variant loaded at Precision holds: its planned peak and the components it loads, in
@@ -344,6 +424,7 @@ type Registry struct {
 	nodesAt   map[string]time.Time     // "<host>.<env>" → when its nodes were published
 	workflows map[string][]Workflow    // "<host>.<env>" → its workflows (without node schemas)
 	models    map[string][]Model       // "<host>.<env>" → the models present there
+	licences  map[string][]Licence     // "<host>.<env>" → the licences its models key publishes (API 1.16)
 	loras     map[string][]SharedLora  // "<host>.<env>" → the shared LoRAs on that host
 	looks     map[string][]StarterLook // "<host>.<env>" → the starter looks of its packs
 	looksAt   map[string]time.Time     // "<host>.<env>" → when its looks were published
@@ -460,15 +541,18 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 	case "models":
 		if value == nil {
 			delete(r.models, source)
+			delete(r.licences, source)
 			return nil
 		}
 		var parsed struct {
-			Models []Model `json:"models"`
+			Models   []Model   `json:"models"`
+			Licences []Licence `json:"licences"`
 		}
 		if err := json.Unmarshal(value, &parsed); err != nil {
 			return err
 		}
 		set(&r.models, source, parsed.Models)
+		set(&r.licences, source, parsed.Licences)
 	case "looks":
 		if value == nil {
 			delete(r.looks, source)
@@ -670,6 +754,22 @@ func (r *Registry) Looks(now time.Time) map[string]LiveLook {
 					live.Loras[i].LoraID = entry.Loras[at].LoraID
 				}
 			}
+		}
+	}
+	return out
+}
+
+// Published returns what every runner publishes about weights, by "<host>.<env>" (live or not).
+func (r *Registry) Published() map[string]Published {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := map[string]Published{}
+	for source, models := range r.models {
+		out[source] = Published{Models: models, Licences: r.licences[source], Loras: r.loras[source]}
+	}
+	for source, loras := range r.loras {
+		if _, seen := out[source]; !seen {
+			out[source] = Published{Loras: loras}
 		}
 	}
 	return out

@@ -128,6 +128,7 @@ func Run() error {
 			return reply, err
 		},
 	}
+	module.purge, module.putSettings = messaging.NatsPurge(client), messaging.NatsKVPut(client, "host_settings")
 	if module.store, err = objectStore(ctx, env); err != nil {
 		return err
 	}
@@ -169,6 +170,16 @@ func Run() error {
 			log.Printf("take backfill: %v", err)
 		} else if made > 0 {
 			log.Printf("take backfill: %d run outputs became takes", made)
+		}
+	})
+	modelEvents := &micro.NatsJetStreamGroup{}
+	projector.MountModels(modelEvents)
+	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ModelsConsumer, modelEvents) })
+	workers.Go(func() { studio.RunModelJobs(ctx, pool, runners) })
+	workers.Go(func() {
+		// KV host_settings is a copy of studio's table: written at every start (API 1.16)
+		if err := module.settings.PublishSettings(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("host settings: %v", err)
 		}
 	})
 	workers.Go(func() { messaging.Relay(ctx, pool, messaging.NatsJetStreamPublisher(client)) })

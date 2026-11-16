@@ -1,0 +1,13 @@
+{
+  "host": "mac",
+  "requests": [
+    {
+      "env": "mlx",
+      "state": "after_run"
+    },
+    {
+      "env": "torch",
+      "state": "asked"
+    }
+  ]
+}

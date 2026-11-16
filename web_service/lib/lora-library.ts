@@ -9,6 +9,7 @@ type Lora = S<"Lora">;
 
 // ponytail: like lib/library.ts, a change in another tab shows here only after a reload (the picker reloads on open)
 let items: Lora[] | null = null;
+let usage: S<"LoraUsage"> | null = null;
 let loading: Promise<void> | null = null;
 let failed = "";
 let owner: string | null = null;
@@ -19,6 +20,7 @@ function ownedBy(id: string | null) {
   if (id === owner) return;
   owner = id;
   items = null;
+  usage = null;
   loading = null;
   failed = "";
   generation++;
@@ -31,6 +33,7 @@ export function reloadLoras(): Promise<void> {
     .then((l) => {
       if (mine !== generation) return;
       items = l.loras;
+      usage = l.usage ?? null;
       failed = "";
     })
     .catch((e) => {
@@ -68,6 +71,9 @@ export function useLoras(): Lora[] | null {
   }, [id]);
   return items;
 }
+
+/** The caller's own LoRAs against the quota, from the last read (null before it, or from an older server). */
+export const lorasUsage = () => usage;
 
 /** Why the last read failed ("" when it did not). */
 export const lorasError = () => failed;

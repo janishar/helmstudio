@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.model.progress.schema.json",
+  "title": "runner → studio: a model job's progress",
+  "description": "From API 1.16. Subject evt.model.<host>.progress (stream EVT), Nats-Msg-Id <job_id>:<delivery>:<seq>. A download sends one when each file starts and ends, and at most every 2 s between (absolute counts: a lost event loses nothing). A delete sends none.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.model.progress"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the model job id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "delivery",
+        "done_bytes",
+        "total_bytes",
+        "files_done",
+        "files_total"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "delivery": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "done_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "bytes of the plan on disk now, resumed ones included"
+        },
+        "total_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "the plan's size from the Hub's file list (shared components reused not counted); null until listed"
+        },
+        "files_done": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_total": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "file": {
+          "type": "string",
+          "maxLength": 400,
+          "description": "the repo path being fetched now"
+        },
+        "eta_s": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

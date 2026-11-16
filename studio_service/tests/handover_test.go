@@ -212,22 +212,39 @@ func TestHandoverBatchRowsOfTwoEnvs(t *testing.T) {
 	}
 }
 
-// A run larger than the host fails at once with its numbers, never sent.
-func TestHandoverTooBig(t *testing.T) {
+// A pin never fails or holds a run (plan 03-runtime 6.2): the queued run says first which pinned entries it would
+// unload (unloads_pinned), then the pinned transformer is asked last, after every unpinned entry.
+func TestHandoverPinnedLastResort(t *testing.T) {
 	e := setup(t)
 	e.twoEnvs()
 	pinned := slices.Clone(qwenResident)
 	pinned[1] = map[string]any{"component": "transformer", "model": "qwen-image-2.1", "variant": "turbo", "precision": "int8",
-		"gb": 7.4, "pinned": true}
-	e.mac("torch", pinned) // RUNNER_PIN
+		"gb": 7.4, "pinned": true, "pinned_why": "pin"}
+	e.mac("torch", pinned)
 	mlx, _ := e.start(userA, "ltx-text-to-video", nil)
-	if got := e.gatePass(studio.NewDispatcher(e.pool, e.registry, nil, nil), time.Now()); len(got) != 0 {
-		t.Fatal(got)
+	run := e.call(userA, "GET", "/v1/studio/runs/"+mlx, nil, 200)
+	want := []any{map[string]any{"env": "torch", "component": "transformer", "model": "qwen-image-2.1", "variant": "turbo",
+		"precision": "int8", "gb": 7.4}}
+	if b, _ := json.Marshal(run["unloads_pinned"]); run["status"] != "queued" || string(b) != mustJSON(want) {
+		t.Fatal("says so first", run)
 	}
-	if run := e.call(userA, "GET", "/v1/studio/runs/"+mlx, nil, 200); run["status"] != "failed" ||
-		run["error"] != "needs 45.9 GB at its peak; host mac has 48.0 GB, 7.4 GB of it pinned" {
-		t.Fatal(run)
+	fake := &unloads{reply: `{"error": "a run is in progress", "code": "busy"}`}
+	d := studio.NewDispatcher(e.pool, e.registry, nil, nil)
+	d.Unload = fake.request
+	if got := e.gatePass(d, time.Now()); len(got) != 0 || len(fake.asked) != 1 || fake.asked[0] != `runner.unload.mac.torch {"for_env":"mlx","run_id":"`+mlx+`","components":[`+
+		`{"component":"text_encoder","model":"qwen-image-2.1","variant":"base","precision":"int8"},`+
+		`{"component":"vae","model":"qwen-image-2.1","variant":"base","precision":"bf16"},`+
+		`{"component":"transformer","model":"qwen-image-2.1","variant":"turbo","precision":"int8"}]}` {
+		t.Fatal(got, fake.asked)
 	}
+	if run := e.call(userA, "GET", "/v1/studio/runs/"+mlx, nil, 200); run["status"] != "queued" {
+		t.Fatal("waits for the unload, never fails", run)
+	}
+}
+
+func mustJSON(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 // GET /hosts: every env of a host carries host_memory (the smallest budget, what all its envs hold) and each resident

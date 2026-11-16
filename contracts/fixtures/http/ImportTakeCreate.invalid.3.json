@@ -1,0 +1,24 @@
+{
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "key": "helmstudio:01JBX9Q4Z7K3M2N8P5R6S1T0VW",
+  "kind": "image",
+  "filename": "a quiet harbour at dawn.png",
+  "content_type": "image/png",
+  "bytes": 60000000,
+  "width": 1024,
+  "height": 1024,
+  "created_at": "2025-09-12T18:04:11Z",
+  "starred": true,
+  "title": "a quiet harbour at dawn",
+  "legacy": {
+    "studio": "iris-studio",
+    "old_id": "01JBX9Q4Z7K3M2N8P5R6S1T0VW",
+    "params": {
+      "prompt": "a quiet harbour at dawn",
+      "seed": 42,
+      "steps": 4,
+      "checkpoint": "flux-2-klein-4b"
+    }
+  },
+  "parents": []
+}

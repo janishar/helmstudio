@@ -101,6 +101,16 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/admin/providers/:name", c.putProviderHandler)
 	group.DELETE("/admin/providers/:name", c.deleteProviderHandler)
 	group.POST("/admin/providers/:name/test", c.testProviderHandler)
+	group.GET("/models", c.listModelsHandler)
+	group.POST("/admin/models/:model/download", c.downloadModelHandler)
+	group.DELETE("/admin/models/:model", c.deleteModelHandler)
+	group.DELETE("/admin/loras/:lora_id", c.deleteSharedLoraHandler)
+	group.GET("/admin/model-jobs", c.listModelJobsHandler)
+	group.GET("/admin/model-jobs/:job_id", c.getModelJobHandler)
+	group.POST("/admin/model-jobs/:job_id/cancel", c.cancelModelJobHandler)
+	group.POST("/admin/hosts/:host/unload", c.adminUnloadHandler)
+	group.PUT("/admin/hosts/:host/settings", c.putHostSettingsHandler)
+	group.PUT("/admin/hosts/:host/pins", c.putHostPinsHandler)
 	group.GET("/library", c.listLibraryHandler)
 	group.POST("/library", c.createLibraryItemHandler)
 	group.GET("/library/:id", c.getLibraryItemHandler)
@@ -882,5 +892,106 @@ func (c *controller) deleteProviderHandler(ctx *gin.Context) {
 // testProviderHandler: POST /admin/providers/{name}/test[?model=].
 func (c *controller) testProviderHandler(ctx *gin.Context) {
 	out, err := c.service.TestProvider(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("name"), ctx.Query("model"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// ------------------------------------------------------------------ models, model jobs, the hosts admin (API 1.16)
+
+// adminBody is strictBody behind the admin check: 403 before the body is read.
+func adminBody[B any](ctx *gin.Context) (common.Caller, *B, error) {
+	caller := common.MustCaller(ctx)
+	if !caller.IsAdmin() {
+		return caller, nil, errAdmin
+	}
+	body, err := strictBody[B](ctx, false)
+	return caller, body, err
+}
+
+// accepted answers 202 for a new job, 200 for the same unfinished one.
+func accepted(created bool) int {
+	if created {
+		return http.StatusAccepted
+	}
+	return http.StatusOK
+}
+
+// listModelsHandler: GET /models.
+func (c *controller) listModelsHandler(ctx *gin.Context) {
+	out, err := c.service.ListModels(ctx.Request.Context(), common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// downloadModelHandler: POST /admin/models/{model}/download — 202 queued, 200 the same unfinished job.
+func (c *controller) downloadModelHandler(ctx *gin.Context) {
+	caller, body, err := adminBody[dto.ModelDownload](ctx)
+	var out dto.ModelJob
+	created := false
+	if err == nil {
+		out, created, err = c.service.DownloadModel(ctx.Request.Context(), caller, ctx.Param("model"), body)
+	}
+	reply(ctx, accepted(created), out, err)
+}
+
+// deleteModelHandler: DELETE /admin/models/{model}?host=&variant=.
+func (c *controller) deleteModelHandler(ctx *gin.Context) {
+	var variant *string
+	if v, ok := ctx.GetQuery("variant"); ok {
+		variant = &v
+	}
+	out, created, err := c.service.DeleteModel(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("model"), ctx.Query("host"), variant)
+	reply(ctx, accepted(created), out, err)
+}
+
+// deleteSharedLoraHandler: DELETE /admin/loras/{lora_id}?host=.
+func (c *controller) deleteSharedLoraHandler(ctx *gin.Context) {
+	out, created, err := c.service.DeleteSharedLora(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("lora_id"), ctx.Query("host"))
+	reply(ctx, accepted(created), out, err)
+}
+
+// listModelJobsHandler: GET /admin/model-jobs?host=&active=.
+func (c *controller) listModelJobsHandler(ctx *gin.Context) {
+	out, err := c.service.ListModelJobs(ctx.Request.Context(), common.MustCaller(ctx), ctx.Query("host"), ctx.Query("active"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getModelJobHandler: GET /admin/model-jobs/{job_id}.
+func (c *controller) getModelJobHandler(ctx *gin.Context) {
+	out, err := c.service.GetModelJob(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("job_id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// cancelModelJobHandler: POST /admin/model-jobs/{job_id}/cancel.
+func (c *controller) cancelModelJobHandler(ctx *gin.Context) {
+	out, err := c.service.CancelModelJob(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("job_id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// adminUnloadHandler: POST /admin/hosts/{host}/unload — 202.
+func (c *controller) adminUnloadHandler(ctx *gin.Context) {
+	caller, body, err := adminBody[dto.HostUnload](ctx)
+	var out dto.HostUnloadAccepted
+	if err == nil {
+		out, err = c.service.AdminUnload(ctx.Request.Context(), caller, ctx.Param("host"), body)
+	}
+	reply(ctx, http.StatusAccepted, out, err)
+}
+
+// putHostSettingsHandler: PUT /admin/hosts/{host}/settings.
+func (c *controller) putHostSettingsHandler(ctx *gin.Context) {
+	caller, body, err := adminBody[dto.HostSettingsPut](ctx)
+	var out dto.HostSettings
+	if err == nil {
+		out, err = c.service.PutHostSettings(ctx.Request.Context(), caller, ctx.Param("host"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// putHostPinsHandler: PUT /admin/hosts/{host}/pins.
+func (c *controller) putHostPinsHandler(ctx *gin.Context) {
+	caller, body, err := adminBody[dto.HostPins](ctx)
+	var out dto.HostSettings
+	if err == nil {
+		out, err = c.service.PutHostPins(ctx.Request.Context(), caller, ctx.Param("host"), body)
+	}
 	reply(ctx, http.StatusOK, out, err)
 }

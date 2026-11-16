@@ -2,9 +2,9 @@
 fake stack shows it, and the M4 demonstration on the echo family: a still, "Use in…" image-to-video, Save as
 pipeline on the clip, then that pipeline over ten rows.
 
-The fake stack has one env (host fake, env fake) and reports no memory, so there is no admission, no unload and
-nothing resident: hosts data carries no `host_memory`, the order is plain round-robin, and the demonstration's
-release order (row 1 end to end, then every still, then every clip) comes from oldest-first alone. Admission, eviction
+The fake stack has one runner env (host fake, env fake). From 1.16 it reports memory (the echo pack's tiny model,
+test_models.py), but the demonstration's echo workflows load no component, so it needs no unload: the order is plain
+round-robin and the release order (row 1 end to end, then every still, then every clip) comes from oldest-first alone. Admission, eviction
 and the fairness bound are covered by studio's table tests over contracts/fixtures/dispatch."""
 
 from collections import Counter, defaultdict
@@ -29,14 +29,24 @@ ROWS = 10
 
 def test_hosts_data_shape(api):
     hosts = ok(api.get(f"{STUDIO}/hosts"))["hosts"]
-    allowed = {"host", "env", "state", "updated_at", "memory", "host_memory", "resident"}
+    allowed = {
+        "host",
+        "env",
+        "state",
+        "updated_at",
+        "memory",
+        "host_memory",
+        "resident",
+        "cached_gb",
+        "machine",
+    }
     item = {"component", "model", "variant", "precision", "gb", "pinned"}
     by_host = defaultdict(list)
     for h in hosts:
         assert set(h) <= allowed, h  # never a run id or an owner
         by_host[h["host"]].append(h)
         for r in h.get("resident", []):
-            assert item <= set(r) <= item | {"last_used", "loras"}, r
+            assert item <= set(r) <= item | {"last_used", "loras", "pinned_why"}, r
             for lora in r.get("loras", []):
                 if lora["lora_id"] is None:  # another user's own LoRA: only its size
                     assert (lora["name"], lora["strength"]) == (None, None), lora
@@ -58,7 +68,7 @@ def test_hosts_data_shape(api):
     fake = by_host["fake"]
     # API 1.15: pipelines' server executor reports env server on the fake host too (its servers' memory)
     fake = [e for e in fake if e["env"] != "server"]
-    assert [e["env"] for e in fake] == ["fake"] and "host_memory" not in fake[0], fake
+    assert [e["env"] for e in fake] == ["fake"], fake
 
 
 # ---------------------------------------------------------------- still -> Use in… -> Save as pipeline -> ten rows

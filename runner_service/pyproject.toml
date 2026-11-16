@@ -9,6 +9,7 @@ dependencies = [
     "boto3>=1.44.3",
     "pillow>=13.0.0",
     "pyyaml>=6.0.3",
+    "huggingface-hub>=2.4.0,<3",  # model downloads (core/download.py)
 ]
 
 [project.optional-dependencies]

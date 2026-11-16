@@ -1,0 +1,373 @@
+"""Model weights on this host's disk (contracts/README.md "Models and model jobs"): what the models key says per
+variant (its folder's manifest, components, presence), the hash index, the host's disk and machine, and delete.
+
+- **Hashes**: a file downloaded through huggingface_hub has its Hub LFS SHA-256 recorded in its sidecar
+  `<dir>/.cache/huggingface/download/<path>.metadata` (commit, etag, time): trusted while the file is not newer than
+  the sidecar. Any other file is hashed once, in the background (`Hashes.start`, never at start), and kept in
+  `<cache>/model-hashes-<env>.json` by path, size and mtime, as the LoRA index does. A recorded file changed since
+  is re-hashed; a different hash makes the variant `mismatch`.
+- **Presence**: present = every component's globs match in the folder it loads from and no download is unfinished
+  there (MARKER: written when a download starts, removed when it succeeds) and nothing mismatches; partial = some of
+  its own files are there; missing = none; mismatch wins over both.
+- **Delete** removes a variant's own files inside `<root>/<dir>` (never through a symlink), keeping a shared
+  component another variant still loads."""
+
+import hashlib
+import json
+import logging
+import os
+import re
+import shutil
+import sys
+import threading
+from fnmatch import fnmatchcase
+from pathlib import Path
+
+from core import pack as packs
+
+log = logging.getLogger("models")
+
+SIDECARS = Path(".cache/huggingface/download")
+MARKER = Path(".cache/helmstudio/download.json")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+MAX_FILES = 4096  # registry: files[] maxItems
+
+
+def sha256_file(path: Path, check=lambda: None) -> str:
+    """The file's SHA-256; `check()` runs every 64 MB (a cancel point)."""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(1 << 26):
+            check()
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def recorded(root: Path, rel: str, st: os.stat_result) -> tuple[str | None, bool]:
+    """(the SHA-256 the download sidecar recorded, whether the file is unchanged since it was written)."""
+    try:
+        _commit, etag, at = (root / SIDECARS / f"{rel}.metadata").read_text().split("\n")[:3]
+    except OSError, ValueError:
+        return None, False
+    if not SHA256.match(etag.strip()):  # a git blob id (a small non-LFS file): not a SHA-256
+        return None, False
+    try:
+        fresh = st.st_mtime <= float(at) + 1
+    except ValueError:
+        fresh = False
+    return etag.strip(), fresh
+
+
+class Hashes:
+    """path → SHA-256 of model files, kept by (size, mtime_ns). Unknown files queue; `start()` hashes them in a
+    background thread, `drain()` now (tests)."""
+
+    def __init__(self, path: Path | None = None) -> None:
+        self.path, self.lock = path, threading.Lock()
+        self.known: dict[str, list] = {}  # str(path) → [size, mtime_ns, sha256]
+        self.queue: dict[str, None] = {}  # ordered set of paths to hash
+        self.wake = threading.Event()
+        if path:
+            try:
+                self.known = json.loads(path.read_text())
+            except OSError, ValueError:
+                pass
+
+    def get(self, path: Path, st: os.stat_result | None = None) -> str | None:
+        """The kept hash of `path` as it is now, or None (then queued)."""
+        st = st or path.stat()
+        with self.lock:
+            k = self.known.get(str(path))
+            if k and k[:2] == [st.st_size, st.st_mtime_ns]:
+                return k[2]
+            self.queue[str(path)] = None
+        self.wake.set()
+        return None
+
+    def put(self, path: Path, sha: str) -> None:
+        """Keep `sha` as the hash of `path` as it is now (a download checked it)."""
+        st = path.stat()
+        with self.lock:
+            self.known[str(path)] = [st.st_size, st.st_mtime_ns, sha]
+            self.queue.pop(str(path), None)
+        self.save()
+
+    def compute(self, path: Path, check=lambda: None) -> str:
+        """The hash of `path` now: kept, else computed (and kept)."""
+        if (sha := self.get(path)) is None:
+            sha = sha256_file(path, check)
+            self.put(path, sha)
+        return sha
+
+    def drain(self) -> None:
+        """Hash every queued file now."""
+        while self.queue:
+            with self.lock:
+                p = next(iter(self.queue))
+            try:
+                self.compute(Path(p))
+            except OSError:  # gone meanwhile
+                with self.lock:
+                    self.queue.pop(p, None)
+
+    def save(self) -> None:
+        if not self.path:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.lock:
+                text = json.dumps(self.known)
+            tmp = self.path.with_suffix(".tmp")
+            tmp.write_text(text)
+            tmp.replace(self.path)
+        except OSError:
+            log.warning("could not keep model hashes in %s", self.path, exc_info=True)
+
+    def start(self) -> None:
+        """Hash queued files in a daemon thread, one at a time (a rescan publishes what it learnt)."""
+
+        def loop() -> None:
+            while True:
+                self.wake.wait()
+                self.wake.clear()
+                self.drain()
+
+        threading.Thread(target=loop, name="hashes", daemon=True).start()
+
+
+hashes = Hashes()  # main replaces it with one kept on disk and started
+
+
+def is_safe(rel: str) -> bool:
+    """A relative path that stays inside its folder: no absolute path, `..`, backslash, control character or
+    `.cache` (the sidecars)."""
+    parts = rel.split("/")
+    return bool(rel) and not rel.startswith("/") and "\\" not in rel and parts[0] != ".cache" \
+        and not any(ord(c) < 32 for c in rel) and all(p not in ("", ".", "..") for p in parts)  # fmt: skip
+
+
+def inside(root: Path, path: Path) -> bool:
+    """Whether `path`, links resolved, is inside `root`."""
+    return path.resolve().is_relative_to(root.resolve())
+
+
+def own_files(folder: Path) -> list[Path]:
+    """The files of a variant's folder, relative and sorted: not links, nothing under a dot folder or dot file."""
+    if not folder.is_dir():
+        return []
+    return sorted(
+        p.relative_to(folder)
+        for p in folder.rglob("*")
+        if p.is_file()
+        and not p.is_symlink()
+        and not any(x.startswith(".") for x in p.relative_to(folder).parts)
+    )
+
+
+def globs(pack, component: str) -> list[str]:
+    g = pack.component(component)["files"]
+    return [g] if isinstance(g, str) else g
+
+
+def component_of(pack, rel: str) -> str | None:
+    """The first component (model.yaml order) whose glob matches `rel`; None for configs."""
+    return next((c for c in pack.spec.get("components", {})
+                 if any(fnmatchcase(rel, g) for g in globs(pack, c))), None)  # fmt: skip
+
+
+def folder(pack, variant: str) -> Path:
+    return packs.models_root() / pack.spec["variants"][variant]["dir"]
+
+
+def manifest(pack, variant: str) -> tuple[list[dict], list[str]]:
+    """(files [{path, bytes, sha256?, component?}], mismatch [path]) of the variant's own folder."""
+    root, files, mismatch = folder(pack, variant), [], []
+    for rel in own_files(root)[:MAX_FILES]:
+        p, r = root / rel, rel.as_posix()
+        st = p.stat()
+        rec, fresh = recorded(root, r, st)
+        sha = rec if fresh else hashes.get(p, st)
+        if rec and sha and sha != rec:
+            mismatch.append(r)
+        item = {"path": r, "bytes": st.st_size} | ({"sha256": sha} if sha else {})
+        if c := component_of(pack, r):
+            item["component"] = c
+        files.append(item)
+    return files, mismatch
+
+
+def variant_entry(pack, vid: str, offered: set[str]) -> dict:
+    """One variant of the models key (registry.schema.json `models[].variants[]`)."""
+    spec, v = pack.spec, pack.spec["variants"][vid]
+    ref = packs.ModelRef(pack, vid, "bf16")
+    files, mismatch = manifest(pack, vid)
+    comps, ok, unfinished = [], True, (folder(pack, vid) / MARKER).exists()
+    found_by = {c: ref.files(c) for c in spec.get("components", {})}
+    # a file several components read (LTX: vae and vae_encoder, the connector inside the transformer and text
+    # encoder files) counts once, for the component listing the fewest files (the first on a tie): bytes add up
+    counted: dict = {}
+    for c, found in sorted(found_by.items(), key=lambda kv: len(kv[1])):
+        for f in found:
+            counted.setdefault(f, c)
+    for c, cs in spec.get("components", {}).items():
+        owner = ref.owner(c)
+        found = found_by[c]
+        ok = ok and bool(found)
+        unfinished = unfinished or (folder(pack, owner) / MARKER).exists()
+        item = {"component": c, "from_variant": owner, "precisions": cs.get("precision", ["bf16"])}
+        if found:
+            item["bytes"] = sum(f.stat().st_size for f in found if counted[f] == c)
+        if owner == vid and c in v.get("shares", []):
+            item["separate"] = True
+        comps.append(item)
+    if mismatch:
+        presence = "mismatch"
+    elif ok and not unfinished:
+        presence = "present"
+    else:
+        presence = "partial" if files else "missing"
+    out = {"id": vid, "presence": presence}
+    if files:
+        out["bytes"] = sum(f["bytes"] for f in files)
+    out["precisions"] = [p for p in packs.PRECISIONS if p in offered]
+    out |= {"title": v.get("title", vid), "dir": v["dir"]}
+    if "source" in v:
+        out["source"] = v["source"]
+    if comps:
+        out["components"] = comps
+    if files:
+        out["files"] = files
+    if mismatch:
+        out["mismatch"] = mismatch[:64]
+    return out
+
+
+def entry(pack) -> dict:
+    """The pack's `models` entry: id, family, title, media, runtimes, variants (as on disk now), lora."""
+    spec = pack.spec
+    out = {"id": spec["id"], "family": pack.family, "title": spec["title"]}
+    if "variants" in spec:
+        if "media" in spec:
+            out["media"] = spec["media"]
+        out["runtimes"] = [{"runtime": r, "env": x["env"]} for r, x in spec["runtimes"].items()]
+        offered = {
+            p for c in spec.get("components", {}).values() for p in c.get("precision", ["bf16"])
+        }
+        out["variants"] = [variant_entry(pack, vid, offered) for vid in spec["variants"]]
+    if block := packs.lora_block(pack):
+        out["lora"] = block
+    return out
+
+
+def licence_text(pack, lid: str) -> str:
+    return (pack.dir / "licences" / f"{lid}.md").read_text()
+
+
+def licences(loaded) -> list[dict]:
+    """The models key's `licences`: each licence a variant's source names, once (title and url from model.yaml
+    `licences`, the text from licences/<id>.md)."""
+    out: dict[str, dict] = {}
+    for p in loaded:
+        for v in p.spec.get("variants", {}).values():
+            if (lid := v.get("source", {}).get("licence")) and lid not in out:
+                meta = p.spec.get("licences", {}).get(lid, {})
+                out[lid] = {"id": lid, "title": meta.get("title", lid)} | (
+                    {"url": meta["url"]} if "url" in meta else {}) | {"text": licence_text(p, lid)}  # fmt: skip
+    return list(out.values())
+
+
+# --- the host
+
+
+def disk(root: Path) -> dict:
+    """The hosts key's `models_disk`: the volume of the models root (or its nearest existing parent)."""
+    p = root
+    while not p.exists() and p != p.parent:
+        p = p.parent
+    u = shutil.disk_usage(p)
+    home = str(Path.home())
+    shown = "~" + str(root)[len(home) :] if str(root).startswith(home + "/") else str(root)
+    return {"root": shown[:400], "free_bytes": u.free, "total_bytes": u.total}
+
+
+def machine(device: str, ram_gb: float) -> dict:
+    """The hosts key's `machine`."""
+    mac = sys.platform == "darwin"
+    accel = "cuda" if device == "cuda" else "metal" if mac and device in ("mps", "gpu") else "cpu"
+    packaging = "container" if Path("/.dockerenv").exists() else "native"
+    return {"os": "macos" if mac else "linux", "accel": accel, "packaging": packaging,
+            "ram_gb": round(ram_gb, 1)}  # fmt: skip
+
+
+# --- delete
+
+
+class InUse(Exception):
+    """A delete was refused: the message is the one-line reason."""
+
+
+def kept_components(pack, deleted: set[str]) -> tuple[list[str], list[str] | None]:
+    """(kept components, what to delete of the first variant's folder: None = all, else the folders or globs of
+    its components not kept) when deleting the variants `deleted`. A component is kept when another variant not
+    deleted shares it and still has files of its own; then only the other components' files go (the folder's
+    configs, processor and scheduler stay: the sharing variant reads them)."""
+    first = next(iter(pack.spec["variants"]))
+    kept: list[str] = []
+    if first in deleted:
+        for vid, v in pack.spec["variants"].items():
+            if vid not in deleted and own_files(folder(pack, vid)):
+                kept += [c for c in v.get("shares", [])
+                         if c not in kept and not packs.owns_copy(pack, vid, c)]  # fmt: skip
+    if not kept:
+        return [], None
+    only = [g.rsplit("/", 1)[0] + "/" if "/" in g else g
+            for c in pack.spec["components"] if c not in kept for g in globs(pack, c)]  # fmt: skip
+    return kept, only
+
+
+def delete_variant(pack, vid: str, only: list[str] | None = None) -> tuple[int, int]:
+    """Remove the variant's files under its folder (`only`: just those under these folder prefixes ending in /,
+    or matching these globs), sidecars with them, then the empty folders. Never follows a link: a link is removed,
+    not its target. Returns (files removed, bytes freed)."""
+    root = packs.models_root()
+    base = folder(pack, vid)
+    if not base.exists():
+        return 0, 0
+    if base.is_symlink() or not inside(root, base) or base.resolve() == root.resolve():
+        raise InUse(
+            f"{pack.spec['variants'][vid]['dir']} is a link or outside the models root: remove it by hand"
+        )
+
+    def kept(rel: str) -> bool:
+        if only is None:
+            return False
+        side = SIDECARS.as_posix() + "/"
+        if rel.startswith(side):  # a sidecar goes with its file
+            rel = re.sub(r"\.(metadata|lock)$", "", rel[len(side) :])
+        return not any(rel.startswith(k) if k.endswith("/") else fnmatchcase(rel, k) for k in only)
+
+    files = freed = 0
+    for dirpath, dirnames, filenames in os.walk(base, topdown=False, followlinks=False):
+        d = Path(dirpath)
+        for name in filenames + [n for n in dirnames if (d / n).is_symlink()]:
+            p = d / name
+            rel = p.relative_to(base).as_posix()
+            if kept(rel):
+                continue
+            size, link = p.lstat().st_size, p.is_symlink()
+            p.unlink()
+            if not link and not rel.startswith(
+                ".cache/"
+            ):  # sidecars and markers are not the model's
+                files, freed = files + 1, freed + size
+        for name in dirnames:
+            with_empty = d / name
+            if (
+                not with_empty.is_symlink()
+                and with_empty.is_dir()
+                and not any(with_empty.iterdir())
+            ):
+                with_empty.rmdir()
+    if not any(base.iterdir()):
+        base.rmdir()
+    return files, freed

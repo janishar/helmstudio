@@ -1,7 +1,9 @@
 """Stage functions of the echo pack (runtime fake): see model.yaml."""
 
+import importlib.util
 import json
 import re
+import sys
 import textwrap
 import time
 
@@ -9,7 +11,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 from core import ask as asks
 from core.graph import RunError, auto_frames
-from packs.echo import mp4
+from packs.echo import loader, mp4
+
+# the tiny model's components load with core.loaders_<runtime> (core/pack.py ModelRef.load, main.residency_for):
+# for runtime fake that is packs/echo/loader.py, unless core grows its own core/loaders_fake.py
+if importlib.util.find_spec("core.loaders_fake") is None:
+    sys.modules["core.loaders_fake"] = loader
 
 SIZE = 512
 
@@ -45,6 +52,20 @@ def echo(ctx, params: dict, inputs: dict) -> dict:
     if params["fail"]:
         raise RunError("echo: failed on purpose (fail=true)")
     return {"image": draw(inputs["text"])}
+
+
+def tiny(ctx, params: dict, inputs: dict) -> dict:
+    """Loads the tiny model's transformer and vae (resident afterwards, as the after-run setting says), then echoes
+    the text with the variant: `<text> [tiny]`."""
+    model = inputs["model"]
+    for name in ("transformer", "vae"):
+        ctx.component(model, name)
+    steps = params["steps"]
+    for step in range(1, steps + 1):
+        ctx.check()
+        time.sleep(params["delay_ms"] / 1000)
+        ctx.progress(step, steps)
+    return {"image": draw(f"{inputs['text']} [{model.variant}]")}
 
 
 def canvas(ctx, params: dict, inputs: dict) -> dict:

@@ -74,7 +74,6 @@ describe("BFF allow-list", () => {
       "/auth/signin",
       "/auth/refresh",
       "/auth/signout",
-      "/auth/admin/apikeys",
       "/auth/admin/users/x/roles",
       "/files/x",
       "/v1/../auth/signin",
@@ -87,6 +86,17 @@ describe("BFF allow-list", () => {
       "/internal",
     ])
       expect(allowed(p)).toBe(false);
+  });
+});
+
+describe("BFF API keys", () => {
+  it("lists and revokes keys, never makes one", () => {
+    const id = "/auth/admin/apikeys/00000000-0000-4000-8000-000000000000";
+    expect(allowed("/auth/admin/apikeys", "GET")).toBe(true);
+    expect(allowed(id, "DELETE")).toBe(true);
+    expect(allowed("/auth/admin/apikeys", "POST")).toBe(false);
+    expect(allowed(id, "GET")).toBe(false);
+    expect(allowed("/auth/admin/apikeys/x", "DELETE")).toBe(false);
   });
 });
 

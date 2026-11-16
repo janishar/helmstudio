@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import subprocess
 import time
 
 import httpx
@@ -207,6 +208,42 @@ def usable_looks(client: httpx.Client) -> list[dict]:
         }
         for x in items
     ]
+
+
+def docker_exec(service: str, *cmd: str, stdin: bytes | None = None) -> str:
+    """stdout of a command in `<COMPOSE_PROJECT>-<service>-1` (default project helmstudio-test): the fakes and the
+    fake runner's disk publish no host port. RuntimeError when it fails."""
+    project = os.environ.get("COMPOSE_PROJECT", "helmstudio-test")
+    out = subprocess.run(
+        ["docker", "exec", "-i", f"{project}-{service}-1", *cmd],
+        input=stdin,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    if out.returncode:
+        raise RuntimeError(out.stderr.decode()[-300:])
+    return out.stdout.decode()
+
+
+def fake_hub(method: str, path: str, body=None):
+    """One control request to the fake hub (contract_tests/fake_hub/server.py) from inside its container."""
+    args = ["python", "server.py", "call", method, path] + (["-"] if body is not None else [])
+    stdin = json.dumps(body).encode() if body is not None else None
+    return json.loads(docker_exec("fake-hub", *args, stdin=stdin))
+
+
+def disk_hashes(folder: str) -> dict[str, str]:
+    """path → SHA-256 of every file under the fake runner's `/models/<folder>` (its scratch models root), dot
+    folders (huggingface_hub's and the runner's sidecars) left out; {} when the folder is not there."""
+    script = (
+        "import hashlib, json, pathlib, sys\n"
+        "r = pathlib.Path('/models') / sys.argv[1]\n"
+        "print(json.dumps({str(p.relative_to(r)): hashlib.sha256(p.read_bytes()).hexdigest()"
+        " for p in sorted(r.rglob('*')) if p.is_file()"
+        " and not any(x.startswith('.') for x in p.relative_to(r).parts)} if r.is_dir() else {}))"
+    )
+    return json.loads(docker_exec("runner", "python", "-c", script, folder))
 
 
 def usable_loras(client: httpx.Client) -> dict[str, str]:

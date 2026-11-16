@@ -27,6 +27,19 @@ workflow uses them or a pack lists them in `publish`: `prompt` (→ `text: Text`
 `output` (`media: Media` in, an Image or a Video; stores it as the run's next output: a PNG, or an MP4 with its
 poster PNG) and `answer` (`text: Text` in, no outputs: the sink of a text workflow, below).
 
+## Weights on disk: presence, downloads, delete (API 1.16)
+
+The runner publishes each variant's folder as it is on disk (`core/models.py`): the manifest (`files`, each with its
+SHA-256 from the huggingface_hub sidecar or hashed once in the background, kept in `<RUNNER_CACHE>/model-hashes-<env>.json`
+by path, size and mtime), its `components` (with `from_variant`) and `presence`: present (every component's globs
+match where it loads from, no unfinished download), partial, missing, or mismatch (a file changed since its recorded
+hash). It rescans every 60 s and after each model job. A download (`core/download.py`, `messaging/models.py`) is a
+`cmd.model.job` handled beside the runs: the Hub's file list for `source`, a free-space check, then each file with
+`hf_hub_download(local_dir=<root>/<dir>)` (plain files, a temporary cache_dir, `HF_ENDPOINT` selects the hub),
+checked against its LFS SHA-256. Files already complete are skipped, so a cancelled or restarted job resumes; a
+delete removes only the variant's files inside its folder and keeps a shared component another variant loads. Tests
+use `runner_service/tests/fake_hub.py`, never the internet or `~/GenAI/models`.
+
 ## model.yaml
 
 ```yaml
@@ -123,9 +136,19 @@ stages:                           # one node kind each: <family>/<stage>; the fu
 Keys the core understands; anything else is ignored:
 
 - **Top level**: `id`, `family`, `title`, `publish` (core node kinds to publish without a workflow using them),
-  `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`, `lora`, `stages`. A pack without `variants` (echo) has no model node and its `models` entry is `{id, family, title}`.
+  `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`, `lora`, `stages`, and from API 1.16 `media`
+  (what the model makes: `[image]`, `[video, audio]`) and `licences` (`<id>: {title, url?}`; the text is
+  `licences/<id>.md` in the pack, shown to the admin before a download). A pack without `variants` has no model
+  node and its `models` entry is `{id, family, title}`.
 - **`variants.<id>`**: `dir`, `shares` (component names loaded from the first variant's folder, so they are one
-  residency entry and one cache identity across variants).
+  residency entry and one cache identity across variants; a share made by hand with links into that folder is still
+  a share, a real copy in the variant's own folder is `separate`), `title` (the display name; default the id) and
+  `source` (where a download fetches it; absent = not downloadable): `{repo, revision, allow_patterns, licence,
+  must_accept, gated, bytes?}`. `revision` is best a commit SHA (the one in the folder's
+  `.cache/huggingface/download/*.metadata` sidecars when the weights are already on disk); `allow_patterns` are
+  fnmatch globs over repo paths naming the variant's own components and their configs, never a shared component
+  (that comes from the first variant's source into its folder); `must_accept` makes the admin accept the licence
+  text; `gated` makes the runner send the host's Hub token (RUNNER_HF_TOKEN_FILE).
 - **`components.<name>`**: `files` (a glob, or a list of globs: one component may take keys from several files),
   `dtype` (`bf16` | `fp16` | `fp32`, default bf16; `stored` keeps each tensor's own dtype, MLX), `precision` (default
   `[bf16]`; `int8`, and `int4` on MLX), `quantize` (fnmatch globs over module names, used only at a quantized

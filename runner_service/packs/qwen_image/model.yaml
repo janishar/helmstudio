@@ -15,9 +15,24 @@ model:
     label: Precision
     default: int8
     help: "int8 quantizes the transformer and text encoder at load: about half the memory."
+media: [image]
+licences:                         # licences/<id>.md holds each text, shown before a download
+  apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
 variants:
-  base: {dir: Qwen-Image-2.1}
-  turbo: {dir: Qwen-Image-2.1-Turbo, shares: [text_encoder, vae]}
+  base:
+    dir: Qwen-Image-2.1
+    title: Base
+    source: {repo: Qwen/Qwen-Image-2.1, revision: 790c92633540aa0cb11d9abf19eb46d861714758,
+             allow_patterns: [model_index.json, "transformer/*", "text_encoder/*", "vae/*", "processor/*",
+                              "scheduler/*"],
+             licence: apache-2.0, must_accept: false, gated: false, bytes: 33131601593}
+  turbo:
+    dir: Qwen-Image-2.1-Turbo
+    title: Turbo
+    shares: [text_encoder, vae]
+    source: {repo: Qwen/Qwen-Image-2.1-Turbo, revision: fc13ba1986fcb905854dc8de2f52eee395f49b5b,
+             allow_patterns: [model_index.json, "transformer/*", "processor/*", "scheduler/*"],
+             licence: apache-2.0, must_accept: false, gated: false, bytes: 14241746072}
 components:
   transformer:
     files: "transformer/*.safetensors"

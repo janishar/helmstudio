@@ -11,7 +11,8 @@ RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-ins
 FROM python:3.14.10-slim-trixie AS runtime
 WORKDIR /app
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1
-RUN useradd --system --uid 10001 runner
+# a home: RUNNER_CACHE (~/.cache/helmstudio-runner: the LoRA cache, model hashes, download temp files) lives in it
+RUN useradd --system --create-home --uid 10001 runner
 COPY --from=build /app/.venv /app/.venv
 COPY . .
 USER runner

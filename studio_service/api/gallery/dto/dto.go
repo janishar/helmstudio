@@ -120,6 +120,8 @@ type Take struct {
 	Video       *VideoInfo `json:"video,omitempty"` // kind video only
 	// only GET /takes/{id}: the judge decisions that weighed it, newest first (API 1.14)
 	Decisions *[]TakeDecision `json:"decisions,omitempty"`
+	// source import: the old settings, read-only (API 1.16)
+	Legacy json.RawMessage `json:"legacy,omitempty"`
 }
 
 // TakeDecision is one judge decision about a take: kept (by the judge or the user's pick), passed or failed.

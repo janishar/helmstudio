@@ -27,4 +27,4 @@ and dropped (`open`; a `GetRange` on the store is used once helmgo has one).
 | `cmd/main.go` | `files` (server), `files health` (container check) |
 | `startup/` | config → store → module (`network.NewRouter`: `/health`, `/files`) → serve |
 | `config/` | env (see `.env.example`) |
-| `api/file/` | `Signer.Verify` (the format studio_service's `common.Signer` makes; both tests hold the same vector), `GET` and `HEAD /files/*path`, `PUT /files/*path` (signed uploads: images at most 50 MB; a `u/<owner>/loras/<id>.safetensors` key `application/octet-stream` at most 2 GiB) |
+| `api/file/` | `Signer.Verify` (the format studio_service's `common.Signer` makes; both tests hold the same vector), `GET` and `HEAD /files/*path`, `PUT /files/*path` (signed uploads: images at most 50 MB; a `u/<owner>/loras/<id>.safetensors` key `application/octet-stream` at most 2 GiB; an import's `u/<owner>/imports/<take_id>.mp4` key `video/mp4` at most 2 GiB) |

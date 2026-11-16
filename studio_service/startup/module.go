@@ -1,6 +1,8 @@
 package startup
 
 import (
+	"context"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/helmgo/micro"
@@ -25,14 +27,17 @@ type Module struct {
 	recheck        studio.Recheck  // the token check an open event stream repeats
 	shutdown       <-chan struct{} // closes when the service stops, which ends open SSE streams
 	health         micro.Controller
-	maxBody        int64                  // bytes
-	store          storage.Store          // read to check uploads and reference images
-	stateGet       studio.StateGet        // pipelines.state.get (a row's checkpoint state)
-	memory         studio.MemoryAsk       // pipelines.memory (a pipeline's memory)
-	dispatcher     *studio.Dispatcher     // positions use its skip counts; nil in tests
-	remoteModels   bool                   // the deployment's remote switch (API 1.15)
-	providerTest   studio.ProviderTestAsk // pipelines.providers.test
-	lookup         studio.Lookup          // a server provider's host name (nil: the system resolver)
+	maxBody        int64                                                      // bytes
+	store          storage.Store                                              // read to check uploads and reference images
+	stateGet       studio.StateGet                                            // pipelines.state.get (a row's checkpoint state)
+	memory         studio.MemoryAsk                                           // pipelines.memory (a pipeline's memory)
+	dispatcher     *studio.Dispatcher                                         // positions use its skip counts; nil in tests
+	remoteModels   bool                                                       // the deployment's remote switch (API 1.15)
+	providerTest   studio.ProviderTestAsk                                     // pipelines.providers.test
+	lookup         studio.Lookup                                              // a server provider's host name (nil: the system resolver)
+	purge          func(ctx context.Context, subject string) error            // a CMD subject's messages (API 1.16)
+	putSettings    func(ctx context.Context, host string, value []byte) error // KV host_settings (API 1.16)
+	settings       *studio.Service                                            // the service Controllers built (it publishes the host settings at start)
 }
 
 // RootMiddlewares returns the middlewares in load order. The body limit comes before the guard, so 411 and 413 come
@@ -56,6 +61,8 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetRemote(m.remoteModels)
 	service.SetProviderTest(m.providerTest)
 	service.SetLookup(m.lookup)
+	service.SetModelOps(m.purge, m.putSettings)
+	m.settings = service
 	return []micro.Controller{
 		m.health,
 		studio.NewController(service, m.recheck, m.shutdown),

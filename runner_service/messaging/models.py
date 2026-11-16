@@ -1,0 +1,270 @@
+"""cmd.model.job deliveries from the durable models-<host>-<env> (contracts/README.md "Models and model jobs"), one
+at a time, in a worker beside the runs: disk and network on a worker thread, never the GPU thread, never a weight
+holder, so a download does not block generation.
+
+- invalid → copied to dlq.<subject> and `term`;
+- cancel key `<job_id>` already written → cancelled;
+- else `running` → the job (`+WIP` every WIP seconds; a download watches its cancel key and sends
+  evt.model.progress at each file's start and end and at most every PROGRESS seconds between) → a rescan of the
+  models and loras keys → one terminal status → ack (after the status is acked). A redelivery (the runner
+  restarted: delivery + 1, seq from 1) resumes a download from the files already on disk."""
+
+import asyncio
+import contextlib
+import hashlib
+import json
+import logging
+import shutil
+import time
+import uuid
+
+from config import ENV, HOST
+from core import download, models
+from core import pack as packs
+from core.download import Cancelled, JobError
+from messaging import cancels, schemas
+from messaging.publisher import now, retried
+
+log = logging.getLogger("models")
+
+DURABLE = f"models-{HOST}-{ENV}"
+SUBJECT = f"cmd.model.{HOST}.{ENV}"
+ACK_WAIT = 60  # seconds
+WIP = 10  # seconds between +WIP
+PROGRESS = 2.0  # seconds between progress events within a file
+POLL = 0.25  # seconds between looks at a running download
+
+
+class ModelEvents:
+    """evt.model.status / evt.model.progress of one delivery of a job: seq from 1 per delivery."""
+
+    def __init__(self, js, cmd: dict, delivery: int) -> None:
+        self.js, self.cmd, self.delivery, self.seq = js, cmd, delivery, 0
+
+    async def publish(self, kind: str, data: dict) -> dict:
+        cmd, seq = self.cmd, self.seq + 1
+        msg = {"type": f"evt.model.{kind}", "version": 1, "id": str(uuid.uuid4()), "job_id": cmd["job_id"],
+               "owner_id": cmd["owner_id"], "occurred_at": now(),
+               "trace": {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")},
+               "data": {"seq": seq, "delivery": self.delivery} | data}  # fmt: skip
+        if errs := schemas.message_errors(msg):
+            raise ValueError(f"evt.model.{kind} is off-contract: {'; '.join(errs[:3])}")
+        self.seq = seq
+        body = json.dumps(msg).encode()
+        headers = {"Nats-Msg-Id": f"{cmd['job_id']}:{self.delivery}:{seq}"}
+        await retried(lambda: self.js.publish(f"evt.model.{HOST}.{kind}", body, headers=headers))
+        return msg
+
+    async def status(
+        self, status: str, failure: JobError | None = None, result: dict | None = None
+    ):
+        data: dict = {"status": status}
+        if failure is not None:
+            data["failure"] = {"class": failure.cls, "detail": str(failure) or failure.cls}
+        if result is not None:
+            data["result"] = result
+        return await self.publish("status", data)
+
+
+class ModelJobs:
+    """Runs this runner's model jobs. `rescan()` republishes the models and loras keys and the hosts key."""
+
+    def __init__(
+        self, *, js, cancels_kv, packs_, library, consumer, rescan, cache, endpoint, token_file
+    ):
+        self.js, self.cancels_kv, self.packs, self.library = js, cancels_kv, packs_, library
+        self.consumer, self.rescan, self.cache = consumer, rescan, cache
+        self.endpoint, self.token_file = endpoint, token_file
+        self.job: str | None = None  # the job in progress
+
+    async def handle(self, msg) -> None:
+        try:
+            cmd = json.loads(msg.data)
+        except ValueError:
+            cmd = None
+        errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
+        if not errs and cmd["type"] != "cmd.model.job":
+            errs = [f"not a model job: {cmd['type']}"]
+        if errs:
+            log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]))
+            with contextlib.suppress(Exception):
+                await self.js.publish(f"dlq.{msg.subject}", msg.data)
+            with contextlib.suppress(Exception):
+                await msg.term()
+            return
+        meta = getattr(msg, "metadata", None)
+        events = ModelEvents(self.js, cmd, getattr(meta, "num_delivered", None) or 1)
+        job_id, data = cmd["job_id"], cmd["data"]
+        self.job = job_id
+        beat = asyncio.create_task(self._wip(msg))
+        failure = result = None
+        try:
+            if await cancels.requested(self.cancels_kv, job_id):
+                status = "cancelled"
+            else:
+                await events.status("running")
+                log.info(
+                    "model job %s: %s %s",
+                    job_id,
+                    data["kind"],
+                    data.get("model") or data.get("lora_id"),
+                )
+                result = await getattr(self, data["kind"])(job_id, data, events)
+                status = "succeeded"
+        except Cancelled:
+            status = "cancelled"
+        except JobError as e:
+            status, failure = "failed", e
+        except Exception as e:
+            log.exception("model job %s failed", job_id)
+            status, failure = (
+                "failed",
+                JobError("internal", f"the runner failed ({type(e).__name__})"),
+            )
+        finally:
+            beat.cancel()
+            self.job = None
+        try:
+            await self.rescan()
+        except Exception:
+            log.exception("rescan after model job %s failed", job_id)
+        log.info(
+            "model job %s: %s%s", job_id, status, f" ({failure.cls}: {failure})" if failure else ""
+        )
+        try:
+            await events.status(status, failure, result if status == "succeeded" else None)
+            await msg.ack_sync()
+        except (
+            Exception
+        ):  # not acked: redelivered after ACK_WAIT, and the job runs again (idempotent)
+            log.exception("model job %s: could not report %s", job_id, status)
+
+    async def _wip(self, msg) -> None:
+        while True:
+            await asyncio.sleep(WIP)
+            with contextlib.suppress(Exception):
+                await msg.in_progress()
+
+    def find(self, model: str):
+        p = next((p for p in self.packs if p.spec["id"] == model), None)
+        if p is None:
+            raise JobError("not_found", f"{model} is not published by {HOST}.{ENV}")
+        return p
+
+    async def download(self, job_id: str, data: dict, events: ModelEvents) -> dict:
+        p = self.find(data["model"])
+        vid = data.get("variant") or next(iter(p.spec.get("variants", {})), None)
+        if vid not in p.spec.get("variants", {}):
+            raise JobError("not_found", f"{p.spec['title']} has no variant {vid}")
+        src = p.spec["variants"][vid].get("source")
+        if src is None:
+            raise JobError("not_downloadable", f"{p.spec['title']} {vid} has no download source")
+        if src["must_accept"]:
+            want = hashlib.sha256(models.licence_text(p, src["licence"]).encode()).hexdigest()
+            if data.get("licence") != {"id": src["licence"], "sha256": want}:
+                raise JobError("licence", f"licence {src['licence']} changed since it was accepted")
+        token = download.read_token(self.token_file) if src["gated"] else None
+        log.info("model job %s: %s %s from %s, token: %s", job_id, p.spec["id"], vid, src["repo"],
+                 "present" if token else "absent")  # fmt: skip
+        progress = download.Progress()
+        stop = await cancels.watch(self.cancels_kv, job_id, progress.cancel.set)
+        task = asyncio.create_task(asyncio.to_thread(
+            download.download, p, vid, endpoint=self.endpoint, token=token, cache=self.cache, host=HOST,
+            progress=progress))  # fmt: skip
+        try:
+            sent, at, last = None, 0.0, None
+            while True:
+                await asyncio.wait({task}, timeout=POLL)
+                if progress.total_bytes is not None:
+                    d = progress.data()
+                    edge = (d["files_done"], d.get("file"))
+                    if edge != sent or (
+                        time.monotonic() - at >= PROGRESS and d["done_bytes"] != last
+                    ):
+                        await events.publish("progress", d)
+                        sent, at, last = edge, time.monotonic(), d["done_bytes"]
+                if task.done():
+                    return task.result()
+        finally:
+            progress.cancel.set()  # the thread stops at its next chunk when this coroutine is cancelled
+            with contextlib.suppress(Exception):
+                await stop()
+            shutil.rmtree(self.cache / "hf-xet", ignore_errors=True)
+
+    def _loaded(self, test) -> list[tuple]:
+        res = self.consumer.residency
+        return [k for k in (res.entries if res else ()) if test(k)]
+
+    async def delete(self, job_id: str, data: dict, events: ModelEvents) -> dict:
+        p = self.find(data["model"])
+        variants = p.spec.get("variants", {})
+        if (v := data.get("variant")) is not None and v not in variants:
+            raise JobError("not_found", f"{p.spec['title']} has no variant {v}")
+        deleted = {v} if v else set(variants)
+        if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[1] in deleted):
+            raise JobError("in_use", f"{p.spec['title']} {loaded[0][1]} {loaded[0][2]} is loaded on "
+                                     f"{HOST}.{ENV}: unload it first")  # fmt: skip
+        res = self.consumer.residency
+        if self.consumer.ctx is not None and res and any(k[0] == p.spec["id"] for k in res.used):
+            raise JobError("in_use", f"a run on {HOST}.{ENV} uses {p.spec['title']}")
+        kept, only = models.kept_components(p, deleted)
+        first = next(iter(variants))
+
+        def work() -> tuple[int, int]:
+            files = freed = 0
+            for vid in variants:
+                if vid in deleted:
+                    f, b = models.delete_variant(p, vid, only if vid == first else None)
+                    files, freed = files + f, freed + b
+            return files, freed
+
+        try:
+            files, freed = await asyncio.to_thread(work)
+        except models.InUse as e:
+            raise JobError("in_use", str(e)) from None
+        log.info(
+            "model job %s: deleted %d files (%.1f GB), kept %s", job_id, files, freed / 1e9, kept
+        )
+        return {"files": files, "freed_bytes": freed} | ({"kept": kept} if kept else {})
+
+    async def lora_delete(self, job_id: str, data: dict, events: ModelEvents) -> dict:
+        sha, lib = data["lora_id"], self.library
+        paths = [f for f, s in lib.files.items() if s == sha]
+        if not paths:
+            raise JobError("not_found", f"LoRA {sha[:12]} is not on host {HOST}")
+        name = lib.shared[sha].stem if sha in lib.shared else paths[0].stem
+        for p in self.packs:
+            for x in (p.spec.get("lora") or {}).get("prefused", []):
+                f = packs.models_root() / p.spec["variants"][x["variant"]]["dir"] / x["file"]
+                if f in paths:
+                    raise JobError("in_use", f"LoRA {name} is pre-fused into {p.spec['title']}")
+        if self._loaded(lambda k: len(k) > 4 and any(s == sha for s, _ in k[4])):
+            raise JobError(
+                "in_use", f"LoRA {name} is baked into a loaded component: unload it first"
+            )
+        root, freed = packs.models_root(), 0
+        for f in paths:
+            if not models.inside(root, f):
+                raise JobError("internal", f"LoRA {name} is outside the models root")
+            freed += f.lstat().st_size
+            await asyncio.to_thread(f.unlink, True)
+        log.info("model job %s: deleted LoRA %s (%d files)", job_id, name, len(paths))
+        return {"files": len(paths), "freed_bytes": freed}
+
+
+async def pull(sub, jobs: ModelJobs, stop: asyncio.Event) -> None:
+    """Fetch and handle model jobs one at a time until `stop`."""
+    import nats.errors
+
+    while not stop.is_set():
+        try:
+            msgs = await sub.fetch(1, timeout=2)
+        except nats.errors.TimeoutError:
+            continue
+        except Exception:
+            log.exception("model jobs fetch failed; retrying")
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), 2)
+            continue
+        for m in msgs:
+            await jobs.handle(m)

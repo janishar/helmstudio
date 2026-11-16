@@ -67,9 +67,20 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   Submit's "What leaves the machine" and reserved memory (`POST /pipelines/validate`); the director's chat beside the
   batch (and in the editor for the last batch), rows it added or changed marked; fanned-out cells; an agent step's
   messages and tool calls in the execution view. Model text is always rendered as text.
-- `/timeline`, `/models` — placeholders until their milestone.
+- `/models` (`components/models/`, `lib/models.ts`; boards Models, ModelDownload, ModelsLoras): every model and
+  variant with its components, sizes and state per host (present, partial, missing, downloading with progress,
+  hash mismatch) from `GET /v1/studio/models`, read every 2 s while something downloads (else 15 s); admins get
+  Download to host (licence text and accept, the gated note; Cancel while it downloads) and Delete from host with the
+  server's refusal. `?tab=loras`: the LoRA library (yours: upload, quota, rename, delete; shared per host, which an
+  admin deletes from one host).
+- `/timeline` — placeholder until its milestone.
 - `/admin` (admins only in the dock) — Users: add, roles (`user`, `dev`), reset password, disable/enable; the
-  `ADMIN_EMAIL` account is locked. `/admin?tab=providers` — Model providers (docs/mock/Providers.dc.html, `lib/providers.ts`):
+  `ADMIN_EMAIL` account is locked. `/admin?tab=hosts` — Hosts (docs/mock/Hosts.dc.html, `lib/hosts.ts`): each
+  host's envs, memory, current run, resident components with Pin and Unload, Unload all / Evict all, and the
+  selected host's settings (after run, idle timeout, reserve) saved as they change; polled every 3 s.
+  `/admin?tab=keys` — API keys (docs/mock/ApiKeys.dc.html): list and revoke; keys are made only by `auth apikey
+  <client>` on the server, so the BFF passes `GET /auth/admin/apikeys` and `DELETE …/{id}` and never a create. A
+  signed-in non-admin gets a 404 for every /admin tab. `/admin?tab=providers` — Model providers (docs/mock/Providers.dc.html, `lib/providers.ts`):
   local servers and remote providers, Test, Edit, Enable/Disable, Delete; a key is only its secret file's name.
 
 ## Run

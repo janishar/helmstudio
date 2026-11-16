@@ -196,6 +196,8 @@ class Consumer:
                 with contextlib.suppress(Exception):
                     await stop_watch()
             self.cache.trim()
+            if self.after_run == "unload":  # Unload everything: cached node results hold memory too
+                self.cache.clear()
             if self.residency is not None and not self.stalled:
                 try:
                     await asyncio.get_running_loop().run_in_executor(

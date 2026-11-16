@@ -1,5 +1,5 @@
 {
-  "description": "the peak plus the pinned components exceed the budget: the run can never fit and fails with the numbers",
+  "description": "a pin never fails a run: when the unpinned entries (least recently used first) are not enough, the pinned transformer goes too, as the last victim; its pin stays set",
   "host": "mac",
   "keys": {
     "torch": {
@@ -96,9 +96,30 @@
     ]
   },
   "expect": {
-    "decision": "fail",
-    "unload": {},
+    "decision": "unload",
+    "unload": {
+      "torch": [
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8"
+        },
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16"
+        },
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8"
+        }
+      ]
+    },
     "budget_gb": null,
-    "error": "needs 44.1 GB at its peak; host mac has 48.0 GB, 7.4 GB of it pinned"
+    "error": null
   }
 }

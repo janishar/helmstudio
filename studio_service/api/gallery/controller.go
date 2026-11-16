@@ -1,6 +1,8 @@
 package gallery
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +37,43 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/sessions/:id/takes", c.sessionTakesHandler)
 	group.POST("/uploads", c.createUploadHandler)
 	group.POST("/uploads/:id/complete", c.completeUploadHandler)
+	group.POST("/admin/imports/takes", c.createImportHandler)
+	group.POST("/admin/imports/takes/:id/complete", c.completeImportHandler)
+}
+
+// createImportHandler: POST /admin/imports/takes — 201 a new key, 200 one seen before; 403 before the body is read.
+func (c *controller) createImportHandler(ctx *gin.Context) {
+	caller := common.MustCaller(ctx)
+	if !caller.IsAdmin() {
+		network.SendMixedError(ctx, errAdmin)
+		return
+	}
+	// a legacy snapshot alone may be 64 KB: ReqBody's limit is too small
+	body := new(dto.ImportTakeCreate)
+	raw, err := io.ReadAll(http.MaxBytesReader(ctx.Writer, ctx.Request.Body, 256<<10))
+	if err == nil {
+		err = json.Unmarshal(raw, body)
+	}
+	if err != nil {
+		network.SendMixedError(ctx, network.NewUnprocessableError("invalid JSON body", err))
+		return
+	}
+	if detail := body.Validate(); detail != "" {
+		network.SendMixedError(ctx, network.NewUnprocessableError(detail, nil))
+		return
+	}
+	out, created, err := c.service.CreateImport(ctx.Request.Context(), caller, body)
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	reply(ctx, status, out, err)
+}
+
+// completeImportHandler: POST /admin/imports/takes/{take_id}/complete.
+func (c *controller) completeImportHandler(ctx *gin.Context) {
+	out, err := c.service.CompleteImport(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
 }
 
 // reply sends out with status, or the error.

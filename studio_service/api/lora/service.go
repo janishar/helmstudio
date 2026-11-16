@@ -50,6 +50,9 @@ var (
 // IsID reports whether id has a LoRA id's form: a shared LoRA's SHA-256 or an own LoRA's UUID (lower-case hex).
 func IsID(id string) bool { return sharedID.MatchString(id) || ownID.MatchString(id) }
 
+// IsShared reports whether id is a shared LoRA's id (its file's SHA-256).
+func IsShared(id string) bool { return sharedID.MatchString(id) }
+
 // Key is where an own LoRA's file lives.
 func Key(ownerID, id string) string {
 	return common.OwnerPrefix(ownerID) + "loras/" + id + ".safetensors"
@@ -76,6 +79,24 @@ type Lora struct {
 // List is GET /loras.
 type List struct {
 	Loras []Lora `json:"loras"`
+	Usage Usage  `json:"usage"` // API 1.16
+}
+
+// Usage is the caller's own LoRAs against the quota, counted as CreateUpload's 409s count them.
+type Usage struct {
+	Count    int   `json:"count"`
+	Bytes    int64 `json:"bytes"`
+	MaxCount int   `json:"max_count"`
+	MaxBytes int64 `json:"max_bytes"`
+}
+
+// usage counts the caller's LoRAs as the quota does: not deleted, and the bytes of every one not rejected (a deleted
+// one's until the sweep).
+func usage(ctx context.Context, tx pgx.Tx, ownerID string) (Usage, error) {
+	out := Usage{MaxCount: MaxLoras, MaxBytes: MaxTotalBytes}
+	err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE deleted_at IS NULL),
+		coalesce(sum(size_bytes) FILTER (WHERE state <> 'rejected'), 0) FROM loras WHERE owner_id = $1`, ownerID).Scan(&out.Count, &out.Bytes)
+	return out, err
 }
 
 // Patch is PATCH /loras/{id}.
@@ -213,6 +234,9 @@ func (s *Service) List(ctx context.Context, caller common.Caller, q Query) (List
 		if err != nil {
 			return err
 		}
+		if out.Usage, err = usage(ctx, tx, caller.ID); err != nil {
+			return err
+		}
 		for _, r := range rows {
 			if l := ownDTO(r); q.matches(l) {
 				out.Loras = append(out.Loras, l)
@@ -320,24 +344,20 @@ func (s *Service) CreateUpload(ctx context.Context, caller common.Caller, body *
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('loras:' || $1::text))`, caller.ID); err != nil {
 			return err
 		}
-		var count int
-		var used int64
 		// a deleted LoRA's bytes count until the sweep removes its object (Grace), so delete and re-upload can't grow
 		// the store past the cap
-		if err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE deleted_at IS NULL),
-			coalesce(sum(size_bytes) FILTER (WHERE state <> 'rejected'), 0)
-			FROM loras WHERE owner_id = $1`, caller.ID).Scan(&count, &used); err != nil {
+		quota, err := usage(ctx, tx, caller.ID)
+		if err != nil {
 			return err
 		}
 		switch {
-		case count >= MaxLoras:
+		case quota.Count >= MaxLoras:
 			return network.NewConflictError(fmt.Sprintf("You have %d LoRAs; delete some first.", MaxLoras), nil)
-		case used+body.Bytes > MaxTotalBytes:
+		case quota.Bytes+body.Bytes > MaxTotalBytes:
 			return network.NewConflictError("Your LoRAs would use more than 20 GB; delete some first.", nil)
 		}
 		rows, _ := tx.Query(ctx, `INSERT INTO loras (id, owner_id, name, key, size_bytes) VALUES ($1, $2, $3, $4, $5)
 			RETURNING `+cols, id, caller.ID, name, key, body.Bytes)
-		var err error
 		created, err = pgx.CollectExactlyOneRow(rows, pgx.RowToStructByPos[row])
 		return err
 	})

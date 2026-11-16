@@ -38,6 +38,19 @@ for the model by `POST /__script`, else the prompt's `ECHO-TURN <n>:` / `ECHO-AN
 as native tool_calls when the request has tools), `GET /__requests`, `POST /__reset`; `python server.py call METHOD
 PATH [-]` makes one request from inside the container. Nothing real is ever called.
 
+## The fake hub
+
+`fake_hub/server.py` (stdlib only; service `fake-hub` of `deploy/compose/fake.yml`, no host port, the fake runner's
+`HF_ENDPOINT`) stands in for the Hugging Face Hub (API 1.16): the revision, tree and paths-info API and
+`/resolve/` with ETag / X-Repo-Commit / X-Linked-* headers and `Range` (206). Three repos back the echo pack's tiny
+model (`runner_service/packs/echo`, model `echo`): `helm-test/echo-tiny` (variant tiny), `-plus` (two 12 MiB shards
+at 1 MiB/s, so a cancel or a restart lands mid-download) and `-gated` (401 GatedRepo without the placeholder token),
+all with the same vae bytes (shared by content hash). It writes the placeholder token file the runner reads
+(`RUNNER_HF_TOKEN_FILE`, volume `hubsecrets`); `POST /__token {"present": bool}` removes or restores it,
+`GET /__requests` lists the file GETs (`done`: fully sent), `GET /__manifest` the files' sizes and SHA-256,
+`POST /__reset` clears the log. Tests reach it with `docker exec <project>-fake-hub-1 python server.py call …` and
+read the runner's scratch models root (volume `fake-models` at `/models`) the same way. Nothing real is downloaded.
+
 ## Resilience
 
 `resilience.sh` restarts studio, runner, nats, postgres and kong of the running helmstudio-test stack one at a time,
@@ -55,6 +68,8 @@ batch must end `done` with exactly 3 still runs, 3 judge runs and one decision p
 few minutes. `director-mid` (API 1.15) restarts pipelines while the
 director is mid-reply to a chat message asking for a row and a 3-shot fan-out is half done: after Resume the batch
 must end `done` with exactly 2 rows (3 and 2 takes), 5 distinct shot runs and takes and one director reply.
+`model-download` (API 1.16) restarts the fake runner and studio while the echo pack's plus variant downloads from the
+fake hub: the job must end `succeeded` and every file on the runner's disk must have the hub's SHA-256.
 `handover-studio` restarts studio while a run waits for another env of its host to unload and requires it to
 start exactly once (attempt 1, one `running`); it needs a host with two envs that report memory and `HANDOVER_HOLD` /
 `HANDOVER_WAIT` workflow ids, so it prints SKIP on the fake stack (one env, no memory).
@@ -95,6 +110,10 @@ Kong's sign-in rate limit is 20 a minute per IP; the suite signs in about that o
 | `test_looks.py` | looks (API 1.10): the echo pack's starter looks (`fixtures/registry/looks.valid.json`) listed for every user, `GET /library/echo/<id>`, PUT/DELETE 409, unknown 404; `fits`/`reason` for `?workflow=` (echo, and the fake LoRA stack when there is one); own look CRUD with `version` (stale 409), the look rules, filters (`kind`, `group`, `source`, `family`, `q`, `limit`), the 200 cap shared with elements (a fresh user); Save as look (text as typed, usable LoRAs without mode, no images, upload 422, foreign/deleted 404, `from_take_id` null once the take is deleted); runs with looks (the resolved prompt after the element lines, look images after the element rows, a repeated look once, identical lines once, `made_with.looks`, `Run.looks`), unknown and not-fitting looks 422, a LoRA look on the stack (the user's own row wins); reuse `current` → `changed` → `deleted`; a lines batch and a table `looks` column against the batch's copy, a pipeline batch's `looks` 422; a pipeline step's `looks`, `unknown_look` at Submit; isolation; every `fixtures/mentions/resolve.looks-*` case whose graph is echo against `check.py resolve_mentions`. Not covered: the echo image's drawn text (made_with is checked), starter thumbnails (none in the echo pack) |
 | `test_video.py` | video takes (API 1.11) on the fake `echo-video` (skipped without it): workflow `media` and `?media=` (422 for another value), the `frames` / Canvas / Video / Media schemas, `duration.frames` off the grid 422; the run's phases (`rendering`, `writing mp4`) and output (`kind: video`, `.mp4` key, size, `video` block); the take (`video/mp4`, `video` with `duration_s` = frames / fps, `has_audio`, `poster_url`); the MP4 through its signed link (ftyp, moov before mdat, two traks with avc1 and mp4a; Range 206 with `Content-Range`, suffix and clamped ranges, 416 past the end, a multi-range answered 200); the poster and `thumb_url` PNGs of the canvas size; `kind=video` / `kind=image` in the gallery; a video take 422 `is not an image` in `echo.refs`, `/use`, element and look images; a 3-row video batch (row thumbnails are posters); a pipeline echo → gate → echo-video (the pick as `video.refs`, the video's `parents`); `video.fail`; isolation (B: 404 on the take, its reuse and use, `not found` as a reference; the MP4 and poster 403 unsigned, tampered or with the other key's signature) |
 | `test_video_inputs.py` | video inputs (API 1.12) on the fake `echo-image-to-video` (skipped without it; the fake predicts 2 s): keyframe, steps and `auto` schemas; a first-frame run (`parents`, `made_with`, `children`, reuse) and first + last frame; keyframe rows 422 (past the clip, a frame used twice, range, cap, none, unknown field, unknown take, frames off the grid); a video take 422 as a frame and in `/use`; `auto` length (`resolved.params`, the take's frames, `made_with.typed`, reuse gives `auto`; studio checks only repeated frames, the runner fails a frame past the predicted clip); `values_by` steps 422 and a user workflow's `param_invalid`; "Use in…" data (image-to-video templates, `/use`); a batch of take-id lines on the keyframe rows; a pipeline echo → gate → clip (`unbound_input` when unbound; lineage clip → pick); `mode: adapter` 422 on a bake-only lora-stack (skipped without a live ltx host); isolation (B: `not found` in runs and batches, 404 in `/use`) |
+| `test_models.py` | models and model jobs (API 1.16) on the echo pack's tiny model and the fake hub (skipped without docker exec): `GET /models` for a user (variants, components, shared vae, licence, per-host state, no `hub_token`), every admin endpoint 403 for a user; the host starts with all three variants missing; download refusals (licence not accepted, unknown variant, host, model); tiny downloads (licence recorded with its SHA-256, progress, present, the hub's hashes on disk, a second POST 409); plus cancelled after its first shard then downloaded again (idempotent POST, `downloading` with the job, no finished file fetched twice, tiny's vae reused); gated fails `gated` without the token file and succeeds with it; delete refused while loaded and while a run of the model is not over, then tiny deleted keeping the vae plus and gated load, then every variant, missing again |
+| `test_hosts_admin.py` | hosts admin (API 1.16): users get no `admin` block; the admin block on fake; settings and pins refusals; unload `all` / `cached_env` / errors; after_run `unload` then `keep_warm` change the next run live; a pin is reported `pin`, survives the one-minute idle unload while the vae goes, and an admin unload frees it (the pin stays set) |
+| `test_apikeys.py` | application keys: create (shown once, no-store), the list never carries a key, the key works through Kong, revoke makes it 401, revoke again 404 |
+| `test_import.py` | the import endpoints (API 1.16): admin only, two synthetic PNGs into user A's gallery with lineage by key, legacy snapshot and original time, pending hidden and `upload not received`, re-POST 200 `ready` without links, a size mismatch deletes the pending take, `legacy` over 64 KB 422 |
 
 `helpers.py` has the polling, the SSE reader and the run steps; `conftest.py` the clients, the users and `echo_done`,
 user A's finished quick echo run that the runs, events and isolation tests share.

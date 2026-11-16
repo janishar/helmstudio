@@ -51,6 +51,17 @@ def test_fake_host_is_live(api):
     hosts = ok(api.get(f"{STUDIO}/hosts"))["hosts"]
     fake = [h for h in hosts if (h["host"], h["env"]) == ("fake", "fake")]
     assert len(fake) == 1 and fake[0]["state"] in ("idle", "busy"), hosts
-    # never a run id or an owner; a real runner adds its memory and resident components (test_handover: their shape)
-    allowed = {"host", "env", "state", "updated_at", "memory", "host_memory", "resident"}
+    # never a run id or an owner; a runner adds its memory and resident components (test_handover: their shape),
+    # 1.16 its machine and cached GB; `admin` only for admins (test_hosts_admin)
+    allowed = {
+        "host",
+        "env",
+        "state",
+        "updated_at",
+        "memory",
+        "host_memory",
+        "resident",
+        "cached_gb",
+        "machine",
+    }
     assert all(set(h) <= allowed for h in hosts)

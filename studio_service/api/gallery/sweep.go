@@ -42,9 +42,11 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 	err := common.System(ctx, s.pool, func(tx pgx.Tx) error {
 		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.owner_id::text, t.key, t.video->'poster'->>'key' FROM takes t
 			WHERE (t.deleted_at < clock_timestamp() - make_interval(secs => $1)
-				OR (NOT t.ready AND t.created_at < clock_timestamp() - make_interval(secs => $2)))
+				OR (NOT t.ready AND t.created_at < clock_timestamp() - make_interval(secs =>
+					CASE WHEN t.source = 'import' THEN $4::float8 ELSE $2::float8 END)))
 			AND NOT EXISTS (SELECT 1 FROM takes o WHERE o.key = t.key AND o.id <> t.id AND o.deleted_at IS NULL)
-			ORDER BY t.created_at LIMIT $3 FOR UPDATE SKIP LOCKED`, Grace.Seconds(), UploadTTL.Seconds(), sweepBatch)
+			ORDER BY t.created_at LIMIT $3 FOR UPDATE SKIP LOCKED`, Grace.Seconds(), UploadTTL.Seconds(), sweepBatch,
+			ImportLink.Seconds())
 		found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct {
 			ID, Owner, Key string
 			Poster         *string

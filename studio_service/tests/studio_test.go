@@ -101,6 +101,7 @@ func setup(t *testing.T) *env {
 	e.host(0)
 	studio.NewProjector(pool).MountNatsJetStream(e.events)
 	studio.NewProjector(pool).MountPipeline(e.events)
+	studio.NewProjector(pool).MountModels(e.events)
 	signer := common.NewSigner("test-secret-0123456789", "http://kong", time.Hour)
 	router, err := network.NewRouter(nil)
 	if err != nil {

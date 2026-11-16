@@ -1,0 +1,76 @@
+{
+  "loras": [
+    {
+      "id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c10",
+      "source": "mine",
+      "name": "my-sketch-style",
+      "family": "qwen-image",
+      "rank": 8,
+      "size_bytes": 18874368,
+      "key_style": "kohya",
+      "licence": null,
+      "sha256": "b7e15163a1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8",
+      "hosts": [],
+      "state": "ready",
+      "reason": null,
+      "thumb_url": null,
+      "created_at": "2026-11-14T09:00:00Z"
+    },
+    {
+      "id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c11",
+      "source": "mine",
+      "name": "new-upload",
+      "family": "unknown",
+      "rank": null,
+      "size_bytes": 18874368,
+      "key_style": null,
+      "licence": null,
+      "sha256": null,
+      "hosts": [],
+      "state": "pending",
+      "reason": null,
+      "thumb_url": null,
+      "created_at": "2026-11-14T09:00:00Z"
+    },
+    {
+      "id": "2c4e6a8b-1d3f-4a5b-9c7d-0e2f4a6b8c12",
+      "source": "mine",
+      "name": "model-weights",
+      "family": "unknown",
+      "rank": null,
+      "size_bytes": 18874368,
+      "key_style": null,
+      "licence": null,
+      "sha256": null,
+      "hosts": [],
+      "state": "rejected",
+      "reason": "no LoRA keys found (is it a full model?)",
+      "thumb_url": null,
+      "created_at": "2026-11-14T09:00:00Z"
+    },
+    {
+      "id": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+      "source": "shared",
+      "name": "ink-wash",
+      "family": "qwen-image",
+      "rank": 16,
+      "size_bytes": 295698432,
+      "key_style": "comfyui",
+      "licence": "apache-2.0",
+      "sha256": "3f0a6c1e9b2d4a7c8e5f1b3d6a9c2e4f7b0d3a6c9e2f5b8d1a4c7e0f3b6d9a2c",
+      "hosts": [
+        "mac"
+      ],
+      "state": "ready",
+      "reason": null,
+      "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.png?exp=1767225600&sig=ab12",
+      "created_at": "2026-10-02T08:12:00Z"
+    }
+  ],
+  "usage": {
+    "count": 3,
+    "bytes": 912000000,
+    "max_count": 50,
+    "max_bytes": 21474836480
+  }
+}

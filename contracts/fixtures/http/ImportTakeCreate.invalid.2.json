@@ -1,0 +1,24 @@
+{
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "key": "helmstudio:01JBXA0000000000000000VID1",
+  "kind": "video",
+  "filename": "harbour.mp4",
+  "content_type": "video/mp4",
+  "bytes": 48211330,
+  "width": 704,
+  "height": 448,
+  "created_at": "2025-09-12T18:04:11Z",
+  "starred": true,
+  "title": "harbour, slow push in",
+  "legacy": {
+    "studio": "ltx-studio",
+    "old_id": "01JBXA0000000000000000VID1",
+    "params": {
+      "frames": 121,
+      "fps": 24
+    }
+  },
+  "parents": [
+    "helmstudio:01JBX9Q4Z7K3M2N8P5R6S1T0VW"
+  ]
+}

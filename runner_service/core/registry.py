@@ -10,7 +10,7 @@ import json
 import logging
 
 from config import ENV, HOST, PUBLISHED_BY
-from core import graph
+from core import graph, models
 from core import pack as packs
 from messaging import schemas
 from messaging.publisher import now
@@ -41,20 +41,10 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     values = {
         "nodes": {"schema_version": 1} | meta | {"nodes": [s for s, _ in every.values()]},
         "workflows": {"schema_version": 1} | meta | {"workflows": workflows},
-        "models": {"schema_version": 1}
-        | meta
-        | {"models": [packs.models_entry(p) for p, _ in loaded]},
     }
     node_schemas = {k: s for k, (s, _) in every.items()}
     impls = {k: n for k, (_, n) in every.items()}
-    for (p, _), entry in zip(loaded, values["models"]["models"], strict=True):
-        for variant in entry.get("variants", []):
-            if variant["presence"] == "present" and p.spec.get("components"):
-                variant["memory"] = [
-                    plan
-                    for x in variant["precisions"]
-                    for plan in memory_plans(p, variant["id"], x, impls, node_schemas)
-                ]
+    values["models"] = models_value([p for p, _ in loaded], impls, node_schemas, env)
     for kind, value in values.items():
         if errs := schemas.registry_errors(kind, value):
             raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
@@ -67,6 +57,31 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
         if errs := graph.validate(w["nodes"], node_schemas, run=False):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
     return values, impls, [p for p, _ in loaded]
+
+
+def models_value(loaded, impls: dict, node_schemas: dict, env: str = ENV) -> dict:
+    """The `models` value as the disk is now (core.models.entry per pack, `memory` for present variants, the
+    licences); `prefused` stays empty until fill_prefused. Rebuilt by every rescan."""
+    entries = [packs.models_entry(p) for p in loaded]
+    for p, entry in zip(loaded, entries, strict=True):
+        for variant in entry.get("variants", []):
+            if variant["presence"] == "present" and p.spec.get("components"):
+                variant["memory"] = [
+                    plan
+                    for x in variant["precisions"]
+                    for plan in memory_plans(p, variant["id"], x, impls, node_schemas)
+                ]
+    value = {"schema_version": 1, "host": HOST, "env": env, "published_at": now(),
+             "published_by": PUBLISHED_BY, "models": entries}  # fmt: skip
+    if lic := models.licences(loaded):
+        value["licences"] = lic
+    return value
+
+
+def changed(old: dict | None, new: dict) -> bool:
+    """Whether two values of a key differ beyond published_at."""
+    strip = lambda v: {k: x for k, x in (v or {}).items() if k != "published_at"}
+    return strip(old) != strip(new)
 
 
 ASK_IMAGES = (
@@ -83,8 +98,10 @@ def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: 
     if not media:
         return [memory_plan(pack, variant, precision, impls, node_schemas, text)]
     plans = [memory_plan(pack, variant, precision, impls, node_schemas, media)]
-    return plans + [memory_plan(pack, variant, precision, impls, node_schemas, [w]) | {"workflow": w["id"]}
-                    for w in text]  # fmt: skip
+    plans += [memory_plan(pack, variant, precision, impls, node_schemas, [w]) | {"workflow": w["id"]}
+              for w in text]  # fmt: skip
+    # a workflow that loads nothing (echo-ask) has no plan
+    return [p for p in plans if p["components"]]
 
 
 def memory_plan(
@@ -193,5 +210,7 @@ async def publish(js, values: dict[str, dict]) -> None:
     """Write the values to the `registry` KV bucket."""
     kv = await js.key_value("registry")
     for kind, value in values.items():
+        if errs := schemas.registry_errors(kind, value):
+            raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
         await kv.put(f"{HOST}.{ENV}.{kind}", json.dumps(value).encode())
     log.info("registry published: %s.%s.{%s}", HOST, ENV, ",".join(values))

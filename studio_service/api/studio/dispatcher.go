@@ -71,6 +71,7 @@ type Dispatcher struct {
 	asks   map[string]*ask      // "<host>.<env>" asked to unload → the state of its asks
 	skips  map[string]skip      // queued run id → how often resident-first order passed it over
 	asking sync.WaitGroup       // the asks in flight (tests wait for them)
+	admin  []*adminAsk          // the admin's unloads not answered yet (API 1.16, dispatcher_admin.go)
 }
 
 // ask is the state of the unload requests to one env: whether one is in flight, when the last went, and gen, bumped by
@@ -176,6 +177,13 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 				return err
 			}
 		}
+		running := map[string]bool{}
+		for _, run := range snap.released {
+			running[*run.Host+"."+run.Env] = true
+		}
+		for host := range d.adminPass(running, busy, now) { // an admin unload not answered holds its host
+			busy[host] = true
+		}
 		var free []string
 		for _, host := range snap.hosts {
 			if !busy[host] {
@@ -229,6 +237,36 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 func (d *Dispatcher) handover(ctx context.Context, snap snapshot, next placed, now time.Time) admission {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	got := d.decide(snap, next, now)
+	for _, env := range slices.Sorted(maps.Keys(got.unload)) {
+		d.ask(ctx, next, env, got.unload[env], now)
+	}
+	return got
+}
+
+// pinnedVictims are the pinned entries handover would ask to unload for next now (Run.unloads_pinned); a nil
+// dispatcher decides from the hosts values alone (no unload replies standing).
+func (d *Dispatcher) pinnedVictims(reg *registry.Registry, snap snapshot, next placed, now time.Time) []dto.PinnedUnload {
+	if d == nil {
+		d = &Dispatcher{registry: reg, asks: map[string]*ask{}}
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var out []dto.PinnedUnload
+	got := d.decide(snap, next, now)
+	for _, env := range slices.Sorted(maps.Keys(got.unload)) {
+		for _, v := range got.unload[env] {
+			if v.res.Pinned {
+				out = append(out, dto.PinnedUnload{Env: v.env, Component: v.res.Component, Model: v.res.Model,
+					Variant: v.res.Variant, Precision: v.res.Precision, GB: v.res.GB})
+			}
+		}
+	}
+	return out
+}
+
+// decide is next's admission on its host, without asking anything (d.mu held).
+func (d *Dispatcher) decide(snap snapshot, next placed, now time.Time) admission {
 	if next.env == "server" { // a local server's call loads nothing: its memory is reserved already (API 1.15)
 		return admission{decision: "release"}
 	}
@@ -268,11 +306,7 @@ func (d *Dispatcher) handover(ctx context.Context, snap snapshot, next placed, n
 		}
 	}
 	p := planOf(d.registry, next.host, next.run)
-	got := admit(next.host, entries, budget, next.env, p.peak, p.needs, referenced, running)
-	for _, env := range slices.Sorted(maps.Keys(got.unload)) {
-		d.ask(ctx, next, env, got.unload[env], now)
-	}
-	return got
+	return admit(next.host, entries, budget, next.env, p.peak, p.needs, referenced, running)
 }
 
 // ask sends env of next's host one unload request naming victims, unless one is in flight or the last went less than
@@ -524,26 +558,20 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 		p = budget
 	}
 	var counted []entry
-	c, pinned, own := 0, 0, 0
+	c, own := 0, 0
 	for _, e := range entries {
 		if e.env == env && slices.Contains(needs, e.key) {
 			continue // reused: inside the peak
 		}
 		counted = append(counted, e)
 		c += e.gb
-		if e.res.Pinned && e.fresh {
-			pinned += e.gb
-		}
 		if e.env == env && e.key == "(measured)" {
 			own += e.gb // the run's own runner measured beyond its entries
 		}
 	}
-	if p+pinned > budget {
-		reason := fmt.Sprintf("needs %.1f GB at its peak; host %s has %.1f GB", float64(p)/100, host, float64(budget)/100)
-		if p <= budget {
-			reason += fmt.Sprintf(", %.1f GB of it pinned", float64(pinned)/100)
-		}
-		return admission{decision: "fail", err: reason}
+	if p > budget { // a pin never fails a run: pinned entries are its last victims (below)
+		return admission{decision: "fail", err: fmt.Sprintf("needs %.1f GB at its peak; host %s has %.1f GB",
+			float64(p)/100, host, float64(budget)/100)}
 	}
 	if running != "" {
 		return admission{decision: "wait", holder: running}
@@ -570,14 +598,14 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 	var victims []entry
 	holders := []string{}
 	for _, e := range counted {
-		if e.fresh && !e.res.Pinned {
+		if e.fresh && e.res.PinnedWhy != "in_use" {
 			victims = append(victims, e)
 		} else if !e.fresh && !slices.Contains(holders, e.env) && (e.env != env || e.key != "(measured)") {
 			holders = append(holders, e.env)
 		}
 	}
-	slices.SortStableFunc(victims, func(a, b entry) int {
-		return cmp.Or(cmp.Compare(tier(a), tier(b)), cmp.Compare(btoi(a.res.LastUsed != nil), btoi(b.res.LastUsed != nil)),
+	slices.SortStableFunc(victims, func(a, b entry) int { // pinned ones last: taken only when nothing else fits
+		return cmp.Or(cmp.Compare(btoi(a.res.Pinned), btoi(b.res.Pinned)), cmp.Compare(tier(a), tier(b)), cmp.Compare(btoi(a.res.LastUsed != nil), btoi(b.res.LastUsed != nil)),
 			deref(a.res.LastUsed).Compare(deref(b.res.LastUsed)), cmp.Compare(b.gb, a.gb), strings.Compare(a.env, b.env),
 			strings.Compare(a.res.Component, b.res.Component), strings.Compare(a.res.Model, b.res.Model),
 			strings.Compare(a.res.Variant, b.res.Variant), strings.Compare(a.res.Precision, b.res.Precision))
@@ -737,6 +765,7 @@ type placed struct {
 	env      string
 	position int
 	passed   []string
+	pins     []dto.PinnedUnload // read only: the pinned entries admitting it now would unload
 }
 
 // snapshot is the queue as one look sees it: the released runs not ended, the waiting runs (oldest first) with
@@ -1102,6 +1131,7 @@ func (s *Service) lineupNow(ctx context.Context) (map[string]placed, map[string]
 			}
 		}
 		for _, next := range lineup(snap.hosts, snap.queue, snap.last, ahead, 0, s.dispatcher.skipState(), now) {
+			next.pins = s.dispatcher.pinnedVictims(s.registry, snap, next, now)
 			at[next.run.ID] = next
 		}
 		return nil
@@ -1129,9 +1159,9 @@ func fill(runs []*dto.Run, at map[string]placed) {
 		if run.Status != "queued" {
 			continue
 		}
-		run.Host, run.Position = nil, nil
+		run.Host, run.Position, run.UnloadsPinned = nil, nil, nil
 		if next, ok := at[run.ID]; ok {
-			run.Host, run.Position = &next.host, &next.position
+			run.Host, run.Position, run.UnloadsPinned = &next.host, &next.position, next.pins
 		}
 	}
 }

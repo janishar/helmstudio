@@ -15,8 +15,13 @@ budget of physical RAM minus RUNNER_RESERVE_GB.
   after the device cache was freed (contracts/README.md, "Measured memory above the declared sizes").
 - After a run: a plain component whose baked set the run used is unloaded (the two never stay together); then
   unload (everything), keep_warm (the default: stay until memory is needed or RUNNER_IDLE_UNLOAD_S passes) or
-  keep_pinned (only RUNNER_PIN components stay); then the device cache is freed, after every run.
-- `unload_named`: studio's dispatcher names entries to unload (runner.unload), never a pinned one.
+  keep_pinned (only pinned components stay); then the device cache is freed, after every run.
+- Pins (contracts/README.md "Hosts admin"): the host_settings key's `pins` (entries by identity, `pin_refs`), else
+  RUNNER_PIN (component names). A pinned entry is never an idle or after-run victim (keep_pinned keeps it) and is an
+  admission victim only as a last resort (after every unpinned one, when the stage would otherwise not fit: a pin
+  never fails a run). The pin stays set: the component is pinned again when it is next loaded.
+- `unload_named`: studio's dispatcher names entries to unload (runner.unload); it names a pinned one only as a last
+  resort, and an admin unload names them freely, so every named entry held and not in use goes.
 
 Every method but `state` runs on the GPU thread; `state` (read by the hosts heartbeat) takes the lock."""
 
@@ -66,6 +71,9 @@ class Residency:
         pins: set[str] = frozenset(),
     ) -> None:
         self.budget_gb, self.free, self.measure, self.pins = budget_gb, free, measure, pins
+        self.pin_refs: set[tuple] | None = (
+            None  # host_settings pins of this env (ident), replacing `pins`
+        )
         # key → [gb, value, loras, last_used (epoch s)]; LRU first
         self.entries: OrderedDict[tuple, list] = OrderedDict()
         self.in_use: set[tuple] = set()  # the running stage's components: not evictable
@@ -73,6 +81,13 @@ class Residency:
         self.cap: float | None = None  # the running run's budget_gb, if studio sent one
         self.on_short: list[Callable[[], None]] = []  # drop cached node results (graph.Cache.clear)
         self.lock = threading.Lock()
+
+    def pinned(self, key: tuple) -> bool:
+        """Whether a pin names the entry `key`: a host_settings pin, else a RUNNER_PIN component name."""
+        if self.pin_refs is None:
+            return key[2] in self.pins
+        entry = self.entries.get(key)
+        return ident(_name(key, entry[2] if entry else None)) in self.pin_refs
 
     @property
     def used_gb(self) -> float:
@@ -149,8 +164,10 @@ class Residency:
 
         def order(
             k: tuple,
-        ) -> tuple:  # not needed later first; then a baked set this run does not use; then LRU
-            return k in later, not (len(k) > 4 and k not in self.used), lru.index(k)
+        ) -> (
+            tuple
+        ):  # unpinned first (a pin is the last resort); not needed later; a baked set unused; LRU
+            return self.pinned(k), k in later, not (len(k) > 4 and k not in self.used), lru.index(k)
 
         evicted = False
         for k in sorted((k for k in lru if k not in self.in_use), key=order):
@@ -174,7 +191,7 @@ class Residency:
 
     def release(self, keys: set[tuple]) -> None:
         """Unload these components now (a stage's model.yaml `unload_after`), pinned ones excepted."""
-        victims = [k for k in self.entries if k in keys and k[2] not in self.pins]
+        victims = [k for k in self.entries if k in keys and not self.pinned(k)]
         for k in victims:
             self.in_use.discard(k)
             self._evict(k)
@@ -182,9 +199,9 @@ class Residency:
             self.free()
 
     def unload(self, keep_pins: bool = False) -> list[dict]:
-        """Unload every component (keep_pins: but RUNNER_PIN ones) and give the memory back; returns the
+        """Unload every component (keep_pins: but pinned ones) and give the memory back; returns the
         unloaded entries' names (runner.unload `freed`)."""
-        victims = [k for k in self.entries if not (keep_pins and k[2] in self.pins)]
+        victims = [k for k in self.entries if not (keep_pins and self.pinned(k))]
         freed = [_name(k, self.entries[k][2]) for k in victims]
         for k in victims:
             self._evict(k)
@@ -193,11 +210,14 @@ class Residency:
         return freed
 
     def unload_named(self, names: list[dict]) -> tuple[list[dict], float]:
-        """runner.unload `components`: unload exactly the named entries held, not in use and not RUNNER_PIN ones;
-        returns (their names, their GB)."""
-        want = {_ident(n) for n in names}
-        victims = [k for k, e in self.entries.items() if _ident(_name(k, e[2])) in want
-                   and k not in self.in_use and k[2] not in self.pins]  # fmt: skip
+        """runner.unload `components`: unload exactly the named entries held and not in use, pinned ones too (the
+        dispatcher names a pin only as a last resort); returns (their names, their GB)."""
+        want = {ident(n) for n in names}
+        victims = [
+            k
+            for k, e in self.entries.items()
+            if ident(_name(k, e[2])) in want and k not in self.in_use
+        ]
         freed = [_name(k, self.entries[k][2]) for k in victims]
         gb = sum(self.entries[k][0] for k in victims)
         for k in victims:
@@ -212,7 +232,7 @@ class Residency:
         try:
             # a baked set the run used makes the plain copy dead weight (38 GB together for LTX): it goes now
             plain = {k[:4] for k in self.used if len(k) > 4} - self.used
-            for k in [k for k in plain if k in self.entries and k[2] not in self.pins]:
+            for k in [k for k in plain if k in self.entries and not self.pinned(k)]:
                 self._evict(k)
         finally:
             self.done()
@@ -226,6 +246,8 @@ class Residency:
         """The hosts value's `memory` and `resident`."""
         with self.lock:
             entries = [(k, e[0], e[2], e[3]) for k, e in self.entries.items()]
+        why = {k: "pin" if self.pinned(k) else "in_use" for k, *_ in entries
+               if self.pinned(k) or k in self.in_use}  # fmt: skip
         used = sum(e[1] for e in entries)
         measured = self.measure()
         return {
@@ -233,10 +255,7 @@ class Residency:
                 "budget_gb": round(self.budget_gb, 1),
                 "used_gb": round(measured if measured is not None else used, 1),
             },
-            "resident": [
-                _resident(k, gb, k in self.in_use or k[2] in self.pins, loras, at)
-                for k, gb, loras, at in entries
-            ],
+            "resident": [_resident(k, gb, why.get(k), loras, at) for k, gb, loras, at in entries],
         }
 
 
@@ -244,11 +263,13 @@ def _stamp(at: float) -> str:
     return datetime.fromtimestamp(at, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def _resident(key: tuple, gb: float, pinned: bool, loras: list | None, at: float) -> dict:
-    """One hosts value `resident` entry; one with baked LoRAs (core.pack.ModelRef.resident_loras) lists them."""
+def _resident(key: tuple, gb: float, why: str | None, loras: list | None, at: float) -> dict:
+    """One hosts value `resident` entry (`why`: pinned_why, None = not pinned); one with baked LoRAs
+    (core.pack.ModelRef.resident_loras) lists them."""
     model, variant, component, precision, *_ = key
     out = {"component": component, "model": model, "variant": variant, "precision": precision,
-           "gb": round(gb, 2), "pinned": pinned, "last_used": _stamp(at)}  # fmt: skip
+           "gb": round(gb, 2), "pinned": why is not None} | ({"pinned_why": why} if why else {})  # fmt: skip
+    out["last_used"] = _stamp(at)
     if loras:
         out["loras"] = loras
     return out
@@ -263,8 +284,8 @@ def _name(key: tuple, loras: list | None) -> dict:
     return out
 
 
-def _ident(name: dict) -> tuple:
-    """A named entry as a comparable tuple (absent and empty `loras` are both the plain component)."""
+def ident(name: dict) -> tuple:
+    """A named entry (a req.runner.unload component, a host_settings pin) as a comparable tuple (absent and empty `loras` are both the plain component)."""
     loras = tuple((x.get("lora_id"), float(x.get("strength", 0))) for x in name.get("loras") or ())
     return (
         name.get("component"),

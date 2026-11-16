@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "state": "idle",
+  "run_id": null,
+  "updated_at": "2026-11-16T10:00:00Z",
+  "published_by": "runner mlx 0.3.0",
+  "memory": {
+    "budget_gb": 48,
+    "used_gb": 21.0
+  },
+  "resident": [
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8",
+      "gb": 19.2,
+      "pinned": true,
+      "pinned_why": "pin",
+      "last_used": "2026-11-16T09:58:00Z"
+    },
+    {
+      "component": "upscaler",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.93,
+      "pinned": false
+    }
+  ],
+  "models_disk": {
+    "root": "~/GenAI/models",
+    "free_bytes": 812345678848,
+    "total_bytes": 1995218165760
+  },
+  "machine": {
+    "os": "macos",
+    "accel": "metal",
+    "packaging": "native",
+    "ram_gb": 64
+  },
+  "hub_token": "hf_xxx",
+  "policy": {
+    "after_run": "keep_warm",
+    "idle_unload_min": 10,
+    "reserve_gb": 12,
+    "settings_version": 3
+  }
+}

@@ -59,8 +59,13 @@ def test_models_entry_measures_presence_and_own_bytes(tmp_path, monkeypatch):
     assert schemas.registry_errors("models", value) == []
     (tmp_path / "Qwen-Image-2.1/vae/base.safetensors").unlink()
     base, turbo = pack.models_entry(q.pack)["variants"]
-    assert base["presence"] == turbo["presence"] == "missing"  # turbo shares base's vae
-    assert "bytes" not in base
+    assert base["presence"] == turbo["presence"] == "partial"  # turbo shares base's vae
+    assert base["bytes"] < header * 3 and "vae" not in {f.get("component") for f in base["files"]}
+    for d in ("Qwen-Image-2.1", "Qwen-Image-2.1-Turbo"):
+        for f in (tmp_path / d).rglob("*.safetensors"):
+            f.unlink()
+    base, turbo = pack.models_entry(q.pack)["variants"]
+    assert base["presence"] == turbo["presence"] == "missing" and "bytes" not in base
 
 
 def test_component_size_is_computed_at_the_target_dtype(tmp_path, monkeypatch):
@@ -249,3 +254,20 @@ def test_a_text_workflow_gets_its_own_memory_plan_at_four_thumbnails(tmp_path, m
     ]  # only text workflows (the llm pack): one item, no `workflow`
     (only,) = registry.memory_plans(q.pack, "turbo", "int8", q.impls, q.schemas)
     assert "workflow" not in only and only["planned_at"]["images"] == 4
+
+
+def test_a_file_two_components_read_counts_once(tmp_path, monkeypatch):
+    """LTX's vae and vae_encoder (and the connector inside the transformer file) read the same files: each file's
+    bytes go to one component, the one listing the fewest files, the first on a tie."""
+    q = FakeQwen(tmp_path, monkeypatch)
+    comps = q.pack.spec["components"]
+    comps["vae_encoder"] = dict(comps["vae"])
+    comps["connector"] = {
+        "files": [comps["transformer"]["files"], comps["vae"]["files"]],
+        "dtype": "stored",
+    }
+    base = pack.models_entry(q.pack)["variants"][0]
+    got = {c["component"]: c["bytes"] for c in base["components"]}
+    vae = len(next((tmp_path / "Qwen-Image-2.1/vae").glob("*.safetensors")).read_bytes())
+    assert got["vae"] == vae and got["vae_encoder"] == 0 and got["connector"] == 0, got
+    assert got["transformer"] > 0

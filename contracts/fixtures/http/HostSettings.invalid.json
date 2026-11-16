@@ -1,0 +1,18 @@
+{
+  "host": "mac",
+  "version": 3,
+  "after_run": "keep",
+  "idle_unload_min": 10,
+  "reserve_gb": 12,
+  "pins": [
+    {
+      "env": "mlx",
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8"
+    }
+  ],
+  "applied": true,
+  "updated_at": "2026-11-16T09:59:00Z"
+}

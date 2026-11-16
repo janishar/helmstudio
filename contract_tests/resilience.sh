@@ -5,7 +5,7 @@
 #   make resilience                (from the repo root: brings the test stack up and runs this)
 #   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats
-# batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio; studio-queued restarts studio while a second run is still queued behind the first (not yet
+# batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download; studio-queued restarts studio while a second run is still queued behind the first (not yet
 # released) and requires that it then succeeds. batch-<svc> restarts <svc> during a 12-row slow echo batch (batch-kill:
 # SIGKILL the pipelines container, then start it), presses Resume whenever the batch is paused (pipelines pauses its
 # batches after a restart) and requires the batch to end done with exactly 12 runs (one per row) and 12 takes.
@@ -22,6 +22,9 @@
 # the director is mid-reply and the fan-out half done; it presses Resume when paused: the batch must end done with
 # exactly 2 rows (succeeded with 3 and 2 takes), 5 distinct shot runs and takes, and one director reply.
 # handover-studio restarts studio while a run waits for an unload (see handover_check; skipped on the fake stack).
+# model-download (API 1.16) downloads the echo pack's plus variant (24 MiB at the fake hub's 1 MiB/s) and restarts the
+# fake runner and studio once it is under way: the job must end succeeded (resumed from the redelivered command) and
+# every file of plus on the runner's disk must have the fake hub's SHA-256.
 # Needs curl and python3. Exit 1 when any service fails.
 set -eu
 cd "$(dirname "$0")"
@@ -345,16 +348,62 @@ print(sum(1 for e in json.load(sys.stdin)["events"] if e["run_id"]==sys.argv[1] 
   echo "$verdict $1: waiting run was $was -> $end, attempt $attempt, started $starts time(s)"
 }
 
+# model_check: restart the fake runner and studio mid-download (see the header)
+model_check() {
+  plus_state() { api GET /v1/studio/models | python3 -c 'import json,sys
+(m,) = [m for m in json.load(sys.stdin)["models"] if m["id"] == "echo"]
+(v,) = [v for v in m["variants"] if v["id"] == "plus"]
+print(next(h["state"] for h in v["hosts"] if h["host"] == "fake"))'; }
+  job_field() { j=$1; shift; api GET "/v1/studio/admin/model-jobs/$j" | field "$@"; }
+  api POST /v1/studio/admin/hosts/fake/unload '{"all":true}' >/dev/null || true
+  if [ "$(plus_state || echo unknown)" != missing ]; then   # start from nothing on disk
+    del=$(api DELETE "/v1/studio/admin/models/echo?host=fake&variant=plus" | field id) || del=""
+    for _ in $(seq 60); do
+      case $(job_field "$del" state || true) in succeeded | failed | cancelled) break ;; esac
+      sleep 1
+    done
+  fi
+  jid=$(api POST /v1/studio/admin/models/echo/download '{"host":"fake","variant":"plus","accept_licence":true}' |
+    field id) || jid=""
+  [ -n "$jid" ] || { fails=$((fails + 1)); echo "FAIL $1: the download was not accepted"; return; }
+  for _ in $(seq 60); do                     # under way: past 2 MiB, inside the first 12 MiB shard
+    [ "$(job_field "$jid" progress done_bytes || echo 0)" -gt 2097152 ] 2>/dev/null && break
+    sleep 1
+  done
+  was=$(job_field "$jid" progress done_bytes || echo ?)
+  dc restart runner studio >/dev/null 2>&1
+  dc up -d --wait >/dev/null 2>&1
+  signin
+  end=unknown
+  for _ in $(seq "$END_TIMEOUT"); do
+    end=$(job_field "$jid" state) || end=unreachable
+    case $end in succeeded | failed | cancelled) break ;; esac
+    sleep 1
+  done
+  hashes=$(dc exec -T fake-hub python server.py call GET /__manifest | python3 -c 'import json,sys
+m = json.load(sys.stdin)["helm-test/echo-tiny-plus"]
+print(json.dumps({p: v["sha256"] for p, v in sorted(m.items()) if not p.startswith("vae/")}, sort_keys=True))')
+  disk=$(dc exec -T runner python -c 'import hashlib, json, pathlib
+r = pathlib.Path("/models/Echo-Tiny-Plus")
+print(json.dumps({str(p.relative_to(r)): hashlib.sha256(p.read_bytes()).hexdigest() for p in r.rglob("*")
+  if p.is_file() and not any(x.startswith(".") for x in p.relative_to(r).parts)}, sort_keys=True))')
+  verdict=PASS
+  { [ "$end" = succeeded ] && [ -n "$hashes" ] && [ "$hashes" = "$disk" ]; } || { verdict=FAIL; fails=$((fails + 1)); }
+  [ "$hashes" = "$disk" ] && same=yes || same=no
+  echo "$verdict $1: download at $was bytes during the restart -> $end; files match the hub's SHA-256: $same"
+}
+
 signin
 SID=$(api POST /v1/studio/sessions '{"title":"resilience"}' | field id)
 fails=0
-for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio}; do
+for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download}; do
   case $svc in
     batch-*) batch_check "$svc"; continue ;;
     pipeline-parked) pipeline_check "$svc"; continue ;;
     agents-parked) agents_check "$svc"; continue ;;
     director-mid) director_check "$svc"; continue ;;
     handover-studio) handover_check "$svc"; continue ;;
+    model-download) model_check "$svc"; continue ;;
   esac
   rid=$(run "$SID" 40)                       # 40 steps x 300 ms: ~12 s of work
   wait_status "$rid" "running" 30 >/dev/null || true

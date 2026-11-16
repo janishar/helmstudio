@@ -96,6 +96,44 @@
       }
     },
     {
+      "id": "echo-tiny",
+      "title": "Echo tiny",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "model": {
+          "kind": "echo/model",
+          "params": {
+            "variant": "tiny",
+            "precision": "bf16"
+          }
+        },
+        "tiny": {
+          "kind": "echo/tiny",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text"
+          },
+          "params": {
+            "steps": 3,
+            "delay_ms": 100
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "tiny.image"
+          }
+        }
+      }
+    },
+    {
       "id": "echo-video",
       "title": "Echo video",
       "family": "echo",

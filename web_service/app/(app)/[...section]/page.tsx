@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 /** Dock sections that arrive in a later milestone, by route segment. */
 const LATER: Record<string, string> = {
   timeline: "Timeline",
-  models: "Models",
 };
 
 type Props = { params: Promise<{ section: string[] }> };

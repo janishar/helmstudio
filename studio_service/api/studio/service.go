@@ -44,6 +44,15 @@ type Service struct {
 	remoteOn     bool            // the deployment's remote switch (STUDIO_REMOTE_MODELS, off by default; API 1.15)
 	// the dispatcher whose skip counts positions use; nil: none
 	dispatcher *Dispatcher
+	// API 1.16: purge drops a CMD subject's messages (a stale released download's command); putSettings writes KV
+	// host_settings key <host>. nil: not reachable (tests)
+	purge       func(ctx context.Context, subject string) error
+	putSettings func(ctx context.Context, host string, value []byte) error
+}
+
+// SetModelOps sets the NATS calls of model jobs and host settings (API 1.16).
+func (s *Service) SetModelOps(purge func(ctx context.Context, subject string) error, putSettings func(ctx context.Context, host string, value []byte) error) {
+	s.purge, s.putSettings = purge, putSettings
 }
 
 // SetDispatcher lets positions use the dispatcher's current skip counts.
@@ -211,26 +220,49 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 			return out, err
 		}
 	}
+	var admin map[string]*dto.HostAdmin
+	if caller.IsAdmin() {
+		err := common.System(ctx, s.db, func(tx pgx.Tx) (err error) {
+			admin, err = s.hostsAdmin(ctx, tx, hosts, now)
+			return err
+		})
+		if err != nil {
+			return out, err
+		}
+	}
 	for _, host := range hosts {
 		state := host.State
 		if !host.Live(now) {
 			state = "offline"
 		}
 		resident := slices.Clone(host.Resident)
+		declared := 0
 		for i, r := range resident {
+			declared += hundredths(r.GB)
 			if len(r.Loras) == 0 {
 				continue
 			}
 			r.Loras = slices.Clone(r.Loras)
 			for j, l := range r.Loras {
-				if l.LoraID == nil || (utility.IsUUID(*l.LoraID) && !mine[*l.LoraID]) {
+				switch {
+				case l.LoraID == nil:
+					r.Loras[j] = registry.ResidentLora{Bytes: l.Bytes}
+				case utility.IsUUID(*l.LoraID) && !mine[*l.LoraID] && caller.IsAdmin(): // admins: id and strength, never the name
+					r.Loras[j] = registry.ResidentLora{LoraID: l.LoraID, Strength: l.Strength, Bytes: l.Bytes}
+				case utility.IsUUID(*l.LoraID) && !mine[*l.LoraID]:
 					r.Loras[j] = registry.ResidentLora{Bytes: l.Bytes}
 				}
 			}
 			resident[i] = r
 		}
-		out.Hosts = append(out.Hosts, dto.Host{Host: host.Host, Env: host.Env, State: state, UpdatedAt: host.UpdatedAt,
-			Memory: host.Memory, HostMemory: shared[host.Host], Resident: resident})
+		entry := dto.Host{Host: host.Host, Env: host.Env, State: state, UpdatedAt: host.UpdatedAt,
+			Memory: host.Memory, HostMemory: shared[host.Host], Resident: resident, Machine: host.Machine,
+			Admin: admin[host.Host+"."+host.Env]}
+		if host.Memory != nil {
+			cached := math.Round(float64(max(0, hundredths(host.Memory.UsedGB)-declared))/10) / 10
+			entry.CachedGB = &cached
+		}
+		out.Hosts = append(out.Hosts, entry)
 	}
 	return out, nil
 }

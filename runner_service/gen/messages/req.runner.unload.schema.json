@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json",
   "title": "NATS request/reply runner.unload.<host>.<env> (studio's dispatcher → a runner)",
-  "description": "Core NATS request/reply on subject `runner.unload.<host>.<env>` (no queue group: one runner per host and env), bare JSON. The dispatcher's hand-over (contracts/README.md, The hand-over): to make room on a host whose envs share one memory budget it names the components (resident entries) an env should unload. The runner, when idle, unloads exactly those of them it holds (never a RUNNER_PIN one; absent `components` = every component, pinned ones, adapters and cached handles included: by hand), frees its device memory (MLX: mx.clear_cache(); torch MPS: synchronize() then empty_cache()), rewrites its hosts key, then replies with what it freed and what remains. While a run is in progress it unloads nothing and replies `busy`. Studio waits 60 s.",
+  "description": "Core NATS request/reply on subject `runner.unload.<host>.<env>` (no queue group: one runner per host and env), bare JSON. The dispatcher's hand-over (contracts/README.md, The hand-over): to make room on a host whose envs share one memory budget it names the components (resident entries) an env should unload. The runner, when idle, unloads exactly those of them it holds (a pinned one too, from API 1.16: the dispatcher names a pin only as its last-resort victim, and the pin stays set; absent `components` = every component, pinned ones, adapters and cached handles included: by hand), frees its device memory (MLX: mx.clear_cache(); torch MPS: synchronize() then empty_cache()), rewrites its hosts key, then replies with what it freed and what remains. While a run is in progress it unloads nothing and replies `busy`. Studio waits 60 s. From API 1.16 the admin's Unload, Unload all and cached-handle unload use the same request with `by: admin`.",
   "$defs": {
     "request": {
       "type": "object",
@@ -27,7 +27,24 @@
             "$ref": "#/$defs/component"
           },
           "description": "from API 1.13: the entries to unload, in the dispatcher's victim order; one it does not hold is skipped. Absent = everything (stage A, by hand)"
+        },
+        "by": {
+          "enum": [
+            "dispatcher",
+            "admin"
+          ],
+          "description": "from API 1.16: who asks; absent = dispatcher. admin (POST /v1/studio/admin/hosts/{host}/unload): the named entries are unloaded even when pinned (pinned_why pin; the pin setting stays, so the entry is pinned again when it next loads); never one in use: a run in progress still gets `busy`, and studio asks again after it ends"
+        },
+        "cached_only": {
+          "const": true,
+          "description": "from API 1.16, by admin, without components: free only the cached handles (cached node results, adapters not in use, the device cache: the measured excess); every resident entry stays"
         }
+      },
+      "not": {
+        "required": [
+          "cached_only",
+          "components"
+        ]
       }
     },
     "reply": {

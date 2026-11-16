@@ -132,9 +132,12 @@ class ModelRef:
         return out
 
     def owner(self, component: str) -> str:
-        """The variant whose folder holds `component`'s files (the first variant when this one shares it)."""
+        """The variant whose folder holds `component`'s files: the first variant when this one shares it, unless
+        this one holds its own copy (a download found the owner's hashes differ: `separate`)."""
         shares = self.pack.spec["variants"][self.variant].get("shares", [])
-        return next(iter(self.pack.spec["variants"])) if component in shares else self.variant
+        if component in shares and not owns_copy(self.pack, self.variant, component):
+            return next(iter(self.pack.spec["variants"]))
+        return self.variant
 
     def precision_of(self, component: str) -> str:
         """The precision `component` loads at: the model's, when the component offers it, else its first."""
@@ -213,6 +216,15 @@ def models_root() -> Path:
     import config
 
     return config.MODELS
+
+
+def owns_copy(pack: Pack, variant: str, component: str) -> bool:
+    """Whether the variant's own folder holds files of `component` (a shared one kept separate); a link (into the
+    owner's folder, as a hand-made share) is not a copy."""
+    root = models_root() / pack.spec["variants"][variant]["dir"]
+    globs = pack.component(component)["files"]
+    return any(p.is_file() and not p.is_symlink()
+               for g in ([globs] if isinstance(globs, str) else globs) for p in root.glob(g))  # fmt: skip
 
 
 def component_files(pack: Pack, variant: str, component: str) -> list[Path]:
@@ -448,34 +460,10 @@ def model_node(pack: Pack):
 
 
 def models_entry(pack: Pack) -> dict:
-    """The pack's entry in the `models` registry value, with each variant's presence measured on disk:
-    present when every component's files are there; bytes = its own files (not links, not shared)."""
-    spec = pack.spec
-    entry = {"id": spec["id"], "family": pack.family, "title": spec["title"]}
-    if "variants" not in spec:
-        if block := lora_block(pack):  # a model-free pack (echo) still publishes its own lora block
-            entry["lora"] = block
-        return entry
-    entry["variants"] = []
-    offered = {p for c in spec.get("components", {}).values() for p in c.get("precision", ["bf16"])}
-    for vid, v in spec["variants"].items():
-        ref = ModelRef(pack, vid, "bf16")
-        root = models_root() / v["dir"]
-        present = root.is_dir() and all(ref.files(c) for c in spec.get("components", {}))
-        variant = {"id": vid, "presence": "present" if present else "missing"}
-        if present:
-            variant["bytes"] = sum(
-                f.stat().st_size
-                for f in root.rglob("*")
-                if f.is_file()
-                and not f.is_symlink()
-                and not any(part.startswith(".") for part in f.relative_to(root).parts)
-            )
-        variant["precisions"] = [p for p in PRECISIONS if p in offered]
-        entry["variants"].append(variant)
-    if block := lora_block(pack):
-        entry["lora"] = block
-    return entry
+    """The pack's entry in the `models` registry value, as on disk now (core.models.entry)."""
+    from core import models
+
+    return models.entry(pack)
 
 
 # --- loading

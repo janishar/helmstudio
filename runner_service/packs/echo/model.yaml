@@ -11,7 +11,52 @@ family: echo
 title: Echo (fake)
 runtimes:
   fake: {env: fake}
+media: [image]
+# The tiny fake model (API 1.16, M5a: model jobs without the internet): three variants on the fake hub
+# (contract_tests/fake_hub, HF_ENDPOINT in deploy/compose/fake.yml), a few small safetensors files each. plus and
+# gated share tiny's vae (the same bytes on the hub: shared by content hash); gated needs the host's (placeholder)
+# token; every source has the echo-test licence to accept. The fake host starts with all three missing; echo/tiny
+# (workflow echo-tiny) loads both components through packs/echo/loader.py (plain bytes, no GPU), so they are resident.
+licences:
+  echo-test: {title: Echo Test Licence}
+model:
+  help: "Which tiny fake weights to load (downloaded from the fake hub)."
+  variant: {label: Variant}
+variants:
+  tiny:
+    dir: Echo-Tiny
+    title: Tiny
+    source: {repo: helm-test/echo-tiny, revision: b5800734cb8cbaf5f439eaec38cf987d912ddf8c,
+             allow_patterns: [config.json, "transformer/*", "vae/*"], licence: echo-test, must_accept: true,
+             gated: false, bytes: 98502}
+  plus:
+    dir: Echo-Tiny-Plus
+    title: Plus
+    shares: [vae]
+    source: {repo: helm-test/echo-tiny-plus, revision: bd41ceaa49a7a29228baa60c8c7ab952b736893b,
+             allow_patterns: [config.json, "transformer/*"], licence: echo-test, must_accept: true, gated: false,
+             bytes: 25166027}
+  gated:
+    dir: Echo-Tiny-Gated
+    title: Gated
+    shares: [vae]
+    source: {repo: helm-test/echo-tiny-gated, revision: 0ae47312f432cb40425628796865750b44b948ce,
+             allow_patterns: [config.json, "transformer/*"], licence: echo-test, must_accept: true, gated: true,
+             bytes: 16500}
+components:
+  transformer: {files: "transformer/*.safetensors", dtype: bf16, precision: [bf16]}
+  vae: {files: "vae/*.safetensors", dtype: bf16, precision: [bf16]}
 stages:
+  tiny:
+    title: Echo tiny
+    help: "Fake model stage: loads the tiny model's transformer and vae, then draws its text and the variant."
+    uses: [transformer, vae]
+    inputs: {model: Model, text: Text}
+    outputs: {image: Image}
+    params:
+      steps: {type: int, label: Steps, default: 3, min: 1, max: 200, help: Progress steps to report.}
+      delay_ms: {type: int, label: Delay per step (ms), default: 100, min: 0, max: 10000}
+    peak_gb: "0.01"
   echo:
     title: Echo
     help: "Fake model: draws its text on a gradient, one progress step at a time."

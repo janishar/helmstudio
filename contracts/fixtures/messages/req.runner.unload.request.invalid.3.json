@@ -1,0 +1,8 @@
+{
+  "for_env": "torch",
+  "by": "admin",
+  "cached_only": true,
+  "components": [
+    {"component": "vae", "model": "qwen-image-2.1", "variant": "base", "precision": "bf16"}
+  ]
+}

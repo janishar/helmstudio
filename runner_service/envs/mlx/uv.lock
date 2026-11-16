@@ -345,6 +345,7 @@ version = "0.3.0"
 source = { virtual = "." }
 dependencies = [
     { name = "boto3" },
+    { name = "huggingface-hub" },
     { name = "jsonschema" },
     { name = "mlx" },
     { name = "mlx-arsenal" },
@@ -370,6 +371,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.44.3" },
+    { name = "huggingface-hub", specifier = ">=2.4.0,<3" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "mlx", specifier = ">=0.32.4" },
     { name = "mlx-arsenal", specifier = "==0.2.4" },

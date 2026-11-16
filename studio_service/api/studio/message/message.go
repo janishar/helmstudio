@@ -108,6 +108,8 @@ type Unload struct {
 	ForEnv     string      `json:"for_env"`
 	RunID      string      `json:"run_id,omitempty"`
 	Components []Component `json:"components,omitempty"`
+	By         string      `json:"by,omitempty"`          // API 1.16: dispatcher (absent) | admin
+	CachedOnly bool        `json:"cached_only,omitempty"` // API 1.16, by admin without components: cached handles only
 }
 
 // Component names one resident entry of a hosts value (no LoRAs = the plain component).
@@ -474,3 +476,56 @@ type PipelineChat struct {
 
 // PipelineSeq is the event's seq (per batch, over every kind).
 func (c PipelineChat) PipelineSeq() int64 { return c.Seq }
+
+// ------------------------------------------------------------------ model jobs (API 1.16)
+
+// ModelJob is cmd.model.job's data: one job for the runner of Host and Env (never a token, URL, path or bytes).
+type ModelJob struct {
+	Kind    string      `json:"kind"` // download | delete | lora_delete
+	Model   *string     `json:"model,omitempty"`
+	Variant *string     `json:"variant,omitempty"`
+	Licence *JobLicence `json:"licence,omitempty"`
+	LoraID  *string     `json:"lora_id,omitempty"`
+	Host    string      `json:"-"`
+	Env     string      `json:"-"`
+}
+
+// JobLicence is the licence a download's admin accepted and the SHA-256 of its text.
+type JobLicence struct {
+	ID     string `json:"id"`
+	SHA256 string `json:"sha256"`
+}
+
+// Type is the envelope type.
+func (ModelJob) Type() string { return "cmd.model.job" }
+
+// Subject is cmd.model.<host>.<env>.
+func (j ModelJob) Subject() string { return "cmd.model." + j.Host + "." + j.Env }
+
+// ModelBase is what every evt.model.* has: seq per delivery and the command's delivery count.
+type ModelBase struct {
+	Seq      int `json:"seq"`
+	Delivery int `json:"delivery"`
+}
+
+// Base returns the base.
+func (b ModelBase) Base() ModelBase { return b }
+
+// ModelStatus is evt.model.status's data.
+type ModelStatus struct {
+	ModelBase
+	Status  string          `json:"status"` // running | succeeded | failed | cancelled
+	Failure json.RawMessage `json:"failure"`
+	Result  json.RawMessage `json:"result"`
+}
+
+// ModelProgress is evt.model.progress's data (absolute counts).
+type ModelProgress struct {
+	ModelBase
+	DoneBytes  int64    `json:"done_bytes"`
+	TotalBytes *int64   `json:"total_bytes"`
+	FilesDone  int      `json:"files_done"`
+	FilesTotal *int     `json:"files_total"`
+	File       *string  `json:"file"`
+	EtaS       *float64 `json:"eta_s"`
+}

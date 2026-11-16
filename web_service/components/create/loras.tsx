@@ -403,45 +403,11 @@ function Picker({
       }
     >
       {uploads.map(({ key, state: u }) => (
-        <li key={`u${key}`} className="flex min-w-0 flex-col gap-1.5">
-          <i
-            className={`flex aspect-[16/10] flex-col items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-dash bg-s1 px-2 text-center text-[11px] not-italic ${u.phase === "failed" ? "text-bad" : "text-t2"}`}
-          >
-            {u.phase === "sending" ? (
-              <>
-                <span aria-live="polite">Uploading {Math.round(u.progress * 100)}%</span>
-                <span
-                  role="progressbar"
-                  aria-label={`Uploading ${u.name}`}
-                  aria-valuenow={Math.round(u.progress * 100)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  className="block h-1 w-full overflow-hidden rounded-[2px] bg-in"
-                >
-                  <span className="block h-full bg-a2" style={{ width: `${u.progress * 100}%` }} />
-                </span>
-              </>
-            ) : u.phase === "failed" ? (
-              <span role="alert">{u.error}</span>
-            ) : (
-              <span aria-live="polite">checking…</span>
-            )}
-          </i>
-          <b className="truncate text-[12px] font-semibold">
-            {u.name.replace(/\.safetensors$/i, "")}
-          </b>
-          {u.phase === "failed" && (
-            <small>
-              <button
-                type="button"
-                className={small}
-                onClick={() => setUploads((x) => x.filter((y) => y.key !== key))}
-              >
-                Dismiss
-              </button>
-            </small>
-          )}
-        </li>
+        <UploadTile
+          key={`u${key}`}
+          u={u}
+          onDismiss={() => setUploads((x) => x.filter((y) => y.key !== key))}
+        />
       ))}
       {shown.map((l) => {
         const why = fitReason(l, family);
@@ -552,5 +518,44 @@ function Picker({
         );
       })}
     </VisualPicker>
+  );
+}
+
+/** An upload in flight in a LoRA grid: its progress, "checking…", or why it failed with Dismiss. */
+export function UploadTile({ u, onDismiss }: { u: UploadState; onDismiss: () => void }) {
+  return (
+    <li className="flex min-w-0 flex-col gap-1.5">
+      <i
+        className={`flex aspect-[16/10] flex-col items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-dash bg-s1 px-2 text-center text-[11px] not-italic ${u.phase === "failed" ? "text-bad" : "text-t2"}`}
+      >
+        {u.phase === "sending" ? (
+          <>
+            <span aria-live="polite">Uploading {Math.round(u.progress * 100)}%</span>
+            <span
+              role="progressbar"
+              aria-label={`Uploading ${u.name}`}
+              aria-valuenow={Math.round(u.progress * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="block h-1 w-full overflow-hidden rounded-[2px] bg-in"
+            >
+              <span className="block h-full bg-a2" style={{ width: `${u.progress * 100}%` }} />
+            </span>
+          </>
+        ) : u.phase === "failed" ? (
+          <span role="alert">{u.error}</span>
+        ) : (
+          <span aria-live="polite">checking…</span>
+        )}
+      </i>
+      <b className="truncate text-[12px] font-semibold">{u.name.replace(/\.safetensors$/i, "")}</b>
+      {u.phase === "failed" && (
+        <small>
+          <button type="button" className="chip h-6 px-2 text-[11px]" onClick={onDismiss}>
+            Dismiss
+          </button>
+        </small>
+      )}
+    </li>
   );
 }

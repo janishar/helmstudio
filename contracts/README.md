@@ -21,10 +21,11 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/req.studio.tools.schema.json` | (API 1.15) NATS request/reply pipelines → studio (not enveloped): one Agent tool call that needs studio's data (gallery.search, library.read, rows.add, rows.edit), as the batch's owner |
 | `messages/req.pipelines.providers.test.schema.json` | (API 1.15) NATS request/reply studio → pipelines (not enveloped): test a model provider (only pipelines ever calls one) |
 | `messages/tools.schema.json` | (API 1.15) not a message: every Agent tool's arguments and result, one turn, one executed tool call (Agents: tools) |
+| `messages/cmd.model.job.schema.json`, `evt.model.{status,progress}.schema.json` | (API 1.16) studio → a runner: one model job (download, delete, lora_delete); runner → studio's projector: its lifecycle and download progress (Models and model jobs) |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload the named components now, reply what was freed and what remains (Two envs on one host: the hand-over) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
-| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
+| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
 | `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
@@ -72,7 +73,10 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `runner.unload.<host>.<env>` | core request/reply, no queue group | bare JSON (`req.runner.unload`) | studio's dispatcher → the runner of that host and env (60 s) |
 | KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras`, `.looks` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras`, `looks` | the runner writes its own keys once at start; studio reads |
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s and deletes it on a clean exit; studio reads (older than 30 s = offline). Bucket TTL 1 h: an offline key stays present (and counts, the hand-over) far past any stall; expiry writes no delete marker, so a studio started later would read an expired key as gone |
-| KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step |
+| `cmd.model.<host>.<env>` | stream `CMD` (work queue) | `cmd.model.job`, `Nats-Msg-Id <job_id>:1` | studio outbox relay → the runner of that host and env (durable `models-<host>-<env>`, max_ack_pending 1; API 1.16) |
+| `evt.model.<host>.status`, `.progress` | stream `EVT` | `evt.model.status`, `.progress`, `Nats-Msg-Id <job_id>:<delivery>:<seq>` | runner → studio projector (durable `studio-models`, filter `evt.model.>`; API 1.16) |
+| KV `host_settings` key `<host>` | KV | `registry.schema.json` `$defs/settings` | studio writes (every change, and at start); every runner of the host watches it (API 1.16, Hosts admin) |
+| KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step. From API 1.16 also key `<job_id>` for a running download (`…/model-jobs/{job_id}/cancel`) |
 
 Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
 env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`);
@@ -212,7 +216,7 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
   status was projected before the runner's next write reached studio, or the run lost its lease while its runner may
   still run it; fresh or offline). That run may still use up to the `budget_gb` it was released with, more than the
   key declares (its stage's peak is not in `resident`), so X **waits** (Admission 2) and nothing is asked; its pins
-  are not Pn; the next write, idle, decides (or the time limit).
+  are not victims; the next write, idle, decides (or the time limit).
 - **Entry**: one `resident` item of a present key, identified by (env, `component`, `model`, `variant`, `precision`,
   baked LoRAs = its `loras` as `(lora_id, strength)` in order; none = the plain component). Memory arithmetic is in
   integer hundredths of a GB: `round(gb × 100)` per value, then sums.
@@ -236,8 +240,11 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
   encoder evicted and reloaded around every still). Its own excess may make room in other envs (victims) but never
   makes X wait: when no victim is taken and X fits without it, X is released (its runner drops its own caches).
 - **Reused** entries: entries of X's env equal to one of its needs (they are inside P). **Counted** C = Σ `gb` of every
-  entry of every present key that is not reused (measured excess included). **Pinned** Pn = Σ `gb` of counted entries with `pinned: true` in fresh
-  keys (an idle runner marks only its setting's pins, RUNNER_PIN).
+  entry of every present key that is not reused (measured excess included). **Pinned** entries: counted entries
+  with `pinned: true` in fresh keys (an idle runner marks only its setting's pins, RUNNER_PIN). From API 1.16 (plan
+  03-runtime 6.2, "a pin never blocks a run") a pin is a **last-resort victim**: it never fails or holds a run by
+  itself, it goes only after every unpinned victim and only when the run would not fit otherwise, and its pin stays
+  set (the component is loaded again the next time a run uses it, and is pinned again).
 - **Resident** (for order and placement): X's env key on H has an entry of X's model id, variant and precision whose
   component is the family's `lora.component` (`transformer` in every family so far) with X's baked LoRAs (one LoRA in
   two chained stacks once, with the summed strength; none = plain); a family without a `lora` block: any entry of that
@@ -248,15 +255,17 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
 (One run at a time per host): while a run of env E runs, H admits nothing, so the whole `budget_gb` that run was
 released with, its planned peak included, stays reserved for E however little E's key declares mid-run. The in-run
 rule extends that reservation to a run whose key outlives its end on the view.
-1. P + Pn > B: X fails at once, `needs <P> GB at its peak; host <H> has <B> GB` (P > B), else `…; host <H> has <B>
-   GB, <Pn> GB of it pinned` (one decimal: `needs 44.1 GB at its peak; host mac has 48.0 GB, 7.4 GB of it pinned`).
+1. P > B: X fails at once, `needs <P> GB at its peak; host <H> has <B> GB` (one decimal: `needs 52.5 GB at its
+   peak; host mac has 52.0 GB`). Pinned memory never fails a run (before 1.16, P + Pn > B failed it).
 2. A present key of H is in-run: X waits (5), nothing is sent. Else C + P ≤ B: X is released; its `cmd.run.execute` carries `budget_gb` = B − Σ `gb` of the entries of H's other envs
    (measured excess included).
-3. Else **victims**, in this order: counted entries of **fresh** keys with `pinned: false`, (a) first the baked entries
+3. Else **victims**, in this order: counted entries of **fresh** keys, (0) every `pinned: false` one before any
+   `pinned: true` one (a pin is the last resort), then (a) first the baked entries
    (with `loras`) that no other queued run of H needs (queued, not held, eligible for H, any env), then all others;
    (b) `last_used` ascending, absent first; (c) larger `gb` first; (d) env, component, model, variant, precision by
    name. Victims are taken in that order until C − taken + P ≤ B, or none are left. Never a reused entry (what X
-   needs), never a pinned one, never an entry of an offline key (counted, fail closed: a runner cut off from NATS may
+   needs), never an entry in use (`pinned_why: in_use`: only a busy key has one, and it is never fresh while its run
+   holds H), never an entry of an offline key (counted, fail closed: a runner cut off from NATS may
    still have its weights mapped).
 4. One `runner.unload.<H>.<env>` `{for_env: X.env, run_id: X.id, components: [that env's victims, in order]}` per env
    holding victims, **X's own env included** (its idle runner unloads, say, the baked transformer left by a LoRA run).
@@ -271,8 +280,8 @@ rule extends that reservation to a run whose key outlives its end on the view.
   in. An `ok` reply of the current generation stands for that env's entries (the reply's `resident`) until its hosts
   key is rewritten after the reply arrived (`updated_at` later) or a run is released to it. An `ok` of an older
   generation, `busy`, `internal`, a malformed reply or none in 60 s changes nothing; the env is asked again.
-- **The runner**, idle: unloads exactly the named entries it holds (one it does not hold is skipped; a RUNNER_PIN one
-  is kept), frees the device cache (MLX `mx.clear_cache()`; torch MPS `synchronize()` then `empty_cache()`), rewrites
+- **The runner**, idle: unloads exactly the named entries it holds (one it does not hold is skipped; a pinned one
+  goes too, from 1.16: the dispatcher names it only as the last resort, and its pin stays set), frees the device cache (MLX `mx.clear_cache()`; torch MPS `synchronize()` then `empty_cache()`), rewrites
   its hosts key, then replies `{unloaded_gb, freed, resident}` (`freed`: the entries it unloaded; `resident`: what
   remains, exactly as the key it wrote). Asked again for what it no longer holds: `{unloaded_gb: 0, freed: [], …}`.
   A run in progress: `{error, code: busy}`, nothing unloaded; unloading failed: `code: internal` (logged). No
@@ -365,7 +374,7 @@ same for all envs of a host: B, and per present key the larger of its entries' �
 summed and rounded to 0.1: what admission counts) and every
 resident component `last_used`; another user's own LoRA in a baked set stays redacted (`lora_id`, `name`, `strength`
 null, `bytes` kept). The memory chip shows `host_memory` used / total for the host the run will use, and busy when any
-env of it is; the admin Hosts screen (M5a) needs nothing more.
+env of it is. The admin Hosts screen adds Hosts admin (API 1.16), below.
 
 ## Takes, the gallery and uploads (plan 9.1, 17.2)
 
@@ -950,7 +959,7 @@ project memory, saved checklists, thumbnails for server or remote models.
   {text, tokens_in, tokens_out, seconds}`, outputs `[]`), copies it into `evt.studio.run_finished` `answer` and into
   a terminal `studio.runs.create` reply.
 - **Memory plans**: a models `memory` item may name a `workflow` (it plans only runs of that workflow; else the item
-  of the run's precision without one) and `planned_at.images` (more thumbnails than that: no plan, P = B; studio counts
+  of the run's precision without one; a workflow that loads no component, `echo-ask`, has no item of its own) and `planned_at.images` (more thumbnails than that: no plan, P = B; studio counts
   1 per image and 3 per video item of the run's `media`). `llm`: kept 15.4, peak 27.2 at 4 × 1024 px (fit from two
   points, extrapolated: measure before relying on it). `qwen-image-ask`: components `[text_encoder]`, peak = kept +
   2.5 + 1.5 × 4 (a bound, not measured). The dispatcher treats `llm` as one more family on env mlx; with no `lora`
@@ -1618,7 +1627,7 @@ Sharing a user's LoRA with others is not in this version.
   only, plus one SHA-256 of the whole file (kept by path, size and mtime, so a restart rehashes nothing). Each entry:
   `id` = the SHA-256 (the same file on two hosts is one LoRA), `name` (file stem, cut to 80), `family` (family
   detection, LoRA normaliser, over its packs' families: one env, so by name), `rank`, `bytes`, `key_style`, `licence`,
-  `modified_at`. A file that is not a LoRA (LoRA upload checks below) is left out and logged. Rescans come with M5a.
+  `modified_at`. A file that is not a LoRA (LoRA upload checks below) is left out and logged. From API 1.16 the runner rescans every 60 s (Models and model jobs).
 - **Own** (studio table `loras`, owner-scoped by RLS, another user's id is 404 everywhere): uploaded by the takes'
   two-step signed PUT. `POST /v1/studio/loras {filename, bytes}` → 201 `LoraUpload` (the LoRA `pending`, a 15-minute
   `PUT` link for `u/<owner>/loras/<lora_id>.safetensors`, `Content-Type: application/octet-stream`); the client PUTs
@@ -1696,7 +1705,7 @@ Sharing a user's LoRA with others is not in this version.
   **Reuse** adds `loras_status` per entry: `current` (the caller can use it now), `missing` (shared, no live host
   lists it now), `deleted` (own, deleted since); running a missing or deleted one is 422.
 - **Nothing leaks.** Another user's own LoRA never appears in a list, a get, a problem message or an error (404 / `not
-  found`); in `GET /v1/studio/hosts` a baked entry shows it as its size only (`lora_id`, `name`, `strength` null).
+  found`); in `GET /v1/studio/hosts` a baked entry shows it as its size only (`lora_id`, `name`, `strength` null; from 1.16 an admin sees `lora_id` and `strength`, never the name: Hosts admin).
   Cache keys include the owner as before.
 
 ## LoRA normaliser (normative)
@@ -1769,6 +1778,160 @@ not parse in the style and matches no published family's `ignore`: `<key> is not
 not B (or B but not A): `<module part>: lora_B is missing` (`lora_A`); ranks that differ: `<module part>: lora_A and
 lora_B ranks differ`; a rank over 4096: `rank <r> is over 4096`. The first failing key in code-point order is named.
 `licence` = `__metadata__` `modelspec.license`, else `license`, trimmed, cut to 200; null when neither.
+
+## Models and model jobs (API 1.16, M5a; plan 06-platform 9.2; normative)
+
+Weights are plain files on each GPU host's disk under its models root (`HELMSTUDIO_MODELS`, default `~/GenAI/models`):
+never in an image, the object store or the Hugging Face cache. Host property, managed by admins.
+
+**model.yaml additions** (runner_service packs; the runner publishes them in `<host>.<env>.models`): top-level
+`media` (`[image]`, `[video, audio]`); per variant `title` and `source {repo, revision, allow_patterns, licence,
+must_accept, gated, bytes?}` (absent: not downloadable); licence texts in the pack's `licences/<id>.md`.
+
+**What a runner publishes** (registry.schema.json): the models key gains `licences [{id, title, url?, text}]`, per model
+`media`, `runtimes [{runtime, env}]` (every runtime of the pack), per variant `title`, `dir`, `source`, `components
+[{component, from_variant, precisions, bytes?, separate?}]`, `files [{path, bytes, sha256?, component?}]` (the
+manifest of its own folder, paths relative to `dir`), `presence` present | partial | missing | mismatch (with
+`mismatch [path]`). The hosts key gains `models_disk {root (home as ~), free_bytes, total_bytes}`, `machine {os, accel,
+packaging, ram_gb}`, `hub_token` (a token file exists), `policy` (Hosts admin) and `resident[].pinned_why`. The
+runner **rescans** its models root every 60 s and after each model job (presence by stat; a file is hashed once and
+the hash kept by path, size and mtime, as the LoRA index does) and rewrites `models` / `loras` only when they changed.
+This replaces "Rescans come with M5a": shared LoRAs copied in by hand appear within 60 s.
+
+- **presence**: present = every file of the variant's components (its own, and each shared component in
+  `from_variant`'s folder) matches its glob, no download of it is unfinished on disk (`.incomplete` files) and no
+  recorded hash differs; partial = some of its own files are there but not that; missing = none of its own; mismatch
+  = a file's SHA-256 on disk differs from the one recorded at download (the runner re-hashes a file whose size or mtime
+  changed). Only present runs; the dispatcher treats any other value as not runnable on that host.
+- **Shared components by content hash**: a variant that `shares` a component loads it from the owner's folder only
+  when the owner's files there have the hashes the variant's source lists for them (the Hub's LFS SHA-256);
+  otherwise the download fetches the variant's own copy into its folder and the component is `separate: true`,
+  `from_variant` = the variant (one more residency entry). `GET /v1/studio/models` shows it per host (`separate`).
+
+**`GET /v1/studio/models`** (everyone; openapi `studioListModels`, `ModelList`): hosts with a present hosts key,
+every model of their models keys with each variant's components and per-host state; `downloading` (with `job {id,
+state, done_bytes, total_bytes}`) while a download of that host, model and variant is queued or running. Nothing in it
+is per user; admins additionally see `hub_token`. The board's per-variant licence, size (`download_bytes`, else the
+host's `bytes`), `bf16 | int8 at load` (`precisions`), `shares 2 with Base` (components whose `from_variant` is
+another), `Mac only` (only mlx in `runtimes`) and the detail panel's path (`models_root` + `/` + `dir`) all come from it.
+
+**Model jobs** (admin only; openapi `studioAdmin…ModelJob…`, `ModelJob`). Kinds `download`, `delete`, `lora_delete`.
+- **Queue**: studio stores the job `queued` and releases at most one job per host at a time, oldest first (an
+  outbox row: `cmd.model.job` on `cmd.model.<host>.<env>`, `Nats-Msg-Id <job_id>:1`), to the env whose models key lists
+  the model (lora_delete: the first env by name whose loras key lists the id). Jobs run beside runs (disk and network,
+  no GPU memory, no admission); a release re-checks the refusals of its POST/DELETE and fails the job with that text
+  (class `in_use`) instead of sending it.
+- **The runner** consumes durable `models-<host>-<env>` (max_ack_pending 1, ack wait 60 s) in a worker apart from
+  runs, sends `+WIP` every 10 s, publishes `evt.model.status` `running`, `evt.model.progress` (each file's start and
+  end, at most every 2 s between: absolute counts), then one terminal status; it acks the command only after the
+  terminal status is acked. The projector (durable `studio-models`, filter `evt.model.>`) dedupes on (job_id,
+  delivery, seq) and ignores events of a terminal job.
+- **Download**: the plan = the variant's `source` files (`huggingface_hub.snapshot_download(repo_id, revision,
+  allow_patterns, local_dir=<root>/<dir>)`: plain files, resumable per file (the files already landed and checked are
+  kept; the one in flight starts over: huggingface_hub drops its temp file on a cancel or a restart); HF_HUB_CACHE is never
+  written; `HF_ENDPOINT` selects the hub: the fake hub in tests) plus each shared component not already on the host
+  with matching hashes (from the owner's source, its component's patterns, into the owner's folder). Before fetching:
+  the Hub's file list gives sizes and LFS hashes (`total_bytes`); free space < remaining + 1 GiB fails `disk_full`.
+  Each file is checked against its LFS SHA-256 after it lands (else it is deleted and the job fails `hash_mismatch`);
+  hashes are recorded (the manifest's `sha256`). **Licence**: `ModelDownload.accept_licence` must be true when
+  `must_accept` (else 422); the job records `{id, sha256 of the text shown}` and the command carries it; the runner
+  fails `licence` if its pack's text hashes otherwise. **Token**: the runner reads the Hub token only from the file
+  `RUNNER_HF_TOKEN_FILE` (default `<secrets>/hf_token`; absent = anonymous); it is never in the API, a message, the KV
+  or a log line (log `token: present|absent` only).
+- **Resume and restarts**: a runner restart redelivers the command (delivery + 1; `seq` restarts per delivery) and the
+  download continues with the files not yet landed. Studio restarting loses nothing (jobs and the outbox are rows). Cancel
+  (queued: at once; running download: KV `cancels` key `<job_id>`, checked at least every 2 s; the files landed are kept,
+  the variant shows `partial`); if the env's hosts key is gone or older than 60 s, studio cancels it itself and purges
+  `cmd.model.<host>.<env>`. Studio never fails a released job on its own otherwise.
+- **Idempotency**: a second POST for the same (host, model, variant) download, or the same delete, while one is queued
+  or running answers that job (200). A finished download leaves `present` and a new POST is 409 `… is already on …`.
+- **Delete**: removes the variant's own files under `<root>/<dir>/` (never outside it, never following a symlink out),
+  then the folder when empty. A shared component whose owner is deleted is **kept** when another variant of the host
+  that is not deleted loads it (`keeps`, decided at the request; `result.kept`), together with the folder's files that
+  belong to no component (configs, tokenizer, scheduler: the sharing variant reads them); only the other components'
+  files go. Refused (409, the openapi texts) while
+  any affected entry is resident on any env of the host, a run not yet terminal uses the model there, or a download
+  of it is unfinished. `lora_delete` removes every file of the host's index with that SHA-256 (409 for a pre-fused one,
+  one baked into a resident entry, or one a run not yet terminal names on that host); other envs drop it at their next
+  rescan (a run sent there meanwhile fails `LoRA <name> is not on host <host>`, as today).
+- **Failures** (`failure.class`, one-line `detail`): `not_found` (repo, revision or file 404: `repo <repo> has no
+  revision <rev>`), `gated` (401/403: `repo <repo> is gated: put a Hub token in this host's secrets file
+  (RUNNER_HF_TOKEN_FILE)`, or `… the token was refused`), `licence` (`licence <id> changed since it was accepted`),
+  `disk_full` (`host <h> has <x> GB free; this download needs <y> GB`, or ENOSPC mid-file), `hash_mismatch` (`<path>:
+  SHA-256 differs from the Hub's`), `network` (after huggingface_hub's retries: `cannot reach the hub: <reason>`),
+  `in_use` (a delete's refusal found at release or by the runner), `not_downloadable` (no `source`), `internal`.
+
+**Tests** never download from the internet: a fake hub (a small local HTTP server speaking the endpoints
+huggingface_hub uses for `snapshot_download`: `GET /api/models/<repo>/revision/<rev>` with `siblings` and LFS sizes and
+hashes, `HEAD` / `GET /<repo>/resolve/<rev>/<path>` with `ETag`, `X-Repo-Commit`, `X-Linked-Size`, `X-Linked-Etag`,
+`Range` → 206; a gated repo answering 401 without its test token, a licence, small files) is selected with
+`HF_ENDPOINT` in runner tests and the fake compose overlay. Deletes run on a throwaway folder under a scratch models
+root, never `~/GenAI/models`.
+
+## Hosts admin (API 1.16, M5a; plan 03-runtime 6.2; normative)
+
+- **Envs concerned**: the host's runners that hold weights; a local server's `server` env (API 1.15) is never asked to
+  unload, holds no pins and does not count for `applied`.
+- **Settings are per host** (the board's settings panel "apply to every env on it"; plan 6.2 "one setting per host"):
+  `after_run` (unload | keep_warm | keep_pinned, the RUNNER_AFTER_RUN values), `idle_unload_min` (RUNNER_IDLE_UNLOAD_S /
+  60; 0 = never), `reserve_gb` (RUNNER_RESERVE_GB) and `pins`. Studio's table is the truth; on every change (and at
+  start) studio writes KV bucket `host_settings` key `<host>` (`$defs/settings`, `version` + 1). Each runner of the
+  host watches its key and applies a new version at once when idle, else right after its run (never mid-run, never a
+  restart): new budget, after-run policy, idle timer, pins; an idle runner then applies the policy at once, as after a
+  run (unload: everything goes; keep_pinned: what is not pinned goes). It reports
+  the values in effect as `policy` in its hosts key (`settings_version` = the version applied; no key: its env
+  defaults, `settings_version: null`). Settings replace RUNNER_PIN / RUNNER_AFTER_RUN / RUNNER_IDLE_UNLOAD_S /
+  RUNNER_RESERVE_GB while a key exists.
+- **Pins** name entries (`PinRef`: env, component, model, variant, precision, baked loras). A resident entry a pin
+  names is `pinned: true, pinned_why: pin` in every hosts write (busy or idle); one the running run uses is
+  `pinned_why: in_use`. In the hand-over a pin is the **last-resort victim** (Terms: Pinned; Admission 1 and 3): a
+  run never fails or waits because of pinned memory alone; an entry in use is never a victim. Inside its own run a
+  runner's admission evicts a pinned entry of its env the same way, after every unpinned one, rather than fail the
+  stage. Idle unloads and the after-run policies keep pins (keep_pinned keeps only them). An admin unload unloads a
+  pinned entry (`req.runner.unload` `by: admin`). Every unloaded pin stays set.
+- **Generate says so first** (plan 6.2: "unloads pinned transformer, reloads ≈ N GB after"): a queued run's
+  `unloads_pinned` (`Run`, computed on every read like `position`, so the `POST …/runs` 202 has it too) lists the
+  pinned entries the admission would take as victims if the run were admitted on its `host` now (env, component, model,
+  variant, precision, `gb`); absent when none. The UI shows it next to Generate's memory chip.
+- **`GET /v1/studio/hosts`**: everyone gets `machine`, `cached_gb` and `pinned_why`; admins get `admin` (`HostAdmin`:
+  settings, policy, the current run with its owner id and latest progress, `idle_since`, `unload_pending`,
+  `hub_token`) and, in baked sets, another user's own LoRA's `lora_id` and `strength` (`name` stays null). Non-admins
+  stay redacted as before.
+- **Unload** (`POST /v1/studio/admin/hosts/{host}/unload`): `all` (every env, everything, pins and caches), `entries`
+  (per env, the named ones, pinned too), `cached_env` (`cached_only`: cached node results, idle adapters, the device
+  cache). Asked at once when the env is idle; a busy env is asked when its run's terminal status is projected, and the
+  dispatcher releases nothing to that host until every pending admin unload is answered `ok` (or 60 s after the host
+  went idle). Repeated like dispatcher asks (every 10 s while unanswered), at most 10 minutes, then dropped (logged).
+- **API keys** (Admin › API keys, docs/mock/ApiKeys.dc.html): the existing `GET /auth/admin/apikeys` and `DELETE
+  /auth/admin/apikeys/{id}` are all the board needs (client, `prefix`, created, `last_used_at`, Active / Revoked with
+  `revoked_at`); keys are made only on the server with `auth apikey <client>` (the board's command and "Shown once"),
+  so the web calls no create. No personal user keys: helm sends its client key plus the user's token (plan 17.3).
+
+## Import (API 1.16, M5a; plan 06-platform 9.3; normative)
+
+`helm import <path> --user <email> [--dry-run]` (admin CLI) brings an old helmstudio gallery into one user's gallery.
+- **Read-only source**: the CLI opens `<path>/helm.db` with SQLite URI `file:<abs path>?mode=ro&immutable=1` (no
+  -wal/-shm is created; if the driver cannot honour it, it copies helm.db to a temp dir first) and only reads
+  `assets/` and `cache/`. Nothing under `<path>` is ever written.
+- **Mapping** (general; the exact schema is read from the real db): one old gallery item (table `items`) of kind image
+  or video → one take, `source: import`; its bytes = the asset blob it references (`assets/blobs/…`); a video's poster
+  = the old derived poster under `cache/` (else frame 0 by ffmpeg when on PATH, else the item fails `no poster`);
+  `created_at` = the item's creation time; `starred` = its star; `title` = its title, else the prompt's first line (80
+  characters), else the file stem; `legacy` = a JSON object `{studio, old_id, params (the item's params JSON as
+  stored), …}` (≤ 64 KB, read-only: shown, never editable; reuse 409 as an upload); lineage = `item_inputs` edges
+  between imported items → `parents` (input order). Audio and text items, deleted items, sessions, timelines, jobs,
+  records and kv are not imported (counted as skipped).
+- **Calls** (admin token; openapi `studioAdminCreateImportTake`, `studioAdminCompleteImportTake`): resolve `--user`
+  with `GET /auth/admin/users` (unknown email: exit 2); per item in old creation order: create (idempotent on
+  `(owner_id, key)`; `key` stable for one old item across runs, e.g. `helmstudio:<old item id>`), PUT the file (and
+  poster) to the signed links exactly as uploads do (objects under `u/<owner_id>/imports/`; files_service takes
+  `video/mp4` only on such a `<take_id>.mp4` key), complete. Rules: images
+  png / jpeg / webp ≤ 50 MB, videos mp4 ≤ 2 GB with a png / jpeg / webp poster ≤ 50 MB, width and height as the file
+  says. A re-run adds nothing: ready keys answer 200 and only add parent edges not stored yet.
+- **Summary** (stdout; exit 0, or 1 when any item failed):
+  `imported <n> new (<i> images, <v> videos), <m> already imported, <f> failed; <e> lineage edges, <s> starred, <x.x>
+  GB uploaded; skipped <k> (audio <a>, text <t>, deleted <d>)`, then one line per failed item (`<old id>: <reason>`,
+  first 20). `--dry-run` only reads and counts: no network call, nothing written (`--user` is echoed, not resolved): `would import <n> (<i> images, <v> videos), <x.x> GB; <e> lineage edges, <s> starred; skipped <k> (…)`.
 
 ## Rules
 

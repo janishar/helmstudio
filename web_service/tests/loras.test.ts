@@ -8,7 +8,9 @@ import {
   clampStrength,
   emptyStack,
   fitReason,
+  libraryLine,
   lorasNote,
+  quotaText,
   madeWithLine,
   modeOf,
   newRow,
@@ -278,5 +280,34 @@ describe("uploading an own LoRA", () => {
       io({ create: async (b) => ({ ...(await io().create(b)), upload_url: "javascript:x" }) }),
     );
     expect(r4.phases.at(-1)).toBe("failed: The server gave an unusable upload link.");
+  });
+});
+
+describe("the Models screen's LoRAs tab", () => {
+  const ready = (l: Partial<S<"Lora">>) =>
+    ({
+      state: "ready",
+      reason: null,
+      rank: 16,
+      size_bytes: 295698432,
+      family: "qwen-image",
+      hosts: ["gpu1", "mac"],
+      source: "shared",
+      ...l,
+    }) as S<"Lora">;
+  it("lines a tile with its family, rank, size and hosts", () => {
+    expect(libraryLine(ready({}))).toBe("qwen-image · rank 16 · 296 MB · gpu1, mac");
+    expect(libraryLine(ready({ source: "mine", hosts: [], rank: null }))).toBe(
+      "qwen-image · 296 MB · mine",
+    );
+    expect(libraryLine(ready({ state: "pending" }))).toBe("checking…");
+    expect(libraryLine(ready({ state: "rejected", reason: "not a LoRA" }))).toBe(
+      "rejected: not a LoRA",
+    );
+  });
+  it("shows the quota", () => {
+    expect(quotaText({ count: 3, bytes: 2 ** 29, max_count: 50, max_bytes: 21474836480 })).toBe(
+      "3 of 50 · 0.5 of 20 GB",
+    );
   });
 });

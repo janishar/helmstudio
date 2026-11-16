@@ -1,5 +1,5 @@
 {
-  "description": "a pinned component (the host's RUNNER_PIN) is never a victim, though least recently used: the text encoder and the transformer go",
+  "description": "a pinned component goes only after every unpinned one, though least recently used: the text encoder and the transformer are enough, the pinned VAE stays",
   "host": "mac",
   "keys": {
     "torch": {

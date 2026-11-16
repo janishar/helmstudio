@@ -247,6 +247,27 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
   `director` and `remote` kept. Step events keep `branch`, `turn` and `tool_calls` (the execution view); cells keep
   `branch` and `agent`; a decision whose source is remote is shown `replayable: false` whatever was sent.
 
+## Models, model jobs, the hosts admin and import (API 1.16, M5a)
+
+- `GET /models` (`models.go`, everyone): built from the present hosts keys' models keys and the unfinished downloads
+  (`buildModels`); admins also see `hub_token`. Model jobs (`model_jobs.go`, admin only, table `model_jobs`): download,
+  delete, lora_delete with every openapi refusal (registry: `weights.check*`; database: open runs, open jobs), 200 for
+  the same unfinished job; `ReleaseModelJobs` (every Tick) sends at most one job per host, oldest first, re-checking
+  its refusals (a refusal fails it `in_use`) once its env's key is live: `cmd.model.job` on `cmd.model.<host>.<env>`,
+  `Nats-Msg-Id <job_id>:1`. Durable `studio-models` projects `evt.model.*` (dedupe on job, delivery, seq; nothing after
+  the end). Cancel: unreleased at once; a released download through KV `cancels` (a key gone or older than 60 s:
+  cancelled here, `cmd.model.<host>.<env>` purged); a released delete 409.
+- Hosts admin (`hosts_admin.go`, `dispatcher_admin.go`): settings and pins per host in `host_settings` (version + 1,
+  written to KV `host_settings` key `<host>` on every change and at start); `POST …/unload` sends `req.runner.unload`
+  `by: admin` per env (at once when it runs nothing, else after its run), repeated every 10 s for at most 10 minutes;
+  the dispatcher releases nothing to the host until each is answered ok or 60 s after the host went idle. `GET /hosts`
+  adds `machine`, `cached_gb`, `pinned_why` and, for admins, `admin` (settings, policy, run, idle_since,
+  unload_pending, hub_token; another user's baked LoRA id and strength). Pins reach admission as the runners' `pinned`.
+- Import (`api/gallery/imports.go`, admin only): `POST /admin/imports/takes` makes a pending take of `owner_id` (as
+  that user, under RLS; idempotent on `takes.import_key`) with 24 h signed PUTs under `u/<owner_id>/imports/`; lineage
+  by key (`import_edges`) becomes `take_parents` once both ends are ready; complete checks the files as upload does
+  (MP4 `ftyp`, poster, declared sizes), a failure deletes the take and frees its key. `GET /loras` adds `usage`.
+
 ## Layout
 
 | Path | What |
@@ -264,4 +285,4 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 | `api/lora/` | the LoRA library (`/v1/studio/loras`: list, get, upload by signed PUT, complete, rename, delete, the sweep), `safetensors.go` (the bounded header parser: 8 MB, 20000 tensors, offsets, dtypes; no tensor data held), `normalise.go` (key styles, the normaliser, upload checks, family detection; tests run `contracts/fixtures/loras` as real files), `Usable` (what runs may use) |
 | `api/studio/loras.go` | LoRA values of a run: checked as the owner in `runGraphs`, kept as `runs.loras`, resolved into the command at release; the dispatcher's shared-LoRA host rule, baked residency and deleted-LoRA failure |
 | `api/studio/batch*.go` | batches: `batches.go` (Submit, reads, control, events, `studio.runs.create`), `batch_rows.go` (rows from lines/table/grid/seeds), `batch_projector.go` (`evt.pipeline.*`), `batch_record.go` (`run_finished`, the batch log) |
-| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras`, `00013` looks (`library_items.loras`, `from_take_id`, `runs.looks`, `batches.looks`, `batch_rows.looks`), … `00016` providers, batch_chat, tool_calls, stage B columns |
+| `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras`, `00013` looks (`library_items.loras`, `from_take_id`, `runs.looks`, `batches.looks`, `batch_rows.looks`), … `00016` providers, batch_chat, tool_calls, stage B columns, `00017` model_jobs, host_settings, takes.import_key / legacy / import_wait, import_edges |

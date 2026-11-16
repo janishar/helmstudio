@@ -66,9 +66,10 @@ export async function proxy(req: NextRequest, path: string, withAuth: boolean): 
   });
 }
 
-/** The BFF only exposes the API, the signed-in user's own auth routes and the admin's user management (auth_service
- * answers 403 without the admin role); sign-in/refresh/out are server actions, API keys never pass. */
-export function allowed(path: string): boolean {
+/** The BFF only exposes the API, the signed-in user's own auth routes, the admin's user management and the API key
+ * list and revoke (auth_service answers 403 without the admin role); sign-in/refresh/out are server actions, and no
+ * key is ever made here (only `auth apikey <client>` on the server prints one). */
+export function allowed(path: string, method = "GET"): boolean {
   // fetch would resolve dot segments (/v1/../auth/…), and Kong may decode an escaped / or % into one
   const bad = (s: string) => {
     try {
@@ -84,6 +85,8 @@ export function allowed(path: string): boolean {
     /^\/v1\/studio\//.test(path) ||
     path === "/auth/me" ||
     path === "/auth/password" ||
-    /^\/auth\/admin\/users(\/[0-9a-f-]{36}\/(roles|disabled|password))?$/.test(path)
+    /^\/auth\/admin\/users(\/[0-9a-f-]{36}\/(roles|disabled|password))?$/.test(path) ||
+    (path === "/auth/admin/apikeys" && method === "GET") ||
+    (/^\/auth\/admin\/apikeys\/[0-9a-f-]{36}$/.test(path) && method === "DELETE")
   );
 }

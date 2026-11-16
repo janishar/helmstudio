@@ -211,3 +211,22 @@ export async function uploadLora(
     return fail(message(e));
   }
 }
+
+// ---------------------------------------------------------------- the Models screen's LoRAs tab
+
+/** A library tile's line: "checking…", the rejection, else "qwen-image · rank 32 · 144 MB · mac, gpu1" (or "mine"). */
+export function libraryLine(l: Lora): string {
+  if (l.state !== "ready") return fitReason(l, null)!;
+  return [
+    l.family,
+    l.rank && `rank ${l.rank}`,
+    sizeText(l.size_bytes),
+    l.source === "mine" ? "mine" : l.hosts.join(", "),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** The quota line: "3 of 50 · 0.4 of 20 GB". */
+export const quotaText = (u: S<"LoraUsage">) =>
+  `${u.count} of ${u.max_count} · ${(u.bytes / 2 ** 30).toFixed(1)} of ${u.max_bytes / 2 ** 30} GB`;

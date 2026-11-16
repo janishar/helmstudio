@@ -12,6 +12,7 @@ dependencies = [
     "boto3>=1.44.3",
     "pillow>=13.0.0",
     "pyyaml>=6.0.3",
+    "huggingface-hub>=2.4.0,<3",  # model downloads (core/download.py)
     "mlx>=0.32.4",
     "mlx-arsenal==0.2.4",  # the version ltx-2-studio's lockfile (and the goldens) used
     "transformers>=5.23.0,<6",  # the Gemma tokenizer only

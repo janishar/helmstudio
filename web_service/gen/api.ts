@@ -375,6 +375,7 @@ export interface paths {
          *     `source`, `family` (exact, `unknown` included), `q` (every whitespace-separated word occurs, case-insensitively,
          *     in `name`). Order: own first, newest `created_at` first; then shared by `name` (case-insensitive, code points),
          *     then `id`. `thumb_url` is the caller's oldest take whose `made_with.loras` has the id (never another user's).
+         *     From 1.16 `usage` is the caller's quota use (every own LoRA, whatever the filters).
          */
         get: operations["studioListLoras"];
         put?: never;
@@ -635,7 +636,11 @@ export interface paths {
          * @description One entry per key in the KV `hosts`. `offline` when the key is older than 30 s. A host running anyone's run is
          *     `busy`; which run and whose is never shown. From 1.13 each entry carries `host_memory`, the budget its host's
          *     envs share and what they hold together (the memory chip shows it for the host the run will use), and each
-         *     resident component its `last_used` (contracts/README.md, The hand-over).
+         *     resident component its `last_used` (contracts/README.md, The hand-over). From 1.16 every entry adds `machine`,
+         *     `cached_gb` and each resident component's `pinned_why`; for an admin (and only then) every entry adds
+         *     `admin` (the host's settings, the env's policy in effect, the current run, idle since, unload pending, the
+         *     Hub token's presence), and a baked entry shows another user's LoRA with its `lora_id` and `strength` (`name`
+         *     still null) so it can be named for Unload and Pin (contracts/README.md, Hosts admin).
          */
         get: operations["studioListHosts"];
         put?: never;
@@ -655,7 +660,7 @@ export interface paths {
         };
         /**
          * The caller's gallery, newest first, filtered and paginated
-         * @description Every take of the caller that is not deleted and (for an upload) completed, newest first (`created_at`, then
+         * @description Every take of the caller that is not deleted and (for an upload or an import) completed, newest first (`created_at`, then
          *     `id`). Filters combine with AND. `q`: every whitespace-separated word must occur, case-insensitively, in the
          *     title or the prompt (`made_with.prompt`). A `session_id` that is unknown or another user's just matches
          *     nothing. A malformed filter value or cursor is 422.
@@ -707,7 +712,7 @@ export interface paths {
          * The settings that made a take, to pre-fill Create
          * @description `workflow_id` and `inputs` = `made_with.inputs` (every param, the seed the runner used instead of random), ready
          *     to post as a `RunRequest` or to load into the form; image values come back as recorded (`{take_id}`), so a
-         *     reference deleted since makes that request 422. Nothing is created. 409 for an upload (it has no settings).
+         *     reference deleted since makes that request 422. Nothing is created. 409 for an upload or an import (it has no settings).
          *     `workflow_status` compares the workflow now with the one that made the take: `current` (a template still
          *     published, or a user workflow at `made_with.workflow_version`), `changed` (a user workflow edited since: keys
          *     that are no longer a settable param of it are dropped from `inputs`, the rest kept), `deleted` (no longer
@@ -1423,6 +1428,302 @@ export interface paths {
          * @description From 1.15. Admin only. Studio asks `pipelines.providers.test` (30 s, else 503); `?model=` adds one tiny chat completion. A failed test is 200 with ok false and `failure`.
          */
         post: operations["studioAdminTestProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every model and variant with its components, and its presence on every host (for everyone)
+         * @description From 1.16. Built from the registry `<host>.<env>.models` keys of every host with a present `hosts` key (fresh or
+         *     offline) and studio's model jobs; nothing in it is per user. `hosts`: those hosts by name, `live` = a fresh key.
+         *     `models`: the union of their models by `title` then `id`; each variant's descriptive fields from the freshest
+         *     live key that publishes it (else the freshest key); `hosts` of a variant: every host whose models key lists the
+         *     model, by name (a host with no env for the model is not listed). A variant host's `state`: `downloading` while a
+         *     download job of that (host, model, variant) is queued or running (`job`), else the key's `presence`. Not
+         *     paginated.
+         */
+        get: operations["studioListModels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/models/{model}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue a download of a variant's weights to one host (a model job)
+         * @description From 1.16. Admin only (403). 202 with the new job, `queued`; 200 with the existing job when a download of the
+         *     same (host, model, variant) is already queued or running (idempotent). The runner of the env whose models key
+         *     lists the model on that host fetches the variant's `source` (and any shared component of its owner variant not
+         *     already on the host with matching hashes) into `<models root>/<dir>/` as plain files (contracts/README.md,
+         *     Model jobs). 404 for a model no host publishes. 422 `host <host> has no env for <model>`, `<model> has no
+         *     variant <variant>`, `<title> <variant> has no download source`, `licence <id> must be accepted` (the variant's
+         *     `source.must_accept` and `accept_licence` not true). 409 `<title> <variant> is already on <host>` (state
+         *     present), `a delete of <title> on <host> is unfinished`.
+         */
+        post: operations["studioAdminDownloadModel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/models/{model}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Queue a delete of a model's files on one host (a model job)
+         * @description From 1.16. Admin only (403). 202 with the job (its `keeps`: shared components left on disk because another
+         *     variant on the host that is not deleted loads them); 200 with the existing job when the same delete is queued
+         *     or running. `variant` absent = every variant of the model on the host. Refused, checked again by studio when
+         *     it releases the job and by the runner before it removes anything (then the job fails `in_use`): 409 `<title>
+         *     <variant> is not on <host>` (state missing), `<component> of <title> is loaded on <host>; unload it first` (a
+         *     resident entry of any env of the host whose files the delete removes), `<title> is in use by a queued or
+         *     running run on <host>` (a run not yet terminal whose model node names the model and whose host is the host, or
+         *     that is not placed yet and the host is eligible for it), `a download of <title> on <host> is unfinished; cancel
+         *     it first`. 422 `host <host> has no env for <model>`, `<model> has no variant <variant>`, `host is required`. The
+         *     runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it).
+         */
+        delete: operations["studioAdminDeleteModel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/loras/{lora_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Queue a delete of a shared LoRA's file on one host (a model job)
+         * @description From 1.16. Admin only (403). 202 with the job (kind `lora_delete`, sent to the first env by name whose loras key
+         *     on that host lists the id); 200 with the existing job when the same delete is queued or running. Every file of
+         *     that host's index with this SHA-256 is removed; the other envs of the host drop it at their next rescan (at
+         *     most 60 s). 404 for an id the host does not list (an own LoRA's UUID included: users delete their own with
+         *     `DELETE /v1/studio/loras/{lora_id}`). 409 `LoRA <name> is part of <title> (pre-fused); delete the model
+         *     instead`, `LoRA <name> is baked into a loaded component on <host>; unload it first`, `LoRA <name> is in use by
+         *     a queued or running run on <host>`.
+         */
+        delete: operations["studioAdminDeleteSharedLora"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/model-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model jobs, newest first (at most 200)
+         * @description From 1.16. Admin only (403). `active`: true = only queued and running ones. Every admin sees every job.
+         */
+        get: operations["studioAdminListModelJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/model-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description From 1.16. Admin only (403). The UI polls it (every 2 s while active) for progress. */
+        get: operations["studioAdminGetModelJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/model-jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a queued job, or a running download
+         * @description From 1.16. Admin only (403). Queued: `cancelled` at once, never sent. A running download: studio writes KV
+         *     `cancels` key `<job_id>`; the runner stops within 2 s, keeps the partial files (the variant shows `partial`; a
+         *     new download resumes them) and reports `cancelled`; if the env's hosts key is gone or older than 60 s, studio
+         *     marks it `cancelled` itself and purges the command from `cmd.model.<host>.<env>`. 409 `a running delete cannot
+         *     be cancelled`, `job already ended`. Answers the job as it is now.
+         */
+        post: operations["studioAdminCancelModelJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/hosts/{host}/unload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unload components, cached handles, or everything on a host (pins included)
+         * @description From 1.16. Admin only (403). Studio sends `req.runner.unload` with `by: admin` to each env concerned: `all` =
+         *     every env of the host, no `components` (everything: pinned components, adapters, cached handles); `entries` =
+         *     one request per env with that env's entries (pinned ones too; an entry not resident is skipped); `cached_env` =
+         *     that env, `cached_only`. An env whose key is idle is asked at once; a busy one after its run ends ("a running
+         *     run finishes first"): until every request of this call is answered, or 60 s after the host went idle, the
+         *     dispatcher releases nothing to the host. Pins stay set. The result shows in `GET /v1/studio/hosts`. 404 for a
+         *     host with no present hosts key. 422 `env <env> is not on host <host>`.
+         */
+        post: operations["studioAdminUnload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/hosts/{host}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set what stays loaded after a run, the idle timeout and the memory reserve, for every env of a host
+         * @description From 1.16. Admin only (403). Stored in studio (the truth), `version` + 1, written to KV `host_settings` key
+         *     `<host>`; each runner of the host applies it at once when idle, else after its run, without a restart, and
+         *     reports it in its hosts key (`policy.settings_version`; `HostSettings.applied`). A first PUT creates the row
+         *     with no pins. 404 for a host with no present hosts key. 422 `reserve_gb leaves no memory on <host>` (reserve_gb
+         *     ≥ the smallest `machine.ram_gb` the host's keys report).
+         */
+        put: operations["studioAdminPutHostSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/hosts/{host}/pins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the host's pinned components
+         * @description From 1.16. Admin only (403). Replaces the pins (duplicates collapsed), `version` + 1, published like the
+         *     settings. A first PUT creates the row with the other settings copied from the freshest key's `policy`. A pin
+         *     keeps its entry loaded (keep_pinned, the idle unload) and is a hand-over victim only as the last resort (after
+         *     every unpinned one, when the run would not fit otherwise: a pin never fails or holds a run; `Run.unloads_pinned`
+         *     says so first); an admin unload still unloads it. An unloaded pin stays set. A pin need not be resident now. 404 for a host with no
+         *     present hosts key. 422 `env <env> is not on host <host>`, `<model> is not published by <host>.<env>`.
+         */
+        put: operations["studioAdminPutHostPins"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/imports/takes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create (or find) one imported take for a user, with signed PUT links for its files
+         * @description From 1.16, used by `helm import`. Admin only (403). Idempotent on (`owner_id`, `key`): a new key stores a
+         *     pending take (`source: import`, owner `owner_id`) and answers 201 with single-use 24-hour `PUT` links for
+         *     `u/<owner_id>/imports/<take_id>.<png|jpg|webp|mp4>` (and, for a video, `…/<take_id>.poster.<png|jpg|webp>`),
+         *     exactly as uploads sign them; a key already pending answers 200 with fresh links; a key already complete
+         *     answers 200 `state: ready` without links and changes nothing but adding `parents` edges not stored yet. Every
+         *     `parents` key is stored as an edge and shows once both takes are complete, in either order. A pending import
+         *     not completed in 24 hours is deleted. 422 for a body that breaks the schema, `legacy is larger than 64 KB`.
+         */
+        post: operations["studioAdminCreateImportTake"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/imports/takes/{take_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check an imported take's uploaded files and show it in its owner's gallery
+         * @description From 1.16. Admin only (403). As `POST /v1/studio/uploads/{take_id}/complete`: HEAD each object (its size =
+         *     the declared bytes) and read its first 64 KB: an image's header gives width and height (must equal the declared
+         *     ones); a video must start with an MP4 `ftyp` box; its poster is checked as an image. 422 `size differs from the
+         *     declared bytes`, `not a png, jpeg or webp image`, `not an MP4 file`, `width and height differ from the file`
+         *     (a failed check deletes the pending take and its objects, so a later run of the import creates it again). 409
+         *     `upload not received` while an object is missing. Complete again: the same 200. 404 for an id that is not a pending or
+         *     ready import.
+         */
+        post: operations["studioAdminCompleteImportTake"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2654,6 +2955,16 @@ export interface components {
             /** @description the looks it was asked with (RunRequest.looks; a batch run: its row's or step's), as requested; absent or empty = none */
             looks?: components["schemas"]["LookIds"];
             answer?: components["schemas"]["RunAnswer"];
+            /** @description from 1.16, only while queued (computed on every read, like `position`): the pinned components the host memory admission would unload, as its last-resort victims, if the run were admitted on `host` now (contracts/README.md, Hosts admin: Generate says so first); they are loaded again, and pinned again, when next used. Absent when none */
+            unloads_pinned?: {
+                env: string;
+                component: string;
+                model: string;
+                variant: string;
+                precision: string;
+                /** @description its resident size: what reloading it costs */
+                gb: number;
+            }[];
         };
         /** @description from 1.14, a run of a text (ask) workflow (lane batch: a judge, write or decide call): its answer, stored on the run, never a take (`outputs` stays empty). Sent once it succeeded, and when it failed on the schema */
         RunAnswer: {
@@ -2785,6 +3096,11 @@ export interface components {
                  * @description from 1.13: when the runner last used it; absent from older runners
                  */
                 last_used?: string;
+                /**
+                 * @description from 1.16, with pinned true: in_use = the running run uses it; pin = a pin of the host
+                 * @enum {string}
+                 */
+                pinned_why?: "in_use" | "pin";
                 /** @description a component with LoRAs baked in is its own entry: those LoRAs in order; absent or empty = the plain component. Another user's own LoRA shows only its size (`lora_id`, `name`, `strength` null) */
                 loras?: {
                     lora_id: string | null;
@@ -2793,6 +3109,57 @@ export interface components {
                     bytes: number;
                 }[];
             }[];
+            /** @description from 1.16: what the env holds beyond its resident components (cached handles: cached node results, the device cache, the runtime): max(0, memory.used_gb − Σ gb), rounded to 0.1; absent without memory. The board's `Cached handles` */
+            cached_gb?: number;
+            /** @description from 1.16, when the runner reports it: `macos · metal · native` is the board's `Apple Silicon · Metal · native` */
+            machine?: {
+                /** @enum {string} */
+                os: "macos" | "linux";
+                /** @enum {string} */
+                accel: "metal" | "cuda" | "cpu";
+                /** @enum {string} */
+                packaging: "native" | "container";
+                ram_gb: number;
+            };
+            admin?: components["schemas"]["HostAdmin"];
+        };
+        /** @description from 1.16, admins only: what the Hosts screen needs beyond the redacted view */
+        HostAdmin: {
+            /** @description the host's settings (the same on every entry of the host); null until an admin sets them (the runners use their env defaults, `policy`) */
+            settings: components["schemas"]["HostSettings"] | null;
+            /** @description what this env's runner applies now (its hosts key's `policy`); null from a runner that does not report it */
+            policy: {
+                after_run: components["schemas"]["AfterRun"];
+                idle_unload_min: number;
+                reserve_gb: number;
+                settings_version: number | null;
+            } | null;
+            /** @description busy: the run released to this env that holds the host (studio's own table); null otherwise */
+            run: {
+                /** Format: uuid */
+                run_id: string;
+                /**
+                 * Format: uuid
+                 * @description the run's owner; the web shows their name from GET /auth/admin/users
+                 */
+                owner_id: string;
+                lane: components["schemas"]["RunLane"];
+                /** @description from its latest progress event; null before the first */
+                node: string | null;
+                step: number | null;
+                of: number | null;
+                phase: string | null;
+                eta_s: number | null;
+            } | null;
+            /**
+             * Format: date-time
+             * @description the end of the last run released to the host (any env); null while busy or never
+             */
+            idle_since: string | null;
+            /** @description an admin unload waits for this env's run to end */
+            unload_pending: boolean;
+            /** @description the runner reports a Hub token file (never the token) */
+            hub_token: boolean;
         };
         HostList: {
             hosts: components["schemas"]["Host"][];
@@ -2800,10 +3167,10 @@ export interface components {
         /** @enum {string} */
         TakeKind: "image" | "video" | "audio";
         /**
-         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1). timeline comes later
+         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`). timeline comes later
          * @enum {string}
          */
-        TakeSource: "create" | "upload" | "pipeline";
+        TakeSource: "create" | "upload" | "pipeline" | "import";
         /**
          * @description One item of the caller's gallery: a run output or an upload, pointing at an immutable object (its key is never
          *     shown). `title` starts as the first line of the prompt (at most 80 characters; the workflow title when the
@@ -2841,8 +3208,10 @@ export interface components {
              * @description the run that made it; null for an upload or after its session was deleted
              */
             run_id: string | null;
-            /** @description null for an upload */
+            /** @description null for an upload or an import */
             made_with: components["schemas"]["MadeWith"] | null;
+            /** @description from 1.16, source import only (absent otherwise): the old settings, read-only */
+            legacy?: components["schemas"]["LegacyInfo"];
             /** @description lineage: the takes it was made from, in input order (every image value of `made_with.inputs`, each once); deleted ones left out; empty for a take made from no image */
             parents: string[];
             /** @description only in `GET /v1/studio/takes/{take_id}`: the takes made from this one ("Used in"), newest first, at most 50, deleted ones left out */
@@ -3266,6 +3635,16 @@ export interface components {
         };
         LoraList: {
             loras: components["schemas"]["Lora"][];
+            usage?: components["schemas"]["LoraUsage"];
+        };
+        /** @description from 1.16: the caller's own LoRAs against the quota, counted as the upload's 409s count them (every state; pending and ready bytes plus deleted ones until the sweep), whatever the filters */
+        LoraUsage: {
+            count: number;
+            bytes: number;
+            /** @constant */
+            max_count: 50;
+            /** @constant */
+            max_bytes: 21474836480;
         };
         LoraPatch: {
             /** @description trimmed; must then be 1-80 characters */
@@ -4175,6 +4554,313 @@ export interface components {
         CustomNodeList: {
             nodes: components["schemas"]["CustomNode"][];
         };
+        /** @enum {string} */
+        Precision: "bf16" | "fp16" | "int8" | "int4";
+        ModelList: {
+            hosts: components["schemas"]["ModelHost"][];
+            /** @description every licence a listed variant names, each once (the text shown before a download) */
+            licences: components["schemas"]["Licence"][];
+            models: components["schemas"]["Model"][];
+        };
+        ModelHost: {
+            host: string;
+            /** @description some hosts key of it is fresh (30 s); an offline host shows what it last published */
+            live: boolean;
+            /** @description its envs with a present hosts key, by name */
+            envs: string[];
+            /** @description the models root (`~/GenAI/models`), from the freshest key's `models_disk`; null when no key reports it */
+            models_root: string | null;
+            /** @description free space on the models root's volume, from the same key */
+            free_bytes: number | null;
+            total_bytes: number | null;
+            /** @description admins only: a Hub token file is present on the host (needed for a gated source); never the token */
+            hub_token?: boolean;
+        };
+        Licence: {
+            /** @example apache-2.0 */
+            id: string;
+            title: string;
+            url: string | null;
+            /** @description the full text; its UTF-8 SHA-256 is what a download's job records as accepted */
+            text: string;
+        };
+        Model: {
+            /** @example qwen-image-2.1 */
+            id: string;
+            /** @example qwen-image */
+            family: string;
+            /** @example Qwen Image 2.1 */
+            title: string;
+            /** @description the board's `image`, `video + audio` */
+            media: ("image" | "video" | "audio")[];
+            /** @description every runtime the pack has; only mlx = runs on Apple silicon only (the board's `Mac only`) */
+            runtimes: {
+                runtime: string;
+                env: string;
+            }[];
+            variants: components["schemas"]["ModelVariant"][];
+        };
+        ModelVariant: {
+            /** @example turbo */
+            id: string;
+            /** @example Turbo */
+            title: string;
+            /** @description first = as stored; the rest load-time quantizations (`int8 at load`); one only = stored quantized (`no load-time quantization`) */
+            precisions: components["schemas"]["Precision"][];
+            /** @description its folder under each host's models root */
+            dir: string | null;
+            /** @description its source's licence (an id of `licences`); null = no download source */
+            licence: {
+                id: string;
+                must_accept: boolean;
+            } | null;
+            /** @description the source needs a Hub token on the host */
+            gated: boolean;
+            /** @description the expected size of its own files (source.bytes); null when unknown */
+            download_bytes: number | null;
+            components: {
+                /** @example text_encoder */
+                component: string;
+                /** @description the variant whose folder holds it: itself, or the owner of a shared component (the board's `shared with Base`) */
+                from_variant: string;
+                precisions: components["schemas"]["Precision"][];
+                /** @description on disk, from the freshest key where it is present; null when on no host */
+                bytes: number | null;
+            }[];
+            hosts: components["schemas"]["ModelVariantHost"][];
+        };
+        /**
+         * @description present: every file on disk, hashes as recorded; partial: some (resume with a download); missing: none of its own; downloading: a download job is queued or running (`job`); mismatch: files whose hash differs from the recorded one (`mismatch`; download again)
+         * @enum {string}
+         */
+        ModelVariantState: "present" | "partial" | "missing" | "downloading" | "mismatch";
+        ModelVariantHost: {
+            host: string;
+            state: components["schemas"]["ModelVariantState"];
+            /** @description its own files on that host's disk (the board's `On disk for this variant`); null when missing */
+            bytes: number | null;
+            /** @description state mismatch: the files, relative to `dir` */
+            mismatch?: string[];
+            /** @description shared components this host keeps as the variant's own copy because their hashes differ from the owner's */
+            separate?: string[];
+            /** @description state downloading: its download job (the board's `downloading · 62%` = done / total); null otherwise */
+            job: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                state: "queued" | "running";
+                done_bytes: number;
+                /** @description null until the runner has listed the source */
+                total_bytes: number | null;
+            } | null;
+        };
+        ModelDownload: {
+            host: string;
+            /** @description absent = the model's first variant */
+            variant?: string;
+            /** @description true: the admin accepted the variant's licence text as GET /v1/studio/models showed it; required when its must_accept is true */
+            accept_licence?: boolean;
+        };
+        /** @enum {string} */
+        ModelJobKind: "download" | "delete" | "lora_delete";
+        /** @enum {string} */
+        ModelJobState: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        ModelJob: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["ModelJobKind"];
+            host: string;
+            /** @description the runner env that does it (the one whose models or loras key lists the model or LoRA) */
+            env: string;
+            /** @description download, delete */
+            model: string | null;
+            /** @description download: the variant; delete: null = every variant */
+            variant: string | null;
+            /** @description lora_delete */
+            lora_id: string | null;
+            /**
+             * @description `Qwen Image 2.1 · Turbo`, or the LoRA's name
+             * @example Qwen Image 2.1 · Turbo
+             */
+            title: string;
+            state: components["schemas"]["ModelJobState"];
+            /** @description a download's latest evt.model.progress (kept after it ends); null before the first and for deletes */
+            progress: {
+                done_bytes: number;
+                total_bytes: number | null;
+                files_done: number;
+                files_total: number | null;
+                file: string | null;
+                eta_s: number | null;
+            } | null;
+            /** @description failed: why (contracts/README.md, Model jobs: failures); null otherwise */
+            failure: {
+                /** @enum {string} */
+                class: "not_found" | "gated" | "licence" | "disk_full" | "hash_mismatch" | "network" | "in_use" | "not_downloadable" | "internal";
+                detail: string;
+            } | null;
+            /** @description succeeded: evt.model.status `result`; null otherwise */
+            result: {
+                bytes?: number;
+                files?: number;
+                freed_bytes?: number;
+                reused?: string[];
+                separate?: string[];
+                kept?: string[];
+            } | null;
+            /** @description delete: the shared components it leaves on disk, decided when it was queued; [] otherwise */
+            keeps: {
+                component: string;
+                from_variant: string;
+                /** @description the variants on the host that still load it */
+                for: string[];
+            }[];
+            /** @description download: the licence accepted and the SHA-256 of its text; null when none had to be */
+            licence: {
+                id: string;
+                sha256: string;
+            } | null;
+            /**
+             * Format: uuid
+             * @description the admin's user id
+             */
+            requested_by: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description the first running status
+             */
+            started_at: string | null;
+            /** Format: date-time */
+            ended_at: string | null;
+        };
+        ModelJobList: {
+            jobs: components["schemas"]["ModelJob"][];
+        };
+        /** @description one resident entry's identity (registry `$defs/pin`): what a resident component of GET /v1/studio/hosts shows, with its entry's env */
+        PinRef: {
+            env: string;
+            component: string;
+            model: string;
+            variant: string;
+            precision: components["schemas"]["Precision"];
+            /** @description a baked set, in order (lora_id and strength as the admin's hosts view shows them); absent or empty = the plain component */
+            loras?: {
+                lora_id: string;
+                strength: number;
+            }[];
+        };
+        /**
+         * @description what stays loaded once a run ends: unload = nothing (the board's `Unload everything`); keep_warm = everything until memory is needed or the idle timeout passes (the default); keep_pinned = only the pins
+         * @enum {string}
+         */
+        AfterRun: "unload" | "keep_warm" | "keep_pinned";
+        HostSettingsPut: {
+            after_run: components["schemas"]["AfterRun"];
+            /** @description keep_warm: minutes idle before everything but the pins is unloaded; 0 = never */
+            idle_unload_min: number;
+            /** @description the host's budget is its RAM minus this */
+            reserve_gb: number;
+        };
+        HostPins: {
+            pins: components["schemas"]["PinRef"][];
+        };
+        HostSettings: {
+            host: string;
+            version: number;
+            after_run: components["schemas"]["AfterRun"];
+            idle_unload_min: number;
+            reserve_gb: number;
+            pins: components["schemas"]["PinRef"][];
+            /** @description every fresh hosts key of the host reports `policy.settings_version` = version */
+            applied: boolean;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description exactly one of: `all` (the board's Unload all), `entries` (a component's ×), `cached_env` (Cached handles ×) */
+        HostUnload: {
+            /** @constant */
+            all?: true;
+            entries?: components["schemas"]["PinRef"][];
+            cached_env?: string;
+        } & (unknown | unknown | unknown);
+        HostUnloadAccepted: {
+            host: string;
+            requests: {
+                env: string;
+                /**
+                 * @description asked: sent now; after_run: the env is busy and is asked when its run ends
+                 * @enum {string}
+                 */
+                state: "asked" | "after_run";
+            }[];
+        };
+        ImportTakeCreate: {
+            /**
+             * Format: uuid
+             * @description the user whose gallery receives it (the CLI resolves `--user <email>` with GET /auth/admin/users)
+             */
+            owner_id: string;
+            /** @description the idempotency key: stable for one old item across runs (the CLI's choice: contracts/README.md, Import) */
+            key: string;
+            /** @enum {string} */
+            kind: "image" | "video";
+            /** @description the old file's name, for logs */
+            filename: string;
+            /** @enum {string} */
+            content_type: "image/png" | "image/jpeg" | "image/webp" | "video/mp4";
+            /** @description an image at most 50 MB, a video at most 2 GB */
+            bytes: number;
+            width: number;
+            height: number;
+            /**
+             * Format: date-time
+             * @description the old item's creation time: the take's created_at (its place in the gallery)
+             */
+            created_at: string;
+            starred: boolean;
+            title: string;
+            /** @description the read-only legacy settings snapshot (at most 65536 bytes as compact JSON): contracts/README.md, Import */
+            legacy: Record<string, never>;
+            /** @description keys of the imported items it was made from, in input order (lineage) */
+            parents: string[];
+            video?: {
+                duration_s: number;
+                fps: number;
+                frames: number;
+                has_audio: boolean;
+                poster: {
+                    /** @enum {string} */
+                    content_type: "image/png" | "image/jpeg" | "image/webp";
+                    bytes: number;
+                    width: number;
+                    height: number;
+                };
+            };
+        };
+        ImportTake: {
+            /** Format: uuid */
+            take_id: string;
+            key: string;
+            /** @enum {string} */
+            state: "pending" | "ready";
+            /** @description pending: the signed PUT link for the file (exactly its content_type and bytes); ready: null */
+            upload_url: string | null;
+            /** @description pending video: the poster's link; null otherwise */
+            poster_upload_url: string | null;
+            /**
+             * Format: date-time
+             * @description pending: when the links expire
+             */
+            expires_at: string | null;
+        };
+        /** @description a take imported from the old helmstudio: the read-only snapshot of its settings there (never editable; reuse is refused as for an upload) */
+        LegacyInfo: {
+            settings: Record<string, never>;
+            /** Format: date-time */
+            imported_at: string;
+        };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
             email: string;
@@ -4483,6 +5169,12 @@ export interface components {
         PipelineId: string;
         /** @description a shared LoRA's SHA-256 (64 hex) or an own LoRA's UUID (malformed = 404) */
         LoraId: string;
+        /** @description a model id of the registry (`qwen-image-2.1`; unknown or malformed = 404) */
+        ModelId: string;
+        /** @description model job UUID (malformed = 404) */
+        ModelJobId: string;
+        /** @description a host name of the KV hosts (`mac`; unknown or malformed = 404) */
+        HostName: string;
         /** @description library item UUID (malformed = 404) */
         LibraryItemId: string;
         /** @description a starter look's family (the part of its id before `/`; malformed = 404) */
@@ -6706,6 +7398,395 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AdminRequired"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the models */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminDownloadModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a model id of the registry (`qwen-image-2.1`; unknown or malformed = 404) */
+                model: components["parameters"]["ModelId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelDownload"];
+            };
+        };
+        responses: {
+            /** @description the same download, already queued or running */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            /** @description the job, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminDeleteModel: {
+        parameters: {
+            query: {
+                host: string;
+                variant?: string;
+            };
+            header?: never;
+            path: {
+                /** @description a model id of the registry (`qwen-image-2.1`; unknown or malformed = 404) */
+                model: components["parameters"]["ModelId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the same delete, already queued or running */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            /** @description the job, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminDeleteSharedLora: {
+        parameters: {
+            query: {
+                host: string;
+            };
+            header?: never;
+            path: {
+                /** @description a shared LoRA's SHA-256 (64 hex) or an own LoRA's UUID (malformed = 404) */
+                lora_id: components["parameters"]["LoraId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the same delete, already queued or running */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            /** @description the job, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminListModelJobs: {
+        parameters: {
+            query?: {
+                host?: string;
+                active?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the jobs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJobList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminGetModelJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description model job UUID (malformed = 404) */
+                job_id: components["parameters"]["ModelJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminCancelModelJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description model job UUID (malformed = 404) */
+                job_id: components["parameters"]["ModelJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminUnload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a host name of the KV hosts (`mac`; unknown or malformed = 404) */
+                host: components["parameters"]["HostName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostUnload"];
+            };
+        };
+        responses: {
+            /** @description asked (or waiting for the run) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostUnloadAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminPutHostSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a host name of the KV hosts (`mac`; unknown or malformed = 404) */
+                host: components["parameters"]["HostName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostSettingsPut"];
+            };
+        };
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminPutHostPins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a host name of the KV hosts (`mac`; unknown or malformed = 404) */
+                host: components["parameters"]["HostName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostPins"];
+            };
+        };
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminCreateImportTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportTakeCreate"];
+            };
+        };
+        responses: {
+            /** @description the key was seen: still pending (fresh links), or ready */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportTake"];
+                };
+            };
+            /** @description created, pending */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportTake"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminCompleteImportTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the take, as its owner sees it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Take"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

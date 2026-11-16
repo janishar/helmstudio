@@ -202,7 +202,7 @@ def test_the_cap_lowers_the_budget_for_one_run():
     assert res.cap is None and res.limit == 48
 
 
-def test_unload_named_frees_exactly_those_held_and_not_pinned_or_in_use():
+def test_unload_named_frees_exactly_those_held_and_not_in_use():
     res, freed = manager(budget=48, pins={"c"})
     for key in (A, B, C, K):
         res.get(
@@ -217,8 +217,13 @@ def test_unload_named_frees_exactly_those_held_and_not_pinned_or_in_use():
     res.in_use = {B}
     names = [{"component": n, "model": "m", "variant": "base", "precision": "bf16"} for n in "abc"]
     names.append(names[0] | {"loras": [{"lora_id": "x", "strength": 1}]})
-    out, gb = res.unload_named(names)
-    assert out == [names[0], names[3]] and gb == 4 and list(res.entries) == [B, C] and freed == [1]
+    out, gb = res.unload_named(names)  # C is pinned: named, it goes too
+    assert (
+        out == [names[0], names[2], names[3]]
+        and gb == 6
+        and list(res.entries) == [B]
+        and freed == [1]
+    )
     assert res.unload_named(names) == ([], 0)
 
 

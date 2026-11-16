@@ -1,0 +1,24 @@
+{
+  "pins": [
+    {
+      "env": "mlx",
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8"
+    },
+    {
+      "env": "torch",
+      "component": "transformer",
+      "model": "qwen-image-2.1",
+      "variant": "turbo",
+      "precision": "int8",
+      "loras": [
+        {
+          "lora_id": "3f0a9c1e5b7d2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a",
+          "strength": 0.8
+        }
+      ]
+    }
+  ]
+}

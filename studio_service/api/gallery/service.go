@@ -622,6 +622,9 @@ func (s *Service) takeDTO(row model.Take) dto.Take {
 	out := dto.Take{ID: row.ID, Kind: row.Kind, Source: row.Source, Title: row.Title, URL: link, ThumbURL: thumb, Video: video,
 		ContentType: row.ContentType, Width: row.Width, Height: row.Height, Bytes: row.Bytes, CreatedAt: row.CreatedAt,
 		Starred: row.Starred, SessionID: row.SessionID, RunID: row.RunID, Parents: row.Parents, BatchID: row.BatchID}
+	if len(row.Legacy) > 0 && string(row.Legacy) != "null" {
+		out.Legacy = row.Legacy
+	}
 	_ = json.Unmarshal(row.MadeWith, &out.MadeWith)
 	if out.Parents == nil {
 		out.Parents = []string{}

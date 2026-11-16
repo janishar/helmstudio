@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/registry.schema.json",
-  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras|looks) and bucket hosts (key <host>.<env>)",
-  "description": "Each runner writes only its own keys: the five registry keys once at start, its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them. Every value carries schema_version (major, versioned like a message).",
+  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras|looks), bucket hosts (key <host>.<env>) and bucket host_settings (key <host>)",
+  "description": "Each runner writes only its own keys: the registry keys at start (from API 1.16 `models` and `loras` again whenever a rescan finds a change: every 60 s and after each model job), its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them, and alone writes bucket host_settings (the admin's per-host settings, API 1.16), which the runners of that host watch. Every value carries schema_version (major, versioned like a message).",
   "$defs": {
     "meta": {
       "type": "object",
@@ -1039,8 +1039,11 @@
                         "presence": {
                           "enum": [
                             "present",
-                            "missing"
-                          ]
+                            "partial",
+                            "missing",
+                            "mismatch"
+                          ],
+                          "description": "present: every file of the variant (its own and the shared ones it loads) is on disk and no recorded hash differs; partial: some are (an interrupted or cancelled download: resume it); missing: none of its own; mismatch (API 1.16): a file's SHA-256 differs from the one recorded at download (`mismatch` names them; the variant does not load until it is downloaded again). partial and mismatch are from API 1.16; the dispatcher treats every value but present as not runnable"
                         },
                         "bytes": {
                           "type": "integer",
@@ -1160,6 +1163,177 @@
                               }
                             }
                           }
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80,
+                          "description": "from API 1.16: the variant's display name (`Turbo`, `Distilled int8`); absent = the id"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "^[^/\\u0000-\\u001f][^\\u0000-\\u001f]*$",
+                          "not": {
+                            "pattern": "(^|/)\\.\\.(/|$)"
+                          },
+                          "description": "from API 1.16: its folder under the host's models root (`Qwen-Image-2.1-Turbo`): model.yaml `variants.<id>.dir`"
+                        },
+                        "source": {
+                          "type": "object",
+                          "required": [
+                            "repo",
+                            "revision",
+                            "allow_patterns",
+                            "licence",
+                            "must_accept",
+                            "gated"
+                          ],
+                          "additionalProperties": false,
+                          "description": "from API 1.16: where a download fetches the variant's own files (model.yaml `variants.<id>.source`): huggingface_hub.snapshot_download(repo_id=repo, revision=revision, allow_patterns=allow_patterns, local_dir=<models root>/<dir>). Absent: the variant cannot be downloaded (put its files there by hand)",
+                          "properties": {
+                            "repo": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$",
+                              "description": "a Hub model repo, owner/name"
+                            },
+                            "revision": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$",
+                              "description": "a commit SHA (preferred: pinned), tag or branch"
+                            },
+                            "allow_patterns": {
+                              "type": "array",
+                              "minItems": 1,
+                              "maxItems": 64,
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 200
+                              },
+                              "description": "fnmatch globs over repo paths; the variant's own components' files and their configs (shared components come from their owner variant's source)"
+                            },
+                            "licence": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                              "description": "an id of the key's `licences`"
+                            },
+                            "must_accept": {
+                              "type": "boolean",
+                              "description": "true: the admin accepts the licence text before the download starts (accept_licence)"
+                            },
+                            "gated": {
+                              "type": "boolean",
+                              "description": "the repo needs a Hub token: the runner reads it from the host's secrets file (RUNNER_HF_TOKEN_FILE); never in a message, the API or a log"
+                            },
+                            "bytes": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "description": "the expected download size of the variant's own files (shown while missing; the job's total_bytes is the hub's)"
+                            }
+                          }
+                        },
+                        "components": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 32,
+                          "description": "from API 1.16: every weight component the variant loads, in model.yaml order",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "component",
+                              "from_variant",
+                              "precisions"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "component": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                              },
+                              "from_variant": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                                "description": "the variant whose folder it loads from: itself, or the owner of a shared component (`shares`; Qwen turbo's text_encoder and vae: base)"
+                              },
+                              "precisions": {
+                                "type": "array",
+                                "minItems": 1,
+                                "uniqueItems": true,
+                                "items": {
+                                  "enum": [
+                                    "bf16",
+                                    "fp16",
+                                    "int8",
+                                    "int4"
+                                  ]
+                                },
+                                "description": "first = as stored; the rest are load-time quantizations"
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "description": "on disk (its files in from_variant's folder); absent when missing"
+                              },
+                              "separate": {
+                                "type": "boolean",
+                                "description": "true: a shared component kept as this variant's own copy on this host because its files' hashes differ from the owner's (from_variant is then the variant itself); absent = false"
+                              }
+                            }
+                          }
+                        },
+                        "files": {
+                          "type": "array",
+                          "maxItems": 4096,
+                          "description": "from API 1.16: the manifest of the variant's own folder: every file the runner found (or a download wrote), path relative to `dir`, sorted. Absent when missing",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "path",
+                              "bytes"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 400,
+                                "pattern": "^[^/\\u0000-\\u001f][^\\u0000-\\u001f]*$",
+                                "not": {
+                                  "pattern": "(^|/)\\.\\.(/|$)"
+                                }
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "sha256": {
+                                "$ref": "messages/defs.schema.json#/$defs/sha256",
+                                "description": "recorded at download (the Hub's LFS hash, checked), or hashed once by the runner and kept by path, size and mtime; absent while not known yet"
+                              },
+                              "component": {
+                                "type": "string",
+                                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                                "description": "the component whose glob matches it; absent for configs"
+                              }
+                            }
+                          }
+                        },
+                        "mismatch": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 64,
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "^[^/\\u0000-\\u001f][^\\u0000-\\u001f]*$",
+                            "not": {
+                              "pattern": "(^|/)\\.\\.(/|$)"
+                            }
+                          },
+                          "description": "from API 1.16, presence mismatch only: the files (relative to `dir`) whose SHA-256 on disk differs from the recorded one, sorted"
                         }
                       }
                     }
@@ -1167,6 +1341,78 @@
                   "lora": {
                     "$ref": "#/$defs/loraBlock",
                     "description": "present when the family takes LoRAs (it publishes a <family>/lora-stack node)"
+                  },
+                  "media": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": [
+                        "image",
+                        "video",
+                        "audio"
+                      ]
+                    },
+                    "description": "from API 1.16: what the model makes (`[image]`, `[video, audio]`), from model.yaml `media`"
+                  },
+                  "runtimes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "runtime",
+                        "env"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "runtime": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+                          "description": "torch, mlx, fake"
+                        },
+                        "env": {
+                          "$ref": "messages/defs.schema.json#/$defs/envName"
+                        }
+                      }
+                    },
+                    "description": "from API 1.16: every runtime the pack has (model.yaml `runtimes`), also those of other envs: a model whose only runtime is mlx runs only on Apple silicon"
+                  }
+                }
+              }
+            },
+            "licences": {
+              "type": "array",
+              "maxItems": 64,
+              "description": "from API 1.16: the full text of every licence a variant's `source.licence` names (from the pack's licences/<id>.md), each once; shown before a download",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "title",
+                  "text"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                    "description": "an SPDX id or the pack's own (`apache-2.0`, `ltx-2-community`)"
+                  },
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "url": {
+                    "type": "string",
+                    "maxLength": 400,
+                    "description": "where the licence is published, for reference"
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 65536
                   }
                 }
               }
@@ -1365,7 +1611,7 @@
               },
               "pinned": {
                 "type": "boolean",
-                "description": "in use by the running run, or pinned by the host's setting (RUNNER_PIN): not evictable. In an idle runner's value only the setting's pins are true"
+                "description": "in use by the running run (never evictable), or pinned by the host's setting (RUNNER_PIN; from API 1.16 the host's pins): kept by idle and after-run unloads, a hand-over victim only as the last resort. In an idle runner's value only the setting's pins are true"
               },
               "last_used": {
                 "type": "string",
@@ -1403,6 +1649,13 @@
                     }
                   }
                 }
+              },
+              "pinned_why": {
+                "enum": [
+                  "in_use",
+                  "pin"
+                ],
+                "description": "from API 1.16, with pinned true: in_use = the running run uses it; pin = the host's pins (bucket host_settings, else RUNNER_PIN) name it. A pin is a hand-over victim only as the last resort (after every unpinned one, when the run would not fit otherwise); an admin unload unloads it anyway; the pin stays set"
               }
             }
           }
@@ -1410,6 +1663,111 @@
         "attempt": {
           "$ref": "messages/defs.schema.json#/$defs/attempt",
           "description": "the attempt of run_id in progress (busy); absent when idle. The dispatcher's lease check compares (run_id, attempt)"
+        },
+        "models_disk": {
+          "type": "object",
+          "required": [
+            "root",
+            "free_bytes",
+            "total_bytes"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.16: the volume holding the models root, measured at every write",
+          "properties": {
+            "root": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 400,
+              "description": "the models root (HELMSTUDIO_MODELS, default ~/GenAI/models) with the home directory written `~`"
+            },
+            "free_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_bytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "machine": {
+          "type": "object",
+          "required": [
+            "os",
+            "accel",
+            "packaging",
+            "ram_gb"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.16: what the runner runs on (the Hosts screen's `Apple Silicon · Metal · native`)",
+          "properties": {
+            "os": {
+              "enum": [
+                "macos",
+                "linux"
+              ]
+            },
+            "accel": {
+              "enum": [
+                "metal",
+                "cuda",
+                "cpu"
+              ]
+            },
+            "packaging": {
+              "enum": [
+                "native",
+                "container"
+              ]
+            },
+            "ram_gb": {
+              "type": "number",
+              "minimum": 0,
+              "description": "physical memory"
+            }
+          }
+        },
+        "hub_token": {
+          "type": "boolean",
+          "description": "from API 1.16: a Hub token file is present on this host (RUNNER_HF_TOKEN_FILE exists and is not empty); the token itself is never published"
+        },
+        "policy": {
+          "type": "object",
+          "required": [
+            "after_run",
+            "idle_unload_min",
+            "reserve_gb",
+            "settings_version"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.16: the residency settings in effect: the host_settings value of this host, else the runner's env (RUNNER_AFTER_RUN, RUNNER_IDLE_UNLOAD_S / 60, RUNNER_RESERVE_GB, pins RUNNER_PIN)",
+          "properties": {
+            "after_run": {
+              "enum": [
+                "unload",
+                "keep_warm",
+                "keep_pinned"
+              ]
+            },
+            "idle_unload_min": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1440
+            },
+            "reserve_gb": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1024
+            },
+            "settings_version": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "description": "the host_settings `version` applied; null = none (env defaults)"
+            }
+          }
         }
       },
       "if": {
@@ -1871,6 +2229,125 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "pin": {
+      "type": "object",
+      "required": [
+        "env",
+        "component",
+        "model",
+        "variant",
+        "precision"
+      ],
+      "additionalProperties": false,
+      "description": "one resident entry's identity, as req.runner.unload names it, with its env",
+      "properties": {
+        "env": {
+          "$ref": "messages/defs.schema.json#/$defs/envName"
+        },
+        "component": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$"
+        },
+        "variant": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "precision": {
+          "enum": [
+            "bf16",
+            "fp16",
+            "int8",
+            "int4"
+          ]
+        },
+        "loras": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "required": [
+              "lora_id",
+              "strength"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "lora_id": {
+                "$ref": "messages/defs.schema.json#/$defs/loraId"
+              },
+              "strength": {
+                "type": "number"
+              }
+            }
+          },
+          "description": "a baked set, in order; absent or empty = the plain component"
+        }
+      }
+    },
+    "settings": {
+      "description": "from API 1.16: bucket host_settings, key <host>: the admin's residency settings for every env of the host (plan 03-runtime 6.2: one setting per host). studio_service writes it from its own table on every change and at start (its table is the truth; the key is a copy); each runner of the host watches the key and applies a new version at once, between runs (never mid-run), then reports `policy.settings_version` in its hosts key. No key: the runner's env defaults",
+      "type": "object",
+      "required": [
+        "schema_version",
+        "host",
+        "version",
+        "after_run",
+        "idle_unload_min",
+        "reserve_gb",
+        "pins",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName",
+          "description": "= the key"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "studio adds 1 on every change"
+        },
+        "after_run": {
+          "enum": [
+            "unload",
+            "keep_warm",
+            "keep_pinned"
+          ],
+          "description": "what stays loaded once a run ends (RUNNER_AFTER_RUN's values): unload = everything, keep_warm = all until memory is needed or idle_unload_min passes, keep_pinned = only the pins"
+        },
+        "idle_unload_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440,
+          "description": "keep_warm: minutes idle before everything but the pins is unloaded; 0 = never"
+        },
+        "reserve_gb": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1024,
+          "description": "memory.budget_gb = machine.ram_gb − reserve_gb"
+        },
+        "pins": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/pin"
+          },
+          "description": "replaces RUNNER_PIN: these entries are marked pinned (pinned_why pin) whenever resident, kept by keep_pinned and the idle unload, a hand-over victim only as the last resort; an admin unload still unloads them"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
         }
       }
     }

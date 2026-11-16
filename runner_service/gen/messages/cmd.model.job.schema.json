@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.model.job.schema.json",
+  "title": "studio → a runner: one model job (download or delete weights, delete a shared LoRA file)",
+  "description": "From API 1.16 (contracts/README.md, Models and model jobs). Subject cmd.model.<host>.<env> (stream CMD, work queue; durable models-<host>-<env>, max_ack_pending 1, ack wait 60 s), Nats-Msg-Id <job_id>:1. `owner_id` = the admin who asked. Studio releases at most one job per host at a time. The runner works on it beside its runs (a separate worker: disk and network, no GPU memory), sends `+WIP` every 10 s while it works, publishes evt.model.status running, evt.model.progress, then one terminal status, waits for its ack, then acks the command. A redelivery (the runner restarted) resumes: snapshot_download keeps the partial files in local_dir. Everything the runner needs beyond this (repo, revision, allow_patterns, dir, the shared components) is its own pack's model.yaml: never a token, a URL, a path or bytes here.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.model.job"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the model job id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "download",
+            "delete",
+            "lora_delete"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "download, delete: a model id of the env's models key"
+        },
+        "variant": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "description": "download: the variant (absent = the first); delete: the variant (absent = every variant of the model on the host)"
+        },
+        "licence": {
+          "type": "object",
+          "required": [
+            "id",
+            "sha256"
+          ],
+          "additionalProperties": false,
+          "description": "download of a variant whose source.must_accept is true: the licence the admin accepted and the SHA-256 of its UTF-8 text as the models key published it. The runner fails the job `licence` when its pack's text hashes otherwise",
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+            },
+            "sha256": {
+              "$ref": "defs.schema.json#/$defs/sha256"
+            }
+          }
+        },
+        "lora_id": {
+          "$ref": "defs.schema.json#/$defs/sha256",
+          "description": "lora_delete: the shared LoRA (its SHA-256): every file of the host's index with that hash is deleted"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "lora_delete"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "lora_id"
+            ],
+            "not": {
+              "required": [
+                "model"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "model"
+            ],
+            "not": {
+              "required": [
+                "lora_id"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
