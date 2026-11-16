@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.media.status.schema.json",
+  "title": "runner → studio: a media job's lifecycle",
+  "description": "From API 1.17. Subject evt.media.<host>.status (stream EVT), Nats-Msg-Id <job_id>:<delivery>:<seq>. `running` when the runner starts it (each delivery), then one terminal status; `succeeded` only after every output object is written and checked. The projector (durable studio-media, filter evt.media.>) dedupes on (job_id, delivery, seq), ignores events of a terminal job, and on succeeded makes the take in the same transaction (README, Timeline: export).",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.media.status"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the media job id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "delivery",
+        "status"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq",
+          "description": "per delivery, from 1, over status and progress"
+        },
+        "delivery": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "encoder": {
+          "enum": [
+            "h264_videotoolbox",
+            "libx264",
+            "copy"
+          ],
+          "description": "running and succeeded exports: the video encoder used"
+        },
+        "failure": {
+          "type": "object",
+          "required": [
+            "class",
+            "detail"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "class": {
+              "enum": [
+                "input",
+                "invalid",
+                "ffmpeg",
+                "verify",
+                "internal"
+              ],
+              "description": "input: an input object is missing or unreadable, or ffprobe cannot read it; invalid: the args were refused; ffmpeg: it exited non-zero; verify: the output failed the check; internal"
+            },
+            "detail": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "description": "one line (ffmpeg: its last error line); never a local path, a URL or a stack trace"
+            }
+          }
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "succeeded",
+          "required": [
+            "key",
+            "width",
+            "height",
+            "bytes"
+          ],
+          "properties": {
+            "key": {
+              "allOf": [
+                {
+                  "$ref": "defs.schema.json#/$defs/objectKey"
+                },
+                {
+                  "pattern": "/(export\\.mp4|frame\\.png)$"
+                }
+              ]
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "etag": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{32}$"
+            },
+            "mode": {
+              "enum": [
+                "copy",
+                "conform"
+              ],
+              "description": "export: what it did"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 300,
+              "description": "export planned copy, done conform: which probe differed (`clip input 2: extradata_sha256 differs`)"
+            },
+            "video": {
+              "type": "object",
+              "required": [
+                "duration_s",
+                "fps",
+                "frames",
+                "has_audio",
+                "poster",
+                "last"
+              ],
+              "additionalProperties": false,
+              "description": "export: as evt.run.output video",
+              "properties": {
+                "duration_s": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "fps": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "frames": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "has_audio": {
+                  "type": "boolean"
+                },
+                "poster": {
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "width",
+                    "height",
+                    "bytes"
+                  ],
+                  "additionalProperties": false,
+                  "description": "export.poster.png: the frame at a tenth of the length (a fade-in never gives a black poster)",
+                  "properties": {
+                    "key": {
+                      "allOf": [
+                        {
+                          "$ref": "defs.schema.json#/$defs/objectKey"
+                        },
+                        {
+                          "pattern": "\\.poster\\.png$"
+                        }
+                      ]
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "last": {
+                  "type": "object",
+                  "required": [
+                    "key",
+                    "width",
+                    "height",
+                    "bytes"
+                  ],
+                  "additionalProperties": false,
+                  "description": "export.last.png: the last frame",
+                  "properties": {
+                    "key": {
+                      "allOf": [
+                        {
+                          "$ref": "defs.schema.json#/$defs/objectKey"
+                        },
+                        {
+                          "pattern": "\\.last\\.png$"
+                        }
+                      ]
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  }
+                },
+                "stream": {
+                  "$ref": "defs.schema.json#/$defs/videoStream"
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "failure"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "failure"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "succeeded"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "result"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "result"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

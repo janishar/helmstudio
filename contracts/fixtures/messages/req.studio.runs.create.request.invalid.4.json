@@ -1,0 +1,29 @@
+{
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "workflow_id": "echo-image-to-video",
+  "inputs": {
+    "prompt.text": "@fox reaches the tree line",
+    "keyframes.images": [
+      {
+        "image": {
+          "frame_of": "aaaaaaaa-0000-4000-8000-000000000001",
+          "at": "middle"
+        },
+        "seconds": 0,
+        "strength": 1
+      },
+      {
+        "image": {
+          "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+        },
+        "seconds": 1.0,
+        "strength": 1
+      }
+    ]
+  },
+  "lane": "batch",
+  "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "row": 1,
+  "idempotency_key": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47:1:1:clip_b:0:0"
+}

@@ -158,6 +158,45 @@
                   "minimum": 1
                 }
               }
+            },
+            "last": {
+              "type": "object",
+              "required": [
+                "key",
+                "width",
+                "height",
+                "bytes"
+              ],
+              "additionalProperties": false,
+              "description": "from API 1.17: the last frame as PNG at the video's size, <output_prefix><index>.last.png, written before this event (New shot's \"start from the previous clip's last frame\" copies it; absent from older runners: studio then extracts it with a media job)",
+              "properties": {
+                "key": {
+                  "allOf": [
+                    {
+                      "$ref": "defs.schema.json#/$defs/objectKey"
+                    },
+                    {
+                      "pattern": "\\.last\\.png$"
+                    }
+                  ]
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "stream": {
+              "$ref": "defs.schema.json#/$defs/videoStream",
+              "description": "from API 1.17: the stream facts of the MP4 (the export plan's input); absent = not probed (the plan re-encodes that clip: not_probed)"
             }
           }
         }

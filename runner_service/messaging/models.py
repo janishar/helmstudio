@@ -38,23 +38,28 @@ POLL = 0.25  # seconds between looks at a running download
 
 
 class ModelEvents:
-    """evt.model.status / evt.model.progress of one delivery of a job: seq from 1 per delivery."""
+    """evt.model.status / evt.model.progress of one delivery of a job: seq from 1 per delivery (KIND media: the
+    evt.media ones)."""
+
+    KIND = "model"
 
     def __init__(self, js, cmd: dict, delivery: int) -> None:
         self.js, self.cmd, self.delivery, self.seq = js, cmd, delivery, 0
 
     async def publish(self, kind: str, data: dict) -> dict:
         cmd, seq = self.cmd, self.seq + 1
-        msg = {"type": f"evt.model.{kind}", "version": 1, "id": str(uuid.uuid4()), "job_id": cmd["job_id"],
+        msg = {"type": f"evt.{self.KIND}.{kind}", "version": 1, "id": str(uuid.uuid4()), "job_id": cmd["job_id"],
                "owner_id": cmd["owner_id"], "occurred_at": now(),
                "trace": {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")},
                "data": {"seq": seq, "delivery": self.delivery} | data}  # fmt: skip
         if errs := schemas.message_errors(msg):
-            raise ValueError(f"evt.model.{kind} is off-contract: {'; '.join(errs[:3])}")
+            raise ValueError(f"evt.{self.KIND}.{kind} is off-contract: {'; '.join(errs[:3])}")
         self.seq = seq
         body = json.dumps(msg).encode()
         headers = {"Nats-Msg-Id": f"{cmd['job_id']}:{self.delivery}:{seq}"}
-        await retried(lambda: self.js.publish(f"evt.model.{HOST}.{kind}", body, headers=headers))
+        await retried(
+            lambda: self.js.publish(f"evt.{self.KIND}.{HOST}.{kind}", body, headers=headers)
+        )
         return msg
 
     async def status(

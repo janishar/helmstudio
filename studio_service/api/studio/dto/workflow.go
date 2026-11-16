@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/helmstudio/studio_service/api/timeline"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -28,6 +29,8 @@ type Workflow struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Problems  *[]Problem `json:"problems,omitempty"` // only from get, create and replace
+	// API 1.17, always sent: the keyframe rows New shot binds (null: neither option is offered)
+	Keyframes *timeline.Keyframes `json:"keyframes"`
 }
 
 // StudioLayout is which params Create shows and where (contracts StudioLayout).

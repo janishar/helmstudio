@@ -1,0 +1,28 @@
+{
+  "revision": 4,
+  "stream_copy": false,
+  "reasons": [],
+  "blocked": [
+    {
+      "code": "no_host",
+      "clip": null,
+      "message": "no live host can export (ffmpeg)"
+    }
+  ],
+  "output": {
+    "width": 256,
+    "height": 128,
+    "fps": 24,
+    "sample_rate": 48000,
+    "container": "mp4",
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "video_bitrate": 1000000
+  },
+  "frames": 98,
+  "duration_s": 4.083333333333333,
+  "estimated_bytes": 608417,
+  "host": null,
+  "env": null,
+  "hardware": null
+}

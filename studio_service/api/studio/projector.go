@@ -192,6 +192,9 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
 		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: parents(typedView(run.Nodes, run.Mentions)),
 		Video: data.Video})
+	if err == nil && data.Index == 0 {
+		err = fillShot(ctx, tx, run, takeID) // API 1.17: the run's first take fills its slot
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -236,6 +239,10 @@ func badVideo(data message.Output, prefix string) bool {
 	video := data.Video
 	if data.Kind != "video" {
 		return video != nil
+	}
+	if video != nil && video.Last != nil && (!strings.HasPrefix(video.Last.Key, prefix) || // API 1.17: the last frame
+		!strings.HasSuffix(video.Last.Key, ".last.png") || strings.Contains(video.Last.Key, "..") || strings.Contains(video.Last.Key, "//")) {
+		return true
 	}
 	return video == nil || !strings.HasSuffix(data.Key, ".mp4") || data.Width == nil || data.Height == nil ||
 		video.Frames < 1 || video.FPS <= 0 || video.DurationS <= 0 || !strings.HasPrefix(video.Poster.Key, prefix) ||

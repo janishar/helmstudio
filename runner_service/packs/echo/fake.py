@@ -107,7 +107,8 @@ def keyframes(ctx, params: dict, inputs: dict) -> dict:
 
 def video(ctx, params: dict, inputs: dict) -> dict:
     """As echo, then a still clip of the drawn text (canvas size, duration frames at fps, silent stereo audio).
-    A Video value is the encoded clip: {mp4 (bytes), poster (frame 0, a PIL image), frames, fps, has_audio}."""
+    A Video value is the encoded clip: {mp4 (bytes), poster (frame 0, a PIL image), last (the last frame), frames, fps,
+    has_audio, stream (defs videoStream)}."""
     return _render(ctx, params, inputs, fail=params["fail"])
 
 
@@ -129,8 +130,9 @@ def _render(ctx, params: dict, inputs: dict, fail: bool) -> dict:
     poster = draw(inputs["text"], size["width"], size["height"])
     clip = mp4.mp4(poster, d["frames"], d["fps"])
     ctx.progress(1, 1, "writing mp4")
-    return {"video": {"mp4": clip, "poster": poster, "frames": d["frames"], "fps": d["fps"],
-                      "has_audio": True}}  # fmt: skip
+    # a still clip: its last frame is its poster
+    return {"video": {"mp4": clip, "poster": poster, "last": poster, "frames": d["frames"], "fps": d["fps"],
+                      "has_audio": True, "stream": mp4.stream(*poster.size, d["fps"])}}  # fmt: skip
 
 
 def lora_stack(ctx, params: dict, inputs: dict) -> dict:

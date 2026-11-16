@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 /** Dock sections that arrive in a later milestone, by route segment. */
-const LATER: Record<string, string> = {
-  timeline: "Timeline",
-};
+const LATER: Record<string, string> = {};
 
 type Props = { params: Promise<{ section: string[] }> };
 

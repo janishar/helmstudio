@@ -163,11 +163,21 @@ class Ctx:
         self._call(self._progress(self.node, step, of, phase, eta))
 
     def output(
-        self, data: bytes, *, ext: str, kind: str, width: int, height: int, video=None, poster=None
+        self,
+        data: bytes,
+        *,
+        ext: str,
+        kind: str,
+        width: int,
+        height: int,
+        video=None,
+        poster=None,
+        last=None,
     ) -> None:
-        """A video also passes `video` ({duration_s, fps, frames, has_audio}) and `poster` (PNG bytes)."""
+        """A video also passes `video` ({duration_s, fps, frames, has_audio[, stream]}), `poster` and `last` (the
+        last frame; PNG bytes)."""
         index, self.outputs = self.outputs, self.outputs + 1
-        extra = {"video": video, "poster": poster} if video is not None else {}
+        extra = {"video": video, "poster": poster, "last": last} if video is not None else {}
         if video is not None and self.auto:  # auto length: the clip's real frames (README, Video)
             self.resolved |= dict.fromkeys(self.auto, video["frames"])
             extra["resolved"] = {"params": dict(self.resolved)}

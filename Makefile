@@ -22,7 +22,9 @@ envs:             ## every missing .env / .test.env from its example
 build: secrets envs
 	$(DEV) build
 
+# a running nats keeps the nats.conf it started with: HUP reloads it (users and permissions) before every up
 up: secrets envs  ## build and start the stack (fake runner), wait until healthy
+	-@$(DEV) kill -s HUP nats >/dev/null 2>&1
 	$(DEV) up -d --build --wait
 
 dev: up
@@ -43,11 +45,13 @@ contracts-check: contract_tests/.venv   ## schemas, fixtures, openapi.yaml (no s
 	$(MAKE) -C contract_tests check-contracts
 
 test: secrets envs contract_tests/.venv  ## the contract suite on the helmstudio-test stack
+	-@$(TEST) kill -s HUP nats >/dev/null 2>&1
 	$(TEST) up -d --build --wait
 	key=$$($(TEST) run --rm -T auth apikey contract) && \
 	  $(MAKE) -C contract_tests test BASE_URL=http://localhost:8390 API_KEY="$$key" CONTRACT_SCHEMAS=1 $(TEST_ADMIN)
 
 resilience: secrets envs  ## contract_tests/resilience.sh on the helmstudio-test stack (restarts its services); SCENARIOS="a b" runs only those
+	-@$(TEST) kill -s HUP nats >/dev/null 2>&1
 	$(TEST) up -d --build --wait
 	key=$$($(TEST) run --rm -T auth apikey contract) && API_KEY="$$key" $(TEST_ADMIN) contract_tests/resilience.sh $(SCENARIOS)
 

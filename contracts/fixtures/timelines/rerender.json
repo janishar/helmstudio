@@ -1,0 +1,1118 @@
+{
+  "description": "rerender_steps(normalized document, takes with made_with / frame_of, selected clips, keyframes by workflow) → the steps in run order with their binds, or {error, clip} (README, Timeline: re-render)",
+  "keyframes": {
+    "echo-image-to-video": {
+      "param": "keyframes.images",
+      "image": "image",
+      "seconds": "seconds",
+      "last": true
+    }
+  },
+  "cases": [
+    {
+      "description": "every clip with a take: B starts from A's last frame and ends on C's first, so it runs after both",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "11111111-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "11111111-0000-4000-8000-000000000001",
+                  "11111111-0000-4000-8000-000000000002"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "22222222-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "22222222-0000-4000-8000-000000000001"
+                ],
+                "at": 1.0416666666666667
+              },
+              {
+                "id": "c",
+                "take_id": "33333333-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "33333333-0000-4000-8000-000000000001"
+                ],
+                "at": 2.0833333333333335
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.125,
+        "frames": 75
+      },
+      "takes": {
+        "11111111-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "11111111-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "22222222-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                },
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 1.0416666666666667,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "33333333-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "11111111-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000002": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "33333333-0000-4000-8000-000000000001",
+            "at": "first"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000003": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "22222222-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "bbbbbbbb-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "width": 256,
+          "height": 128,
+          "bytes": 90000
+        },
+        "aaaaaaaa-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.0416666666666665,
+          "fps": 24,
+          "frames": 49,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "stream": {
+            "container": "mp4",
+            "codec": "h264",
+            "profile": "High",
+            "level": 21,
+            "pix_fmt": "yuv420p",
+            "width": 256,
+            "height": 128,
+            "sar": "1:1",
+            "field_order": "progressive",
+            "frame_rate": "24/1",
+            "time_base": "1/12288",
+            "color": {
+              "range": null,
+              "space": null,
+              "primaries": null,
+              "transfer": null
+            },
+            "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expect": {
+        "steps": [
+          {
+            "step": "clip_a",
+            "clip": "a",
+            "binds": {}
+          },
+          {
+            "step": "clip_c",
+            "clip": "c",
+            "binds": {}
+          },
+          {
+            "step": "clip_b",
+            "clip": "b",
+            "binds": {
+              "keyframes.images[1]": "clip_a.last_frame",
+              "keyframes.images[2]": "clip_c.first_frame"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "a selection: only edges between selected clips bind",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "11111111-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "11111111-0000-4000-8000-000000000001",
+                  "11111111-0000-4000-8000-000000000002"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "22222222-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "22222222-0000-4000-8000-000000000001"
+                ],
+                "at": 1.0416666666666667
+              },
+              {
+                "id": "c",
+                "take_id": "33333333-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "33333333-0000-4000-8000-000000000001"
+                ],
+                "at": 2.0833333333333335
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.125,
+        "frames": 75
+      },
+      "clips": [
+        "b",
+        "c"
+      ],
+      "takes": {
+        "11111111-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "11111111-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "22222222-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                },
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 1.0416666666666667,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "33333333-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "11111111-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000002": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "33333333-0000-4000-8000-000000000001",
+            "at": "first"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000003": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "22222222-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "bbbbbbbb-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "width": 256,
+          "height": 128,
+          "bytes": 90000
+        },
+        "aaaaaaaa-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.0416666666666665,
+          "fps": 24,
+          "frames": 49,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "stream": {
+            "container": "mp4",
+            "codec": "h264",
+            "profile": "High",
+            "level": 21,
+            "pix_fmt": "yuv420p",
+            "width": 256,
+            "height": 128,
+            "sar": "1:1",
+            "field_order": "progressive",
+            "frame_rate": "24/1",
+            "time_base": "1/12288",
+            "color": {
+              "range": null,
+              "space": null,
+              "primaries": null,
+              "transfer": null
+            },
+            "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expect": {
+        "steps": [
+          {
+            "step": "clip_c",
+            "clip": "c",
+            "binds": {}
+          },
+          {
+            "step": "clip_b",
+            "clip": "b",
+            "binds": {
+              "keyframes.images[2]": "clip_c.first_frame"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "a take not made by a workflow (an upload, import, frame or export)",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "11111111-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "11111111-0000-4000-8000-000000000002"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "u",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 1.0416666666666667
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.0833333333333335,
+        "frames": 74
+      },
+      "takes": {
+        "11111111-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "11111111-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "22222222-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                },
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 1.0416666666666667,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "33333333-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "11111111-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000002": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "33333333-0000-4000-8000-000000000001",
+            "at": "first"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000003": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "22222222-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "bbbbbbbb-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "width": 256,
+          "height": 128,
+          "bytes": 90000
+        },
+        "aaaaaaaa-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.0416666666666665,
+          "fps": 24,
+          "frames": 49,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "stream": {
+            "container": "mp4",
+            "codec": "h264",
+            "profile": "High",
+            "level": 21,
+            "pix_fmt": "yuv420p",
+            "width": 256,
+            "height": 128,
+            "sar": "1:1",
+            "field_order": "progressive",
+            "frame_rate": "24/1",
+            "time_base": "1/12288",
+            "color": {
+              "range": null,
+              "space": null,
+              "primaries": null,
+              "transfer": null
+            },
+            "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expect": {
+        "error": "not_made",
+        "clip": "u"
+      }
+    },
+    {
+      "description": "an empty slot",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "s",
+                "take_id": null,
+                "hold": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 0.0
+              }
+            ]
+          }
+        ],
+        "duration_s": 1.0,
+        "frames": 24
+      },
+      "clips": [
+        "s"
+      ],
+      "takes": {
+        "11111111-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "11111111-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "22222222-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                },
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 1.0416666666666667,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "33333333-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "11111111-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000002": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "33333333-0000-4000-8000-000000000001",
+            "at": "first"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000003": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "22222222-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "bbbbbbbb-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "width": 256,
+          "height": 128,
+          "bytes": 90000
+        },
+        "aaaaaaaa-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.0416666666666665,
+          "fps": 24,
+          "frames": 49,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "stream": {
+            "container": "mp4",
+            "codec": "h264",
+            "profile": "High",
+            "level": 21,
+            "pix_fmt": "yuv420p",
+            "width": 256,
+            "height": 128,
+            "sar": "1:1",
+            "field_order": "progressive",
+            "frame_rate": "24/1",
+            "time_base": "1/12288",
+            "color": {
+              "range": null,
+              "space": null,
+              "primaries": null,
+              "transfer": null
+            },
+            "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expect": {
+        "error": "empty",
+        "clip": "s"
+      }
+    },
+    {
+      "description": "two clips that start from each other",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "11111111-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "11111111-0000-4000-8000-000000000001",
+                  "11111111-0000-4000-8000-000000000002"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "22222222-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "22222222-0000-4000-8000-000000000001"
+                ],
+                "at": 1.0416666666666667
+              },
+              {
+                "id": "c",
+                "take_id": "33333333-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "33333333-0000-4000-8000-000000000001"
+                ],
+                "at": 2.0833333333333335
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.125,
+        "frames": 75
+      },
+      "clips": [
+        "b",
+        "c"
+      ],
+      "takes": {
+        "11111111-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "11111111-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "22222222-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                },
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000002"
+                  },
+                  "seconds": 1.0416666666666667,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "33333333-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "44444444-0000-4000-8000-000000000003"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                }
+              ]
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "11111111-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000002": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "33333333-0000-4000-8000-000000000001",
+            "at": "first"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000003": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "22222222-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "bbbbbbbb-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "width": 256,
+          "height": 128,
+          "bytes": 90000
+        },
+        "aaaaaaaa-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.0416666666666665,
+          "fps": 24,
+          "frames": 49,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "stream": {
+            "container": "mp4",
+            "codec": "h264",
+            "profile": "High",
+            "level": 21,
+            "pix_fmt": "yuv420p",
+            "width": 256,
+            "height": 128,
+            "sar": "1:1",
+            "field_order": "progressive",
+            "frame_rate": "24/1",
+            "time_base": "1/12288",
+            "color": {
+              "range": null,
+              "space": null,
+              "primaries": null,
+              "transfer": null
+            },
+            "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expect": {
+        "error": "rerender_cycle",
+        "clip": "b"
+      }
+    }
+  ]
+}

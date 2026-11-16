@@ -122,6 +122,9 @@ type Take struct {
 	Decisions *[]TakeDecision `json:"decisions,omitempty"`
 	// source import: the old settings, read-only (API 1.16)
 	Legacy json.RawMessage `json:"legacy,omitempty"`
+	// source frame: the video take and frame it is; source export: the sequence and revision (API 1.17)
+	FrameOf json.RawMessage `json:"frame_of,omitempty"`
+	Export  json.RawMessage `json:"export,omitempty"`
 }
 
 // TakeDecision is one judge decision about a take: kept (by the judge or the user's pick), passed or failed.
@@ -150,6 +153,9 @@ type Video struct {
 	Frames    int     `json:"frames"`
 	HasAudio  bool    `json:"has_audio"`
 	Poster    Poster  `json:"poster"`
+	// API 1.17: the last frame (absent from older runners: a media job makes it) and the stream facts (export plan)
+	Last   *Poster         `json:"last,omitempty"`
+	Stream json.RawMessage `json:"stream,omitempty"`
 }
 
 // Poster is a video's frame 0 as PNG: the take's thumbnail.

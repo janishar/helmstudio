@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.media.progress.schema.json",
+  "title": "runner → studio: an export's progress",
+  "description": "From API 1.17. Subject evt.media.<host>.progress (stream EVT), Nats-Msg-Id <job_id>:<delivery>:<seq>. From ffmpeg's `-progress pipe:1` `frame=N`: at most every 2 s and at least every 30 s (absolute counts). A frame job sends none.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.media.progress"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "seq",
+        "delivery",
+        "frames",
+        "total"
+      ],
+      "properties": {
+        "seq": {
+          "$ref": "defs.schema.json#/$defs/seq"
+        },
+        "delivery": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the command's export.frames"
+        },
+        "eta_s": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

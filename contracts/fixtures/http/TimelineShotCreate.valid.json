@@ -1,0 +1,31 @@
+{
+  "slot": {
+    "clip": "s"
+  },
+  "run": {
+    "workflow_id": "echo-image-to-video",
+    "inputs": {
+      "prompt.text": "@fox reaches the tree line and slips between the birches",
+      "duration.frames": 73,
+      "keyframes.images": [
+        {
+          "image": {
+            "take_id": "44444444-0000-4000-8000-000000000001"
+          },
+          "seconds": 0,
+          "strength": 1
+        },
+        {
+          "image": {
+            "take_id": "44444444-0000-4000-8000-000000000002"
+          },
+          "seconds": 3.0416666666666665,
+          "strength": 1
+        }
+      ]
+    },
+    "looks": [
+      "qwen-image/window-light"
+    ]
+  }
+}

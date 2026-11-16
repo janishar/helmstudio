@@ -1,0 +1,16 @@
+{
+  "type": "evt.media.status",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001712",
+  "job_id": "9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:00:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 2,
+    "delivery": 1,
+    "status": "succeeded"
+  }
+}

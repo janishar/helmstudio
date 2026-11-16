@@ -1,0 +1,8 @@
+{
+  "slot": {
+    "at": 8.0
+  },
+  "run": {
+    "workflow_id": "echo-video"
+  }
+}

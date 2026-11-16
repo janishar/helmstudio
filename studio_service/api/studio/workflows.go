@@ -18,6 +18,7 @@ import (
 	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/model"
+	"github.com/helmstudio/studio_service/api/timeline"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -82,7 +83,7 @@ func templateDoc(workflow registry.Workflow) dto.WorkflowDoc {
 func (s *Service) templateDTO(workflow registry.Workflow, problems *[]dto.Problem) dto.Workflow {
 	return dto.Workflow{ID: workflow.ID, Title: workflow.Title, Family: workflow.Family, Env: workflow.Env,
 		Media: cmp.Or(workflow.Media, "image"), Nodes: workflow.Nodes, NodeSchemas: workflow.NodeSchemas, Source: "template",
-		Studio: templateDoc(workflow).Studio, Problems: problems}
+		Studio: templateDoc(workflow).Studio, Problems: problems, Keyframes: timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas)}
 }
 
 // mineDTO maps a stored workflow (its media computed from its graph); problems nil leaves them out.
@@ -91,7 +92,8 @@ func (s *Service) mineDTO(row model.UserWorkflow, problems *[]dto.Problem) dto.W
 	schemas := s.schemasOf(doc.Nodes)
 	return dto.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env, Nodes: doc.Nodes,
 		Media: workflowMedia(doc.Nodes, schemas), NodeSchemas: schemas, Source: "mine", Studio: doc.Studio, BasedOn: row.BasedOn,
-		Version: &row.Version, CreatedAt: &row.CreatedAt, UpdatedAt: &row.UpdatedAt, Problems: problems}
+		Version: &row.Version, CreatedAt: &row.CreatedAt, UpdatedAt: &row.UpdatedAt, Problems: problems,
+		Keyframes: timeline.ShotKeyframes(doc.Nodes, schemas)}
 }
 
 // readWorkflow reads one of the caller's workflows in tx (lock: FOR UPDATE); another user's is errNotFound.

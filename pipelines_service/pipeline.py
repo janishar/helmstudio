@@ -186,6 +186,9 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
         k = n.get("kind")
         if what == "takes" and k == "step":
             return "takes", n.get("seeds", 1) * branches(nid)
+        # API 1.17: a Re-render snapshot's row bind
+        if what in ("first_frame", "last_frame") and k == "step":
+            return "frame", nid
         if what == "picked" and k in ("gate", "judge"):
             return "takes", n.get("keep", 1)
         if (what == "reasons" and k == "judge") or (
@@ -297,6 +300,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
         for k, v in nodes[nid].get("bind", {}).items():
             s = source(v)
             if (not s or (s[0] == "text" and s[1] != "custom") or s[0] == "items"
+                    or ("[" in k) != (s[0] == "frame")  # `<node>.<param>[<row>]` ← `<step>.first|last_frame` only
                     or (s[0] == "item" and fan.get(nid) != s[1])
                     or (s[0] != "item" and not before(v, nid))):  # fmt: skip
                 add("bind_source", nid, k)

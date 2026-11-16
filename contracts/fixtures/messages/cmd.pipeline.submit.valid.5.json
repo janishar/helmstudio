@@ -1,0 +1,268 @@
+{
+  "type": "cmd.pipeline.submit",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001720",
+  "job_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-15T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "batch_id": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c47",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "snapshot": {
+      "workflow_id": "echo-video",
+      "workflow": {
+        "id": "echo-video",
+        "title": "Echo video",
+        "family": "echo",
+        "env": "fake",
+        "media": "video",
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "canvas": {
+            "kind": "echo/canvas",
+            "params": {
+              "width": 256,
+              "height": 128
+            }
+          },
+          "duration": {
+            "kind": "echo/duration",
+            "params": {
+              "frames": 25,
+              "fps": 24
+            }
+          },
+          "video": {
+            "kind": "echo/video",
+            "in": {
+              "text": "prompt.text",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "steps": 10,
+              "delay_ms": 300,
+              "fail": false,
+              "refs": []
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "video.video"
+            }
+          }
+        }
+      },
+      "pipeline": {
+        "id": "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b",
+        "title": "Re-render · Fox at dusk",
+        "version": 9,
+        "nodes": {
+          "inputs": {
+            "kind": "inputs",
+            "inputs": [
+              {
+                "name": "timeline",
+                "type": "Text"
+              }
+            ]
+          },
+          "clip_a": {
+            "kind": "step",
+            "workflow": "echo-video",
+            "seeds": 1,
+            "inputs": {
+              "prompt.text": "a fox trots in",
+              "duration.frames": 25
+            },
+            "bind": {},
+            "seed_param": null
+          },
+          "clip_b": {
+            "kind": "step",
+            "workflow": "echo-image-to-video",
+            "seeds": 1,
+            "preset": "final",
+            "inputs": {
+              "prompt.text": "@fox reaches the tree line",
+              "keyframes.images": [
+                {
+                  "image": {
+                    "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 0,
+                  "strength": 1
+                },
+                {
+                  "image": {
+                    "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+                  },
+                  "seconds": 1.0,
+                  "strength": 1
+                }
+              ]
+            },
+            "bind": {
+              "keyframes.images[1]": "clip_a.last_frame"
+            },
+            "seed_param": null
+          },
+          "out": {
+            "kind": "output",
+            "from": "clip_b.takes",
+            "collection": "Re-render · Fox at dusk"
+          }
+        },
+        "edges": [
+          [
+            "inputs",
+            "clip_a"
+          ],
+          [
+            "clip_a",
+            "clip_b"
+          ],
+          [
+            "clip_b",
+            "out"
+          ]
+        ],
+        "workflows": {
+          "echo-video": {
+            "id": "echo-video",
+            "title": "Echo video",
+            "family": "echo",
+            "env": "fake",
+            "media": "video",
+            "nodes": {
+              "prompt": {
+                "kind": "prompt",
+                "params": {
+                  "text": ""
+                }
+              },
+              "canvas": {
+                "kind": "echo/canvas",
+                "params": {
+                  "width": 256,
+                  "height": 128
+                }
+              },
+              "duration": {
+                "kind": "echo/duration",
+                "params": {
+                  "frames": 25,
+                  "fps": 24
+                }
+              },
+              "video": {
+                "kind": "echo/video",
+                "in": {
+                  "text": "prompt.text",
+                  "canvas": "canvas.canvas",
+                  "duration": "duration.duration"
+                },
+                "params": {
+                  "steps": 10,
+                  "delay_ms": 300,
+                  "fail": false,
+                  "refs": []
+                }
+              },
+              "output": {
+                "kind": "output",
+                "in": {
+                  "media": "video.video"
+                }
+              }
+            }
+          },
+          "echo-image-to-video": {
+            "id": "echo-image-to-video",
+            "title": "Echo image to video",
+            "family": "echo",
+            "env": "fake",
+            "media": "video",
+            "nodes": {
+              "prompt": {
+                "kind": "prompt",
+                "params": {
+                  "text": ""
+                }
+              },
+              "canvas": {
+                "kind": "echo/canvas",
+                "params": {
+                  "width": 256,
+                  "height": 128
+                }
+              },
+              "duration": {
+                "kind": "echo/duration",
+                "params": {
+                  "frames": 25,
+                  "fps": 24
+                }
+              },
+              "keyframes": {
+                "kind": "echo/keyframes",
+                "in": {
+                  "text": "prompt.text",
+                  "duration": "duration.duration"
+                },
+                "params": {
+                  "images": []
+                }
+              },
+              "sample": {
+                "kind": "echo/sample",
+                "in": {
+                  "text": "keyframes.text",
+                  "canvas": "canvas.canvas",
+                  "duration": "duration.duration"
+                },
+                "params": {
+                  "role": "stage1",
+                  "steps": 4,
+                  "delay_ms": 300
+                }
+              },
+              "output": {
+                "kind": "output",
+                "in": {
+                  "media": "sample.video"
+                }
+              }
+            }
+          }
+        },
+        "remote": {
+          "enabled": false,
+          "providers": [],
+          "max_calls": 200,
+          "max_tokens": 400000
+        }
+      }
+    },
+    "inputs": {},
+    "rows": [
+      {
+        "row": 1,
+        "inputs": {
+          "inputs.timeline": "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b"
+        },
+        "seeds": {}
+      }
+    ],
+    "replay_from": "5a2e9c4b-1d7f-4b3a-9c8e-6f0d2a1b3c40"
+  }
+}

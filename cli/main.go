@@ -34,6 +34,11 @@ const usage = `usage:
   helm batches [--limit n] [--cursor c]
   helm batch-stop <batch_id>
   helm takes [--kind image|video|audio] [--source create|upload] [--starred] [--session <id>] [--q <text>] [--limit n] [--cursor c]
+  helm timelines                      your sequences (id, revision, V1 clips, length, size and rate, updated, name)
+  helm timeline show <id>             a sequence's tracks and clips (gaps, offline clips, dissolves, shots)
+  helm timeline add <id> [--track A2] <take_id>...   "Add to timeline": append takes in order (A2…: a video's sound)
+  helm timeline export <id> [-o file.mp4] [--plan] [--host h]   --plan: copy or re-encode and why, exit 1 if blocked;
+             else export the current revision, follow it (Ctrl-C cancels) and save the MP4
   helm upload <file>                  a png, jpeg or webp image, into the gallery
   helm use [--param node.param] <take_id> <workflow_id>   print the helm run command with the take as reference 1
 
@@ -106,6 +111,10 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = batchStop(args[1:], stdout)
 	case "takes":
 		err = takesCmd(args[1:], stdout, stderr)
+	case "timelines":
+		err = timelinesCmd(stdout)
+	case "timeline":
+		err = timelineCmd(args[1:], stdout, stderr, stop)
 	case "upload":
 		err = uploadCmd(args[1:], stdout)
 	case "use":

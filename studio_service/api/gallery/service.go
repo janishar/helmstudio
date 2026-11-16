@@ -115,6 +115,9 @@ func decodeCursor(text string) (*cursor, bool) {
 	return &cursor{CreatedAt: at, ID: id}, true
 }
 
+// takeSources are TakeSource's values (contracts/openapi.yaml): import from 1.16, export and frame from 1.17.
+var takeSources = []string{"create", "upload", "pipeline", "import", "export", "frame"}
+
 // ParseFilter reads kind, source, starred, session_id, q, cursor and limit; the second result is the 422 detail.
 // sessionParam false ignores a session_id (GET /sessions/{id}/takes sets it from the path).
 func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
@@ -122,8 +125,8 @@ func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 	if filter.Kind != "" && filter.Kind != "image" && filter.Kind != "video" && filter.Kind != "audio" {
 		return filter, "kind must be image, video or audio"
 	}
-	if filter.Source != "" && filter.Source != "create" && filter.Source != "upload" && filter.Source != "pipeline" {
-		return filter, "source must be create, upload or pipeline"
+	if filter.Source != "" && !slices.Contains(takeSources, filter.Source) {
+		return filter, "source must be " + strings.Join(takeSources[:len(takeSources)-1], ", ") + " or " + takeSources[len(takeSources)-1]
 	}
 	if text := query.Get("starred"); text != "" {
 		if text != "true" && text != "false" {
@@ -608,13 +611,16 @@ func imageInput(workflow registry.Workflow, want *string) (string, registry.Para
 	return keys[0], params[keys[0]], ""
 }
 
-// takeDTO maps a row, signing its keys: an image is its own thumbnail (API 1.2), a video's is its poster.
-func (s *Service) takeDTO(row model.Take) dto.Take {
+// takeDTO maps a row, signing its keys.
+func (s *Service) takeDTO(row model.Take) dto.Take { return TakeDTO(s.signer, row) }
+
+// TakeDTO maps a row, signing its keys: an image is its own thumbnail (API 1.2), a video's is its poster.
+func TakeDTO(signer *common.Signer, row model.Take) dto.Take {
 	if row.ID == "" {
 		return dto.Take{}
 	}
-	link := s.signer.Sign(row.Key)
-	video := dto.Info(row.Video, s.signer.Sign)
+	link := signer.Sign(row.Key)
+	video := dto.Info(row.Video, signer.Sign)
 	thumb := link
 	if video != nil {
 		thumb = video.PosterURL
@@ -622,8 +628,14 @@ func (s *Service) takeDTO(row model.Take) dto.Take {
 	out := dto.Take{ID: row.ID, Kind: row.Kind, Source: row.Source, Title: row.Title, URL: link, ThumbURL: thumb, Video: video,
 		ContentType: row.ContentType, Width: row.Width, Height: row.Height, Bytes: row.Bytes, CreatedAt: row.CreatedAt,
 		Starred: row.Starred, SessionID: row.SessionID, RunID: row.RunID, Parents: row.Parents, BatchID: row.BatchID}
-	if len(row.Legacy) > 0 && string(row.Legacy) != "null" {
-		out.Legacy = row.Legacy
+	for _, raw := range []struct {
+		to   *json.RawMessage
+		from json.RawMessage
+	}{{&out.Legacy, row.Legacy},
+		{&out.FrameOf, row.FrameOf}, {&out.Export, row.Export}} {
+		if len(raw.from) > 0 && string(raw.from) != "null" {
+			*raw.to = raw.from
+		}
 	}
 	_ = json.Unmarshal(row.MadeWith, &out.MadeWith)
 	if out.Parents == nil {

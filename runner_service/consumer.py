@@ -155,15 +155,17 @@ class Consumer:
             await events.status("running")
             log.info("run %s: running (seed %s)", run_id, ctx.seed)
 
-            async def output(index: int, body: bytes, *, ext: str, poster=None, **meta) -> None:
+            async def output(
+                index: int, body: bytes, *, ext: str, poster=None, last=None, **meta
+            ) -> None:
                 key = f"{data['output_prefix']}{index}.{ext}"
-                if (
-                    poster is not None
-                ):  # a video: its poster first, <prefix><n>.poster.png at the video's size
-                    pkey = f"{data['output_prefix']}{index}.poster.png"
-                    await self.store.put(pkey, poster, "image/png")
-                    meta["video"] = meta["video"] | {"poster": {"key": pkey, "width": meta["width"],
-                                                                "height": meta["height"], "bytes": len(poster)}}  # fmt: skip
+                # a video: its poster and last frame first, <prefix><n>.{poster,last}.png at the video's size
+                for name, png in (("poster", poster), ("last", last)):
+                    if png is not None:
+                        pkey = f"{data['output_prefix']}{index}.{name}.png"
+                        await self.store.put(pkey, png, "image/png")
+                        meta["video"] = meta["video"] | {name: {"key": pkey, "width": meta["width"],
+                                                                "height": meta["height"], "bytes": len(png)}}  # fmt: skip
                 await self.store.put(key, body, mimetypes.types_map[f".{ext}"])
                 etag = hashlib.md5(body).hexdigest()  # the S3 ETag of this single-part PUT
                 await events.output(

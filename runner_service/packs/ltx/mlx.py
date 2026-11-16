@@ -28,6 +28,7 @@ import numpy as np
 import yaml
 from PIL import Image
 
+from core import media
 from core.graph import RunError, auto_frames
 
 sys.path.append(
@@ -632,12 +633,21 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
         )
         with Image.open(tmp / "poster.png") as im:
             poster = im.copy()
+        try:  # the last frame (New shot's "start from the previous clip's last frame") and the stream facts
+            info = media.probe(tmp / "out.mp4")
+            media.frame_png(tmp / "out.mp4", info["frames"] - 1, tmp / "last.png")
+        except media.MediaError as e:
+            raise RunError(f"reading back the mp4 failed: {e}") from None
+        with Image.open(tmp / "last.png") as im:
+            last = im.copy()
         data = (tmp / "out.mp4").read_bytes()
     clip = {
         "mp4": data,
         "poster": poster,
+        "last": last,
         "frames": latent.frames,
         "fps": latent.fps,
         "has_audio": audio,
+        "stream": info["stream"],
     }
     return {"video": clip}

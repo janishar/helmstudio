@@ -12,12 +12,16 @@ the reference mention rules (README, Mentions) against the same palette; fixture
 LoRA normaliser (README, LoRA normaliser) against the canonical qwen-image lora block (or the fixture's `family`);
 fixtures/decisions/ through the reference judge verdict and replay hash (README, Agent nodes);
 fixtures/video/ through the reference auto length and keyframe position rules (README, Video); fixtures/dispatch/
-through the reference host admission (`admit`) and dispatch order (`simulate`) (README, The hand-over).
+through the reference host admission (`admit`) and dispatch order (`simulate`) (README, The hand-over);
+fixtures/timelines/ through the reference timeline rules (`t_normalize`, `t_edit`, `snap_point`, `frame_at`,
+`export_plan`, `shot_keyframes`, `rerender_steps`) (README, Timeline rules).
 Exit code 1 on any failure."""
 
+import copy
 import hashlib
 import json
 import math
+from decimal import ROUND_HALF_UP, Decimal
 from fnmatch import fnmatchcase
 import re
 import sys
@@ -68,6 +72,8 @@ HTTP_SCHEMAS = [
     "CustomNodeList",
     "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "HostPins", "HostUnload",
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
+    "Timeline", "TimelineList", "TimelineCreate", "TimelineUpdate", "TimelineAddClips", "TimelineShotCreate",
+    "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -1604,6 +1610,592 @@ def check_video(registry: Registry, palette: dict) -> None:
     print("ok   fixtures/video/keyframes.json")
 
 
+# ---------------------------------------------------------------- timeline rules (README, "Timeline rules")
+# The frame-rate table: fps as JSON writes it → the exact rate num/den.
+RATES = [(23.976, 24000, 1001), (24, 24, 1), (25, 25, 1), (29.97, 30000, 1001), (30, 30, 1), (48, 48, 1), (50, 50, 1),
+         (59.94, 60000, 1001), (60, 60, 1)]
+T_MAGNET_PX = 6  # an edge lands on a cut within this many screen pixels
+T_IMAGE_HOLD_S = 3.0  # an image take added to V1 holds this long
+T_MAX_AUDIO_TRACKS, T_MAX_CLIPS, T_MAX_BYTES, T_MAX_ALTERNATIVES, T_MAX_RERENDER = 8, 1000, 262144, 32, 22
+
+
+def rnd(x: float) -> int:
+    """Round half away from zero, exactly: Go math.Round; JS Math.sign(x) * Math.round(Math.abs(x))."""
+    return int(Decimal(x).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+class Grid:
+    """The target's frame and sample grids: f(s) = rnd(s × num / den), s(f) = f × den / num (in that order)."""
+
+    def __init__(self, target: dict) -> None:
+        self.num, self.den = next((n, d) for fps, n, d in RATES if abs(fps - target["fps"]) < 1e-6)
+        self.sr = target["sample_rate"]
+
+    def f(self, s: float) -> int:
+        return rnd(s * self.num / self.den)
+
+    def s(self, f: int) -> float:
+        return f * self.den / self.num
+
+    def snap(self, s: float) -> float:
+        return self.s(self.f(s))
+
+    def smp(self, s: float) -> int:
+        return rnd(s * self.sr)
+
+
+def t_kind(c: dict, takes: dict) -> str:
+    """slot (no take: an empty slot), video or image; an offline clip by its fields (hold = image)."""
+    tid = c.get("take_id")
+    return "slot" if not tid else takes[tid]["kind"] if tid in takes else "image" if "hold" in c else "video"
+
+
+def t_len(c: dict, kind: str, g: Grid, audio: bool = False) -> int:
+    """A clip's length in frames on the sequence (an audio-track clip: its end's frame minus its start's)."""
+    if audio:
+        return g.f(c["at"] + c["out"] - c["in"]) - g.f(c["at"])
+    return g.f(c["out"]) - g.f(c["in"]) if kind == "video" else g.f(c["hold"])
+
+
+def shot_ref(shot: dict) -> dict:
+    return {k: shot[k] for k in ("run_id", "batch_id", "step") if k in shot}
+
+
+def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[dict | None, list]:
+    """A written document (`TimelineDoc`) → (the normalized document, []) or (None, problems): every time snapped,
+    V1 laid end to end from 0, defaults filled, track names given. takes: the caller's takes the document names
+    (id → facts); a take that is missing is offline when `previous` (the stored revision) named it, else
+    `take_not_found`. A `shot` must be the previous revision's for that clip (only studio makes one)."""
+    probs = []
+    add = lambda code, track=None, clip=None: probs.append([code, track, clip])
+    if len(json.dumps(doc, separators=(",", ":"), ensure_ascii=False).encode()) > T_MAX_BYTES:
+        return None, [["too_large", None, None]]
+    tracks = doc["tracks"]
+    if (not tracks or tracks[0]["kind"] != "video" or any(t["kind"] != "audio" for t in tracks[1:])
+            or len(tracks) > 1 + T_MAX_AUDIO_TRACKS):
+        return None, [["track_layout", None, None]]
+    if sum(len(t["clips"]) for t in tracks) > T_MAX_CLIPS:
+        return None, [["too_many_clips", None, None]]
+    g = Grid(doc["target"])
+    known, shots = set(), {}
+    for t in (previous or {}).get("tracks", []):
+        for c in t["clips"]:
+            known |= {c.get("take_id")} | set(c.get("alternatives", []))
+            if "shot" in c:
+                shots[c["id"]] = shot_ref(c["shot"])
+    ids, out, ends = set(), [], []
+    for ti, t in enumerate(tracks):
+        name, video, clips = ("V1" if ti == 0 else f"A{ti + 1}"), ti == 0, []
+        for c in t["clips"]:
+            cid, tid = c["id"], c.get("take_id")
+            tk, kind = takes.get(tid), t_kind(c, takes)
+            if cid in ids:
+                add("duplicate_clip", name, cid)
+            ids.add(cid)
+            if any(x not in takes and x not in known for x in [tid] * bool(tid) + c.get("alternatives", [])):
+                add("take_not_found", name, cid)
+            if "shot" in c and shots.get(cid) != shot_ref(c["shot"]):
+                add("shot_invalid", name, cid)
+            n = {"id": cid, "take_id": tid}
+            if kind == "video":
+                if "hold" in c:
+                    add("hold_on_video", name, cid)
+                end = c.get("out", tk["duration_s"] if tk else None)
+                if end is None:
+                    add("out_required", name, cid)
+                    continue
+                if video:
+                    i_, o_ = g.f(c.get("in", 0)), g.f(end)
+                    if tk and not (0 <= i_ and o_ - i_ >= 1 and o_ <= g.f(tk["duration_s"])):
+                        add("trim", name, cid)
+                    n |= {"in": g.s(i_), "out": g.s(o_)}
+                else:
+                    i_, o_ = g.smp(c.get("in", 0)), g.smp(end)
+                    if tk and not (0 <= i_ < o_ <= g.smp(tk["duration_s"])):
+                        add("trim", name, cid)
+                    if tk and not tk["has_audio"]:
+                        add("no_audio", name, cid)
+                    if "at" not in c:
+                        add("at_required", name, cid)
+                        continue
+                    n |= {"in": i_ / g.sr, "out": o_ / g.sr, "at": g.snap(c["at"])}
+            elif not video:
+                add("wrong_track", name, cid)
+                continue
+            else:
+                if "in" in c or "out" in c:
+                    add("image_trim", name, cid)
+                if "hold" not in c:
+                    add("hold_required", name, cid)
+                    continue
+                if g.f(c["hold"]) < 1:
+                    add("hold", name, cid)
+                n["hold"] = g.snap(c["hold"])
+            n |= {"gain_db": c.get("gain_db", 0), "mute": c.get("mute", False)}
+            if "transition_in" in c:
+                if video:
+                    n["transition_in"] = c["transition_in"]
+                else:
+                    add("dissolve_track", name, cid)
+            alts = list(dict.fromkeys(c.get("alternatives", []) + [tid] * bool(tid)))
+            while len(alts) > T_MAX_ALTERNATIVES:  # the oldest that is not the current one goes
+                alts.remove(next(a for a in alts if a != tid))
+            n["alternatives"] = alts
+            if "shot" in c:
+                n["shot"] = shot_ref(c["shot"])
+            if tid and not tk:
+                n["offline"] = True
+            clips.append((n, kind))
+        if video:
+            pos = 0
+            for n, kind in clips:
+                n["at"] = g.s(pos)
+                pos += t_len(n, kind, g)
+            din = [n.get("transition_in", {}).get("frames", 0) for n, _ in clips] + [0]
+            for k, (n, kind) in enumerate(clips):
+                d = din[k]
+                if d and k == 0:
+                    add("dissolve_first", name, n["id"])
+                elif d and "slot" in (kind, clips[k - 1][1]):
+                    add("dissolve_gap", name, n["id"])
+                elif d:
+                    p, pk = clips[k - 1]
+                    ptk = takes.get(p["take_id"])
+                    if (pk == "video" and ptk and g.f(p["out"]) + d // 2 > g.f(ptk["duration_s"])) or (
+                            kind == "video" and g.f(n["in"]) - d // 2 < 0):
+                        add("dissolve_handles", name, n["id"])
+                half = (din[k] if k else 0) // 2 + din[k + 1] // 2
+                if half and half > t_len(n, kind, g):
+                    add("dissolve_length", name, n["id"])
+        else:
+            clips.sort(key=lambda x: x[0]["at"])
+            prev_end = None
+            for n, _ in clips:
+                a, e = g.smp(n["at"]), g.smp(n["at"]) + g.smp(n["out"]) - g.smp(n["in"])
+                if prev_end is not None and a < prev_end:
+                    add("overlap", name, n["id"])
+                prev_end = max(e, prev_end or 0)
+                ends.append((name, n["id"], e))
+        out.append({"name": name, "kind": t["kind"], "gain_db": t.get("gain_db", 0), "mute": t.get("mute", False),
+                    "clips": [n for n, _ in clips]})
+    v1 = out[0]["clips"]
+    if v1:
+        frames = g.f(v1[-1]["at"]) + t_len(v1[-1], t_kind(v1[-1], takes), g)
+        for name, cid, e in ends:
+            if e > g.smp(g.s(frames)):
+                add("past_end", name, cid)
+    else:
+        frames = max([g.f(e / g.sr) for _, _, e in ends], default=0)
+    if probs:
+        return None, sorted(probs, key=lambda p: (p[0], p[1] or "", p[2] or ""))
+    return {"target": doc["target"], "tracks": out, "duration_s": g.s(frames), "frames": frames}, []
+
+
+def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
+    """One edit on a normalized document → the new document as written (normalize it next), or an error code when
+    the edit cannot apply. The web draws with it; studio runs `add`, `insert` and `fill` itself."""
+    d, g = copy.deepcopy(doc), Grid(doc["target"])
+    tracks = {t["name"]: t for t in d["tracks"]}
+    v1 = d["tracks"][0]["clips"]
+
+    def find(cid: str) -> tuple[dict, int]:
+        return next((t, i) for t in d["tracks"] for i, c in enumerate(t["clips"]) if c["id"] == cid)
+
+    def din(i: int) -> int:
+        return v1[i].get("transition_in", {}).get("frames", 0) if 0 < i < len(v1) else 0
+
+    def cut_at(i: int) -> None:  # the cut before v1[i] changed: its dissolve goes
+        if i < len(v1):
+            v1[i].pop("transition_in", None)
+
+    o = op["op"]
+    if o == "add":
+        t = tracks[op.get("track", "V1")]
+        for tid, cid in zip(op["take_ids"], op["ids"]):
+            tk = takes[tid]
+            if t["name"] != "V1":
+                end = max((c["at"] + c["out"] - c["in"] for c in t["clips"]), default=0)
+                t["clips"].append({"id": cid, "take_id": tid, "in": 0, "out": tk["duration_s"], "at": g.snap(end)})
+            elif tk["kind"] == "image":
+                t["clips"].append({"id": cid, "take_id": tid, "hold": T_IMAGE_HOLD_S})
+            else:
+                t["clips"].append({"id": cid, "take_id": tid, "in": 0, "out": tk["duration_s"]})
+        return d
+    if o == "insert":  # an empty slot at the V1 cut nearest the playhead (a tie: the later cut)
+        cuts = [0]
+        for c in v1:
+            cuts.append(cuts[-1] + t_len(c, t_kind(c, takes), g))
+        f = g.f(op["at"])
+        i = min(range(len(cuts)), key=lambda k: (abs(cuts[k] - f), -k))
+        v1.insert(i, {"id": op["id"], "take_id": None, "hold": op["hold"]})
+        cut_at(i + 1)
+        return d
+    if o in ("add_track", "remove_track", "track"):
+        if o == "add_track":
+            if len(d["tracks"]) > T_MAX_AUDIO_TRACKS:
+                return "too_many_tracks"
+            d["tracks"].append({"kind": "audio", "gain_db": 0, "mute": False, "clips": []})
+        elif o == "remove_track":
+            if op["track"] == "V1":
+                return "video_track"
+            d["tracks"].remove(tracks[op["track"]])
+        else:
+            tracks[op["track"]] |= {k: op[k] for k in ("gain_db", "mute") if k in op}
+        for t in d["tracks"]:
+            t.pop("name", None)  # names follow the position
+        return d
+    if o == "split":
+        return t_split(d, tracks[op["track"]], op, takes, g)
+    t, i = find(op["clip"])
+    c, kind, on_v1 = t["clips"][i], t_kind(t["clips"][i], takes), t is d["tracks"][0]
+    if o == "move":
+        if on_v1:
+            v1.pop(i)
+            cut_at(i)
+            v1.insert(op["index"], c)
+            c.pop("transition_in", None)
+            cut_at(op["index"] + 1)
+        else:
+            t["clips"].pop(i)
+            tracks[op.get("track", t["name"])]["clips"].append(c | {"at": op["at"]})
+    elif o == "trim":
+        df = g.f(op["delta"])
+        src = g.f(takes[c["take_id"]]["duration_s"]) if kind == "video" and c.get("take_id") in takes else None
+        if on_v1:
+            d_in, d_out = din(i), din(i + 1)
+            least = max(1, d_in // 2 + d_out // 2)
+            if kind == "video":
+                i_, o_ = g.f(c["in"]), g.f(c["out"])
+                if op["edge"] == "in":
+                    i_ = min(max(i_ + df, d_in // 2), o_ - least)
+                else:
+                    o_ = max(o_ + df, i_ + least)
+                    o_ = o_ if src is None else min(o_, src - d_out // 2)
+                c["in"], c["out"] = g.s(i_), g.s(o_)
+            else:
+                c["hold"] = g.s(max(g.f(c["hold"]) + (df if op["edge"] == "out" else -df), least))
+        else:
+            i_, o_, frame = g.smp(c["in"]), g.smp(c["out"]), g.smp(g.s(1))
+            if op["edge"] == "in":
+                df = max(df, -g.f(c["at"]))
+                ni = min(max(i_ + g.smp(g.s(df)), 0), o_ - frame)
+                c["at"], c["in"] = g.snap(c["at"] + (ni - i_) / g.sr), ni / g.sr
+            else:
+                no = max(o_ + g.smp(g.s(df)), i_ + frame)
+                c["out"] = (no if src is None else min(no, g.smp(takes[c["take_id"]]["duration_s"]))) / g.sr
+    elif o in ("remove", "lift"):
+        if o == "lift" and not on_v1:
+            return "lift_track"
+        if o == "lift":
+            t["clips"][i] = {"id": c["id"], "take_id": None, "hold": g.s(t_len(c, kind, g))}
+        else:
+            t["clips"].pop(i)
+        if on_v1:
+            cut_at(i if o == "remove" else i + 1)
+    elif o == "replace":
+        if op["take_id"] not in c.get("alternatives", []):
+            return "not_alternative"
+        if op["take_id"] not in takes:
+            return "take_not_found"
+        tk, ln = takes[op["take_id"]], t_len(c, kind, g, audio=not on_v1)
+        old_in = g.f(c["in"]) if kind == "video" else 0
+        for k in ("in", "out", "hold"):
+            c.pop(k, None)
+        if tk["kind"] == "image" and on_v1:
+            c["hold"] = g.s(ln)
+        else:
+            src = g.f(tk["duration_s"])
+            i_ = min(old_in, src - 1)
+            c["in"], c["out"] = g.s(i_), g.s(min(i_ + ln, src))
+        c["take_id"] = op["take_id"]
+    elif o == "set":
+        for k in ("gain_db", "mute", "hold", "transition_in"):
+            if k in op:
+                if op[k] is None:
+                    c.pop(k, None)
+                else:
+                    c[k] = op[k]
+    elif o == "fill":  # studio: a shot's take fills its slot (README, Timeline: New shot)
+        tk, ln = takes[op["take_id"]], t_len(c, kind, g)
+        for k in ("in", "out", "hold", "shot"):
+            c.pop(k, None)
+        if tk["kind"] == "image":
+            c["hold"] = g.s(ln)
+        else:
+            c["in"], c["out"] = 0, g.s(min(g.f(tk["duration_s"]), ln))
+        c["take_id"] = op["take_id"]
+        c["alternatives"] = c.get("alternatives", []) + [op["take_id"]]
+    else:
+        return "unknown_op"
+    return d
+
+
+def t_split(d: dict, t: dict, op: dict, takes: dict, g: Grid) -> dict | str:
+    """Split at the playhead (`at`, sequence seconds) the clip of `track` under it; the right part gets `id`, keeps
+    the take and alternatives, never the dissolve or the shot."""
+    f, on_v1 = g.f(op["at"]), t is d["tracks"][0]
+    hit = None
+    for k, c in enumerate(t["clips"]):
+        a, ln = g.f(c["at"]), t_len(c, t_kind(c, takes), g, audio=not on_v1)
+        if a <= f < a + ln:
+            hit = (k, c, f - a, ln)
+    if hit is None:
+        return "split_none"
+    k, c, p, ln = hit
+    if p == 0:
+        return "split_edge"
+    if "shot" in c:
+        return "split_shot"
+    c2 = {x: v for x, v in copy.deepcopy(c).items() if x not in ("transition_in", "shot")} | {"id": op["id"]}
+    if not on_v1:
+        cut = g.smp(c["in"]) + g.smp(g.s(p))
+        c["out"], c2["in"], c2["at"] = cut / g.sr, cut / g.sr, g.s(f)
+    elif t_kind(c, takes) == "video":
+        c["out"] = c2["in"] = g.s(g.f(c["in"]) + p)
+    else:
+        c["hold"], c2["hold"] = g.s(p), g.s(ln - p)
+    t["clips"].insert(k + 1, c2)
+    return d
+
+
+def t_apply(doc: dict, op: dict, takes: dict) -> dict:
+    """An edit, then normalize against the edited document as the previous revision. `fill` then drops a dissolve
+    the new take cannot carry (a fill never fails)."""
+    raw = t_edit(doc, op, takes)
+    if isinstance(raw, str):
+        return {"error": raw}
+    n, probs = t_normalize(raw, takes, doc)
+    if op["op"] == "fill" and probs:
+        bad = {p[2] for p in probs if p[0] in ("dissolve_handles", "dissolve_length")}
+        for c in raw["tracks"][0]["clips"]:
+            if c["id"] in bad:
+                c.pop("transition_in", None)
+        n, probs = t_normalize(raw, takes, doc)
+    return {"document": n} if n else {"problems": probs}
+
+
+def t_cuts(doc: dict, takes: dict, exclude: str | None = None) -> list[float]:
+    """What an edge snaps to: 0 and every clip's start and end on every track, but the dragged clip's own."""
+    g, cuts = Grid(doc["target"]), {0.0}
+    for ti, t in enumerate(doc["tracks"]):
+        for c in t["clips"]:
+            if c["id"] != exclude:
+                cuts |= {c["at"], g.s(g.f(c["at"]) + t_len(c, t_kind(c, takes), g)) if ti == 0
+                         else c["at"] + c["out"] - c["in"]}
+    return sorted(cuts)
+
+
+def snap_point(t: float, cuts: list[float], px_per_s: float, g: Grid) -> float:
+    """A dragged edge: the nearest cut when within T_MAGNET_PX on screen (a tie: the earlier), else its frame."""
+    best = min(cuts, key=lambda c: (abs(c - t), c), default=None)
+    return best if best is not None and abs(best - t) * px_per_s <= T_MAGNET_PX else g.snap(t)
+
+
+def drop_index(doc: dict, clip: str, mid: float, takes: dict) -> int:
+    """Moving a V1 clip: its index among the others = how many others have their midpoint before the dragged
+    clip's midpoint `mid` (sequence seconds)."""
+    g = Grid(doc["target"])
+    m2 = 2 * g.f(mid)
+    return sum(1 for c in doc["tracks"][0]["clips"] if c["id"] != clip
+               and 2 * g.f(c["at"]) + t_len(c, t_kind(c, takes), g) < m2)
+
+
+def frame_at(doc: dict, f: int, takes: dict) -> dict:
+    """What the preview shows and plays at sequence frame f: pictures bottom first ({clip, t (source seconds; null
+    for an image), opacity, offline?}) and sounds ({clip, t, gain_db = track + clip, fade}); a dissolve of d frames
+    centred on its cut runs over [cut − d/2, cut + d/2): the incoming picture's opacity and sound fade are
+    (f − (cut − d/2)) / d, the outgoing sound's 1 minus that. Muted clips and tracks, empty slots, images and takes
+    without sound play no sound; an offline clip shows as offline and plays nothing."""
+    g, pics, sounds = Grid(doc["target"]), [], []
+    v1t = doc["tracks"][0]
+    v1 = v1t["clips"]
+    dins = [c.get("transition_in", {}).get("frames", 0) for c in v1] + [0]
+    for k, c in enumerate(v1):
+        kind, a = t_kind(c, takes), g.f(c["at"])
+        ln = t_len(c, kind, g)
+        start, end = a - dins[k] // 2, a + ln + dins[k + 1] // 2
+        if kind == "slot" or not start <= f < end:
+            continue
+        mix_in = (f - start) / dins[k] if dins[k] and f < a + dins[k] // 2 else 1
+        mix_out = (f - (a + ln - dins[k + 1] // 2)) / dins[k + 1] if dins[k + 1] and f >= a + ln - dins[k + 1] // 2 else 0
+        src = g.s(g.f(c["in"]) + f - a) if kind == "video" else None
+        pic = {"clip": c["id"], "t": src, "opacity": mix_in}
+        if c.get("offline"):
+            pics.append(pic | {"offline": True})
+            continue
+        pics.append(pic)
+        if kind == "video" and takes[c["take_id"]]["has_audio"] and not c["mute"] and not v1t["mute"]:
+            sounds.append({"clip": c["id"], "t": src, "gain_db": v1t["gain_db"] + c["gain_db"],
+                           "fade": mix_in if mix_in < 1 else 1 - mix_out})
+    for t in doc["tracks"][1:]:
+        for c in t["clips"]:
+            a = g.f(c["at"])
+            if a <= f < a + t_len(c, "video", g, audio=True) and not c.get("offline") and not c["mute"] and not t["mute"]:
+                sounds.append({"clip": c["id"], "t": c["in"] + g.s(f - a), "gain_db": t["gain_db"] + c["gain_db"],
+                               "fade": 1})
+    return {"pictures": pics, "sounds": sounds}
+
+
+def ratio(s: str) -> tuple[int, int]:
+    a, _, b = s.partition("/")
+    return int(a), int(b or 1)
+
+
+def export_plan(doc: dict, takes: dict) -> dict:
+    """The export plan of a normalized document (README, Timeline: export): stream copy only when every V1 clip is a
+    whole, probed H.264 take in MP4/MOV matching the target and the first clip; sound is always re-encoded."""
+    g, tg = Grid(doc["target"]), doc["target"]
+    blocked = [["offline", c["id"]] for t in doc["tracks"] for c in t["clips"] if c.get("offline")]
+    if doc["frames"] == 0:
+        blocked.append(["empty", None])
+    reasons, first = [], None
+    why = lambda code, cid: reasons.append([code, cid])
+    for c in doc["tracks"][0]["clips"]:
+        cid, tk = c["id"], takes.get(c.get("take_id"))
+        if not c.get("take_id"):
+            why("gap", cid)
+            continue
+        if not tk:
+            continue
+        if tk["kind"] == "image":
+            why("image", cid)
+            continue
+        if "transition_in" in c:
+            why("transition", cid)
+        s = tk.get("stream")
+        if not s:
+            why("not_probed", cid)
+            continue
+        fr = ratio(s["frame_rate"])
+        for code, bad in (("container", s["container"] not in ("mp4", "mov")), ("codec", s["codec"] != "h264"),
+                          ("pixel_format", s["pix_fmt"] != "yuv420p"),
+                          ("size", (s["width"], s["height"]) != (tg["width"], tg["height"])),
+                          ("aspect", s["sar"] not in (None, "1:1")),
+                          ("field_order", s["field_order"] not in (None, "progressive", "unknown")),
+                          ("frame_rate", fr[0] * g.den != fr[1] * g.num),
+                          ("trimmed", g.f(c["in"]) != 0 or g.f(c["out"]) != g.f(tk["duration_s"]))):
+            if bad:
+                why(code, cid)
+        if first is None:
+            first = s
+            continue
+        for code, key in (("profile", "profile"), ("level", "level"), ("time_base", "time_base"),
+                          ("colour", "color"), ("parameter_sets", "extradata_sha256")):
+            if s[key] != first[key]:
+                why(code, cid)
+    copy_ok = not reasons and not blocked
+    bitrate = min(max(rnd(tg["width"] * tg["height"] * g.num / g.den * 0.15), 1_000_000), 40_000_000)
+    dur = g.s(doc["frames"])
+    audio = rnd(192000 * dur / 8)
+    est = (sum(takes[c["take_id"]]["bytes"] for c in doc["tracks"][0]["clips"]) + audio if copy_ok
+           else rnd((bitrate + 192000) * dur / 8))
+    return {"stream_copy": copy_ok, "reasons": reasons, "blocked": blocked,
+            "video_bitrate": None if copy_ok else bitrate, "estimated_bytes": est}
+
+
+def shot_keyframes(nodes: dict, palette: dict) -> dict | None:
+    """Which frames a New shot can bind (Workflow.keyframes): the workflow's one rows param, unwired on a known, not
+    bypassed node, with one Image field and a `position: seconds` field. `last` when it takes 2 rows or more."""
+    found = []
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        for p in (s["params"] if s and not n.get("bypass") else []):
+            pos = [k for k, v in p.get("item", {}).items() if isinstance(v, dict) and v.get("position") == "seconds"]
+            if image_field(p) and pos and p["name"] not in n.get("in", {}):
+                found.append({"param": f"{nid}.{p['name']}", "image": image_field(p), "seconds": pos[0],
+                              "last": p["max"] >= 2})
+    return found[0] if len(found) == 1 else None
+
+
+def rerender_steps(doc: dict, takes: dict, clips: list[str] | None, keyframes: dict) -> dict:
+    """Re-render's pipeline order and binds (README, Timeline: re-render): a step `clip_<id>` per selected V1 clip;
+    a keyframe row whose image is a frame take of a take in another selected clip's alternatives binds that clip's
+    step (`<param>[<row>]` ← `clip_<other>.first_frame|last_frame`) and runs after it; ties in timeline order.
+    keyframes: workflow id → its `shot_keyframes` (absent: none)."""
+    v1 = [c for c in doc["tracks"][0]["clips"] if (c["id"] in clips if clips is not None else c.get("take_id"))]
+    if len(v1) > T_MAX_RERENDER:
+        return {"error": "too_many", "clip": None}
+    for c in v1:
+        tk = takes.get(c.get("take_id"))
+        code = "empty" if not c.get("take_id") else "offline" if not tk else "not_made" if not tk.get("made_with") else None
+        if code:
+            return {"error": code, "clip": c["id"]}
+    owner = {a: c["id"] for c in v1 for a in c["alternatives"]}
+    deps, binds = {c["id"]: set() for c in v1}, {c["id"]: {} for c in v1}
+    for c in v1:
+        mw = takes[c["take_id"]]["made_with"]
+        kf = keyframes.get(mw["workflow_id"])
+        for r, row in enumerate(mw["inputs"].get(kf["param"], []) if kf else [], 1):
+            fo = takes.get((row.get(kf["image"]) or {}).get("take_id"), {}).get("frame_of")
+            src = owner.get(fo["take_id"]) if fo else None
+            if src and src != c["id"]:
+                binds[c["id"]][f"{kf['param']}[{r}]"] = f"clip_{src}.{fo['at']}_frame"
+                deps[c["id"]].add(src)
+    order, left = [], [c["id"] for c in v1]
+    while left:
+        ready = next((x for x in left if deps[x] <= set(order)), None)
+        if ready is None:
+            return {"error": "rerender_cycle", "clip": left[0]}
+        order.append(ready)
+        left.remove(ready)
+    return {"steps": [{"step": f"clip_{x}", "clip": x, "binds": binds[x]} for x in order]}
+
+
+def check_timelines(registry: Registry, palette: dict) -> None:
+    g_ = HERE / "fixtures" / "timelines"
+    ref = lambda n: Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/{n}"}, registry=registry,
+                                         format_checker=FormatChecker())
+    doc_v, out_v = ref("TimelineDoc"), ref("TimelineNormalized")
+
+    def shape(name: str, v, x) -> bool:
+        if errs := list(v.iter_errors(x)):
+            fail(f"{name}: {errs[0].json_path}: {errs[0].message}")
+            return False
+        return True
+
+    for c in json.loads((g_ / "rates.json").read_text())["cases"]:
+        g = Grid({"fps": c["fps"], "sample_rate": 48000})
+        got = {"frames": g.f(c["seconds"]), "snapped": g.snap(c["seconds"])}
+        if got != {k: c[k] for k in got}:
+            fail(f"fixtures/timelines/rates.json {c}: got {got}")
+    print("ok   fixtures/timelines/rates.json")
+    for p in sorted(g_.glob("*.json")):
+        name, fx = f"fixtures/timelines/{p.name}", json.loads(p.read_text())
+        if p.name == "rates.json":
+            continue
+        for c in fx["cases"]:
+            where, takes = f"{name} {c['description']!r}", fx.get("takes", {}) | c.get("takes", {})
+            if p.name.startswith("normalize."):
+                if not shape(where, doc_v, c["document"]):
+                    continue
+                n, probs = t_normalize(c["document"], takes, c.get("previous"))
+                got = {"document": n} if n else {"problems": probs}
+                if n and not shape(where + " (result)", out_v, n):
+                    continue
+            elif p.name.startswith("edits."):
+                if not shape(where, out_v, c["document"]):
+                    continue
+                got = t_apply(c["document"], c["op"], takes)
+            elif p.name.startswith("snap."):
+                g = Grid(c["document"]["target"])
+                got = {"to": snap_point(c["t"], t_cuts(c["document"], takes, c.get("exclude")), c["px_per_s"], g)} \
+                    if "t" in c else {"index": drop_index(c["document"], c["clip"], c["mid"], takes)}
+            elif p.name.startswith("frame-at."):
+                got = frame_at(c["document"], c["frame"], takes)
+            elif p.name.startswith("plan."):
+                got = export_plan(c["document"], takes)
+            elif p.name.startswith("shot-keyframes."):
+                got = {"keyframes": shot_keyframes(c["workflow"]["nodes"], palette)}
+            elif p.name.startswith("rerender."):
+                got = rerender_steps(c["document"], takes, c.get("clips"), fx["keyframes"])
+            else:
+                fail(f"{name}: unknown timeline fixture")
+                break
+            if got != c["expect"]:
+                fail(f"{where}: got {json.dumps(got)}, want {json.dumps(c['expect'])}")
+        print(f"ok   {name}")
+
+
 # ---------------------------------------------------------------- the dispatcher's hand-over (README, "The hand-over")
 SWAP_SKIPS, SWAP_WAIT_S = 4, 180  # the fairness bound: studio_service dispatcher.go SwapSkips, SwapWait
 WINDOW = 16  # rows of one batch in flight (the pipelines engine)
@@ -1932,6 +2524,7 @@ def main() -> int:
     check_loras()
     check_lora_detection()
     check_video(registry, palette)
+    check_timelines(registry, palette)
     check_dispatch(registry)
     check_openapi()
     check_names()

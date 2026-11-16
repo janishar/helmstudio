@@ -50,11 +50,24 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 	if !s.registry.Ready() { // a view not loaded yet would read as an unknown workflow or no live host
 		return dto.Run{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
 	}
+	var out dto.Run
+	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
+		out, err = s.createRun(ctx, tx, caller, sessionID, body)
+		return err
+	})
+	if err == nil {
+		err = s.placeQueued(ctx, &out)
+	}
+	return out, err
+}
+
+// createRun is CreateRun inside the caller's transaction (New shot makes its run with the slot's revision).
+func (s *Service) createRun(ctx context.Context, tx pgx.Tx, caller common.Caller, sessionID string, body *dto.RunRequest) (dto.Run, error) {
 	if body.Inputs == nil {
 		body.Inputs = map[string]any{}
 	}
 	var out dto.Run
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+	err := func() error {
 		// The session first: another user's session is a 404 before any 422.
 		if tag, err := tx.Exec(ctx, `UPDATE sessions SET updated_at = clock_timestamp() WHERE id = $1`, sessionID); err != nil {
 			return err
@@ -110,10 +123,7 @@ func (s *Service) CreateRun(ctx context.Context, caller common.Caller, sessionID
 		}
 		out = s.runDTO(run, nil)
 		return nil
-	})
-	if err == nil {
-		err = s.placeQueued(ctx, &out)
-	}
+	}()
 	return out, err
 }
 

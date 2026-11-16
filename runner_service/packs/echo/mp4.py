@@ -3,6 +3,7 @@
 macroblocks, so the clip holds still) and AAC-LC 48 kHz stereo silence, moov first (faststart) so it streams with
 Range requests. Sides must be multiples of 16."""
 
+import hashlib
 import math
 import struct
 
@@ -55,9 +56,8 @@ def nal(header: int, rbsp: bytes) -> bytes:
     return bytes(out)
 
 
-def h264(image: Image.Image, frames: int) -> tuple[bytes, bytes, list[bytes]]:
-    """(SPS, PPS, one access unit per frame as NAL units without start codes)."""
-    w, h = image.size
+def params(w: int, h: int) -> tuple[bytes, bytes]:
+    """(SPS, PPS) of a w × h clip."""
     mbw, mbh = w // 16, h // 16
     s = Bits()
     s.u(66, 8)  # profile_idc: Baseline
@@ -93,7 +93,14 @@ def h264(image: Image.Image, frames: int) -> tuple[bytes, bytes, list[bytes]]:
     p.u(0, 1)  # constrained_intra_pred_flag
     p.u(0, 1)  # redundant_pic_cnt_present_flag
     pps = nal(0x68, p.rbsp())
+    return sps, pps
 
+
+def h264(image: Image.Image, frames: int) -> tuple[bytes, bytes, list[bytes]]:
+    """(SPS, PPS, one access unit per frame as NAL units without start codes)."""
+    w, h = image.size
+    mbw, mbh = w // 16, h // 16
+    sps, pps = params(w, h)
     # limited-range BT.601 4:2:0 samples (never 0, which old decoders refuse in PCM)
     ycc = image.convert("RGB").convert("YCbCr")
     y_, cb, cr = ycc.split()
@@ -205,6 +212,21 @@ def trak(
     return box(b"trak", tkhd, box(b"mdia", mdhd, hdlr, minf))
 
 
+def avcc_payload(sps: bytes, pps: bytes) -> bytes:
+    """The avcC box's body: the codec header data (ffprobe's extradata)."""
+    return (bytes([1, 66, 0xC0, 40, 0xFF, 0xE1]) + struct.pack(">H", len(sps)) + sps + bytes([1])
+            + struct.pack(">H", len(pps)) + pps)  # fmt: skip
+
+
+def stream(w: int, h: int, fps: int) -> dict:
+    """The defs videoStream facts of what mp4() writes at w × h and fps (what ffprobe reads from it)."""
+    return {"container": "mp4", "codec": "h264", "profile": "Constrained Baseline", "level": 40,
+            "pix_fmt": "yuv420p", "width": w, "height": h, "sar": None, "field_order": "progressive",
+            "frame_rate": f"{fps}/1", "time_base": f"1/{fps * 1000}",
+            "color": {"range": None, "space": None, "primaries": None, "transfer": None},
+            "extradata_sha256": hashlib.sha256(avcc_payload(*params(w, h))).hexdigest()}  # fmt: skip
+
+
 def mp4(image: Image.Image, frames: int, fps: int) -> bytes:
     """`frames` frames of `image` at `fps`, with as much silent stereo audio, as an MP4 (moov before mdat)."""
     w, h = image.size
@@ -214,8 +236,7 @@ def mp4(image: Image.Image, frames: int, fps: int) -> bytes:
     video = [struct.pack(">I", len(u)) + u for u in units]  # 4-byte NAL lengths
     audio = [aac_silence()] * math.ceil(frames * RATE / (fps * AAC_FRAME))
     movie_ms = round(frames * 1000 / fps)
-    avcc = box(b"avcC", bytes([1, 66, 0xC0, 40, 0xFF, 0xE1]), struct.pack(">H", len(sps)), sps,
-               bytes([1]), struct.pack(">H", len(pps)), pps)  # fmt: skip
+    avcc = box(b"avcC", avcc_payload(sps, pps))
     avc1 = box(
         b"avc1", bytes(6), struct.pack(">HHH3I", 1, 0, 0, 0, 0, 0), struct.pack(">HH", w, h),
         struct.pack(">IIIH", 0x480000, 0x480000, 0, 1), bytes(32), struct.pack(">Hh", 24, -1), avcc,

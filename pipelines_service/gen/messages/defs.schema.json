@@ -227,13 +227,16 @@
       }
     },
     "inputValue": {
-      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id})",
+      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only)",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
         },
         {
           "$ref": "#/$defs/imageRef"
+        },
+        {
+          "$ref": "#/$defs/frameRef"
         },
         {
           "type": "array",
@@ -250,6 +253,9 @@
                 },
                 {
                   "$ref": "#/$defs/imageRef"
+                },
+                {
+                  "$ref": "#/$defs/frameRef"
                 },
                 {
                   "$ref": "#/$defs/loraRef"
@@ -508,7 +514,7 @@
     "pipelineSource": {
       "type": "string",
       "pattern": "^(\\$[a-z][a-z0-9_]{0,63}|[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63})$",
-      "description": "`$<input>`, `<step>.takes`, `<gate or judge>.picked`, from API 1.14 `<judge>.reasons` and `<memory read node>.notes` (text sources: write, decide and memory write `from` only) (contracts/README.md, Pipeline rules); from API 1.15 `<producer>.item` (in the binds of a step whose `each` is `<producer>.items`: this branch's item) and `<custom>.<output field>` (a custom node's output: a string field is a text source, a list of take ids a takes source). Which are allowed where: contracts/README.md, Pipeline rules"
+      "description": "`$<input>`, `<step>.takes`, `<gate or judge>.picked`, from API 1.14 `<judge>.reasons` and `<memory read node>.notes` (text sources: write, decide and memory write `from` only) (contracts/README.md, Pipeline rules); from API 1.15 `<producer>.item` (in the binds of a step whose `each` is `<producer>.items`: this branch's item) and `<custom>.<output field>` (a custom node's output: a string field is a text source, a list of take ids a takes source). Which are allowed where: contracts/README.md, Pipeline rules; from API 1.17 `<step>.first_frame` / `<step>.last_frame` (a sequence's Re-render snapshot only): the first or last frame of that step's first take of its latest visit, sent to studio.runs.create as a frameRef"
     },
     "pipelineNode": {
       "description": "a node of a pipeline snapshot: the document's node, a step's `inputs` already merged over its preset by studio at Submit, plus `seed_param`; from API 1.14 judge, write and decide nodes add `workflow` (the resolved ask workflow) and a judge's `criteria` is always both lists; from API 1.15 agent and custom nodes, a fanned-out step's `each` / `fanout_max`, a write's `list`, and every model node's `source`",
@@ -626,16 +632,17 @@
             },
             "inputs": {
               "$ref": "#/$defs/inputs",
-              "description": "the fixed values: the preset's, then the document's step inputs"
+              "description": "the fixed values: the preset's, then the document's step inputs; from API 1.17 a sequence's Re-render snapshot may hold takes here (the clip's own images, checked at run as RunRequest.inputs)"
             },
             "bind": {
               "type": "object",
               "propertyNames": {
-                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}(\\[[1-9][0-9]?\\])?$"
               },
               "additionalProperties": {
                 "$ref": "#/$defs/pipelineSource"
-              }
+              },
+              "description": "workflow param ← source; from API 1.17 a key `<node>.<param>[<row>]` (a sequence's Re-render snapshot only) fills the one Image field of that row (from 1) of the rows value in `inputs`, the row's other fields kept"
             },
             "looks": {
               "type": "array",
@@ -2636,6 +2643,160 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]{0,31}/[a-z][a-z0-9-]{0,31}$",
       "description": "a custom node's registered name `<pack>/<node>`"
+    },
+    "frameRef": {
+      "type": "object",
+      "required": [
+        "frame_of",
+        "at"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.17, only in a studio.runs.create request of a sequence's Re-render (a bound `<step>.first_frame` / `<step>.last_frame` source): the first or last frame of that video take. Studio resolves it to the frame take (POST /v1/studio/takes/{take_id}/frame, made at once from the stored poster or last frame) and the run records `{take_id}` of the frame take; a take without a stored last frame fails the run's row (`… take <id> has no stored last frame`)",
+      "properties": {
+        "frame_of": {
+          "$ref": "#/$defs/uuid"
+        },
+        "at": {
+          "enum": [
+            "first",
+            "last"
+          ]
+        }
+      }
+    },
+    "videoStream": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "from API 1.17: the video stream's facts as ffprobe reads them from the written file (what the export plan compares: contracts/README.md, Timeline: export plan). A runner that writes the MP4 itself (the fake) reports what it wrote",
+      "required": [
+        "container",
+        "codec",
+        "profile",
+        "level",
+        "pix_fmt",
+        "width",
+        "height",
+        "sar",
+        "field_order",
+        "frame_rate",
+        "time_base",
+        "color",
+        "extradata_sha256"
+      ],
+      "properties": {
+        "container": {
+          "type": "string",
+          "description": "the first name of ffprobe's format_name (mov,mp4,… → mp4 for .mp4, mov for .mov)",
+          "examples": [
+            "mp4"
+          ]
+        },
+        "codec": {
+          "type": "string",
+          "examples": [
+            "h264"
+          ]
+        },
+        "profile": {
+          "type": "string",
+          "examples": [
+            "High",
+            "Constrained Baseline"
+          ]
+        },
+        "level": {
+          "type": "integer",
+          "examples": [
+            31
+          ]
+        },
+        "pix_fmt": {
+          "type": "string",
+          "examples": [
+            "yuv420p"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sar": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+:[0-9]+$",
+          "description": "sample aspect ratio; null when unset"
+        },
+        "field_order": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "progressive, tt, bb, …; null when unknown"
+        },
+        "frame_rate": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*/[1-9][0-9]*$",
+          "description": "r_frame_rate as num/den",
+          "examples": [
+            "24/1",
+            "24000/1001"
+          ]
+        },
+        "time_base": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*/[1-9][0-9]*$",
+          "examples": [
+            "1/12288"
+          ]
+        },
+        "color": {
+          "type": "object",
+          "required": [
+            "range",
+            "space",
+            "primaries",
+            "transfer"
+          ],
+          "additionalProperties": false,
+          "description": "the four colour tags; null = untagged (an untagged value is still compared)",
+          "properties": {
+            "range": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "space": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "primaries": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "transfer": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "extradata_sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 of the codec header data (SPS/PPS): ffprobe -show_data_hash sha256"
+        }
+      }
     }
   }
 }

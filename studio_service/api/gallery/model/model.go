@@ -27,6 +27,8 @@ type Take struct {
 	BatchID     *string
 	Video       json.RawMessage // a video's metadata and poster (dto.Video); null for an image
 	Legacy      json.RawMessage // source import: {settings, imported_at}; null otherwise (API 1.16)
+	FrameOf     json.RawMessage // source frame: {take_id, at}; null otherwise (API 1.17)
+	Export      json.RawMessage // source export: {timeline_id, timeline_name, revision, job_id, mode} (API 1.17)
 }
 
 // TakeCols are the columns Take scans, in order, from takes aliased t.
@@ -34,7 +36,7 @@ const TakeCols = `t.id::text, t.kind, t.source, t.title, t.key, t.content_type, 
 	t.session_id::text, t.run_id::text, t.made_with, t.ready, t.created_at,
 	coalesce((SELECT array_agg(p.parent_id::text ORDER BY p.idx) FROM take_parents p
 		JOIN takes pt ON pt.id = p.parent_id AND pt.deleted_at IS NULL WHERE p.take_id = t.id), '{}'),
-	t.batch_id::text, t.video, t.legacy`
+	t.batch_id::text, t.video, t.legacy, t.frame_of, t.export`
 
 // ThumbKey is the key of a take's thumbnail, from takes aliased t: a video's poster, else the image itself.
 const ThumbKey = `coalesce(t.video->'poster'->>'key', t.key)`

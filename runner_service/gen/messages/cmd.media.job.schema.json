@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.media.job.schema.json",
+  "title": "studio → a runner: one media job (a sequence's export, or a video take's frame)",
+  "description": "From API 1.17 (contracts/README.md, Timeline: media jobs). Subject cmd.media.<host>.<env> (stream CMD, work queue; durable media-<host>-<env>, max_ack_pending 1, ack wait 60 s), Nats-Msg-Id <job_id>:1. `owner_id` = the user. Sent at once to the env studio chose (one whose hosts key has `media`). The runner works on it in a worker apart from runs and model jobs (ffmpeg on CPU or the media engine: no model, no GPU memory, no admission; it never counts as holding weights), sends `+WIP` every 10 s, checks KV `cancels` key <job_id> before it starts and at least every 2 s, publishes evt.media.status running, evt.media.progress, then one terminal status, waits for its ack, then acks the command. A redelivery starts over. Never bytes or URLs: inputs are object keys under u/<owner_id>/, outputs go under output_prefix.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.media.job"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the media job id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "kind",
+        "inputs",
+        "output_prefix"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "export",
+            "frame"
+          ]
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 1000,
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "kind"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "$ref": "defs.schema.json#/$defs/objectKey"
+              },
+              "kind": {
+                "enum": [
+                  "video",
+                  "image"
+                ]
+              }
+            }
+          },
+          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one"
+        },
+        "output_prefix": {
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/objectPrefix"
+            }
+          ],
+          "description": "export: u/<owner_id>/exports/<job_id>/ (export.mp4, export.poster.png, export.last.png); frame: u/<owner_id>/frames/<job_id>/ (frame.png)"
+        },
+        "export": {
+          "type": "object",
+          "required": [
+            "timeline_id",
+            "revision",
+            "mode",
+            "target",
+            "frames",
+            "samples",
+            "video_bitrate",
+            "args"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "timeline_id": {
+              "$ref": "defs.schema.json#/$defs/uuid"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "mode": {
+              "enum": [
+                "copy",
+                "conform"
+              ],
+              "description": "the plan's: copy = picture stream copy (concat demuxer), conform = re-encode; sound is re-encoded in both"
+            },
+            "target": {
+              "type": "object",
+              "required": [
+                "width",
+                "height",
+                "fps",
+                "rate",
+                "sample_rate"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "width": {
+                  "type": "integer",
+                  "minimum": 16,
+                  "maximum": 4096
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 16,
+                  "maximum": 4096
+                },
+                "fps": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "rate": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*/[1-9][0-9]*$",
+                  "description": "the exact frame rate (24000/1001)"
+                },
+                "sample_rate": {
+                  "enum": [
+                    44100,
+                    48000
+                  ]
+                }
+              }
+            },
+            "frames": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "the sequence's length in frames (the progress total; the output must be within one frame of it)"
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "frames × sample_rate × den / num: the sound's length in samples"
+            },
+            "video_bitrate": {
+              "type": "integer",
+              "minimum": 1000000,
+              "maximum": 40000000,
+              "description": "bits per second for {venc}"
+            },
+            "args": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4000,
+              "items": {
+                "type": "string",
+                "maxLength": 65536
+              },
+              "description": "ffmpeg's arguments after the program name, built by studio (the one filter graph implementation), with placeholders the runner substitutes: `{in:<n>}` = the local absolute path of inputs[n], `{list}` = the concat list it writes from `concat`, `{out}` = the local output file, `{venc}` = its own video encoder arguments (expands to several: README, Timeline: media jobs). The runner refuses (failure `invalid`) a list with an `-i` not followed by `{in:<n>}` or `{list}`, a codec value (`-c`, `-c:v`, `-c:a`, `-codec*`, `-vcodec`, `-acodec`) other than copy, aac, rawvideo or pcm_s16le outside `{venc}`, an output other than `{out}`, or a filter that opens a file or URL (movie, amovie)"
+            },
+            "concat": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "description": "copy: the inputs (by index) in clip order for the concat list (`file '<path>'` lines, `'` written as `'\\''`)"
+            },
+            "expect": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "input",
+                  "stream"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "input": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "stream": {
+                    "$ref": "defs.schema.json#/$defs/videoStream"
+                  }
+                }
+              },
+              "description": "copy: the facts studio planned with, per video input; the runner probes each download and, when any differs, runs conform_args instead (reporting mode conform and the reason)"
+            },
+            "conform_args": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4000,
+              "items": {
+                "type": "string",
+                "maxLength": 65536
+              },
+              "description": "copy: the conform arguments to fall back to (same placeholders)"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "mode": {
+                    "const": "copy"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "concat",
+                  "expect",
+                  "conform_args"
+                ]
+              }
+            }
+          ]
+        },
+        "frame": {
+          "type": "object",
+          "required": [
+            "at",
+            "index"
+          ],
+          "additionalProperties": false,
+          "description": "inputs[0] is the video: write that frame as PNG at the video's size",
+          "properties": {
+            "at": {
+              "enum": [
+                "first",
+                "last"
+              ]
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "the frame number from 0 (last: the take's frames − 1)"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "export"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "export"
+            ],
+            "not": {
+              "required": [
+                "frame"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "frame"
+            ],
+            "properties": {
+              "inputs": {
+                "minItems": 1,
+                "maxItems": 1
+              }
+            },
+            "not": {
+              "required": [
+                "export"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

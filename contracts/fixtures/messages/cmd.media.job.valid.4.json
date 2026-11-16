@@ -1,0 +1,69 @@
+{
+  "type": "cmd.media.job",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001704",
+  "job_id": "9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:00:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "kind": "export",
+    "inputs": [],
+    "output_prefix": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/exports/9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f/",
+    "export": {
+      "timeline_id": "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b",
+      "revision": 7,
+      "mode": "conform",
+      "target": {
+        "width": 256,
+        "height": 128,
+        "fps": 24,
+        "rate": "24/1",
+        "sample_rate": 48000
+      },
+      "frames": 24,
+      "samples": 48000,
+      "video_bitrate": 1000000,
+      "args": [
+        "-hide_banner",
+        "-nostdin",
+        "-loglevel",
+        "error",
+        "-y",
+        "-fflags",
+        "+bitexact",
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        "-filter_complex",
+        "color=c=black:s=256x128:r=24/1:d=1,setpts=PTS-STARTPTS,fps=24/1,format=yuv420p[v0];[v0]trim=duration=1,setpts=PTS-STARTPTS[vout];anullsrc=r=48000:cl=stereo,atrim=duration=1,asetpts=N/SR/TB[aout]",
+        "-map",
+        "[vout]",
+        "{venc}",
+        "-r",
+        "24/1",
+        "-pix_fmt",
+        "yuv420p",
+        "-map",
+        "[aout]",
+        "-map_metadata",
+        "-1",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-movflags",
+        "+faststart",
+        "-f",
+        "mp4",
+        "{out}"
+      ]
+    }
+  }
+}

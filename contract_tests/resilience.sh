@@ -5,7 +5,7 @@
 #   make resilience                (from the repo root: brings the test stack up and runs this)
 #   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats
-# batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download; studio-queued restarts studio while a second run is still queued behind the first (not yet
+# batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download export-restart; studio-queued restarts studio while a second run is still queued behind the first (not yet
 # released) and requires that it then succeeds. batch-<svc> restarts <svc> during a 12-row slow echo batch (batch-kill:
 # SIGKILL the pipelines container, then start it), presses Resume whenever the batch is paused (pipelines pauses its
 # batches after a restart) and requires the batch to end done with exactly 12 runs (one per row) and 12 takes.
@@ -25,6 +25,10 @@
 # model-download (API 1.16) downloads the echo pack's plus variant (24 MiB at the fake hub's 1 MiB/s) and restarts the
 # fake runner and studio once it is under way: the job must end succeeded (resumed from the redelivered command) and
 # every file of plus on the runner's disk must have the fake hub's SHA-256.
+# export-restart (API 1.17) exports a sequence of EXPORT_HOLD_S (default 1200) seconds of black at 1280x720 and
+# restarts the media runner (EXPORT_RUNNER_SVC, default runner) and studio once ffmpeg reports progress: the job must
+# end exactly once (succeeded with exactly one export take of the sequence, or failed/cancelled with no take and a new
+# export of the same revision accepted); it prints SKIP when no live env advertises media (ffmpeg).
 # Needs curl and python3. Exit 1 when any service fails.
 set -eu
 cd "$(dirname "$0")"
@@ -393,10 +397,61 @@ print(json.dumps({str(p.relative_to(r)): hashlib.sha256(p.read_bytes()).hexdiges
   echo "$verdict $1: download at $was bytes during the restart -> $end; files match the hub's SHA-256: $same"
 }
 
+# export_check: restart the media runner and studio mid-export (see the header)
+export_check() {
+  again=""
+  tid=$(api POST /v1/studio/timelines '{"name":"resilience export"}' | field id) || tid=""
+  [ -n "$tid" ] || { fails=$((fails + 1)); echo "FAIL $1: the sequence was not created"; return; }
+  doc=$(python3 -c 'import json,os; print(json.dumps({"revision": 1, "target": {"width": 1280, "height": 720,
+    "fps": 24, "sample_rate": 48000}, "tracks": [{"kind": "video", "clips": [{"id": "black", "take_id": None,
+    "hold": float(os.environ.get("EXPORT_HOLD_S", "1200"))}]}]}))')
+  api PUT "/v1/studio/timelines/$tid" "$doc" >/dev/null
+  if [ -z "$(api POST "/v1/studio/timelines/$tid/export/plan" '{}' | field host)" ]; then
+    echo "SKIP $1: no live env advertises media (ffmpeg)"
+    api DELETE "/v1/studio/timelines/$tid" >/dev/null || true
+    return
+  fi
+  jid=$(api POST "/v1/studio/timelines/$tid/export" '{"revision":2}' | field id) || jid=""
+  [ -n "$jid" ] || { fails=$((fails + 1)); echo "FAIL $1: the export was not accepted"; return; }
+  job_field() { api GET "/v1/studio/media-jobs/$jid" | field "$@"; }
+  for _ in $(seq 120); do                    # under way: ffmpeg has written frames
+    [ "$(job_field progress frames || echo 0)" -gt 0 ] 2>/dev/null && break
+    sleep 1
+  done
+  was=$(job_field progress frames || echo ?)
+  dc restart "${EXPORT_RUNNER_SVC:-runner}" studio >/dev/null 2>&1
+  dc up -d --wait >/dev/null 2>&1
+  signin
+  end=unknown
+  for _ in $(seq $((END_TIMEOUT * 3))); do
+    end=$(job_field status) || end=unreachable
+    case $end in succeeded | failed | cancelled) break ;; esac
+    sleep 1
+  done
+  jobs=$(api GET "/v1/studio/timelines/$tid/exports" | python3 -c 'import json,sys
+print(len(json.load(sys.stdin)["jobs"]))') || jobs="?"
+  takes=$(api GET "/v1/studio/takes?source=export&limit=200" | python3 -c 'import json,sys
+print(len([t for t in json.load(sys.stdin)["takes"] if t["export"]["timeline_id"] == sys.argv[1]]))' "$tid") || takes="?"
+  made=$(job_field take_id || true)
+  verdict=PASS
+  case $end in
+    succeeded) [ "$takes" = 1 ] && [ -n "$made" ] || verdict=FAIL ;;
+    failed | cancelled)
+      again=$(api POST "/v1/studio/timelines/$tid/export" '{"revision":2}' | field id) || again=""
+      [ "$takes" = 0 ] && [ -z "$made" ] && [ -n "$again" ] || verdict=FAIL
+      [ -z "$again" ] || api POST "/v1/studio/media-jobs/$again/cancel" >/dev/null || true ;;
+    *) verdict=FAIL ;;
+  esac
+  [ "$jobs" = 1 ] || verdict=FAIL
+  [ $verdict = PASS ] || fails=$((fails + 1))
+  echo "$verdict $1: export at frame $was during the restart -> $end; jobs $jobs; export takes $takes${again:+; retry accepted}"
+  api DELETE "/v1/studio/timelines/$tid" >/dev/null || true
+}
+
 signin
 SID=$(api POST /v1/studio/sessions '{"title":"resilience"}' | field id)
 fails=0
-for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download}; do
+for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download export-restart}; do
   case $svc in
     batch-*) batch_check "$svc"; continue ;;
     pipeline-parked) pipeline_check "$svc"; continue ;;
@@ -404,6 +459,7 @@ for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines b
     director-mid) director_check "$svc"; continue ;;
     handover-studio) handover_check "$svc"; continue ;;
     model-download) model_check "$svc"; continue ;;
+    export-restart) export_check "$svc"; continue ;;
   esac
   rid=$(run "$SID" 40)                       # 40 steps x 300 ms: ~12 s of work
   wait_status "$rid" "running" 30 >/dev/null || true

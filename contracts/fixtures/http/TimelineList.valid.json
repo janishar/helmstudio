@@ -1,0 +1,19 @@
+{
+  "timelines": [
+    {
+      "id": "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b",
+      "name": "Fox at dusk",
+      "target": {
+        "width": 256,
+        "height": 128,
+        "fps": 24,
+        "sample_rate": 48000
+      },
+      "revision": 4,
+      "duration_s": 8.541666666666666,
+      "clips": 4,
+      "thumb_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12",
+      "updated_at": "2026-11-16T10:00:00Z"
+    }
+  ]
+}

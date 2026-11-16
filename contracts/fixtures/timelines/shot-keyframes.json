@@ -1,0 +1,419 @@
+{
+  "description": "shot_keyframes(workflow nodes, fixtures/graphs/palette.json) → Workflow.keyframes (README, Timeline: New shot options)",
+  "cases": [
+    {
+      "description": "echo image to video: first and last",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "canvas": {
+            "kind": "echo/canvas",
+            "params": {
+              "width": 256,
+              "height": 128
+            }
+          },
+          "duration": {
+            "kind": "echo/duration",
+            "params": {
+              "frames": 25,
+              "fps": 24
+            }
+          },
+          "keyframes": {
+            "kind": "echo/keyframes",
+            "in": {
+              "text": "prompt.text",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "images": []
+            }
+          },
+          "sample": {
+            "kind": "echo/sample",
+            "in": {
+              "text": "keyframes.text",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 4,
+              "delay_ms": 300
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "sample.video"
+            }
+          }
+        }
+      },
+      "expect": {
+        "keyframes": {
+          "param": "keyframes.images",
+          "image": "image",
+          "seconds": "seconds",
+          "last": true
+        }
+      }
+    },
+    {
+      "description": "echo video: none",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "canvas": {
+            "kind": "echo/canvas",
+            "params": {
+              "width": 256,
+              "height": 128
+            }
+          },
+          "duration": {
+            "kind": "echo/duration",
+            "params": {
+              "frames": 25,
+              "fps": 24
+            }
+          },
+          "video": {
+            "kind": "echo/video",
+            "in": {
+              "text": "prompt.text",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "steps": 10,
+              "delay_ms": 300,
+              "fail": false,
+              "refs": []
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "video.video"
+            }
+          }
+        }
+      },
+      "expect": {
+        "keyframes": null
+      }
+    },
+    {
+      "description": "ltx image to video: first and last",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "keyframes": {
+            "kind": "ltx/keyframes",
+            "in": {
+              "cond": "encode.cond"
+            },
+            "params": {
+              "images": []
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "keyframes.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        }
+      },
+      "expect": {
+        "keyframes": {
+          "param": "keyframes.images",
+          "image": "image",
+          "seconds": "seconds",
+          "last": true
+        }
+      }
+    },
+    {
+      "description": "ltx text to video: none",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "ltx/canvas",
+            "params": {
+              "width": 704,
+              "height": 448
+            }
+          },
+          "duration": {
+            "kind": "ltx/duration",
+            "params": {
+              "frames": 49,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "ltx/model",
+            "params": {
+              "variant": "distilled",
+              "precision": "int8"
+            }
+          },
+          "lora": {
+            "kind": "ltx/lora-stack",
+            "in": {
+              "model": "model.model"
+            },
+            "params": {
+              "rows": []
+            }
+          },
+          "encode": {
+            "kind": "ltx/encode",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text"
+            },
+            "params": {
+              "beats": []
+            }
+          },
+          "sample1": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "encode.cond",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 8
+            }
+          },
+          "upscale": {
+            "kind": "ltx/upscale",
+            "in": {
+              "model": "model.model",
+              "latent": "sample1.latent"
+            },
+            "params": {}
+          },
+          "sample2": {
+            "kind": "ltx/sample",
+            "in": {
+              "model": "lora.model",
+              "cond": "encode.cond",
+              "seed": "seed.seed",
+              "latent": "upscale.latent"
+            },
+            "params": {
+              "role": "stage2",
+              "steps": 3
+            }
+          },
+          "decode": {
+            "kind": "ltx/decode",
+            "in": {
+              "model": "model.model",
+              "latent": "sample2.latent"
+            },
+            "params": {
+              "audio": true
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "decode.video"
+            }
+          }
+        }
+      },
+      "expect": {
+        "keyframes": null
+      }
+    },
+    {
+      "description": "keyframes bypassed: none",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "canvas": {
+            "kind": "echo/canvas",
+            "params": {
+              "width": 256,
+              "height": 128
+            }
+          },
+          "duration": {
+            "kind": "echo/duration",
+            "params": {
+              "frames": 25,
+              "fps": 24
+            }
+          },
+          "keyframes": {
+            "kind": "echo/keyframes",
+            "in": {
+              "text": "prompt.text",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "images": []
+            },
+            "bypass": true
+          },
+          "sample": {
+            "kind": "echo/sample",
+            "in": {
+              "text": "keyframes.text",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration"
+            },
+            "params": {
+              "role": "stage1",
+              "steps": 4,
+              "delay_ms": 300
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "sample.video"
+            }
+          }
+        }
+      },
+      "expect": {
+        "keyframes": null
+      }
+    }
+  ]
+}

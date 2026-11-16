@@ -40,7 +40,7 @@ func NewSweeper(pool *pgxpool.Pool, store storage.Store) *Sweeper {
 func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 	removed := 0
 	err := common.System(ctx, s.pool, func(tx pgx.Tx) error {
-		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.owner_id::text, t.key, t.video->'poster'->>'key' FROM takes t
+		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.owner_id::text, t.key, t.video->'poster'->>'key', t.video->'last'->>'key' FROM takes t
 			WHERE (t.deleted_at < clock_timestamp() - make_interval(secs => $1)
 				OR (NOT t.ready AND t.created_at < clock_timestamp() - make_interval(secs =>
 					CASE WHEN t.source = 'import' THEN $4::float8 ELSE $2::float8 END)))
@@ -49,7 +49,7 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 			ImportLink.Seconds())
 		found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct {
 			ID, Owner, Key string
-			Poster         *string
+			Poster, Last   *string
 		}])
 		if err != nil {
 			return err
@@ -57,13 +57,16 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 		var ids, keys []string
 		for _, row := range found {
 			bad := func(key string) bool { return !common.Owns(row.Owner, key) || strings.HasSuffix(key, "/") }
-			if bad(row.Key) || (row.Poster != nil && bad(*row.Poster)) {
+			if bad(row.Key) || (row.Poster != nil && bad(*row.Poster)) || (row.Last != nil && bad(*row.Last)) {
 				log.Printf("take sweep: take %s key outside u/%s/, left alone", row.ID, row.Owner)
 				continue
 			}
 			ids, keys = append(ids, row.ID), append(keys, row.Key)
 			if row.Poster != nil {
 				keys = append(keys, *row.Poster)
+			}
+			if row.Last != nil { // API 1.17: the stored last frame (a frame take is a copy of it, never this object)
+				keys = append(keys, *row.Last)
 			}
 		}
 		if len(ids) == 0 {

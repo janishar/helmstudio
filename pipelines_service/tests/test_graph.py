@@ -152,3 +152,34 @@ def test_an_uncapped_loop_does_not_validate():
     doc = copy.deepcopy(doc)
     doc["edges"] = [e for e in doc["edges"] if e[0] != "review"] + [["review", "still"]]
     assert ("uncapped_cycle", "still", None, None) in pipeline.problems(doc)
+
+
+def test_rerender_row_bind_sends_a_frame_ref():
+    """API 1.17 Re-render: `<node>.<param>[<row>]` ← `<step>.last_frame` fills that row's Image with a frameRef and
+    keeps its other fields."""
+    wf = {"nodes": {"keyframes": {"params": {"images": []}}}}
+    rows = [
+        {"image": {"take_id": "old"}, "seconds": 0, "strength": 1},
+        {"image": {"take_id": "x"}, "seconds": 1},
+    ]
+    plan = {"workflows": {"w": wf}, "inputs_node": "inputs"}
+    spec = {
+        "workflow": "w",
+        "inputs": {"keyframes.images": rows},
+        "bind": {"keyframes.images[1]": "clip_a.last_frame"},
+    }
+    got, err = graph.run_inputs(plan, {"inputs": {}, "takes": {"clip_a": ["t1", "t2"]}}, spec)
+    assert err is None and got["keyframes.images"][0] == {
+        "image": {"frame_of": "t1", "at": "last"},
+        "seconds": 0,
+        "strength": 1,
+    }
+    assert got["keyframes.images"][1] == rows[1] and rows[0]["image"] == {"take_id": "old"}
+    assert graph.run_inputs(plan, {"inputs": {}, "takes": {}}, spec) == (
+        None,
+        "nothing from clip_a yet",
+    )
+    spec["bind"] = {"keyframes.images[3]": "clip_a.first_frame"}
+    assert graph.run_inputs(plan, {"inputs": {}, "takes": {"clip_a": ["t1"]}}, spec)[1].endswith(
+        "no row 3"
+    )

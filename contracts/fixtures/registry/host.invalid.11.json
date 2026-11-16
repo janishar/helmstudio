@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "state": "busy",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "attempt": 1,
+  "updated_at": "2026-11-15T10:01:00Z",
+  "published_by": "runner mlx 0.3.0",
+  "memory": {
+    "budget_gb": 48,
+    "used_gb": 21.0
+  },
+  "resident": [
+    {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8",
+      "gb": 19.2,
+      "pinned": true
+    },
+    {
+      "component": "upscaler",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "bf16",
+      "gb": 0.93,
+      "pinned": true
+    }
+  ],
+  "media": {
+    "ffmpeg": "7.1",
+    "encoders": [
+      "libopenh264"
+    ]
+  }
+}

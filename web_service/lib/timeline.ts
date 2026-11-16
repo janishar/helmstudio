@@ -1,0 +1,667 @@
+// The timeline rules (contracts/README.md "Timeline rules"): a TypeScript port of contracts/check.py's reference
+// (t_normalize, t_edit / t_apply, t_cuts, snap_point, drop_index, frame_at), tested on contracts/fixtures/timelines so
+// the editor draws exactly what studio stores. Ported in spirit from the old helmstudio's sequence.js (MIT, same
+// owner). Pure: no React, no fetch.
+import type { S } from "@/lib/api";
+
+export type Target = { width: number; height: number; fps: number; sample_rate: number };
+export type Dissolve = { type: "dissolve"; frames: number };
+export type ShotRef = {
+  run_id?: string;
+  batch_id?: string;
+  step?: string;
+  status?: string;
+  error?: string | null;
+};
+export type Clip = {
+  id: string;
+  take_id: string | null;
+  in?: number;
+  out?: number;
+  hold?: number;
+  at?: number;
+  gain_db?: number;
+  mute?: boolean;
+  transition_in?: Dissolve;
+  alternatives?: string[];
+  shot?: ShotRef;
+  offline?: boolean;
+};
+export type Track = {
+  name?: string;
+  kind: "video" | "audio";
+  gain_db?: number;
+  mute?: boolean;
+  clips: Clip[];
+};
+export type Doc = { target: Target; tracks: Track[]; duration_s?: number; frames?: number };
+/** A normalized document: names, V1 `at`, defaults filled, every time snapped. */
+export type Norm = Doc & { duration_s: number; frames: number };
+/** What the rules need of a take. */
+export type Facts = { kind: string; duration_s?: number; has_audio?: boolean };
+export type Takes = Record<string, Facts>;
+export type Problem = [string, string | null, string | null];
+export type Kind = "slot" | "video" | "image";
+
+/** The rate table: fps as JSON writes it → the exact rate num/den. */
+export const RATES: [number, number, number][] = [
+  [23.976, 24000, 1001],
+  [24, 24, 1],
+  [25, 25, 1],
+  [29.97, 30000, 1001],
+  [30, 30, 1],
+  [48, 48, 1],
+  [50, 50, 1],
+  [59.94, 60000, 1001],
+  [60, 60, 1],
+];
+export const MAGNET_PX = 6;
+export const IMAGE_HOLD_S = 3;
+export const MAX_AUDIO_TRACKS = 8;
+const MAX_CLIPS = 1000;
+const MAX_BYTES = 262144;
+const MAX_ALTERNATIVES = 32;
+
+/** Round half away from zero, exactly (Go math.Round); never JS Math.round on a negative half. */
+export const rnd = (x: number) => Math.sign(x) * Math.round(Math.abs(x)) + 0;
+
+/** The target's frame and sample grids: f(s) = rnd(s × num / den), s(f) = f × den / num, in that order. */
+export class Grid {
+  num: number;
+  den: number;
+  sr: number;
+  constructor(t: Pick<Target, "fps" | "sample_rate">) {
+    const r = RATES.find(([fps]) => Math.abs(fps - t.fps) < 1e-6) ?? [24, 24, 1];
+    this.num = r[1];
+    this.den = r[2];
+    this.sr = t.sample_rate;
+  }
+  f = (s: number) => rnd((s * this.num) / this.den);
+  s = (f: number) => (f * this.den) / this.num;
+  snap = (s: number) => this.s(this.f(s));
+  smp = (s: number) => rnd(s * this.sr);
+}
+
+const tk = (takes: Takes, id: string | null | undefined) => (id ? takes[id] : undefined);
+
+/** slot (no take), video or image; an offline clip by its fields (hold = image). */
+export function kindOf(c: Clip, takes: Takes): Kind {
+  if (!c.take_id) return "slot";
+  const t = takes[c.take_id];
+  if (t) return t.kind === "image" ? "image" : "video";
+  return "hold" in c ? "image" : "video";
+}
+
+/** A clip's length in frames on the sequence (an audio-track clip: its end's frame minus its start's). */
+export function lenOf(c: Clip, kind: Kind, g: Grid, audio = false): number {
+  if (audio) return g.f(c.at! + c.out! - c.in!) - g.f(c.at!);
+  return kind === "video" ? g.f(c.out!) - g.f(c.in!) : g.f(c.hold!);
+}
+
+const shotKey = (s: ShotRef) => JSON.stringify([s.run_id, s.batch_id, s.step]);
+const shotRef = (s: ShotRef): ShotRef => {
+  const o: ShotRef = {};
+  if (s.run_id !== undefined) o.run_id = s.run_id;
+  if (s.batch_id !== undefined) o.batch_id = s.batch_id;
+  if (s.step !== undefined) o.step = s.step;
+  return o;
+};
+
+/** A written document → the normalized document, or its problems sorted by code, track, clip (check.py
+ * t_normalize). `previous` (the stored revision) names takes that may be offline now. */
+export function normalize(
+  doc: Doc,
+  takes: Takes,
+  previous?: Doc | null,
+): { document: Norm } | { problems: Problem[] } {
+  const probs: Problem[] = [];
+  const add = (code: string, track: string | null = null, clip: string | null = null) =>
+    probs.push([code, track, clip]);
+  if (new TextEncoder().encode(JSON.stringify(doc)).length > MAX_BYTES)
+    return { problems: [["too_large", null, null]] };
+  const tracks = doc.tracks;
+  if (
+    !tracks.length ||
+    tracks[0].kind !== "video" ||
+    tracks.slice(1).some((t) => t.kind !== "audio") ||
+    tracks.length > 1 + MAX_AUDIO_TRACKS
+  )
+    return { problems: [["track_layout", null, null]] };
+  if (tracks.reduce((n, t) => n + t.clips.length, 0) > MAX_CLIPS)
+    return { problems: [["too_many_clips", null, null]] };
+  const g = new Grid(doc.target);
+  const known = new Set<string | null>();
+  const shots: Record<string, string> = {};
+  for (const t of previous?.tracks ?? [])
+    for (const c of t.clips) {
+      known.add(c.take_id ?? null);
+      for (const a of c.alternatives ?? []) known.add(a);
+      if (c.shot) shots[c.id] = shotKey(c.shot);
+    }
+  const ids = new Set<string>();
+  const out: Track[] = [];
+  const ends: [string, string, number][] = [];
+  tracks.forEach((t, ti) => {
+    const name = ti === 0 ? "V1" : `A${ti + 1}`;
+    const video = ti === 0;
+    const clips: [Clip, Kind][] = [];
+    for (const c of t.clips) {
+      const cid = c.id;
+      const tid = c.take_id ?? null;
+      const take = tk(takes, tid);
+      const kind = kindOf(c, takes);
+      if (ids.has(cid)) add("duplicate_clip", name, cid);
+      ids.add(cid);
+      if (
+        [...(tid ? [tid] : []), ...(c.alternatives ?? [])].some((x) => !takes[x] && !known.has(x))
+      )
+        add("take_not_found", name, cid);
+      if (c.shot && shots[cid] !== shotKey(c.shot)) add("shot_invalid", name, cid);
+      const n: Clip = { id: cid, take_id: tid };
+      if (kind === "video") {
+        if ("hold" in c) add("hold_on_video", name, cid);
+        const end = "out" in c ? c.out : take ? take.duration_s : undefined;
+        if (end === undefined) {
+          add("out_required", name, cid);
+          continue;
+        }
+        if (video) {
+          const i_ = g.f(c.in ?? 0);
+          const o_ = g.f(end);
+          if (take && !(0 <= i_ && o_ - i_ >= 1 && o_ <= g.f(take.duration_s!)))
+            add("trim", name, cid);
+          n.in = g.s(i_);
+          n.out = g.s(o_);
+        } else {
+          const i_ = g.smp(c.in ?? 0);
+          const o_ = g.smp(end);
+          if (take && !(0 <= i_ && i_ < o_ && o_ <= g.smp(take.duration_s!)))
+            add("trim", name, cid);
+          if (take && !take.has_audio) add("no_audio", name, cid);
+          if (!("at" in c)) {
+            add("at_required", name, cid);
+            continue;
+          }
+          n.in = i_ / g.sr;
+          n.out = o_ / g.sr;
+          n.at = g.snap(c.at!);
+        }
+      } else if (!video) {
+        add("wrong_track", name, cid);
+        continue;
+      } else {
+        if ("in" in c || "out" in c) add("image_trim", name, cid);
+        if (!("hold" in c)) {
+          add("hold_required", name, cid);
+          continue;
+        }
+        if (g.f(c.hold!) < 1) add("hold", name, cid);
+        n.hold = g.snap(c.hold!);
+      }
+      n.gain_db = c.gain_db ?? 0;
+      n.mute = c.mute ?? false;
+      if (c.transition_in) {
+        if (video) n.transition_in = c.transition_in;
+        else add("dissolve_track", name, cid);
+      }
+      const alts = [...new Set([...(c.alternatives ?? []), ...(tid ? [tid] : [])])];
+      while (alts.length > MAX_ALTERNATIVES)
+        alts.splice(
+          alts.findIndex((a) => a !== tid),
+          1,
+        );
+      n.alternatives = alts;
+      if (c.shot) n.shot = shotRef(c.shot);
+      if (tid && !take) n.offline = true;
+      clips.push([n, kind]);
+    }
+    if (video) {
+      let pos = 0;
+      for (const [n, kind] of clips) {
+        n.at = g.s(pos);
+        pos += lenOf(n, kind, g);
+      }
+      const din = [...clips.map(([n]) => n.transition_in?.frames ?? 0), 0];
+      clips.forEach(([n, kind], k) => {
+        const d = din[k];
+        if (d && k === 0) add("dissolve_first", name, n.id);
+        else if (d && (kind === "slot" || clips[k - 1][1] === "slot"))
+          add("dissolve_gap", name, n.id);
+        else if (d) {
+          const [p, pk] = clips[k - 1];
+          const ptk = tk(takes, p.take_id);
+          if (
+            (pk === "video" && ptk && g.f(p.out!) + d / 2 > g.f(ptk.duration_s!)) ||
+            (kind === "video" && g.f(n.in!) - d / 2 < 0)
+          )
+            add("dissolve_handles", name, n.id);
+        }
+        const half = Math.floor((k ? din[k] : 0) / 2) + Math.floor(din[k + 1] / 2);
+        if (half && half > lenOf(n, kind, g)) add("dissolve_length", name, n.id);
+      });
+    } else {
+      clips.sort((a, b) => a[0].at! - b[0].at!);
+      let prevEnd: number | null = null;
+      for (const [n] of clips) {
+        const a = g.smp(n.at!);
+        const e = a + g.smp(n.out!) - g.smp(n.in!);
+        if (prevEnd !== null && a < prevEnd) add("overlap", name, n.id);
+        prevEnd = Math.max(e, prevEnd ?? 0);
+        ends.push([name, n.id, e]);
+      }
+    }
+    out.push({
+      name,
+      kind: t.kind,
+      gain_db: t.gain_db ?? 0,
+      mute: t.mute ?? false,
+      clips: clips.map(([n]) => n),
+    });
+  });
+  const v1 = out[0].clips;
+  let frames: number;
+  if (v1.length) {
+    const last = v1[v1.length - 1];
+    frames = g.f(last.at!) + lenOf(last, kindOf(last, takes), g);
+    for (const [name, cid, e] of ends) if (e > g.smp(g.s(frames))) add("past_end", name, cid);
+  } else frames = Math.max(0, ...ends.map(([, , e]) => g.f(e / g.sr)));
+  if (probs.length) {
+    const key = (p: Problem) => [p[0], p[1] ?? "", p[2] ?? ""];
+    return {
+      problems: probs.sort((a, b) => {
+        const [x, y] = [key(a), key(b)];
+        for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+        return 0;
+      }),
+    };
+  }
+  return { document: { target: doc.target, tracks: out, duration_s: g.s(frames), frames } };
+}
+
+/** An edit (contracts/README.md, Timeline rules: Edits). `delta` and every time are seconds. */
+export type Op =
+  | { op: "move"; clip: string; index: number }
+  | { op: "move"; clip: string; at: number; track?: string }
+  | { op: "trim"; clip: string; edge: "in" | "out"; delta: number }
+  | { op: "split"; track: string; at: number; id: string }
+  | { op: "remove" | "lift"; clip: string }
+  | { op: "replace"; clip: string; take_id: string }
+  | {
+      op: "set";
+      clip: string;
+      gain_db?: number | null;
+      mute?: boolean | null;
+      hold?: number | null;
+      transition_in?: Dissolve | null;
+    }
+  | { op: "add"; take_ids: string[]; track?: string; ids: string[] }
+  | { op: "insert"; at: number; hold: number; id: string }
+  | { op: "fill"; clip: string; take_id: string }
+  | { op: "add_track" }
+  | { op: "remove_track"; track: string }
+  | { op: "track"; track: string; gain_db?: number; mute?: boolean };
+
+/** One edit on a normalized document → the document as written (normalize it next), or an error code (t_edit). */
+export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
+  const d: Doc = structuredClone(doc);
+  const g = new Grid(d.target);
+  const tracks: Record<string, Track> = Object.fromEntries(d.tracks.map((t) => [t.name, t]));
+  const v1 = d.tracks[0].clips;
+  const din = (i: number) => (0 < i && i < v1.length ? (v1[i].transition_in?.frames ?? 0) : 0);
+  const cutAt = (i: number) => {
+    if (i < v1.length) delete v1[i].transition_in;
+  };
+
+  if (op.op === "add") {
+    const t = tracks[op.track ?? "V1"];
+    op.take_ids.forEach((tid, k) => {
+      const cid = op.ids[k];
+      if (cid === undefined) return;
+      const take = takes[tid];
+      if (t.name !== "V1") {
+        const end = Math.max(0, ...t.clips.map((c) => c.at! + c.out! - c.in!));
+        t.clips.push({ id: cid, take_id: tid, in: 0, out: take.duration_s, at: g.snap(end) });
+      } else if (take.kind === "image") t.clips.push({ id: cid, take_id: tid, hold: IMAGE_HOLD_S });
+      else t.clips.push({ id: cid, take_id: tid, in: 0, out: take.duration_s });
+    });
+    return d;
+  }
+  if (op.op === "insert") {
+    const cuts = [0];
+    for (const c of v1) cuts.push(cuts[cuts.length - 1] + lenOf(c, kindOf(c, takes), g));
+    const f = g.f(op.at);
+    let i = 0;
+    cuts.forEach((c, k) => {
+      if (Math.abs(c - f) <= Math.abs(cuts[i] - f)) i = k; // a tie: the later cut
+    });
+    v1.splice(i, 0, { id: op.id, take_id: null, hold: op.hold });
+    cutAt(i + 1);
+    return d;
+  }
+  if (op.op === "add_track" || op.op === "remove_track" || op.op === "track") {
+    if (op.op === "add_track") {
+      if (d.tracks.length > MAX_AUDIO_TRACKS) return "too_many_tracks";
+      d.tracks.push({ kind: "audio", gain_db: 0, mute: false, clips: [] });
+    } else if (op.op === "remove_track") {
+      if (op.track === "V1") return "video_track";
+      d.tracks.splice(d.tracks.indexOf(tracks[op.track]), 1);
+    } else {
+      if (op.gain_db !== undefined) tracks[op.track].gain_db = op.gain_db;
+      if (op.mute !== undefined) tracks[op.track].mute = op.mute;
+    }
+    for (const t of d.tracks) delete t.name; // names follow the position
+    return d;
+  }
+  if (op.op === "split") return split(d, tracks[op.track], op, takes, g);
+
+  const t = d.tracks.find((x) => x.clips.some((c) => c.id === op.clip));
+  if (!t) return "clip_not_found";
+  const i = t.clips.findIndex((c) => c.id === op.clip);
+  const c = t.clips[i];
+  const kind = kindOf(c, takes);
+  const onV1 = t === d.tracks[0];
+
+  if (op.op === "move") {
+    if (onV1 && "index" in op) {
+      v1.splice(i, 1);
+      cutAt(i);
+      v1.splice(op.index, 0, c);
+      delete c.transition_in;
+      cutAt(op.index + 1);
+    } else if (!onV1 && "at" in op) {
+      t.clips.splice(i, 1);
+      tracks[op.track ?? t.name!].clips.push({ ...c, at: op.at });
+    } else return "bad_move";
+  } else if (op.op === "trim") {
+    const df = g.f(op.delta);
+    const take = tk(takes, c.take_id);
+    const src = kind === "video" && take ? g.f(take.duration_s!) : null;
+    if (onV1) {
+      const dIn = din(i);
+      const dOut = din(i + 1);
+      const least = Math.max(1, Math.floor(dIn / 2) + Math.floor(dOut / 2));
+      if (kind === "video") {
+        let i_ = g.f(c.in!);
+        let o_ = g.f(c.out!);
+        if (op.edge === "in") i_ = Math.min(Math.max(i_ + df, Math.floor(dIn / 2)), o_ - least);
+        else {
+          o_ = Math.max(o_ + df, i_ + least);
+          if (src !== null) o_ = Math.min(o_, src - Math.floor(dOut / 2));
+        }
+        c.in = g.s(i_);
+        c.out = g.s(o_);
+      } else c.hold = g.s(Math.max(g.f(c.hold!) + (op.edge === "out" ? df : -df), least));
+    } else {
+      const i_ = g.smp(c.in!);
+      const o_ = g.smp(c.out!);
+      const frame = g.smp(g.s(1));
+      if (op.edge === "in") {
+        const dd = Math.max(df, -g.f(c.at!));
+        const ni = Math.min(Math.max(i_ + g.smp(g.s(dd)), 0), o_ - frame);
+        c.at = g.snap(c.at! + (ni - i_) / g.sr);
+        c.in = ni / g.sr;
+      } else {
+        const no = Math.max(o_ + g.smp(g.s(df)), i_ + frame);
+        c.out = (src === null ? no : Math.min(no, g.smp(take!.duration_s!))) / g.sr;
+      }
+    }
+  } else if (op.op === "remove" || op.op === "lift") {
+    if (op.op === "lift" && !onV1) return "lift_track";
+    if (op.op === "lift") t.clips[i] = { id: c.id, take_id: null, hold: g.s(lenOf(c, kind, g)) };
+    else t.clips.splice(i, 1);
+    if (onV1) cutAt(op.op === "remove" ? i : i + 1);
+  } else if (op.op === "replace") {
+    if (!(c.alternatives ?? []).includes(op.take_id)) return "not_alternative";
+    const take = takes[op.take_id];
+    if (!take) return "take_not_found";
+    const ln = lenOf(c, kind, g, !onV1);
+    const oldIn = kind === "video" ? g.f(c.in!) : 0;
+    delete c.in;
+    delete c.out;
+    delete c.hold;
+    if (take.kind === "image" && onV1) c.hold = g.s(ln);
+    else {
+      const src = g.f(take.duration_s!);
+      const i_ = Math.min(oldIn, src - 1);
+      c.in = g.s(i_);
+      c.out = g.s(Math.min(i_ + ln, src));
+    }
+    c.take_id = op.take_id;
+  } else if (op.op === "set") {
+    for (const k of ["gain_db", "mute", "hold", "transition_in"] as const)
+      if (k in op) {
+        if (op[k] === null) delete c[k];
+        else (c as Record<string, unknown>)[k] = op[k];
+      }
+  } else if (op.op === "fill") {
+    const take = takes[op.take_id];
+    const ln = lenOf(c, kind, g);
+    delete c.in;
+    delete c.out;
+    delete c.hold;
+    delete c.shot;
+    if (take.kind === "image") c.hold = g.s(ln);
+    else {
+      c.in = 0;
+      c.out = g.s(Math.min(g.f(take.duration_s!), ln));
+    }
+    c.take_id = op.take_id;
+    c.alternatives = [...(c.alternatives ?? []), op.take_id];
+  } else return "unknown_op";
+  return d;
+}
+
+/** Split at the playhead `at` the clip of `t` under it; the right part gets `id`, keeps the take and alternatives,
+ * never the dissolve or the shot. */
+function split(
+  d: Doc,
+  t: Track,
+  op: { at: number; id: string },
+  takes: Takes,
+  g: Grid,
+): Doc | string {
+  const f = g.f(op.at);
+  const onV1 = t === d.tracks[0];
+  let hit: [number, Clip, number, number] | null = null;
+  t.clips.forEach((c, k) => {
+    const a = g.f(c.at!);
+    const ln = lenOf(c, kindOf(c, takes), g, !onV1);
+    if (a <= f && f < a + ln) hit = [k, c, f - a, ln];
+  });
+  if (!hit) return "split_none";
+  const [k, c, p, ln] = hit as [number, Clip, number, number];
+  if (p === 0) return "split_edge";
+  if (c.shot) return "split_shot";
+  const c2: Clip = { ...structuredClone(c), id: op.id };
+  delete c2.transition_in;
+  delete c2.shot;
+  if (!onV1) {
+    const cut = g.smp(c.in!) + g.smp(g.s(p));
+    c.out = c2.in = cut / g.sr;
+    c2.at = g.s(f);
+  } else if (kindOf(c, takes) === "video") c.out = c2.in = g.s(g.f(c.in!) + p);
+  else {
+    c.hold = g.s(p);
+    c2.hold = g.s(ln - p);
+  }
+  t.clips.splice(k + 1, 0, c2);
+  return d;
+}
+
+export type Applied = { document: Norm } | { problems: Problem[] } | { error: string };
+
+/** An edit, then normalize against the edited document as the previous revision (t_apply). */
+export function apply(doc: Doc, op: Op, takes: Takes): Applied {
+  const raw = edit(doc, op, takes);
+  if (typeof raw === "string") return { error: raw };
+  let r = normalize(raw, takes, doc);
+  if (op.op === "fill" && "problems" in r) {
+    const bad = new Set(
+      r.problems
+        .filter((p) => p[0] === "dissolve_handles" || p[0] === "dissolve_length")
+        .map((p) => p[2]),
+    );
+    for (const c of raw.tracks[0].clips) if (bad.has(c.id)) delete c.transition_in;
+    r = normalize(raw, takes, doc);
+  }
+  return r;
+}
+
+/** What an edge snaps to: 0 and every clip's start and end on every track, but the dragged clip's own. */
+export function cuts(doc: Doc, takes: Takes, exclude?: string): number[] {
+  const g = new Grid(doc.target);
+  const out = new Set([0]);
+  doc.tracks.forEach((t, ti) => {
+    for (const c of t.clips)
+      if (c.id !== exclude) {
+        out.add(c.at!);
+        out.add(
+          ti === 0 ? g.s(g.f(c.at!) + lenOf(c, kindOf(c, takes), g)) : c.at! + c.out! - c.in!,
+        );
+      }
+  });
+  return [...out].sort((a, b) => a - b);
+}
+
+/** A dragged edge: the nearest cut when within MAGNET_PX on screen (a tie: the earlier), else its frame. */
+export function snapPoint(t: number, list: number[], pxPerS: number, g: Grid): number {
+  let best: number | undefined;
+  for (const c of list)
+    if (
+      best === undefined ||
+      Math.abs(c - t) < Math.abs(best - t) ||
+      (Math.abs(c - t) === Math.abs(best - t) && c < best)
+    )
+      best = c;
+  return best !== undefined && Math.abs(best - t) * pxPerS <= MAGNET_PX ? best : g.snap(t);
+}
+
+/** Moving a V1 clip: its index among the others = how many others have their midpoint before `mid`. */
+export function dropIndex(doc: Doc, clip: string, mid: number, takes: Takes): number {
+  const g = new Grid(doc.target);
+  const m2 = 2 * g.f(mid);
+  return doc.tracks[0].clips.filter(
+    (c) => c.id !== clip && 2 * g.f(c.at!) + lenOf(c, kindOf(c, takes), g) < m2,
+  ).length;
+}
+
+export type Picture = { clip: string; t: number | null; opacity: number; offline?: true };
+export type Sound = { clip: string; t: number; gain_db: number; fade: number };
+
+/** What the preview shows and plays at sequence frame f (frame_at): pictures bottom first and sounds. */
+export function frameAt(
+  doc: Doc,
+  f: number,
+  takes: Takes,
+): { pictures: Picture[]; sounds: Sound[] } {
+  const g = new Grid(doc.target);
+  const pics: Picture[] = [];
+  const sounds: Sound[] = [];
+  const v1t = doc.tracks[0];
+  const v1 = v1t.clips;
+  const dins = [...v1.map((c) => c.transition_in?.frames ?? 0), 0];
+  v1.forEach((c, k) => {
+    const kind = kindOf(c, takes);
+    const a = g.f(c.at!);
+    const ln = lenOf(c, kind, g);
+    const start = a - Math.floor(dins[k] / 2);
+    const end = a + ln + Math.floor(dins[k + 1] / 2);
+    if (kind === "slot" || !(start <= f && f < end)) return;
+    const mixIn = dins[k] && f < a + Math.floor(dins[k] / 2) ? (f - start) / dins[k] : 1;
+    const outFrom = a + ln - Math.floor(dins[k + 1] / 2);
+    const mixOut = dins[k + 1] && f >= outFrom ? (f - outFrom) / dins[k + 1] : 0;
+    const src = kind === "video" ? g.s(g.f(c.in!) + f - a) : null;
+    const pic: Picture = { clip: c.id, t: src, opacity: mixIn };
+    if (c.offline) {
+      pics.push({ ...pic, offline: true });
+      return;
+    }
+    pics.push(pic);
+    if (kind === "video" && takes[c.take_id!]?.has_audio && !c.mute && !v1t.mute)
+      sounds.push({
+        clip: c.id,
+        t: src!,
+        gain_db: (v1t.gain_db ?? 0) + (c.gain_db ?? 0),
+        fade: mixIn < 1 ? mixIn : 1 - mixOut,
+      });
+  });
+  for (const t of doc.tracks.slice(1))
+    for (const c of t.clips) {
+      const a = g.f(c.at!);
+      if (a <= f && f < a + lenOf(c, "video", g, true) && !c.offline && !c.mute && !t.mute)
+        sounds.push({
+          clip: c.id,
+          t: c.in! + g.s(f - a),
+          gain_db: (t.gain_db ?? 0) + (c.gain_db ?? 0),
+          fade: 1,
+        });
+    }
+  return { pictures: pics, sounds };
+}
+
+// ---------------------------------------------------------------- editor helpers (not in check.py)
+
+/** The rules' facts of a sequence's takes (Timeline.takes): an offline one is absent. */
+export function factsOf(takes: Record<string, S<"TimelineTake">>): Takes {
+  return Object.fromEntries(
+    Object.entries(takes).map(([id, t]) => [
+      id,
+      { kind: t.kind, duration_s: t.video?.duration_s, has_audio: t.video?.has_audio ?? false },
+    ]),
+  );
+}
+
+/** A new clip id, unique in the document. */
+export function newId(doc: Doc): string {
+  const used = new Set(doc.tracks.flatMap((t) => t.clips.map((c) => c.id)));
+  for (;;) {
+    const id = Math.random().toString(36).slice(2, 10);
+    if (/^[a-z0-9]{1,16}$/.test(id) && !used.has(id)) return id;
+  }
+}
+
+/** A clip's start and end on the sequence, in seconds (V1 and audio tracks alike). */
+export function span(c: Clip, track: number, takes: Takes, g: Grid): [number, number] {
+  const len = lenOf(c, kindOf(c, takes), g, track > 0);
+  return [c.at!, g.s(g.f(c.at!) + len)];
+}
+
+/** "0:05.12": minutes, seconds and hundredths. */
+export function timecode(s: number): string {
+  const cs = Math.max(0, Math.round(s * 100));
+  const m = Math.floor(cs / 6000);
+  const sec = Math.floor((cs % 6000) / 100);
+  return `${m}:${String(sec).padStart(2, "0")}.${String(cs % 100).padStart(2, "0")}`;
+}
+
+/** "0:21": minutes and whole seconds. */
+export const shortTime = (s: number) =>
+  `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** The document a write sends (TimelineUpdate): what the server ignores or answers only is left out. */
+export function writable(doc: Doc): { target: Target; tracks: Track[] } {
+  return {
+    target: doc.target,
+    tracks: doc.tracks.map((t) => ({
+      kind: t.kind,
+      gain_db: t.gain_db,
+      mute: t.mute,
+      clips: t.clips.map((c) => {
+        const out: Clip = { ...c };
+        delete out.offline;
+        if (t.kind === "video") delete out.at;
+        if (out.shot) out.shot = shotRef(out.shot);
+        return out;
+      }),
+    })),
+  };
+}
+
+/** The V1 clip under sequence frame f (its index), or -1. */
+export function clipAt(doc: Doc, f: number, takes: Takes): number {
+  const g = new Grid(doc.target);
+  return doc.tracks[0].clips.findIndex((c) => {
+    const a = g.f(c.at!);
+    return a <= f && f < a + lenOf(c, kindOf(c, takes), g);
+  });
+}

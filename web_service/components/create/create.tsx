@@ -12,6 +12,7 @@ import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/ref
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
 import { ElementsPicker } from "@/components/create/elements";
+import { AddToTimeline } from "@/components/timeline/add";
 import { LooksPicker, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
 import { useLibrary, useLooks } from "@/lib/library";
@@ -915,6 +916,13 @@ export function Create({
                   onPick={() => setSelected(it.run.id)}
                 />
               ),
+            )}
+            {shownTake && (
+              <AddToTimeline
+                key={shownTake.id}
+                takeIds={[shownTake.id]}
+                className="chip bevel h-11 shrink-0 rounded-[10px]"
+              />
             )}
             {shownTake?.kind === "image" && workflows && (
               <UseIn

@@ -8,7 +8,9 @@ current run at its next cancel point (reported failed), unload every component, 
 It also answers runner.unload.<host>.<env> (contracts/README.md, Two envs on one host: the hand-over; Hosts
 admin): idle, it unloads the components studio names (everything when it names none). Beside the runs it pulls
 cmd.model.<host>.<env> (durable models-<host>-<env>: downloads and deletes, messaging.models), follows KV
-host_settings key <host> (messaging.settings) and rescans its models root and LoRAs every RESCAN seconds."""
+host_settings key <host> (messaging.settings) and rescans its models root and LoRAs every RESCAN seconds. With ffmpeg
+(core.media.detect: the hosts key's `media`) it also pulls cmd.media.<host>.<env> (durable media-<host>-<env>:
+exports and frames, messaging.media), never in the GPU loop."""
 
 import asyncio
 import contextlib
@@ -26,9 +28,10 @@ import config
 import health
 from config import ENV, HOST, INBOX_PREFIX, NATS_URL
 from consumer import ACK_WAIT, Consumer
-from core import download, looks, lora, models, registry
+from core import download, looks, lora, media, models, registry
 from core.graph import GPU
 from core.residency import POLICIES, Residency, ram_gb
+from messaging import media as media_jobs
 from messaging import models as model_jobs
 from messaging import schemas
 from messaging.hosts import Host
@@ -145,6 +148,7 @@ async def main() -> None:
     js = nc.jetstream()
     await registry.publish(js, values)
     settings: Settings | None = None
+    can_media = await asyncio.to_thread(media.detect)  # ffmpeg here: this env also runs media jobs
 
     def extra() -> dict:
         """The hosts key beyond idle/busy: memory and resident (with weights), disk, machine, token, policy."""
@@ -152,7 +156,7 @@ async def main() -> None:
         out = residency.state() if residency else {}
         return out | {"models_disk": models.disk(config.MODELS), "machine": machine,
                       "hub_token": tok.is_file() and tok.stat().st_size > 0,
-                      "policy": settings.policy()}  # fmt: skip
+                      "policy": settings.policy()} | ({"media": can_media} if can_media else {})  # fmt: skip
 
     host = Host(await js.key_value("hosts"), extra=extra)
     consumer = Consumer(
@@ -229,6 +233,18 @@ async def main() -> None:
     )  # fmt: skip
 
     stop = asyncio.Event()
+    side_jobs = [model_jobs.pull(jobs_sub, jobs, stop)]
+    if can_media:  # exports and frames: ffmpeg, never the GPU loop
+        await js.add_consumer("CMD", ConsumerConfig(
+            name=media_jobs.DURABLE, durable_name=media_jobs.DURABLE, filter_subject=media_jobs.SUBJECT,
+            ack_policy=AckPolicy.EXPLICIT, ack_wait=media_jobs.ACK_WAIT, max_deliver=3, max_ack_pending=1,
+            deliver_policy=DeliverPolicy.ALL))  # fmt: skip
+        media_sub = await js.pull_subscribe_bind(durable=media_jobs.DURABLE, stream="CMD")
+        mjobs = media_jobs.MediaJobs(js=js, cancels_kv=consumer.cancels_kv, store=store,
+                                     encoders=can_media["encoders"])  # fmt: skip
+        side_jobs.append(model_jobs.pull(media_sub, mjobs, stop))
+        log.info("media jobs on %s (ffmpeg %s, %s)", media_jobs.SUBJECT, can_media["ffmpeg"],
+                 ", ".join(can_media["encoders"]))  # fmt: skip
 
     def on_signal() -> None:
         stop.set()
@@ -248,8 +264,7 @@ async def main() -> None:
     await nc.subscribe(f"runner.unload.{HOST}.{ENV}", cb=on_unload)
     beat = asyncio.create_task(host.beat(stop))
     idle = asyncio.create_task(idle_unload(consumer, host, stop)) if residency else None
-    side = [asyncio.create_task(t) for t in (model_jobs.pull(jobs_sub, jobs, stop),
-                                             settings.watch(js, stop), rescans(stop))]  # fmt: skip
+    side = [asyncio.create_task(t) for t in (*side_jobs, settings.watch(js, stop), rescans(stop))]
     server = await health.serve(nc)
     log.info("runner %s.%s ready on %s (device %s)", HOST, ENV, SUBJECT, device)
     try:

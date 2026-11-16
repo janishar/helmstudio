@@ -116,6 +116,9 @@ func (p storedPipeline) stepInputs(step string, row map[string]any, seed int64) 
 	node, workflow := p.Doc.Nodes[step], p.Workflows[p.Doc.Nodes[step].Workflow]
 	inputs, root := p.fixed(step), p.root()
 	for key, source := range node.Bind {
+		if strings.Contains(key, "[") { // a re-render's row bind (API 1.17): the row's fixed value stands in for its take
+			continue
+		}
 		param, _ := findParam(workflow, key)
 		field, rowsOfImages := imageField(param)
 		if name, ok := strings.CutPrefix(source, "$"); ok {
@@ -317,6 +320,17 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	if detail != "" {
 		return dto.Batch{}, unprocessable("%s", detail)
 	}
+	return s.submitPipeline(ctx, tx, caller, body, stored, info, rows, &row.ID, nil)
+}
+
+// submitPipeline checks every row against every step and stores and submits the batch: a saved pipeline's
+// (pipelineID), or a snapshot studio built (a sequence's Re-render: timelineID, API 1.17).
+func (s *Service) submitPipeline(ctx context.Context, tx pgx.Tx, caller common.Caller, body *dto.BatchCreate,
+	stored storedPipeline, info pipelineInfo, rows []map[string]any, pipelineID, timelineID *string) (dto.Batch, error) {
+	unprocessable := func(format string, args ...any) error {
+		return network.NewUnprocessableError(fmt.Sprintf(format, args...), nil)
+	}
+	doc := stored.Doc
 	// the rows' own takes as Create checks them; takes from earlier steps are checked when their runs are made
 	root, columns := stored.root(), doc.Nodes[stored.root()].Columns
 	perRow := make([][]imageAt, len(rows))
@@ -426,11 +440,11 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO batches (id, owner_id, session_id, title, workflow_id, workflow_title, snapshot,
 		inputs, workflow_version, pipeline_id, pipeline_title, pipeline_version, collection, pipeline, elements, looks, bounds,
-		models, providers, egress, reserved, director, remote) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-		$14, $15, $16, $17, $18, $19, $20, $21, $22, $23)`, batchID, caller.ID,
-		sessionID, title, first.ID, first.Title, first, base, stored.version(first.ID), row.ID, row.Title, row.Version,
+		models, providers, egress, reserved, director, remote, timeline_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+		$14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`, batchID, caller.ID,
+		sessionID, title, first.ID, first.Title, first, base, stored.version(first.ID), pipelineID, stored.Title, stored.Version,
 		collection, stored, lib, looks, stored.Bounds, stored.Listed, append([]string{}, slices.Sorted(maps.Keys(stored.Providers))...), info.Egress,
-		info.Reserved, director, remote); err != nil {
+		info.Reserved, director, remote, timelineID); err != nil {
 		return dto.Batch{}, err
 	}
 	numbers := make([]int, len(rows))

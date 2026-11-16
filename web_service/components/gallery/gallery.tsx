@@ -11,6 +11,7 @@ import { videoLine } from "@/lib/media";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { RefThumbs } from "@/components/create/refs";
 import { ElementEditor } from "@/components/create/elements";
+import { AddToTimeline } from "@/components/timeline/add";
 import { SaveAsLook } from "@/components/create/looks";
 import { lookGroupLabel } from "@/lib/looks";
 import { useLooks } from "@/lib/library";
@@ -46,6 +47,7 @@ const KINDS: [S<"TakeKind">, string][] = [
 const SOURCES: [S<"TakeSource">, string][] = [
   ["create", "From Create"],
   ["pipeline", "From Pipelines"],
+  ["export", "From Timeline"],
   ["upload", "Uploads"],
 ];
 
@@ -403,6 +405,7 @@ export function Gallery({
             >
               <Star size={14} aria-hidden /> Star
             </button>
+            <AddToTimeline takeIds={[...picked]} className="chip bevel" />
             <button
               type="button"
               className="chip bevel"
@@ -769,6 +772,7 @@ function TakePanel({
       )}
 
       <div className="grid grid-cols-2 gap-2">
+        <AddToTimeline key={t.id} takeIds={[t.id]} />
         {m && (
           <Link href={`/?${session}reuse=${encodeURIComponent(t.id)}`} className="act">
             Reuse settings

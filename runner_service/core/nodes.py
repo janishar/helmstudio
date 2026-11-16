@@ -38,16 +38,18 @@ def _png(image: Image.Image) -> bytes:
 
 def output(ctx, params: dict, inputs: dict) -> dict:
     """Store the input as an output of the run: an Image as a PNG; a Video value ({mp4: bytes, poster: PIL image,
-    frames, fps, has_audio}) as its MP4 with the poster (frame 0) as a PNG beside it."""
+    frames, fps, has_audio[, last: PIL image, stream: defs videoStream]}) as its MP4 with the poster (frame 0) and
+    the last frame as PNGs beside it."""
     media = inputs["media"]
     if isinstance(media, Image.Image):
         ctx.output(_png(media), ext="png", kind="image", width=media.width, height=media.height)
         return {}
     poster: Image.Image = media["poster"]
     video = {"duration_s": media["frames"] / media["fps"], "fps": media["fps"], "frames": media["frames"],
-             "has_audio": media["has_audio"]}  # fmt: skip
+             "has_audio": media["has_audio"]} | ({"stream": media["stream"]} if media.get("stream") else {})  # fmt: skip
+    last = media.get("last")
     ctx.output(media["mp4"], ext="mp4", kind="video", width=poster.width, height=poster.height, video=video,
-               poster=_png(poster))  # fmt: skip
+               poster=_png(poster), last=_png(last) if last is not None else None)  # fmt: skip
     return {}
 
 

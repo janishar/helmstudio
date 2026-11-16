@@ -176,6 +176,10 @@ func Run() error {
 	projector.MountModels(modelEvents)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ModelsConsumer, modelEvents) })
 	workers.Go(func() { studio.RunModelJobs(ctx, pool, runners, module.purge) })
+	mediaEvents := &micro.NatsJetStreamGroup{}
+	projector.MountMedia(mediaEvents)
+	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.MediaConsumer, mediaEvents) })
+	workers.Go(func() { studio.RunMediaJobs(ctx, pool, runners) })
 	workers.Go(func() {
 		// KV host_settings is a copy of studio's table: written at every start (API 1.16)
 		if err := module.settings.PublishSettings(ctx); err != nil && ctx.Err() == nil {

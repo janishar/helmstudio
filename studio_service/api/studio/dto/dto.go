@@ -269,6 +269,8 @@ type Batch struct {
 	Reserved *[]PipelineReserved `json:"reserved,omitempty"`
 	Director json.RawMessage     `json:"director,omitempty"`
 	Remote   json.RawMessage     `json:"remote,omitempty"`
+	// API 1.17: a sequence's Re-render
+	TimelineID *string `json:"timeline_id,omitempty"`
 }
 
 // BatchRow is one row of a batch.

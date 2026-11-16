@@ -188,6 +188,14 @@ type Host struct {
 	Machine    *Machine    `json:"machine,omitempty"`
 	HubToken   bool        `json:"hub_token,omitempty"`
 	Policy     *Policy     `json:"policy,omitempty"`
+	// API 1.17: this env runs media jobs (exports and frames) with these H.264 encoders, preferred first
+	Media *Media `json:"media,omitempty"`
+}
+
+// Media is what a runner's media worker has: ffmpeg's version and its H.264 encoders (API 1.17).
+type Media struct {
+	FFmpeg   string   `json:"ffmpeg"`
+	Encoders []string `json:"encoders"`
 }
 
 // ModelsDisk is the volume holding a runner's models root (API 1.16).

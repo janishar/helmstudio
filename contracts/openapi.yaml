@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.16.0
+  version: 1.17.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -1825,6 +1825,298 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  # ------------------------------------------------------------------ studio: timelines (API 1.17, M5b; contracts/README.md, Timeline)
+  /v1/studio/timelines:
+    get:
+      tags: [studio]
+      operationId: studioListTimelines
+      summary: The caller's sequences, newest `updated_at` first (at most 100, not paginated)
+      responses:
+        '200': {description: the sequences, content: {application/json: {schema: {$ref: '#/components/schemas/TimelineList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateTimeline
+      summary: New sequence, optionally with its first clips (target defaults from the first clip)
+      description: |
+        Creates the sequence (revision 1) and its own session (`session_id`: New shot and Re-render runs go there). Missing
+        `target` fields come from the first take of `take_ids` (contracts/README.md, Timeline: sequences), else
+        1280 × 720, 24 fps, 48000 Hz. `take_ids` are added as `POST …/clips` adds them. 409 at 100 sequences (`You have
+        100 sequences; delete some first.`). 422 `take_ids[2]: take <id> not found` (unknown, another user's, deleted
+        or a pending upload), `name must be 1-80 characters`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineCreate'}}}
+      responses:
+        '201': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetTimeline
+      description: 'The sequence at its current revision, normalized, with `takes` (every take it names, signed), offline clips marked and each pending shot''s status.'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      responses:
+        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioUpdateTimeline
+      summary: 'An edit: the whole document at the revision it was made on'
+      description: |
+        Every edit is a whole-document write (contracts/README.md, Timeline: edits): `target` and `tracks` as the
+        editor computed them (the shared edit functions), with the `revision` they were made on. Studio normalizes it
+        (Timeline rules) and stores it as revision + 1; the answer is the normalized sequence. 409 when `revision` is
+        not the current one: `timeline changed since you opened it (now revision <n>)` (re-read, then re-apply the
+        edit). 422 `TimelineError` when a rule fails (`problems`, the first in `detail`), or `{detail}` for a body that
+        does not fit the schema.
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineUpdate'}}}
+      responses:
+        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/TimelineUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      tags: [studio]
+      operationId: studioPatchTimeline
+      summary: 'Rename, or set the defaults for new shots (no revision; not undone)'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelinePatch'}}}
+      responses:
+        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteTimeline
+      summary: Delete a sequence (soft)
+      description: 'Gone from every answer at once; its unfinished exports are cancelled; its runs and batches go on and their takes stay in the gallery. An export take keeps naming it (`Take.export`).'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/clips:
+    post:
+      tags: [studio]
+      operationId: studioAddTimelineClips
+      summary: '"Add to timeline": append takes in order (no revision needed)'
+      description: |
+        Applies the `add` edit to the current revision (so a gallery action never holds a revision) and stores revision
+        + 1. V1 (default): a video take whole (`in` 0, `out` its length), an image take held 3 s. An audio track
+        (`track: A2`…): a video take's sound, whole, at the track's end. 422 `take_ids[2]: take <id> not found`,
+        `take_ids[1]: take <id> has no sound` (on an audio track), `take_ids[1]: an image cannot go on an audio track`,
+        `unknown track A4`, or a rule (`TimelineError`, e.g. `too_many_clips`).
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineAddClips'}}}
+      responses:
+        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/TimelineUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/undo:
+    post:
+      tags: [studio]
+      operationId: studioUndoTimeline
+      summary: Undo the latest edit (written forward as a new revision)
+      description: 'contracts/README.md, Timeline: revisions. 409 when `revision` is not the current one, or `nothing to undo` (the revision to restore is older than the 100 kept, or there is none).'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineRevision'}}}
+      responses:
+        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/redo:
+    post:
+      tags: [studio]
+      operationId: studioRedoTimeline
+      summary: Redo the latest undo (written forward as a new revision)
+      description: '409 when `revision` is not the current one, or `nothing to redo` (any edit after an undo clears redo).'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineRevision'}}}
+      responses:
+        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/shots:
+    post:
+      tags: [studio]
+      operationId: studioCreateTimelineShot
+      summary: 'New shot: a run whose take fills a slot'
+      description: |
+        contracts/README.md, Timeline: New shot. `run` is checked and created exactly as `POST
+        /v1/studio/sessions/{session_id}/runs` (same 422 texts, same 409 at 100 runs) in the sequence's session; the
+        slot gets `shot {run_id}` (an inserted slot first: the `insert` edit) as revision + 1, applied to the current
+        revision. The run's first take fills the slot (the `fill` edit, by studio). 409 `clip <id> already has a shot
+        running`; 422 `unknown clip <id>`, `clip <id> is not on V1`, `length is required to insert a slot`.
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineShotCreate'}}}
+      responses:
+        '202': {description: 'the sequence with the placeholder, and the run (queued, or failed at once)', content: {application/json: {schema: {$ref: '#/components/schemas/TimelineShot'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/rerender:
+    post:
+      tags: [studio]
+      operationId: studioRerenderTimeline
+      summary: 'Re-render the sequence or a selection with a preset: one pipeline batch, a step per clip'
+      description: |
+        contracts/README.md, Timeline: re-render. 409 stale `revision`, a selected clip with a shot running, or the
+        batch limit (`You have 5 unfinished batches; …`). 422 `clip <id> is an empty slot`, `clip <id> is offline`,
+        `clip <id>: its take was not made by a workflow`, `clip <id>: workflow <wid> has no preset <p>`, `clip <id>:
+        workflow <wid> no longer exists`, `at most 22 clips per re-render`, `clips <a> and <b> start from each other`,
+        `unknown clip <id>`.
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineRerender'}}}
+      responses:
+        '202': {description: 'the sequence with every selected clip''s shot, and the batch', content: {application/json: {schema: {$ref: '#/components/schemas/TimelineRerenderAnswer'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/export/plan:
+    post:
+      tags: [studio]
+      operationId: studioPlanTimelineExport
+      summary: The export plan, shown before exporting (nothing is created)
+      description: 'contracts/README.md, Timeline: export. `revision` absent = the current one; one that is not kept (older than the last 100) is 404.'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineExportCreate'}}}
+      responses:
+        '200': {description: the plan, content: {application/json: {schema: {$ref: '#/components/schemas/ExportPlan'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/export:
+    post:
+      tags: [studio]
+      operationId: studioExportTimeline
+      summary: Export the sequence to an MP4 take (a queued media job)
+      description: |
+        Plans the stated revision (it must be the current one: 409 stale), builds the ffmpeg arguments and sends
+        `cmd.media.job` (kind `export`) to the chosen runner env (contracts/README.md, Timeline: export). 409 when the
+        plan is `blocked` (the first reason's text: `clip <id> is offline`, `the sequence is empty`, `no live host
+        can export (ffmpeg)`), `an export of this sequence is already running`, or `revision`. 422 `host <h> cannot
+        export` for a named host with no media env.
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineExportCreate'}}}
+      responses:
+        '202': {description: 'the job, queued', content: {application/json: {schema: {$ref: '#/components/schemas/MediaJob'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/exports:
+    get:
+      tags: [studio]
+      operationId: studioListTimelineExports
+      summary: The sequence's exports, newest first (at most 20)
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      responses:
+        '200': {description: the jobs, content: {application/json: {schema: {$ref: '#/components/schemas/MediaJobList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/media-jobs/{job_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetMediaJob
+      description: 'An export or frame job of the caller (another user''s is 404). The UI polls it every second while it is queued or running.'
+      parameters: [{$ref: '#/components/parameters/MediaJobId'}]
+      responses:
+        '200': {description: the job, content: {application/json: {schema: {$ref: '#/components/schemas/MediaJob'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/media-jobs/{job_id}/cancel:
+    post:
+      tags: [studio]
+      operationId: studioCancelMediaJob
+      summary: Cancel a queued or running export or frame job
+      description: 'Studio writes KV `cancels` key `<job_id>`; the runner stops ffmpeg (SIGTERM, 10 s, SIGKILL), removes its temp files and reports `cancelled`. If the env''s hosts key is gone or older than 60 s, studio marks it `cancelled` itself. 409 `job already ended`. Answers the job as it is now.'
+      parameters: [{$ref: '#/components/parameters/MediaJobId'}]
+      responses:
+        '200': {description: the job, content: {application/json: {schema: {$ref: '#/components/schemas/MediaJob'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/takes/{take_id}/frame:
+    post:
+      tags: [studio]
+      operationId: studioTakeFrame
+      summary: An image take of a video take's first or last frame (for keyframes)
+      description: |
+        contracts/README.md, Timeline: frames. Idempotent per (take, `at`): a frame take made before and not deleted is
+        answered again. 200 with the take when studio can make it at once (a server-side copy of the poster, or of the
+        stored last frame); 202 with a media job (kind `frame`) for a video take made before API 1.17 that has no
+        stored last frame (asking again while it runs answers the same job). 404 unknown take; 422 `take <id> is not a
+        video`; 409 `no live host can export (ffmpeg)` when a job is needed and no env can run it.
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TakeFrameRequest'}}}
+      responses:
+        '200': {description: the frame take, content: {application/json: {schema: {$ref: '#/components/schemas/TakeFrame'}}}}
+        '202': {description: the job that makes it, content: {application/json: {schema: {$ref: '#/components/schemas/TakeFrame'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ files
   /files/{path}:
     get:
@@ -2163,6 +2455,8 @@ components:
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
     ProviderName: {name: name, in: path, required: true, schema: {type: string}, description: 'a provider''s name (unknown = 404 on DELETE and test; malformed = 404)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
+    TimelineId: {name: timeline_id, in: path, required: true, schema: {type: string}, description: sequence UUID (malformed = 404)}
+    MediaJobId: {name: job_id, in: path, required: true, schema: {type: string}, description: media job UUID (malformed = 404)}
 
   responses:
     Unauthorized: {description: 'missing or invalid x-api-key (Kong), or missing/invalid/expired/revoked bearer token', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -2190,6 +2484,9 @@ components:
     PipelineUnprocessable:
       description: 'the body does not fit the schema (`{detail}` only), or the pipeline has problems that block saving (`problems`: every problem)'
       content: {application/json: {schema: {$ref: '#/components/schemas/PipelineError'}}}
+    TimelineUnprocessable:
+      description: 'the body does not fit the schema (`{detail}` only), or the document breaks a timeline rule (`problems`: every problem)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/TimelineError'}}}
 
   schemas:
     # ---------------------------------------------------------- errors
@@ -2378,6 +2675,7 @@ components:
         created_at: {type: string, format: date-time, description: mine only}
         updated_at: {type: string, format: date-time, description: mine only}
         problems: {type: array, items: {$ref: '#/components/schemas/Problem'}, description: 'only from GET /v1/studio/workflows/{workflow_id}, POST and PUT: the graph rules against the live palette now; empty = it can run'}
+        keyframes: {oneOf: [{$ref: '#/components/schemas/WorkflowKeyframes'}, {type: 'null'}], description: 'from 1.17, always sent (computed, contracts/README.md Timeline: New shot options): the rows New shot binds a first (and with `last`, a last) frame into; null = the workflow takes none, so neither option is offered'}
     WorkflowMedia:
       type: string
       enum: [image, video]
@@ -3280,8 +3578,8 @@ components:
     TakeKind: {type: string, enum: [image, video, audio]}
     TakeSource:
       type: string
-      enum: [create, upload, pipeline, import]
-      description: 'create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`). timeline comes later'
+      enum: [create, upload, pipeline, import, export, frame]
+      description: 'create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence''s export (`export`); frame (from 1.17): a video take''s first or last frame (`frame_of`)'
     Take:
       type: object
       description: |
@@ -3308,6 +3606,8 @@ components:
         run_id: {type: [string, 'null'], format: uuid, description: 'the run that made it; null for an upload or after its session was deleted'}
         made_with: {oneOf: [{$ref: '#/components/schemas/MadeWith'}, {type: 'null'}], description: null for an upload or an import}
         legacy: {$ref: '#/components/schemas/LegacyInfo', description: 'from 1.16, source import only (absent otherwise): the old settings, read-only'}
+        frame_of: {$ref: '#/components/schemas/TakeFrameOf', description: 'from 1.17, source frame only: which video take and frame it is (its `parents` = that take)'}
+        export: {$ref: '#/components/schemas/TakeExport', description: 'from 1.17, source export only: the sequence and revision it is (`made_with` null; `parents` = its clips'' takes)'}
         parents: {type: array, items: {type: string, format: uuid}, description: 'lineage: the takes it was made from, in input order (every image value of `made_with.inputs`, each once); deleted ones left out; empty for a take made from no image'}
         children:
           type: array
@@ -3397,10 +3697,10 @@ components:
       type: object
       required: [id, title, version, node, attempt, row]
       properties:
-        id: {type: string, format: uuid, description: 'the pipeline (it may be deleted since)'}
+        id: {type: string, format: uuid, description: 'the pipeline (it may be deleted since); from 1.17, a sequence''s Re-render: the timeline (the snapshot''s id; Batch.timeline_id)'}
         title: {type: string, description: 'as in the batch''s snapshot'}
-        version: {type: integer, minimum: 1}
-        node: {type: string, description: 'the step node id that made it'}
+        version: {type: integer, minimum: 1, description: 'a Re-render: the revision it was made from'}
+        node: {type: string, description: 'the step node id that made it (a Re-render: clip_<clip id>)'}
         attempt: {type: integer, minimum: 1, description: 'the step''s visit in that row (1 + times a loop brought the row back to it)'}
         row: {type: integer, minimum: 1, maximum: 500, description: 'the batch row'}
     TakePage:
@@ -3773,6 +4073,7 @@ components:
         reserved: {type: array, items: {$ref: '#/components/schemas/PipelineReserved'}, description: 'from 1.15, a pipeline batch: local servers'' reserved memory'}
         director: {oneOf: [{$ref: '#/components/schemas/BatchDirector'}, {type: 'null'}], description: 'from 1.15: the batch''s director chat; null when its pipeline has no director'}
         remote: {oneOf: [{$ref: '#/components/schemas/BatchRemote'}, {type: 'null'}], description: 'from 1.15: remote calls so far against the caps; null when the pipeline''s remote is off'}
+        timeline_id: {type: [string, 'null'], format: uuid, description: 'from 1.17: a sequence''s Re-render (`pipeline_id` null, `pipeline_title` "Re-render · <name>", `pipeline_version` = the revision); absent or null otherwise'}
     BatchDirector:
       type: object
       required: [node, state, wakes, max_wakes]
@@ -4778,6 +5079,330 @@ components:
       properties:
         settings: {type: object}
         imported_at: {type: string, format: date-time}
+
+    # ---------------------------------------------------------- studio: timelines (API 1.17; contracts/README.md, Timeline)
+    TimelineTarget:
+      type: object
+      required: [width, height, fps, sample_rate]
+      additionalProperties: false
+      description: 'the sequence''s geometry and rates; the codec is the export''s (H.264 + AAC in MP4)'
+      properties:
+        width: {type: integer, minimum: 16, maximum: 4096, multipleOf: 2}
+        height: {type: integer, minimum: 16, maximum: 4096, multipleOf: 2}
+        fps: {type: number, enum: [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60], description: 'one of the rate table (exact rates 24000/1001, 30000/1001, 60000/1001 for the NTSC ones)'}
+        sample_rate: {type: integer, enum: [44100, 48000]}
+    TimelineSeconds: {type: number, minimum: 0, maximum: 86400, description: 'seconds, snapped by studio onto the frame grid (an audio track''s in/out: the sample grid); contracts/README.md, Timeline rules: time'}
+    TimelineDissolve:
+      type: object
+      required: [type, frames]
+      additionalProperties: false
+      properties:
+        type: {type: string, const: dissolve}
+        frames: {type: integer, minimum: 2, maximum: 240, multipleOf: 2, description: 'centred on the cut: half before it, half after'}
+    TimelineShotRef:
+      description: 'a generation filling this slot (made by studio only; a write keeps it or drops it): a New shot''s run, or a Re-render batch''s step. In answers it adds `status` and, failed, `error`'
+      type: object
+      oneOf:
+        - {required: [run_id]}
+        - {required: [batch_id, step]}
+      properties:
+        run_id: {type: string, format: uuid}
+        batch_id: {type: string, format: uuid}
+        step: {type: string, pattern: '^clip_[a-z0-9]{1,16}$', description: 'the re-render pipeline''s step for this clip'}
+        status: {type: string, enum: [queued, running, failed], description: 'answers only: the run''s, or the batch step''s (a cancelled or succeeded one is gone from the document)'}
+        error: {type: [string, 'null'], description: 'answers only, failed: the run''s error'}
+    TimelineClipId: {type: string, pattern: '^[a-z0-9]{1,16}$', description: 'a slot''s id, stable across edits and revisions; the editor makes new ones (unique in the document)'}
+    TimelineClip:
+      type: object
+      required: [id, take_id]
+      additionalProperties: false
+      description: 'a slot: a take (video: in/out; image: hold), or an empty slot (`take_id` null, `hold`): black and silence'
+      properties:
+        id: {$ref: '#/components/schemas/TimelineClipId'}
+        take_id: {type: [string, 'null'], format: uuid}
+        in: {$ref: '#/components/schemas/TimelineSeconds', description: 'a video take: the source time it starts at (default 0)'}
+        out: {$ref: '#/components/schemas/TimelineSeconds', description: 'a video take: the source time it ends at (default its length)'}
+        hold: {type: number, exclusiveMinimum: 0, maximum: 3600, description: 'an image take or an empty slot: its length in seconds'}
+        at: {$ref: '#/components/schemas/TimelineSeconds', description: 'an audio track: where it starts on the sequence (required there); V1: computed, ignored in a write'}
+        gain_db: {type: number, minimum: -60, maximum: 12, default: 0}
+        mute: {type: boolean, default: false, description: 'V1: the clip''s own sound is off'}
+        transition_in: {$ref: '#/components/schemas/TimelineDissolve'}
+        alternatives: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}, description: 'the takes made for this slot, oldest first; the current `take_id` is among them (studio adds it). Replace picks one'}
+        shot: {$ref: '#/components/schemas/TimelineShotRef'}
+        offline: {type: boolean, description: 'answers only, true when the take is deleted or gone: the clip keeps its place and length, plays as offline and blocks an export'}
+    TimelineTrackKind: {type: string, enum: [video, audio]}
+    TimelineTrack:
+      type: object
+      required: [kind, clips]
+      additionalProperties: false
+      properties:
+        name: {type: string, pattern: '^(V1|A[2-9])$', description: 'answers only (ignored in a write): V1, then A2…A9 by position (A1 is V1''s own sound, drawn under it)'}
+        kind: {$ref: '#/components/schemas/TimelineTrackKind'}
+        gain_db: {type: number, minimum: -60, maximum: 12, default: 0}
+        mute: {type: boolean, default: false}
+        clips: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/TimelineClip'}}
+    TimelineDoc:
+      type: object
+      required: [target, tracks]
+      description: 'the editable document: exactly one video track first (V1), then up to 8 audio tracks'
+      properties:
+        target: {$ref: '#/components/schemas/TimelineTarget'}
+        tracks: {type: array, minItems: 1, maxItems: 9, items: {$ref: '#/components/schemas/TimelineTrack'}}
+    TimelineNormalized:
+      allOf: [{$ref: '#/components/schemas/TimelineDoc'}]
+      type: object
+      required: [target, tracks, duration_s, frames]
+      description: 'a document as studio stores and answers it: names, V1 `at`, defaults filled, every time snapped'
+      properties:
+        duration_s: {type: number, minimum: 0, description: '`frames` in seconds'}
+        frames: {type: integer, minimum: 0, description: 'the sequence''s length: V1''s end (no V1 clip: the last sound''s)'}
+    TimelineDefaults:
+      type: object
+      additionalProperties: false
+      description: 'what New shot''s composer starts with: the cast (elements, offered as mentions and typed into an empty prompt) and the looks (sent as RunRequest.looks)'
+      properties:
+        cast: {type: array, maxItems: 16, uniqueItems: true, items: {type: string, format: uuid}, description: 'library elements of the caller; one deleted since is left out of answers'}
+        looks: {$ref: '#/components/schemas/LookIds'}
+    TimelineCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, maxLength: 80, description: 'trimmed; empty or missing = "Untitled sequence"'}
+        target: {type: object, additionalProperties: false, description: 'any field left out comes from the first take', properties: {width: {$ref: '#/components/schemas/TimelineTarget/properties/width'}, height: {$ref: '#/components/schemas/TimelineTarget/properties/height'}, fps: {$ref: '#/components/schemas/TimelineTarget/properties/fps'}, sample_rate: {$ref: '#/components/schemas/TimelineTarget/properties/sample_rate'}}}
+        take_ids: {type: array, maxItems: 100, items: {type: string, format: uuid}, description: 'clips to start with, in order (the gallery''s multi-selection)'}
+        defaults: {$ref: '#/components/schemas/TimelineDefaults'}
+    TimelineUpdate:
+      type: object
+      required: [revision, target, tracks]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the revision the edit was made on'}
+        target: {$ref: '#/components/schemas/TimelineTarget'}
+        tracks: {$ref: '#/components/schemas/TimelineDoc/properties/tracks'}
+    TimelinePatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
+        defaults: {$ref: '#/components/schemas/TimelineDefaults'}
+    TimelineRevision:
+      type: object
+      required: [revision]
+      additionalProperties: false
+      properties: {revision: {type: integer, minimum: 1, description: 'the current revision, as the editor has it'}}
+    TimelineAddClips:
+      type: object
+      required: [take_ids]
+      additionalProperties: false
+      properties:
+        take_ids: {type: array, minItems: 1, maxItems: 100, items: {type: string, format: uuid}, description: in order}
+        track: {type: string, pattern: '^(V1|A[2-9])$', default: V1}
+    TimelineTake:
+      type: object
+      description: 'a take the document names (a clip''s or an alternative), signed for the editor and the preview'
+      required: [id, kind, source, title, url, thumb_url, width, height, seed, workflow_id, workflow_title]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/TakeKind'}
+        source: {$ref: '#/components/schemas/TakeSource'}
+        title: {type: string, maxLength: 200}
+        url: {$ref: '#/components/schemas/SignedUrl'}
+        thumb_url: {$ref: '#/components/schemas/SignedUrl'}
+        width: {type: [integer, 'null'], minimum: 1}
+        height: {type: [integer, 'null'], minimum: 1}
+        video: {$ref: '#/components/schemas/VideoInfo'}
+        seed: {type: [integer, 'null'], minimum: 0, description: '`made_with.seed` (the board''s "seed 42"); null without one'}
+        workflow_id: {type: [string, 'null'], description: '`made_with.workflow_id`; null for an upload, import, frame or export (no "from this clip", no re-render)'}
+        workflow_title: {type: [string, 'null']}
+    TimelineProblem:
+      type: object
+      required: [code, track, clip, message]
+      properties:
+        code: {type: string, description: 'contracts/README.md, Timeline rules (a code may be added in a minor version)', examples: [dissolve_handles]}
+        track: {type: [string, 'null'], examples: [V1]}
+        clip: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}]}
+        message: {type: string}
+    TimelineError:
+      type: object
+      required: [detail]
+      properties:
+        detail: {type: string, description: '`timeline has <n> problems: <first message>`, or why the body does not fit'}
+        problems: {type: array, items: {$ref: '#/components/schemas/TimelineProblem'}}
+    Timeline:
+      allOf: [{$ref: '#/components/schemas/TimelineNormalized'}]
+      type: object
+      required: [id, name, session_id, revision, defaults, can_undo, can_redo, takes, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 80}
+        session_id: {type: [string, 'null'], format: uuid, description: 'the session its shots run in (follow it with GET …/sessions/{session_id}/events); null after that session was deleted (the next shot makes a new one)'}
+        revision: {type: integer, minimum: 1, description: '1 on create, +1 on every stored change of the document'}
+        defaults: {type: object, required: [cast, looks], properties: {cast: {type: array, items: {type: string, format: uuid}}, looks: {$ref: '#/components/schemas/LookIds'}}}
+        can_undo: {type: boolean}
+        can_redo: {type: boolean}
+        takes: {type: object, propertyNames: {format: uuid}, additionalProperties: {$ref: '#/components/schemas/TimelineTake'}, description: 'every take the document names that is not offline'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    TimelineSummary:
+      type: object
+      required: [id, name, target, revision, duration_s, clips, thumb_url, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        target: {$ref: '#/components/schemas/TimelineTarget'}
+        revision: {type: integer, minimum: 1}
+        duration_s: {type: number, minimum: 0}
+        clips: {type: integer, minimum: 0, description: V1 clips}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first V1 take''s thumbnail; null when none'}
+        updated_at: {type: string, format: date-time}
+    TimelineList:
+      type: object
+      required: [timelines]
+      properties: {timelines: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/TimelineSummary'}}}
+    TimelineSlot:
+      description: 'where a New shot goes: an existing V1 slot (an empty slot is filled; a take''s clip is redone: "from this clip"), or a new empty slot at the V1 cut nearest `at` (the playhead) of `length` seconds'
+      oneOf:
+        - {type: object, required: [clip], additionalProperties: false, properties: {clip: {$ref: '#/components/schemas/TimelineClipId'}}}
+        - {type: object, required: [at, length], additionalProperties: false, properties: {at: {$ref: '#/components/schemas/TimelineSeconds'}, length: {type: number, exclusiveMinimum: 0, maximum: 3600}, id: {$ref: '#/components/schemas/TimelineClipId', description: 'the new slot''s id; absent = studio makes one'}}}
+    TimelineShotCreate:
+      type: object
+      required: [slot, run]
+      additionalProperties: false
+      properties:
+        slot: {$ref: '#/components/schemas/TimelineSlot'}
+        run: {$ref: '#/components/schemas/RunRequest', description: 'as the docked composer sends it: the sequence''s defaults, and the first/last keyframe rows bound to frame takes (POST /v1/studio/takes/{take_id}/frame) when those options are on'}
+    TimelineShot:
+      type: object
+      required: [timeline, run]
+      properties:
+        timeline: {$ref: '#/components/schemas/Timeline'}
+        run: {$ref: '#/components/schemas/Run'}
+    TimelineRerender:
+      type: object
+      required: [revision]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1}
+        clips: {type: array, minItems: 1, maxItems: 22, uniqueItems: true, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'V1 clips to re-render; absent = every V1 clip with a take'}
+        preset: {type: string, minLength: 1, maxLength: 40, description: 'a preset every selected clip''s workflow has in `studio.presets` (for example final); applied over the clip''s own settings; absent = the clip''s own settings and seed'}
+    TimelineRerenderAnswer:
+      type: object
+      required: [timeline, batch]
+      properties:
+        timeline: {$ref: '#/components/schemas/Timeline'}
+        batch: {$ref: '#/components/schemas/Batch'}
+    TimelineExportCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'plan: absent = the current one; export: required (409 when not current)'}
+        host: {type: string, pattern: '^[a-z0-9]{1,32}$', description: 'run it on this host (one of its envs with `media`); absent = automatic'}
+    ExportReason:
+      type: object
+      required: [code, clip, message]
+      properties:
+        code: {type: string, enum: [gap, image, transition, not_probed, container, codec, pixel_format, size, aspect, field_order, frame_rate, trimmed, profile, level, time_base, colour, parameter_sets, offline, empty, no_host], description: 'contracts/README.md, Timeline: export plan (may grow in a minor version)'}
+        clip: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}]}
+        message: {type: string, examples: ['Shot 2 is 704 × 448; the sequence is 1280 × 704']}
+    ExportPlan:
+      type: object
+      required: [revision, stream_copy, reasons, blocked, output, frames, duration_s, estimated_bytes, host, env, hardware]
+      properties:
+        revision: {type: integer, minimum: 1}
+        stream_copy: {type: boolean, description: 'the picture is copied as it is; the sound is always re-encoded'}
+        reasons: {type: array, items: {$ref: '#/components/schemas/ExportReason'}, description: 'why the picture must be re-encoded, per V1 clip in order; empty with stream_copy'}
+        blocked: {type: array, items: {$ref: '#/components/schemas/ExportReason'}, description: 'why it cannot export now (offline clips, empty, no host); empty = it can'}
+        output:
+          type: object
+          required: [width, height, fps, sample_rate, container, video_codec, audio_codec, video_bitrate]
+          properties:
+            width: {type: integer}
+            height: {type: integer}
+            fps: {type: number}
+            sample_rate: {type: integer}
+            container: {type: string, const: mp4}
+            video_codec: {type: string, const: h264}
+            audio_codec: {type: string, const: aac, description: 'AAC-LC 192 kb/s stereo'}
+            video_bitrate: {type: [integer, 'null'], description: 're-encode: bits per second; null for a stream copy'}
+        frames: {type: integer, minimum: 0}
+        duration_s: {type: number, minimum: 0}
+        estimated_bytes: {type: integer, minimum: 0}
+        host: {type: [string, 'null'], description: 'the env that would run it now (automatic choice, or the named host''s); null when none'}
+        env: {type: [string, 'null']}
+        hardware: {type: [boolean, 'null'], description: 'true: VideoToolbox; false: software (libx264); null without a host'}
+    MediaJobKind: {type: string, enum: [export, frame]}
+    MediaJobStatus: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+    MediaJob:
+      type: object
+      required: [id, kind, status, host, env, timeline_id, revision, source_take_id, mode, progress, take_id, failure, created_at, started_at, finished_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/MediaJobKind'}
+        status: {$ref: '#/components/schemas/MediaJobStatus'}
+        host: {type: string}
+        env: {type: string}
+        timeline_id: {type: [string, 'null'], format: uuid, description: 'export: the sequence'}
+        revision: {type: [integer, 'null'], minimum: 1, description: 'export: the revision exported'}
+        source_take_id: {type: [string, 'null'], format: uuid, description: 'frame: the video take'}
+        mode: {type: [string, 'null'], enum: [copy, conform, null], description: 'export: what was planned (copy = picture stream copy); once it ended, what the runner did (copy can fall back to conform)'}
+        reason: {type: [string, 'null'], description: 'export: why the runner fell back to conform (a probe disagreed with the plan); null otherwise'}
+        progress:
+          oneOf:
+            - {type: object, required: [frames, total], properties: {frames: {type: integer, minimum: 0}, total: {type: integer, minimum: 1}}}
+            - {type: 'null'}
+          description: 'export: frames written of the sequence''s frames (a succeeded export: all of them); null before the first progress and for frame jobs'
+        take_id: {type: [string, 'null'], format: uuid, description: 'succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame)'}
+        failure:
+          oneOf:
+            - {type: object, required: [class, detail], properties: {class: {type: string, enum: [input, invalid, ffmpeg, verify, internal]}, detail: {type: string}}}
+            - {type: 'null'}
+        created_at: {type: string, format: date-time}
+        started_at: {type: [string, 'null'], format: date-time}
+        finished_at: {type: [string, 'null'], format: date-time}
+    MediaJobList:
+      type: object
+      required: [jobs]
+      properties: {jobs: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/MediaJob'}}}
+    TakeFrameRequest:
+      type: object
+      required: [at]
+      additionalProperties: false
+      properties:
+        at: {type: string, enum: [first, last]}
+    TakeFrame:
+      type: object
+      description: 'exactly one: `take` (200), or `job` (202) whose `take_id` is the frame take once it succeeded'
+      oneOf:
+        - {required: [take]}
+        - {required: [job]}
+      properties:
+        take: {$ref: '#/components/schemas/Take'}
+        job: {$ref: '#/components/schemas/MediaJob'}
+    TakeFrameOf:
+      type: object
+      required: [take_id, at]
+      properties:
+        take_id: {type: string, format: uuid, description: 'the video take (it may be deleted since)'}
+        at: {type: string, enum: [first, last]}
+    TakeExport:
+      type: object
+      required: [timeline_id, timeline_name, revision, job_id, mode]
+      properties:
+        timeline_id: {type: string, format: uuid, description: 'the sequence (it may be deleted since)'}
+        timeline_name: {type: string, description: 'as it was when exported'}
+        revision: {type: integer, minimum: 1}
+        job_id: {type: string, format: uuid}
+        mode: {type: string, enum: [copy, conform]}
+    WorkflowKeyframes:
+      type: object
+      required: [param, image, seconds, last]
+      description: 'the keyframe rows a New shot binds (contracts/README.md, Timeline: New shot options)'
+      properties:
+        param: {type: string, examples: [keyframes.images]}
+        image: {type: string, description: 'the rows'' Image field', examples: [image]}
+        seconds: {type: string, description: 'the rows'' `position: seconds` field', examples: [seconds]}
+        last: {type: boolean, description: 'it takes 2 rows or more: "End on the next clip''s first frame" is offered'}
 
     # ---------------------------------------------------------- auth_service
     SigninRequest:

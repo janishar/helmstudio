@@ -1730,6 +1730,296 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/timelines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's sequences, newest `updated_at` first (at most 100, not paginated) */
+        get: operations["studioListTimelines"];
+        put?: never;
+        /**
+         * New sequence, optionally with its first clips (target defaults from the first clip)
+         * @description Creates the sequence (revision 1) and its own session (`session_id`: New shot and Re-render runs go there). Missing
+         *     `target` fields come from the first take of `take_ids` (contracts/README.md, Timeline: sequences), else
+         *     1280 × 720, 24 fps, 48000 Hz. `take_ids` are added as `POST …/clips` adds them. 409 at 100 sequences (`You have
+         *     100 sequences; delete some first.`). 422 `take_ids[2]: take <id> not found` (unknown, another user's, deleted
+         *     or a pending upload), `name must be 1-80 characters`.
+         */
+        post: operations["studioCreateTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The sequence at its current revision, normalized, with `takes` (every take it names, signed), offline clips marked and each pending shot's status. */
+        get: operations["studioGetTimeline"];
+        /**
+         * An edit: the whole document at the revision it was made on
+         * @description Every edit is a whole-document write (contracts/README.md, Timeline: edits): `target` and `tracks` as the
+         *     editor computed them (the shared edit functions), with the `revision` they were made on. Studio normalizes it
+         *     (Timeline rules) and stores it as revision + 1; the answer is the normalized sequence. 409 when `revision` is
+         *     not the current one: `timeline changed since you opened it (now revision <n>)` (re-read, then re-apply the
+         *     edit). 422 `TimelineError` when a rule fails (`problems`, the first in `detail`), or `{detail}` for a body that
+         *     does not fit the schema.
+         */
+        put: operations["studioUpdateTimeline"];
+        post?: never;
+        /**
+         * Delete a sequence (soft)
+         * @description Gone from every answer at once; its unfinished exports are cancelled; its runs and batches go on and their takes stay in the gallery. An export take keeps naming it (`Take.export`).
+         */
+        delete: operations["studioDeleteTimeline"];
+        options?: never;
+        head?: never;
+        /** Rename, or set the defaults for new shots (no revision; not undone) */
+        patch: operations["studioPatchTimeline"];
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/clips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "Add to timeline": append takes in order (no revision needed)
+         * @description Applies the `add` edit to the current revision (so a gallery action never holds a revision) and stores revision
+         *     + 1. V1 (default): a video take whole (`in` 0, `out` its length), an image take held 3 s. An audio track
+         *     (`track: A2`…): a video take's sound, whole, at the track's end. 422 `take_ids[2]: take <id> not found`,
+         *     `take_ids[1]: take <id> has no sound` (on an audio track), `take_ids[1]: an image cannot go on an audio track`,
+         *     `unknown track A4`, or a rule (`TimelineError`, e.g. `too_many_clips`).
+         */
+        post: operations["studioAddTimelineClips"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo the latest edit (written forward as a new revision)
+         * @description contracts/README.md, Timeline: revisions. 409 when `revision` is not the current one, or `nothing to undo` (the revision to restore is older than the 100 kept, or there is none).
+         */
+        post: operations["studioUndoTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/redo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redo the latest undo (written forward as a new revision)
+         * @description 409 when `revision` is not the current one, or `nothing to redo` (any edit after an undo clears redo).
+         */
+        post: operations["studioRedoTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/shots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * New shot: a run whose take fills a slot
+         * @description contracts/README.md, Timeline: New shot. `run` is checked and created exactly as `POST
+         *     /v1/studio/sessions/{session_id}/runs` (same 422 texts, same 409 at 100 runs) in the sequence's session; the
+         *     slot gets `shot {run_id}` (an inserted slot first: the `insert` edit) as revision + 1, applied to the current
+         *     revision. The run's first take fills the slot (the `fill` edit, by studio). 409 `clip <id> already has a shot
+         *     running`; 422 `unknown clip <id>`, `clip <id> is not on V1`, `length is required to insert a slot`.
+         */
+        post: operations["studioCreateTimelineShot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/rerender": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-render the sequence or a selection with a preset: one pipeline batch, a step per clip
+         * @description contracts/README.md, Timeline: re-render. 409 stale `revision`, a selected clip with a shot running, or the
+         *     batch limit (`You have 5 unfinished batches; …`). 422 `clip <id> is an empty slot`, `clip <id> is offline`,
+         *     `clip <id>: its take was not made by a workflow`, `clip <id>: workflow <wid> has no preset <p>`, `clip <id>:
+         *     workflow <wid> no longer exists`, `at most 22 clips per re-render`, `clips <a> and <b> start from each other`,
+         *     `unknown clip <id>`.
+         */
+        post: operations["studioRerenderTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/export/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The export plan, shown before exporting (nothing is created)
+         * @description contracts/README.md, Timeline: export. `revision` absent = the current one; one that is not kept (older than the last 100) is 404.
+         */
+        post: operations["studioPlanTimelineExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export the sequence to an MP4 take (a queued media job)
+         * @description Plans the stated revision (it must be the current one: 409 stale), builds the ffmpeg arguments and sends
+         *     `cmd.media.job` (kind `export`) to the chosen runner env (contracts/README.md, Timeline: export). 409 when the
+         *     plan is `blocked` (the first reason's text: `clip <id> is offline`, `the sequence is empty`, `no live host
+         *     can export (ffmpeg)`), `an export of this sequence is already running`, or `revision`. 422 `host <h> cannot
+         *     export` for a named host with no media env.
+         */
+        post: operations["studioExportTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The sequence's exports, newest first (at most 20) */
+        get: operations["studioListTimelineExports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/media-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description An export or frame job of the caller (another user's is 404). The UI polls it every second while it is queued or running. */
+        get: operations["studioGetMediaJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/media-jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a queued or running export or frame job
+         * @description Studio writes KV `cancels` key `<job_id>`; the runner stops ffmpeg (SIGTERM, 10 s, SIGKILL), removes its temp files and reports `cancelled`. If the env's hosts key is gone or older than 60 s, studio marks it `cancelled` itself. 409 `job already ended`. Answers the job as it is now.
+         */
+        post: operations["studioCancelMediaJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/takes/{take_id}/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * An image take of a video take's first or last frame (for keyframes)
+         * @description contracts/README.md, Timeline: frames. Idempotent per (take, `at`): a frame take made before and not deleted is
+         *     answered again. 200 with the take when studio can make it at once (a server-side copy of the poster, or of the
+         *     stored last frame); 202 with a media job (kind `frame`) for a video take made before API 1.17 that has no
+         *     stored last frame (asking again while it runs answers the same job). 404 unknown take; 422 `take <id> is not a
+         *     video`; 409 `no live host can export (ffmpeg)` when a job is needed and no env can run it.
+         */
+        post: operations["studioTakeFrame"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{path}": {
         parameters: {
             query?: never;
@@ -2180,6 +2470,8 @@ export interface components {
             updated_at?: string;
             /** @description only from GET /v1/studio/workflows/{workflow_id}, POST and PUT: the graph rules against the live palette now; empty = it can run */
             problems?: components["schemas"]["Problem"][];
+            /** @description from 1.17, always sent (computed, contracts/README.md Timeline: New shot options): the rows New shot binds a first (and with `last`, a last) frame into; null = the workflow takes none, so neither option is offered */
+            keyframes?: components["schemas"]["WorkflowKeyframes"] | null;
         };
         /**
          * @description what a workflow's takes are; video when an `output` node's `media` is wired from a `Video` output, else image
@@ -3167,10 +3459,10 @@ export interface components {
         /** @enum {string} */
         TakeKind: "image" | "video" | "audio";
         /**
-         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`). timeline comes later
+         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence's export (`export`); frame (from 1.17): a video take's first or last frame (`frame_of`)
          * @enum {string}
          */
-        TakeSource: "create" | "upload" | "pipeline" | "import";
+        TakeSource: "create" | "upload" | "pipeline" | "import" | "export" | "frame";
         /**
          * @description One item of the caller's gallery: a run output or an upload, pointing at an immutable object (its key is never
          *     shown). `title` starts as the first line of the prompt (at most 80 characters; the workflow title when the
@@ -3212,6 +3504,10 @@ export interface components {
             made_with: components["schemas"]["MadeWith"] | null;
             /** @description from 1.16, source import only (absent otherwise): the old settings, read-only */
             legacy?: components["schemas"]["LegacyInfo"];
+            /** @description from 1.17, source frame only: which video take and frame it is (its `parents` = that take) */
+            frame_of?: components["schemas"]["TakeFrameOf"];
+            /** @description from 1.17, source export only: the sequence and revision it is (`made_with` null; `parents` = its clips' takes) */
+            export?: components["schemas"]["TakeExport"];
             /** @description lineage: the takes it was made from, in input order (every image value of `made_with.inputs`, each once); deleted ones left out; empty for a take made from no image */
             parents: string[];
             /** @description only in `GET /v1/studio/takes/{take_id}`: the takes made from this one ("Used in"), newest first, at most 50, deleted ones left out */
@@ -3302,13 +3598,14 @@ export interface components {
         MadeWithPipeline: {
             /**
              * Format: uuid
-             * @description the pipeline (it may be deleted since)
+             * @description the pipeline (it may be deleted since); from 1.17, a sequence's Re-render: the timeline (the snapshot's id; Batch.timeline_id)
              */
             id: string;
             /** @description as in the batch's snapshot */
             title: string;
+            /** @description a Re-render: the revision it was made from */
             version: number;
-            /** @description the step node id that made it */
+            /** @description the step node id that made it (a Re-render: clip_<clip id>) */
             node: string;
             /** @description the step's visit in that row (1 + times a loop brought the row back to it) */
             attempt: number;
@@ -3759,6 +4056,11 @@ export interface components {
             director?: components["schemas"]["BatchDirector"] | null;
             /** @description from 1.15: remote calls so far against the caps; null when the pipeline's remote is off */
             remote?: components["schemas"]["BatchRemote"] | null;
+            /**
+             * Format: uuid
+             * @description from 1.17: a sequence's Re-render (`pipeline_id` null, `pipeline_title` "Re-render · <name>", `pipeline_version` = the revision); absent or null otherwise
+             */
+            timeline_id?: string | null;
         };
         BatchDirector: {
             /** @description the director agent node */
@@ -4863,6 +5165,396 @@ export interface components {
             /** Format: date-time */
             imported_at: string;
         };
+        /** @description the sequence's geometry and rates; the codec is the export's (H.264 + AAC in MP4) */
+        TimelineTarget: {
+            width: number;
+            height: number;
+            /**
+             * @description one of the rate table (exact rates 24000/1001, 30000/1001, 60000/1001 for the NTSC ones)
+             * @enum {number}
+             */
+            fps: 23.976 | 24 | 25 | 29.97 | 30 | 48 | 50 | 59.94 | 60;
+            /** @enum {integer} */
+            sample_rate: 44100 | 48000;
+        };
+        /** @description seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time */
+        TimelineSeconds: number;
+        TimelineDissolve: {
+            /** @constant */
+            type: "dissolve";
+            /** @description centred on the cut: half before it, half after */
+            frames: number;
+        };
+        /** @description a generation filling this slot (made by studio only; a write keeps it or drops it): a New shot's run, or a Re-render batch's step. In answers it adds `status` and, failed, `error` */
+        TimelineShotRef: {
+            /** Format: uuid */
+            run_id?: string;
+            /** Format: uuid */
+            batch_id?: string;
+            /** @description the re-render pipeline's step for this clip */
+            step?: string;
+            /**
+             * @description answers only: the run's, or the batch step's (a cancelled or succeeded one is gone from the document)
+             * @enum {string}
+             */
+            status?: "queued" | "running" | "failed";
+            /** @description answers only, failed: the run's error */
+            error?: string | null;
+        } & (unknown | unknown);
+        /** @description a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document) */
+        TimelineClipId: string;
+        /** @description a slot: a take (video: in/out; image: hold), or an empty slot (`take_id` null, `hold`): black and silence */
+        TimelineClip: {
+            id: components["schemas"]["TimelineClipId"];
+            /** Format: uuid */
+            take_id: string | null;
+            /** @description a video take: the source time it starts at (default 0) */
+            in?: components["schemas"]["TimelineSeconds"];
+            /** @description a video take: the source time it ends at (default its length) */
+            out?: components["schemas"]["TimelineSeconds"];
+            /** @description an image take or an empty slot: its length in seconds */
+            hold?: number;
+            /** @description an audio track: where it starts on the sequence (required there); V1: computed, ignored in a write */
+            at?: components["schemas"]["TimelineSeconds"];
+            /** @default 0 */
+            gain_db?: number;
+            /**
+             * @description V1: the clip's own sound is off
+             * @default false
+             */
+            mute?: boolean;
+            transition_in?: components["schemas"]["TimelineDissolve"];
+            /** @description the takes made for this slot, oldest first; the current `take_id` is among them (studio adds it). Replace picks one */
+            alternatives?: string[];
+            shot?: components["schemas"]["TimelineShotRef"];
+            /** @description answers only, true when the take is deleted or gone: the clip keeps its place and length, plays as offline and blocks an export */
+            offline?: boolean;
+        };
+        /** @enum {string} */
+        TimelineTrackKind: "video" | "audio";
+        TimelineTrack: {
+            /** @description answers only (ignored in a write): V1, then A2…A9 by position (A1 is V1's own sound, drawn under it) */
+            name?: string;
+            kind: components["schemas"]["TimelineTrackKind"];
+            /** @default 0 */
+            gain_db?: number;
+            /** @default false */
+            mute?: boolean;
+            clips: components["schemas"]["TimelineClip"][];
+        };
+        /** @description the editable document: exactly one video track first (V1), then up to 8 audio tracks */
+        TimelineDoc: {
+            target: components["schemas"]["TimelineTarget"];
+            tracks: components["schemas"]["TimelineTrack"][];
+        };
+        /** @description a document as studio stores and answers it: names, V1 `at`, defaults filled, every time snapped */
+        TimelineNormalized: {
+            /** @description `frames` in seconds */
+            duration_s: number;
+            /** @description the sequence's length: V1's end (no V1 clip: the last sound's) */
+            frames: number;
+        } & WithRequired<components["schemas"]["TimelineDoc"], "target" | "tracks">;
+        /** @description what New shot's composer starts with: the cast (elements, offered as mentions and typed into an empty prompt) and the looks (sent as RunRequest.looks) */
+        TimelineDefaults: {
+            /** @description library elements of the caller; one deleted since is left out of answers */
+            cast?: string[];
+            looks?: components["schemas"]["LookIds"];
+        };
+        TimelineCreate: {
+            /** @description trimmed; empty or missing = "Untitled sequence" */
+            name?: string;
+            /** @description any field left out comes from the first take */
+            target?: {
+                width?: components["schemas"]["TimelineTarget"]["width"];
+                height?: components["schemas"]["TimelineTarget"]["height"];
+                fps?: components["schemas"]["TimelineTarget"]["fps"];
+                sample_rate?: components["schemas"]["TimelineTarget"]["sample_rate"];
+            };
+            /** @description clips to start with, in order (the gallery's multi-selection) */
+            take_ids?: string[];
+            defaults?: components["schemas"]["TimelineDefaults"];
+        };
+        TimelineUpdate: {
+            /** @description the revision the edit was made on */
+            revision: number;
+            target: components["schemas"]["TimelineTarget"];
+            tracks: components["schemas"]["TimelineDoc"]["tracks"];
+        };
+        TimelinePatch: {
+            /** @description trimmed; blank = 422 */
+            name?: string;
+            defaults?: components["schemas"]["TimelineDefaults"];
+        };
+        TimelineRevision: {
+            /** @description the current revision, as the editor has it */
+            revision: number;
+        };
+        TimelineAddClips: {
+            /** @description in order */
+            take_ids: string[];
+            /** @default V1 */
+            track?: string;
+        };
+        /** @description a take the document names (a clip's or an alternative), signed for the editor and the preview */
+        TimelineTake: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TakeKind"];
+            source: components["schemas"]["TakeSource"];
+            title: string;
+            url: components["schemas"]["SignedUrl"];
+            thumb_url: components["schemas"]["SignedUrl"];
+            width: number | null;
+            height: number | null;
+            video?: components["schemas"]["VideoInfo"];
+            /** @description `made_with.seed` (the board's "seed 42"); null without one */
+            seed: number | null;
+            /** @description `made_with.workflow_id`; null for an upload, import, frame or export (no "from this clip", no re-render) */
+            workflow_id: string | null;
+            workflow_title: string | null;
+        };
+        TimelineProblem: {
+            /**
+             * @description contracts/README.md, Timeline rules (a code may be added in a minor version)
+             * @example dissolve_handles
+             */
+            code: string;
+            /** @example V1 */
+            track: string | null;
+            clip: components["schemas"]["TimelineClipId"] | null;
+            message: string;
+        };
+        TimelineError: {
+            /** @description `timeline has <n> problems: <first message>`, or why the body does not fit */
+            detail: string;
+            problems?: components["schemas"]["TimelineProblem"][];
+        };
+        Timeline: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /**
+             * Format: uuid
+             * @description the session its shots run in (follow it with GET …/sessions/{session_id}/events); null after that session was deleted (the next shot makes a new one)
+             */
+            session_id: string | null;
+            /** @description 1 on create, +1 on every stored change of the document */
+            revision: number;
+            defaults: {
+                cast: string[];
+                looks: components["schemas"]["LookIds"];
+            };
+            can_undo: boolean;
+            can_redo: boolean;
+            /** @description every take the document names that is not offline */
+            takes: {
+                [key: string]: components["schemas"]["TimelineTake"];
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        } & components["schemas"]["TimelineNormalized"];
+        TimelineSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            target: components["schemas"]["TimelineTarget"];
+            revision: number;
+            duration_s: number;
+            /** @description V1 clips */
+            clips: number;
+            /** @description the first V1 take's thumbnail; null when none */
+            thumb_url: components["schemas"]["SignedUrl"] | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TimelineList: {
+            timelines: components["schemas"]["TimelineSummary"][];
+        };
+        /** @description where a New shot goes: an existing V1 slot (an empty slot is filled; a take's clip is redone: "from this clip"), or a new empty slot at the V1 cut nearest `at` (the playhead) of `length` seconds */
+        TimelineSlot: {
+            clip: components["schemas"]["TimelineClipId"];
+        } | {
+            at: components["schemas"]["TimelineSeconds"];
+            length: number;
+            /** @description the new slot's id; absent = studio makes one */
+            id?: components["schemas"]["TimelineClipId"];
+        };
+        TimelineShotCreate: {
+            slot: components["schemas"]["TimelineSlot"];
+            /** @description as the docked composer sends it: the sequence's defaults, and the first/last keyframe rows bound to frame takes (POST /v1/studio/takes/{take_id}/frame) when those options are on */
+            run: components["schemas"]["RunRequest"];
+        };
+        TimelineShot: {
+            timeline: components["schemas"]["Timeline"];
+            run: components["schemas"]["Run"];
+        };
+        TimelineRerender: {
+            revision: number;
+            /** @description V1 clips to re-render; absent = every V1 clip with a take */
+            clips?: components["schemas"]["TimelineClipId"][];
+            /** @description a preset every selected clip's workflow has in `studio.presets` (for example final); applied over the clip's own settings; absent = the clip's own settings and seed */
+            preset?: string;
+        };
+        TimelineRerenderAnswer: {
+            timeline: components["schemas"]["Timeline"];
+            batch: components["schemas"]["Batch"];
+        };
+        TimelineExportCreate: {
+            /** @description plan: absent = the current one; export: required (409 when not current) */
+            revision?: number;
+            /** @description run it on this host (one of its envs with `media`); absent = automatic */
+            host?: string;
+        };
+        ExportReason: {
+            /**
+             * @description contracts/README.md, Timeline: export plan (may grow in a minor version)
+             * @enum {string}
+             */
+            code: "gap" | "image" | "transition" | "not_probed" | "container" | "codec" | "pixel_format" | "size" | "aspect" | "field_order" | "frame_rate" | "trimmed" | "profile" | "level" | "time_base" | "colour" | "parameter_sets" | "offline" | "empty" | "no_host";
+            clip: components["schemas"]["TimelineClipId"] | null;
+            /** @example Shot 2 is 704 × 448; the sequence is 1280 × 704 */
+            message: string;
+        };
+        ExportPlan: {
+            revision: number;
+            /** @description the picture is copied as it is; the sound is always re-encoded */
+            stream_copy: boolean;
+            /** @description why the picture must be re-encoded, per V1 clip in order; empty with stream_copy */
+            reasons: components["schemas"]["ExportReason"][];
+            /** @description why it cannot export now (offline clips, empty, no host); empty = it can */
+            blocked: components["schemas"]["ExportReason"][];
+            output: {
+                width: number;
+                height: number;
+                fps: number;
+                sample_rate: number;
+                /** @constant */
+                container: "mp4";
+                /** @constant */
+                video_codec: "h264";
+                /**
+                 * @description AAC-LC 192 kb/s stereo
+                 * @constant
+                 */
+                audio_codec: "aac";
+                /** @description re-encode: bits per second; null for a stream copy */
+                video_bitrate: number | null;
+            };
+            frames: number;
+            duration_s: number;
+            estimated_bytes: number;
+            /** @description the env that would run it now (automatic choice, or the named host's); null when none */
+            host: string | null;
+            env: string | null;
+            /** @description true: VideoToolbox; false: software (libx264); null without a host */
+            hardware: boolean | null;
+        };
+        /** @enum {string} */
+        MediaJobKind: "export" | "frame";
+        /** @enum {string} */
+        MediaJobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+        MediaJob: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["MediaJobKind"];
+            status: components["schemas"]["MediaJobStatus"];
+            host: string;
+            env: string;
+            /**
+             * Format: uuid
+             * @description export: the sequence
+             */
+            timeline_id: string | null;
+            /** @description export: the revision exported */
+            revision: number | null;
+            /**
+             * Format: uuid
+             * @description frame: the video take
+             */
+            source_take_id: string | null;
+            /**
+             * @description export: what was planned (copy = picture stream copy); once it ended, what the runner did (copy can fall back to conform)
+             * @enum {string|null}
+             */
+            mode: "copy" | "conform" | null;
+            /** @description export: why the runner fell back to conform (a probe disagreed with the plan); null otherwise */
+            reason?: string | null;
+            /** @description export: frames written of the sequence's frames (a succeeded export: all of them); null before the first progress and for frame jobs */
+            progress: {
+                frames: number;
+                total: number;
+            } | null;
+            /**
+             * Format: uuid
+             * @description succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame)
+             */
+            take_id: string | null;
+            failure: {
+                /** @enum {string} */
+                class: "input" | "invalid" | "ffmpeg" | "verify" | "internal";
+                detail: string;
+            } | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+        };
+        MediaJobList: {
+            jobs: components["schemas"]["MediaJob"][];
+        };
+        TakeFrameRequest: {
+            /** @enum {string} */
+            at: "first" | "last";
+        };
+        /** @description exactly one: `take` (200), or `job` (202) whose `take_id` is the frame take once it succeeded */
+        TakeFrame: {
+            take?: components["schemas"]["Take"];
+            job?: components["schemas"]["MediaJob"];
+        } & (unknown | unknown);
+        TakeFrameOf: {
+            /**
+             * Format: uuid
+             * @description the video take (it may be deleted since)
+             */
+            take_id: string;
+            /** @enum {string} */
+            at: "first" | "last";
+        };
+        TakeExport: {
+            /**
+             * Format: uuid
+             * @description the sequence (it may be deleted since)
+             */
+            timeline_id: string;
+            /** @description as it was when exported */
+            timeline_name: string;
+            revision: number;
+            /** Format: uuid */
+            job_id: string;
+            /** @enum {string} */
+            mode: "copy" | "conform";
+        };
+        /** @description the keyframe rows a New shot binds (contracts/README.md, Timeline: New shot options) */
+        WorkflowKeyframes: {
+            /** @example keyframes.images */
+            param: string;
+            /**
+             * @description the rows' Image field
+             * @example image
+             */
+            image: string;
+            /**
+             * @description the rows' `position: seconds` field
+             * @example seconds
+             */
+            seconds: string;
+            /** @description it takes 2 rows or more: "End on the next clip's first frame" is offered */
+            last: boolean;
+        };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
             email: string;
@@ -5153,6 +5845,15 @@ export interface components {
                 "application/json": components["schemas"]["PipelineError"];
             };
         };
+        /** @description the body does not fit the schema (`{detail}` only), or the document breaks a timeline rule (`problems`: every problem) */
+        TimelineUnprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["TimelineError"];
+            };
+        };
     };
     parameters: {
         /** @description session UUID (malformed = 404) */
@@ -5190,6 +5891,10 @@ export interface components {
         /** @description a provider's name (unknown = 404 on DELETE and test; malformed = 404) */
         ProviderName: string;
         Limit: number;
+        /** @description sequence UUID (malformed = 404) */
+        TimelineId: string;
+        /** @description media job UUID (malformed = 404) */
+        MediaJobId: string;
     };
     requestBodies: never;
     headers: never;
@@ -7792,6 +8497,508 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioListTimelines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the sequences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineCreate"];
+            };
+        };
+        responses: {
+            /** @description the sequence */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the sequence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioUpdateTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineUpdate"];
+            };
+        };
+        responses: {
+            /** @description the sequence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["TimelineUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPatchTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelinePatch"];
+            };
+        };
+        responses: {
+            /** @description the sequence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAddTimelineClips: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineAddClips"];
+            };
+        };
+        responses: {
+            /** @description the sequence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["TimelineUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioUndoTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineRevision"];
+            };
+        };
+        responses: {
+            /** @description the sequence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRedoTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineRevision"];
+            };
+        };
+        responses: {
+            /** @description the sequence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateTimelineShot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineShotCreate"];
+            };
+        };
+        responses: {
+            /** @description the sequence with the placeholder, and the run (queued, or failed at once) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineShot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRerenderTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineRerender"];
+            };
+        };
+        responses: {
+            /** @description the sequence with every selected clip's shot, and the batch */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineRerenderAnswer"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPlanTimelineExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TimelineExportCreate"];
+            };
+        };
+        responses: {
+            /** @description the plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportPlan"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioExportTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineExportCreate"];
+            };
+        };
+        responses: {
+            /** @description the job, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListTimelineExports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the jobs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaJobList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetMediaJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description media job UUID (malformed = 404) */
+                job_id: components["parameters"]["MediaJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCancelMediaJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description media job UUID (malformed = 404) */
+                job_id: components["parameters"]["MediaJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaJob"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioTakeFrame: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeFrameRequest"];
+            };
+        };
+        responses: {
+            /** @description the frame take */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakeFrame"];
+                };
+            };
+            /** @description the job that makes it */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakeFrame"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     filesGetFile: {
         parameters: {
             query?: {
@@ -8291,3 +9498,6 @@ export interface operations {
         };
     };
 }
+type WithRequired<T, K extends keyof T> = T & {
+    [P in K]-?: T[P];
+};

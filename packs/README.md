@@ -25,7 +25,9 @@ The core also provides five nodes in the same grammar (`runner_service/core/node
 workflow uses them or a pack lists them in `publish`: `prompt` (→ `text: Text`), `seed` (→ `seed: Seed`), `canvas`
 (`mode` auto | fixed, `width`, `height` → `canvas: Canvas`), `image` (param `image: image` → `image: Image`),
 `output` (`media: Media` in, an Image or a Video; stores it as the run's next output: a PNG, or an MP4 with its
-poster PNG) and `answer` (`text: Text` in, no outputs: the sink of a text workflow, below).
+poster PNG and, from API 1.17, its last frame as `<n>.last.png` (`video.last`) and ffprobe's stream facts
+(`video.stream`, defs videoStream): a pack's Video value carries `last` (a PIL image) and `stream` for them; the
+fake's come from `packs/echo/mp4.py`, ltx's from `core/media.py` on its MP4) and `answer` (`text: Text` in, no outputs: the sink of a text workflow, below).
 
 ## Weights on disk: presence, downloads, delete (API 1.16)
 

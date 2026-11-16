@@ -1768,6 +1768,37 @@
               "description": "the host_settings `version` applied; null = none (env defaults)"
             }
           }
+        },
+        "media": {
+          "type": "object",
+          "required": [
+            "ffmpeg",
+            "encoders"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.17: this env runs media jobs (cmd.media.<host>.<env>: exports and frames; contracts/README.md, Timeline: media jobs). Present only when the runner found ffmpeg >= 6 with the filters xfade, apad, amix and the encoder aac, and at least one H.264 encoder; absent = it runs none",
+          "properties": {
+            "ffmpeg": {
+              "type": "string",
+              "maxLength": 40,
+              "description": "ffmpeg's version",
+              "examples": [
+                "7.1"
+              ]
+            },
+            "encoders": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "h264_videotoolbox",
+                  "libx264"
+                ]
+              },
+              "description": "the H.264 encoders it will use, preferred first (h264_videotoolbox = hardware)"
+            }
+          }
         }
       },
       "if": {

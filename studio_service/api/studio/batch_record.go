@@ -16,6 +16,9 @@ import (
 // runEnded is called in the transaction that made run terminal: for a batch run it writes evt.studio.run_finished to
 // the outbox (so pipelines learns of it even across a crash) and logs the row and batch as changed.
 func runEnded(ctx context.Context, tx pgx.Tx, run model.Run) error {
+	if err := shotEnded(ctx, tx, run); err != nil { // API 1.17: a cancelled New shot leaves its slot
+		return err
+	}
 	if run.BatchID == nil || run.BatchRow == nil || run.Key == nil {
 		return nil
 	}

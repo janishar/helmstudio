@@ -22,6 +22,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/req.pipelines.providers.test.schema.json` | (API 1.15) NATS request/reply studio → pipelines (not enveloped): test a model provider (only pipelines ever calls one) |
 | `messages/tools.schema.json` | (API 1.15) not a message: every Agent tool's arguments and result, one turn, one executed tool call (Agents: tools) |
 | `messages/cmd.model.job.schema.json`, `evt.model.{status,progress}.schema.json` | (API 1.16) studio → a runner: one model job (download, delete, lora_delete); runner → studio's projector: its lifecycle and download progress (Models and model jobs) |
+| `messages/cmd.media.job.schema.json`, `evt.media.{status,progress}.schema.json` | (API 1.17) studio → a runner: one media job (a sequence's export, a video take's frame) run with ffmpeg outside the GPU loop; runner → studio's projector: its lifecycle and export progress (Timeline: media jobs) |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload the named components now, reply what was freed and what remains (Two envs on one host: the hand-over) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
@@ -36,12 +37,13 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/pipelines.custom.valid.json` | (API 1.15) **canonical** custom-node registry value with the one shipped example `text/prefix` (Custom nodes) |
 | `fixtures/decisions/` | the **shared decision fixtures** (API 1.14): `verdict.json` (a judge answer → `judge_verdict`), `replay.json` (a call → `inputs_hash`); (API 1.15) `agent-turn.json` (a turn's answer, local or native, → `agent_turn`: the calls to run, final, route, or the re-ask error), `agent-schema.json` (a node → the canonical turn schema `turn_schema`). pipelines_service runs them |
 | `fixtures/dispatch/` | the **shared dispatcher fixtures** (Two envs on one host: the hand-over): `admit.*.json` (one admission decision: the host's keys, the run, the other queued runs → `{decision, unload, budget_gb, error}`), `order.*.json` (a simulated queue on one host: plans, runs, batches → `{releases, unloads, loads}`). studio_service's Go tests run them |
+| `fixtures/timelines/` | the **shared timeline fixtures** (API 1.17, Timeline rules, below): `rates.json`, `normalize.json`, `edits.json`, `snap.json`, `frame-at.json`, `plan.json`, `shot-keyframes.json`, `rerender.json`, each `{description, takes?, cases: [{description, …, expect}]}`. studio_service (Go) and the web (TypeScript) both run them |
 | `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, the dispatch fixtures through `admit` / `simulate`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -75,8 +77,10 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s and deletes it on a clean exit; studio reads (older than 30 s = offline). Bucket TTL 1 h: an offline key stays present (and counts, the hand-over) far past any stall; expiry writes no delete marker, so a studio started later would read an expired key as gone |
 | `cmd.model.<host>.<env>` | stream `CMD` (work queue) | `cmd.model.job`, `Nats-Msg-Id <job_id>:1` | studio outbox relay → the runner of that host and env (durable `models-<host>-<env>`, max_ack_pending 1; API 1.16) |
 | `evt.model.<host>.status`, `.progress` | stream `EVT` | `evt.model.status`, `.progress`, `Nats-Msg-Id <job_id>:<delivery>:<seq>` | runner → studio projector (durable `studio-models`, filter `evt.model.>`; API 1.16) |
+| `cmd.media.<host>.<env>` | stream `CMD` (work queue) | `cmd.media.job`, `Nats-Msg-Id <job_id>:1` | studio outbox relay → the runner of that host and env (durable `media-<host>-<env>`, max_ack_pending 1, ack wait 60 s; API 1.17) |
+| `evt.media.<host>.status`, `.progress` | stream `EVT` | `evt.media.status`, `.progress`, `Nats-Msg-Id <job_id>:<delivery>:<seq>` | runner → studio projector (durable `studio-media`, filter `evt.media.>`; API 1.17) |
 | KV `host_settings` key `<host>` | KV | `registry.schema.json` `$defs/settings` | studio writes (every change, and at start); every runner of the host watches it (API 1.16, Hosts admin) |
-| KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step. From API 1.16 also key `<job_id>` for a running download (`…/model-jobs/{job_id}/cancel`) |
+| KV `cancels` key `<run_id>` (no schema) | KV | the request time, RFC 3339 text (ignored) | studio writes on `POST /v1/studio/runs/{run_id}/cancel`; the runner checks the key before it starts and at every step. From API 1.16 also key `<job_id>` for a running download (`…/model-jobs/{job_id}/cancel`); from 1.17 key `<job_id>` of a media job (`…/media-jobs/{job_id}/cancel`) |
 
 Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
 env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`);
@@ -498,7 +502,9 @@ audio track) plus a poster image; uploads stay images.
   `<output_prefix><n>.poster.png` (frame 0 at the video's size, `image/png`), both under the command's `output_prefix`,
   then one `evt.run.output`: `kind: video`, `key` (the MP4), `width`, `height`, `bytes`, `etag` (optional, the MP4's
   md5) and `video {duration_s = frames / fps, fps, frames, has_audio, poster {key, width, height, bytes}}` (required
-  for video, absent for an image). Never bytes or URLs.
+  for video, absent for an image). From 1.17 also `<output_prefix><n>.last.png` (the last frame, `video.last`) and the
+  ffprobe facts of the MP4 (`video.stream`, defs `videoStream`): both optional, used by the timeline (Timeline: frames,
+  export plan). Never bytes or URLs.
 - **Takes.** The projector stores the take `kind: video`, `content_type` from the key (`.mp4` → `video/mp4`),
   `width`, `height`, `bytes`, and the `video` fields with the poster's key and size. `Take.video` /
   `RunOutput.video` (`VideoInfo`: `duration_s`, `fps`, `frames`, `has_audio`, `poster_url`); a video take's
@@ -1952,11 +1958,245 @@ no call, counts the first n).
   GB uploaded; skipped <k> (audio <a>, text <t>, deleted <d>)`, then one line per failed item (`<old id>: <reason>`,
   first 20). `--dry-run` only reads and counts: no network call, nothing written (`--user` is echoed, not resolved): `would import <n> (<i> images, <v> videos), <x.x> GB; <e> lineage edges, <s> starred; skipped <k> (…)`.
 
+## Timeline (API 1.17, M5b; plan 11-timeline section 15; normative)
+
+A **sequence** (`Timeline`) is one owner's edit: `target {width, height, fps, sample_rate}`, `tracks`, `defaults`,
+`revision`, its own `session_id`. Owner-scoped by RLS (another user's id is 404); at most 100 per user; soft delete.
+Storage (studio internal): `timelines(id, owner_id, name, target, tracks jsonb, defaults, revision, session_id,
+deleted_at, …)`, `timeline_revisions(timeline_id, revision, target, tracks, by user|studio, undo_to, redo_to,
+saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot index `(owner, run_id | batch_id+step) →
+(timeline_id, clip id)`.
+
+- **Document.** V1 (`kind: video`) first, then 0–8 audio tracks (names by position: `V1`, `A2`…`A9`; A1 is the board's
+  lane of V1's own sound). A clip is a **slot** `{id, take_id, in, out | hold, at, gain_db, mute, transition_in,
+  alternatives, shot}`: a video take uses `in`/`out` (source seconds), an image take and an **empty slot** (`take_id:
+  null`: black and silence) use `hold`. V1 is laid end to end from 0 (its `at` is computed: a gap is an empty slot);
+  audio-track clips are a video take's sound placed at `at`. One video track only: no compositing in M5b (the board
+  shows V1, A1, A2). Caps: 1000 clips, 500 per track, 32 alternatives per slot, 256 KB as compact JSON, 16 cast + 8
+  looks in `defaults`.
+- **Edits are whole-document writes** (`PUT …/timelines/{id}` with the `revision` they were made on; stale = 409
+  `timeline changed since you opened it (now revision <n>)`). Why not named operations: the old studio's model is a
+  whole document normalized by one function (rules + snapping) on every write, which keeps one validator in Go; the
+  edit maths are pure functions over the document (`t_edit`, shared fixtures) that the web runs to draw the result at
+  once and then sends; a named-op API would duplicate each edit in Go. Server-made changes apply to the current
+  revision without one: `POST …/clips` (Add to timeline), `…/shots`, `…/rerender`, and the projector's fills. Each
+  stored change is revision + 1. On 409 the web re-reads and re-applies its pending edit (edits address clips by
+  `id`, so one whose clip is gone is dropped). Name and defaults change by PATCH, outside revisions.
+- **Revisions, undo, redo.** Every stored document is a revision with `undo_to` / `redo_to`. A user write (PUT, clips,
+  shots, re-render): `undo_to` = the previous revision, `redo_to` = null. `POST …/undo {revision}` writes the document of
+  `undo_to` as a new revision n (`undo_to(n)` = that revision's `undo_to`, `redo_to(n)` = the revision undone);
+  `…/redo` writes the document of `redo_to` (`undo_to` = the current, `redo_to` = that revision's `redo_to`). A studio
+  write (a fill, a cancelled shot dropped) copies the previous revision's `undo_to` and `redo_to`: undo skips over it.
+  Every restore is normalized and then **reconciled**: a slot whose shot already ended is filled (succeeded) or loses
+  its shot (cancelled), so undo never brings back a finished placeholder. `can_undo` / `can_redo` = the pointer is set
+  and still kept (within the 100).
+- **Sequences.** Create: name (empty = `Untitled sequence`), `target` fields left out come from the first take of
+  `take_ids`: its `width` × `height` (each rounded down to even, at least 16), its video `fps` when in the rate table
+  (else 24; an image: 24), 48000 Hz; no take: 1280 × 720, 24, 48000. Add to timeline / the add-clips tray's gallery
+  picker = `POST …/clips {take_ids, track}` in the given order (`add`). A take deleted later stays as an **offline**
+  clip (`offline: true`, its place and length kept, `takes` leaves it out, preview shows it offline, export is blocked);
+  it never breaks the sequence.
+- **Defaults for new shots** (`defaults {cast, looks}`, library items: plan 10): New shot's composer starts with the
+  looks as `RunRequest.looks` and the cast as `@handle` mentions typed into an empty prompt (and first in the mention
+  list). Studio applies nothing itself: the run is what the composer sends.
+
+### New shot (plan 15.3)
+
+- `POST …/shots {slot, run}`: `slot` = `{clip}` (an empty slot: fill it; a take's clip: redo it, "from this clip") or
+  `{at, length, id?}` (the `insert` edit: an empty slot of `length` at the V1 cut nearest the playhead `at`). `run` is a
+  `RunRequest` created in the sequence's session exactly as Create's; the slot gets `shot {run_id}` (revision + 1). 202
+  `{timeline, run}`. Progress: the session's events (the run's), and `shot.status` (queued | running | failed, from
+  the run) on every read.
+- **The result fills the slot** (studio, when the projector stores the run's first take): the `fill` edit (`t_apply`):
+  `take_id` = the new take, appended to `alternatives`, `shot` removed; a video take: `in` 0, `out` = min(its length,
+  the slot's length) (the rest is handle; a shorter take shrinks the slot and V1 ripples); an image: `hold` = the slot's
+  length; a dissolve the new take cannot carry is dropped. A failed run keeps the shot (`status: failed`, `error`: the
+  placeholder shows it; the user retries or removes it); a cancelled one drops it (studio revision). A slot removed
+  meanwhile: nothing (the take is in the gallery, with lineage to its keyframes).
+- **Options, offered only when the workflow has the template for them** (`Workflow.keyframes`, computed with
+  `shot_keyframes`: its one unwired rows param on a known, not bypassed node with one Image field and a `position:
+  seconds` field; `last` when its `max` ≥ 2; null = no option. Echo: `echo-image-to-video`; LTX: `ltx-image-to-video`;
+  text-to-video templates offer none, so the web offers the family's image-to-video template for them):
+  - *Start from the previous clip's last frame*: `POST /v1/studio/takes/{prev take}/frame {at: last}` → an image take,
+    put in row 1 at `seconds` 0.
+  - *End on the next clip's first frame* (`last` only; in a gap the duration snaps to fit: the frames value on the
+    workflow's grid nearest the gap's length, the result trimmed to the slot by `fill`): `…/frame {at: first}` of the
+    next clip's take, as the last row at `seconds` = frames / fps (Video: Keyframes, the last frame).
+  - *From this clip*: `POST /v1/studio/takes/{take}/reuse` prefills the composer; `slot {clip}` redoes it. Offered
+    when the clip's take has `workflow_id` (`TimelineTake`; not an upload, import, frame or export).
+  - Take actions (Extend, Retake, audio to video) need templates no family has yet: none is offered in M5b.
+- **Replace** = a pick among the slot's `alternatives` (the board's "Replace with another take · seed 42 / 44 / 45",
+  seeds from `takes`): the `replace` edit, sent by PUT.
+
+### Frames (POST /v1/studio/takes/{take_id}/frame)
+
+An image take (`source: frame`, `frame_of {take_id, at}`, `parents` = [the video take], title `<title> · first
+frame|last frame`, the video's size) of a video take's first or last frame, idempotent per (take, at). **Studio makes it
+at once** by a server-side object copy to `u/<owner>/frames/<new take id>.png`: `first` = the poster (frame 0), `last`
+= the stored last frame (from 1.17 every runner writes `<output_prefix><index>.last.png` beside the poster and reports
+it as `evt.run.output` `video.last`; exports write `export.last.png`). Why studio and a copy: the runner already has
+both frames as pixels when it writes the MP4, so a keyframe is exact (never re-decoded) and instant, with no queue
+and no ffmpeg in studio. A video take from before 1.17 has no stored last frame: a **media job** `frame` (`index` =
+frames − 1) makes it on a runner (202 `{job}`); the projector stores the take and records it as that video's last
+frame. Pipelines bind frames through `<step>.last_frame` / `.first_frame` sources (re-render).
+
+### Re-render (plan 15.3)
+
+`POST …/rerender {revision, clips?, preset?}` (absent clips = every V1 clip with a take; at most 22: a pipeline holds
+24 nodes) builds one pipeline snapshot and submits it as a batch of one row (`Batch.timeline_id`, `pipeline_id` null,
+`pipeline_title` `Re-render · <name>`, snapshot `id` = the timeline id, `version` = the revision; runs in the sequence's
+session; the batch limits apply). Order and binds are `rerender_steps` (`fixtures/timelines/rerender.json`):
+- inputs node `inputs` with one Text input `timeline` (row 1: the timeline id; nothing reads it), then a chain of steps
+  `clip_<id>` in run order, then output `out` (from the last step, collection = the pipeline title);
+- each step: its take's `made_with.workflow_id`, `seeds` 1, `inputs` = the take's reuse inputs (typed view, the
+  recorded seed as the seed param's value, takes included: a snapshot may hold takes) with the preset's values laid over
+  them, `preset` named for display, `looks` = the take's `made_with.looks` ids;
+- **an edge where a clip starts from another's frame**: a keyframe row whose image is a frame take (`frame_of`) of a
+  take in another selected clip's `alternatives` binds `<param>[<row>]` ← `clip_<other>.last_frame` (or
+  `.first_frame`), which fills that row's Image field and keeps its other fields; that step runs after the other; ties
+  keep timeline order; a cycle is 422 (`rerender_cycle`). pipelines_service sends such a source to `studio.runs.create`
+  as a `frameRef {frame_of: <that step's first take>, at}`; studio resolves it to the frame take (a copy, as above).
+- every selected clip gets `shot {batch_id, step}`; each step's take fills its slot when the projector stores it (a
+  take with that `batch_id` and `made_with.pipeline.node`), becoming the slot's current alternative. Refusals: 422 for an
+  empty slot, an offline clip, a take not made by a workflow, a workflow gone, a preset a workflow lacks; 409 for a
+  clip whose shot is running.
+
+### Export (plan 15.4)
+
+- **Plan** (`POST …/export/plan`; `export_plan`, `fixtures/timelines/plan.json`): from the **stream facts** stored on
+  each take (`evt.run.output` `video.stream`, 1.17: ffprobe's facts of the written file; the fake reports what it
+  writes). `stream_copy` only when every V1 clip is a whole video take (in = 0, out = its length, in frames), probed,
+  container mp4|mov, h264, yuv420p, the target's size, SAR 1:1 or unset, progressive (or unknown), frame rate exactly
+  the target's (num × den cross-multiplied) and the same profile, level, time base, four colour tags and SHA-256 of
+  the codec header data as the first clip. Reasons per clip in V1 order: `gap`, `image`, `transition` (on the clip
+  that starts the dissolve), `not_probed`, `container`, `codec`, `pixel_format`, `size`, `aspect`, `field_order`,
+  `frame_rate`, `trimmed`, `profile`, `level`, `time_base`, `colour`, `parameter_sets`. Gain, mute and audio tracks
+  never stop a copy: **sound is always re-encoded** (the 81 ms AAC lesson: each clip's sound is trimmed to its
+  picture, placed at its exact sample with a silence prefix, mixed with `amix normalize=0`, encoded once). `blocked`:
+  `offline` (per clip), `empty`, `no_host`. `video_bitrate` (conform) = clamp(rnd(w × h × num / den × 0.15), 1 Mb/s, 40
+  Mb/s); `estimated_bytes` = copy: Σ clip take bytes + rnd(192000 × duration / 8), else rnd((bitrate + 192000) ×
+  duration / 8). `host` / `env` / `hardware`: the env that would run it now.
+- **Export** (`POST …/export {revision, host?}` → 202 `MediaJob`): at most one unfinished export per sequence (409).
+  Studio builds the ffmpeg arguments (the one filter graph, ported from the old `internal/timeline` Build/EncodeArgs:
+  conform chain per clip `trim, setpts, scale(in_color_matrix bt601 for untagged), pad, setsar=1, fps, format=yuv420p,
+  settb=AVTB, setparams bt709`; cuts `concat`, dissolves `xfade` centred on the cut; sound as above; `-fflags +bitexact
+  -map_metadata -1 -movflags +faststart`) and sends `cmd.media.job` kind `export` with the object keys, never URLs.
+  A copy plan also carries `expect` (the facts it planned with) and `conform_args`: the runner re-probes the downloads
+  and runs `conform_args` when any fact differs (`mode: conform`, `reason`).
+- **The take** (projector, on `evt.media.status` succeeded, one transaction): kind video, `source: export`, title = the
+  sequence's name, `made_with` null, `export {timeline_id, timeline_name, revision, job_id, mode}` (the export names its
+  timeline and revision here, not in `made_with`, which describes a workflow run: reuse answers 409 as for an upload),
+  `parents` = the distinct takes of its clips in order (V1, then audio tracks), the video fields, poster, last frame
+  and stream facts from `result.video`. Objects `u/<owner>/exports/<job_id>/export.{mp4,poster.png,last.png}`.
+- Delete a sequence: its unfinished exports are cancelled; an export take keeps naming it.
+
+### Media jobs (cmd.media.job; the model-job path, for users)
+
+- **Who runs them**: an env whose hosts key has `media {ffmpeg, encoders}` (the runner found ffmpeg ≥ 6 with `xfade`,
+  `apad`, `amix`, `aac` and an H.264 encoder). Automatic choice: the named `host`'s media envs, else every live one;
+  `h264_videotoolbox` first (the Mac's native envs), then host, env by name; never a `server` env. `{venc}` = the env's
+  first encoder: `-c:v h264_videotoolbox -profile:v high -allow_sw 1 -b:v <video_bitrate>` or `-c:v libx264 -preset
+  medium -profile:v high -b:v <video_bitrate> -maxrate <video_bitrate> -bufsize <2 × video_bitrate>` (software
+  fallback; libx264 is what this repo's runners already use; the old studio's LGPL-only rule is not kept: an owner
+  decision, reported). The Docker fake runner advertises `media` only if its image has ffmpeg.
+- **Never a weight holder**: a media job loads no model and takes no GPU memory or admission; the dispatcher ignores it,
+  the hosts key's `state`, `resident` and the hand-over do not count it, and the Hosts admin never asks it to unload.
+- **The runner** consumes durable `media-<host>-<env>` in a worker apart from runs and model jobs (one at a time), sends
+  `+WIP` every 10 s, publishes `evt.media.status` running (with `encoder`), `evt.media.progress` (`frame=N` of
+  `-progress pipe:1`; at most every 2 s, at least every 30 s), then one terminal status, waits for its ack, then acks.
+  It downloads each input once into a 0700 temp dir (an export of empty slots only has none), writes the concat
+  list (copy; each file with its picture's `duration`, so the next starts where the picture ends, not its sound),
+  substitutes the placeholders, checks the argument allowlist (`invalid`), runs ffmpeg in its own process group, then verifies the output (size, fps
+  and sample rate equal the target; duration within one frame of `frames`: else `verify`), writes the poster (frame at
+  a tenth of the length) and the last frame, uploads them under `output_prefix`, removes the temp dir (on success,
+  failure and cancel). Cancel: KV `cancels` key `<job_id>` (checked before start and every 2 s): SIGTERM to the group,
+  10 s, SIGKILL; `cancelled`. A redelivery starts over. Studio: a job whose env's hosts key is gone or older than 60 s is
+  cancelled by studio; one with no event for 10 minutes fails `internal` (`the runner stopped reporting this job`).
+- Failure classes: `input`, `invalid`, `ffmpeg` (its last error line), `verify`, `internal`.
+
+## Timeline rules (normative)
+
+studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `fill`, plans exports) and the web
+(TypeScript: every edit, snapping, the preview) implement exactly these rules and test against `fixtures/timelines/`;
+`check.py` holds the reference (`t_normalize`, `t_edit` / `t_apply`, `t_cuts`, `snap_point`, `drop_index`, `frame_at`,
+`export_plan`, `shot_keyframes`, `rerender_steps`). Numbers in fixtures compare by value (1 = 1.0).
+
+- **Time** is JSON seconds on the target's exact grid. Rates: 23.976 → 24000/1001, 24, 25, 29.97 → 30000/1001, 30, 48,
+  50, 59.94 → 60000/1001, 60 (the fps matching within 1e-6). `frames(s) = rnd(s × num / den)`, `seconds(f) = f × den /
+  num`, computed in IEEE doubles in exactly that order; `rnd` = round half away from zero, exactly (Go `math.Round`; JS
+  `Math.sign(x) * Math.round(Math.abs(x))`; never JS `Math.round` on a negative half). `snap(s) = seconds(frames(s))`.
+  Audio-track `in` / `out` snap to the sample grid (`rnd(s × sample_rate) / sample_rate`); every other time to frames.
+  Lengths and rules compare integers (frames; samples on audio tracks). Why seconds and not frames: source times live
+  in the take's own time (another rate is allowed), only the grid is the target's.
+- **Normalize** (`t_normalize(document, takes, previous)`): checks, snaps, fills defaults (`in` 0, `out` the take's
+  length, `gain_db` 0, `mute` false, the current take appended to `alternatives`; over 32, the oldest that is not
+  current goes), names tracks, lays V1 (`at` = the sum of the lengths before), sorts audio clips by `at`; writing its
+  result back changes nothing. A V1 clip's length: video `frames(out) − frames(in)`, image and empty slot
+  `frames(hold)`. The sequence's `frames` = V1's end; with no V1 clip, the last sound's end. Problems `[code, track,
+  clip]`, sorted by code, track, clip; any problem = nothing is stored (422 `TimelineError`):
+
+| Code | When |
+|---|---|
+| `too_large` | over 262144 bytes as compact JSON (alone) |
+| `track_layout` | not exactly one video track, first, then audio tracks; more than 8 audio tracks (alone) |
+| `too_many_clips` | more than 1000 clips (alone) |
+| `duplicate_clip` | a clip id twice in the document |
+| `take_not_found` | `take_id` or an alternative is not the caller's, and `previous` did not name it (named before: the clip is `offline`, kept, not trim-checked) |
+| `shot_invalid` | a `shot` that the stored revision's same clip does not have (only studio makes shots) |
+| `out_required` | an offline video clip without `out` |
+| `trim` | V1 video: `frames(in) < 0`, under one frame, or `frames(out)` past `frames(take length)`; audio: `in < 0`, `out ≤ in` or past the take, in samples |
+| `hold_on_video` | a `hold` on a video take |
+| `image_trim` | `in` / `out` on an image or an empty slot |
+| `hold_required` | an image or empty slot on V1 without `hold` |
+| `hold` | a hold under one frame |
+| `wrong_track` | an image or an empty slot on an audio track |
+| `no_audio` | a take without sound on an audio track |
+| `at_required` | an audio-track clip without `at` |
+| `overlap` | an audio clip starting (in samples) before the previous one on its track ends |
+| `past_end` | an audio clip ending after the sequence (with V1 clips) |
+| `dissolve_track` | a `transition_in` on an audio track |
+| `dissolve_first` | on V1's first clip |
+| `dissolve_gap` | this clip or the previous one is an empty slot |
+| `dissolve_handles` | the outgoing video's `frames(out) + d/2` is past its take's length, or the incoming video's `frames(in) − d/2 < 0` (an image has handles without end; an offline clip is not checked) |
+| `dissolve_length` | a clip's in-dissolve d/2 + out-dissolve d/2 is more than its length |
+
+- **Dissolve**: `transition_in {type: dissolve, frames: d}`, d even, 2–240 (schema), centred on the cut: it moves no
+  clip and plays from `cut − d/2` to `cut + d/2`, using d/2 frames of handle past the outgoing clip's `out` and before
+  the incoming clip's `in`.
+- **Edits** (`t_edit`, then normalize against the edited document): `move {clip, index}` (V1: reorder, ripple; drops the
+  dissolve of the moved clip, of the clip after its old place and of the clip after its new place) or `{clip, at,
+  track?}` (audio: a new start, another audio track); `trim {clip, edge: in|out, delta}` (delta in frames: V1 video in
+  ∈ [d_in/2, out − least], out ∈ [in + least, take length − d_out/2], least = max(1, d_in/2 + d_out/2); an image's
+  hold ± delta, ≥ least; V1 ripples; audio: in clamped to [0, out − 1 frame] and `at` moves with it so the end stays,
+  out clamped to [in + 1 frame, take length], no ripple); `split {track, at, id}` (the clip under the playhead `at`,
+  frame p inside it: p = 0 is `split_edge`, none `split_none`, a clip with a shot `split_shot`; video: out = in' = in + p;
+  image and slot: holds p and length − p; audio: at a sample, the right part at `at`; the right part gets `id`, keeps
+  take and alternatives, never the dissolve or the shot); `remove {clip}` (V1 ripples; the next clip's dissolve goes);
+  `lift {clip}` (V1 only, else `lift_track`: an empty slot of its length with the same id); `replace {clip, take_id}`
+  (one of its alternatives, else `not_alternative`: in kept within the new take, length kept within it; an image: hold
+  = the length); `set {clip, gain_db?, mute?, hold?, transition_in?}` (null removes); `add {take_ids, track, ids}` (V1:
+  video whole, image hold 3 s; audio track: whole, at the track's end snapped); `insert {at, hold, id}` (an empty slot
+  at the V1 cut nearest frames(at), a tie: the later cut; the next clip's dissolve goes); `fill {clip, take_id}` (New
+  shot, above); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
+  {track, gain_db?, mute?}`.
+- **Snapping** (`snap_point`): a dragged edge or audio clip start lands on the nearest **cut** (0 and every clip's start
+  and end on every track, the dragged clip's own excluded; a tie: the earlier cut) when it is within 6 screen pixels
+  (`|cut − t| × px_per_s ≤ 6`), else on its frame. Moving a V1 clip reorders by midpoint (`drop_index`: the count of
+  other clips whose midpoint is before the dragged one's, in frames). Interaction constants (the old element): trim
+  handle 7 px, drag starts after 3 px; keys `[` / `]` trim a frame (shift: reverse), Alt+arrows move, Delete removes,
+  Cmd+Z / Shift+Cmd+Z undo / redo, Space plays, arrows step a frame (shift: 1 s).
+- **Preview** (`frame_at(document, f)`): plays each clip's own file against one clock, nothing rendered. At frame f:
+  pictures bottom first `{clip, t (source seconds, null for an image), opacity}` (in a dissolve the incoming opacity =
+  (f − (cut − d/2)) / d), an offline clip `{…, offline: true}`; sounds `{clip, t, gain_db = track gain + clip gain,
+  fade}` for V1 video clips with sound and every audio-track clip, not muted (clip or track), with a dissolve's fades
+  (incoming = its opacity, outgoing = 1 − that). The old preview's bug (V1's track gain left out) is fixed here and the
+  export applies the same gains. Gain above 0 dB needs Web Audio (a GainNode); `<video>.volume` stops at 1.
+
 ## Rules
 
 - **Claim check:** messages carry object keys under `u/<owner_id>/…`, never bytes or signed URLs. Producers only
   write keys under the envelope's `owner_id` prefix; run outputs live under `u/<owner_id>/runs/<run_id>/<attempt>/`
-  (`<index>.<ext>`). `check.py` fails any message fixture with a `u/…` string outside its owner's prefix.
+  (`<index>.<ext>`); from 1.17 exports under `u/<owner_id>/exports/<job_id>/`, frames under `u/<owner_id>/frames/`. `check.py` fails any message fixture with a `u/…` string outside its owner's prefix.
 - **Envelope** is closed (`additionalProperties: false`); `data` is open: consumers ignore fields they don't know.
 - **Versioning:** a message's `version` is the major version of its `data` schema (`const` in the schema).
   Additive, optional fields keep the version. Removing or renaming a field, changing a type or meaning, or making a

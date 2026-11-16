@@ -220,6 +220,19 @@ def run_inputs(plan, state, spec, item: str | None = None) -> tuple[dict | None,
     out = dict(state["inputs"]) if spec.get("row_inputs") else {}
     out |= spec["inputs"]
     for k, src in spec["bind"].items():
+        # API 1.17 Re-render: that row's Image ← a frameRef
+        if src.endswith(("first_frame", "last_frame")):
+            nid, what = src.split(".")
+            ids = (state.get("takes") or {}).get(nid)
+            if not ids:
+                return None, f"nothing from {nid} yet"
+            key, r = k[:-1].split("[")
+            rows = [dict(x) for x in out.get(key) or []]
+            if not 1 <= int(r) <= len(rows):
+                return None, f"{k}: there is no row {r}"
+            rows[int(r) - 1][IMAGE_FIELD] = {"frame_of": ids[0], "at": what.removesuffix("_frame")}
+            out[key] = rows
+            continue
         if src.endswith(".item"):
             if item is None:
                 return None, f"nothing from {src.split('.')[0]} yet"

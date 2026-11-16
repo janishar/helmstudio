@@ -116,8 +116,9 @@ func withPipeline(ctx context.Context, tx pgx.Tx, run model.Run, made gallerydto
 	key, ok := parsePipelineKey(*run.Key)
 	ok = ok && key.Turn < 0
 	var pipeline gallerydto.MadeWithPipeline
-	err := tx.QueryRow(ctx, `SELECT pipeline_id::text, pipeline_title, pipeline_version FROM batches WHERE id = $1
-		AND pipeline_id IS NOT NULL`, *run.BatchID).Scan(&pipeline.ID, &pipeline.Title, &pipeline.Version)
+	// a sequence's Re-render (API 1.17) has no pipeline: its snapshot's id is the timeline's
+	err := tx.QueryRow(ctx, `SELECT coalesce(pipeline_id, timeline_id)::text, pipeline_title, pipeline_version FROM batches
+		WHERE id = $1 AND (pipeline_id IS NOT NULL OR timeline_id IS NOT NULL)`, *run.BatchID).Scan(&pipeline.ID, &pipeline.Title, &pipeline.Version)
 	if errors.Is(err, pgx.ErrNoRows) || !ok {
 		return made, nil
 	} else if err != nil {

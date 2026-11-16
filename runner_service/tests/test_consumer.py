@@ -371,6 +371,30 @@ async def test_a_video_output_stores_the_mp4_and_its_poster_and_reports_the_vide
                             "poster": {"key": PREFIX + "0.poster.png", "width": 64, "height": 32, "bytes": len(png)}}  # fmt: skip
 
 
+async def test_an_echo_video_run_writes_its_last_frame_and_stream_facts():
+    """From 1.17 a video output also writes <n>.last.png before the event and reports video.last and video.stream."""
+    cmd = command()
+    cmd["data"]["workflow"]["nodes"] = {
+        "prompt": {"kind": "prompt", "params": {"text": "hi"}},
+        "canvas": {"kind": "echo/canvas", "params": {"width": 64, "height": 64}},
+        "duration": {"kind": "echo/duration", "params": {"frames": 9, "fps": 24}},
+        "video": {"kind": "echo/video", "params": {"steps": 1, "delay_ms": 0, "fail": False, "refs": []},
+                  "in": {"text": "prompt.text", "canvas": "canvas.canvas", "duration": "duration.duration"}},
+        "output": {"kind": "output", "params": {}, "in": {"media": "video.video"}}}  # fmt: skip
+    js = FakeJS()
+    c = consumer(js)
+    await c.handle(FakeMsg(cmd, js))
+    assert kinds(js)[-1] == "succeeded", js.events()[-1]
+    check_events(js)
+    video = next(e for e in js.events() if e["type"] == "evt.run.output")["data"]["video"]
+    assert list(c.store.objects) == [
+        PREFIX + "0.poster.png",
+        PREFIX + "0.last.png",
+        PREFIX + "0.mp4",
+    ]
+    assert video["last"]["key"] == PREFIX + "0.last.png" and video["stream"]["width"] == 64
+
+
 async def test_runner_unload_frees_everything_when_idle_and_is_busy_during_a_run():
     import main
 

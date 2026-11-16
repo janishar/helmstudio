@@ -1,0 +1,354 @@
+"use client";
+// New shot (plan 15.3, docs/mock/Timeline.dc.html "New shot"): Create's composer docked in the timeline, for one
+// slot: at the playhead (a new empty slot), an empty slot (its gap) or a clip to redo ("from this clip"). It starts
+// with the sequence's defaults (the cast typed into the prompt as mentions, the looks sent as RunRequest.looks) and
+// offers start/end keyframes only when the workflow (or its family's image-to-video template) has them.
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { ErrorNote } from "@/components/kit";
+import { PromptArea } from "@/components/create/prompt";
+import { useLibrary } from "@/lib/library";
+import { api, message, ok, type S } from "@/lib/api";
+import { mediaOf, snapFrames, gridOf } from "@/lib/media";
+import { clipOf } from "@/lib/video";
+import { buildInputs, fields as fieldsOf, rawsFrom, toRaw, type Raw } from "@/lib/workflow";
+import {
+  Grid,
+  kindOf,
+  lenOf,
+  newId,
+  shortTime,
+  type Clip,
+  type Norm,
+  type Takes,
+} from "@/lib/timeline";
+
+type Workflow = S<"Workflow">;
+type Timeline = S<"Timeline">;
+
+/** Where the shot goes: a new slot at the playhead, an empty slot, or a clip redone with its own settings. */
+export type ShotSlot = { at: number } | { clip: string; redo?: boolean };
+
+/** The V1 clips before and after the slot (for its start and end keyframes). */
+function neighbours(
+  doc: Norm,
+  facts: Takes,
+  slot: ShotSlot,
+): { prev?: Clip; next?: Clip; at: number } {
+  const v1 = doc.tracks[0].clips;
+  const g = new Grid(doc.target);
+  if ("clip" in slot) {
+    const i = v1.findIndex((c) => c.id === slot.clip);
+    return { prev: v1[i - 1], next: v1[i + 1], at: v1[i]?.at ?? 0 };
+  }
+  // the V1 cut nearest the playhead (a tie: the later), as studio's insert does
+  const cuts = [0];
+  for (const c of v1) cuts.push(cuts[cuts.length - 1] + lenOf(c, kindOf(c, facts), g));
+  const f = g.f(slot.at);
+  let i = 0;
+  cuts.forEach((c, k) => {
+    if (Math.abs(c - f) <= Math.abs(cuts[i] - f)) i = k;
+  });
+  return { prev: v1[i - 1], next: v1[i], at: g.s(cuts[i]) };
+}
+
+/** An image take of a video take's first or last frame: at once, or by a media job polled until it ends. */
+async function frameTake(takeId: string, at: "first" | "last"): Promise<string> {
+  const r = await ok(
+    api.POST("/v1/studio/takes/{take_id}/frame", {
+      params: { path: { take_id: takeId } },
+      body: { at },
+    }),
+  );
+  if (r.take) return r.take.id;
+  let job = r.job!;
+  while (job.status === "queued" || job.status === "running") {
+    await new Promise((res) => setTimeout(res, 1000));
+    job = await ok(
+      api.GET("/v1/studio/media-jobs/{job_id}", { params: { path: { job_id: job.id } } }),
+    );
+  }
+  if (job.status !== "succeeded" || !job.take_id)
+    throw new Error(job.failure?.detail ?? `Making the ${at} frame ${job.status}.`);
+  return job.take_id;
+}
+
+export function ShotComposer({
+  tl,
+  doc,
+  facts,
+  slot,
+  workflows,
+  onDone,
+  onClose,
+}: {
+  tl: Timeline;
+  doc: Norm;
+  facts: Takes;
+  slot: ShotSlot;
+  workflows: Workflow[];
+  onDone: (t: Timeline) => void;
+  onClose: () => void;
+}) {
+  const video = useMemo(() => workflows.filter((w) => mediaOf(w) === "video"), [workflows]);
+  const g = new Grid(doc.target);
+  const { prev, next, at } = neighbours(doc, facts, slot);
+  const here = "clip" in slot ? doc.tracks[0].clips.find((c) => c.id === slot.clip) : undefined;
+  const fixedLen = here ? g.s(lenOf(here, kindOf(here, facts), g)) : null;
+  const usable = (c?: Clip) =>
+    c?.take_id && !c.offline && !c.shot && tl.takes[c.take_id]?.kind === "video" ? c : undefined;
+  const from = usable(prev);
+  const to = usable(next);
+  const name = (c: Clip) => tl.takes[c.take_id!]?.title ?? "the clip";
+
+  const [workflowId, setWorkflowId] = useState(
+    () => (from || to ? video.find((w) => w.keyframes) : undefined)?.id ?? video[0]?.id ?? "",
+  );
+  const [raws, setRaws] = useState<Record<string, Raw>>({});
+  const [start, setStart] = useState(false);
+  const [end, setEnd] = useState(false);
+  const [frames, setFrames] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const library = useLibrary();
+
+  // "from this clip": the clip's own workflow and settings
+  const redoTake = "clip" in slot && slot.redo ? here?.take_id : null;
+  useEffect(() => {
+    if (!redoTake) return;
+    let stop = false;
+    ok(api.POST("/v1/studio/takes/{take_id}/reuse", { params: { path: { take_id: redoTake } } }))
+      .then((r) => {
+        const w = workflows.find((x) => x.id === r.workflow_id);
+        if (stop) return;
+        if (!w) return setError(`The workflow ${r.workflow_id} is not available any more.`);
+        setWorkflowId(w.id);
+        setRaws(rawsFrom(fieldsOf(w), r.inputs));
+      })
+      .catch((e) => !stop && setError(message(e)));
+    return () => {
+      stop = true;
+    };
+  }, [redoTake, workflows]);
+
+  const workflow = video.find((w) => w.id === workflowId);
+  const fields = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  const promptField = fields.find((f) => f.param.type === "text");
+  const framesField = fields.find((f) => f.param.type === "frames");
+  // the start / end frame options: this workflow's keyframes, else its family's template that has them
+  const kfw = workflow?.keyframes
+    ? workflow
+    : video.find((w) => w.family === workflow?.family && w.source === "template" && w.keyframes);
+  const castText = useMemo(() => {
+    const handles = (library ?? [])
+      .filter((x) => tl.defaults.cast.includes(x.id))
+      .map((x) => `@${x.handle}`);
+    return handles.length ? handles.join(" ") + " " : "";
+  }, [library, tl.defaults.cast]);
+  const prompt = promptField
+    ? String(
+        raws[promptField.key] ??
+          (redoTake ? toRaw(promptField.initial, promptField.param) : castText),
+      )
+    : "";
+
+  const fps = clipOf(fields, raws)?.fps ?? 24;
+  const grid = framesField ? gridOf(framesField.param) : null;
+  const want = fixedLen ?? (frames !== null ? frames / fps : 3);
+  const nFrames = framesField ? snapFrames(framesField.param, want * fps) : null;
+  const choices = grid
+    ? Array.from(
+        { length: Math.floor((grid.max - grid.min) / grid.step) + 1 },
+        (_, i) => grid.min + i * grid.step,
+      ).filter((n) => n / fps <= 20)
+    : [];
+
+  /** Switches to `w`, keeping the prompt typed so far. */
+  function pick(w: Workflow) {
+    if (w.id === workflowId) return;
+    const p = fieldsOf(w).find((f) => f.param.type === "text");
+    setWorkflowId(w.id);
+    setRaws(p && promptField ? { [p.key]: prompt } : {});
+  }
+  const toggle = (which: "start" | "end") => {
+    if (kfw && kfw.id !== workflowId) pick(kfw);
+    (which === "start" ? setStart : setEnd)((v) => !v);
+  };
+
+  async function generate() {
+    if (!workflow) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r: Record<string, Raw> = { ...raws };
+      if (promptField) r[promptField.key] = prompt;
+      if (framesField && nFrames) r[framesField.key] = String(nFrames);
+      const kf = workflow.keyframes;
+      if (kf && (start || end)) {
+        const rows: S<"RowItem">[] = [];
+        if (start && from)
+          rows.push({
+            [kf.image]: { take_id: await frameTake(from.take_id!, "last") },
+            [kf.seconds]: 0,
+          });
+        if (end && to && kf.last && nFrames)
+          rows.push({
+            [kf.image]: { take_id: await frameTake(to.take_id!, "first") },
+            // the clip's last frame (Video: Keyframes: s = F / fps, F the last frame's index)
+            [kf.seconds]: (nFrames - 1) / fps,
+          });
+        r[`${kf.param}`] = rows;
+      }
+      const built = buildInputs(fields, r);
+      const bad = Object.entries(built.errors)[0];
+      if (bad) throw new Error(`${bad[0]}: ${bad[1]}`);
+      const shotSlot: S<"TimelineSlot"> =
+        "clip" in slot
+          ? { clip: slot.clip }
+          : { at: slot.at, length: (nFrames ?? 3 * fps) / fps, id: newId(doc) };
+      const res = await ok(
+        api.POST("/v1/studio/timelines/{timeline_id}/shots", {
+          params: { path: { timeline_id: tl.id } },
+          body: {
+            slot: shotSlot,
+            run: {
+              workflow_id: workflow.id,
+              inputs: built.inputs,
+              ...(tl.defaults.looks.length && { looks: tl.defaults.looks }),
+            },
+          },
+        }),
+      );
+      onDone(res.timeline);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const where =
+    "clip" in slot
+      ? slot.redo
+        ? `redoes this clip · ${fixedLen?.toFixed(1)} s`
+        : `fills the ${fixedLen?.toFixed(1)} s gap`
+      : "a new slot at the playhead";
+  const uses = [tl.defaults.cast.length && "cast", tl.defaults.looks.length && "look"].filter(
+    Boolean,
+  );
+  return (
+    <section
+      aria-label="New shot"
+      className="flex flex-col gap-2.5 rounded-[28px_28px_28px_12px] border border-s5 bg-s2 px-3.5 py-3 shadow-[0_16px_40px_color-mix(in_srgb,var(--shd)_50%,transparent)]"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="m-0 font-display text-sm font-bold tracking-[0.04em] uppercase">New shot</h2>
+        <span className="mono text-[12px] text-t2">
+          at {shortTime(at)} · {where}
+          {uses.length ? ` · uses this sequence's ${uses.join(" and ")}` : ""}
+        </span>
+        <div className="grow" />
+        {kfw && from && (
+          <button
+            type="button"
+            aria-pressed={start}
+            onClick={() => toggle("start")}
+            className="chip bevel rounded-[10px] aria-pressed:outline-2 aria-pressed:outline-a1"
+          >
+            Start from last frame of {name(from)}
+          </button>
+        )}
+        {kfw?.keyframes?.last && to && (
+          <button
+            type="button"
+            aria-pressed={end}
+            onClick={() => toggle("end")}
+            className="chip bevel rounded-[10px] aria-pressed:outline-2 aria-pressed:outline-a1"
+          >
+            End on first frame of {name(to)}
+          </button>
+        )}
+      </div>
+      {promptField && (
+        <>
+          <label htmlFor="shot" className="sr-only">
+            Shot prompt
+          </label>
+          <PromptArea
+            id="shot"
+            rows={1}
+            value={prompt}
+            onChange={(v) => setRaws((r) => ({ ...r, [promptField.key]: v }))}
+            placeholder="What happens in this shot"
+            className="w-full resize-none border-0 bg-transparent text-[15px] leading-[22px] text-t1 outline-0"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void generate();
+            }}
+          />
+        </>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="shot-workflow" className="sr-only">
+          Workflow
+        </label>
+        <select
+          id="shot-workflow"
+          className="chip bevel rounded-[10px] text-t1"
+          value={workflowId}
+          onChange={(e) => {
+            const w = video.find((x) => x.id === e.target.value);
+            if (w) pick(w);
+          }}
+        >
+          {video.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.title}
+            </option>
+          ))}
+        </select>
+        {framesField && nFrames && (
+          <>
+            <label htmlFor="shot-length" className="sr-only">
+              Length
+            </label>
+            <select
+              id="shot-length"
+              className="chip bevel rounded-[10px] text-t1"
+              disabled={fixedLen !== null}
+              value={nFrames}
+              onChange={(e) => setFrames(Number(e.target.value))}
+            >
+              {(choices.includes(nFrames) ? choices : [nFrames, ...choices]).map((n) => (
+                <option key={n} value={n}>
+                  {(n / fps).toFixed(1)} s · {n} frames
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        {tl.session_id && (
+          <Link
+            href={`/?s=${encodeURIComponent(tl.session_id)}`}
+            className="chip bevel rounded-[10px]"
+          >
+            Open in Create
+          </Link>
+        )}
+        <button type="button" className="chip bevel rounded-[10px]" onClick={onClose}>
+          Close
+        </button>
+        <div className="grow" />
+        <button
+          type="button"
+          className="key h-12 rounded-xl px-[22px] text-sm uppercase"
+          disabled={busy || !workflow}
+          onClick={() => void generate()}
+        >
+          {busy ? "Starting…" : "Generate shot"}
+        </button>
+      </div>
+      {!video.length && <p className="m-0 text-[13px] text-t2">No video workflow is installed.</p>}
+      {error && <ErrorNote>{error}</ErrorNote>}
+    </section>
+  );
+}

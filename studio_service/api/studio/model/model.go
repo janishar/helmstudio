@@ -111,6 +111,7 @@ type Batch struct {
 	Reserved        json.RawMessage // API 1.15: [PipelineReserved]
 	Director        json.RawMessage // API 1.15: {node, state, wakes, max_wakes}; null without a director
 	Remote          json.RawMessage // API 1.15: {calls, tokens, network_failures, max_calls, max_tokens}; null when off
+	TimelineID      *string         // API 1.17: a sequence's Re-render
 	Total           int
 	Queued          int
 	Running         int
@@ -129,7 +130,7 @@ const RowShown = `CASE WHEN br.status IN ('succeeded', 'failed', 'cancelled', 'w
 const BatchFrom = `SELECT b.id::text, b.owner_id::text, b.session_id::text, b.title, b.workflow_id, b.workflow_title, b.status,
 	b.control, b.reason, b.commands, b.created_at, b.started_at, b.finished_at, b.pipeline_id::text, b.pipeline_title,
 	b.pipeline_version, b.collection, b.bounds, b.models, b.memory, b.again_of::text, b.same_decisions, b.egress, b.reserved,
-	b.director, b.remote, c.* FROM batches b, LATERAL (
+	b.director, b.remote, b.timeline_id::text, c.* FROM batches b, LATERAL (
 	SELECT count(*)::int, count(*) FILTER (WHERE s = 'queued')::int, count(*) FILTER (WHERE s = 'running')::int,
 	count(*) FILTER (WHERE s = 'waiting')::int, count(*) FILTER (WHERE s = 'succeeded')::int, count(*) FILTER (WHERE s = 'failed')::int,
 	count(*) FILTER (WHERE s = 'cancelled')::int

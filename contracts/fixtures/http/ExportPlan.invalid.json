@@ -1,0 +1,12 @@
+{
+  "revision": 4,
+  "stream_copy": true,
+  "reasons": [
+    {
+      "code": "blurry",
+      "clip": "a",
+      "message": "x"
+    }
+  ],
+  "blocked": []
+}

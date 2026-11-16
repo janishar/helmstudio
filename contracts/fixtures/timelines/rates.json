@@ -1,0 +1,83 @@
+{
+  "description": "frames(s) = round(s × num / den), half away from zero; snapped = frames × den / num (README, Timeline rules: time)",
+  "cases": [
+    {
+      "fps": 24,
+      "seconds": 1.0,
+      "frames": 24,
+      "snapped": 1.0
+    },
+    {
+      "fps": 24,
+      "seconds": 0.020833333333333332,
+      "frames": 1,
+      "snapped": 0.041666666666666664
+    },
+    {
+      "fps": 24,
+      "seconds": -0.020833333333333332,
+      "frames": -1,
+      "snapped": -0.041666666666666664
+    },
+    {
+      "fps": 24,
+      "seconds": 0.03,
+      "frames": 1,
+      "snapped": 0.041666666666666664
+    },
+    {
+      "fps": 24,
+      "seconds": 2.0416666666666665,
+      "frames": 49,
+      "snapped": 2.0416666666666665
+    },
+    {
+      "fps": 23.976,
+      "seconds": 1.0,
+      "frames": 24,
+      "snapped": 1.001
+    },
+    {
+      "fps": 23.976,
+      "seconds": 10.0,
+      "frames": 240,
+      "snapped": 10.01
+    },
+    {
+      "fps": 25,
+      "seconds": 0.02,
+      "frames": 1,
+      "snapped": 0.04
+    },
+    {
+      "fps": 25,
+      "seconds": 0.06,
+      "frames": 2,
+      "snapped": 0.08
+    },
+    {
+      "fps": 25,
+      "seconds": -0.06,
+      "frames": -2,
+      "snapped": -0.08
+    },
+    {
+      "fps": 29.97,
+      "seconds": 10.0,
+      "frames": 300,
+      "snapped": 10.01
+    },
+    {
+      "fps": 59.94,
+      "seconds": 0.5,
+      "frames": 30,
+      "snapped": 0.5005
+    },
+    {
+      "fps": 60,
+      "seconds": 0.5,
+      "frames": 30,
+      "snapped": 0.5
+    }
+  ]
+}

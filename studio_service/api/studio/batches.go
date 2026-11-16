@@ -189,7 +189,7 @@ func batchDTO(row model.Batch) dto.Batch {
 		StartedAt: row.StartedAt, FinishedAt: row.FinishedAt, Counts: dto.BatchCounts{Total: row.Total, Queued: row.Queued,
 			Running: row.Running, Waiting: row.Waiting, Succeeded: row.Succeeded, Failed: row.Failed, Cancelled: row.Cancelled},
 		PipelineID: row.PipelineID, PipelineTitle: row.PipelineTitle, PipelineVersion: row.PipelineVersion,
-		Collection: row.Collection, AgainOf: row.AgainOf}
+		Collection: row.Collection, AgainOf: row.AgainOf, TimelineID: row.TimelineID}
 	_ = json.Unmarshal(row.Bounds, &out.Bounds) // null leaves each out
 	_ = json.Unmarshal(row.Models, &out.Models)
 	if len(row.Memory) > 0 && string(row.Memory) != "null" {
@@ -758,6 +758,12 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE idempotency_key = $1`, req.IdempotencyKey)
 		created := errors.Is(err, errNotFound)
 		if created {
+			if detail, err := s.resolveFrames(ctx, tx, req.OwnerID, req.Inputs); err != nil || detail != "" {
+				if detail != "" {
+					refused = invalid(detail)
+				}
+				return err
+			}
 			graphs, details, _, err := s.runGraphs(ctx, tx, req.OwnerID, workflow, []map[string]any{req.Inputs},
 				[][]string{looks}, &libraryCopy{Elements: batch.Elements, Looks: batch.Looks})
 			if err != nil {

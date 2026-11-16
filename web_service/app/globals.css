@@ -364,6 +364,42 @@
     font-size: 12px;
     color: var(--t2);
   }
+  /* a timeline clip (docs/mock/Timeline .clip) and its trim handles */
+  .tl-clip {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border-radius: 8px;
+    outline: 3px solid var(--s1);
+    outline-offset: -1px;
+    overflow: hidden;
+    text-align: left;
+    font-size: 11px;
+    line-height: 14px;
+    touch-action: none;
+  }
+  .tl-clip:focus-visible {
+    outline-color: var(--a1);
+  }
+  .tl-clip b {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .tl-clip small {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .tl-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 7px;
+    cursor: ew-resize;
+  }
   .dock-item:not([aria-current]) .tile {
     filter: saturate(0.55) brightness(0.8);
   }

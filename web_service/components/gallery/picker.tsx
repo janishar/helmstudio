@@ -1,6 +1,6 @@
 "use client";
 // The gallery picker (plan 9.1: the one way to choose media): the Gallery's grid, search and filters in a dialog,
-// images only, picking up to `max` takes.
+// images only (or every kind: `kind` null), picking up to `max` takes.
 import { useState } from "react";
 import { ErrorNote, Modal } from "@/components/kit";
 import { Chip, TakeCard, useTakePages } from "@/components/gallery/gallery";
@@ -21,15 +21,18 @@ export function GalleryPicker({
   onClose,
   max,
   onPick,
+  kind = "image",
 }: {
   open: boolean;
   onClose: () => void;
   max: number;
   onPick: (takes: Take[]) => void;
+  /** the kind offered; null: images and videos */
+  kind?: S<"TakeKind"> | null;
 }) {
   return (
     <Modal open={open} onClose={onClose} title="Add from gallery" width="w-[min(94vw,880px)]">
-      <Picker max={max} onClose={onClose} onPick={onPick} />
+      <Picker max={max} onClose={onClose} onPick={onPick} kind={kind ?? undefined} />
     </Modal>
   );
 }
@@ -39,12 +42,14 @@ function Picker({
   max,
   onClose,
   onPick,
+  kind,
 }: {
   max: number;
   onClose: () => void;
   onPick: (takes: Take[]) => void;
+  kind?: S<"TakeKind">;
 }) {
-  const [filter, setFilter] = useState<Filter>({ kind: "image" });
+  const [filter, setFilter] = useState<Filter>({ kind });
   const [q, setQ] = useState("");
   const { takes, next, loading, error, fetchPage, sentinel } = useTakePages(
     filter,
@@ -99,7 +104,7 @@ function Picker({
       <div className="min-h-40 overflow-y-auto p-0.5">
         <div
           role="list"
-          aria-label="Images"
+          aria-label={kind === "image" ? "Images" : "Takes"}
           aria-busy={loading}
           className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2.5"
         >
@@ -126,8 +131,8 @@ function Picker({
         {takes?.length === 0 && !error && (
           <p className="py-8 text-center text-t2">
             {q.trim() || filter.starred || filter.source
-              ? "No images match."
-              : "No images yet: upload some, or make some in Create."}
+              ? `No ${kind === "image" ? "images" : "takes"} match.`
+              : `No ${kind === "image" ? "images" : "takes"} yet: upload some, or make some in Create.`}
           </p>
         )}
         <div ref={sentinel} aria-hidden className="h-px" />
