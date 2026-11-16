@@ -63,5 +63,7 @@ def test_fake_host_is_live(api):
         "resident",
         "cached_gb",
         "machine",
+        "device",  # API 1.18
+        "host_ram",
     }
     assert all(set(h) <= allowed for h in hosts)

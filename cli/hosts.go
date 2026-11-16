@@ -18,7 +18,13 @@ type hostEntry struct {
 	State      string  `json:"state"`
 	Memory     *gbPair `json:"memory"`
 	HostMemory *gbPair `json:"host_memory"`
-	Resident   []struct {
+	HostRAM    *gbPair `json:"host_ram"` // cuda only: the second limit
+	Device     *struct {
+		Kind          string  `json:"kind"`
+		Name          string  `json:"name"`
+		MemoryTotalGB float64 `json:"memory_total_gb"`
+	} `json:"device"`
+	Resident []struct {
 		Component string  `json:"component"`
 		Model     string  `json:"model"`
 		Variant   string  `json:"variant"`
@@ -26,13 +32,15 @@ type hostEntry struct {
 		GB        float64 `json:"gb"`
 		Pinned    bool    `json:"pinned"`
 		LastUsed  string  `json:"last_used"`
+		Device    string  `json:"device"` // "cpu": held in host RAM
 		Loras     []struct {
 			Name *string `json:"name"`
 		} `json:"loras"`
 	} `json:"resident"`
 }
 
-// hostsCmd prints each host with its shared budget (host_memory), then its envs and what each holds.
+// hostsCmd prints each host with its shared budget (host_memory: VRAM on a cuda host), its device and, on cuda, host
+// RAM, then its envs and what each holds.
 func hostsCmd(stdout io.Writer) error {
 	c, err := loggedIn()
 	if err != nil {
@@ -48,11 +56,17 @@ func hostsCmd(stdout io.Writer) error {
 	for _, h := range list.Hosts {
 		if h.Host != last {
 			last = h.Host
+			line := h.Host
 			if h.HostMemory != nil {
-				fmt.Fprintf(stdout, "%s  %.1f / %.1f GB\n", h.Host, h.HostMemory.UsedGB, h.HostMemory.BudgetGB)
-			} else {
-				fmt.Fprintln(stdout, h.Host)
+				line += fmt.Sprintf("  %.1f / %.1f GB", h.HostMemory.UsedGB, h.HostMemory.BudgetGB)
 			}
+			if d := h.Device; d != nil {
+				line += fmt.Sprintf("  %s %s %.1f GB", d.Kind, d.Name, d.MemoryTotalGB)
+			}
+			if h.HostRAM != nil {
+				line += fmt.Sprintf("  host RAM %.1f / %.1f GB", h.HostRAM.UsedGB, h.HostRAM.BudgetGB)
+			}
+			fmt.Fprintln(stdout, line)
 		}
 		mem := ""
 		if h.Memory != nil {
@@ -70,6 +84,9 @@ func hostsCmd(stdout io.Writer) error {
 					}
 				}
 				s += "  + " + strings.Join(names, ", ")
+			}
+			if r.Device == "cpu" {
+				s += "  host RAM"
 			}
 			if r.Pinned {
 				s += "  pinned"

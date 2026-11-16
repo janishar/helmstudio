@@ -1,5 +1,5 @@
 """The residency manager (docs/plan/03-runtime.md section 6.2): which model components are loaded, within a memory
-budget of physical RAM minus RUNNER_RESERVE_GB.
+budget of the device's memory (physical RAM; VRAM on CUDA) minus RUNNER_RESERVE_GB.
 
 - An entry is one component keyed by (model id, owning variant, component, precision[, baked LoRAs]): one file
   set at one precision, with LoRAs merged at load (mode bake) its own entry. Adapters live on an entry's module and
@@ -26,14 +26,17 @@ budget of physical RAM minus RUNNER_RESERVE_GB.
 Every method but `state` runs on the GPU thread; `state` (read by the hosts heartbeat) takes the lock."""
 
 import ctypes
+import functools
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
 from core.graph import RunError
 
@@ -61,6 +64,34 @@ def footprint_gb() -> float | None:
     return _RUSAGE[2 + 7] / 2**30
 
 
+def rss_gb() -> float | None:
+    """This process's resident set now (Linux /proc), else its footprint (macOS); None where neither exists."""
+    try:
+        pages = int(Path("/proc/self/statm").read_text().split()[1])
+    except OSError:
+        return footprint_gb()
+    return pages * os.sysconf("SC_PAGE_SIZE") / 2**30
+
+
+@functools.cache
+def _cpu_name() -> str:
+    try:
+        if sys.platform == "darwin":
+            out = subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True,
+                                 timeout=5, check=False).stdout  # fmt: skip
+        else:
+            out = next((ln.split(":", 1)[1] for ln in Path("/proc/cpuinfo").read_text().splitlines()
+                        if ln.startswith("model name")), "")  # fmt: skip
+    except OSError:
+        out = ""
+    return out.strip()[:80] or "cpu"
+
+
+def host_device(kind: str) -> dict:
+    """The hosts key's `device` without a device of its own memory (mps: unified RAM; cpu): the chip, RAM."""
+    return {"kind": kind, "name": _cpu_name(), "memory_total_gb": round(ram_gb(), 1)}
+
+
 class Residency:
     def __init__(
         self,
@@ -71,6 +102,7 @@ class Residency:
         pins: set[str] = frozenset(),
     ) -> None:
         self.budget_gb, self.free, self.measure, self.pins = budget_gb, free, measure, pins
+        self.total_gb: float | None = None  # what budget_gb is cut from (CUDA: VRAM); None = RAM
         self.pin_refs: set[tuple] | None = (
             None  # host_settings pins of this env (ident), replacing `pins`
         )

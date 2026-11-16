@@ -7,7 +7,7 @@ family: qwen-image
 title: Qwen Image 2.1
 publish: [image]   # the core Image source, for graphs built on this pack (no workflow uses it yet)
 runtimes:
-  torch: {env: torch}
+  torch: {env: torch, devices: [mps, cuda]}   # Linux + NVIDIA from M6 (packs/README.md "CUDA")
 model:
   help: Which weights to load and at what precision.
   variant: {label: Variant, help: "Turbo: 8 fixed steps, much faster."}

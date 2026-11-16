@@ -39,6 +39,8 @@ def test_hosts_data_shape(api):
         "resident",
         "cached_gb",
         "machine",
+        "device",  # API 1.18: the device and, cuda only, host RAM
+        "host_ram",
     }
     item = {"component", "model", "variant", "precision", "gb", "pinned"}
     by_host = defaultdict(list)
@@ -46,7 +48,7 @@ def test_hosts_data_shape(api):
         assert set(h) <= allowed, h  # never a run id or an owner
         by_host[h["host"]].append(h)
         for r in h.get("resident", []):
-            assert item <= set(r) <= item | {"last_used", "loras", "pinned_why"}, r
+            assert item <= set(r) <= item | {"last_used", "loras", "pinned_why", "device"}, r
             for lora in r.get("loras", []):
                 if lora["lora_id"] is None:  # another user's own LoRA: only its size
                     assert (lora["name"], lora["strength"]) == (None, None), lora
@@ -61,7 +63,12 @@ def test_hosts_data_shape(api):
         assert budget == pytest.approx(min(e["memory"]["budget_gb"] for e in reporting), abs=0.05)
         # per env the larger of what its entries declare and what it measured (caches count too)
         held = sum(
-            max(sum(r["gb"] for r in e.get("resident", [])), e["memory"]["used_gb"])
+            max(
+                sum(
+                    r["gb"] for r in e.get("resident", []) if r.get("device") != "cpu"
+                ),  # 1.18: host RAM
+                e["memory"]["used_gb"],
+            )
             for e in reporting
         )
         assert used == pytest.approx(held, abs=0.1), (name, used, held)

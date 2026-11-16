@@ -1,6 +1,6 @@
 """KV `host_settings`, key <host> (contracts/README.md "Hosts admin"): the admin's after-run policy, idle unload,
-memory reserve and pins for every env of this host, written only by studio. This runner watches its key and applies
-a new version at once when idle, else right after its run (never mid-run, never a restart); a deleted key brings
+memory reserve and pins for every env of this host, written only by studio. This runner reads its key every POLL
+seconds and applies a new version at once when idle, else right after its run (never mid-run, never a restart); a deleted key brings
 back its env (RUNNER_AFTER_RUN, RUNNER_IDLE_UNLOAD_S, RUNNER_RESERVE_GB, RUNNER_PIN). What is in effect is the hosts
 key's `policy`."""
 
@@ -8,6 +8,8 @@ import asyncio
 import contextlib
 import json
 import logging
+
+from nats.js.errors import NotFoundError
 
 import config
 from config import ENV, HOST
@@ -19,6 +21,7 @@ log = logging.getLogger("settings")
 
 BUCKET = "host_settings"
 RETRY = 60  # seconds between tries to open the bucket
+POLL = 5  # seconds between reads of the key
 
 
 class Settings:
@@ -78,7 +81,7 @@ class Settings:
             c.cache.clear()
         c.idle_unload_s = self.idle_unload_min * 60 if value is not None else config.IDLE_UNLOAD_S
         if res is not None:
-            res.budget_gb, res.pin_refs = ram_gb() - self.reserve_gb, self.pins
+            res.budget_gb, res.pin_refs = (res.total_gb or ram_gb()) - self.reserve_gb, self.pins
             if self.after_run != "keep_warm":  # unload: everything; keep_pinned: what is not pinned
                 await asyncio.get_running_loop().run_in_executor(
                     GPU, res.unload, self.after_run == "keep_pinned"
@@ -87,28 +90,28 @@ class Settings:
         await self.host.put()
 
     async def watch(self, js, stop: asyncio.Event) -> None:
-        """Follow the key until `stop`; a missing bucket is tried again every RETRY seconds."""
+        """Read the key every POLL seconds until `stop` and offer each new revision (a direct get of its own key: a
+        remote host's NATS user may create no consumer on the bucket). A missing bucket is tried again every RETRY
+        seconds."""
+        kv, seen = None, 0  # the revision offered last; 0 = none or deleted
         while not stop.is_set():
             try:
-                kv = await js.key_value(BUCKET)
-                watcher = await kv.watch(HOST)
-            except Exception:  # noqa: BLE001 (no bucket yet: deploy creates it)
+                kv = kv or await js.key_value(BUCKET)
+                try:
+                    entry = await kv.get(HOST)
+                    rev, value = entry.revision, entry.value
+                except NotFoundError:  # absent or deleted
+                    rev, value = 0, None
+            except Exception:  # noqa: BLE001 (no bucket yet: deploy creates it; NATS away)
                 log.warning("bucket %s not available; retrying in %d s", BUCKET, RETRY)
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), RETRY)
-                continue
-            task = asyncio.create_task(self._follow(watcher))
-            await stop.wait()
-            await watcher.stop()
-            task.cancel()
-            return
-
-    async def _follow(self, watcher) -> None:
-        async for entry in watcher:
-            if entry is None:  # the end of the initial values
-                continue
-            deleted = getattr(entry, "operation", None) in ("DEL", "PURGE") or not entry.value
-            try:
-                await self.offer(None if deleted else json.loads(entry.value))
-            except Exception:
-                log.exception("host_settings %s could not be applied", HOST)
+                kv, wait = None, RETRY
+            else:
+                wait = POLL
+                if rev != seen:
+                    seen = rev
+                    try:
+                        await self.offer(json.loads(value) if value else None)
+                    except Exception:
+                        log.exception("host_settings %s could not be applied", HOST)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(stop.wait(), wait)

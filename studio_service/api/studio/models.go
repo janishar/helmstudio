@@ -259,6 +259,15 @@ func (w weights) key(host, env string) (registry.Host, bool) {
 	return w.values[i], true
 }
 
+// writable is a 409 when host.env's models root is bind-mounted read-only (API 1.18: models_disk.writable false; a
+// GPU host that takes no model jobs).
+func (w weights) writable(host, env string) error {
+	if key, ok := w.key(host, env); ok && key.ModelsDisk != nil && key.ModelsDisk.Writable != nil && !*key.ModelsDisk.Writable {
+		return network.NewConflictError("models root on "+host+" is read-only", nil)
+	}
+	return nil
+}
+
 // variantTitle is `<model title> <variant title>`.
 func variantTitle(m registry.Model, v registry.Variant) string {
 	return m.Title + " " + cmp.Or(v.Title, v.ID)
@@ -282,6 +291,9 @@ func (w weights) checkDownload(host, model string, variant *string, accept bool)
 		return download{}, network.NewUnprocessableError(fmt.Sprintf("host %s has no env for %s", host, model), nil)
 	}
 	out := download{env: env, model: m}
+	if err := w.writable(host, env); err != nil {
+		return out, err
+	}
 	switch {
 	case variant == nil && len(m.Variants) == 0:
 		return out, network.NewUnprocessableError(m.Title+" has no download source", nil)
@@ -335,6 +347,9 @@ func (w weights) checkDelete(host, model string, variant *string) (removal, erro
 		return removal{}, network.NewUnprocessableError(fmt.Sprintf("host %s has no env for %s", host, model), nil)
 	}
 	out := removal{env: env, model: m, removed: map[string]bool{}, keeps: []dto.Keep{}, title: m.Title}
+	if err := w.writable(host, env); err != nil {
+		return out, err
+	}
 	on := func(v registry.Variant) bool { return v.Presence != "missing" && v.Presence != "" }
 	if variant != nil {
 		i := slices.IndexFunc(m.Variants, func(v registry.Variant) bool { return v.ID == *variant })

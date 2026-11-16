@@ -147,9 +147,11 @@ type Run struct {
 	Error      *string        `json:"error"`
 	Outputs    []RunOutput    `json:"outputs"`
 	Host       *string        `json:"host"` // while queued: the host it is lined up for
-	Lane       string         `json:"lane"`
-	Attempt    int            `json:"attempt"`
-	Position   *int           `json:"position,omitempty"` // only while queued
+	// API 1.18: attempt 1's host, when it stopped responding and the run was queued again
+	LostHost *string `json:"lost_host,omitempty"`
+	Lane     string  `json:"lane"`
+	Attempt  int     `json:"attempt"`
+	Position *int    `json:"position,omitempty"` // only while queued
 	// only while queued: the pinned entries admitting it on Host now would unload (last-resort victims)
 	UnloadsPinned []PinnedUnload `json:"unloads_pinned,omitempty"`
 	Resolved      map[string]any `json:"resolved,omitempty"` // values the runner chose (a random seed), from succeeded
@@ -202,11 +204,22 @@ type Host struct {
 	UpdatedAt time.Time        `json:"updated_at"`
 	Memory    *registry.Memory `json:"memory,omitempty"`
 	// the host's shared budget and what all its envs hold (the same on each of its envs); nil: no key reports memory
-	HostMemory *registry.Memory    `json:"host_memory,omitempty"`
+	HostMemory *HostMemory         `json:"host_memory,omitempty"`
 	Resident   []registry.Resident `json:"resident,omitempty"`
 	CachedGB   *float64            `json:"cached_gb,omitempty"` // API 1.16
 	Machine    *registry.Machine   `json:"machine,omitempty"`
 	Admin      *HostAdmin          `json:"admin,omitempty"` // admins only
+	// API 1.18: the runner's device, and on cuda the host-RAM limit (API only, not on the board)
+	Device  *registry.Device `json:"device,omitempty"`
+	HostRAM *registry.Memory `json:"host_ram,omitempty"`
+}
+
+// HostMemory is a host's shared budget and what all its envs hold, as admission counts them; kind (API 1.18) says what
+// the numbers measure: unified (mps), vram (cuda) or ram (cpu).
+type HostMemory struct {
+	BudgetGB float64 `json:"budget_gb"`
+	UsedGB   float64 `json:"used_gb"`
+	Kind     string  `json:"kind,omitempty"`
 }
 
 // HostList is every runner, by key.

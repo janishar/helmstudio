@@ -38,6 +38,8 @@ REDACTED = {
     "resident",
     "cached_gb",
     "machine",
+    "device",  # API 1.18: the device and, cuda only, host RAM
+    "host_ram",
 }
 
 

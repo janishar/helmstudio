@@ -73,6 +73,7 @@ def test_run_output_is_a_take(api, anon, echo_done):
         "prompt": "a red fox",
         "seed": None,  # echo has no seed node
         "model": None,
+        "host": "fake",  # API 1.18: the run's host
     }
     for link in (take["url"], take["thumb_url"]):
         r = anon.get(link)

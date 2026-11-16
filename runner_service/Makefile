@@ -1,4 +1,4 @@
-.PHONY: dev test test-torch lint gen image
+.PHONY: dev test test-torch lint gen image image-cuda
 # uv 0.13.8 is required (pyproject [tool.uv] required-version); `uvx --from uv==0.13.8 uv` stands in for an older uv
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')
 
@@ -28,3 +28,7 @@ gen:
 
 image:
 	docker build -t helmstudio/runner:dev .
+
+# the torch runner for Linux + NVIDIA (deploy/gpu-host/): linux/amd64, torch's CUDA 13 wheels from uv.lock (several GB)
+image-cuda:
+	docker build --platform linux/amd64 -f Dockerfile.cuda -t helmstudio/runner-cuda:dev .

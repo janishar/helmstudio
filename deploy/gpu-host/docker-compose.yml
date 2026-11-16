@@ -1,0 +1,45 @@
+# A remote GPU host's runner (contracts/README.md, Hosts with a discrete GPU and A remote GPU host; README.md here has
+# the steps): runner_service as a container with the NVIDIA runtime, host <GPU_HOST>, env torch (Qwen Image on CUDA),
+# device 0. It connects only to the stack's NATS (tls://) and object store (https://), never to Postgres; with the test
+# rig's SSH tunnel both are on this host's loopback, so the container uses host networking. Run from this folder:
+#   docker compose build && docker compose up -d && docker compose ps
+# Weights stay on this host's disk (MODELS_DIR, read-only unless MODELS_MODE=rw), never in the image.
+name: helmstudio-gpu
+
+services:
+  runner:
+    build: {context: ../../runner_service, dockerfile: Dockerfile.cuda}
+    image: helmstudio/runner-cuda:${IMAGE_TAG:-dev}
+    restart: unless-stopped
+    network_mode: host
+    env_file: [.env]                                  # GPU_HOST, MODELS_DIR, S3 endpoint, reserves: .env.example
+    environment:                                      # credentials are files in ./secrets (<VAR>_FILE)
+      RUNNER_HOST: ${GPU_HOST:?set GPU_HOST in .env}
+      RUNNER_ENV: torch
+      NATS_URL_FILE: /run/secrets/nats_runner_${GPU_HOST}_torch_url
+      NATS_CA_FILE: /run/secrets/tls_ca
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_runner_${GPU_HOST}_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_runner_${GPU_HOST}_secret_access_key
+      S3_CA_FILE: /run/secrets/tls_ca
+      RUNNER_HF_TOKEN_FILE: /run/secrets/hf_token    # optional: absent = anonymous downloads
+      HELMSTUDIO_MODELS: /models
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video   # video: NVENC for media jobs
+    volumes:
+      - ./secrets:/run/secrets:ro                     # owned by uid 10001, mode 600 (README step 3)
+      - ${MODELS_DIR:?set MODELS_DIR in .env}:/models:${MODELS_MODE:-ro}
+      # RUNNER_CACHE=/cache (the image's): the LoRA cache, model hashes, download temp files; TMPDIR=/cache/tmp (media
+      # jobs' and the ask stage's temp files). Named, so it outlives a recreated container
+      - runner-cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, device_ids: ["0"], capabilities: [gpu]}]
+    healthcheck:                                      # health.py asks GET /health on HEALTH_PORT: NATS connected
+      test: [CMD, python, health.py]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+volumes:
+  runner-cache:

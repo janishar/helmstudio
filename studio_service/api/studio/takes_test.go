@@ -14,6 +14,7 @@ import (
 // prompt and the model (its id from the host's models); without the registry it keeps the inputs as requested.
 func TestMadeWith(t *testing.T) {
 	workflows := &registry.Registry{}
+	withHosts(workflows, "mac.torch")
 	for _, kind := range []string{"nodes", "workflows", "models"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", "qwen-image."+kind+".valid.json"))
 		if err != nil {

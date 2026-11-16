@@ -118,3 +118,31 @@ describe("Admin › Hosts", () => {
     expect(ago("2026-11-13T10:00:00Z", now)).toBe("2 d ago");
   });
 });
+
+import two from "../../contracts/fixtures/http/HostList.valid.3.json";
+import { deviceLine } from "@/lib/hosts";
+
+describe("two hosts, one with a discrete GPU", () => {
+  const all = two.hosts as S<"Host">[];
+  const [gcp, mac] = hostCards(all);
+  it("lists both hosts by name, the CUDA one with its VRAM budget", () => {
+    expect([gcp.host, mac.host]).toEqual(["gcp", "mac"]);
+    expect([gcp.used_gb, gcp.budget_gb]).toEqual([8.1, 93.6]);
+    expect(machineText(gcp.machine)).toBe("Linux · CUDA · container");
+    expect(deviceLine(gcp)).toBe("NVIDIA RTX PRO 6000 Blackwell Server Edition · 95.6 GB");
+    expect(deviceLine(mac)).toBe("");
+    expect(deviceLine({ machine: { ...gcp.machine!, os: "macos" }, device: undefined })).toBe(
+      "Apple Silicon · 176 GB",
+    );
+  });
+  it("leaves a component held in host RAM out of the memory bar", () => {
+    expect(gcp.entries).toHaveLength(2);
+    expect([gcp.components_gb, gcp.cached_gb]).toEqual([6.8, 1.3]);
+  });
+  it("puts the memory chip on the run's host when the env is on several", () => {
+    expect(hostMemory(all, "torch")!.host).toBe("mac");
+    const m = hostMemory(all, "torch", "gcp")!;
+    expect([m.host, m.used_gb, m.budget_gb, m.envs.length]).toEqual(["gcp", 8.1, 93.6, 1]);
+    expect(hostMemory(all, "torch", "gone")!.host).toBe("mac");
+  });
+});

@@ -3,7 +3,9 @@ env (torch is the optional extra "torch").
 
 A component is built on the meta device by the pack (`build(component, model)`), then filled one tensor at a
 time: on MPS safetensors reads each tensor straight into a GPU buffer (safe_open(device="mps", backend="pread"),
-no CPU copy); elsewhere it goes through safetensors' own device path. Each tensor passes the hook chain
+no CPU copy); on CUDA each tensor is read into one pinned host buffer and copied to the device with non_blocking
+(`staged`: one tensor of host memory at a time, the stated exception to "no CPU copy", checked against the host-RAM
+budget); on the CPU through safetensors. Each tensor passes the hook chain
 rename (the pack's `rename(component, key)`, optional) → cast (floating tensors to the component's dtype) →
 LoRA bake (rows of mode bake: W + s * B @ A in fp32, cast back) → quantize (a Linear matched by the component's `quantize` globs at precision int8 becomes an Int8Linear: int8
 weight, one bf16 scale per output row, quantized on the device as the tensor arrives). The int8 technique is the
@@ -13,16 +15,22 @@ LoRA adapters (LoraLinear, `activate`) wrap plain and int8 Linears of a resident
 with s a tensor, so strength changes and swaps never reload the base."""
 
 import gc
+import json
 import logging
+import re
+import struct
 import time
+from functools import cache
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+import config
 from core import pack as packs
 from core.graph import RunError
-from core.residency import footprint_gb
+from core.residency import footprint_gb, host_device, ram_gb, rss_gb
 
 log = logging.getLogger("loader")
 DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}
@@ -47,31 +55,100 @@ if torch.backends.mps.is_available():
     torch.mps.empty_cache = _safe_empty_cache
 
 
+@cache
 def device() -> str:
-    """mps, cuda or cpu: the first one present."""
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cuda" if torch.cuda.is_available() else "cpu"
+    """mps, cuda or cpu: the first one present, picked once per process; RUNNER_DEVICE forces one of those present."""
+    present = [d for d, ok in (("mps", torch.backends.mps.is_available()),
+                               ("cuda", torch.cuda.is_available()), ("cpu", True)) if ok]  # fmt: skip
+    want = config.DEVICE or present[0]
+    if want not in present:
+        raise ValueError(
+            f"RUNNER_DEVICE={want} is not present here (present: {', '.join(present)})"
+        )
+    return want
 
 
 def free() -> None:
     """Give memory released by dropped modules back to the system (after the residency manager evicts)."""
     gc.collect()
-    if torch.backends.mps.is_available():
+    if device() == "mps":
         torch.mps.empty_cache()  # synchronizes first (above)
-    elif torch.cuda.is_available():
+    elif device() == "cuda":
+        torch.cuda.synchronize()
         torch.cuda.empty_cache()
+        getattr(torch._C, "_host_emptyCache", lambda: None)()  # the pinned staging buffers too
+
+
+@cache
+def context_gb() -> float:
+    """CUDA: the device's used memory just after this process created its context, before any tensor (measured
+    once: main calls it at start)."""
+    free_b, total = torch.cuda.mem_get_info()
+    return (total - free_b) / 2**30
 
 
 def measure_gb() -> float | None:
     """What the process really holds: on MPS its physical footprint (the driver allocation, safetensors' buffers
-    torch's own counter misses, and the CPU side), else the CUDA allocator's reservation."""
-    if torch.backends.mps.is_available():
+    torch's own counter misses, and the CPU side); on CUDA the allocator's reservation + the context; on the CPU
+    its resident set."""
+    if device() == "mps":
         fp = footprint_gb()
         return fp if fp is not None else torch.mps.driver_allocated_memory() / 2**30
-    if torch.cuda.is_available():
-        return torch.cuda.memory_reserved() / 2**30
-    return None
+    if device() == "cuda":
+        return torch.cuda.memory_reserved() / 2**30 + context_gb()
+    return rss_gb()
+
+
+def total_gb() -> float:
+    """The memory the budget is cut from: VRAM on CUDA, else RAM."""
+    return torch.cuda.mem_get_info()[1] / 2**30 if device() == "cuda" else ram_gb()
+
+
+def host_ram() -> dict:
+    """The hosts key's `host_ram` (CUDA: host RAM is the second limit): RAM - RUNNER_RAM_RESERVE_GB, and the RSS."""
+    return {
+        "budget_gb": round(ram_gb() - config.RAM_RESERVE_GB, 1),
+        "used_gb": round(rss_gb() or 0, 1),
+    }
+
+
+@cache
+def _driver() -> str | None:
+    """The NVIDIA driver version (the container runtime mounts /proc/driver/nvidia)."""
+    try:
+        text = Path("/proc/driver/nvidia/version").read_text()
+    except OSError:
+        return None
+    m = re.search(r"Kernel Module(?: for \S+)?\s+(\d+(?:\.\d+)+)", text)
+    return m.group(1)[:40] if m else None
+
+
+def device_info() -> dict:
+    """The hosts key's `device`, measured at each write."""
+    torch_v = f"torch {torch.__version__.split('+')[0]}"
+    if device() != "cuda":
+        return host_device(device()) | {"runtime": f"{torch_v} · {device().upper()}"}
+    free_b, total = torch.cuda.mem_get_info()
+    major, minor = torch.cuda.get_device_capability(0)
+    out = {"kind": "cuda", "name": torch.cuda.get_device_name(0)[:80], "memory_total_gb": round(total / 2**30, 1),
+           "memory_used_gb": round((total - free_b) / 2**30, 1), "capability": f"{major}.{minor}",
+           "runtime": f"{torch_v} · CUDA {torch.version.cuda}"}  # fmt: skip
+    return out | ({"driver": d} if (d := _driver()) else {})
+
+
+def dtype_of(name: str) -> torch.dtype:
+    """A component's dtype here: bf16 loads as fp16 on CUDA below compute capability 8.0 (no native bf16)."""
+    if name == "bf16" and device() == "cuda" and torch.cuda.get_device_capability(0) < (8, 0):
+        name = "fp16"
+    return DTYPES[name]
+
+
+@cache
+def _int8_kernel(device_type: str) -> bool:
+    """Whether torch has its int8 weight-only matmul kernel on this device type (CPU and MPS; CUDA per build)."""
+    return torch._C._dispatch_has_kernel_for_dispatch_key(
+        "aten::_weight_int8pack_mm", device_type.upper()
+    )
 
 
 class Int8Linear(nn.Module):
@@ -99,7 +176,7 @@ class Int8Linear(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         shape = x.shape
         small = x.numel() // self.in_features <= SMALL_BATCH
-        if small and self.kernel and x.dtype == torch.bfloat16:
+        if small and self.kernel and x.dtype == torch.bfloat16 and _int8_kernel(x.device.type):
             out = torch._weight_int8pack_mm(
                 x.reshape(-1, self.in_features), self.qweight, self.scale
             )
@@ -161,31 +238,32 @@ def lora_tensors(model, use, path, shapes: dict, dev: str, dtype: torch.dtype) -
     block = model.pack.spec["lora"]
     block = {"modules": list(shapes), "renames": block.get("renames", []), "ignore": block.get("ignore", [])}  # fmt: skip
     try:
-        tensors, _ = lora.read_header(path, block["ignore"])
+        header, _ = lora.read_header(path, block["ignore"])
     except lora.LoraFileError as e:
         raise RunError(f"LoRA {use.name}: {e}") from e
-    res = lora.normalise(use.name, tensors, block, model.pack.family, shapes)
+    res = lora.normalise(use.name, header, block, model.pack.family, shapes)
     for k in res["unapplied"]:
         log.warning("LoRA %s: %s does not apply to %s", use.name, k, model.pack.family)
     if res["error"]:
         raise RunError(res["error"])
     log.info("LoRA %s (%s keys): %d of %d keys applied, %d ignored", use.name, res["key_style"], res["applied"],
              res["total"], res["ignored"])  # fmt: skip
-    from safetensors import safe_open
-
+    want = {k for g in res["groups"].values() for k in (g["A"], g["B"], g["alpha"]) if k}
+    got = dict(
+        tensors(path, dev, want)
+    )  # straight to the device (CUDA: through the pinned staging buffer)
     out = {}
-    with safe_open(str(path), "pt", device="cpu") as f:
-        for module, g in res["groups"].items():
-            a, b = f.get_tensor(g["A"]), f.get_tensor(g["B"])
-            factor = float(f.get_tensor(g["alpha"]).float().reshape(-1)[0]) / a.shape[0] if g["alpha"] else 1.0  # fmt: skip
-            out[module] = (a.to(dev, dtype), b.to(dev, dtype), factor)
+    for module, g in res["groups"].items():
+        a, b = got[g["A"]], got[g["B"]]
+        factor = float(got[g["alpha"]].float().reshape(-1)[0]) / a.shape[0] if g["alpha"] else 1.0
+        out[module] = (a.to(dtype), b.to(dtype), factor)
     return out
 
 
 def _dtype(m: nn.Module) -> torch.dtype:
-    """The compute dtype of a Linear: its weight's, an Int8Linear's scale dtype (bf16)."""
+    """The compute dtype of a Linear: its weight's; an Int8Linear's is bf16 (fp16 where bf16 is not native)."""
     m = m.base if isinstance(m, LoraLinear) else m
-    return m.scale.dtype if isinstance(m, Int8Linear) else m.weight.dtype
+    return dtype_of("bf16") if isinstance(m, Int8Linear) else m.weight.dtype
 
 
 def _device(m: nn.Module) -> torch.device:
@@ -234,14 +312,65 @@ def activate(model, component: str, module: nn.Module, ctx) -> float:
     return total / 2**30
 
 
-def tensors(path, dev: str):
-    """(key, tensor on `dev`) for each tensor of one safetensors file, one at a time."""
+# safetensors dtype names → torch
+ST_DTYPES = {"F64": torch.float64, "F32": torch.float32, "F16": torch.float16, "BF16": torch.bfloat16,
+             "I64": torch.int64, "I32": torch.int32, "I16": torch.int16, "I8": torch.int8, "U8": torch.uint8,
+             "BOOL": torch.bool, "F8_E4M3": torch.float8_e4m3fn, "F8_E5M2": torch.float8_e5m2}  # fmt: skip
+
+
+def tensors(path, dev: str, keys: set | None = None):
+    """(key, tensor on `dev`) for each tensor of one safetensors file (`keys`: only those), one at a time."""
+    kind = torch.device(dev).type
+    if kind == "cuda":
+        yield from staged(path, dev, keys)
+        return
     from safetensors import safe_open
 
-    kw = {"backend": "pread"} if dev == "mps" else {}
-    with safe_open(str(path), "pt", device=dev, **kw) as f:
+    kw = {"backend": "pread"} if kind == "mps" else {}
+    with safe_open(str(path), "pt", device=kind, **kw) as f:  # one device each: mps, cpu
         for key in f.keys():  # noqa: SIM118 (safe_open has no __iter__)
-            yield key, f.get_tensor(key)
+            if keys is None or key in keys:
+                yield key, f.get_tensor(key)
+
+
+def staged(path, dev: str, keys: set | None = None):
+    """`tensors` on CUDA (plan 6.3): each tensor is read from the file into one host buffer, pinned on CUDA, and
+    copied to the device with non_blocking; the next read waits only for that copy. The buffer grows to the largest
+    tensor read, never a whole file; growing it is checked against the host-RAM budget (RunError with the
+    contract's text). The pinned memory goes back at the next free()."""
+    pin = torch.device(dev).type == "cuda"
+    with open(path, "rb", buffering=0) as f:
+        (n,) = struct.unpack("<Q", f.read(8))
+        header = json.loads(f.read(n))
+        header.pop("__metadata__", None)
+        buf, copied = None, None
+        for key, info in header.items():
+            if keys is not None and key not in keys:
+                continue
+            start, end = info["data_offsets"]
+            size = end - start
+            if copied is not None:
+                copied.synchronize()  # the previous copy has left the buffer
+            if buf is None or buf.numel() < size:
+                buf = None
+                limit = host_ram()["budget_gb"]
+                if (need := (rss_gb() or 0) + size / 2**30) > limit:
+                    raise RunError(f"needs {need:.1f} GB of host RAM at its peak; host {config.HOST} has "
+                                   f"{limit:.1f} GB")  # fmt: skip
+                buf = torch.empty(max(size, 1), dtype=torch.uint8, pin_memory=pin)
+            view = memoryview(buf.numpy())[:size]
+            f.seek(8 + n + start)
+            got = 0
+            while got < size:
+                if not (k := f.readinto(view[got:])):
+                    raise ValueError(f"{Path(path).name}: {key} is cut short")
+                got += k
+            out = torch.empty(size, dtype=torch.uint8, device=dev)
+            out.copy_(buf[:size], non_blocking=pin)
+            if pin:
+                copied = torch.cuda.Event()
+                copied.record()
+            yield key, out.view(ST_DTYPES[info["dtype"]]).reshape(info["shape"])
 
 
 def load(
@@ -347,7 +476,7 @@ def load_component(model, component: str, ctx):
         meta,
         files,
         dev=ctx.device,
-        dtype=DTYPES[spec.get("dtype", "bf16")],
+        dtype=dtype_of(spec.get("dtype", "bf16")),
         quantize=lambda name: packs.quantized(spec, precision, name),
         rename=(lambda key: rename(component, key)) if rename else (lambda key: key),
         bake=bake,

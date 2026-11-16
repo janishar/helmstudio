@@ -1,0 +1,50 @@
+#!/bin/sh
+# The test rig's link to a remote GPU host (contracts/README.md, A remote GPU host: TLS; deploy/gpu-host/README.md):
+# an SSH reverse tunnel opened from this machine puts the dev stack's NATS (127.0.0.1:$NATS_HOST_PORT, default 4322)
+# and S3 https (127.0.0.1:$S3_TLS_HOST_PORT, default 8443; needs STACK_TLS=on) on the GPU host's loopback as
+# 127.0.0.1:4222 and 127.0.0.1:8333. Nothing is published to the internet; no firewall or IAM change. TLS runs end to
+# end inside the tunnel (the runner verifies the stack's cert against tls_ca).
+#   .tools/gpu-host-tunnel start <instance> <zone>   in the background; restarts after a drop (spot preemption, sleep)
+#   .tools/gpu-host-tunnel stop | status
+# GCLOUD_PROJECT=<id> adds --project. Run `gcloud compute ssh <instance> --zone <zone> -- true` once by hand first, so
+# its key and host-key prompts are answered. Pid file and log: deploy/gpu-host/.run/tunnel.{pid,log} (git-ignored).
+set -eu
+run="$(cd "$(dirname "$0")/.." && pwd)/deploy/gpu-host/.run"
+pidf="$run/tunnel.pid" log="$run/tunnel.log"
+
+running() { pid=$(cat "$pidf" 2>/dev/null) && [ -n "$pid" ] && ps -p "$pid" -o command= | grep -q gpu-host-tunnel; }
+
+case "${1:-}" in
+start)
+  [ $# -eq 3 ] || { echo "usage: $0 start <instance> <zone>" >&2; exit 2; }
+  if running; then echo "tunnel already runs ($pid); $0 stop first"; exit 0; fi
+  mkdir -p "$run"
+  nohup "$0" loop "$2" "$3" >"$log" 2>&1 &
+  echo $! >"$pidf"
+  echo "tunnel to $2 ($3) started ($!); log $log"
+  ;;
+loop) # the supervisor: one ssh at a time in its own process group, so stop ends gcloud and its ssh together
+  set -m
+  c=
+  trap '[ -z "$c" ] || { kill -TERM -"$c" 2>/dev/null; wait "$c" 2>/dev/null; }; exit 143' TERM INT
+  while :; do
+    echo "$(date '+%F %T') connecting"
+    gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- -N \
+      -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
+      -R "127.0.0.1:4222:127.0.0.1:${NATS_HOST_PORT:-4322}" \
+      -R "127.0.0.1:8333:127.0.0.1:${S3_TLS_HOST_PORT:-8443}" &
+    c=$!
+    wait "$c" || :
+    echo "$(date '+%F %T') tunnel exited; reconnecting in 10 s"
+    sleep 10
+  done
+  ;;
+stop)
+  if running; then kill "$pid" && echo "stopped tunnel ($pid)"; else echo "tunnel is not running"; fi
+  rm -f "$pidf"
+  ;;
+status)
+  if running; then echo "tunnel runs ($pid)"; tail -n 3 "$log"; else echo "tunnel is not running"; exit 1; fi
+  ;;
+*) echo "usage: $0 start <instance> <zone> | stop | status" >&2; exit 2 ;;
+esac

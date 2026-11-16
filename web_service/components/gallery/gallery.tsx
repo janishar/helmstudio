@@ -694,6 +694,7 @@ function TakePanel({
         <h2 className="heading">{m ? "Made with" : "Uploaded"}</h2>
         {m?.prompt && <p className="m-0 text-[13px] break-words">{m.prompt}</p>}
         {m && <Row label="Template" value={templateLine(m)} />}
+        {m?.host && <Row label="Host" value={m.host} />}
         {!!m?.looks?.length && (
           <Row
             label="Looks"

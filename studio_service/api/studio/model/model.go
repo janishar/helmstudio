@@ -50,12 +50,14 @@ type Run struct {
 	Answer          json.RawMessage // an ask run's defs answer; null otherwise
 	Thumbs          *int            // an ask run: the thumbnails it sends (an image 1, a video 3); nil otherwise
 	PinHost         *string         // a server-ask run: the only host it may go to (its provider's; API 1.15)
+	LostHost        *string         // attempt 1's host after it stopped responding (API 1.18); nil otherwise
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
-	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks, answer, thumbs, pin_host`
+	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks, answer, thumbs, pin_host,
+	lost_host`
 
 // Output is a run_outputs row.
 type Output struct {

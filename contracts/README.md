@@ -36,14 +36,14 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/server.{nodes,workflows}.valid.json` | (API 1.15) **canonical** values pipelines_service's server executor publishes for each host it serves (host `mac` here, env `server`: kind `server/ask`, workflow `server-ask`; Model sources) |
 | `fixtures/registry/pipelines.custom.valid.json` | (API 1.15) **canonical** custom-node registry value with the one shipped example `text/prefix` (Custom nodes) |
 | `fixtures/decisions/` | the **shared decision fixtures** (API 1.14): `verdict.json` (a judge answer → `judge_verdict`), `replay.json` (a call → `inputs_hash`); (API 1.15) `agent-turn.json` (a turn's answer, local or native, → `agent_turn`: the calls to run, final, route, or the re-ask error), `agent-schema.json` (a node → the canonical turn schema `turn_schema`). pipelines_service runs them |
-| `fixtures/dispatch/` | the **shared dispatcher fixtures** (Two envs on one host: the hand-over): `admit.*.json` (one admission decision: the host's keys, the run, the other queued runs → `{decision, unload, budget_gb, error}`), `order.*.json` (a simulated queue on one host: plans, runs, batches → `{releases, unloads, loads}`). studio_service's Go tests run them |
+| `fixtures/dispatch/` | the **shared dispatcher fixtures** (Two envs on one host: the hand-over): `admit.*.json` (one admission decision: the host's keys, the run, the other queued runs → `{decision, unload, budget_gb, error}`), `order.*.json` (a simulated queue on one host: plans, runs, batches → `{releases, unloads, loads}`), (API 1.18) `place.*.json` (several hosts: a run's eligible hosts and the one it is lined up on, or its error; Several hosts). studio_service's Go tests run them |
 | `fixtures/timelines/` | the **shared timeline fixtures** (API 1.17, Timeline rules, below): `rates.json`, `normalize.json`, `edits.json`, `snap.json`, `frame-at.json`, `plan.json`, `shot-keyframes.json`, `rerender.json`, each `{description, takes?, cases: [{description, …, expect}]}`. studio_service (Go) and the web (TypeScript) both run them |
 | `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -73,7 +73,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `cmd.run.<host>.server` | stream `CMD` (work queue) | `cmd.run.execute` of a `server-ask` run | studio outbox relay → pipelines' server executor (durable `runner-<host>-server`; API 1.15) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
 | `runner.unload.<host>.<env>` | core request/reply, no queue group | bare JSON (`req.runner.unload`) | studio's dispatcher → the runner of that host and env (60 s) |
-| KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras`, `.looks` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras`, `looks` | the runner writes its own keys once at start; studio reads |
+| KV `registry` keys `<host>.<env>.nodes`, `.workflows`, `.models`, `.loras`, `.looks` | KV | `registry.schema.json` `$defs/nodes`, `workflows`, `models`, `loras`, `looks` | the runner writes its own keys once at start; studio reads (from 1.18 only while the host has a present hosts key: Several hosts) |
 | KV `hosts` key `<host>.<env>` | KV | `registry.schema.json` `$defs/host` (`run_id` and `attempt` while busy) | the runner rewrites it every 10 s and deletes it on a clean exit; studio reads (older than 30 s = offline). Bucket TTL 1 h: an offline key stays present (and counts, the hand-over) far past any stall; expiry writes no delete marker, so a studio started later would read an expired key as gone |
 | `cmd.model.<host>.<env>` | stream `CMD` (work queue) | `cmd.model.job`, `Nats-Msg-Id <job_id>:1` | studio outbox relay → the runner of that host and env (durable `models-<host>-<env>`, max_ack_pending 1; API 1.16) |
 | `evt.model.<host>.status`, `.progress` | stream `EVT` | `evt.model.status`, `.progress`, `Nats-Msg-Id <job_id>:<delivery>:<seq>` | runner → studio projector (durable `studio-models`, filter `evt.model.>`; API 1.16) |
@@ -85,7 +85,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
 env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`);
 the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subject `cmd.run.mac.mlx`, registry keys
-`mac.mlx.*`, hosts key `mac.mlx`, unload subject `runner.unload.mac.mlx`): two processes, one GPU and one memory budget (Two envs on one host: the hand-over). The envelope `type` is the kind of message, never the subject.
+`mac.mlx.*`, hosts key `mac.mlx`, unload subject `runner.unload.mac.mlx`): two processes, one GPU and one memory budget (Two envs on one host: the hand-over). From API 1.18 a remote GPU host joins the same way (host `gcp`, env `torch`: `cmd.run.gcp.torch`, durable `runner-gcp-torch`, NATS user `runner_gcp_torch`; A remote GPU host), with its own budget (Hosts with a discrete GPU; Several hosts). The envelope `type` is the kind of message, never the subject.
 
 ## How the pieces meet
 
@@ -155,14 +155,15 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   object keys turned into signed URLs (`SessionEvent` in openapi.yaml).
 - **Hosts.** `GET /v1/studio/hosts` shows host, env, `idle` / `busy` / `offline`, `updated_at` and, when the runner
   reports them, `memory` and `resident`; never a run id or an owner. From 1.13 every entry also has `host_memory`
-  (the host's shared budget and what all its envs hold; the hand-over) and each resident component its `last_used`.
+  (the host's shared budget and what all its envs hold; the hand-over) and each resident component its `last_used`;
+  from 1.18 `device`, `host_ram` (cuda) and `host_memory.kind` (Hosts with a discrete GPU).
 
 ## The dispatcher (plan 17.5)
 
 The queue is studio's `runs` table; a dispatcher in studio_service decides what goes out. It runs after every run
 create, terminal status and cancel, and every few seconds.
 
-- **Eligible host** for a run: its hosts key is fresher than 30 s, its env is the workflow's `env`, and its registry
+- **Eligible host** (from API 1.18 with model presence and room, and the line-up among several hosts: Several hosts) for a run: its hosts key is fresher than 30 s, its env is the workflow's `env`, and its registry
   `<host>.<env>.workflows` publishes the workflow id, and its `<host>.<env>.loras` lists every **shared** LoRA of the
   run's resolved graph (own LoRAs are fetched by any host). None at creation, or at any later pass while the run is
   queued: the run fails at once with `no live host for env <env>` (`no live host for env <env> has LoRA <name>` when
@@ -379,6 +380,210 @@ summed and rounded to 0.1: what admission counts) and every
 resident component `last_used`; another user's own LoRA in a baked set stays redacted (`lora_id`, `name`, `strength`
 null, `bytes` kept). The memory chip shows `host_memory` used / total for the host the run will use, and busy when any
 env of it is. The admin Hosts screen adds Hosts admin (API 1.16), below.
+
+## Hosts with a discrete GPU (API 1.18, M6; plan 03-runtime 6.1-6.3, 13-services 17.7; normative)
+
+A GPU host is one machine with one device and its own memory budget. Today: `mac` (Apple silicon, envs `torch` and
+`mlx`, unified memory) and, from M6, a Linux host with one NVIDIA GPU (`gcp` in the test rig, env `torch` only: v1 runs
+Qwen Image on CUDA; LTX and the llm pack stay MLX). Multi-GPU in one host is out of scope: a runner uses device 0.
+
+**The device** is picked once per process: `mps`, then `cuda`, then `cpu` (runner_service `loaders_torch`; MLX is
+`mps`). Every native or container runner publishes it in its hosts key (`registry.schema.json` `$defs/host`):
+- `device {kind: cuda|mps|cpu, name, memory_total_gb, memory_used_gb?, capability?, driver?, runtime?}`: `name` =
+  `torch.cuda.get_device_name(0)` (`NVIDIA L4`) or the Apple chip; `memory_total_gb` = VRAM
+  (`torch.cuda.mem_get_info()[1]`), unified RAM or RAM; cuda only: `memory_used_gb` = the whole device's used memory
+  (total − free, every process: shown to admins, never counted), `capability` (`8.9`), `driver` (`580.95.05`);
+  `runtime` = `torch 2.15.0 · CUDA 13.2`, `torch 2.15.0 · MPS`, `mlx <version>`.
+- `host_ram {budget_gb, used_gb}`, **cuda only**: the second limit (below). Absent on `mps` and `cpu`.
+- `machine` as before (`linux · cuda · container` is the board's `Linux · CUDA · container`).
+- `resident[].device: cpu` (cuda only): a component kept in host RAM (CPU offload); absent = on the device.
+- `models_disk.writable` (absent = true): false when the models root is bind-mounted read-only (below).
+- `media.encoders` may list `h264_nvenc` (Media jobs).
+
+**Budgets per device kind** (gb = GB of 2^30 bytes, as everywhere):
+
+| device | `memory.budget_gb` | `memory.used_gb` (measured at each write) | second limit |
+|---|---|---|---|
+| `mps` | RAM − `reserve_gb` (unified: one budget for every env, as before) | the process's `phys_footprint` | none |
+| `cuda` | VRAM total − `reserve_gb` | `torch.cuda.memory_reserved()` + the CUDA context (the device's used memory measured once, just after the runner created its context and before any tensor) | `host_ram`: budget = RAM − `RUNNER_RAM_RESERVE_GB` (default 4); used = the process's resident set (RSS) |
+| `cpu` | RAM − `reserve_gb` | the process's RSS | none |
+
+`reserve_gb` is the host's setting (Hosts admin; else `RUNNER_RESERVE_GB`): on a cuda host it reserves VRAM (the
+mock's `Linux · CUDA` card: `38.2 of 76 GB`, `reserve 4 GB` on an 80 GB card); the GPU host's env example sets
+`RUNNER_RESERVE_GB=2`. Host RAM has no admin setting in v1 (`RUNNER_RAM_RESERVE_GB` only).
+
+**What admission counts** (The hand-over, per host, unchanged in form):
+- A component's `gb` is its size **in device memory** at its precision, as the host's own runner declares it in its
+  models key and hosts value: each runner plans for its own device, so one variant may plan differently on two hosts
+  (model.yaml may give per-device sizes, `memory.<device>`; runner_service decides; the contract only reads the
+  published numbers). An entry or plan component with `device: cpu` is **not** counted in `memory` at all (not in C,
+  not a victim, not in Σ `gb` for the measured excess); it is in host RAM.
+- A run's planned peak P = the plan item's `peak_gb` (device memory only: the most the run holds on the device at
+  once) + its LoRA files' bytes / 2^30, as before; `budget_gb` in `cmd.run.execute` is device memory, as before.
+- **Host RAM** (cuda): the plan item's `ram_peak_gb` (the most host RAM the run holds: CPU-side components, one
+  tensor's pinned staging per load, the runtime) against R = the smallest `host_ram.budget_gb` among H's present keys.
+  `ram_peak_gb` > R fails at once, after the device check: `needs <x> GB of host RAM at its peak; host <H> has <y> GB`
+  (one decimal; `admit.cuda-host-ram.json`). No victims are taken for host RAM: the runner holds itself to R (before
+  each load: RSS + the next tensor's staging + the stage's CPU-side components; short: it drops its cached node results
+  and CPU-side components the rest of the run does not need, then fails the stage with the same text). Absent
+  `ram_peak_gb` or `host_ram`: not checked.
+
+**The runner on CUDA** (plan 6.3; contract-visible parts): weights load per tensor through one pinned host buffer
+(one tensor of host memory at a time, the stated exception to "no CPU copy"); the int8 path is the MPS one (int8
+weights on the device); a `bf16` component loads as `fp16` when `capability` < 8.0 (its resident entry and plan say
+`fp16`); freeing the device cache (unload requests, after runs) is `torch.cuda.synchronize()` then
+`torch.cuda.empty_cache()`. The models root on Linux is the host folder bind-mounted at `HELMSTUDIO_MODELS` in the
+container: read-only for a host that takes no model jobs (`models_disk.writable: false`: studio answers a download or
+delete for that host 409 `models root on <host> is read-only`), read-write to download there. Weights are never in an
+image.
+
+**Hosts data and the memory chip.** `GET /v1/studio/hosts` adds per entry `device`, `host_ram` and
+`host_memory.kind` (`unified` | `vram` | `ram`, from the keys' `device.kind`; absent from older runners = unified).
+`host_memory` stays what admission counts: on a cuda host, VRAM budget and VRAM used (per key max(Σ `gb` of device
+entries, `used_gb`)). The memory chip shows `host_memory` used / budget for the host the run is lined up on, exactly
+as for the Mac (`8.1 / 93.6 GB` on a 96 GB card with reserve 2); the Hosts board's Memory bar the same (`<used> of
+<budget> GB`, `reserve <n> GB`); `host_ram` is in the API for admins and tests, not on the board (the mock leads).
+
+## Several hosts (API 1.18, M6; extends The dispatcher and The hand-over; normative)
+
+Every rule of The dispatcher and The hand-over holds **per host**: one run at a time per host, B, C, measured excess,
+victims, unload asks (only to envs of that host), the 120 s limit. Nothing one host holds counts on another.
+studio_service implements exactly these rules and runs `fixtures/dispatch/place.*.json`; `check.py` holds the
+reference (`place`). Lanes, round-robin and the bound (N = 4, T = 180 s) are unchanged: a user's last turn is one
+time over all hosts (`dispatch_owners`), skip counts are per run whichever host passed it over.
+
+**Eligibility** of host H for queued run X (replaces The dispatcher's "Eligible host"; each step narrows the hosts by
+name; when none is left the run fails at once with that step's text, at creation or at any pass while queued, held or
+not; Starting up still exempts):
+1. H has a **fresh** hosts key of X's env and `<H>.<env>.workflows` lists X's workflow: `no live host for env <env>`.
+2. **Model**: X's `<family>/model` node's model id has the node's `variant` with `presence: present` and its
+   `precision` in `precisions`, in `<H>.<env>.models`: `no live host for env <env> has model <model> variant <variant>
+   at <precision>`. A workflow without a model node (echo): no check.
+3. **Shared LoRAs**: `<H>.<env>.loras` lists every shared LoRA of the resolved graph. With F = the first host left (by
+   name) and L = the first LoRA (graph order) F lacks: `no live host for env <env> has LoRA <L>` when no host left has
+   L, else `no live host for env <env> has all of its LoRAs (<L> is not on <F>)`.
+4. **Room**: H's admission would not fail X at once (P ≤ B_H; ram_peak ≤ R_H): else the text of the host with the
+   largest B (then name), `needs <P> GB at its peak; host <H> has <B> GB` or the host-RAM text.
+A retried run (`lost_host` set) fails instead with `runner on host <lost_host> stopped responding; no other live host
+for env <env>`. A run's own LoRA deleted since: `LoRA <name> was deleted`, as before. Media capability is not a run's
+concern: media jobs pick hosts by `media` (Media jobs). A host with a released `delete` / `lora_delete` affecting X
+(Model jobs) stays eligible but is not lined up for X while another eligible host exists (else X waits, as before).
+
+**Line-up** (Placement): X's `host` is the first of its eligible hosts by, in order: (1) **free** first (no run
+released to it is unterminated); (2) **resident** first (The hand-over: Resident, on that host); (3) **fits now**
+first (its admission would release X at once: no victims, no wait); (4) **idle longest** (oldest last terminal run on
+it; never ran = first); (5) host name. A retried run drops `lost_host` from its eligible hosts when another remains.
+
+**A pass**: line up every queued run; walk the free hosts by name; on each, the Order (The hand-over) picks among the
+runs lined up there and admission decides (release, unload asks, wait or fail); after a release, line up again (that
+host is busy now) and walk again, until a walk releases nothing. A run waiting on H (Admission 5) keeps H only while it
+stays lined up there; a later pass may line it up on a host that became free and fits (asks already sent are
+harmless). `Run.position` is counted on the run's lined-up host.
+
+**Recording**: `runs.host` is written at each release (attempt 2 may differ); `Run.lost_host` = attempt 1's host
+after a host loss (absent or null otherwise); every take of a run records `made_with.host` = the run's host at the
+attempt that stored it (the projector, in the take's transaction). `Run.host` stays visible to the owner; admins see
+each host's current run (`HostAdmin.run`).
+
+**Host loss** (spot preemption: the VM and its disk go without a clean exit):
+- **Runs**: the lease is as before (key fresher than 30 s, its `(run_id, attempt)` from 30 s after the release). First
+  loss: purge `cmd.run.<H>.<env>`, attempt 2, `queued`, the `queued` event with `attempt: 2`, and `lost_host = H`; the
+  next pass lines it up on another eligible host; when H is the only eligible host (fresh again: a blip) it runs there
+  again; when none is eligible it fails `runner on host <H> stopped responding; no other live host for env <env>`.
+  Attempt 1's outputs are dropped as before. Second loss: `runner on host <host> stopped responding; gave up after 2
+  attempts` (the host of attempt 2). Queued runs lined up on H go to other hosts at the next pass, or fail `no live
+  host …` when none is left.
+- **Model jobs**: a released job whose env's hosts key is gone or older than 60 s **and** that was not heard from (its
+  last `evt.model.*`, else its release) for 60 s fails at the next pass, class `host_lost`, `host <H> stopped
+  responding`, and `cmd.model.<H>.<env>` is purged; files already landed stay (the variant shows `partial` when the host
+  returns; a new POST resumes). A runner restarted cleanly deletes its key but reports again within seconds and finishes
+  the redelivered command: no loss. A queued job for H waits for H (it is that disk's job); an admin may cancel it.
+- **Media jobs**: a job not yet terminal whose env's hosts key is gone or older than 60 s and that was not heard from
+  for 60 s fails `host_lost` (`host <H> stopped responding`; this replaces "cancelled by studio" for that case), its
+  command is purged and its id written to KV cancels; exporting again picks among the live media envs.
+- **Keys**: a preempted runner deletes nothing: its hosts key is offline after 30 s and expires after 1 h (bucket TTL);
+  until then its entries count only for H. Registry keys have no TTL: from 1.18 studio reads a host's registry keys
+  (workflows, models, loras, looks, nodes) only while the host has a **present** hosts key, so they lapse with it; a
+  runner that comes back rewrites them at start. A new VM starts with an empty disk: its variants are `missing` until
+  downloaded.
+
+**Fixtures** (`place.*.json`): `{description, hosts: {<name>: {keys (as admit fixtures, plus `ram_budget_gb`),
+workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), loras: {env: [shared
+LoRA names]}, free, idle_since}}, run: {env, workflow, model?, variant?, precision?, loras (shared, graph order),
+peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?}, expect: {host, eligible, error}}`; `eligible` is after the
+`lost_host` rule, by name. Cases: resident-first, fits-first, idle-longest, name-order, free-first, variant-missing,
+no-variant, offline, small-gpu, too-big, host-ram, loras, loras-split, lost-elsewhere, lost-same, lost-none. Admission
+on a cuda host: `admit.cuda-cpu-entry.json` (a `device: cpu` entry is not counted), `admit.cuda-host-ram.json`.
+
+## A remote GPU host: credentials and TLS (API 1.18, M6; deployment, normative for names and permissions)
+
+A GPU host that is not the stack's machine runs only its runner (a container with the NVIDIA runtime,
+`deploy/gpu-host/`). A runner connects only to NATS and the object store, never to Postgres or another service; it
+needs nothing else of the stack. No secret value is ever in this repository's tracked files, an image or a message.
+
+**Names.** Host `<h>` (lower-case letters and digits: `gcp`), env `<e>` (`torch`). Per env, exactly as for `mac`:
+subject `cmd.run.<h>.<e>`, durables `runner-<h>-<e>`, `models-<h>-<e>`, `media-<h>-<e>`, registry keys `<h>.<e>.*`,
+hosts key `<h>.<e>`, unload subject `runner.unload.<h>.<e>`, events `evt.model.<h>.*`, `evt.media.<h>.*`. NATS user
+`runner_<h>_<e>` (`runner_gcp_torch`), password file `deploy/secrets/nats_runner_<h>_<e>_password` (made by
+`.tools/make-secrets`, git-ignored); S3 identity `runner-<h>` with files `deploy/secrets/s3_runner_<h>_access_key_id` and
+`s3_runner_<h>_secret_access_key`. The operator copies these files to the GPU host's own secrets folder (0600); the
+runner reads them through `X_FILE` as every service does.
+
+**NATS permissions** of `runner_<h>_<e>` (the local runners' shape, narrowed to its host; nothing of other hosts):
+- publish: `evt.run.>`; `dlq.cmd.run.<h>.<e>`, `dlq.cmd.model.<h>.<e>`, `dlq.cmd.media.<h>.<e>`; `evt.model.<h>.>`,
+  `evt.media.<h>.>`; `$KV.registry.<h>.<e>.>`, `$KV.hosts.<h>.<e>`; `$JS.API.INFO`, `$JS.API.STREAM.INFO.CMD`; for each
+  durable D of `runner-<h>-<e>` (filter `cmd.run.<h>.<e>`), `models-<h>-<e>` (`cmd.model.<h>.<e>`), `media-<h>-<e>`
+  (`cmd.media.<h>.<e>`): `$JS.API.CONSUMER.CREATE.CMD.D.<its filter>` only (the filtered CREATE subject; no bare
+  CREATE and no DURABLE.CREATE, whose filter is in the body and unchecked), `$JS.API.CONSUMER.INFO.CMD.D`,
+  `$JS.API.CONSUMER.MSG.NEXT.CMD.D`, `$JS.ACK.CMD.D.>`; host settings, its own key only:
+  `$JS.API.STREAM.INFO.KV_host_settings`, `$JS.API.DIRECT.GET.KV_host_settings.$KV.host_settings.<h>`,
+  `$JS.API.CONSUMER.CREATE.KV_host_settings.*.$KV.host_settings.<h>`, `$JS.API.CONSUMER.INFO.KV_host_settings.>`,
+  `$JS.API.CONSUMER.DELETE.KV_host_settings.>`, `$JS.FC.KV_host_settings.>`; `$JS.API.STREAM.INFO.KV_registry`,
+  `$JS.API.STREAM.INFO.KV_hosts`; cancels as the local runners (`$JS.API.STREAM.INFO.KV_cancels`,
+  `$JS.API.DIRECT.GET.KV_cancels.>`, `$JS.FC.KV_cancels.>`, `$JS.API.CONSUMER.CREATE.KV_cancels`,
+  `$JS.API.CONSUMER.CREATE.KV_cancels.>`, `$JS.API.CONSUMER.INFO.KV_cancels.>`, `$JS.API.CONSUMER.DELETE.KV_cancels.>`).
+- subscribe: `_INBOX_runner_<h>_<e>.>`, `runner.unload.<h>.<e>`,
+  `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.CMD.runner-<h>-<e>`; `allow_responses: true`.
+- So the runner's clients must create every consumer with the filter in the subject (nats-py's single-filter create;
+  runner_service verifies, a refused create is the test). Limits: `evt.run.<session_id>.*` is keyed by session, not
+  host, so a host can publish run events for any run id it knows (it learns only the ids released to it; the projector
+  drops events of an attempt that is not the run's current one); KV `cancels` is readable whole (run and job ids only).
+
+**Object store.** One S3 identity per remote host, actions `Read:<bucket>` and `Write:<bucket>` on the media bucket
+only (no `List` (ListBuckets answers an empty list), `Tagging`, `Admin`, no other bucket; SeaweedFS's `Write` also
+covers DeleteObject and multipart uploads, so the identity can delete keys of the bucket), revocable on its own
+(SeaweedFS `-s3.config` identities; the stack's own key stays the admin one). **Enforced by the store**: the bucket, the verbs, per-host
+revocation. **Not enforced by the store**: owner and run prefixes (keys are per owner and per run, made at dispatch):
+the identity can read and write any key of the bucket. **Enforced by the runner** (the claim-check rule): every key
+it reads must be one its command names, under `u/<owner_id>/` of the envelope's owner with no `..` segment, and it
+writes only under the command's `output_prefix` (exports, frames: their prefixes); a command breaking that is
+dead-lettered. **Enforced by nothing**: a compromised GPU host can read every object of the bucket and overwrite or
+delete keys; a remote GPU host is therefore trusted like the stack's machine (the operator's own VM). Per-run signed links in
+commands would close it but break the claim-check rule (never signed URLs in messages): not in v1.
+
+**TLS.**
+- NATS server: a `tls {cert_file, key_file, ca_file?, verify?, timeout: 2, handshake_first: "300ms"}` block on the
+  client port with `allow_non_tls: true` (nats-server ≥ 2.10; the stack's own services stay plain on the compose
+  network, a remote runner always uses TLS). `allow_non_tls` clears `tls_required` in the server's INFO, so a client
+  that waits for INFO before upgrading (nats-py) would stay plain and send its password in clear: a runner on a
+  `tls://` URL **starts with the TLS handshake** (nats-py `tls_handshake_first`), and the server's `handshake_first`
+  with a fallback delay serves TLS-first clients and, after the delay, plain ones. Server cert SANs: `DNS:localhost`, `IP:127.0.0.1` and the public name or address used by
+  remote hosts. Optional client certs: `verify: true` with `ca_file`, or `verify_and_map: true` to take the user from
+  the cert (then TLS is required for that user). Cert, key and CA are files in `deploy/secrets/` (`stack_tls_cert`,
+  `stack_tls_key`, `tls_ca` from `.tools/make-secrets`: a self-signed CA and one server cert for NATS and S3, in the
+  test stack and the test rig; the CA's key is not kept).
+- Runner settings (every runner; empty = off): `NATS_URL` `tls://host:port` (with a password from
+  `NATS_URL_FILE`), `NATS_CA_FILE` (verify the server against this CA; default the system store),
+  `NATS_CERT_FILE` / `NATS_KEY_FILE` (client cert, optional), `S3_ENDPOINT` `https://…`, `S3_CA_FILE` (the S3 client's
+  `verify` path). A runner refuses to start with a `tls://` or `https://` URL whose server cert does not verify.
+- S3 over https: SeaweedFS's own TLS (`-s3.cert.file`, `-s3.key.file`, with `-s3.port.https` for a TLS-only second
+  port so in-stack http stays) or a TLS-terminating proxy in front of it; same CA and SANs as NATS.
+- **The test rig** (M6, no port on the internet): the Mac keeps NATS (4322, plain and TLS on one port) and S3 https
+  (a second loopback port next to 8433, the deploy area's choice) on 127.0.0.1 only; an SSH reverse tunnel opened from
+  the Mac (`gcloud compute ssh <vm> -- -N -R 127.0.0.1:4222:127.0.0.1:4322 -R 127.0.0.1:8333:127.0.0.1:<s3 https
+  port>`) puts them on the VM's loopback; the runner container uses host
+  networking and `tls://127.0.0.1:4222`, `https://127.0.0.1:8333` with the self-signed CA, so TLS is exercised end to
+  end inside the tunnel. A real deployment publishes the TLS ports instead (firewalled to its GPU hosts).
 
 ## Takes, the gallery and uploads (plan 9.1, 17.2)
 
@@ -1876,7 +2081,8 @@ another), `Mac only` (only mlx in `runtimes`) and the detail panel's path (`mode
   (RUNNER_HF_TOKEN_FILE)`, or `… the token was refused`), `licence` (`licence <id> changed since it was accepted`),
   `disk_full` (`host <h> has <x> GB free; this download needs <y> GB`, or ENOSPC mid-file), `hash_mismatch` (`<path>:
   SHA-256 differs from the Hub's`), `network` (after huggingface_hub's retries: `cannot reach the hub: <reason>`),
-  `in_use` (a delete's refusal found at release or by the runner), `not_downloadable` (no `source`), `internal`.
+  `in_use` (a delete's refusal found at release or by the runner), `not_downloadable` (no `source`), `internal`,
+  (1.18) `host_lost` (`host <h> stopped responding`: Several hosts, host loss).
 
 **Tests** never download from the internet: a fake hub (a small local HTTP server speaking the endpoints
 huggingface_hub uses for `snapshot_download`: `GET /api/models/<repo>/revision/<rev>` with `siblings` and LFS sizes and
@@ -2103,8 +2309,10 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
 
 - **Who runs them**: an env whose hosts key has `media {ffmpeg, encoders}` (the runner found ffmpeg ≥ 6 with `xfade`,
   `apad`, `amix`, `aac` and an H.264 encoder). Automatic choice: the named `host`'s media envs, else every live one;
-  `h264_videotoolbox` first (the Mac's native envs), then host, env by name; never a `server` env. `{venc}` = the env's
-  first encoder: `-c:v h264_videotoolbox -profile:v high -allow_sw 1 -b:v <video_bitrate>` or `-c:v libx264 -preset
+  `h264_videotoolbox` first (the Mac's native envs), from 1.18 then `h264_nvenc`, then host, env by name; never a
+  `server` env. `{venc}` = the env's first encoder: `-c:v h264_videotoolbox -profile:v high -allow_sw 1 -b:v
+  <video_bitrate>`, (1.18, a cuda container whose ffmpeg has NVENC and whose GPU encodes) `-c:v h264_nvenc -preset p5
+  -profile:v high -b:v <video_bitrate> -maxrate <video_bitrate> -bufsize <2 × video_bitrate>`, or `-c:v libx264 -preset
   medium -profile:v high -b:v <video_bitrate> -maxrate <video_bitrate> -bufsize <2 × video_bitrate>` (software
   fallback; libx264 is what this repo's runners already use; the old studio's LGPL-only rule is not kept: an owner
   decision, reported). The Docker fake runner advertises `media` only if its image has ffmpeg.
@@ -2125,11 +2333,12 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   a tenth of the length) and the last frame, uploads them under `output_prefix` (the MP4 streamed from disk), removes the temp dir (on success,
   failure and cancel). Cancel: KV `cancels` key `<job_id>` (checked before start and every 2 s): SIGTERM to the group,
   10 s, SIGKILL; `cancelled`. A redelivery starts over. Studio: a job whose env's hosts key is gone or older than 60 s is
-  cancelled by studio (on a cancel, a delete of its sequence or the sweep) with its command purged (the subject
+  cancelled by studio (from 1.18 failed `host_lost` instead: Several hosts, host loss) (on a cancel, a delete of its sequence or the sweep) with its command purged (the subject
   `cmd.media.<host>.<env>`: no job is sent to an env that stale, and every open one on it ends too), so a runner that
   comes back never runs it; one with no event for 10 minutes fails `internal` (`the runner stopped reporting this job`)
   and its id is written to KV cancels, so the runner stops it.
-- Failure classes: `input`, `invalid`, `ffmpeg` (its last error line), `verify`, `internal`.
+- Failure classes: `input`, `invalid`, `ffmpeg` (its last error line), `verify`, `internal`, (1.18) `host_lost` (its
+  host stopped responding: Several hosts, host loss).
 
 ## Timeline rules (normative)
 

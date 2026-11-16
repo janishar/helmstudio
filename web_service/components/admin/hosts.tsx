@@ -13,6 +13,7 @@ import {
   afterRunTag,
   ago,
   componentText,
+  deviceLine,
   duration,
   hostCards,
   isPinned,
@@ -385,6 +386,7 @@ function HostSection({
                 <b className="truncate text-[13px] font-semibold">{name}</b>
                 <small className="mono truncate text-[10px] text-t2">
                   {e.env} · {e.r.precision}
+                  {e.r.device === "cpu" ? " · host RAM" : ""}
                   {baked ? ` · ${baked} LoRA${baked === 1 ? "" : "s"} baked` : ""}
                   {e.r.pinned_why === "in_use" ? " · in use" : ""}
                   {e.r.last_used ? ` · used ${ago(e.r.last_used, now)}` : ""}
@@ -505,7 +507,6 @@ function SettingsPanel({
     }, 600);
     return () => clearTimeout(t);
   }, [draft, dirty, c.host, onSaved]);
-  const ram = c.machine?.ram_gb;
   const reserveMax = Math.max(32, draft.reserve_gb);
   return (
     <aside
@@ -517,14 +518,7 @@ function SettingsPanel({
           {c.host}
           <Info>Settings for the selected host. They apply to every env on it.</Info>
         </h2>
-        <span className="mono text-[12px] text-t2">
-          {[
-            c.machine?.os === "macos" ? "Apple Silicon" : c.machine ? "Linux" : "",
-            ram && `${ram} GB`,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </span>
+        <span className="mono text-[12px] text-t2">{deviceLine(c)}</span>
       </div>
       <fieldset className="m-0 flex flex-col gap-1 rounded-[18px_18px_18px_8px] border-0 bg-s2 p-3">
         <legend className="float-left flex items-center pb-1.5 text-[12px] font-semibold text-t2">
@@ -570,8 +564,8 @@ function SettingsPanel({
         <label htmlFor="h-reserve" className="label flex items-center">
           Memory reserve, GB
           <Info>
-            Budget is physical memory minus this reserve, also checked against live system memory
-            pressure.
+            Budget is physical memory (the GPU&apos;s memory on a CUDA host) minus this reserve,
+            also checked against live system memory pressure.
           </Info>
         </label>
         <div className="flex items-center gap-2.5">

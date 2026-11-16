@@ -18,10 +18,38 @@ func fixture(t *testing.T, name string) []byte {
 	return data
 }
 
+// present writes a live hosts key for each "<host>.<env>": a host's registry keys are read only while it has one.
+func present(r *Registry, sources ...string) {
+	for _, source := range sources {
+		host, env, _ := strings.Cut(source, ".")
+		_ = r.SetHost(source, []byte(`{"host": "`+host+`", "env": "`+env+`", "state": "idle", "run_id": null, "updated_at": "`+
+			time.Now().UTC().Format(time.RFC3339Nano)+`"}`))
+	}
+}
+
+// From API 1.18 a host's registry keys are read only while it has a present hosts key (any env): they lapse with it.
+func TestRegistryKeysLapseWithTheHost(t *testing.T) {
+	var r Registry
+	_ = r.SetRegistry("gcp.torch.workflows", fixture(t, "qwen-image.workflows"))
+	_ = r.SetRegistry("gcp.torch.models", fixture(t, "qwen-image.models"))
+	if r.Publishes("gcp.torch", "qwen-image") || len(r.Published()) != 0 {
+		t.Fatal("no hosts key: nothing read")
+	}
+	present(&r, "gcp.torch")
+	if _, ok := r.Model("gcp.torch", "qwen-image"); !ok || !r.Publishes("gcp.torch", "qwen-image") || len(r.Published()) != 1 {
+		t.Fatal("present: read")
+	}
+	_ = r.SetHost("gcp.torch", nil)
+	if _, ok := r.Model("gcp.torch", "qwen-image"); ok || len(r.LoraBlocks()) != 0 {
+		t.Fatal("gone again")
+	}
+}
+
 // The fake runner's values give the echo workflow with the schemas of its three kinds; a workflow with a kind its
 // runner did not publish is left out.
 func TestWorkflows(t *testing.T) {
 	var r Registry
+	present(&r, "fake.fake", "other.fake")
 	if len(r.Workflows()) != 0 {
 		t.Fatal("empty registry")
 	}
@@ -52,6 +80,7 @@ func TestWorkflows(t *testing.T) {
 // always has it.
 func TestPublishesAndModels(t *testing.T) {
 	var r Registry
+	present(&r, "mac.torch", "fake.fake", "old.fake")
 	_ = r.SetRegistry("mac.torch.workflows", fixture(t, "qwen-image.workflows"))
 	_ = r.SetRegistry("mac.torch.models", []byte(`{"models": [{"id": "qwen-image-2.1", "family": "qwen-image", "variants": [
 		{"id": "base", "presence": "present", "precisions": ["bf16"]}, {"id": "turbo", "presence": "missing", "precisions": ["bf16"]}]}]}`))
@@ -100,6 +129,7 @@ func TestValuesAreTiedToTheirKeys(t *testing.T) {
 	if err := r.SetRegistry("fake.fake.workflows", []byte(`{"workflows": [{"id": "qwen.edit", "env": "qwen", "nodes": {}}]}`)); err == nil {
 		t.Fatal("a workflow of another env was taken")
 	}
+	present(&r, "gpu1.qwen", "aaaa.fake")
 	_ = r.SetRegistry("gpu1.qwen.workflows", []byte(`{"workflows": [{"id": "qwen.edit", "env": "qwen", "nodes": {}}]}`))
 	_ = r.SetRegistry("aaaa.fake.workflows", []byte(`{"workflows": [{"id": "qwen.edit", "env": "fake", "nodes": {}}]}`))
 	if workflow, ok := r.Workflow("qwen.edit"); !ok || workflow.Env != "qwen" {
@@ -114,6 +144,7 @@ func TestValuesAreTiedToTheirKeys(t *testing.T) {
 // The torch runner's canonical values give the qwen-image workflow; its hosts value carries memory and resident.
 func TestQwenAndHostMemory(t *testing.T) {
 	var r Registry
+	present(&r, "mac.torch")
 	_ = r.SetRegistry("mac.torch.nodes", fixture(t, "qwen-image.nodes"))
 	_ = r.SetRegistry("mac.torch.workflows", fixture(t, "qwen-image.workflows"))
 	workflow, ok := r.Workflow("qwen-image")
@@ -180,6 +211,7 @@ func TestLoraFamiliesPreferNonFakeEnvs(t *testing.T) {
 	_ = r.SetRegistry("fake.fake.models", fixture(t, "models"))
 	_ = r.SetRegistry("mac.torch.models", fixture(t, "qwen-image.models"))
 	_ = r.SetRegistry("other.fake.models", fixture(t, "qwen-image.models"))
+	present(&r, "fake.fake", "mac.torch", "other.fake")
 	blocks := r.LoraBlocks()
 	if !blocks["echo"].Fake || blocks["qwen-image"].Fake || len(blocks["qwen-image"].Modules) == 0 {
 		t.Fatalf("%+v", blocks)

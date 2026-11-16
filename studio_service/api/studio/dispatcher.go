@@ -184,42 +184,61 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 		for host := range d.adminPass(running, busy, now) { // an admin unload not answered holds its host
 			busy[host] = true
 		}
-		var free []string
-		for _, host := range snap.hosts {
-			if !busy[host] {
-				free = append(free, host)
+		// Several hosts (contracts/README.md): line up every queued run, walk the free hosts by name, each picking
+		// among the runs lined up on it; after a release or a fail line up again and walk again, until a walk
+		// decides nothing. A host whose pick waits keeps waiting for it this pass.
+		skips, clock := d.skipState(), now
+		for _, at := range snap.last {
+			if at.After(clock) { // a simulated turn later than every real one
+				clock = at
 			}
 		}
-		for _, next := range lineup(free, snap.queue, snap.last, nil, 1, d.skipState(), now) {
-			got := d.handover(ctx, snap, next, now)
-			switch got.decision {
-			case "release":
-				if err := release(ctx, tx, next, got.budget); err != nil {
+		waiting := map[string]bool{} // hosts waiting for their pick this pass
+		for decidedOne := true; decidedOne; {
+			decidedOne = false
+			d.lineUp(d.registry, snap, busy, now)
+			for _, host := range snap.hosts {
+				if busy[host] || waiting[host] {
+					continue
+				}
+				k, passed := pick(host, snap.queue, snap.last, skips, now)
+				if k < 0 {
+					continue
+				}
+				q := snap.queue[k]
+				next := placed{run: q.run, host: host, env: q.slots[host], passed: passed}
+				got := d.handover(ctx, snap, next, now)
+				reason := got.err
+				if got.decision != "release" && got.decision != "fail" {
+					first, seen := d.waited[next.run.ID]
+					if !seen {
+						first = now
+					}
+					if now.Sub(first) < GateTimeout {
+						waited[next.run.ID] = first // stays queued: the host waits for it
+						waiting[host] = true
+						snap.queue = slices.Delete(snap.queue, k, k+1)
+						continue
+					}
+					reason = fmt.Sprintf("env %s on host %s did not unload its models in %d s", got.holder, next.host, int(GateTimeout.Seconds()))
+				}
+				if got.decision == "release" {
+					if err := release(ctx, tx, next, got.budget); err != nil {
+						return err
+					}
+					d.loads(next.host + "." + next.env)
+					busy[host] = true
+				} else if err := failTurn(ctx, tx, next.run, reason); err != nil {
 					return err
 				}
-				d.loads(next.host + "." + next.env)
 				decided[next.run.ID] = next.passed
-				continue
-			case "fail":
-				if err := failTurn(ctx, tx, next.run, got.err); err != nil {
-					return err
-				}
-				decided[next.run.ID] = next.passed
-				continue
+				passOver(skips, next.run.ID, passed, now)
+				clock = clock.Add(time.Nanosecond) // its owner's turn, for the next host's pick
+				snap.last[next.run.OwnerID] = clock
+				snap.queue = slices.Delete(snap.queue, k, k+1)
+				decidedOne = true
+				break
 			}
-			first, seen := d.waited[next.run.ID]
-			if !seen {
-				first = now
-			}
-			if now.Sub(first) < GateTimeout {
-				waited[next.run.ID] = first // stays queued: the host waits for it
-				continue
-			}
-			reason := fmt.Sprintf("env %s on host %s did not unload its models in %d s", got.holder, next.host, int(GateTimeout.Seconds()))
-			if err := failTurn(ctx, tx, next.run, reason); err != nil {
-				return err
-			}
-			decided[next.run.ID] = next.passed
 		}
 		return nil
 	})
@@ -271,16 +290,14 @@ func (d *Dispatcher) decide(snap snapshot, next placed, now time.Time) admission
 		return admission{decision: "release"}
 	}
 	var entries []entry
-	budget, running := -1, ""
+	running := ""
+	budget, ram := budgets(snap.values, next.host)
 	for _, value := range snap.values {
 		if value.Host != next.host {
 			continue
 		}
 		if value.RunID != nil && (running == "" || value.Env < running) {
 			running = value.Env // its run may still be using up to its budget_gb: the next write decides
-		}
-		if value.Memory != nil && (budget < 0 || hundredths(value.Memory.BudgetGB) < budget) {
-			budget = hundredths(value.Memory.BudgetGB)
 		}
 		resident, standing := value.Resident, false
 		if state := d.asks[value.Host+"."+value.Env]; state != nil && state.ok {
@@ -306,7 +323,25 @@ func (d *Dispatcher) decide(snap snapshot, next placed, now time.Time) admission
 		}
 	}
 	p := planOf(d.registry, next.host, next.run)
-	return admit(next.host, entries, budget, next.env, p.peak, p.needs, referenced, running)
+	return admit(next.host, entries, budget, next.env, p, referenced, running, ram)
+}
+
+// budgets are host's B and R in hundredths: the smallest memory.budget_gb and host_ram.budget_gb among its present
+// keys (-1: no key reports one; the fake host reports neither, so no admission).
+func budgets(values []registry.Host, host string) (int, int) {
+	budget, ram := -1, -1
+	for _, value := range values {
+		if value.Host != host {
+			continue
+		}
+		if value.Memory != nil && (budget < 0 || hundredths(value.Memory.BudgetGB) < budget) {
+			budget = hundredths(value.Memory.BudgetGB)
+		}
+		if value.HostRAM != nil && (ram < 0 || hundredths(value.HostRAM.BudgetGB) < ram) {
+			ram = hundredths(value.HostRAM.BudgetGB)
+		}
+	}
+	return budget, ram
 }
 
 // ask sends env of next's host one unload request naming victims, unless one is in flight or the last went less than
@@ -429,6 +464,9 @@ func keyEntries(env string, resident []registry.Resident, fresh bool, measured i
 	var out []entry
 	declared := 0
 	for _, r := range resident {
+		if !registry.OnDevice(r.Device) {
+			continue // in host RAM (API 1.18): not an entry of the memory budget, never a victim
+		}
 		e := newEntry(env, r, fresh)
 		out, declared = append(out, e), declared+e.gb
 	}
@@ -449,11 +487,13 @@ func measured(value registry.Host, standing bool) int {
 	return hundredths(value.Memory.UsedGB)
 }
 
-// held is what a key's runner holds in hundredths: its entries' gb, or its measured used_gb when larger.
+// held is what a key's runner holds in hundredths: its device entries' gb, or its measured used_gb when larger.
 func held(value registry.Host) int {
 	declared := 0
 	for _, r := range value.Resident {
-		declared += hundredths(r.GB)
+		if registry.OnDevice(r.Device) {
+			declared += hundredths(r.GB)
+		}
 	}
 	if value.Memory != nil {
 		return max(declared, hundredths(value.Memory.UsedGB))
@@ -470,17 +510,19 @@ func (e entry) component() message.Component {
 	return out
 }
 
-// plan is what a run loads on a host: its needs (entry keys of its env) and its planned peak in hundredths (-1: no
-// plan, which admit plans at the whole budget).
+// plan is what a run loads on a host: its needs (entry keys of its env, device components only) and its planned peak
+// in hundredths (-1: no plan, which admit plans at the whole budget); ramPeak is its plan's ram_peak_gb in hundredths
+// (-1: none, not checked).
 type plan struct {
-	needs []string
-	peak  int
+	needs   []string
+	peak    int
+	ramPeak int
 }
 
 // planOf reads run's plan in <host>.<env>.models: its <family>/model node's variant's memory item for the node's
 // precision, the family's lora component carrying the run's baked LoRAs; the peak adds the run's LoRA files.
 func planOf(reg *registry.Registry, host string, run model.Run) plan {
-	out := plan{peak: -1}
+	out := plan{peak: -1, ramPeak: -1}
 	var graph map[string]registry.Node
 	_ = json.Unmarshal(run.Nodes, &graph)
 	models := runModels(graph)
@@ -501,7 +543,13 @@ func planOf(reg *registry.Registry, host string, run model.Run) plan {
 	}
 	used := runUsed(run.Loras)
 	bake := baked(used, graph)
+	if memory.RAMPeakGB != nil {
+		out.ramPeak = hundredths(*memory.RAMPeakGB)
+	}
 	for _, c := range memory.Components {
+		if !registry.OnDevice(c.Device) {
+			continue // kept in host RAM: inside ram_peak_gb, not a device need
+		}
 		var loras []registry.ResidentLora
 		if found.Lora != nil && c.Component == found.Lora.Component {
 			loras = bake
@@ -550,10 +598,11 @@ type admission struct {
 // run of env with planned peak (-1: the budget) and needs (entry keys) on a host of budget (hundredths) holding
 // entries; referenced holds "<env> <key>" of what the host's other queued runs need; running is the first env by name
 // whose key still names a run ("": none): that run may still use up to the budget_gb it was released with, more than
-// its key declares, so the run waits (nothing asked) until that key's next write.
-func admit(host string, entries []entry, budget int, env string, peak int, needs []string, referenced map[string]bool,
-	running string) admission {
-	p := peak
+// its key declares, so the run waits (nothing asked) until that key's next write. ram is the host's host-RAM budget
+// (-1: none): a run whose ram_peak_gb exceeds it fails at once, after the device check; no victims are taken for it.
+func admit(host string, entries []entry, budget int, env string, run plan, referenced map[string]bool,
+	running string, ram int) admission {
+	p, needs := run.peak, run.needs
 	if p < 0 {
 		p = budget
 	}
@@ -569,9 +618,8 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 			own += e.gb // the run's own runner measured beyond its entries
 		}
 	}
-	if p > budget { // a pin never fails a run: pinned entries are its last victims (below)
-		return admission{decision: "fail", err: fmt.Sprintf("needs %.1f GB at its peak; host %s has %.1f GB",
-			float64(p)/100, host, float64(budget)/100)}
+	if why := tooBig(host, p, budget, run.ramPeak, ram); why != "" { // a pin never fails a run: pins are its last victims
+		return admission{decision: "fail", err: why}
 	}
 	if running != "" {
 		return admission{decision: "wait", holder: running}
@@ -635,6 +683,18 @@ func admit(host string, entries []entry, budget int, env string, peak int, needs
 	return got
 }
 
+// tooBig is why a run of planned peak p (and ram_peak, -1: none) can never run on host (budget and ram in hundredths,
+// ram -1: none), or "".
+func tooBig(host string, p, budget, ramPeak, ram int) string {
+	switch {
+	case p > budget:
+		return fmt.Sprintf("needs %.1f GB at its peak; host %s has %.1f GB", float64(p)/100, host, float64(budget)/100)
+	case ram >= 0 && ramPeak > ram:
+		return fmt.Sprintf("needs %.1f GB of host RAM at its peak; host %s has %.1f GB", float64(ramPeak)/100, host, float64(ram)/100)
+	}
+	return ""
+}
+
 // holds reports whether a released run still holds its host: the host's key is fresh and, from Lease after the
 // release, names this run and attempt.
 func holds(values []registry.Host, run model.Run, now time.Time) bool {
@@ -654,7 +714,8 @@ func holds(values []registry.Host, run model.Run, now time.Time) bool {
 }
 
 // lose ends a lost lease, the run's command already purged: a run asked to cancel ends cancelled, attempt 1 is
-// queued again as attempt 2 (the next pass places it, or fails it when no host is eligible), attempt 2 fails.
+// queued again as attempt 2 with its host as lost_host (the next pass lines it up on another eligible host, on the
+// same one only when it is the only one, or fails it when none is eligible), attempt 2 fails.
 func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 	switch {
 	case run.Cancelling:
@@ -677,7 +738,7 @@ func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 	if _, err := tx.Exec(ctx, `DELETE FROM run_outputs WHERE run_id = $1`, run.ID); err != nil {
 		return err
 	}
-	retried, err := one[model.Run](ctx, tx, `UPDATE runs SET status = 'queued', attempt = attempt + 1, host = NULL,
+	retried, err := one[model.Run](ctx, tx, `UPDATE runs SET status = 'queued', attempt = attempt + 1, lost_host = host, host = NULL,
 		released_at = NULL, progress = NULL, started_at = NULL, updated_at = clock_timestamp()
 		WHERE id = $1 AND status IN ('queued', 'running') RETURNING `+model.RunCols, run.ID)
 	if errors.Is(err, errNotFound) {
@@ -745,11 +806,13 @@ func OutputPrefix(run model.Run) string {
 
 // ------------------------------------------------------------------ the queue as one look sees it
 
-// queued is a waiting run with where it may go: eligible host name → its env, and the hosts with its model resident.
+// queued is a waiting run with where it may go: eligible host name → its env, the hosts with its model resident, and
+// the host it is lined up on (lineUp).
 type queued struct {
 	run      model.Run
 	slots    map[string]string
 	resident map[string]bool
+	host     string
 }
 
 // stuck is a waiting run with nowhere to go, and why.
@@ -769,14 +832,15 @@ type placed struct {
 }
 
 // snapshot is the queue as one look sees it: the released runs not ended, the waiting runs (oldest first) with
-// somewhere or nowhere to go, the hosts values, the live host names idle longest first, and when each waiting owner
-// last had a run released.
+// somewhere or nowhere to go, the hosts values, the live host names by name and when each last ended a run (none:
+// never), and when each waiting owner last had a run released.
 type snapshot struct {
 	released []model.Run
 	queue    []queued
 	stuck    []stuck
 	values   []registry.Host
 	hosts    []string
+	idle     map[string]time.Time
 	last     map[string]time.Time
 	held     map[string]bool // waiting runs of a paused batch: no position, skip counts kept
 	reserved map[string]int  // host → hundredths of a GB its enabled local servers reserve (API 1.15)
@@ -840,11 +904,11 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 		if held[run.ID] || len(slots) == 0 {
 			continue // (no slot left: it waits for the delete to end, without a position)
 		}
-		snap.queue = append(snap.queue, queued{run, slots, resident})
+		snap.queue = append(snap.queue, queued{run: run, slots: slots, resident: resident})
 		owners = append(owners, run.OwnerID)
 	}
-	idle := map[string]time.Time{}
-	for _, value := range snap.values {
+	snap.idle = map[string]time.Time{}
+	for _, value := range snap.values { // by key: by host name
 		if value.Live(now) && !slices.Contains(snap.hosts, value.Host) {
 			snap.hosts = append(snap.hosts, value.Host)
 		}
@@ -871,11 +935,8 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 		return snap, err
 	}
 	for _, row := range ends {
-		idle[row.Key] = row.At
+		snap.idle[row.Key] = row.At
 	}
-	slices.SortStableFunc(snap.hosts, func(a, b string) int { // idle longest first (never used first), then by name
-		return cmp.Or(idle[a].Compare(idle[b]), strings.Compare(a, b))
-	})
 	return snap, nil
 }
 
@@ -912,69 +973,111 @@ func deletedLoras(ctx context.Context, tx pgx.Tx, open []model.Run) (map[string]
 	return out, nil
 }
 
-// eligible returns where run may go now: each live host with the run's env whose runner publishes its workflow (a user
-// workflow's run: every kind of its graph), lists every shared LoRA the run was made with and, for every
-// <family>/model node whose family its models key lists, has that variant present (host name → env), and which of
-// those hold every such model resident (its family's lora component, with the run's baked LoRAs). With none, reason
-// says why.
+// eligible returns where run may go now (contracts/README.md "Several hosts", Eligibility), each step narrowing the
+// hosts by name: (1) a live key of the run's env whose runner publishes its workflow (a user workflow's run: every
+// kind of its graph); (2) every <family>/model node's variant present at its precision in that runner's models key;
+// (3) every shared LoRA the run was made with; (4) room: its admission there would not fail it at once. It returns
+// host name → env, which of them hold every model node resident (its family's lora component, with the run's baked
+// LoRAs), and with none the text of the step that left none. A retried run drops its lost host while another remains,
+// and with none fails as that host's loss.
 func eligible(reg *registry.Registry, values []registry.Host, run model.Run, now time.Time) (map[string]string, map[string]bool, string) {
 	var graph map[string]registry.Node
 	_ = json.Unmarshal(run.Nodes, &graph)
 	models := runModels(graph)
 	used := runUsed(run.Loras)
 	bake := baked(used, graph)
-	slots, resident, missing := map[string]string{}, map[string]bool{}, ""
-	var lacking []string // the sources that would take the run but for a shared LoRA
-hosts:
+	env := run.Env
+	gone := func(reason string) (map[string]string, map[string]bool, string) {
+		if run.LostHost != nil {
+			reason = "runner on host " + *run.LostHost + " stopped responding; no other live host for env " + env
+		}
+		return nil, nil, reason
+	}
+	var hosts []string // values are by key, so by host name
 	for _, value := range values {
 		source := value.Host + "." + value.Env
-		if value.Env != run.Env || !value.Live(now) || (run.PinHost != nil && value.Host != *run.PinHost) {
+		switch {
+		case value.Env != env || !value.Live(now) || (run.PinHost != nil && value.Host != *run.PinHost):
 			continue // (a local server's call goes only to its provider's host)
-		}
-		if run.WorkflowVersion == nil && !reg.Publishes(source, run.WorkflowID) {
+		case run.WorkflowVersion == nil && !reg.Publishes(source, run.WorkflowID):
 			continue
-		}
-		if run.WorkflowVersion != nil && !reg.PublishesKinds(source, kinds(graph)) {
+		case run.WorkflowVersion != nil && !reg.PublishesKinds(source, kinds(graph)):
 			continue // a user workflow: the runner must publish every kind of its snapshot
 		}
-		if slices.ContainsFunc(used, func(u lora.Used) bool { return u.Source == "shared" && !reg.HasLora(source, u.ID) }) {
-			lacking = append(lacking, source)
-			continue
+		hosts = append(hosts, value.Host)
+	}
+	if len(hosts) == 0 {
+		return gone("no live host for env " + env)
+	}
+	missing := "" // the first model node the first host lacks
+	hosts = slices.DeleteFunc(hosts, func(host string) bool {
+		for _, m := range models {
+			found, listed := reg.Model(host+"."+env, m.family)
+			if !listed || !found.Has(m.variant) || !found.HasPrecision(m.variant, m.precision) {
+				if missing == "" {
+					id := m.family
+					if listed {
+						id = found.ID
+					}
+					missing = fmt.Sprintf("model %s variant %s at %s", id, m.variant, m.precision)
+				}
+				return true
+			}
 		}
+		return false
+	})
+	if len(hosts) == 0 {
+		return gone("no live host for env " + env + " has " + missing)
+	}
+	has := func(host string, u lora.Used) bool { return u.Source != "shared" || reg.HasLora(host+"."+env, u.ID) }
+	withAll := slices.DeleteFunc(slices.Clone(hosts), func(host string) bool {
+		return slices.ContainsFunc(used, func(u lora.Used) bool { return !has(host, u) })
+	})
+	if len(withAll) == 0 {
+		first := used[slices.IndexFunc(used, func(u lora.Used) bool { return !has(hosts[0], u) })]
+		if !slices.ContainsFunc(hosts, func(host string) bool { return has(host, first) }) {
+			return gone("no live host for env " + env + " has LoRA " + first.Name)
+		}
+		return gone("no live host for env " + env + " has all of its LoRAs (" + first.Name + " is not on " + hosts[0] + ")")
+	}
+	hosts, largest, why := withAll, -2, ""
+	hosts = slices.DeleteFunc(hosts, func(host string) bool {
+		budget, ram := budgets(values, host)
+		if budget < 0 {
+			return false // no admission there
+		}
+		p := planOf(reg, host, run)
+		peak := p.peak
+		if peak < 0 {
+			peak = budget
+		}
+		reason := tooBig(host, peak, budget, p.ramPeak, ram)
+		if reason != "" && budget > largest { // the host with the largest budget (then name) says why
+			largest, why = budget, reason
+		}
+		return reason != ""
+	})
+	if len(hosts) == 0 {
+		return gone(why)
+	}
+	if run.LostHost != nil && len(hosts) > 1 {
+		hosts = slices.DeleteFunc(hosts, func(host string) bool { return host == *run.LostHost }) // attempt 2 goes elsewhere
+	}
+	slots, resident := map[string]string{}, map[string]bool{}
+	for _, host := range hosts {
+		slots[host] = env
+		value := values[slices.IndexFunc(values, func(v registry.Host) bool { return v.Host == host && v.Env == env })]
 		all := len(models) > 0
 		for _, m := range models {
-			model, listed := reg.Model(source, m.family)
-			if !listed {
-				all = false
-				continue
-			}
-			if !model.Has(m.variant) {
-				missing = cmp.Or(missing, fmt.Sprintf("model %s variant %s", m.family, m.variant))
-				continue hosts
-			}
+			found, _ := reg.Model(host+"."+env, m.family)
 			all = all && slices.ContainsFunc(value.Resident, func(r registry.Resident) bool {
-				return r.Model == model.ID && r.Variant == m.variant && r.Precision == m.precision && sameBaked(r.Loras, bake) &&
-					(model.Lora == nil || r.Component == model.Lora.Component)
+				return r.Model == found.ID && r.Variant == m.variant && r.Precision == m.precision && sameBaked(r.Loras, bake) &&
+					(found.Lora == nil || r.Component == found.Lora.Component) && registry.OnDevice(r.Device)
 			})
 		}
-		resident[value.Host] = all
-		slots[value.Host] = value.Env
+		resident[host] = all
 	}
-	switch {
-	case len(slots) > 0:
-		return slots, resident, ""
-	case missing != "":
-		return nil, nil, fmt.Sprintf("%s is not present on any live host for env %s", missing, run.Env)
-	case len(lacking) > 0: // name the first shared LoRA none of them has (else the first one some lack)
-		at := slices.IndexFunc(used, func(u lora.Used) bool {
-			return u.Source == "shared" && !slices.ContainsFunc(lacking, func(source string) bool { return reg.HasLora(source, u.ID) })
-		})
-		if at < 0 {
-			at = slices.IndexFunc(used, func(u lora.Used) bool { return u.Source == "shared" && !reg.HasLora(lacking[0], u.ID) })
-		}
-		return nil, nil, "no live host for env " + run.Env + " has LoRA " + used[at].Name
-	}
-	return nil, nil, "no live host for env " + run.Env
+	return slots, resident, ""
 }
 
 // deletes is whether a delete of model (kind delete) or of a shared LoRA (lora_delete) removes files run would load
@@ -1007,62 +1110,75 @@ func runModels(graph map[string]registry.Node) []runModel {
 	return out
 }
 
-// lineup orders waiting runs (oldest first) onto hosts the way the dispatcher releases them. Hosts take turns in
-// the given order (idle longest first), each taking at most one run per round; rounds 0 runs until every run is
-// placed. A host takes the next run of pick, but a run whose model is resident on another host still free this
-// round goes there and the first host picks again. last is each owner's last release; ahead[h] counts runs already
-// before the line on h (released, not started); skips are the current skip counts, time frozen at now. ponytail:
-// residency stays as it is now for the whole line (positions only: each pass picks again from the newest state).
-func lineup(hosts []string, waiting []queued, last map[string]time.Time, ahead map[string]int, rounds int,
-	skips map[string]skip, now time.Time) []placed {
-	last, position, left, skips := maps.Clone(last), maps.Clone(ahead), slices.Clone(waiting), maps.Clone(skips)
-	if last == nil {
-		last = map[string]time.Time{}
-	}
-	if position == nil {
-		position = map[string]int{}
-	}
-	if skips == nil {
-		skips = map[string]skip{}
-	}
-	clock := time.Time{} // a simulated release time later than every real one
-	for _, at := range last {
-		if at.After(clock) {
-			clock = at
-		}
-	}
-	var out []placed
-	for round := 0; rounds == 0 || round < rounds; round++ {
-		used, before := map[string]bool{}, len(out)
-		for i := 0; i < len(hosts); i++ {
-			host := hosts[i]
-			k, passed := -1, []string(nil)
-			if !used[host] {
-				k, passed = pick(host, left, last, skips, now)
+// lineUp lines up every waiting run of snap on one of its eligible hosts (q.host; contracts/README.md "Several hosts",
+// Line-up): the first by free (not busy), resident, fits now (its admission would release it at once), idle longest
+// (oldest last ended run; never ran first), then name.
+func (d *Dispatcher) lineUp(reg *registry.Registry, snap snapshot, busy map[string]bool, now time.Time) {
+	for i := range snap.queue {
+		q := &snap.queue[i]
+		hosts := slices.Sorted(maps.Keys(q.slots))
+		fits := map[string]bool{}
+		if len(hosts) > 1 {
+			for _, host := range hosts {
+				fits[host] = d.fitsNow(reg, snap, placed{run: q.run, host: host, env: q.slots[host]}, now)
 			}
+		}
+		q.host = slices.MinFunc(hosts, func(a, b string) int {
+			return cmp.Or(cmp.Compare(btoi(busy[a]), btoi(busy[b])), cmp.Compare(btoi(!q.resident[a]), btoi(!q.resident[b])),
+				cmp.Compare(btoi(!fits[a]), btoi(!fits[b])), snap.idle[a].Compare(snap.idle[b]), strings.Compare(a, b))
+		})
+	}
+}
+
+// fitsNow reports whether next's admission on its host would release it now, nothing unloaded; a nil dispatcher
+// decides from the hosts values alone.
+func (d *Dispatcher) fitsNow(reg *registry.Registry, snap snapshot, next placed, now time.Time) bool {
+	if d == nil {
+		d = &Dispatcher{registry: reg, asks: map[string]*ask{}}
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	snap.queue = nil // what other runs need orders victims only: not whether it fits
+	return d.decide(snap, next, now).decision == "release"
+}
+
+// lineup orders the waiting runs lined up on each host (q.host) the way the dispatcher would release them there, every
+// one of them (Run.position): ahead[h] counts runs already before the line on h (released, not started); last is
+// each owner's last release; skips are the current skip counts, time frozen at now. ponytail: each host's line is
+// simulated on its own and residency stays as it is now for the whole line (positions only: each pass picks again
+// from the newest state).
+func lineup(waiting []queued, last map[string]time.Time, ahead map[string]int, skips map[string]skip, now time.Time) []placed {
+	var out []placed
+	hosts := map[string]bool{}
+	for _, q := range waiting {
+		hosts[q.host] = true
+	}
+	for _, host := range slices.Sorted(maps.Keys(hosts)) {
+		last, skips, left, position := maps.Clone(last), maps.Clone(skips), slices.Clone(waiting), ahead[host]
+		if last == nil {
+			last = map[string]time.Time{}
+		}
+		if skips == nil {
+			skips = map[string]skip{}
+		}
+		clock := time.Time{} // a simulated release time later than every real one
+		for _, at := range last {
+			if at.After(clock) {
+				clock = at
+			}
+		}
+		for {
+			k, passed := pick(host, left, last, skips, now)
 			if k < 0 {
-				continue
+				break
 			}
 			next := left[k]
-			target := host
-			if !next.resident[host] {
-				if j := slices.IndexFunc(hosts, func(o string) bool { return !used[o] && next.resident[o] }); j >= 0 {
-					target = hosts[j]
-				}
-			}
-			used[target] = true
-			position[target]++
-			out = append(out, placed{run: next.run, host: target, env: next.slots[target], position: position[target], passed: passed})
+			position++
+			out = append(out, placed{run: next.run, host: host, env: next.slots[host], position: position, passed: passed})
 			passOver(skips, next.run.ID, passed, now)
 			clock = clock.Add(time.Nanosecond)
 			last[next.run.OwnerID] = clock
 			left = slices.Delete(left, k, k+1)
-			if target != host {
-				i-- // this host has not taken a run yet
-			}
-		}
-		if len(out) == before {
-			break
 		}
 	}
 	return out
@@ -1092,21 +1208,21 @@ func passOver(skips map[string]skip, picked string, passed []string, now time.Ti
 	}
 }
 
-// pick returns the index in left (oldest first) of the run host takes next, or -1, and the ids of the heads it passed
-// over (contracts/README.md "the hand-over", Order): interactive before batch; users in round-robin order (the oldest
+// pick returns the index in left (oldest first) of the run lined up on host that host takes next, or -1, and the ids
+// of the heads it passed over (contracts/README.md "the hand-over", Order): interactive before batch; users in round-robin order (the oldest
 // last release first, never released first; a tie: the older oldest run); a user's head is their oldest run resident
 // on host, else their oldest; the first user whose head is resident or overdue goes, else the first user's head.
 func pick(host string, left []queued, last map[string]time.Time, skips map[string]skip, now time.Time) (int, []string) {
 	lane := ""
 	for _, q := range left {
-		if _, ok := q.slots[host]; ok && lane != "interactive" {
+		if q.host == host && lane != "interactive" {
 			lane = q.run.Lane
 		}
 	}
 	var owners []string
 	heads := map[string]int{}
 	for i, q := range left {
-		if _, ok := q.slots[host]; !ok || q.run.Lane != lane {
+		if q.host != host || q.run.Lane != lane {
 			continue
 		}
 		owner := q.run.OwnerID
@@ -1135,8 +1251,8 @@ func pick(host string, left []queued, last map[string]time.Time, skips map[strin
 
 // ------------------------------------------------------------------ the queue as users see it
 
-// lineupNow lines up every waiting run on the live hosts, all rounds, as the dispatcher would release them (by run
-// id), and says which hosts have a released run not ended. It reads every user's queue as System: callers show only
+// lineupNow lines up every waiting run on the live hosts as the dispatcher would release them (by run id), and says
+// which hosts have a released run not ended. It reads every user's queue as System: callers show only
 // their own runs and counts of others'. ponytail: rebuilt on every read, O(n^2) in the waiting runs (per user n is
 // bounded by MaxOpenRuns interactive runs plus MaxOpenBatches × the pipelines engine's WINDOW batch rows); one line-up
 // per pass shared with readers if users grow large.
@@ -1156,7 +1272,8 @@ func (s *Service) lineupNow(ctx context.Context) (map[string]placed, map[string]
 				at[run.ID] = placed{run: run, host: *run.Host, env: run.Env, position: ahead[*run.Host]}
 			}
 		}
-		for _, next := range lineup(snap.hosts, snap.queue, snap.last, ahead, 0, s.dispatcher.skipState(), now) {
+		s.dispatcher.lineUp(s.registry, snap, busy, now)
+		for _, next := range lineup(snap.queue, snap.last, ahead, s.dispatcher.skipState(), now) {
 			next.pins = s.dispatcher.pinnedVictims(s.registry, snap, next, now)
 			at[next.run.ID] = next
 		}

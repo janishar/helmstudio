@@ -290,7 +290,7 @@ func (s *Service) withOutputs(ctx context.Context, tx pgx.Tx, run model.Run) (dt
 // runDTO maps a run and its outputs, signing their keys.
 func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 	out := dto.Run{ID: run.ID, SessionID: run.SessionID, WorkflowID: run.WorkflowID, Inputs: map[string]any{},
-		Status: run.Status, Error: run.Error, Outputs: []dto.RunOutput{}, Host: run.Host, Lane: run.Lane,
+		Status: run.Status, Error: run.Error, Outputs: []dto.RunOutput{}, Host: run.Host, LostHost: run.LostHost, Lane: run.Lane,
 		Attempt: run.Attempt, CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, FinishedAt: run.FinishedAt,
 		BatchID: run.BatchID, BatchRow: run.BatchRow, WorkflowVersion: run.WorkflowVersion}
 	_ = json.Unmarshal(run.Inputs, &out.Inputs)

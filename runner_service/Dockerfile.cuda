@@ -1,0 +1,32 @@
+# runner_service as the torch runner on Linux + NVIDIA (M6: a GPU host's container; deploy/gpu-host/ runs it with the
+# NVIDIA container runtime). Base: the same slim Python as the fake runner, not nvidia/cuda: torch's PyPI wheels
+# (uv.lock, extra "torch", sys_platform linux) already bundle CUDA 13 (cuda-toolkit, cudnn, nccl ... wheels), so a
+# CUDA base image would carry a second copy; only the driver comes from the host, mounted by the NVIDIA runtime.
+# Weights are never in the image: the host's models folder is bind-mounted at HELMSTUDIO_MODELS (read-only unless
+# this host takes model jobs); RUNNER_CACHE (the LoRA cache, model hashes, download temp files) and TMPDIR are
+# writable volumes. Health check: `python health.py` (exit 0 while NATS is connected).
+FROM python:3.14.10-slim-trixie AS build
+RUN pip install --no-cache-dir uv==0.13.8
+WORKDIR /app
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project --extra torch
+
+FROM python:3.14.10-slim-trixie AS runtime
+WORKDIR /app
+# compute for torch, video for NVENC (libnvidia-encode), utility for the driver version
+ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 \
+    NVIDIA_VISIBLE_DEVICES=all NVIDIA_DRIVER_CAPABILITIES=compute,utility,video \
+    RUNNER_ENV=torch RUNNER_DEVICE=cuda HELMSTUDIO_MODELS=/models \
+    RUNNER_CACHE=/cache TMPDIR=/cache/tmp
+RUN useradd --system --create-home --uid 10001 runner \
+    && mkdir -p /models /cache/tmp && chown runner:runner /models /cache /cache/tmp
+# ffmpeg for media jobs: libx264, and h264_nvenc where the GPU encodes (core/media.py tries it at start)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+COPY --from=build /app/.venv /app/.venv
+COPY . .
+USER runner
+VOLUME ["/cache"]
+EXPOSE 8081
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 CMD ["python", "health.py"]
+CMD ["python", "main.py"]

@@ -705,7 +705,12 @@ export function Create({
   const anyActive = !!runs?.some((r) => isActive(r.status));
   const took = workflow && runs ? lastDuration(runs, workflow.id) : null;
   const pinned = pinnedNote(runs?.find((r) => r.id === lastRun));
-  const host = hostMemory(hosts, workflow?.env);
+  // with several hosts of the env: the host an active run is lined up on, else the shown run's (contracts "Several hosts")
+  const host = hostMemory(
+    hosts,
+    workflow?.env,
+    (runs?.find((r) => isActive(r.status) && r.host) ?? shown)?.host,
+  );
   const session = sessions?.find((s) => s.id === sessionId);
 
   const topBar = (badge?: string) => (

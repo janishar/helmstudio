@@ -15,6 +15,7 @@ import (
 func canonical(t *testing.T, prefix, source, id string) registry.Workflow {
 	t.Helper()
 	var r registry.Registry
+	withHosts(&r, source)
 	for _, kind := range []string{"nodes", "workflows"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", prefix+kind+".valid.json"))
 		if err != nil {

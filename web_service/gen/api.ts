@@ -484,6 +484,8 @@ export interface paths {
          *     rows value outside `min`/`max` (`encode.refs: at most 10 items`), an item field not in `item`, or an image param
          *     left null (`image.image: an image is required`) is 422 too. When no host is eligible (none live with the env and the workflow),
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
+         *     From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
+         *     planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility.
          *     409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
          *     running; wait for some to finish.`
          *
@@ -1478,7 +1480,8 @@ export interface paths {
          *     Model jobs). 404 for a model no host publishes. 422 `host <host> has no env for <model>`, `<model> has no
          *     variant <variant>`, `<title> <variant> has no download source`, `licence <id> must be accepted` (the variant's
          *     `source.must_accept` and `accept_licence` not true). 409 `<title> <variant> is already on <host>` (state
-         *     present), `a delete of <title> on <host> is unfinished`.
+         *     present), `a delete of <title> on <host> is unfinished`; from 1.18 `models root on <host> is read-only` (its
+         *     runner's hosts key reports `models_disk.writable: false`).
          */
         post: operations["studioAdminDownloadModel"];
         delete?: never;
@@ -1507,7 +1510,8 @@ export interface paths {
          *     resident entry of any env of the host whose files the delete removes), `<title> is in use by a queued or
          *     running run on <host>` (a run not yet terminal whose model node names the model and whose host is the host, or
          *     that is not placed yet and the host is eligible for it), `a download of <title> on <host> is unfinished; cancel
-         *     it first`. 422 `host <host> has no env for <model>`, `<model> has no variant <variant>`, `host is required`. The
+         *     it first`, from 1.18 `models root on <host> is read-only`. 422 `host <host> has no env for <model>`, `<model>
+         *     has no variant <variant>`, `host is required`. The
          *     runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it).
          */
         delete: operations["studioAdminDeleteModel"];
@@ -3218,8 +3222,10 @@ export interface components {
             error: string | null;
             /** @description by index; outputs whose take was deleted are left out */
             outputs: components["schemas"]["RunOutput"][];
-            /** @description the host it was sent to; while queued, the host it is lined up for (the one the dispatcher would choose now, may change); null when none was eligible */
+            /** @description the host it was sent to (its current attempt's); while queued, the host it is lined up for (the one the dispatcher would choose now, may change); null when none was eligible */
             host: string | null;
+            /** @description from 1.18: the host attempt 1 was sent to, when that host stopped responding and the run was queued again (attempt 2 goes to another eligible host when there is one: contracts/README.md, Several hosts: host loss); absent or null otherwise */
+            lost_host?: string | null;
             lane: components["schemas"]["RunLane"];
             /** @description 1; 2 after its runner was lost once and it was queued again */
             attempt: number;
@@ -3373,6 +3379,36 @@ export interface components {
             host_memory?: {
                 budget_gb: number;
                 used_gb: number;
+                /**
+                 * @description from 1.18: what the numbers measure, from the host's keys' `device.kind`: unified (mps: Apple silicon's shared memory), vram (cuda: the GPU's memory), ram (cpu). The memory chip and the Hosts board show `used of budget GB` the same for every kind; absent from older runners = unified
+                 * @enum {string}
+                 */
+                kind?: "unified" | "vram" | "ram";
+            };
+            /** @description from 1.18, when the runner reports it: its hosts key's `device` (registry.schema.json); the Hosts board's settings line is `<name> · <memory_total_gb> GB` */
+            device?: {
+                /** @enum {string} */
+                kind: "cuda" | "mps" | "cpu";
+                /**
+                 * @example NVIDIA L4
+                 * @example Apple M3 Max
+                 */
+                name: string;
+                /** @description VRAM (cuda), unified RAM (mps), RAM (cpu) */
+                memory_total_gb: number;
+                /** @description cuda: the whole device's used memory, every process */
+                memory_used_gb?: number;
+                /** @example 8.9 */
+                capability?: string;
+                /** @example 580.95.05 */
+                driver?: string;
+                /** @example torch 2.15.0 · CUDA 13.2 */
+                runtime?: string;
+            };
+            /** @description from 1.18, cuda hosts only: the host-RAM limit (RAM − RUNNER_RAM_RESERVE_GB) and the process's resident set; load staging and CPU-side components count here, not in `memory` / `host_memory` */
+            host_ram?: {
+                budget_gb: number;
+                used_gb: number;
             };
             /** @description model components loaded now; no run or owner */
             resident?: {
@@ -3393,6 +3429,11 @@ export interface components {
                  * @enum {string}
                  */
                 pinned_why?: "in_use" | "pin";
+                /**
+                 * @description from 1.18, cuda hosts: held in host RAM (CPU offload), counted in `host_ram`, not in `memory`; absent = on the device
+                 * @enum {string}
+                 */
+                device?: "cpu";
                 /** @description a component with LoRAs baked in is its own entry: those LoRAs in order; absent or empty = the plain component. Another user's own LoRA shows only its size (`lora_id`, `name`, `strength` null) */
                 loras?: {
                     lora_id: string | null;
@@ -3585,6 +3626,8 @@ export interface components {
             typed?: components["schemas"]["RunInputs"];
             /** @description a take made by a step of a pipeline batch (source pipeline): which pipeline, node and loop attempt; absent or null otherwise */
             pipeline?: components["schemas"]["MadeWithPipeline"] | null;
+            /** @description from 1.18: the host that ran it (the run's host at the attempt that stored it); absent or null for takes made before 1.18 */
+            host?: string | null;
             /** @description from the workflow's `<family>/model` node; null without one (echo) */
             model: {
                 /** @description the model id of the registry models key for the family; null when unknown */
@@ -4901,6 +4944,8 @@ export interface components {
             runtimes: {
                 runtime: string;
                 env: string;
+                /** @description from 1.18: the devices it runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime */
+                devices?: ("cuda" | "mps" | "cpu")[];
             }[];
             variants: components["schemas"]["ModelVariant"][];
         };
@@ -4999,8 +5044,11 @@ export interface components {
             } | null;
             /** @description failed: why (contracts/README.md, Model jobs: failures); null otherwise */
             failure: {
-                /** @enum {string} */
-                class: "not_found" | "gated" | "licence" | "disk_full" | "hash_mismatch" | "network" | "in_use" | "not_downloadable" | "internal";
+                /**
+                 * @description from 1.18 host_lost: the host stopped responding while the job was released (contracts/README.md, Several hosts: host loss)
+                 * @enum {string}
+                 */
+                class: "not_found" | "gated" | "licence" | "disk_full" | "hash_mismatch" | "network" | "in_use" | "not_downloadable" | "internal" | "host_lost";
                 detail: string;
             } | null;
             /** @description succeeded: evt.model.status `result`; null otherwise */
@@ -5448,7 +5496,7 @@ export interface components {
             /** @description the env that would run it now (automatic choice, or the named host's); null when none */
             host: string | null;
             env: string | null;
-            /** @description true: VideoToolbox; false: software (libx264); null without a host */
+            /** @description true: a hardware encoder (VideoToolbox or, from 1.18, NVENC); false: software (libx264); null without a host */
             hardware: boolean | null;
         };
         /** @enum {string} */
@@ -5492,8 +5540,11 @@ export interface components {
              */
             take_id: string | null;
             failure: {
-                /** @enum {string} */
-                class: "input" | "invalid" | "ffmpeg" | "verify" | "internal";
+                /**
+                 * @description from 1.18 host_lost: its host stopped responding (contracts/README.md, Several hosts: host loss); export again: another live host is chosen
+                 * @enum {string}
+                 */
+                class: "input" | "invalid" | "ffmpeg" | "verify" | "internal" | "host_lost";
                 detail: string;
             } | null;
             /** Format: date-time */

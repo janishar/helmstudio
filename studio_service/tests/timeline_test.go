@@ -290,7 +290,7 @@ func TestTimelineExport(t *testing.T) {
 		t.Fatal(exports)
 	}
 
-	// cancel asks the runner; a silent env's job is ended by the sweep
+	// cancel asks the runner; a silent env's job fails host_lost in the sweep
 	job = e.call(userA, "POST", base+"/export", map[string]any{"revision": 1}, 202)
 	e.call(userA, "POST", "/v1/studio/media-jobs/"+job["id"].(string)+"/cancel", nil, 200)
 	if len(e.cancelled) != 1 || e.cancelled[0] != job["id"] {
@@ -299,12 +299,23 @@ func TestTimelineExport(t *testing.T) {
 	e.mediaHost(2 * time.Minute)
 	var purged []string
 	purge := func(_ context.Context, subject string) error { purged = append(purged, subject); return nil }
-	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, nil, time.Now()); err != nil {
+	var stopped []string
+	stop := func(_ context.Context, id string) error { stopped = append(stopped, id); return nil }
+	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, stop, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if got := e.call(userA, "GET", "/v1/studio/media-jobs/"+job["id"].(string), nil, 200); got["status"] != "cancelled" ||
-		fmt.Sprint(purged) != "[cmd.media.fake.fake]" { // a runner that comes back never runs it
-		t.Fatal(got, purged)
+	if got = e.call(userA, "GET", "/v1/studio/media-jobs/"+job["id"].(string), nil, 200); got["status"] == "failed" {
+		t.Fatal(got) // heard within 60 s: a clean restart of its runner is no host loss
+	}
+	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, stop,
+		time.Now().Add(studio.StaleJobKey+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	got = e.call(userA, "GET", "/v1/studio/media-jobs/"+job["id"].(string), nil, 200)
+	if failure, _ := got["failure"].(map[string]any); got["status"] != "failed" || failure["class"] != "host_lost" ||
+		failure["detail"] != "host fake stopped responding" || fmt.Sprint(purged) != "[cmd.media.fake.fake]" ||
+		fmt.Sprint(stopped) != fmt.Sprint([]any{job["id"]}) { // API 1.18: host_lost; a runner that comes back never runs it
+		t.Fatal(got, purged, stopped)
 	}
 
 	// at most MaxOpenMediaJobs unfinished media jobs per user (exports and frames share every env's one worker)

@@ -9,9 +9,11 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/registry"
@@ -69,11 +71,13 @@ func TestAdmitFixtures(t *testing.T) {
 				BudgetGB *float64            `json:"budget_gb"`
 				UsedGB   *float64            `json:"used_gb"`
 				Resident []registry.Resident `json:"resident"`
+				RAMGB    *float64            `json:"ram_budget_gb"`
 			} `json:"keys"`
 			Run struct {
-				Env    string              `json:"env"`
-				PeakGB *float64            `json:"peak_gb"`
-				Needs  []message.Component `json:"needs"`
+				Env       string              `json:"env"`
+				PeakGB    *float64            `json:"peak_gb"`
+				RAMPeakGB *float64            `json:"ram_peak_gb"`
+				Needs     []message.Component `json:"needs"`
 			} `json:"run"`
 			Queued []struct {
 				Env   string              `json:"env"`
@@ -85,7 +89,7 @@ func TestAdmitFixtures(t *testing.T) {
 			t.Fatal(name, err)
 		}
 		var entries []entry
-		budget, running := -1, ""
+		budget, running, ram := -1, "", -1
 		for _, env := range slices.Sorted(maps.Keys(fx.Keys)) {
 			key := fx.Keys[env]
 			if key.State == "gone" {
@@ -97,19 +101,24 @@ func TestAdmitFixtures(t *testing.T) {
 			if key.BudgetGB != nil && (budget < 0 || hundredths(*key.BudgetGB) < budget) {
 				budget = hundredths(*key.BudgetGB)
 			}
+			if key.RAMGB != nil && (ram < 0 || hundredths(*key.RAMGB) < ram) {
+				ram = hundredths(*key.RAMGB)
+			}
 			measured := -1
 			if key.UsedGB != nil {
 				measured = hundredths(*key.UsedGB)
 			}
 			entries = append(entries, keyEntries(env, key.Resident, key.State == "fresh" && key.RunID == nil, measured)...)
 		}
-		peak := -1
+		p := plan{peak: -1, ramPeak: -1}
 		if fx.Run.PeakGB != nil {
-			peak = hundredths(*fx.Run.PeakGB)
+			p.peak = hundredths(*fx.Run.PeakGB)
 		}
-		var needs []string
+		if fx.Run.RAMPeakGB != nil {
+			p.ramPeak = hundredths(*fx.Run.RAMPeakGB)
+		}
 		for _, n := range fx.Run.Needs {
-			needs = append(needs, componentKey(n))
+			p.needs = append(p.needs, componentKey(n))
 		}
 		referenced := map[string]bool{}
 		for _, q := range fx.Queued {
@@ -119,7 +128,7 @@ func TestAdmitFixtures(t *testing.T) {
 		}
 		got := admission{decision: "release"}
 		if budget >= 0 {
-			got = admit(fx.Host, entries, budget, fx.Run.Env, peak, needs, referenced, running)
+			got = admit(fx.Host, entries, budget, fx.Run.Env, p, referenced, running, ram)
 		}
 		unload := map[string][]message.Component{}
 		for env, victims := range got.unload {
@@ -266,7 +275,7 @@ func TestOrderFixtures(t *testing.T) {
 			slices.SortStableFunc(ready, func(a, b simRun) int { return cmp.Or(cmp.Compare(a.At, b.At), cmp.Compare(a.seq, b.seq)) })
 			left := make([]queued, len(ready))
 			for i, r := range ready {
-				left[i] = queued{run: model.Run{ID: r.ID, OwnerID: r.Owner, Lane: r.Lane},
+				left[i] = queued{run: model.Run{ID: r.ID, OwnerID: r.Owner, Lane: r.Lane}, host: "mac",
 					slots: map[string]string{"mac": fx.Plans[r.Plan].Env}, resident: map[string]bool{"mac": isResident(r)}}
 			}
 			now := at(t0)
@@ -290,7 +299,7 @@ func TestOrderFixtures(t *testing.T) {
 			for _, c := range p.Components {
 				needs = append(needs, key(chosen.Plan, c))
 			}
-			got := admit("mac", entries, hundredths(fx.BudgetGB), p.Env, hundredths(p.PeakGB), needs, referenced, "")
+			got := admit("mac", entries, hundredths(fx.BudgetGB), p.Env, plan{needs: needs, peak: hundredths(p.PeakGB), ramPeak: -1}, referenced, "", -1)
 			runs = slices.DeleteFunc(runs, func(r simRun) bool { return r.ID == chosen.ID })
 			end := t0
 			if got.decision == "fail" {
@@ -342,6 +351,141 @@ func TestOrderFixtures(t *testing.T) {
 		}
 		if !reflect.DeepEqual(loads, fx.Expect.Loads) || (len(fails) > 0 || fx.Expect.Fails != nil) && !reflect.DeepEqual(fails, fx.Expect.Fails) {
 			t.Errorf("%s loads %v fails %v, want %v %v", name, loads, fails, fx.Expect.Loads, fx.Expect.Fails)
+		}
+	}
+}
+
+// Every place.* fixture (check.py place): the run's eligible hosts (after the lost-host rule) and the host it is lined
+// up on, or the error it fails with, through eligible and lineUp on a registry built from the fixture's hosts.
+func TestPlaceFixtures(t *testing.T) {
+	now := time.Date(2026, 11, 15, 10, 1, 0, 0, time.UTC)
+	for name, data := range dispatchFixtures(t, "place") {
+		var fx struct {
+			Hosts map[string]struct {
+				Keys map[string]struct {
+					State    string              `json:"state"`
+					RunID    *string             `json:"run_id"`
+					BudgetGB *float64            `json:"budget_gb"`
+					UsedGB   *float64            `json:"used_gb"`
+					RAMGB    *float64            `json:"ram_budget_gb"`
+					Resident []registry.Resident `json:"resident"`
+				} `json:"keys"`
+				Workflows map[string][]string            `json:"workflows"`
+				Variants  map[string]map[string][]string `json:"variants"`
+				Loras     map[string][]string            `json:"loras"`
+				Free      bool                           `json:"free"`
+				IdleSince *time.Time                     `json:"idle_since"`
+			} `json:"hosts"`
+			Run struct {
+				Env, Workflow, Model, Variant, Precision string
+				Loras                                    []string
+				PeakGB                                   *float64            `json:"peak_gb"`
+				RAMPeakGB                                *float64            `json:"ram_peak_gb"`
+				Needs                                    []message.Component `json:"needs"`
+				LoraComponent                            string              `json:"lora_component"`
+				LostHost                                 *string             `json:"lost_host"`
+			} `json:"run"`
+			Expect struct {
+				Host     *string  `json:"host"`
+				Eligible []string `json:"eligible"`
+				Error    *string  `json:"error"`
+			} `json:"expect"`
+		}
+		if err := json.Unmarshal(data, &fx); err != nil {
+			t.Fatal(name, err)
+		}
+		run := fx.Run
+		reg := &registry.Registry{}
+		busy, idle := map[string]bool{}, map[string]time.Time{}
+		for host, h := range fx.Hosts {
+			busy[host], idle[host] = !h.Free, deref(h.IdleSince)
+			for env, k := range h.Keys {
+				if k.State == "gone" {
+					continue
+				}
+				value := map[string]any{"host": host, "env": env, "state": "idle", "updated_at": now, "run_id": k.RunID,
+					"resident": k.Resident}
+				if k.State == "offline" {
+					value["updated_at"] = now.Add(-time.Minute)
+				}
+				if k.BudgetGB != nil {
+					value["memory"] = map[string]any{"budget_gb": *k.BudgetGB, "used_gb": deref(k.UsedGB)}
+				}
+				if k.RAMGB != nil {
+					value["host_ram"] = map[string]any{"budget_gb": *k.RAMGB, "used_gb": 0}
+				}
+				raw, _ := json.Marshal(value)
+				if err := reg.SetHost(host+"."+env, raw); err != nil {
+					t.Fatal(name, err)
+				}
+			}
+			for env, ids := range h.Workflows {
+				var list []map[string]any
+				for _, id := range ids {
+					list = append(list, map[string]any{"id": id, "env": env, "nodes": map[string]any{}})
+				}
+				raw, _ := json.Marshal(map[string]any{"workflows": list})
+				_ = reg.SetRegistry(host+"."+env+".workflows", raw)
+			}
+			for env, names := range h.Loras {
+				var list []map[string]any
+				for _, n := range names {
+					list = append(list, map[string]any{"id": n, "name": n})
+				}
+				raw, _ := json.Marshal(map[string]any{"loras": list})
+				_ = reg.SetRegistry(host+"."+env+".loras", raw)
+			}
+			for env, variants := range h.Variants {
+				byModel := map[string][]registry.Variant{}
+				for _, mv := range slices.Sorted(maps.Keys(variants)) {
+					m, v, _ := strings.Cut(mv, "/")
+					variant := registry.Variant{ID: v, Presence: "present", Precisions: variants[mv]}
+					if m == run.Model && v == run.Variant {
+						plan := registry.MemoryPlan{Precision: run.Precision, PeakGB: deref(run.PeakGB), RAMPeakGB: run.RAMPeakGB}
+						for _, n := range run.Needs {
+							plan.Components = append(plan.Components, registry.PlanComponent{Component: n.Component, Variant: n.Variant, Precision: n.Precision})
+						}
+						variant.Memory = []registry.MemoryPlan{plan}
+					}
+					byModel[m] = append(byModel[m], variant)
+				}
+				var models []registry.Model
+				for m, vs := range byModel {
+					models = append(models, registry.Model{ID: m, Family: "qwen-image", Title: m, Variants: vs,
+						Lora: &registry.LoraBlock{Component: run.LoraComponent}})
+				}
+				raw, _ := json.Marshal(map[string]any{"models": models})
+				_ = reg.SetRegistry(host+"."+env+".models", raw)
+			}
+		}
+		graph := map[string]registry.Node{}
+		if run.Model != "" {
+			graph["model"] = registry.Node{Kind: "qwen-image/model", Params: map[string]any{"variant": run.Variant, "precision": run.Precision}}
+		}
+		nodes, _ := json.Marshal(graph)
+		var used []lora.Used
+		for _, n := range run.Loras {
+			used = append(used, lora.Used{Node: "lora", ID: n, Source: "shared", Name: n, Strength: 1, Mode: "adapter"})
+		}
+		x := model.Run{ID: "x", WorkflowID: run.Workflow, Env: run.Env, Nodes: nodes, Loras: lorasJSON(used), LostHost: run.LostHost}
+		slots, resident, reason := eligible(reg, reg.Hosts(), x, now)
+		got := struct {
+			Host     *string  `json:"host"`
+			Eligible []string `json:"eligible"`
+			Error    *string  `json:"error"`
+		}{Eligible: slices.Sorted(maps.Keys(slots))}
+		if reason != "" {
+			got.Error = &reason
+		} else {
+			snap := snapshot{values: reg.Hosts(), queue: []queued{{run: x, slots: slots, resident: resident}}, idle: idle}
+			(*Dispatcher)(nil).lineUp(reg, snap, busy, now)
+			got.Host = &snap.queue[0].host
+		}
+		if got.Eligible == nil {
+			got.Eligible = []string{}
+		}
+		if !reflect.DeepEqual(jsonOf(t, got), jsonOf(t, fx.Expect)) {
+			t.Errorf("%s:\n got %v\nwant %v", name, jsonOf(t, got), jsonOf(t, fx.Expect))
 		}
 	}
 }

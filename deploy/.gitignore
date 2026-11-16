@@ -4,3 +4,6 @@ secrets/
 # AWS box settings and the last released tag (deploy/aws/aws.env.example)
 aws/aws.env
 aws/tag
+
+# the GPU host tunnel's pid file and log (.tools/gpu-host-tunnel)
+gpu-host/.run/

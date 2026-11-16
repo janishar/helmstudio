@@ -1,0 +1,29 @@
+# Overlay (-f): TLS for NATS and the object store (contracts/README.md, A remote GPU host: TLS). Always on in
+# helmstudio-test (make test), so the suites run the fake runner over tls:// and https://; opt-in on the dev stack with
+# STACK_TLS=on (deploy/.env or make up STACK_TLS=on), which the GPU host tunnel needs. NATS keeps one port, plain for the
+# stack's own services and TLS for whoever asks (allow_non_tls); SeaweedFS adds https on 8334 (S3_TLS_HOST_PORT on
+# 127.0.0.1) next to http on 8333. Cert, key and CA: deploy/secrets/stack_tls_{cert,key}, tls_ca (.tools/make-secrets).
+services:
+  nats:
+    environment: {NATS_CONF: nats-tls.conf}
+    secrets: [stack_tls_cert, stack_tls_key]
+
+  seaweedfs:
+    environment:
+      S3_TLS_ARGS: -s3.port.https=8334 -s3.cert.file=/run/secrets/stack_tls_cert -s3.key.file=/run/secrets/stack_tls_key
+    secrets: [stack_tls_cert, stack_tls_key]
+
+  # the fake runner as a remote runner would connect: tls:// verified against tls_ca, S3 over https
+  runner:
+    environment:
+      NATS_URL_FILE: /run/secrets/nats_runner_tls_url
+      NATS_CA_FILE: /run/secrets/tls_ca
+      S3_ENDPOINT: https://seaweedfs:8334
+      S3_CA_FILE: /run/secrets/tls_ca
+    secrets: [nats_runner_tls_url, tls_ca]
+
+secrets:
+  stack_tls_cert: {file: secrets/stack_tls_cert}
+  stack_tls_key: {file: secrets/stack_tls_key}
+  tls_ca: {file: secrets/tls_ca}
+  nats_runner_tls_url: {file: secrets/nats_runner_tls_url}

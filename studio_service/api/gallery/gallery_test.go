@@ -590,6 +590,7 @@ func TestSweep(t *testing.T) {
 // defaults); text to video takes no image.
 func TestImageInputLtx(t *testing.T) {
 	var r registry.Registry
+	_ = r.SetHost("mac.mlx", []byte(`{"host": "mac", "env": "mlx", "state": "idle", "updated_at": "2026-11-15T10:00:00Z"}`)) // keys read while present
 	for _, kind := range []string{"nodes", "workflows"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", "ltx."+kind+".valid.json"))
 		if err == nil {

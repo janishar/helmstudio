@@ -30,6 +30,8 @@ type MadeWith struct {
 	Looks []MadeWithLook `json:"looks,omitempty"`
 	// a take made by a step of a pipeline batch
 	Pipeline *MadeWithPipeline `json:"pipeline,omitempty"`
+	// API 1.18: the host that ran it (the run's host at the attempt that stored it); absent before 1.18
+	Host *string `json:"host,omitempty"`
 }
 
 // MadeWithElement is an element a take's prompt mentioned, as it was expanded.

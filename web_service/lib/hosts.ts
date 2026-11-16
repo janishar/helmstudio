@@ -12,14 +12,17 @@ export type HostMemory = {
   envs: Host[];
 };
 
-/** The live host of `env` with memory, as one chip: `host_memory` (else the env's own `memory`) and its envs. */
+/** The live host of `env` with memory, as one chip: `host_memory` (else the env's own `memory`) and its envs. With
+ * several hosts of the env, `prefer` (the host the run is lined up on or ran on) when it is one of them. */
 export function hostMemory(
   hosts: Host[] | null | undefined,
   env: string | undefined,
+  prefer?: string | null,
 ): HostMemory | null {
-  const h = hosts?.find(
+  const live = (hosts ?? []).filter(
     (x) => x.env === env && x.state !== "offline" && (x.host_memory ?? x.memory),
   );
+  const h = live.find((x) => x.host === prefer) ?? live[0];
   const m = h && (h.host_memory ?? h.memory);
   if (!h || !m) return null;
   const envs = hosts!.filter((x) => x.host === h.host);
@@ -57,6 +60,14 @@ export function machineText(m: Host["machine"]): string {
   return `${os} · ${accel} · ${m.packaging}`;
 }
 
+/** The settings panel's line: "Apple Silicon · 128 GB" (the board), a CUDA host's
+ * "NVIDIA L4 · 22.0 GB" (`<device name> · <VRAM> GB`). */
+export function deviceLine(c: Pick<HostCard, "machine" | "device">): string {
+  if (c.device?.kind === "cuda") return `${c.device.name} · ${c.device.memory_total_gb} GB`;
+  const os = c.machine?.os === "macos" ? "Apple Silicon" : c.machine ? "Linux" : "";
+  return [os, c.machine?.ram_gb && `${c.machine.ram_gb} GB`].filter(Boolean).join(" · ");
+}
+
 /** One resident entry and the env that holds it. */
 export type HostEntry = { env: string; r: Resident };
 
@@ -70,6 +81,7 @@ export type HostCard = {
   components_gb: number;
   cached_gb: number;
   machine: Host["machine"];
+  device: Host["device"];
   admin: S<"HostAdmin"> | undefined;
   /** the settings (the same on every env) and the policy in effect (the first env that reports one) */
   settings: S<"HostSettings"> | null;
@@ -93,7 +105,8 @@ export function hostCards(hosts: Host[]): HostCard[] {
     const envs = runners.length ? runners : all;
     const live = envs.filter((e) => e.state !== "offline");
     const entries = envs.flatMap((e) => (e.resident ?? []).map((r) => ({ env: e.env, r })));
-    const components = entries.reduce((s, x) => s + x.r.gb, 0);
+    // a `device: cpu` entry (CUDA offload) is in host RAM, not in the memory bar (contracts "Hosts with a discrete GPU")
+    const components = entries.reduce((s, x) => s + (x.r.device === "cpu" ? 0 : x.r.gb), 0);
     const cached = envs.reduce((s, e) => s + (e.cached_gb ?? 0), 0);
     const mem = envs.find((e) => e.host_memory)?.host_memory;
     const budgets = envs.map((e) => e.memory?.budget_gb).filter((b) => b != null);
@@ -108,6 +121,7 @@ export function hostCards(hosts: Host[]): HostCard[] {
       components_gb: round1(components),
       cached_gb: round1(cached),
       machine: envs.find((e) => e.machine)?.machine,
+      device: envs.find((e) => e.device)?.device,
       admin,
       settings: admin?.settings ?? null,
       policy: envs.find((e) => e.admin?.policy)?.admin?.policy ?? null,

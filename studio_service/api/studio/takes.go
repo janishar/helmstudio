@@ -29,7 +29,7 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64, resolved
 	inputs := map[string]any{}
 	_ = json.Unmarshal(run.Inputs, &inputs)
 	out := gallerydto.MadeWith{WorkflowID: run.WorkflowID, WorkflowTitle: run.WorkflowID, Inputs: inputs, Seed: seed,
-		WorkflowVersion: run.WorkflowVersion}
+		WorkflowVersion: run.WorkflowVersion, Host: run.Host}
 	if text, ok := inputs["prompt.text"].(string); ok {
 		out.Prompt = &text
 	}

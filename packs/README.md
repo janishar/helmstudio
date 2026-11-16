@@ -51,7 +51,8 @@ family: qwen-image                # node kinds are <family>/<stage>; the model n
 title: Qwen Image 2.1             # the model's title and the model node's title
 publish: [image]                  # core nodes to publish even when no workflow uses them (for graphs)
 runtimes:
-  torch: {env: torch}             # runtime key = module file (torch.py); env = the runner env that loads it
+  torch: {env: torch, devices: [mps, cuda]}   # runtime key = module file (torch.py); env = the runner env that
+                                  # loads it; devices (API 1.18, optional) = where it runs, published in `runtimes`
 model:                            # the generated <family>/model node (see below)
   help: Which weights to load and at what precision.
   variant: {label: Variant, help: "Turbo: 8 fixed steps, much faster."}
@@ -138,7 +139,7 @@ stages:                           # one node kind each: <family>/<stage>; the fu
 Keys the core understands; anything else is ignored:
 
 - **Top level**: `id`, `family`, `title`, `publish` (core node kinds to publish without a workflow using them),
-  `runtimes` (`<runtime>: {env}`), `model`, `variants`, `components`, `lora`, `stages`, and from API 1.16 `media`
+  `runtimes` (`<runtime>: {env, devices?}`), `model`, `variants`, `components`, `lora`, `stages`, and from API 1.16 `media`
   (what the model makes: `[image]`, `[video, audio]`) and `licences` (`<id>: {title, url?}`; the text is
   `licences/<id>.md` in the pack, shown to the admin before a download). A pack without `variants` has no model
   node and its `models` entry is `{id, family, title}`.
@@ -277,7 +278,7 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
 - **Memory**: before a stage runs, admission needs its not-yet-loaded `uses` components (their size computed from
   the safetensors headers at the target dtype) plus `peak_gb`; when short, cached node results are dropped,
   then components: first those the rest of the run does not need, within each group a baked LoRA set the run does
-  not use before plain ones, then least recently used. The budget is RAM minus `RUNNER_RESERVE_GB` (12), capped
+  not use before plain ones, then least recently used. The budget is RAM (on CUDA: VRAM) minus `RUNNER_RESERVE_GB` (12), capped
   for one run by its command's `budget_gb` (what the host's other env leaves: contracts/README.md "Two envs on one
   host: the hand-over"). After a run that used a baked set, the plain copy of that component is unloaded (unless
   pinned or used too), so the two never stay resident together. The hosts key lists every entry with `gb`,
@@ -287,8 +288,44 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   `peak_gb`), so write `peak_gb` for the default sizes honestly: studio admits runs across envs with it.
   `runner.unload` naming components unloads exactly those (never a RUNNER_PIN one). After a run `RUNNER_AFTER_RUN` = `keep_warm` (default; idle unload after
   `RUNNER_IDLE_UNLOAD_S`), `unload`, or `keep_pinned` (`RUNNER_PIN=transformer,vae`). Eviction drops the
-  module, runs `gc` and `torch.mps.empty_cache()` (synchronised first). A pack that needs an `auto` decision
+  module, runs `gc` and `torch.mps.empty_cache()` (synchronised first; on CUDA `torch.cuda.synchronize()`, then
+  `empty_cache()` and the pinned host cache). A pack that needs an `auto` decision
   (tiling) decides it inside the stage; its `peak_gb` should then describe the larger case.
+
+## CUDA: the torch runner on Linux + NVIDIA (API 1.18, M6)
+
+v1 runs Qwen Image on CUDA only (LTX and llm stay MLX). The runner is `runner_service/Dockerfile.cuda` (`make
+image-cuda`; `deploy/gpu-host/` runs it with the NVIDIA runtime): the slim Python image plus the `torch` extra from
+the same `uv.lock` (on Linux torch 2.15's wheels bundle CUDA 13; the driver comes from the host), ffmpeg, user
+`runner`, weights bind-mounted at `HELMSTUDIO_MODELS=/models` (read-only unless the host takes model jobs: the hosts
+key's `models_disk.writable`), `/cache` writable (`RUNNER_CACHE`, `TMPDIR`). What changes for a pack: nothing, if it
+follows these rules.
+
+- **The device** is picked once per process (`core.loaders_torch.device()`: mps, cuda, cpu; `RUNNER_DEVICE` forces
+  one that is present). Use `ctx.device`, never a literal; sync with `getattr(torch, dev).synchronize()` when
+  `dev != "cpu"`, never `torch.mps.*` directly.
+- **Loading**: each tensor is read into one pinned host buffer (the largest tensor, never a file) and copied with
+  `non_blocking`; the next read waits only for that copy. LoRA files load the same way. Growing the buffer past the
+  host-RAM budget (`RAM - RUNNER_RAM_RESERVE_GB`, 4) fails the stage `needs <x> GB of host RAM at its peak; host <H>
+  has <y> GB`.
+- **dtypes**: bf16 is native from compute capability 8.0; below it a `bf16` component loads as fp16 (Qwen in fp16
+  may overflow: unsupported). The int8 path is the MPS one (int8 weights on the device); torch's
+  `_weight_int8pack_mm` is used only where the build has it for the device (`_int8_kernel`), else dequantize + matmul.
+- **Memory**: budget = VRAM total - reserve; used = `torch.cuda.memory_reserved()` + the CUDA context (measured once
+  at start). The hosts key adds `device` (name, VRAM, capability, driver, runtime) and `host_ram`. No CPU offload in
+  v1 (no `device: cpu` entries), no `ram_peak_gb` in plans (absent = not checked by studio).
+- **Seeds and parity**: noise comes from a CPU generator (same noise on every device); the ask stage is greedy. Pixels
+  still differ from the MPS goldens: SDPA picks flash / memory-efficient kernels on CUDA, bf16 matmuls accumulate
+  differently, and the int8 path may dequantize where MPS uses the kernel. Compare CUDA runs with a tolerance (PSNR),
+  never bit-exact, and keep CUDA goldens apart from MPS ones.
+- **Media jobs**: `h264_nvenc` when the container's ffmpeg lists it and a 0.2 s test encode works (it needs
+  `NVIDIA_DRIVER_CAPABILITIES` with `video`), else `libx264`.
+
+**Checked only on a real GPU** (the GPU host's checklist; CPU tests cover the rest): `pytest -m gpu` there; the
+pinned staging speed and peak RSS on the real Qwen files; `_weight_int8pack_mm` on CUDA (present or the dequantize
+path) and int8 quality; `context_gb` and `memory_reserved` against `nvidia-smi`; the `/proc/driver/nvidia` driver
+field; Qwen base and turbo at 1 MP (int8 and bf16), an edit with references, adapter and bake LoRAs, the ask stage;
+`empty_cache` returning memory after unload; NVENC detection; a download onto the read-write models root.
 
 ## Ask stages and text workflows (API 1.14; contracts/README.md "The llm pack and agent nodes")
 

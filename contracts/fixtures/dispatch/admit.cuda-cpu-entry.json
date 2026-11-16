@@ -1,0 +1,67 @@
+{
+  "description": "a 24 GB CUDA host (budget 22 = VRAM - reserve): Base's transformer is offloaded to host RAM (device cpu) and does not count in the VRAM budget; the measured excess (9.5 - 7.39 on the device) does. 2.11 + 14.5 <= 22: released, nothing unloaded (counting the CPU entry would have unloaded it)",
+  "host": "gcp",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 22,
+      "used_gb": 9.5,
+      "ram_budget_gb": 28,
+      "resident": [
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "int8",
+          "gb": 6.76,
+          "pinned": false,
+          "last_used": "2026-11-15T09:59:00Z",
+          "device": "cpu"
+        },
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 6.76,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:20Z"
+        },
+        {
+          "component": "vae",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 0.63,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:30Z"
+        }
+      ]
+    }
+  },
+  "run": {
+    "env": "torch",
+    "peak_gb": 14.5,
+    "ram_peak_gb": 18,
+    "needs": [
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "turbo",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "release",
+    "unload": {},
+    "budget_gb": 22.0,
+    "error": null
+  }
+}

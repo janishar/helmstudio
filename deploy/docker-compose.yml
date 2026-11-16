@@ -41,6 +41,8 @@ secrets:
   web_api_key: {file: secrets/web_api_key}
   helm_api_key: {file: secrets/helm_api_key}      # the CLI's key (client "helm")
   file_url_secret: {file: secrets/file_url_secret}  # studio signs /files links with it, files verifies them
+  nats_gpu_hosts: {file: secrets/nats_gpu_hosts.conf}  # remote GPU hosts' NATS passwords (nats.conf includes it)
+  s3_config: {file: secrets/s3_config.json}        # SeaweedFS identities: the admin key + one runner-<h> per GPU host
 
 # Fixed addresses for the two hops allowed to set X-Forwarded-For: Kong (trusted by auth) and the web BFF (trusted
 # by Kong and auth), so sign-in rate limits key on the browser's IP and a header sent from outside is ignored. Every
@@ -91,12 +93,13 @@ services:
 
   nats:
     image: nats:2.15.3-alpine3.22
-    # nats.conf reads the users' passwords from the environment; they come from the secrets here
-    entrypoint: [sh, -c, 'for u in admin auth studio runner runner_mac_torch runner_mac_mlx pipelines; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/nats.conf']
+    # nats.conf reads the users' passwords from the environment; they come from the secrets here (the remote GPU
+    # hosts' from the included secret nats_gpu_hosts). NATS_CONF=nats-tls.conf (compose/tls.yml) adds TLS.
+    entrypoint: [sh, -c, 'for u in admin auth studio runner runner_mac_torch runner_mac_mlx pipelines; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/$${NATS_CONF:-nats.conf}']
     secrets: [nats_admin_password, nats_auth_password, nats_studio_password, nats_runner_password,
-              nats_runner_mac_torch_password, nats_runner_mac_mlx_password, nats_pipelines_password]
-    ports: ["127.0.0.1:${NATS_HOST_PORT:-4322}:4222"]   # for native runners (make runners)
-    volumes: [./nats/nats.conf:/etc/nats/nats.conf:ro, natsdata:/data]
+              nats_runner_mac_torch_password, nats_runner_mac_mlx_password, nats_pipelines_password, nats_gpu_hosts]
+    ports: ["127.0.0.1:${NATS_HOST_PORT:-4322}:4222"]   # for native runners (make runners) and the GPU host tunnel
+    volumes: [./nats:/etc/nats:ro, natsdata:/data]
     healthcheck:
       test: [CMD, wget, -qO-, "http://localhost:8222/healthz?js-enabled-only=true"]
       interval: 3s
@@ -124,10 +127,14 @@ services:
   seaweedfs:
     image: chrislusf/seaweedfs:4.53
     profiles: [s3local]
-    # with no -s3.config, AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (from the secrets) become the S3 admin identity
-    entrypoint: [sh, -c, 'export AWS_ACCESS_KEY_ID="$$(cat /run/secrets/s3_access_key_id)" AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/s3_secret_access_key)"; exec /entrypoint.sh server -dir=/data -s3 -s3.port=8333 -ip=seaweedfs -ip.bind=0.0.0.0']
-    secrets: [s3_access_key_id, s3_secret_access_key]
-    ports: ["127.0.0.1:${S3_HOST_PORT:-8433}:8333"]   # the S3 API, for native runners (make runners)
+    # identities from -s3.config (secret s3_config, .tools/make-secrets): the admin key of the s3_* secrets (also
+    # exported, as before) and runner-<h> per remote GPU host, Read and Write on the bucket only; a new host's identity
+    # needs a seaweedfs restart (make gpu-host-reload). S3_TLS_ARGS (compose/tls.yml) adds https on 8334; 8333 stays http.
+    entrypoint: [sh, -c, 'export AWS_ACCESS_KEY_ID="$$(cat /run/secrets/s3_access_key_id)" AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/s3_secret_access_key)"; exec /entrypoint.sh server -dir=/data -s3 -s3.port=8333 -s3.config=/run/secrets/s3_config $${S3_TLS_ARGS:-} -ip=seaweedfs -ip.bind=0.0.0.0']
+    secrets: [s3_access_key_id, s3_secret_access_key, s3_config]
+    ports:
+      - "127.0.0.1:${S3_HOST_PORT:-8433}:8333"        # the S3 API, for native runners (make runners)
+      - "127.0.0.1:${S3_TLS_HOST_PORT:-8443}:8334"    # the same over https when TLS is on, for the GPU host tunnel
     volumes: [seaweeddata:/data]
     healthcheck: {test: [CMD, wget, -qO-, http://localhost:8333/healthz], interval: 3s, timeout: 3s, retries: 30}
 

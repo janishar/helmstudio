@@ -20,6 +20,8 @@ class Store:
             endpoint_url=config.S3_ENDPOINT or None,
             aws_access_key_id=config.S3_ACCESS_KEY_ID or None,
             aws_secret_access_key=config.S3_SECRET_ACCESS_KEY or None,
+            verify=config.S3_CA_FILE
+            or None,  # https:// with the stack's own CA (a remote GPU host)
             # ponytail: path-style always (SeaweedFS needs it; AWS still serves it)
             config=Config(
                 signature_version="s3v4",

@@ -1,0 +1,40 @@
+{
+  "id": "5a7e0c11-2b3d-4e5f-8a9b-0c1d2e3f4a5b",
+  "kind": "image",
+  "source": "create",
+  "title": "Fox at dusk, soft backlight",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/0.png?exp=1767225600&sig=ab12",
+  "content_type": "image/png",
+  "width": 2752,
+  "height": 1536,
+  "bytes": 6291456,
+  "created_at": "2026-11-14T10:16:20Z",
+  "starred": true,
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "made_with": {
+    "workflow_id": "qwen-image",
+    "workflow_title": "Qwen Image",
+    "inputs": {
+      "prompt.text": "Fox at dusk, soft backlight",
+      "seed.seed": 43,
+      "canvas.width": 2752,
+      "canvas.height": 1536,
+      "model.variant": "base",
+      "model.precision": "int8",
+      "encode.transparent": false,
+      "sample.steps": 40,
+      "decode.tiled": "auto"
+    },
+    "prompt": "Fox at dusk, soft backlight",
+    "seed": 43,
+    "model": {
+      "id": "qwen-image-2.1",
+      "variant": "base",
+      "precision": "int8"
+    },
+    "host": "gcp"
+  },
+  "parents": []
+}

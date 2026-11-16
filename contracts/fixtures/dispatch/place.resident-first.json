@@ -1,0 +1,139 @@
+{
+  "description": "both hosts free and big enough; Qwen Turbo int8 is resident on mac only: mac, though gcp has been idle longer",
+  "hosts": {
+    "mac": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": [
+            {
+              "component": "text_encoder",
+              "model": "qwen-image-2.1",
+              "variant": "base",
+              "precision": "int8",
+              "gb": 9.28,
+              "pinned": false,
+              "last_used": "2026-11-15T10:00:10Z"
+            },
+            {
+              "component": "transformer",
+              "model": "qwen-image-2.1",
+              "variant": "turbo",
+              "precision": "int8",
+              "gb": 6.76,
+              "pinned": false,
+              "last_used": "2026-11-15T10:00:20Z"
+            },
+            {
+              "component": "vae",
+              "model": "qwen-image-2.1",
+              "variant": "base",
+              "precision": "bf16",
+              "gb": 0.63,
+              "pinned": false,
+              "last_used": "2026-11-15T10:00:30Z"
+            }
+          ]
+        },
+        "mlx": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ],
+          "qwen-image-2.1/turbo": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": "2026-11-15T10:00:00Z"
+    },
+    "gcp": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 94,
+          "ram_budget_gb": 176,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ],
+          "qwen-image-2.1/turbo": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": "2026-11-15T09:00:00Z"
+    }
+  },
+  "run": {
+    "env": "torch",
+    "workflow": "qwen-image",
+    "model": "qwen-image-2.1",
+    "variant": "turbo",
+    "precision": "int8",
+    "loras": [],
+    "peak_gb": 29.25,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "turbo",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ],
+    "lora_component": "transformer"
+  },
+  "expect": {
+    "host": "mac",
+    "eligible": [
+      "gcp",
+      "mac"
+    ],
+    "error": null
+  }
+}

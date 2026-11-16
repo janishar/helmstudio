@@ -12,7 +12,8 @@ the reference mention rules (README, Mentions) against the same palette; fixture
 LoRA normaliser (README, LoRA normaliser) against the canonical qwen-image lora block (or the fixture's `family`);
 fixtures/decisions/ through the reference judge verdict and replay hash (README, Agent nodes);
 fixtures/video/ through the reference auto length and keyframe position rules (README, Video); fixtures/dispatch/
-through the reference host admission (`admit`) and dispatch order (`simulate`) (README, The hand-over);
+through the reference host admission (`admit`), dispatch order (`simulate`) (README, The hand-over) and placement
+among several hosts (`place`) (README, Several hosts);
 fixtures/timelines/ through the reference timeline rules (`t_normalize`, `t_edit`, `snap_point`, `frame_at`,
 `export_plan`, `shot_keyframes`, `rerender_steps`) (README, Timeline rules).
 Exit code 1 on any failure."""
@@ -2230,12 +2231,14 @@ def entry_key(e: dict) -> tuple:
 
 
 def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: int | None, needs: set,
-          referenced: set, running: str | None = None) -> dict:
+          referenced: set, running: str | None = None, ram_budget: int | None = None, ram_peak: int | None = None) -> dict:
     """The admission decision for releasing a run to `env` of `host`. entries: (env, key, gb, pinned, fresh, used)
     for every resident entry of the host's present keys (gb in hundredths, used sortable, None = oldest); budget: the
     host's (None: no key reports memory); peak: the run's planned peak (None: no plan = the whole budget); needs: the
     keys the run uses; referenced: (env, key) of the host's other queued runs; running: an env whose key still names
-    a run (that run may use up to its budget_gb, more than its key declares: the run waits for that key's next write)."""
+    a run (that run may use up to its budget_gb, more than its key declares: the run waits for that key's next write).
+    ram_budget / ram_peak (API 1.18, cuda hosts): host_ram's smallest budget_gb and the plan's ram_peak_gb; entries held
+    in host RAM (`device: cpu`) are not entries here."""
     if budget is None:
         return {"decision": "release", "unload": {}, "budget_gb": None, "error": None}
     p = budget if peak is None else peak
@@ -2244,6 +2247,9 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
     own = sum(x[2] for x in counted if x[0] == env and x[1][0] == "(measured)")  # the run's own runner's excess
     if p > budget:  # a pin never fails a run: pinned entries are victims too, the last ones (below)
         error = f"needs {p / 100:.1f} GB at its peak; host {host} has {budget / 100:.1f} GB"
+        return {"decision": "fail", "unload": {}, "budget_gb": None, "error": error}
+    if ram_budget is not None and ram_peak is not None and ram_peak > ram_budget:
+        error = f"needs {ram_peak / 100:.1f} GB of host RAM at its peak; host {host} has {ram_budget / 100:.1f} GB"
         return {"decision": "fail", "unload": {}, "budget_gb": None, "error": error}
     if running:
         return {"decision": "wait", "unload": {}, "budget_gb": None, "error": None}
@@ -2272,29 +2278,87 @@ def as_component(key: tuple) -> dict:
     return out
 
 
-def admit_fixture(fx: dict) -> dict:
+def host_view(keys: dict) -> tuple[list, int | None, int | None, str | None]:
+    """One host's present keys (fixture form: env -> {state fresh|offline|gone, budget_gb?, used_gb?, ram_budget_gb?,
+    run_id?, resident}) -> (admission entries, budget, host-RAM budget, the env of an in-run key)."""
     from datetime import datetime
-    entries, budgets = [], []
-    run = fx["run"]
-    for env, k in fx["keys"].items():
+    entries, budgets, rams = [], [], []
+    for env, k in keys.items():
         if k["state"] == "gone":
             continue
         if "budget_gb" in k:
             budgets.append(cgb(k["budget_gb"]))
+        if "ram_budget_gb" in k:
+            rams.append(cgb(k["ram_budget_gb"]))
         fresh = k["state"] == "fresh" and not k.get("run_id")  # a key still naming a run waits for its next write
-        for e in k.get("resident", []):
+        on_device = [e for e in k.get("resident", []) if e.get("device") != "cpu"]  # host RAM is not the budget
+        for e in on_device:
             used = datetime.fromisoformat(e["last_used"].replace("Z", "+00:00")).timestamp() if "last_used" in e else None
             entries.append((env, entry_key(e), cgb(e["gb"]), e["pinned"], fresh, used))
-        extra = cgb(k["used_gb"]) - sum(cgb(e["gb"]) for e in k.get("resident", [])) if "used_gb" in k else 0
+        extra = cgb(k["used_gb"]) - sum(cgb(e["gb"]) for e in on_device) if "used_gb" in k else 0
         if extra > 0:  # measured beyond the entries: counted (the run's own env too), never a victim
             entries.append((env, ("(measured)", "", "", "", ()), extra, False, False, None))
-    running = next((env for env, k in sorted(fx["keys"].items()) if k["state"] != "gone" and k.get("run_id")), None)
+    running = next((env for env, k in sorted(keys.items()) if k["state"] != "gone" and k.get("run_id")), None)
+    return entries, min(budgets) if budgets else None, min(rams) if rams else None, running
+
+
+def admit_fixture(fx: dict) -> dict:
+    run = fx["run"]
+    entries, budget, ram_budget, running = host_view(fx["keys"])
     peak = None if run["peak_gb"] is None else cgb(run["peak_gb"])
+    ram_peak = cgb(run["ram_peak_gb"]) if run.get("ram_peak_gb") is not None else None
     referenced = {(q["env"], entry_key(n)) for q in fx.get("queued", []) for n in q["needs"]}
-    got = admit(fx["host"], entries, min(budgets) if budgets else None, run["env"], peak,
-                {entry_key(n) for n in run["needs"]}, referenced, running)
+    got = admit(fx["host"], entries, budget, run["env"], peak, {entry_key(n) for n in run["needs"]}, referenced,
+                running, ram_budget, ram_peak)
     got["unload"] = {env: [as_component(k) for k in keys] for env, keys in got["unload"].items()}
     return got
+
+
+def place(fx: dict) -> dict:
+    """Several hosts (README, Several hosts): the run's eligible hosts and the one it is lined up on, or the error it
+    fails with. hosts: name -> {keys (as admit fixtures), workflows: {env: [ids]}, variants: {env: {"model/variant":
+    [precisions]}} (present ones only), loras: {env: [shared LoRA names]}, free, idle_since (null = never ran)};
+    run: {env, workflow, model?, variant?, precision?, loras (shared, graph order), peak_gb, ram_peak_gb?, needs,
+    lora_component?, lost_host?}."""
+    run, hosts = fx["run"], fx["hosts"]
+    env = run["env"]
+    gone = lambda m: (f"runner on host {run['lost_host']} stopped responding; no other live host for env {env}"
+                      if run.get("lost_host") else m)
+    cand = sorted(h for h, x in hosts.items() if x["keys"].get(env, {}).get("state") == "fresh")
+    cand = [h for h in cand if run["workflow"] in hosts[h]["workflows"].get(env, [])]
+    if not cand:
+        return {"host": None, "eligible": [], "error": gone(f"no live host for env {env}")}
+    if run.get("model"):
+        mv = f"{run['model']}/{run['variant']}"
+        cand = [h for h in cand if run["precision"] in hosts[h]["variants"].get(env, {}).get(mv, [])]
+        if not cand:
+            return {"host": None, "eligible": [], "error": gone(
+                f"no live host for env {env} has model {run['model']} variant {run['variant']} at {run['precision']}")}
+    has = lambda h, n: n in hosts[h]["loras"].get(env, [])
+    with_loras = [h for h in cand if all(has(h, n) for n in run.get("loras", []))]
+    if not with_loras:
+        first = next(n for n in run["loras"] if not has(cand[0], n))
+        if not any(has(h, first) for h in cand):
+            return {"host": None, "eligible": [], "error": gone(f"no live host for env {env} has LoRA {first}")}
+        return {"host": None, "eligible": [], "error": gone(
+            f"no live host for env {env} has all of its LoRAs ({first} is not on {cand[0]})")}
+    peak = None if run["peak_gb"] is None else cgb(run["peak_gb"])
+    ram_peak = cgb(run["ram_peak_gb"]) if run.get("ram_peak_gb") is not None else None
+    needs = {entry_key(n) for n in run["needs"]}
+    views = {h: host_view(hosts[h]["keys"]) for h in with_loras}
+    decided = {h: admit(h, v[0], v[1], env, peak, needs, set(), v[3], v[2], ram_peak) for h, v in views.items()}
+    eligible = [h for h in with_loras if decided[h]["decision"] != "fail"]
+    if not eligible:  # too big everywhere: the largest host's reason (budget, then name)
+        big = sorted(with_loras, key=lambda h: (-(views[h][1] or 0), h))[0]
+        return {"host": None, "eligible": [], "error": gone(decided[big]["error"])}
+    if run.get("lost_host") in eligible and len(eligible) > 1:  # attempt 2 goes elsewhere when it can
+        eligible.remove(run["lost_host"])
+    comp = run.get("lora_component")
+    resident = lambda h: any(x[0] == env and x[1] in needs and (comp is None or x[1][0] == comp) for x in views[h][0])
+    idle = lambda h: hosts[h].get("idle_since") or ""  # never ran = idle longest
+    best = sorted(eligible, key=lambda h: (not hosts[h]["free"], not resident(h),
+                                           decided[h]["decision"] != "release", idle(h), h))
+    return {"host": best[0], "eligible": eligible, "error": None}
 
 
 def simulate(fx: dict) -> dict:
@@ -2395,6 +2459,10 @@ def check_dispatch(registry: Registry) -> None:
             shapes += [(comp_v, n) for q in [fx["run"], *fx.get("queued", [])] for n in q["needs"]]
             shapes += [(comp_v, c) for cs in fx["expect"]["unload"].values() for c in cs]
             got = admit_fixture(fx)
+        elif p.name.startswith("place."):
+            shapes = [(entry_v, e) for x in fx["hosts"].values() for k in x["keys"].values() for e in k.get("resident", [])]
+            shapes += [(comp_v, n) for n in fx["run"]["needs"]]
+            got = place(fx)
         elif p.name.startswith("order."):
             shapes = [(comp_v, c | {"model": pl["model"]}) for pl in fx["plans"].values()
                       for c in ({k: v for k, v in c.items() if k in ("component", "variant", "precision")}
@@ -2402,7 +2470,7 @@ def check_dispatch(registry: Registry) -> None:
             got = simulate(fx)
             got = {k: v for k, v in got.items() if k in fx["expect"] or v}
         else:
-            fail(f"{name}: not admit.* or order.*")
+            fail(f"{name}: not admit.*, place.* or order.*")
             continue
         if bad := [e for v, x in shapes for e in v.iter_errors(x)]:
             fail(f"{name}: {bad[0].json_path}: {bad[0].message}")

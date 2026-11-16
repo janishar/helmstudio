@@ -265,8 +265,10 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
         dtype = latents.dtype
         latents = scheduler.step(pred[:, -latents.size(1) :], t, latents, return_dict=False)[0]
         latents = latents.to(dtype)  # MPS returns fp32 here (pytorch#99272)
-        if dev == "mps":
-            torch.mps.synchronize()  # so progress, ETA and cancel follow the GPU, not the queue
+        if dev != "cpu":
+            getattr(
+                torch, dev
+            ).synchronize()  # so progress, ETA and cancel follow the GPU, not the queue
         ctx.progress(i + 1, n, "sampling")
     return {"latent": Latent(latents.clone(), width, height)}
 

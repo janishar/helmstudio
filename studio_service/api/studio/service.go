@@ -3,6 +3,7 @@
 package studio
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"math"
@@ -199,16 +200,21 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 			}
 		}
 	}
-	shared := map[string]*registry.Memory{}
+	shared := map[string]*dto.HostMemory{}
 	used := map[string]int{} // hundredths
+	kinds := map[string]string{}
 	for _, host := range hosts {
-		used[host.Host] += held(host) // its entries, or what it measured when larger (caches the admission counts too)
+		used[host.Host] += held(host) // its device entries, or what it measured when larger (caches the admission counts too)
 		if m := host.Memory; m != nil && (shared[host.Host] == nil || hundredths(m.BudgetGB) < hundredths(shared[host.Host].BudgetGB)) {
-			shared[host.Host] = &registry.Memory{BudgetGB: m.BudgetGB}
+			shared[host.Host] = &dto.HostMemory{BudgetGB: m.BudgetGB}
+		}
+		if host.Device != nil && kinds[host.Host] == "" {
+			kinds[host.Host] = map[string]string{"cuda": "vram", "cpu": "ram"}[host.Device.Kind]
 		}
 	}
 	for name, m := range shared {
 		m.BudgetGB, m.UsedGB = math.Round(m.BudgetGB*10)/10, math.Round(float64(used[name])/10)/10
+		m.Kind = cmp.Or(kinds[name], "unified") // absent from older runners: unified
 	}
 	mine := map[string]bool{}
 	if len(ids) > 0 {
@@ -238,7 +244,9 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 		resident := slices.Clone(host.Resident)
 		declared := 0
 		for i, r := range resident {
-			declared += hundredths(r.GB)
+			if registry.OnDevice(r.Device) {
+				declared += hundredths(r.GB)
+			}
 			if len(r.Loras) == 0 {
 				continue
 			}
@@ -257,7 +265,7 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 		}
 		entry := dto.Host{Host: host.Host, Env: host.Env, State: state, UpdatedAt: host.UpdatedAt,
 			Memory: host.Memory, HostMemory: shared[host.Host], Resident: resident, Machine: host.Machine,
-			Admin: admin[host.Host+"."+host.Env]}
+			Admin: admin[host.Host+"."+host.Env], Device: host.Device, HostRAM: host.HostRAM}
 		if host.Memory != nil {
 			cached := math.Round(float64(max(0, hundredths(host.Memory.UsedGB)-declared))/10) / 10
 			entry.CachedGB = &cached

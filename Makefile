@@ -3,15 +3,19 @@
 # The dev stack is compose project helmstudio (Kong on 127.0.0.1:8300); the contract suite runs on its own project,
 # helmstudio-test (Kong on 8390, Postgres on 5464, image tag gate), never on the dev stack.
 
-DEV  := docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml
-# the test stack turns remote models on: its pipelines trusts only the fake OpenAI server's certificate (fake.yml)
-TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 HELM_NET=172.30.98 IMAGE_TAG=gate \
-        REMOTE_MODELS=on \
-        docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml
+# STACK_TLS=on (here or in deploy/.env) adds deploy/compose/tls.yml to the dev stack: TLS for NATS and S3 (GPU hosts)
+STACK_TLS ?= $(shell sed -n 's/^STACK_TLS=//p' deploy/.env 2>/dev/null)
+DEV  := docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml $(if $(filter on,$(STACK_TLS)),-f deploy/compose/tls.yml)
+# the test stack turns remote models on: its pipelines trusts only the fake OpenAI server's certificate (fake.yml);
+# TLS is always on in it (tls.yml): the fake runner joins over tls:// and https://
+TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 S3_TLS_HOST_PORT=8444 \
+        HELM_NET=172.30.98 IMAGE_TAG=gate REMOTE_MODELS=on \
+        docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml -f deploy/compose/tls.yml
 # the test admin set by deploy/compose/fake.yml
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
 
-.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runners-stop
+.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runners-stop \
+        gpu-host-secrets gpu-host-reload gpu-host-tunnel gpu-host-tunnel-stop
 
 secrets:          ## deploy/secrets/ (git-ignored); never overwrites
 	.tools/make-secrets
@@ -47,6 +51,7 @@ contracts-check: contract_tests/.venv   ## schemas, fixtures, openapi.yaml (no s
 test: secrets envs contract_tests/.venv  ## the contract suite on the helmstudio-test stack
 	-@$(TEST) kill -s HUP nats >/dev/null 2>&1
 	$(TEST) up -d --build --wait
+	$(TEST) --profile hosts create runner-b   # the second fake host: test_hosts.py starts and stops it
 	key=$$($(TEST) run --rm -T auth apikey contract) && \
 	  $(MAKE) -C contract_tests test BASE_URL=http://localhost:8390 API_KEY="$$key" CONTRACT_SCHEMAS=1 $(TEST_ADMIN)
 
@@ -93,3 +98,23 @@ runners-stop:     ## stops both native runners (each by its pid file; only a pro
 	@for env in torch mlx; do f=$(RUN_DIR)/runner-mac-$$env.pid; pid=$$(cat $$f 2>/dev/null) || continue; \
 	if ps -p $$pid -o command= | grep -q 'uv run'; then kill $$pid && echo "stopped runner $$env ($$pid)"; \
 	else echo "runner $$env ($$pid) is not running"; fi; rm -f $$f; done
+
+# Remote GPU hosts (deploy/gpu-host/README.md; contracts/README.md, A remote GPU host). Each has its own NATS user
+# runner_<h>_torch and S3 identity runner-<h>, made by .tools/make-secrets; a running dev stack takes a new host
+# without a restart of the stack: NATS reloads its users on HUP, SeaweedFS (identities) restarts alone.
+gpu-host-secrets: ## a GPU host's credentials (GPU_HOSTS="gcp"; default: those that exist, else gcp), then gpu-host-reload
+	GPU_HOSTS="$(GPU_HOSTS)" .tools/make-secrets
+	@$(MAKE) --no-print-directory gpu-host-reload
+
+gpu-host-reload:  ## the running dev stack picks up the GPU hosts' users and identities (only services already running)
+	-@$(DEV) kill -s HUP nats >/dev/null 2>&1 && echo "nats reloaded"
+	@if [ -n "$$($(DEV) ps -q seaweedfs 2>/dev/null)" ]; then $(DEV) restart seaweedfs; fi
+
+# The test rig: an SSH reverse tunnel from this machine puts the dev stack's NATS and S3 https (STACK_TLS=on) on the
+# GPU host's loopback (127.0.0.1:4222 and :8333); no port of this machine is on the internet. Never run by make up.
+gpu-host-tunnel:  ## make gpu-host-tunnel VM=<instance> ZONE=<zone>: the tunnel in the background (restarts on drop)
+	@[ -n "$(VM)" ] && [ -n "$(ZONE)" ] || { echo "usage: make gpu-host-tunnel VM=<instance> ZONE=<zone>"; exit 2; }
+	.tools/gpu-host-tunnel start $(VM) $(ZONE)
+
+gpu-host-tunnel-stop: ## stops the tunnel (by its pid file; only a process the helper started)
+	.tools/gpu-host-tunnel stop

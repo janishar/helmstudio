@@ -265,7 +265,8 @@ def entry(pack) -> dict:
     if "variants" in spec:
         if "media" in spec:
             out["media"] = spec["media"]
-        out["runtimes"] = [{"runtime": r, "env": x["env"]} for r, x in spec["runtimes"].items()]
+        out["runtimes"] = [{"runtime": r, "env": x["env"]} | ({"devices": x["devices"]} if "devices" in x else {})
+                           for r, x in spec["runtimes"].items()]  # fmt: skip
         offered = {
             p for c in spec.get("components", {}).values() for p in c.get("precision", ["bf16"])
         }
@@ -303,7 +304,12 @@ def disk(root: Path) -> dict:
     u = shutil.disk_usage(p)
     home = str(Path.home())
     shown = "~" + str(root)[len(home) :] if str(root).startswith(home + "/") else str(root)
-    return {"root": shown[:400], "free_bytes": u.free, "total_bytes": u.total}
+    return {
+        "root": shown[:400],
+        "free_bytes": u.free,
+        "total_bytes": u.total,
+        "writable": os.access(p, os.W_OK),
+    }  # false on a read-only bind mount: no model jobs here
 
 
 def machine(device: str, ram_gb: float) -> dict:

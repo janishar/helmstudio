@@ -76,7 +76,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k × step (k ≥ 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role)",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role)",
       "required": [
         "name",
         "type",
@@ -207,7 +207,7 @@
         },
         "item": {
           "type": "object",
-          "description": "rows only: field name → a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows)",
+          "description": "rows only: field name \u2192 a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows)",
           "minProperties": 1,
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
@@ -1088,7 +1088,7 @@
                               "peak_gb": {
                                 "type": "number",
                                 "exclusiveMinimum": 0,
-                                "description": "the planned peak: the most this env holds at once during such a run at the canonical workflow's default sizes, starting warm (every component without unloads_after resident): max over its stages of the resident components + the stage's own + the stage's peak_gb formula. LoRAs not included"
+                                "description": "the planned peak: the most this env holds at once during such a run at the canonical workflow's default sizes, starting warm (every component without unloads_after resident): max over its stages of the resident components + the stage's own + the stage's peak_gb formula. LoRAs not included. Sizes are this host's: each runner plans for its own device (model.yaml may give per-device sizes), so one variant may plan differently on two hosts; on cuda, components on the device only (VRAM)"
                               },
                               "planned_at": {
                                 "type": "object",
@@ -1097,7 +1097,7 @@
                                   "frames"
                                 ],
                                 "additionalProperties": false,
-                                "description": "from API 1.13: the largest sizes peak_gb was planned at, over its stages (the formulas' mp and frames). A run larger than either (any node's width × height / 10^6, any numeric frames) has no plan: it is planned at the whole host budget. Absent: every run uses peak_gb",
+                                "description": "from API 1.13: the largest sizes peak_gb was planned at, over its stages (the formulas' mp and frames). A run larger than either (any node's width \u00d7 height / 10^6, any numeric frames) has no plan: it is planned at the whole host budget. Absent: every run uses peak_gb",
                                 "properties": {
                                   "mp": {
                                     "type": "number",
@@ -1153,6 +1153,10 @@
                                     "unloads_after": {
                                       "type": "boolean",
                                       "description": "true: the run unloads it after its stage (a stage's unload_after), so it is not resident after the run; absent = false"
+                                    },
+                                    "device": {
+                                      "const": "cpu",
+                                      "description": "from API 1.18, cuda hosts: held in host RAM (CPU offload): the resident entry's device; not in peak_gb, in ram_peak_gb"
                                     }
                                   }
                                 }
@@ -1160,6 +1164,11 @@
                               "workflow": {
                                 "$ref": "messages/defs.schema.json#/$defs/workflowId",
                                 "description": "from API 1.14: this item plans only runs of that workflow (an ask workflow that loads one component of the family: `qwen-image-ask` loads the text encoder only). The dispatcher takes the item of the run's precision and workflow, else the item of its precision without `workflow`. Items are unique by (precision, workflow)"
+                              },
+                              "ram_peak_gb": {
+                                "type": "number",
+                                "exclusiveMinimum": 0,
+                                "description": "from API 1.18, cuda hosts: the most host RAM such a run holds at once (the CPU-side components, one tensor's pinned staging per load, the runtime). The dispatcher fails a run whose ram_peak_gb exceeds the host's host_ram.budget_gb, as it does for peak_gb. Absent = not a limit"
                               }
                             }
                           }
@@ -1373,6 +1382,19 @@
                         },
                         "env": {
                           "$ref": "messages/defs.schema.json#/$defs/envName"
+                        },
+                        "devices": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "items": {
+                            "enum": [
+                              "cuda",
+                              "mps",
+                              "cpu"
+                            ]
+                          },
+                          "description": "from API 1.18: the devices the runtime runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime (mlx: mps)"
                         }
                       }
                     },
@@ -1556,7 +1578,76 @@
             "used_gb"
           ],
           "additionalProperties": false,
-          "description": "GPU / unified memory the runner may use and uses now. budget_gb = physical RAM minus the runner's reserve; the host's shared budget is the smallest budget_gb of its envs (contracts/README.md, The hand-over)",
+          "description": "the memory admission counts (contracts/README.md, The hand-over; Hosts with a discrete GPU). budget_gb = the device memory the runner may use: unified RAM minus the reserve on mps (as before), VRAM minus the reserve on cuda, RAM minus the reserve on cpu; the host's shared budget is the smallest budget_gb of its envs. used_gb = what the process holds there now: mps the process's phys_footprint; cuda torch.cuda.memory_reserved() + the CUDA context (device used just after the runner created its context, before any tensor, measured once at start); cpu the process's resident set",
+          "properties": {
+            "budget_gb": {
+              "type": "number",
+              "minimum": 0
+            },
+            "used_gb": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "device": {
+          "type": "object",
+          "required": [
+            "kind",
+            "name",
+            "memory_total_gb"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.18: the device the runner computes on (its torch device, or MLX's Metal = mps), picked once per process (mps, then cuda, then cpu)",
+          "properties": {
+            "kind": {
+              "enum": [
+                "cuda",
+                "mps",
+                "cpu"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "description": "torch.cuda.get_device_name(0) (`NVIDIA L4`); on Apple silicon the chip (`Apple M3 Max`); cpu: the CPU model or `cpu`"
+            },
+            "memory_total_gb": {
+              "type": "number",
+              "minimum": 0,
+              "description": "the device's memory: VRAM (cuda: torch.cuda.mem_get_info()[1]); unified RAM (mps); RAM (cpu)"
+            },
+            "memory_used_gb": {
+              "type": "number",
+              "minimum": 0,
+              "description": "cuda only: the whole device's used memory, every process (total - free of torch.cuda.mem_get_info()); shown to admins, never counted by admission"
+            },
+            "capability": {
+              "type": "string",
+              "pattern": "^[0-9]{1,2}\\.[0-9]{1,2}$",
+              "description": "cuda only: the compute capability (`8.9`); below 8.0 has no bf16, so a bf16 component loads as fp16"
+            },
+            "driver": {
+              "type": "string",
+              "maxLength": 40,
+              "description": "cuda only: the NVIDIA driver version (`580.95.05`)"
+            },
+            "runtime": {
+              "type": "string",
+              "maxLength": 80,
+              "description": "the compute stack (`torch 2.15.0 \u00b7 CUDA 13.2`, `torch 2.15.0 \u00b7 MPS`, `mlx 0.30.0`)"
+            }
+          }
+        },
+        "host_ram": {
+          "type": "object",
+          "required": [
+            "budget_gb",
+            "used_gb"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.18, only when the device has its own memory (cuda): the second limit, host RAM. budget_gb = machine RAM - RUNNER_RAM_RESERVE_GB (default 4); used_gb = the process's resident set (pinned staging and CPU-side components included). Absent on mps and cpu, where `memory` is that RAM",
           "properties": {
             "budget_gb": {
               "type": "number",
@@ -1656,6 +1747,10 @@
                   "pin"
                 ],
                 "description": "from API 1.16, with pinned true: in_use = the running run uses it; pin = the host's pins (bucket host_settings, else RUNNER_PIN) name it. A pin is a hand-over victim only as the last resort (after every unpinned one, when the run would not fit otherwise); an admin unload unloads it anyway; the pin stays set"
+              },
+              "device": {
+                "const": "cpu",
+                "description": "from API 1.18, cuda hosts: the component is held in host RAM (CPU offload); it counts against host_ram, never against memory, and is never a hand-over victim. Absent = on the device"
               }
             }
           }
@@ -1687,6 +1782,10 @@
             "total_bytes": {
               "type": "integer",
               "minimum": 0
+            },
+            "writable": {
+              "type": "boolean",
+              "description": "from API 1.18: the runner can write its models root (a container whose models root is bind-mounted read-only reports false: studio refuses its model jobs, 409). Absent = true"
             }
           }
         },
@@ -1699,7 +1798,7 @@
             "ram_gb"
           ],
           "additionalProperties": false,
-          "description": "from API 1.16: what the runner runs on (the Hosts screen's `Apple Silicon · Metal · native`)",
+          "description": "from API 1.16: what the runner runs on (the Hosts screen's `Apple Silicon \u00b7 Metal \u00b7 native`)",
           "properties": {
             "os": {
               "enum": [
@@ -1793,10 +1892,11 @@
               "items": {
                 "enum": [
                   "h264_videotoolbox",
+                  "h264_nvenc",
                   "libx264"
                 ]
               },
-              "description": "the H.264 encoders it will use, preferred first (h264_videotoolbox = hardware)"
+              "description": "the H.264 encoders it will use, preferred first (h264_videotoolbox, from API 1.18 h264_nvenc: hardware; libx264: software)"
             }
           }
         }
@@ -2243,7 +2343,7 @@
         "type",
         "properties"
       ],
-      "description": "an object JSON schema whose top-level properties are the fields; a field a pipeline may bind is `{type: string}` (text) or `{type: array, items: {type: string, format: uuid}, maxItems ≤ 8}` (take ids); any other field takes only a fixed value",
+      "description": "an object JSON schema whose top-level properties are the fields; a field a pipeline may bind is `{type: string}` (text) or `{type: array, items: {type: string, format: uuid}, maxItems \u2264 8}` (take ids); any other field takes only a fixed value",
       "properties": {
         "type": {
           "const": "object"
@@ -2366,7 +2466,7 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1024,
-          "description": "memory.budget_gb = machine.ram_gb − reserve_gb"
+          "description": "memory.budget_gb = machine.ram_gb \u2212 reserve_gb"
         },
         "pins": {
           "type": "array",

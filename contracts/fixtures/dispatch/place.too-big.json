@@ -1,0 +1,108 @@
+{
+  "description": "a 60 GB peak fits no host: the error is the largest host's (mac, 52)",
+  "hosts": {
+    "mac": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        },
+        "mlx": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ],
+          "qwen-image-2.1/turbo": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": null
+    },
+    "gcp": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 22,
+          "ram_budget_gb": 176,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ],
+          "qwen-image-2.1/turbo": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": null
+    }
+  },
+  "run": {
+    "env": "torch",
+    "workflow": "qwen-image",
+    "model": "qwen-image-2.1",
+    "variant": "turbo",
+    "precision": "int8",
+    "loras": [],
+    "peak_gb": 60,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "turbo",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ],
+    "lora_component": "transformer"
+  },
+  "expect": {
+    "host": null,
+    "eligible": [],
+    "error": "needs 60.0 GB at its peak; host mac has 52.0 GB"
+  }
+}

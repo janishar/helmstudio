@@ -30,7 +30,7 @@ from mlx import nn
 import config
 from core import pack as packs
 from core.graph import RunError
-from core.residency import footprint_gb, ram_gb
+from core.residency import footprint_gb, host_device, ram_gb
 
 log = logging.getLogger("loader")
 GROUP = 64  # quantization group size
@@ -56,6 +56,18 @@ _cap_cache()
 
 def device() -> str:
     return "gpu" if mx.metal.is_available() else "cpu"
+
+
+def total_gb() -> float:
+    """The memory the budget is cut from: unified RAM."""
+    return ram_gb()
+
+
+def device_info() -> dict:
+    """The hosts key's `device`: MLX's Metal is `mps`."""
+    return host_device("mps" if device() == "gpu" else "cpu") | {
+        "runtime": f"mlx {mx.__version__}"[:80]
+    }
 
 
 def free() -> None:

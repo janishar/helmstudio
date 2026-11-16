@@ -402,8 +402,10 @@ func endJob(ctx context.Context, tx pgx.Tx, job *jobRow, state string, failure, 
 
 // ------------------------------------------------------------------ release
 
-// ReleaseModelJobs fails the released jobs unheard for JobSilence (their command purged: a runner that crashed
-// through max_deliver, or term'd it, never reports them), then releases the oldest queued job of every host with no
+// ReleaseModelJobs fails the released jobs whose env's hosts key is gone or older than StaleJobKey (host_lost: the
+// host stopped responding, a spot VM preempted; their command purged; queued jobs wait for their host) and those
+// unheard for JobSilence (their command purged: a runner that crashed through max_deliver, or term'd it, never
+// reports them), then releases the oldest queued job of every host with no
 // released job open, once its env's key is live: its refusals are checked again (a refusal fails it, class in_use)
 // and its cmd.model.job goes to the outbox. It holds the dispatcher's lock too, so a run is never released to a host
 // in the same instant as a delete of its weights there.
@@ -418,22 +420,42 @@ func ReleaseModelJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Reg
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('studio.dispatcher'))`); err != nil {
 			return err
 		}
+		ended := func(job jobRow, class, detail string) error {
+			if purge != nil {
+				if err := purge(ctx, "cmd.model."+job.Host+"."+job.Env); err != nil {
+					log.Printf("model jobs: purge cmd.model.%s.%s: %v", job.Host, job.Env, err) // tried again next tick
+					return nil
+				}
+			}
+			log.Printf("model jobs: %s %s on %s: %s", job.Kind, job.ID, job.Host, detail)
+			return endJob(ctx, tx, &job, "failed", map[string]string{"class": class, "detail": detail}, nil)
+		}
+		// only jobs unheard for StaleJobKey: a runner restarted cleanly deletes its key but reports again within
+		// seconds and finishes the redelivered command, so a missing key alone is no host loss
+		released, err := collect[jobRow](ctx, tx, `SELECT `+jobCols+` FROM model_jobs WHERE state IN ('queued', 'running')
+			AND released_at IS NOT NULL AND coalesce(heard_at, released_at) < $1 FOR UPDATE`, now.Add(-StaleJobKey))
+		if err != nil {
+			return err
+		}
+		lost := map[string]bool{}
+		for _, job := range released {
+			if key, ok := (weights{values: reg.Hosts()}).key(job.Host, job.Env); !ok || now.Sub(key.UpdatedAt) > StaleJobKey {
+				lost[job.ID] = true
+				if err := ended(job, "host_lost", "host "+job.Host+" stopped responding"); err != nil {
+					return err
+				}
+			}
+		}
 		silent, err := collect[jobRow](ctx, tx, `SELECT `+jobCols+` FROM model_jobs WHERE state IN ('queued', 'running')
-			AND released_at IS NOT NULL AND coalesce(heard_at, released_at) < $1 FOR UPDATE`, now.Add(-JobSilence))
+			AND released_at IS NOT NULL AND coalesce(heard_at, released_at) < $1`, now.Add(-JobSilence))
 		if err != nil {
 			return err
 		}
 		for _, job := range silent {
-			if purge != nil {
-				if err := purge(ctx, "cmd.model."+job.Host+"."+job.Env); err != nil {
-					log.Printf("model jobs: purge cmd.model.%s.%s: %v", job.Host, job.Env, err) // tried again next tick
-					continue
+			if !lost[job.ID] {
+				if err := ended(job, "internal", "the runner stopped reporting this job"); err != nil {
+					return err
 				}
-			}
-			log.Printf("model jobs: %s %s on %s went unheard for %s: failed", job.Kind, job.ID, job.Host, JobSilence)
-			if err := endJob(ctx, tx, &job, "failed", map[string]string{"class": "internal",
-				"detail": "the runner stopped reporting this job"}, nil); err != nil {
-				return err
 			}
 		}
 		next, err := collect[jobRow](ctx, tx, `SELECT DISTINCT ON (host) `+jobCols+` FROM model_jobs j

@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -99,7 +100,7 @@ func (mediaCommand) Type() string      { return "cmd.media.job" }
 func (c mediaCommand) Subject() string { return "cmd.media." + c.host + "." + c.env }
 
 // mediaEnv is the env that would run a media job now: the named host's media envs, else every live one;
-// VideoToolbox first, then host, env by name; never a server env.
+// VideoToolbox first, then NVENC (API 1.18), then host, env by name; never a server env.
 func (s *Service) mediaEnv(host *string) (registry.Host, bool) {
 	now := time.Now()
 	var envs []registry.Host
@@ -108,15 +109,14 @@ func (s *Service) mediaEnv(host *string) (registry.Host, bool) {
 			envs = append(envs, h)
 		}
 	}
-	slices.SortFunc(envs, func(a, b registry.Host) int {
-		va, vb := a.Media.Encoders[0] == "h264_videotoolbox", b.Media.Encoders[0] == "h264_videotoolbox"
-		switch {
-		case va != vb && va:
-			return -1
-		case va != vb:
-			return 1
+	rank := func(h registry.Host) int { // VideoToolbox, NVENC, then software
+		if i := slices.Index([]string{"h264_videotoolbox", "h264_nvenc"}, h.Media.Encoders[0]); i >= 0 {
+			return i
 		}
-		return strings.Compare(a.Host+"."+a.Env, b.Host+"."+b.Env)
+		return 2
+	}
+	slices.SortFunc(envs, func(a, b registry.Host) int {
+		return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a.Host+"."+a.Env, b.Host+"."+b.Env))
 	})
 	if len(envs) == 0 {
 		return registry.Host{}, false
@@ -185,7 +185,7 @@ func (s *Service) plan(ctx context.Context, tx pgx.Tx, row timelineRow, revision
 	}
 	result := planned{rules: p, doc: doc, takes: rules, rows: rows}
 	if env, ok := s.mediaEnv(host); ok {
-		hardware := env.Media.Encoders[0] == "h264_videotoolbox"
+		hardware := env.Media.Encoders[0] != "libx264" // VideoToolbox or (API 1.18) NVENC
 		out.Host, out.Env, out.Hardware, result.env = &env.Host, &env.Env, &hardware, &env
 	} else {
 		out.Blocked = append(out.Blocked, dto.ExportReason{Code: "no_host", Message: noHost})
@@ -438,8 +438,8 @@ func purgeMedia(ctx context.Context, purge func(ctx context.Context, subject str
 	return purge(ctx, "cmd.media."+job.Host+"."+job.Env)
 }
 
-// SweepMediaJobs ends the open jobs studio can no longer hear: an env's key gone or older than StaleJobKey is
-// cancelled with its command purged; a job unheard for JobSilence fails (internal) and its runner is asked to stop
+// SweepMediaJobs ends the open jobs studio can no longer hear: a job whose env's key is gone or older than
+// StaleJobKey fails host_lost (API 1.18), its command purged and its id written to KV cancels; a job unheard for JobSilence fails (internal) and its runner is asked to stop
 // it (KV cancels), so a hung ffmpeg never holds the env's media worker.
 func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error,
 	cancel Cancel, now time.Time) error {
@@ -455,12 +455,13 @@ func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Regis
 		}
 		for _, job := range open {
 			switch {
-			case !mediaKeyLive(reg, job, now):
+			case !mediaKeyLive(reg, job, now) && now.Sub(job.HeardAt) > StaleJobKey: // a clean restart is no loss
 				if err := purgeMedia(ctx, purge, job); err != nil {
 					log.Printf("media jobs: purge cmd.media.%s.%s: %v", job.Host, job.Env, err) // tried again next tick
 					continue
 				}
-				err = endMedia(ctx, tx, &job, "cancelled", nil)
+				silent = append(silent, job.ID) // a runner that comes back never runs it
+				err = endMedia(ctx, tx, &job, "failed", map[string]string{"class": "host_lost", "detail": "host " + job.Host + " stopped responding"})
 			case now.Sub(job.HeardAt) > JobSilence:
 				silent = append(silent, job.ID)
 				err = endMedia(ctx, tx, &job, "failed", map[string]string{"class": "internal", "detail": "the runner stopped reporting this job"})

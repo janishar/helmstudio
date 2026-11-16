@@ -268,6 +268,20 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
   by key (`import_edges`) becomes `take_parents` once both ends are ready; complete checks the files as upload does
   (MP4 `ftyp`, poster, declared sizes), a failure deletes the take and frees its key. `GET /loras` adds `usage`.
 
+## Several hosts and a CUDA host (API 1.18, M6)
+
+- **Eligibility** (`eligible`, dispatcher.go): live key of the env publishing the workflow, then the model node's
+  variant present at its precision, then shared LoRAs, then room (`tooBig`: P ≤ B, `ram_peak_gb` ≤ host RAM); each
+  step's text when none is left. A retried run drops its `lost_host` while another host remains.
+- **Line-up** (`lineUp`): free, resident, fits now, idle longest, name. A pass walks the free hosts by name, each
+  picking among the runs lined up on it (the hand-over's Order), and lines up again after every release or fail.
+- **CUDA budgets**: `device: cpu` entries and plan components are host RAM, never in `memory`; `host_ram` is the
+  second limit. GET /hosts adds `device`, `host_ram`, `host_memory.kind`.
+- **Host loss**: lease loss sets `runs.lost_host` (migration 00020); released model jobs and open media jobs on a key
+  gone or older than 60 s fail `host_lost`. Registry keys are read only while their host has a hosts key.
+- `made_with.host` = the run's host; a read-only models root (`models_disk.writable: false`) refuses download and
+  delete (409). Tests: `TestPlaceFixtures` (every `place.*`), tests/hosts_test.go.
+
 ## Layout
 
 | Path | What |

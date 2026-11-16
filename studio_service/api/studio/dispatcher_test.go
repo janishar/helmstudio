@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,7 +21,7 @@ import (
 var t0 = time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
 
 // waiting builds a queued run id of owner, created at minute n, eligible on hosts (name → env), resident on those
-// named with a leading "*".
+// named with a leading "*", lined up on the first.
 func waiting(id, owner string, n int, hosts ...string) queued {
 	q := queued{run: model.Run{ID: id, OwnerID: owner, Lane: "interactive", CreatedAt: t0.Add(time.Duration(n) * time.Minute)},
 		slots: map[string]string{}, resident: map[string]bool{}}
@@ -28,6 +29,7 @@ func waiting(id, owner string, n int, hosts ...string) queued {
 		name, resident := strings.CutPrefix(host, "*")
 		q.slots[name] = "env"
 		q.resident[name] = resident
+		q.host = cmp.Or(q.host, name)
 	}
 	return q
 }
@@ -54,41 +56,63 @@ func wantLineup(t *testing.T, got []placed, want ...string) {
 func TestLineupRoundRobin(t *testing.T) {
 	queue := []queued{waiting("a1", "A", 1, "h"), waiting("a2", "A", 2, "h"), waiting("b1", "B", 3, "h"),
 		waiting("a3", "A", 4, "h"), waiting("c1", "C", 5, "h"), waiting("b2", "B", 6, "h")}
-	wantLineup(t, lineup([]string{"h"}, queue, nil, nil, 0, nil, t0), "a1@h#1", "b1@h#2", "c1@h#3", "a2@h#4", "b2@h#5", "a3@h#6")
+	wantLineup(t, lineup(queue, nil, nil, nil, t0), "a1@h#1", "b1@h#2", "c1@h#3", "a2@h#4", "b2@h#5", "a3@h#6")
 
 	last := map[string]time.Time{"A": t0.Add(time.Hour), "B": t0} // C never released: first; then B, served longer ago
-	wantLineup(t, lineup([]string{"h"}, queue, last, nil, 0, nil, t0), "c1@h#1", "b1@h#2", "a1@h#3", "b2@h#4", "a2@h#5", "a3@h#6")
+	wantLineup(t, lineup(queue, last, nil, nil, t0), "c1@h#1", "b1@h#2", "a1@h#3", "b2@h#4", "a2@h#5", "a3@h#6")
 
-	// One dispatch round releases one run per free host; ahead shifts the positions behind a sent run.
-	wantLineup(t, lineup([]string{"h"}, queue, last, nil, 1, nil, t0), "c1@h#1")
-	wantLineup(t, lineup([]string{"h"}, queue[:2], nil, map[string]int{"h": 1}, 0, nil, t0), "a1@h#2", "a2@h#3")
+	// ahead shifts the positions behind a sent run.
+	wantLineup(t, lineup(queue[:2], nil, map[string]int{"h": 1}, nil, t0), "a1@h#2", "a2@h#3")
 }
 
 // Interactive runs go before batch runs whatever their owner's turn or age.
 func TestLineupLane(t *testing.T) {
 	batch := waiting("b1", "B", 1, "h")
 	batch.run.Lane = "batch"
-	wantLineup(t, lineup([]string{"h"}, []queued{batch, waiting("a1", "A", 2, "h")}, map[string]time.Time{"A": t0}, nil, 0, nil, t0),
+	wantLineup(t, lineup([]queued{batch, waiting("a1", "A", 2, "h")}, map[string]time.Time{"A": t0}, nil, nil, t0),
 		"a1@h#1", "b1@h#2")
 }
 
 // Within one user, a run whose model is resident on the host goes before an older one; another user's turn is kept.
 func TestLineupPrefersResident(t *testing.T) {
 	queue := []queued{waiting("a1", "A", 1, "h"), waiting("b1", "B", 2, "h"), waiting("a2", "A", 3, "*h")}
-	wantLineup(t, lineup([]string{"h"}, queue, nil, nil, 0, nil, t0), "a2@h#1", "b1@h#2", "a1@h#3")
+	wantLineup(t, lineup(queue, nil, nil, nil, t0), "a2@h#1", "b1@h#2", "a1@h#3")
 }
 
-// Placement: hosts take turns idle longest first, a run goes only where it is eligible, and a run resident on another
-// free host goes there while the first host picks again.
-func TestLineupPlacement(t *testing.T) {
-	wantLineup(t, lineup([]string{"h1", "h2"}, []queued{waiting("a1", "A", 1, "h2"), waiting("b1", "B", 2, "h1", "h2")}, nil, nil, 1, nil, t0),
-		"b1@h1#1", "a1@h2#1")
-	wantLineup(t, lineup([]string{"h1", "h2"}, []queued{waiting("a1", "A", 1, "h1", "*h2"), waiting("b1", "B", 2, "h1", "h2")}, nil, nil, 1, nil, t0),
-		"a1@h2#1", "b1@h1#1")
-	wantLineup(t, lineup([]string{"h1", "h2"}, []queued{waiting("a1", "A", 1, "h1", "h2"), waiting("a2", "A", 2, "h1", "h2"),
-		waiting("a3", "A", 3, "h1", "h2")}, nil, nil, 0, nil, t0), "a1@h1#1", "a2@h2#1", "a3@h1#2")
-	if got := lineup(nil, []queued{waiting("a1", "A", 1, "h")}, nil, nil, 0, nil, t0); len(got) != 0 {
-		t.Fatal("no host, no line", order(got))
+// Line-up on several hosts (contracts "Several hosts"): free first, then resident, then idle longest (never ran
+// first), then name; each host's line is ordered on its own.
+func TestLineUpAcrossHosts(t *testing.T) {
+	line := func(busy map[string]bool, idle map[string]time.Time, queue ...queued) []string {
+		snap := snapshot{queue: queue, idle: idle}
+		(*Dispatcher)(nil).lineUp(nil, snap, busy, t0)
+		return order(lineup(snap.queue, nil, nil, nil, t0))
+	}
+	if got := line(nil, nil, waiting("a1", "A", 1, "h2", "h1")); !slices.Equal(got, []string{"a1@h1#1"}) {
+		t.Fatal("never ran, then by name:", got)
+	}
+	if got := line(nil, map[string]time.Time{"h1": t0, "h2": t0.Add(-time.Hour)}, waiting("a1", "A", 1, "h1", "h2")); !slices.Equal(got, []string{"a1@h2#1"}) {
+		t.Fatal("idle longest:", got)
+	}
+	if got := line(nil, nil, waiting("a1", "A", 1, "h1", "*h2")); !slices.Equal(got, []string{"a1@h2#1"}) {
+		t.Fatal("resident:", got)
+	}
+	if got := line(map[string]bool{"h2": true}, nil, waiting("a1", "A", 1, "h1", "*h2")); !slices.Equal(got, []string{"a1@h1#1"}) {
+		t.Fatal("free before resident:", got)
+	}
+	got := line(nil, nil, waiting("a1", "A", 1, "h1", "h2"), waiting("b1", "B", 2, "h2"), waiting("a2", "A", 3, "h1"))
+	if !slices.Equal(got, []string{"a1@h1#1", "a2@h1#2", "b1@h2#1"}) {
+		t.Fatal("each host its own line:", got)
+	}
+	if got := lineup(nil, nil, nil, nil, t0); len(got) != 0 {
+		t.Fatal("no run, no line", order(got))
+	}
+}
+
+// withHosts writes a live hosts key for each "<host>.<env>" of reg: a host's registry keys are read only while it has one.
+func withHosts(reg *registry.Registry, sources ...string) {
+	for _, source := range sources {
+		host, env, _ := strings.Cut(source, ".")
+		_ = reg.SetHost(source, hostValue(host, env, time.Now(), ""))
 	}
 }
 
@@ -97,7 +121,7 @@ func hostValue(host, env string, at time.Time, extra string) []byte {
 	return []byte(fmt.Sprintf(`{"host": %q, "env": %q, "state": "idle", "updated_at": %q%s}`, host, env, at.Format(time.RFC3339), extra))
 }
 
-// A host is eligible when live, of the run's env, publishing its workflow and (when listed) holding its variant;
+// A host is eligible when live, of the run's env, publishing its workflow and holding its variant at its precision;
 // resident needs the model, variant and precision loaded. With none, the reason says which is missing.
 func TestEligible(t *testing.T) {
 	reg := &registry.Registry{}
@@ -109,6 +133,7 @@ func TestEligible(t *testing.T) {
 	_ = reg.SetRegistry("mac.torch.workflows", workflows("qwen-image", "torch"))
 	_ = reg.SetRegistry("mac.torch.models", []byte(models))
 	_ = reg.SetRegistry("gpu.torch.workflows", workflows("qwen-image", "torch"))
+	_ = reg.SetRegistry("gpu.torch.models", []byte(strings.ReplaceAll(models, "missing", "present")))
 	_ = reg.SetRegistry("old.torch.workflows", workflows("qwen-image", "torch"))
 	_ = reg.SetRegistry("fake.fake.workflows", workflows("echo", "fake"))
 	_ = reg.SetHost("mac.torch", hostValue("mac", "torch", t0, `, "resident": [{"component": "transformer", "model": "qwen-2",
@@ -124,10 +149,11 @@ func TestEligible(t *testing.T) {
 
 	slots, resident, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "bf16"), t0)
 	if reason != "" || len(slots) != 2 || slots["mac"] != "torch" || slots["gpu"] != "torch" || !resident["mac"] || resident["gpu"] {
-		t.Fatal(slots, resident, reason) // old is stale; gpu lists no models: eligible, nothing resident
+		t.Fatal(slots, resident, reason) // old is stale; gpu: eligible, nothing resident
 	}
-	if _, resident, _ := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "int8"), t0); resident["mac"] {
-		t.Fatal("another precision is not resident")
+	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "int8"), t0); reason !=
+		"no live host for env torch has model qwen-2 variant base at int8" {
+		t.Fatal("a precision not listed:", reason)
 	}
 	if slots, _, _ := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "turbo", "bf16"), t0); len(slots) != 1 || slots["gpu"] == "" {
 		t.Fatal("mac lacks turbo", slots)
@@ -150,7 +176,7 @@ func TestEligible(t *testing.T) {
 	}
 	_ = reg.SetHost("gpu.torch", nil)
 	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "turbo", "bf16"), t0); reason !=
-		"model qwen-image variant turbo is not present on any live host for env torch" {
+		"no live host for env torch has model qwen-2 variant turbo at bf16" {
 		t.Fatal(reason)
 	}
 	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "bf16"), t0.Add(time.Minute)); reason !=
@@ -218,7 +244,7 @@ func TestEligibleLoras(t *testing.T) {
 	for _, host := range []string{"mac", "gpu"} {
 		_ = reg.SetRegistry(host+".torch.workflows", []byte(`{"workflows": [{"id": "qwen-image", "env": "torch", "nodes": {}}]}`))
 		_ = reg.SetRegistry(host+".torch.models", []byte(`{"models": [{"id": "qwen-2", "family": "qwen-image",
-			"variants": [{"id": "base", "presence": "present"}]}]}`))
+			"variants": [{"id": "base", "presence": "present", "precisions": ["int8"]}]}]}`))
 	}
 	_ = reg.SetRegistry("mac.torch.loras", []byte(`{"loras": [{"id": "ink", "name": "ink-wash"}, {"id": "oil", "name": "oil"}]}`))
 	_ = reg.SetRegistry("gpu.torch.loras", []byte(`{"loras": [{"id": "ink", "name": "ink-wash"}]}`))
@@ -404,6 +430,7 @@ func TestPlanOf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	withHosts(reg, "mac.mlx")
 	if err := reg.SetRegistry("mac.mlx.models", data); err != nil {
 		t.Fatal(err)
 	}
@@ -436,6 +463,7 @@ func TestPlanOfALargerRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	withHosts(reg, "mac.mlx")
 	if err := reg.SetRegistry("mac.mlx.models", data); err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +494,7 @@ func TestPlanOfALargerRun(t *testing.T) {
 		if p.peak != tc.peak || !slices.Contains(p.needs, ltxKept.key) {
 			t.Fatal(tc.name, p)
 		}
-		got := admit("mac", append(slices.Clone(qwen), ltxKept), 5200, "mlx", p.peak, p.needs, nil, "")
+		got := admit("mac", append(slices.Clone(qwen), ltxKept), 5200, "mlx", p, nil, "", -1)
 		var names []string
 		for _, v := range got.unload["torch"] {
 			names = append(names, v.res.Component)

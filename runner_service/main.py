@@ -10,7 +10,12 @@ admin): idle, it unloads the components studio names (everything when it names n
 cmd.model.<host>.<env> (durable models-<host>-<env>: downloads and deletes, messaging.models), follows KV
 host_settings key <host> (messaging.settings) and rescans its models root and LoRAs every RESCAN seconds. With ffmpeg
 (core.media.detect: the hosts key's `media`) it also pulls cmd.media.<host>.<env> (durable media-<host>-<env>:
-exports and frames, messaging.media), never in the GPU loop."""
+exports and frames, messaging.media), never in the GPU loop.
+
+The hosts key also carries the `device` (API 1.18) and, on CUDA, `host_ram`; the budget is cut from the device's
+memory (VRAM on CUDA). A remote GPU host connects over TLS (NATS_CA_FILE, S3_CA_FILE: contracts/README.md "A remote
+GPU host"); every consumer is created through the filtered CREATE subject (a name and a filter: nats-py's
+add_consumer), host_settings is read by direct get."""
 
 import asyncio
 import contextlib
@@ -18,6 +23,7 @@ import importlib
 import json
 import logging
 import signal
+import ssl
 import time
 
 import nats
@@ -30,7 +36,7 @@ from config import ENV, HOST, INBOX_PREFIX, NATS_URL
 from consumer import ACK_WAIT, Consumer
 from core import download, looks, lora, media, models, registry
 from core.graph import GPU
-from core.residency import POLICIES, Residency, ram_gb
+from core.residency import POLICIES, Residency, host_device, ram_gb
 from messaging import media as media_jobs
 from messaging import models as model_jobs
 from messaging import schemas
@@ -47,19 +53,37 @@ RESCAN = 60  # seconds between rescans of the models root and the shared LoRAs
 UNLOAD = "https://helmstudio.local/contracts/messages/req.runner.unload.schema.json"
 
 
-def residency_for(packs) -> tuple[Residency | None, str]:
-    """(the residency manager, the device) when a loaded pack has weight components, else (None, "cpu")."""
+def residency_for(packs) -> tuple[Residency | None, str, object]:
+    """(the residency manager, the device, the loader module) when a loaded pack has weight components, else
+    (None, "cpu", None). The budget is cut from the device's memory (CUDA: VRAM, else RAM)."""
     runtimes = {p.runtime for p in packs if p.spec.get("components")}
     if not runtimes:
-        return None, "cpu"
+        return None, "cpu", None
     if len(runtimes) > 1:
         raise ValueError(f"packs of one env use several runtimes: {sorted(runtimes)}")
     loader = importlib.import_module(f"core.loaders_{runtimes.pop()}")
     if config.AFTER_RUN not in POLICIES:
         raise ValueError(f"RUNNER_AFTER_RUN must be one of {POLICIES}")
-    budget = ram_gb() - config.RESERVE_GB
-    res = Residency(budget, free=loader.free, measure=loader.measure_gb, pins=config.PINS)
-    return res, loader.device()
+    dev = loader.device()
+    if dev == "cuda":
+        loader.context_gb()  # the CUDA context's own memory, measured once before any tensor
+    total = loader.total_gb()
+    res = Residency(
+        total - config.RESERVE_GB, free=loader.free, measure=loader.measure_gb, pins=config.PINS
+    )
+    res.total_gb = total
+    return res, dev, loader
+
+
+def tls_context() -> ssl.SSLContext | None:
+    """The NATS client's TLS: verify against NATS_CA_FILE, with NATS_CERT_FILE / NATS_KEY_FILE as a client cert;
+    None = nats-py's default (a tls:// URL then verifies against the system CAs)."""
+    if not (config.NATS_CA_FILE or config.NATS_CERT_FILE):
+        return None
+    ctx = ssl.create_default_context(cafile=config.NATS_CA_FILE or None)
+    if config.NATS_CERT_FILE:
+        ctx.load_cert_chain(config.NATS_CERT_FILE, config.NATS_KEY_FILE or None)
+    return ctx
 
 
 async def idle_unload(consumer: Consumer, host: Host, stop: asyncio.Event) -> None:
@@ -131,7 +155,7 @@ async def main() -> None:
     values, impls, packs = (
         registry.build()
     )  # an off-contract pack stops the runner before it connects
-    residency, device = residency_for(packs)
+    residency, device, loader = residency_for(packs)
     machine = models.machine(device, ram_gb())
     store = Store()
     library = lora.Library(
@@ -142,9 +166,26 @@ async def main() -> None:
     registry.fill_prefused(values, packs, library.files)
     values["looks"] = registry.scanned_value("looks", looks.entries(packs, library, config.MODELS))
     await looks.put_thumbs(packs, store)
+    connected = False
+
+    async def nats_error(e: Exception) -> None:
+        """A server cert that does not verify stops the start (else nats-py would retry it forever)."""
+        if not connected and isinstance(e, ssl.SSLCertVerificationError):
+            raise e
+        log.warning("NATS: %s", e)
+
     nc = await nats.connect(
-        NATS_URL, name=DURABLE, max_reconnect_attempts=-1, inbox_prefix=INBOX_PREFIX
+        NATS_URL,
+        name=DURABLE,
+        max_reconnect_attempts=-1,
+        inbox_prefix=INBOX_PREFIX,
+        tls=tls_context(),
+        # the server allows plain clients too (allow_non_tls clears tls_required): without the handshake first,
+        # nats-py would send the password in clear on a tls:// URL
+        tls_handshake_first=NATS_URL.startswith("tls://"),
+        error_cb=nats_error,
     )
+    connected = True
     js = nc.jetstream()
     await registry.publish(js, values)
     settings: Settings | None = None
@@ -154,6 +195,9 @@ async def main() -> None:
         """The hosts key beyond idle/busy: memory and resident (with weights), disk, machine, token, policy."""
         tok = config.HF_TOKEN_FILE
         out = residency.state() if residency else {}
+        out["device"] = loader.device_info() if loader else host_device("cpu")
+        if device == "cuda":  # host RAM is the second limit
+            out["host_ram"] = loader.host_ram()
         return out | {"models_disk": models.disk(config.MODELS), "machine": machine,
                       "hub_token": tok.is_file() and tok.stat().st_size > 0,
                       "policy": settings.policy()} | ({"media": can_media} if can_media else {})  # fmt: skip

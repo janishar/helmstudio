@@ -6,10 +6,19 @@ import gc
 import hashlib
 
 from core.graph import RunError
+from core.residency import host_device, ram_gb
 
 
 def device() -> str:
     return "cpu"
+
+
+def total_gb() -> float:
+    return ram_gb()  # device cpu: the budget is RAM − reserve
+
+
+def device_info() -> dict:
+    return host_device("cpu")
 
 
 def free() -> None:

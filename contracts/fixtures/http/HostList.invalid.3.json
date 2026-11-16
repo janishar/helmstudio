@@ -1,0 +1,61 @@
+{
+  "hosts": [
+    {
+      "host": "gcp",
+      "env": "torch",
+      "state": "idle",
+      "updated_at": "2026-11-15T10:01:00Z",
+      "memory": {
+        "budget_gb": 93.6,
+        "used_gb": 8.1
+      },
+      "host_memory": {
+        "budget_gb": 93.6,
+        "used_gb": 8.1,
+        "kind": "gpu"
+      },
+      "device": {
+        "kind": "cuda",
+        "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+        "memory_total_gb": 95.6,
+        "memory_used_gb": 8.4,
+        "capability": "12.0",
+        "driver": "580.95.05",
+        "runtime": "torch 2.15.0 · CUDA 13.2"
+      },
+      "host_ram": {
+        "budget_gb": 172.0,
+        "used_gb": 14.2
+      },
+      "resident": [
+        {
+          "component": "transformer",
+          "model": "qwen-image-2.1",
+          "variant": "turbo",
+          "precision": "int8",
+          "gb": 6.76,
+          "pinned": true,
+          "last_used": "2026-11-15T10:00:20Z",
+          "pinned_why": "pin"
+        },
+        {
+          "component": "text_encoder",
+          "model": "qwen-image-2.1",
+          "variant": "base",
+          "precision": "bf16",
+          "gb": 15.4,
+          "pinned": false,
+          "last_used": "2026-11-15T10:00:10Z",
+          "device": "cpu"
+        }
+      ],
+      "cached_gb": 1.3,
+      "machine": {
+        "os": "linux",
+        "accel": "cuda",
+        "packaging": "container",
+        "ram_gb": 176
+      }
+    }
+  ]
+}

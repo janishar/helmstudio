@@ -5,7 +5,7 @@
 #   make resilience                (from the repo root: brings the test stack up and runs this)
 #   API_KEY=... ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD=... ./resilience.sh [svc ...]
 # Default services: studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats
-# batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download export-restart; studio-queued restarts studio while a second run is still queued behind the first (not yet
+# batch-postgres batch-kill batch-hostb pipeline-parked agents-parked director-mid handover-studio model-download export-restart; studio-queued restarts studio while a second run is still queued behind the first (not yet
 # released) and requires that it then succeeds. batch-<svc> restarts <svc> during a 12-row slow echo batch (batch-kill:
 # SIGKILL the pipelines container, then start it), presses Resume whenever the batch is paused (pipelines pauses its
 # batches after a restart) and requires the batch to end done with exactly 12 runs (one per row) and 12 takes.
@@ -29,15 +29,22 @@
 # restarts the media runner (EXPORT_RUNNER_SVC, default runner) and studio once ffmpeg reports progress: the job must
 # end exactly once (succeeded with exactly one export take of the sequence, or failed/cancelled with no take and a new
 # export of the same revision accepted); it prints SKIP when no live env advertises media (ffmpeg).
+# batch-hostb (API 1.18, M6) starts the second fake host (HOST_B, default fakeb; service RUNNER_B_SVC, default
+# runner-b, profile hosts) beside fake, runs the 12-row batch on both and SIGKILLs runner-b while it runs a row (a
+# spot preemption; it is not started again): the batch must end done with exactly 12 runs (one per row), 12 distinct
+# takes and at least one run retried on fake (lost_host HOST_B); it waits for HOST_B to go offline after.
 # Needs curl and python3. Exit 1 when any service fails.
 set -eu
 cd "$(dirname "$0")"
 BASE_URL="${BASE_URL:-http://127.0.0.1:8390}"
 : "${API_KEY:?}" "${ADMIN_EMAIL:?}" "${ADMIN_PASSWORD:?}"
-END_TIMEOUT="${END_TIMEOUT:-180}"   # seconds a run may take to end after the restart (the lease sweep needs ~60 s)
-dc() {
-  KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 HELM_NET=172.30.98 IMAGE_TAG=gate \
-    docker compose -p helmstudio-test -f ../deploy/docker-compose.yml -f ../deploy/compose/fake.yml "$@"
+END_TIMEOUT="${END_TIMEOUT:-180}"
+HOST_B="${HOST_B:-fakeb}"
+RUNNER_B_SVC="${RUNNER_B_SVC:-runner-b}"   # seconds a run may take to end after the restart (the lease sweep needs ~60 s)
+dc() { # exactly the root Makefile's TEST (else an up here recreates services without TLS or remote models)
+  KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 S3_TLS_HOST_PORT=8444 \
+    HELM_NET=172.30.98 IMAGE_TAG=gate REMOTE_MODELS=on docker compose -p helmstudio-test \
+    -f ../deploy/docker-compose.yml -f ../deploy/compose/fake.yml -f ../deploy/compose/tls.yml "$@"
 }
 field() { python3 -c 'import json,sys; v=json.load(sys.stdin); [v:=v[k] for k in sys.argv[1:]]; print("" if v is None else v)' "$@" 2>/dev/null; }
 
@@ -78,9 +85,21 @@ wait_status() {
   return 1
 }
 
+# host_live HOST: 0 when HOST.fake has a fresh hosts key
+host_live() {
+  api GET /v1/studio/hosts | python3 -c 'import json,sys
+sys.exit(not any(h["host"] == sys.argv[1] and h["env"] == "fake" and h["state"] != "offline"
+                 for h in json.load(sys.stdin)["hosts"]))' "$1" 2>/dev/null
+}
+
 # batch_check batch-SVC: the crash test of one service during a batch (see the header)
 batch_check() {
   target=${1#batch-}
+  if [ "$target" = hostb ]; then             # the second fake host joins first
+    dc --profile hosts up -d --wait "$RUNNER_B_SVC" >/dev/null 2>&1 ||
+      { fails=$((fails + 1)); echo "FAIL $1: $RUNNER_B_SVC did not start"; return; }
+    for _ in $(seq 60); do host_live "$HOST_B" && break; sleep 1; done
+  fi
   bsid=$(api POST /v1/studio/sessions '{"title":"resilience batch"}' | field id)
   body=$(python3 -c 'import json,sys; print(json.dumps({"workflow_id": "echo", "session_id": sys.argv[1],
     "inputs": {"echo.steps": 5, "echo.delay_ms": 300},
@@ -88,10 +107,18 @@ batch_check() {
   bid=$(api POST /v1/studio/batches "$body" | field id) || bid=""
   [ -n "$bid" ] || { fails=$((fails + 1)); echo "FAIL $1: the batch was not accepted"; return; }
   for _ in $(seq 60); do                     # mid-batch: row 1 and one more row done, the rest still to go
-    [ "$(api GET "/v1/studio/batches/$bid" | field counts succeeded || echo 0)" -ge 2 ] 2>/dev/null && break
+    if [ "$target" = hostb ]; then           # ... and a row running on HOST_B
+      api GET "/v1/studio/sessions/$bsid/runs" | python3 -c 'import json,sys
+sys.exit(not any(x.get("batch_id") == sys.argv[1] and x["status"] == "running" and x["host"] == sys.argv[2]
+                 for x in json.load(sys.stdin)["runs"]))' "$bid" "$HOST_B" 2>/dev/null && break
+    else
+      [ "$(api GET "/v1/studio/batches/$bid" | field counts succeeded || echo 0)" -ge 2 ] 2>/dev/null && break
+    fi
     sleep 1
   done
-  if [ "$target" = kill ]; then
+  if [ "$target" = hostb ]; then
+    dc --profile hosts kill -s KILL "$RUNNER_B_SVC" >/dev/null 2>&1
+  elif [ "$target" = kill ]; then
     dc kill -s KILL pipelines >/dev/null 2>&1
     dc start pipelines >/dev/null 2>&1
   else
@@ -112,13 +139,22 @@ batch_check() {
   runs=$(api GET "/v1/studio/sessions/$bsid/runs" | python3 -c 'import json,sys
 r=[x for x in json.load(sys.stdin)["runs"] if x.get("batch_id")==sys.argv[1]]
 print(len(r), len({x["batch_row"] for x in r}))' "$bid" 2>/dev/null) || runs="? ?"
+  lost=$(api GET "/v1/studio/sessions/$bsid/runs" | python3 -c 'import json,sys
+print(sum(x.get("batch_id")==sys.argv[1] and x.get("lost_host")==sys.argv[2] and x["attempt"]==2
+          for x in json.load(sys.stdin)["runs"]))' "$bid" "$HOST_B" 2>/dev/null) || lost="?"
   takes=$(api GET "/v1/studio/sessions/$bsid/takes?limit=200" | python3 -c 'import json,sys
 t=[x for x in json.load(sys.stdin)["takes"] if x.get("batch_id")==sys.argv[1]]
 print(len(t), len({x["id"] for x in t}))' "$bid" 2>/dev/null) || takes="? ?"
   verdict=PASS
   [ "$status" = done ] && [ "$runs" = "12 12" ] && [ "$takes" = "12 12" ] || verdict=FAIL
+  extra=""
+  if [ "$target" = hostb ]; then             # a row was lost with HOST_B and ran again on fake
+    [ "$lost" -ge 1 ] 2>/dev/null || verdict=FAIL
+    extra="; retried after losing $HOST_B $lost"
+    for _ in $(seq 90); do host_live "$HOST_B" || break; sleep 1; done   # offline before the next scenario
+  fi
   [ $verdict = PASS ] || fails=$((fails + 1))
-  echo "$verdict $1: batch -> $status; runs (rows) $runs; takes (distinct) $takes"
+  echo "$verdict $1: batch -> $status; runs (rows) $runs; takes (distinct) $takes$extra"
   api DELETE "/v1/studio/sessions/$bsid" >/dev/null || true
 }
 
@@ -451,7 +487,7 @@ print(len([t for t in json.load(sys.stdin)["takes"] if t["export"]["timeline_id"
 signin
 SID=$(api POST /v1/studio/sessions '{"title":"resilience"}' | field id)
 fails=0
-for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill pipeline-parked agents-parked director-mid handover-studio model-download export-restart}; do
+for svc in ${*:-studio studio-queued runner nats postgres kong batch-pipelines batch-studio batch-nats batch-postgres batch-kill batch-hostb pipeline-parked agents-parked director-mid handover-studio model-download export-restart}; do
   case $svc in
     batch-*) batch_check "$svc"; continue ;;
     pipeline-parked) pipeline_check "$svc"; continue ;;

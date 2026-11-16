@@ -69,7 +69,7 @@ A prompt may mention your elements as @handle (@@ is a literal @): helm sends it
   helm lora rm <id>
   helm providers                      (admin) local servers and remote providers; remote models on or off
   helm providers set <name> file.json | rm <name> | test <name> [--model m]   a ProviderPut file; keys are never sent
-  helm hosts                          each host's shared memory (used / budget), its envs and what each holds
+  helm hosts                          each host's memory (used / budget; VRAM on cuda), device, its envs and what each holds
   helm hosts pin|unpin <host> <env> <component> <model> <variant> <precision>   (admin) keep it loaded
   helm hosts unload <host> (--all | --cached <env> | <env> <component> <model> <variant> <precision>)   (admin)
   helm hosts after-run <host> unload|keep_warm|keep_pinned [--idle-min n] [--reserve-gb x]   (admin) every env of it

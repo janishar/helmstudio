@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
+# paths read by their users, never into the environment: the Hub token (per job), the TLS CA, cert and key
+PATHS = {"RUNNER_HF_TOKEN_FILE", "NATS_CA_FILE", "NATS_CERT_FILE", "NATS_KEY_FILE", "S3_CA_FILE"}
 for _k, _v in list(os.environ.items()):
-    if (
-        _k.endswith("_FILE") and _v and _k != "RUNNER_HF_TOKEN_FILE"
-    ):  # the Hub token is read per job only
+    if _k.endswith("_FILE") and _v and _k not in PATHS:
         os.environ[_k.removesuffix("_FILE")] = Path(_v).read_text().strip()
 
 VERSION = "0.3.0"
@@ -23,6 +23,11 @@ NATS_URL = os.environ.get("NATS_URL", "nats://localhost:4222")  # nats://runner:
 # nats.conf lets each runner user subscribe only to _INBOX_<user>.>
 INBOX_PREFIX = f"_INBOX_{urlparse(NATS_URL).username or 'runner'}"
 HEALTH_PORT = int(os.environ.get("HEALTH_PORT", "8081"))
+# TLS (contracts/README.md "A remote GPU host"): NATS_URL tls://…, S3_ENDPOINT https://…; empty = the system CAs
+NATS_CA_FILE = os.environ.get("NATS_CA_FILE", "")  # verify the NATS server against this CA
+NATS_CERT_FILE = os.environ.get("NATS_CERT_FILE", "")  # optional client cert and key
+NATS_KEY_FILE = os.environ.get("NATS_KEY_FILE", "")
+S3_CA_FILE = os.environ.get("S3_CA_FILE", "")  # the S3 client's `verify`
 
 S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "")  # empty = AWS; http://seaweedfs:8333 in compose
 S3_BUCKET = os.environ.get("S3_BUCKET", "helmstudio")
@@ -34,7 +39,13 @@ S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
 # model weights: plain folders on this host's disk, never in an image or the object store
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
 # residency manager: budget = physical RAM - RESERVE_GB; what stays loaded after a run
-RESERVE_GB = float(os.environ.get("RUNNER_RESERVE_GB", "12"))
+RESERVE_GB = float(os.environ.get("RUNNER_RESERVE_GB", "12"))  # on CUDA: VRAM - RESERVE_GB
+RAM_RESERVE_GB = float(
+    os.environ.get("RUNNER_RAM_RESERVE_GB", "4")
+)  # CUDA: host RAM budget = RAM - this
+DEVICE = os.environ.get(
+    "RUNNER_DEVICE", ""
+)  # torch: force mps | cuda | cpu; empty = the first present
 AFTER_RUN = os.environ.get("RUNNER_AFTER_RUN", "keep_warm")  # unload | keep_warm | keep_pinned
 IDLE_UNLOAD_S = float(
     os.environ.get("RUNNER_IDLE_UNLOAD_S", "600")

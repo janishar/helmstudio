@@ -17,6 +17,7 @@ import (
 // thumbnails it was planned at; more thumbnails, or another workflow, take the variant's general item.
 func TestAskPlan(t *testing.T) {
 	var reg registry.Registry
+	withHosts(&reg, "mac.torch")
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", "qwen-image.models.valid.json"))
 	if err == nil {
 		err = reg.SetRegistry("mac.torch.models", data)

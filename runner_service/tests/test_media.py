@@ -9,6 +9,7 @@ import io
 import json
 import subprocess
 import tempfile
+import types
 from pathlib import Path
 
 import pytest
@@ -459,3 +460,16 @@ async def test_a_cancel_during_the_downloads_stops_before_the_next(clips):
         store.objects[f"{U}{k}"] = (clips["a"], "video/mp4")
     events = await asyncio.wait_for(run(cmd, store, kv=kv), 10)
     assert events[-1]["data"]["status"] == "cancelled" and store.reads == [f"{U}runs/a/1/0.mp4"]
+
+
+def test_venc_per_encoder_and_nvenc_only_when_it_encodes(monkeypatch):
+    assert media.venc("h264_nvenc", 8_000_000) == ["-c:v", "h264_nvenc", "-preset", "p5", "-profile:v", "high",
+                                                   "-b:v", "8000000", "-maxrate", "8000000", "-bufsize", "16000000"]  # fmt: skip
+    assert media.venc("libx264", 10)[:4] == ["-c:v", "libx264", "-preset", "medium"]
+    runs = []
+    monkeypatch.setattr(media.subprocess, "run", lambda argv, **kw: runs.append(argv) or
+                        types.SimpleNamespace(returncode=1))  # fmt: skip
+    assert (
+        media.usable("h264_nvenc") is False and "h264_nvenc" in runs[0]
+    )  # listed, but no GPU encodes
+    assert media.usable("libx264")

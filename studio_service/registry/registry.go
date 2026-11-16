@@ -190,7 +190,25 @@ type Host struct {
 	Policy     *Policy     `json:"policy,omitempty"`
 	// API 1.17: this env runs media jobs (exports and frames) with these H.264 encoders, preferred first
 	Media *Media `json:"media,omitempty"`
+	// API 1.18: the device it runs on, and on cuda the host-RAM limit (RAM − RUNNER_RAM_RESERVE_GB, RSS used)
+	Device  *Device `json:"device,omitempty"`
+	HostRAM *Memory `json:"host_ram,omitempty"`
 }
+
+// Device is the one device a runner uses (API 1.18): cuda, mps or cpu.
+type Device struct {
+	Kind          string   `json:"kind"`
+	Name          string   `json:"name"`
+	MemoryTotalGB float64  `json:"memory_total_gb"`
+	MemoryUsedGB  *float64 `json:"memory_used_gb,omitempty"`
+	Capability    string   `json:"capability,omitempty"`
+	Driver        string   `json:"driver,omitempty"`
+	Runtime       string   `json:"runtime,omitempty"`
+}
+
+// OnDevice reports whether a resident entry or a planned component is in device memory: device cpu (CPU offload on a
+// cuda host) is in host RAM and never counted in the memory budget (API 1.18).
+func OnDevice(device string) bool { return device != "cpu" }
 
 // Media is what a runner's media worker has: ffmpeg's version and its H.264 encoders (API 1.17).
 type Media struct {
@@ -203,6 +221,7 @@ type ModelsDisk struct {
 	Root       string `json:"root"`
 	FreeBytes  int64  `json:"free_bytes"`
 	TotalBytes int64  `json:"total_bytes"`
+	Writable   *bool  `json:"writable,omitempty"` // API 1.18: false when bind-mounted read-only; absent = true
 }
 
 // Machine is what a runner runs on (API 1.16).
@@ -241,6 +260,8 @@ type Resident struct {
 	Loras []ResidentLora `json:"loras,omitempty"`
 	// API 1.16, with Pinned: in_use (the running run uses it) or pin (a pin of the host)
 	PinnedWhy string `json:"pinned_why,omitempty"`
+	// API 1.18, cuda hosts: cpu = held in host RAM (not counted in memory); absent = on the device
+	Device string `json:"device,omitempty"`
 }
 
 // ResidentLora is a LoRA baked into a resident component. The runner always fills every field; GET /hosts nulls the
@@ -311,8 +332,9 @@ type Model struct {
 
 // Runtime is one runtime of a model's pack and its env.
 type Runtime struct {
-	Runtime string `json:"runtime"`
-	Env     string `json:"env"`
+	Runtime string   `json:"runtime"`
+	Env     string   `json:"env"`
+	Devices []string `json:"devices,omitempty"` // API 1.18; absent = every device of the runtime
 }
 
 // Variant is one variant of a model on a host.
@@ -370,8 +392,9 @@ type MemoryPlan struct {
 	Precision  string          `json:"precision"`
 	PeakGB     float64         `json:"peak_gb"`
 	Components []PlanComponent `json:"components"`
-	PlannedAt  *PlannedAt      `json:"planned_at,omitempty"` // the largest sizes PeakGB holds for; nil: every size
-	Workflow   string          `json:"workflow,omitempty"`   // API 1.14: plans only runs of this workflow ("" = any)
+	PlannedAt  *PlannedAt      `json:"planned_at,omitempty"`  // the largest sizes PeakGB holds for; nil: every size
+	Workflow   string          `json:"workflow,omitempty"`    // API 1.14: plans only runs of this workflow ("" = any)
+	RAMPeakGB  *float64        `json:"ram_peak_gb,omitempty"` // API 1.18, cuda: the most host RAM the run holds
 }
 
 // PlannedAt is the largest megapixels and frames a memory plan's peak was computed at.
@@ -388,11 +411,20 @@ type PlanComponent struct {
 	Precision    string  `json:"precision"`
 	GB           float64 `json:"gb"`
 	UnloadsAfter bool    `json:"unloads_after,omitempty"`
+	Device       string  `json:"device,omitempty"` // API 1.18: cpu = kept in host RAM
 }
 
 // Has reports whether the variant's files are on the host: always for a model without variants.
 func (m Model) Has(variant string) bool {
 	return len(m.Variants) == 0 || slices.ContainsFunc(m.Variants, func(v Variant) bool { return v.ID == variant && v.Presence == "present" })
+}
+
+// HasPrecision reports whether the variant lists precision (API 1.18 eligibility): always for a model without
+// variants, or a model node without a precision param.
+func (m Model) HasPrecision(variant, precision string) bool {
+	return len(m.Variants) == 0 || precision == "" || slices.ContainsFunc(m.Variants, func(v Variant) bool {
+		return v.ID == variant && slices.Contains(v.Precisions, precision)
+	})
 }
 
 // Plan returns the memory plan of variant at precision for a run of workflow, if the runner publishes one: the item
@@ -781,16 +813,18 @@ func (r *Registry) PrefusedIn(id string) string {
 	return ""
 }
 
-// Published returns what every runner publishes about weights, by "<host>.<env>" (live or not).
+// Published returns what every runner publishes about weights, by "<host>.<env>" (live or not, its host present).
 func (r *Registry) Published() map[string]Published {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := map[string]Published{}
 	for source, models := range r.models {
-		out[source] = Published{Models: models, Licences: r.licences[source], Loras: r.loras[source]}
+		if r.present(source) {
+			out[source] = Published{Models: models, Licences: r.licences[source], Loras: r.loras[source]}
+		}
 	}
 	for source, loras := range r.loras {
-		if _, seen := out[source]; !seen {
+		if _, seen := out[source]; !seen && r.present(source) {
 			out[source] = Published{Loras: loras}
 		}
 	}
@@ -801,7 +835,7 @@ func (r *Registry) Published() map[string]Published {
 func (r *Registry) HasLora(source, id string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return slices.ContainsFunc(r.loras[source], func(l SharedLora) bool { return l.ID == id })
+	return r.present(source) && slices.ContainsFunc(r.loras[source], func(l SharedLora) bool { return l.ID == id })
 }
 
 // LoraBlocks returns every family's lora block any runner publishes (live or not), by family: the first source by key;
@@ -811,6 +845,9 @@ func (r *Registry) LoraBlocks() map[string]LoraBlock {
 	defer r.mu.RUnlock()
 	out := map[string]LoraBlock{}
 	for _, source := range slices.Sorted(maps.Keys(r.models)) {
+		if !r.present(source) {
+			continue
+		}
 		_, env, _ := strings.Cut(source, ".")
 		for _, model := range r.models[source] {
 			if model.Lora == nil {
@@ -868,6 +905,9 @@ func (r *Registry) Workflows() []Workflow {
 	out := []Workflow{}
 	seen := map[string]bool{}
 	for _, source := range slices.Sorted(maps.Keys(r.workflows)) {
+		if !r.present(source) {
+			continue
+		}
 		schemas := map[string]NodeSchema{}
 		for _, schema := range r.nodes[source] {
 			schemas[schema.Kind] = schema
@@ -911,13 +951,16 @@ func (r *Registry) Hosts() []Host {
 func (r *Registry) Publishes(source, id string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return slices.ContainsFunc(r.workflows[source], func(w Workflow) bool { return w.ID == id })
+	return r.present(source) && slices.ContainsFunc(r.workflows[source], func(w Workflow) bool { return w.ID == id })
 }
 
 // PublishesKinds reports whether the runner at source ("<host>.<env>") publishes every one of kinds.
 func (r *Registry) PublishesKinds(source string, kinds []string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if !r.present(source) {
+		return false
+	}
 	for _, kind := range kinds {
 		if !slices.ContainsFunc(r.nodes[source], func(s NodeSchema) bool { return s.Kind == kind }) {
 			return false
@@ -926,12 +969,12 @@ func (r *Registry) PublishesKinds(source string, kinds []string) bool {
 	return true
 }
 
-// Schemas returns every kind any runner publishes, live or not: the schema of the newest publish.
+// Schemas returns every kind any runner publishes, live or not (its host present): the schema of the newest publish.
 func (r *Registry) Schemas() map[string]NodeSchema {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := map[string]NodeSchema{}
-	for kind, found := range r.newest(func(string) bool { return true }) {
+	for kind, found := range r.newest(r.present) {
 		out[kind] = found.schema
 	}
 	return out
@@ -1047,6 +1090,9 @@ func btoi(b bool) int {
 func (r *Registry) Model(source, family string) (Model, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	if !r.present(source) {
+		return Model{}, false
+	}
 	for _, model := range r.models[source] {
 		if model.Family == family {
 			return model, true
@@ -1066,6 +1112,19 @@ func withSchemas(workflow Workflow, schemas map[string]NodeSchema) *Workflow {
 		workflow.NodeSchemas[node.Kind] = schema
 	}
 	return &workflow
+}
+
+// present reports whether the host of source ("<host>.<env>") has a present hosts key: from API 1.18 a host's registry
+// keys (they have no TTL) are read only while it has one, so they lapse with it (contracts/README.md, Several hosts:
+// host loss). Callers hold r.mu.
+func (r *Registry) present(source string) bool {
+	host, _, _ := strings.Cut(source, ".")
+	for key := range r.hosts {
+		if h, _, _ := strings.Cut(key, "."); h == host {
+			return true
+		}
+	}
+	return false
 }
 
 // cut splits a registry key "<host>.<env>.<kind>" into "<host>.<env>" and kind.

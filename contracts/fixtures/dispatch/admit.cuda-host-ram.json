@@ -1,0 +1,43 @@
+{
+  "description": "the plan's host-RAM peak (ram_peak_gb 20) is above the host's host_ram budget (12): fails at once, after the VRAM check",
+  "host": "gcp",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 94,
+      "ram_budget_gb": 12,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "torch",
+    "peak_gb": 29.25,
+    "ram_peak_gb": 20,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "turbo",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "fail",
+    "unload": {},
+    "budget_gb": null,
+    "error": "needs 20.0 GB of host RAM at its peak; host gcp has 12.0 GB"
+  }
+}

@@ -12,7 +12,8 @@ import sys
 from pathlib import Path
 
 FFMPEG, FFPROBE = shutil.which("ffmpeg"), shutil.which("ffprobe")
-H264 = ("h264_videotoolbox", "libx264")  # preferred first: the Mac's media engine, then software
+# preferred first: the Mac's media engine, NVIDIA's (a cuda container whose GPU encodes), then software
+H264 = ("h264_videotoolbox", "h264_nvenc", "libx264")
 NEEDS = ("xfade", "apad", "amix")  # filters the export graph uses
 
 
@@ -30,7 +31,7 @@ def _out(*args: str) -> str:
 
 def detect() -> dict | None:
     """{ffmpeg: version, encoders: [...]} when ffmpeg >= 6 has xfade, apad, amix, aac and an H.264 encoder, else
-    None (this env runs no media jobs). h264_videotoolbox only on macOS."""
+    None (this env runs no media jobs). Encoders as `usable` finds them, preferred first."""
     if not (FFMPEG and FFPROBE):
         return None
     m = re.search(r"version\s+n?(\d+(?:\.\d+)*)", _out(FFMPEG, "-hide_banner", "-version"))
@@ -41,20 +42,31 @@ def detect() -> dict | None:
         names(_out(FFMPEG, "-hide_banner", "-filters")),
         names(_out(FFMPEG, "-hide_banner", "-encoders")),
     )
-    h264 = [
-        e for e in H264 if e in encoders and (e != "h264_videotoolbox" or sys.platform == "darwin")
-    ]
+    h264 = [e for e in H264 if e in encoders and usable(e)]
     if not h264 or "aac" not in encoders or not all(f in filters for f in NEEDS):
         return None
     return {"ffmpeg": m.group(1)[:40], "encoders": h264}
+
+
+def usable(encoder: str) -> bool:
+    """videotoolbox only on macOS; NVENC only when a tiny encode works (ffmpeg lists it wherever it was built in,
+    GPU or not); libx264 always."""
+    if encoder == "h264_videotoolbox":
+        return sys.platform == "darwin"
+    if encoder == "h264_nvenc":
+        argv = [FFMPEG, "-hide_banner", "-v", "error", "-f", "lavfi", "-i", "color=s=256x256:d=0.2",
+                *venc(encoder, 1_000_000), "-f", "null", "-"]  # fmt: skip
+        return subprocess.run(argv, capture_output=True, check=False, timeout=30).returncode == 0
+    return True
 
 
 def venc(encoder: str, bitrate: int) -> list[str]:
     """`{venc}`: the video encoder arguments (README, Timeline: media jobs)."""
     if encoder == "h264_videotoolbox":
         return ["-c:v", encoder, "-profile:v", "high", "-allow_sw", "1", "-b:v", str(bitrate)]
-    return ["-c:v", "libx264", "-preset", "medium", "-profile:v", "high", "-b:v", str(bitrate),
-            "-maxrate", str(bitrate), "-bufsize", str(2 * bitrate)]  # fmt: skip
+    preset = "p5" if encoder == "h264_nvenc" else "medium"
+    return ["-c:v", encoder if encoder == "h264_nvenc" else "libx264", "-preset", preset, "-profile:v", "high",
+            "-b:v", str(bitrate), "-maxrate", str(bitrate), "-bufsize", str(2 * bitrate)]  # fmt: skip
 
 
 def _null(v):
