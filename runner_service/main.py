@@ -68,8 +68,11 @@ def residency_for(packs) -> tuple[Residency | None, str, object]:
     if dev == "cuda":
         loader.context_gb()  # the CUDA context's own memory, measured once before any tensor
     total = loader.total_gb()
-    res = Residency(
-        total - config.RESERVE_GB, free=loader.free, measure=loader.measure_gb, pins=config.PINS
+    res = Residency(  # a reserve above the device's memory leaves none, never a negative budget
+        max(0.0, total - config.RESERVE_GB),
+        free=loader.free,
+        measure=loader.measure_gb,
+        pins=config.PINS,
     )
     res.total_gb = total
     return res, dev, loader
@@ -149,6 +152,8 @@ async def main() -> None:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
+    if why := config.plain_with_ca():
+        raise SystemExit(why)
     download.environment(config.CACHE)  # before huggingface_hub is imported
     models.hashes = models.Hashes(config.CACHE / f"model-hashes-{ENV}.json")
     models.hashes.start()  # hashes what no sidecar records, in the background

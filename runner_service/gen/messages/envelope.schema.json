@@ -19,7 +19,7 @@
     "type": {
       "type": "string",
       "pattern": "^(cmd|evt)\\.[a-z0-9]+\\.[a-z_]+$",
-      "description": "message type, e.g. cmd.run.execute; never the routing subject (cmd.run.execute travels on cmd.run.<host>.<env>, evt.run.status on evt.run.<session_id>.status)"
+      "description": "message type, e.g. cmd.run.execute; never the routing subject (cmd.run.execute travels on cmd.run.<host>.<env>, evt.run.status on evt.run.<host>.<session_id>.status)"
     },
     "version": {
       "type": "integer",

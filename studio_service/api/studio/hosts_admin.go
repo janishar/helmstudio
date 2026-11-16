@@ -124,10 +124,16 @@ func (s *Service) PutHostSettings(ctx context.Context, caller common.Caller, hos
 	if err != nil {
 		return dto.HostSettings{}, err
 	}
-	ram := -1.0
+	ram := -1.0 // the smallest memory a key cuts its budget from: VRAM on cuda, else RAM
 	for _, k := range keys {
-		if k.Machine != nil && (ram < 0 || k.Machine.RAMGB < ram) {
-			ram = k.Machine.RAMGB
+		total := -1.0
+		if k.Device != nil && k.Device.Kind == "cuda" {
+			total = k.Device.MemoryTotalGB
+		} else if k.Machine != nil {
+			total = k.Machine.RAMGB
+		}
+		if total >= 0 && (ram < 0 || total < ram) {
+			ram = total
 		}
 	}
 	if ram >= 0 && *body.ReserveGB >= ram {

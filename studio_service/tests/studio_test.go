@@ -203,15 +203,29 @@ func (e *env) relay() ([]string, []gen.Envelope) {
 	return subjects, sent
 }
 
-// emit projects one evt.run.<session>.<kind> of runID as the runner would publish it.
+// emit projects one evt.run.<host>.<session>.<kind> of runID as the runner of the run's host would publish it.
 func (e *env) emit(owner, sessionID, runID, kind string, seq int, data map[string]any) {
+	e.t.Helper()
+	var host *string
+	_ = common.System(context.Background(), e.pool, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT host FROM runs WHERE id = $1`, runID).Scan(&host)
+	})
+	name := "nohost" // not released: the projector drops it as it would any host's
+	if host != nil {
+		name = *host
+	}
+	e.emitFrom(name, owner, sessionID, runID, kind, seq, data)
+}
+
+// emitFrom projects one event of runID as host's runner publishes it (its NATS user may publish only evt.run.<host>.>).
+func (e *env) emitFrom(host, owner, sessionID, runID, kind string, seq int, data map[string]any) {
 	e.t.Helper()
 	data["seq"] = seq
 	raw, _ := json.Marshal(data)
 	envelope := gen.Envelope{Type: "evt.run." + kind, Version: 1, ID: utility.NewID(), JobID: &runID, OwnerID: owner,
 		OccurredAt: time.Now().UTC(), Trace: gen.Trace{Traceparent: utility.Traceparent()}, Data: raw}
 	body, _ := json.Marshal(envelope)
-	if err := e.events.Handle(context.Background(), "evt.run."+sessionID+"."+kind, body); err != nil {
+	if err := e.events.Handle(context.Background(), "evt.run."+host+"."+sessionID+"."+kind, body); err != nil {
 		e.t.Fatal(err)
 	}
 }
@@ -293,7 +307,7 @@ func TestRunFlow(t *testing.T) {
 	e.emit(userA, sessionID, runID, "progress", 2, map[string]any{"node": "echo", "step": 1, "of": 2})
 	e.emit(userA, sessionID, runID, "progress", 3, map[string]any{"node": "echo", "step": 2, "of": 2, "phase": "sampling", "eta_s": 1.5})
 	e.emit(userA, sessionID, runID, "output", 4, map[string]any{"index": 1, "key": "u/" + userB + "/runs/x/0.png", "kind": "image", "bytes": 5})
-	e.emit(userA, sessionID, runID, "output", 5, map[string]any{"index": 0, "key": "u/" + userA + "/runs/" + runID + "/0.png",
+	e.emit(userA, sessionID, runID, "output", 5, map[string]any{"index": 0, "key": "u/" + userA + "/runs/" + runID + "/1/0.png",
 		"kind": "image", "width": 512, "height": 512, "bytes": 1234, "seed": 42})
 	e.emit(userA, sessionID, runID, "status", 6, map[string]any{"status": "succeeded", "resolved": map[string]any{"seed": 42}})
 	e.emit(userA, sessionID, runID, "status", 7, map[string]any{"status": "failed", "error": "late"}) // after the end

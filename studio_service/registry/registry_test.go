@@ -311,3 +311,52 @@ func TestStarterLookChecks(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// A remote host (gcp) never replaces what the stack's own host (mac) publishes: not a workflow template by id, not a
+// node schema however late its published_at, not a look by a higher version; a remote workflow under an id an own
+// host's other env publishes never refuses the own host's. A hosts key's age is the KV entry's server time.
+func TestRemoteHostsNeverShadowOwnHosts(t *testing.T) {
+	var r Registry
+	present(&r, "mac.torch", "mac.mlx", "gcp.torch")
+	forged := func(name string) []byte {
+		s := strings.Replace(string(fixture(t, name)), `"Qwen Image"`, `"Forged"`, 1)
+		s = strings.Replace(s, `"The text the workflow starts from."`, `"Forged"`, 1)
+		return []byte(strings.Replace(s, `"2026-11-14T10:00:00Z"`, `"2099-01-01T00:00:00Z"`, 1))
+	}
+	_ = r.SetRegistry("gcp.torch.workflows", forged("qwen-image.workflows"))
+	_ = r.SetRegistry("gcp.torch.nodes", forged("qwen-image.nodes"))
+	_ = r.SetRegistry("gcp.torch.workflows", []byte(`{"workflows": [{"id": "qwen-image", "title": "Forged", "env": "torch",
+		"nodes": {"prompt": {"kind": "prompt"}}}, {"id": "ltx-text-to-video", "title": "Forged", "env": "torch",
+		"nodes": {"prompt": {"kind": "prompt"}}}]}`))
+	_ = r.SetRegistry("mac.torch.workflows", fixture(t, "qwen-image.workflows"))
+	_ = r.SetRegistry("mac.torch.nodes", fixture(t, "qwen-image.nodes"))
+	_ = r.SetRegistry("mac.mlx.workflows", fixture(t, "ltx.workflows"))
+	_ = r.SetRegistry("mac.mlx.nodes", fixture(t, "ltx.nodes"))
+	if w, ok := r.Workflow("qwen-image"); !ok || w.Title != "Qwen Image" {
+		t.Fatalf("mac's template: %+v", w)
+	}
+	if w, ok := r.Workflow("ltx-text-to-video"); !ok || w.Env != "mlx" || w.Title == "Forged" {
+		t.Fatalf("mac.mlx's, never refused for gcp's: %+v", w)
+	}
+	if help := r.Schemas()["prompt"].Help; help == "Forged" {
+		t.Fatal("gcp's schema dated 2099 must not replace mac's")
+	}
+	models := []byte(`{"models": [{"id": "qwen-image", "family": "qwen-image", "title": "Qwen"}]}`)
+	look := func(name, version string) []byte {
+		return []byte(`{"published_at": "2099-01-01T00:00:00Z", "looks": [{"id": "qwen-image/ink", "family": "qwen-image",
+			"group": "film", "name": "` + name + `", "text": "", "version": ` + version + `, "loras": [], "thumb": null}]}`)
+	}
+	for _, source := range []string{"mac.torch", "gcp.torch"} {
+		_ = r.SetRegistry(source+".models", models)
+	}
+	_ = r.SetRegistry("gcp.torch.looks", look("Forged", "999"))
+	_ = r.SetRegistry("mac.torch.looks", look("Ink", "1"))
+	if ink := r.Looks(time.Now())["qwen-image/ink"]; ink.Name != "Ink" || ink.PublishedAt.After(time.Now()) {
+		t.Fatalf("mac's look, published_at no later than receipt: %+v", ink)
+	}
+
+	stale := []byte(`{"host": "gcp", "env": "torch", "state": "idle", "run_id": null, "updated_at": "2001-01-01T00:00:00Z"}`)
+	if err := r.SetHostAt("gcp.torch", stale, time.Now()); err != nil || !r.Hosts()[0].Live(time.Now()) {
+		t.Fatal("the server's time decides, not the runner's clock", err)
+	}
+}

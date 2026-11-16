@@ -184,3 +184,107 @@ func TestModelJobsOnALostOrReadOnlyHost(t *testing.T) {
 		}
 	}
 }
+
+// A host's run events are bound to it by subject: after gcp loses its run and attempt 2 goes to mac, gcp's events
+// (even naming attempt 2, with keys under attempt 2's prefix) are dropped, mac's own events are applied, a status
+// naming another host never rewrites runs.host, and an output outside attempt 2's prefix is dropped.
+func TestRunEventsAreBoundToTheReleasedHost(t *testing.T) {
+	e := setup(t)
+	e.twoEnvs()
+	e.gcp(time.Now(), qwenResident, nil)
+	runID, sessionID := e.start(userA, "qwen-image", turbo)
+	d := studio.NewDispatcher(e.pool, e.registry, func(context.Context, string) error { return nil }, nil)
+	now := time.Now()
+	e.gatePass(d, now)
+	e.emit(userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "gcp"})
+	e.gcp(now.Add(-2*time.Minute), qwenResident, nil)
+	e.gatePass(d, now)
+	e.gatePass(d, now.Add(studio.Confirm))
+	if got := e.gatePass(d, now.Add(studio.Confirm)); !slices.Equal(got, []string{"cmd.run.mac.torch " + runID}) {
+		t.Fatal("attempt 2 goes to mac:", got)
+	}
+	prefix := "u/" + userA + "/runs/" + runID + "/2/"
+	e.emitFrom("gcp", userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "mac", "attempt": 2})
+	e.emitFrom("gcp", userA, sessionID, runID, "output", 2, map[string]any{"index": 0, "key": prefix + "0.png", "kind": "image",
+		"bytes": 5, "width": 64, "height": 64, "attempt": 2})
+	e.emitFrom("gcp", userA, sessionID, runID, "status", 3, map[string]any{"status": "succeeded", "attempt": 2})
+	if run := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200); run["status"] != "queued" || run["host"] != "mac" ||
+		len(run["outputs"].([]any)) != 0 {
+		t.Fatal("gcp's events must not touch a run released to mac:", run)
+	}
+	e.emit(userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "gcp", "attempt": 2})
+	e.emit(userA, sessionID, runID, "output", 2, map[string]any{"index": 0, "key": "u/" + userA + "/runs/" + runID + "/1/0.png",
+		"kind": "image", "bytes": 5, "width": 64, "height": 64, "attempt": 2})
+	e.emit(userA, sessionID, runID, "output", 3, map[string]any{"index": 0, "key": prefix + "0.png", "kind": "image",
+		"bytes": 5, "width": 64, "height": 64, "attempt": 2})
+	e.emit(userA, sessionID, runID, "status", 4, map[string]any{"status": "succeeded", "attempt": 2})
+	run := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200)
+	outputs := run["outputs"].([]any)
+	if run["status"] != "succeeded" || run["host"] != "mac" || len(outputs) != 1 || outputs[0].(map[string]any)["key"] != prefix+"0.png" {
+		t.Fatal("mac's events, host kept, only attempt 2's prefix:", run)
+	}
+	if n := e.count(`SELECT count(*) FROM takes WHERE run_id = $1 AND made_with->>'host' = 'mac'`, runID); n != 1 {
+		t.Fatal("made_with.host:", n)
+	}
+}
+
+// A lost host's late success that the projector applies while the pass is deciding its loss (between the look and
+// the retry: here inside the purge) keeps the run succeeded with its outputs; it is not retried.
+func TestLateSuccessFromALostHostKeepsItsOutputs(t *testing.T) {
+	e := setup(t)
+	e.twoEnvs()
+	e.gcp(time.Now(), qwenResident, nil)
+	runID, sessionID := e.start(userA, "qwen-image", turbo)
+	d := studio.NewDispatcher(e.pool, e.registry, func(context.Context, string) error {
+		e.emit(userA, sessionID, runID, "output", 2, map[string]any{"index": 0, "key": "u/" + userA + "/runs/" + runID + "/1/0.png",
+			"kind": "image", "bytes": 5, "width": 64, "height": 64})
+		e.emit(userA, sessionID, runID, "status", 3, map[string]any{"status": "succeeded"})
+		return nil
+	}, nil)
+	now := time.Now()
+	e.gatePass(d, now)
+	e.emit(userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "gcp"})
+	e.gcp(now.Add(-2*time.Minute), qwenResident, nil)
+	e.gatePass(d, now)
+	e.gatePass(d, now.Add(studio.Confirm)) // the purge: the success lands, then the loss is decided
+	run := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200)
+	if run["status"] != "succeeded" || run["attempt"] != float64(1) || run["lost_host"] != nil || len(run["outputs"].([]any)) != 1 {
+		t.Fatal(run)
+	}
+	if n := e.count(`SELECT count(*) FROM takes WHERE run_id = $1 AND deleted_at IS NULL`, runID); n != 1 {
+		t.Fatal("takes kept:", n)
+	}
+}
+
+// On a cuda key the reserve is cut from VRAM: it must leave some of device.memory_total_gb, whatever the RAM.
+func TestCudaReserveIsCheckedAgainstVRAM(t *testing.T) {
+	e := setup(t)
+	e.service.SetModelOps(nil, func(context.Context, string, []byte) error { return nil })
+	e.gcp(time.Now(), nil, map[string]any{"machine": map[string]any{"os": "linux", "accel": "cuda", "packaging": "container", "ram_gb": 176}})
+	settings := "/v1/studio/admin/hosts/gcp/settings"
+	if got := e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_warm", "idle_unload_min": 0, "reserve_gb": 96}, 422); got["detail"] != "reserve_gb leaves no memory on gcp" {
+		t.Fatal(got)
+	}
+	e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_warm", "idle_unload_min": 0, "reserve_gb": 32}, 200)
+}
+
+// A host waiting for its pick's unload is busy for the rest of the pass: another run lined up there (resident on it
+// too) is lined up again on a free host that takes it at once, not held for up to GateTimeout.
+func TestWaitingHostLetsAFreeHostTakeItsOtherRuns(t *testing.T) {
+	e := setup(t)
+	e.twoEnvs()
+	e.mac("torch", qwenResident)
+	e.mac("mlx", ltxResident) // what mlx holds leaves no room for a qwen run's peak: it must unload first
+	e.gcp(time.Now(), nil, nil)
+	fake := &unloads{reply: `{"error": "a run is in progress", "code": "busy"}`}
+	d := studio.NewDispatcher(e.pool, e.registry, nil, nil)
+	d.Unload = fake.request
+	waits, _ := e.start(userA, "qwen-image", turbo)
+	other, _ := e.start(userB, "qwen-image", turbo)
+	if got := e.gatePass(d, time.Now()); !slices.Equal(got, []string{"cmd.run.gcp.torch " + other}) || len(fake.asked) != 1 {
+		t.Fatal("mac waits for mlx with the first run; gcp takes the other:", got, fake.asked)
+	}
+	if run := e.call(userA, "GET", "/v1/studio/runs/"+waits, nil, 200); run["status"] != "queued" || run["host"] != "mac" {
+		t.Fatal(run)
+	}
+}

@@ -1744,7 +1744,8 @@ paths:
         `<host>`; each runner of the host applies it at once when idle, else after its run, without a restart, and
         reports it in its hosts key (`policy.settings_version`; `HostSettings.applied`). A first PUT creates the row
         with no pins. 404 for a host with no present hosts key. 422 `reserve_gb leaves no memory on <host>` (reserve_gb
-        ≥ the smallest `machine.ram_gb` the host's keys report).
+        ≥ the smallest memory the host's keys cut their budget from: `device.memory_total_gb` (VRAM) for a key whose
+        `device.kind` is cuda, else `machine.ram_gb`).
       parameters: [{$ref: '#/components/parameters/HostName'}]
       requestBody:
         required: true
@@ -5005,7 +5006,7 @@ components:
       properties:
         after_run: {$ref: '#/components/schemas/AfterRun'}
         idle_unload_min: {type: integer, minimum: 0, maximum: 1440, description: 'keep_warm: minutes idle before everything but the pins is unloaded; 0 = never'}
-        reserve_gb: {type: number, minimum: 0, maximum: 1024, multipleOf: 0.5, description: 'the host''s budget is its RAM minus this'}
+        reserve_gb: {type: number, minimum: 0, maximum: 1024, multipleOf: 0.5, description: 'the host''s budget is its RAM (on cuda: its VRAM) minus this'}
     HostPins:
       type: object
       required: [pins]

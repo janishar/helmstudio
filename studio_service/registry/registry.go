@@ -547,7 +547,7 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			return err
 		}
 		set(&r.nodes, source, parsed.Nodes)
-		set(&r.nodesAt, source, parsed.PublishedAt)
+		set(&r.nodesAt, source, received(parsed.PublishedAt))
 	case "workflows":
 		if value == nil {
 			delete(r.workflows, source)
@@ -565,7 +565,7 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			if workflow.Env != env {
 				return fmt.Errorf("workflow %s: env %q is not the key's %q", workflow.ID, workflow.Env, env)
 			}
-			if owner := r.ownerOf(workflow.ID, env); owner != "" {
+			if owner := r.ownerOf(workflow.ID, env, source); owner != "" {
 				log.Printf("registry %s: workflow %s refused: %s publishes it", key, workflow.ID, owner)
 				continue
 			}
@@ -615,7 +615,7 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			kept = append(kept, look)
 		}
 		set(&r.looks, source, kept)
-		set(&r.looksAt, source, parsed.PublishedAt)
+		set(&r.looksAt, source, received(parsed.PublishedAt))
 	case "custom":
 		if source != "pipelines.engine" {
 			return nil
@@ -745,11 +745,7 @@ func (r *Registry) Looks(now time.Time) map[string]LiveLook {
 			sources = append(sources, source)
 		}
 	}
-	slices.SortFunc(sources, func(a, b string) int { // non-fake env first, then host, then env
-		ha, ea, _ := strings.Cut(a, ".")
-		hb, eb, _ := strings.Cut(b, ".")
-		return cmp.Or(cmp.Compare(btoi(ea == "fake"), btoi(eb == "fake")), strings.Compare(ha, hb), strings.Compare(ea, eb))
-	})
+	slices.SortFunc(sources, byRank)   // own hosts first, a fake env last
 	kept := map[string][]StarterLook{} // the looks of a family the source serves
 	for _, source := range sources {
 		kept[source] = slices.DeleteFunc(slices.Clone(r.looks[source]), func(l StarterLook) bool {
@@ -757,16 +753,14 @@ func (r *Registry) Looks(now time.Time) map[string]LiveLook {
 		})
 	}
 	out := map[string]LiveLook{}
-	real := map[string]bool{} // ids a non-fake env publishes: a fake env's entry never replaces theirs
+	level := map[string]int{} // id → the best rank publishing it: a worse-ranked entry never replaces it
 	for _, source := range sources {
-		_, env, _ := strings.Cut(source, ".")
-		fake := env == "fake"
 		for _, entry := range kept[source] {
 			live, seen := out[entry.ID]
-			if !fake {
-				real[entry.ID] = true
+			if !seen {
+				level[entry.ID] = rank(source)
 			}
-			if !seen || entry.Version > live.Version && (!fake || !real[entry.ID]) {
+			if !seen || entry.Version > live.Version && rank(source) == level[entry.ID] {
 				at := live.PublishedAt
 				live.StarterLook = entry
 				live.Loras = slices.Clone(entry.Loras)
@@ -865,11 +859,12 @@ func (r *Registry) LoraBlocks() map[string]LoraBlock {
 	return out
 }
 
-// ownerOf returns the source of another env that publishes workflow id, or "". Callers hold r.mu.
-func (r *Registry) ownerOf(id, env string) string {
-	for _, source := range slices.Sorted(maps.Keys(r.workflows)) {
+// ownerOf returns the source of another env, ranked at or above from, that publishes workflow id, or "": a lower-ranked
+// source (a remote host) never takes an id from a higher-ranked one. Callers hold r.mu.
+func (r *Registry) ownerOf(id, env, from string) string {
+	for _, source := range slices.SortedFunc(maps.Keys(r.workflows), byRank) {
 		for _, workflow := range r.workflows[source] {
-			if workflow.ID == id && workflow.Env != env {
+			if workflow.ID == id && workflow.Env != env && rank(source) <= rank(from) {
 				return source
 			}
 		}
@@ -877,9 +872,37 @@ func (r *Registry) ownerOf(id, env string) string {
 	return ""
 }
 
+// localHosts are the stack's own hosts: their NATS users are written in deploy/nats/nats.conf, outside the gpu-hosts
+// block .tools/make-secrets generates (which refuses these names). contracts/README.md, Several hosts: precedence.
+var localHosts = []string{"mac", "fake"}
+
+// rank orders sources ("<host>.<env>") by trust, lowest first: the stack's own hosts before remote ones, a fake env
+// after every other. A source never replaces a definition (workflow template, look, node schema) of a lower rank.
+func rank(source string) int {
+	host, env, _ := strings.Cut(source, ".")
+	return 2*btoi(env == "fake") + btoi(!slices.Contains(localHosts, host))
+}
+
+// byRank sorts sources by rank, then key.
+func byRank(a, b string) int { return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a, b)) }
+
+// received is a value's published_at, no later than now: a runner's clock never ranks its publish above another's.
+func received(at time.Time) time.Time {
+	if now := time.Now(); at.After(now) {
+		return now
+	}
+	return at
+}
+
 // SetHost applies one KV `hosts` value (nil: the key was deleted, the host is offline). The value's host and env
 // must be the key's <host>.<env>.
 func (r *Registry) SetHost(key string, value []byte) error {
+	return r.SetHostAt(key, value, time.Time{})
+}
+
+// SetHostAt is SetHost with the KV entry's server timestamp: when not zero it is the value's updated_at, so a key's
+// age is measured on the stack's clock, never the runner's (contracts/README.md, Several hosts: freshness).
+func (r *Registry) SetHostAt(key string, value []byte, at time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if value == nil {
@@ -893,18 +916,21 @@ func (r *Registry) SetHost(key string, value []byte) error {
 	if host.Host+"."+host.Env != key || strings.Count(key, ".") != 1 {
 		return fmt.Errorf("hosts value %s.%s is not its key's", host.Host, host.Env)
 	}
+	if !at.IsZero() {
+		host.UpdatedAt = at
+	}
 	set(&r.hosts, key, host)
 	return nil
 }
 
 // Workflows returns every workflow whose kinds all have a schema from the same runner, by id; the same id from several
-// runners is listed once (the first runner by key wins).
+// runners is listed once (the first runner by rank, then key, wins).
 func (r *Registry) Workflows() []Workflow {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := []Workflow{}
 	seen := map[string]bool{}
-	for _, source := range slices.Sorted(maps.Keys(r.workflows)) {
+	for _, source := range slices.SortedFunc(maps.Keys(r.workflows), byRank) {
 		if !r.present(source) {
 			continue
 		}
@@ -1048,14 +1074,15 @@ type found struct {
 	schema NodeSchema
 	index  int
 	at     time.Time
+	rank   int
 	envs   []string
 }
 
-// newest collects every kind the sources keep publishes: the schema of the newest publish (ties: the first source
-// by key) and every env, sorted. Callers hold r.mu.
+// newest collects every kind the sources keep publishes: the schema of the newest publish among the best-ranked sources
+// publishing it (ties: the first source by key) and every env, sorted. Callers hold r.mu.
 func (r *Registry) newest(keep func(source string) bool) map[string]found {
 	out := map[string]found{}
-	for _, source := range slices.Sorted(maps.Keys(r.nodes)) {
+	for _, source := range slices.SortedFunc(maps.Keys(r.nodes), byRank) {
 		if !keep(source) {
 			continue
 		}
@@ -1068,8 +1095,8 @@ func (r *Registry) newest(keep func(source string) bool) map[string]found {
 				envs = append(slices.Clone(envs), env)
 				slices.Sort(envs)
 			}
-			if !seen || at.After(old.at) {
-				old = found{schema: schema, index: i, at: at}
+			if !seen || rank(source) == old.rank && at.After(old.at) {
+				old = found{schema: schema, index: i, at: at, rank: rank(source)}
 			}
 			old.envs = envs
 			out[schema.Kind] = old

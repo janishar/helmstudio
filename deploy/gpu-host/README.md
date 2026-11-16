@@ -38,10 +38,12 @@ docker compose version                       # Compose 2.20 or later
 
 ## 3. Copy the folder, the runner's source and the secrets
 
-From the repo root on the stack's machine (no secret is printed; the archive goes straight into ssh):
+From the repo root on the stack's machine (no secret is printed; the archive goes straight into ssh). Only tracked
+files of the commit go (`git archive`): never the git-ignored `runner_service/.env` (the make-dev env, which may hold
+a local NATS password or S3 key), `.venv`, caches or uncommitted edits:
 
 ```sh
-tar -czf - --exclude .venv --exclude .run --exclude __pycache__ runner_service \
+git archive --format=tar.gz HEAD runner_service \
     deploy/gpu-host/docker-compose.yml deploy/gpu-host/.env.example deploy/gpu-host/README.md \
   | gcloud compute ssh <vm> --zone <zone> -- 'mkdir -p ~/helmstudio && tar -xzf - -C ~/helmstudio'
 tar -czf - -C deploy/secrets nats_runner_<h>_torch_url s3_runner_<h>_access_key_id \
@@ -107,8 +109,25 @@ lines up, and the run records it (`made_with.host`). Download Qwen Image onto th
 
 ## A real deployment (not the test rig)
 
-Publish the stack's TLS ports to the GPU hosts only (firewalled), instead of the tunnel: a compose override with
-`ports: ["0.0.0.0:4222:4222"]` on `nats` and `["0.0.0.0:8334:8334"]` on `seaweedfs`; make the cert with the public
-name (`STACK_TLS_NAMES="DNS:stack.example.com" .tools/make-secrets` after deleting `stack_tls_*` and `tls_ca`), make
-the host's URL with `GPU_HOST_NATS_ADDR=stack.example.com:4222`, and set `S3_ENDPOINT=https://stack.example.com:8334`
-in this folder's `.env`. A TLS-terminating proxy in front of S3 works the same way with the same CA.
+Never publish the stack's NATS client port itself: it also accepts plain clients (`allow_non_tls`, so the stack's own
+services stay plain on the compose network), and every NATS user, the unrestricted admin too, could then log in in
+clear from the network. Either keep the SSH tunnel of section 4 (the simplest: nothing is published), or put a
+TLS-only listener in front of NATS: a TLS-terminating proxy on the public address that forwards to `nats:4222` on the
+compose network, firewalled to the GPU hosts, with the server cert made for the public name
+(`STACK_TLS_NAMES="DNS:stack.example.com" .tools/make-secrets` after deleting `stack_tls_*` and `tls_ca`) and the
+host's URL made with `GPU_HOST_NATS_ADDR=stack.example.com:<port>`. S3's https port (8334) is TLS-only already: publish
+it the same way (firewalled) and set `S3_ENDPOINT=https://stack.example.com:8334` in this folder's `.env`. The runner
+refuses a `nats://` URL or an `http://` endpoint while `NATS_CA_FILE` / `S3_CA_FILE` are set (they are in this
+compose file): an edited URL stops it at start, it never falls back to plain.
+
+## What the stack does not enforce on a GPU host
+
+A GPU host's credentials limit it to its own subjects, keys and run events (contracts/README.md, A remote GPU host),
+but a compromised host is still trusted beyond its own runs in these ways:
+- **Object store**: its S3 identity can read, overwrite and delete any key of the media bucket (SeaweedFS cannot
+  scope an identity to a prefix); only the runner's own claim-check rule keeps it to its commands' keys.
+- **JetStream**: the streams have byte caps (CMD never starves), but there is no per-user quota: it can flood its
+  own event and DLQ subjects, slowing the projector and pushing the oldest event history out early.
+- **Shared definitions**: it cannot replace a template, look or node schema the stack's own hosts publish, but it can
+  add new ids that every user then sees.
+Run a GPU host only on a machine you control, and revoke it (above) when in doubt.

@@ -81,7 +81,9 @@ class Settings:
             c.cache.clear()
         c.idle_unload_s = self.idle_unload_min * 60 if value is not None else config.IDLE_UNLOAD_S
         if res is not None:
-            res.budget_gb, res.pin_refs = (res.total_gb or ram_gb()) - self.reserve_gb, self.pins
+            # on CUDA the reserve is cut from VRAM; one above it leaves no budget, never a negative one (off-contract)
+            res.budget_gb = max(0.0, (res.total_gb or ram_gb()) - self.reserve_gb)
+            res.pin_refs = self.pins
             if self.after_run != "keep_warm":  # unload: everything; keep_pinned: what is not pinned
                 await asyncio.get_running_loop().run_in_executor(
                     GPU, res.unload, self.after_run == "keep_pinned"

@@ -36,6 +36,17 @@ S3_REGION = os.environ.get("S3_REGION", "us-east-1")
 S3_ACCESS_KEY_ID = os.environ.get("S3_ACCESS_KEY_ID", "")
 S3_SECRET_ACCESS_KEY = os.environ.get("S3_SECRET_ACCESS_KEY", "")
 
+
+def plain_with_ca() -> str | None:
+    """Why the start is refused: a CA file set (a link meant to be TLS) next to a plain NATS_URL or S3_ENDPOINT, which
+    would send the password and keys in clear (contracts/README.md, A remote GPU host: never a plain fallback)."""
+    if NATS_CA_FILE and not NATS_URL.startswith("tls://"):
+        return "NATS_CA_FILE is set but NATS_URL is not tls://: refusing a plain NATS link"
+    if S3_CA_FILE and not S3_ENDPOINT.startswith("https://"):
+        return "S3_CA_FILE is set but S3_ENDPOINT is not https://: refusing a plain S3 link"
+    return None
+
+
 # model weights: plain folders on this host's disk, never in an image or the object store
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
 # residency manager: budget = physical RAM - RESERVE_GB; what stays loaded after a run

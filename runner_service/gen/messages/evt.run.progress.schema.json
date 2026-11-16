@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.run.progress.schema.json",
   "title": "runner → studio: a run's step progress",
-  "description": "Subject evt.run.<session_id>.progress (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. One per step of a stepping node (the echo node: one per step, step 1..of). A real runner adds phase (what is happening: loading transformer, encoding, sampling, decoding) and eta_s; a phase without steps of its own is sent as step 1 of 1.",
+  "description": "Subject evt.run.<host>.<session_id>.progress (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. One per step of a stepping node (the echo node: one per step, step 1..of). A real runner adds phase (what is happening: loading transformer, encoding, sampling, decoding) and eta_s; a phase without steps of its own is sent as step 1 of 1.",
   "allOf": [
     {
       "$ref": "envelope.schema.json"

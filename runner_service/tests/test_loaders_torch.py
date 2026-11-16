@@ -242,6 +242,14 @@ def test_staging_beyond_the_host_ram_budget_fails_with_the_contract_text(tmp_pat
     assert next(lt.staged(path, "cpu"))[1].shape == (1024, 1024)
 
 
+def test_pinned_staging_counts_the_allocators_power_of_two():
+    """A pinned block is rounded up to a power of two (torch's CachingHostAllocator): the host-RAM check counts that,
+    so Qwen3-VL's 1.24 GB embed_tokens counts 2 GiB; unpinned (CPU, MPS) counts its size."""
+    size = int(1.24 * 2**30)
+    assert lt.staging_gb(size, True) == 2.0 and lt.staging_gb(size, False) == size / 2**30
+    assert lt.staging_gb(2**30, True) == 1.0 and lt.staging_gb(2**30 + 1, True) == 2.0
+
+
 def test_runner_device_forces_one_that_is_present(monkeypatch):
     import config
 

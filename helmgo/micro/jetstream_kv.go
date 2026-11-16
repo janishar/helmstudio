@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -26,6 +27,17 @@ func NatsJetStreamPutKV(ctx context.Context, client NatsClient, bucket, key stri
 func NatsJetStreamWatchKV(
 	ctx context.Context, client NatsClient, bucket string, handler func(key string, value []byte) error, loaded func(),
 ) {
+	NatsJetStreamWatchKVAt(ctx, client, bucket, func(key string, value []byte, _ time.Time) error {
+		return handler(key, value)
+	}, loaded)
+}
+
+// NatsJetStreamWatchKVAt is NatsJetStreamWatchKV with each entry's server timestamp (when the NATS server stored the
+// put or delete): a time on the server's clock, whoever wrote the value.
+func NatsJetStreamWatchKVAt(
+	ctx context.Context, client NatsClient, bucket string, handler func(key string, value []byte, at time.Time) error,
+	loaded func(),
+) {
 	keepRunning(ctx, "watch "+bucket, func() error {
 		return watchUntilStopped(ctx, client.jetStream(), bucket, handler, loaded)
 	})
@@ -34,8 +46,8 @@ func NatsJetStreamWatchKV(
 // watchUntilStopped runs one watch. It returns nil when ctx ends, and an error when the bucket can't be read or the
 // watch ends on its own.
 func watchUntilStopped(
-	ctx context.Context, jetStream jetstream.JetStream, bucket string, handler func(key string, value []byte) error,
-	loaded func(),
+	ctx context.Context, jetStream jetstream.JetStream, bucket string,
+	handler func(key string, value []byte, at time.Time) error, loaded func(),
 ) error {
 	store, err := jetStream.KeyValue(ctx, bucket)
 	if err != nil {
@@ -64,7 +76,7 @@ func watchUntilStopped(
 			if entry.Operation() != jetstream.KeyValuePut {
 				value = nil // a delete or purge
 			}
-			if err := handler(entry.Key(), value); err != nil {
+			if err := handler(entry.Key(), value, entry.Created()); err != nil {
 				log.Printf("watch %s: %s: %v", bucket, entry.Key(), err)
 			}
 		}

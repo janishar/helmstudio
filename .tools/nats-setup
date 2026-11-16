@@ -7,9 +7,16 @@ set -eu
 [ -n "${NATS_URL_FILE:-}" ] && NATS_URL=$(cat "$NATS_URL_FILE")   # the admin user (compose secret nats_admin_url)
 export NATS_URL="${NATS_URL:-nats://nats:4222}"
 
-stream() { # name subjects retention max-age
-  if nats stream info "$1" >/dev/null 2>&1; then echo "stream $1 exists"; return; fi
-  nats stream add "$1" --subjects "$2" --retention "$3" --max-age "$4" \
+# Every stream has a byte cap (an existing one gets it too), together with the KV buckets under nats.conf's 10 GB
+# max_file_store: EVT or DLQ filling up (a remote host publishing without limit) never leaves CMD without room
+# (contracts/README.md, A remote GPU host: JetStream).
+stream() { # name subjects retention max-age max-bytes
+  if nats stream info "$1" >/dev/null 2>&1; then
+    echo "stream $1 exists"
+    nats stream edit "$1" --max-bytes "$5" -f >/dev/null
+    return
+  fi
+  nats stream add "$1" --subjects "$2" --retention "$3" --max-age "$4" --max-bytes "$5" \
     --storage file --replicas 1 --discard old --dupe-window 2m --defaults
 }
 kv() { # bucket [ttl]; an existing bucket gets the ttl given here
@@ -21,9 +28,9 @@ kv() { # bucket [ttl]; an existing bucket gets the ttl given here
   nats kv add "$1" --history 1 --storage file ${2:+--ttl "$2"}
 }
 
-stream CMD 'cmd.>' work 0     # work queue: a run command lives until its runner acks it
-stream EVT 'evt.>' limits 7d  # run + auth events, replayable for 7 days
-stream DLQ 'dlq.>' limits 30d # commands a runner could not accept
+stream CMD 'cmd.>' work 0 1GB     # work queue: a run command lives until its runner acks it
+stream EVT 'evt.>' limits 7d 6GB  # run + auth events, replayable for 7 days (the oldest go first past 6 GB)
+stream DLQ 'dlq.>' limits 30d 1GB # commands a runner could not accept
 
 kv registry                   # <host>.<env>.{nodes,workflows,models}, written by each runner at start
 kv hosts 1h                   # <host>.<env>, rewritten every 10 s; deleted on a clean exit. An offline key counts (fail

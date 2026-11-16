@@ -333,31 +333,37 @@ def tensors(path, dev: str, keys: set | None = None):
                 yield key, f.get_tensor(key)
 
 
+def staging_gb(size: int, pin: bool) -> float:
+    """What a staging buffer of `size` bytes holds in host RAM: pinned, torch's CachingHostAllocator rounds a block up
+    to the next power of two (a 1.24 GB tensor takes 2 GiB) and keeps it cached after it is freed."""
+    return (1 << max(size - 1, 0).bit_length() if pin else size) / 2**30
+
+
 def staged(path, dev: str, keys: set | None = None):
     """`tensors` on CUDA (plan 6.3): each tensor is read from the file into one host buffer, pinned on CUDA, and
-    copied to the device with non_blocking; the next read waits only for that copy. The buffer grows to the largest
-    tensor read, never a whole file; growing it is checked against the host-RAM budget (RunError with the
-    contract's text). The pinned memory goes back at the next free()."""
+    copied to the device with non_blocking; the next read waits only for that copy. The buffer is allocated once per
+    file at the largest tensor read (never a whole file, never grown: a grown pinned buffer would leave the old block
+    cached), checked first against the host-RAM budget with the allocator's rounding (RunError with the contract's
+    text). The pinned memory goes back at the next free()."""
     pin = torch.device(dev).type == "cuda"
     with open(path, "rb", buffering=0) as f:
         (n,) = struct.unpack("<Q", f.read(8))
         header = json.loads(f.read(n))
         header.pop("__metadata__", None)
+        wanted = [(k, i) for k, i in header.items() if keys is None or k in keys]
+        largest = max((i["data_offsets"][1] - i["data_offsets"][0] for _, i in wanted), default=0)
         buf, copied = None, None
-        for key, info in header.items():
-            if keys is not None and key not in keys:
-                continue
+        if wanted:
+            limit = host_ram()["budget_gb"]
+            if (need := (rss_gb() or 0) + staging_gb(largest, pin)) > limit:
+                raise RunError(f"needs {need:.1f} GB of host RAM at its peak; host {config.HOST} has "
+                               f"{limit:.1f} GB")  # fmt: skip
+            buf = torch.empty(max(largest, 1), dtype=torch.uint8, pin_memory=pin)
+        for key, info in wanted:
             start, end = info["data_offsets"]
             size = end - start
             if copied is not None:
                 copied.synchronize()  # the previous copy has left the buffer
-            if buf is None or buf.numel() < size:
-                buf = None
-                limit = host_ram()["budget_gb"]
-                if (need := (rss_gb() or 0) + size / 2**30) > limit:
-                    raise RunError(f"needs {need:.1f} GB of host RAM at its peak; host {config.HOST} has "
-                                   f"{limit:.1f} GB")  # fmt: skip
-                buf = torch.empty(max(size, 1), dtype=torch.uint8, pin_memory=pin)
             view = memoryview(buf.numpy())[:size]
             f.seek(8 + n + start)
             got = 0

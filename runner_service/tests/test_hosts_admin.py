@@ -265,3 +265,32 @@ def test_tls_paths_stay_paths_and_make_the_nats_context(tmp_path, monkeypatch):
     ctx = main.tls_context()
     assert ctx.verify_mode.name == "CERT_REQUIRED" and ctx.check_hostname
     assert [c["subject"] for c in ctx.get_ca_certs()] == [((("commonName", "t"),),)]
+
+
+async def test_a_reserve_above_vram_leaves_no_budget_never_a_negative_one(monkeypatch):
+    """On CUDA the reserve is cut from VRAM (total_gb), not RAM: 32 of a 24 GB card leaves 0, and the hosts key stays
+    on contract (budget_gb ≥ 0) so the host never goes offline for it."""
+    monkeypatch.setattr("messaging.settings.ram_gb", lambda: 64.0)
+    res = Residency(22)
+    res.total_gb = 24.0
+    c = consumer(FakeJS(), residency=res)
+    s = Settings(c, c.host)
+    c.host.extra = lambda: res.state()
+    await s.offer(settings_value(after_run="keep_warm", reserve_gb=32, idle_unload_min=0))
+    assert res.budget_gb == 0
+    assert json.loads(c.host.kv.data["fake.fake"])["memory"]["budget_gb"] == 0
+
+
+def test_a_ca_file_refuses_a_plain_link(monkeypatch):
+    """contracts/README.md, A remote GPU host: with a CA file set, a nats:// or http:// URL is refused, never used."""
+    for k, v in {"NATS_CA_FILE": "/ca", "NATS_URL": "tls://h:4222", "S3_CA_FILE": "/ca",
+                 "S3_ENDPOINT": "https://h:8333"}.items():  # fmt: skip
+        monkeypatch.setattr(config, k, v)
+    assert config.plain_with_ca() is None
+    monkeypatch.setattr(config, "NATS_URL", "nats://runner:pw@h:4222")
+    assert "NATS_URL" in config.plain_with_ca()
+    monkeypatch.setattr(config, "NATS_URL", "tls://h:4222")
+    monkeypatch.setattr(config, "S3_ENDPOINT", "http://h:8333")
+    assert "S3_ENDPOINT" in config.plain_with_ca()
+    monkeypatch.setattr(config, "S3_CA_FILE", "")
+    assert config.plain_with_ca() is None  # no CA: the operator's plain in-stack link (compose)

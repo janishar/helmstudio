@@ -370,11 +370,12 @@ func TestPlaceFixtures(t *testing.T) {
 					RAMGB    *float64            `json:"ram_budget_gb"`
 					Resident []registry.Resident `json:"resident"`
 				} `json:"keys"`
-				Workflows map[string][]string            `json:"workflows"`
-				Variants  map[string]map[string][]string `json:"variants"`
-				Loras     map[string][]string            `json:"loras"`
-				Free      bool                           `json:"free"`
-				IdleSince *time.Time                     `json:"idle_since"`
+				Workflows  map[string][]string            `json:"workflows"`
+				Variants   map[string]map[string][]string `json:"variants"`
+				Loras      map[string][]string            `json:"loras"`
+				Free       bool                           `json:"free"`
+				IdleSince  *time.Time                     `json:"idle_since"`
+				ReservedGB float64                        `json:"reserved_gb"`
 			} `json:"hosts"`
 			Run struct {
 				Env, Workflow, Model, Variant, Precision string
@@ -396,9 +397,9 @@ func TestPlaceFixtures(t *testing.T) {
 		}
 		run := fx.Run
 		reg := &registry.Registry{}
-		busy, idle := map[string]bool{}, map[string]time.Time{}
+		busy, idle, reserved := map[string]bool{}, map[string]time.Time{}, map[string]int{}
 		for host, h := range fx.Hosts {
-			busy[host], idle[host] = !h.Free, deref(h.IdleSince)
+			busy[host], idle[host], reserved[host] = !h.Free, deref(h.IdleSince), hundredths(h.ReservedGB)
 			for env, k := range h.Keys {
 				if k.State == "gone" {
 					continue
@@ -468,7 +469,7 @@ func TestPlaceFixtures(t *testing.T) {
 			used = append(used, lora.Used{Node: "lora", ID: n, Source: "shared", Name: n, Strength: 1, Mode: "adapter"})
 		}
 		x := model.Run{ID: "x", WorkflowID: run.Workflow, Env: run.Env, Nodes: nodes, Loras: lorasJSON(used), LostHost: run.LostHost}
-		slots, resident, reason := eligible(reg, reg.Hosts(), x, now)
+		slots, resident, reason := eligibleIn(reg, reg.Hosts(), reserved, x, now)
 		got := struct {
 			Host     *string  `json:"host"`
 			Eligible []string `json:"eligible"`
@@ -477,7 +478,8 @@ func TestPlaceFixtures(t *testing.T) {
 		if reason != "" {
 			got.Error = &reason
 		} else {
-			snap := snapshot{values: reg.Hosts(), queue: []queued{{run: x, slots: slots, resident: resident}}, idle: idle}
+			snap := snapshot{values: reg.Hosts(), queue: []queued{{run: x, slots: slots, resident: resident}}, idle: idle,
+				reserved: reserved}
 			(*Dispatcher)(nil).lineUp(reg, snap, busy, now)
 			got.Host = &snap.queue[0].host
 		}

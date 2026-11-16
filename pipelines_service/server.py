@@ -171,7 +171,7 @@ class Executor:
                "data": {"seq": seq, "attempt": d.get("attempt", 1)} | data}  # fmt: skip
         if errs := schemas.message_errors(msg):
             raise ValueError(f"evt.run.status is off-contract: {'; '.join(errs[:3])}")
-        await self.js.publish(f"evt.run.{d['session_id']}.status", json.dumps(msg).encode(),
+        await self.js.publish(f"evt.run.{self.host}.{d['session_id']}.status", json.dumps(msg).encode(),
                               headers={"Nats-Msg-Id": f"{d['run_id']}:{d.get('attempt', 1)}:{seq}"})  # fmt: skip
 
     async def _cancelled(self, run_id: str) -> bool:

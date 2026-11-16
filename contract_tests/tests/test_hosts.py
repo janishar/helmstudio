@@ -277,6 +277,7 @@ async def main():
         "pub_cmd": ("pub", f"cmd.run.{them}"),
         "pub_dlq": ("pub", f"dlq.cmd.run.{them}"),
         "pub_model_evt": ("pub", f"evt.model.{them.split('.')[0]}.probe"),
+        "pub_run_evt": ("pub", f"evt.run.{them.split('.')[0]}.probe.status"),  # run events: its own host only
         "pub_create": ("pub", f"$JS.API.CONSUMER.CREATE.CMD.runner-{them.replace('.', '-')}.cmd.run.{them}"),
         "pub_bare_create": ("pub", f"$JS.API.CONSUMER.CREATE.CMD.runner-{me.replace('.', '-')}"),
         "pub_durable_create": ("pub", f"$JS.API.CONSUMER.DURABLE.CREATE.CMD.runner-{me.replace('.', '-')}"),

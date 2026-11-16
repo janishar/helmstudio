@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.run.output.schema.json",
   "title": "runner → studio: one output object written",
-  "description": "Subject evt.run.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event.",
+  "description": "Subject evt.run.<host>.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event.",
   "allOf": [
     {
       "$ref": "envelope.schema.json"

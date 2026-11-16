@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.run.status.schema.json",
   "title": "runner → studio: a run's lifecycle",
-  "description": "Subject evt.run.<session_id>.status (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. `running` once when the runner starts the graph (with host), then exactly one terminal status. The runner publishes the terminal status and waits for its ack before it acks the command.",
+  "description": "Subject evt.run.<host>.<session_id>.status (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. `running` once when the runner starts the graph (with host), then exactly one terminal status. The runner publishes the terminal status and waits for its ack before it acks the command.",
   "allOf": [
     {
       "$ref": "envelope.schema.json"

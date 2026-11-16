@@ -148,7 +148,7 @@ func Run() error {
 		micro.NatsJetStreamWatchKV(ctx, client, "registry", runners.SetRegistry, func() { runners.Loaded("registry") })
 	})
 	workers.Go(func() {
-		micro.NatsJetStreamWatchKV(ctx, client, "hosts", runners.SetHost, func() { runners.Loaded("hosts") })
+		micro.NatsJetStreamWatchKVAt(ctx, client, "hosts", runners.SetHostAt, func() { runners.Loaded("hosts") })
 	})
 	events := &micro.NatsJetStreamGroup{}
 	projector := studio.NewProjector(pool)

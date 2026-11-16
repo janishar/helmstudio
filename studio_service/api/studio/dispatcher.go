@@ -185,20 +185,19 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 			busy[host] = true
 		}
 		// Several hosts (contracts/README.md): line up every queued run, walk the free hosts by name, each picking
-		// among the runs lined up on it; after a release or a fail line up again and walk again, until a walk
-		// decides nothing. A host whose pick waits keeps waiting for it this pass.
+		// among the runs lined up on it; after a release, a fail or a wait line up again and walk again, until a walk
+		// decides nothing. A host whose pick waits is busy for the rest of this pass.
 		skips, clock := d.skipState(), now
 		for _, at := range snap.last {
 			if at.After(clock) { // a simulated turn later than every real one
 				clock = at
 			}
 		}
-		waiting := map[string]bool{} // hosts waiting for their pick this pass
 		for decidedOne := true; decidedOne; {
 			decidedOne = false
 			d.lineUp(d.registry, snap, busy, now)
 			for _, host := range snap.hosts {
-				if busy[host] || waiting[host] {
+				if busy[host] {
 					continue
 				}
 				k, passed := pick(host, snap.queue, snap.last, skips, now)
@@ -215,10 +214,11 @@ func (d *Dispatcher) Pass(ctx context.Context, now time.Time) error {
 						first = now
 					}
 					if now.Sub(first) < GateTimeout {
-						waited[next.run.ID] = first // stays queued: the host waits for it
-						waiting[host] = true
+						waited[next.run.ID] = first // stays queued: the host waits for it, busy for this pass
+						busy[host] = true
 						snap.queue = slices.Delete(snap.queue, k, k+1)
-						continue
+						decidedOne = true // line up again: its other runs may go to a free host
+						break
 					}
 					reason = fmt.Sprintf("env %s on host %s did not unload its models in %d s", got.holder, next.host, int(GateTimeout.Seconds()))
 				}
@@ -334,11 +334,11 @@ func budgets(values []registry.Host, host string) (int, int) {
 		if value.Host != host {
 			continue
 		}
-		if value.Memory != nil && (budget < 0 || hundredths(value.Memory.BudgetGB) < budget) {
-			budget = hundredths(value.Memory.BudgetGB)
+		if value.Memory != nil && (budget < 0 || max(0, hundredths(value.Memory.BudgetGB)) < budget) {
+			budget = max(0, hundredths(value.Memory.BudgetGB)) // a negative budget is none left, never "no key"
 		}
-		if value.HostRAM != nil && (ram < 0 || hundredths(value.HostRAM.BudgetGB) < ram) {
-			ram = hundredths(value.HostRAM.BudgetGB)
+		if value.HostRAM != nil && (ram < 0 || max(0, hundredths(value.HostRAM.BudgetGB)) < ram) {
+			ram = max(0, hundredths(value.HostRAM.BudgetGB))
 		}
 	}
 	return budget, ram
@@ -726,6 +726,16 @@ func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 		_, err := finish(ctx, tx, run, "failed", &reason)
 		return err
 	}
+	// the run moves first, under its row lock (the projector's FOR UPDATE waits for it, then drops attempt 1's events):
+	// a run the projector ended since the look keeps its outputs and is not retried
+	retried, err := one[model.Run](ctx, tx, `UPDATE runs SET status = 'queued', attempt = attempt + 1, lost_host = host, host = NULL,
+		released_at = NULL, progress = NULL, started_at = NULL, updated_at = clock_timestamp()
+		WHERE id = $1 AND status IN ('queued', 'running') RETURNING `+model.RunCols, run.ID)
+	if errors.Is(err, errNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
 	// attempt 1's outputs go: their takes are deleted (the sweep removes the objects) and let go of (run, index), which
 	// attempt 2's outputs take under their own keys
 	if _, err := tx.Exec(ctx, `DELETE FROM outbox WHERE job_id = $1`, run.ID); err != nil {
@@ -736,14 +746,6 @@ func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM run_outputs WHERE run_id = $1`, run.ID); err != nil {
-		return err
-	}
-	retried, err := one[model.Run](ctx, tx, `UPDATE runs SET status = 'queued', attempt = attempt + 1, lost_host = host, host = NULL,
-		released_at = NULL, progress = NULL, started_at = NULL, updated_at = clock_timestamp()
-		WHERE id = $1 AND status IN ('queued', 'running') RETURNING `+model.RunCols, run.ID)
-	if errors.Is(err, errNotFound) {
-		return nil
-	} else if err != nil {
 		return err
 	}
 	if err := appendEvent(ctx, tx, retried, "status", now, statusData("queued", nil, nil, retried.Attempt)); err != nil {
@@ -888,7 +890,7 @@ func look(ctx context.Context, tx pgx.Tx, reg *registry.Registry, now time.Time)
 			snap.released = append(snap.released, run)
 			continue
 		}
-		slots, resident, reason := eligible(reg, snap.values, run, now)
+		slots, resident, reason := eligibleIn(reg, snap.values, snap.reserved, run, now)
 		if name, gone := deleted[run.ID]; gone {
 			reason = "LoRA " + name + " was deleted"
 		}
@@ -979,8 +981,15 @@ func deletedLoras(ctx context.Context, tx pgx.Tx, open []model.Run) (map[string]
 // (3) every shared LoRA the run was made with; (4) room: its admission there would not fail it at once. It returns
 // host name → env, which of them hold every model node resident (its family's lora component, with the run's baked
 // LoRAs), and with none the text of the step that left none. A retried run drops its lost host while another remains,
-// and with none fails as that host's loss.
+// and with none fails as that host's loss. Room counts no local server's reservation (eligibleIn does).
 func eligible(reg *registry.Registry, values []registry.Host, run model.Run, now time.Time) (map[string]string, map[string]bool, string) {
+	return eligibleIn(reg, values, nil, run, now)
+}
+
+// eligibleIn is eligible with room checked against each host's budget less what its enabled local servers reserve
+// (hundredths, as decide subtracts it): a host the reservation leaves too small is not eligible, so the run is never
+// lined up there and failed by its admission while another host fits.
+func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[string]int, run model.Run, now time.Time) (map[string]string, map[string]bool, string) {
 	var graph map[string]registry.Node
 	_ = json.Unmarshal(run.Nodes, &graph)
 	models := runModels(graph)
@@ -1046,6 +1055,7 @@ func eligible(reg *registry.Registry, values []registry.Host, run model.Run, now
 		if budget < 0 {
 			return false // no admission there
 		}
+		budget -= reserved[host]
 		p := planOf(reg, host, run)
 		peak := p.peak
 		if peak < 0 {

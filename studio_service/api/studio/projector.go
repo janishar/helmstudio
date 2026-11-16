@@ -23,7 +23,7 @@ import (
 	"github.com/helmstudio/studio_service/registry"
 )
 
-// Projector applies evt.run.<session_id>.<kind> to the runs and run_outputs tables and appends each applied event to
+// Projector applies evt.run.<host>.<session_id>.<kind> to the runs and run_outputs tables and appends each applied event to
 // the session's log, as System.
 type Projector struct {
 	pool *pgxpool.Pool
@@ -38,9 +38,9 @@ func NewProjector(pool *pgxpool.Pool) *Projector {
 
 // MountNatsJetStream registers one handler per evt.run.* kind.
 func (p *Projector) MountNatsJetStream(group *micro.NatsJetStreamGroup) {
-	group.AddHandler("evt.run.*.status", handler(p, "status", applyStatus))
-	group.AddHandler("evt.run.*.progress", handler(p, "progress", applyProgress))
-	group.AddHandler("evt.run.*.output", handler(p, "output", p.applyOutput))
+	group.AddHandler("evt.run.*.*.status", handler(p, "status", applyStatus))
+	group.AddHandler("evt.run.*.*.progress", handler(p, "progress", applyProgress))
+	group.AddHandler("evt.run.*.*.output", handler(p, "output", p.applyOutput))
 }
 
 // based is an event's data: every one has a seq.
@@ -58,7 +58,8 @@ func handler[D based](p *Projector, typ string, apply applyFunc[D]) micro.NatsJe
 			micro.TermNatsJetStreamMessage(msg, err)
 			return
 		}
-		if err := project(ctx, p.pool, typ, sessionOf(msg.Subject()), event, apply); err != nil {
+		host, session := routeOf(msg.Subject())
+		if err := project(ctx, p.pool, typ, host, session, event, apply); err != nil {
 			micro.NakNatsJetStreamMessage(ctx, msg, err)
 			return
 		}
@@ -66,19 +67,21 @@ func handler[D based](p *Projector, typ string, apply applyFunc[D]) micro.NatsJe
 	}
 }
 
-// sessionOf is the <session_id> of evt.run.<session_id>.<kind>.
-func sessionOf(subject string) string {
+// routeOf is the <host> and <session_id> of evt.run.<host>.<session_id>.<kind> ("" for another shape). The host's
+// NATS user may publish only evt.run.<its host>.>, so the subject names the publisher (contracts/README.md).
+func routeOf(subject string) (string, string) {
 	parts := strings.Split(subject, ".")
-	if len(parts) != 4 {
-		return ""
+	if len(parts) != 5 {
+		return "", ""
 	}
-	return parts[2]
+	return parts[2], parts[3]
 }
 
 // project applies the event once per (job_id, attempt, seq) when its run belongs to the envelope's owner and the
-// subject's session and the event is of the run's current attempt, then appends it to the session's log. Anything
-// else is logged and skipped (acked). A terminal status frees the run's host for the dispatcher's next pass.
-func project[D based](ctx context.Context, pool *pgxpool.Pool, typ, sessionID string, event *gen.Message[D], apply applyFunc[D]) error {
+// subject's session, the subject's host is the one the run's current attempt was released to and the event is of
+// that attempt, then appends it to the session's log. Anything else is logged and skipped (acked). A terminal status
+// frees the run's host for the dispatcher's next pass.
+func project[D based](ctx context.Context, pool *pgxpool.Pool, typ, host, sessionID string, event *gen.Message[D], apply applyFunc[D]) error {
 	seq := event.Data.Common().Seq
 	if event.JobID == nil || !utility.IsUUID(*event.JobID) || seq < 1 {
 		log.Printf("projector: dropping %s without a job_id or seq", event.Type)
@@ -91,6 +94,10 @@ func project[D based](ctx context.Context, pool *pgxpool.Pool, typ, sessionID st
 			return nil
 		} else if err != nil {
 			return err
+		}
+		if run.Host == nil || *run.Host != host { // another host (a lost attempt's, or forging): never its runs
+			log.Printf("projector: dropping %s of run %s from host %q (released to %s)", event.Type, run.ID, host, deref(run.Host))
+			return nil
 		}
 		attempt := event.Data.Common().Try()
 		if attempt != run.Attempt { // a lost attempt's runner still talking: the run has moved on
@@ -108,8 +115,9 @@ func project[D based](ctx context.Context, pool *pgxpool.Pool, typ, sessionID st
 	})
 }
 
-// applyStatus moves the run on when canMove allows it: running sets started_at and the host, a terminal status the
-// error and finished_at. Anything else (a repeat, anything after the end) is ignored.
+// applyStatus moves the run on when canMove allows it: running sets started_at, a terminal status the error and
+// finished_at. The host stays the one written at release (data.host is informational). Anything else (a repeat,
+// anything after the end) is ignored.
 func applyStatus(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Message[message.Status]) (any, error) {
 	data := event.Data
 	if !canMove(run.Status, data.Status) {
@@ -122,9 +130,6 @@ func applyStatus(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Messa
 		data.Error = &reason
 	}
 	host := run.Host
-	if data.Host != nil {
-		host = data.Host
-	}
 	if data.Status != "succeeded" || len(data.Resolved) == 0 {
 		data.Resolved = nil
 	}
@@ -173,12 +178,12 @@ func applyProgress(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Mes
 	return progress, err
 }
 
-// applyOutput records an output stored under the run's own prefix; a key outside it, a video without its metadata or
+// applyOutput records an output stored under the current attempt's prefix (OutputPrefix); a key outside it, a video without its metadata or
 // with a poster outside it, or a run already ended, is dropped. Every output is a take, stored in the same transaction
 // (gallery.Record). The stored event keeps the keys: they are signed when read.
 func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Message[message.Output]) (any, error) {
 	data := event.Data
-	prefix := common.OwnerPrefix(run.OwnerID) + "runs/" + run.ID + "/"
+	prefix := OutputPrefix(run)
 	if terminal[run.Status] || !common.Owns(run.OwnerID, data.Key) || !strings.HasPrefix(data.Key, prefix) ||
 		(data.Kind != "image" && data.Kind != "video") || data.Index < 0 || badVideo(data, prefix) {
 		log.Printf("projector: dropping output %d of run %s (%s)", data.Index, run.ID, data.Key)

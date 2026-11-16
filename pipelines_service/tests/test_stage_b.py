@@ -654,6 +654,21 @@ def test_the_custom_and_server_registry_values_are_on_contract():
     }  # each checked against the schema
 
 
+async def test_the_server_env_publishes_its_status_under_its_host():
+    """evt.run.<host>.<session_id>.status: the subject names the host (its NATS permission and the projector's check)."""
+    sent = []
+
+    class JS:
+        async def publish(self, subject, body, headers=None):
+            sent.append(subject)
+
+    run, session = "00000000-0000-4000-8000-00000000000a", "00000000-0000-4000-8000-00000000000b"
+    cmd = {"job_id": run, "owner_id": "00000000-0000-4000-8000-000000000001", "trace": {"traceparent": "00-" + "1" * 32
+           + "-" + "1" * 16 + "-01"}, "data": {"session_id": session, "run_id": run}}  # fmt: skip
+    await server.Executor(JS(), None, "mac")._status(cmd, 1, {"status": "running", "host": "mac"})
+    assert sent == [f"evt.run.mac.{session}.status"]
+
+
 async def test_the_provider_test_answers_on_contract(fake):
     p = server_provider(fake.url)
     ok = await providers.test({"name": "local", "provider": p, "model": "fake-small"})

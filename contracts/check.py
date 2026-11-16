@@ -2317,7 +2317,7 @@ def admit_fixture(fx: dict) -> dict:
 def place(fx: dict) -> dict:
     """Several hosts (README, Several hosts): the run's eligible hosts and the one it is lined up on, or the error it
     fails with. hosts: name -> {keys (as admit fixtures), workflows: {env: [ids]}, variants: {env: {"model/variant":
-    [precisions]}} (present ones only), loras: {env: [shared LoRA names]}, free, idle_since (null = never ran)};
+    [precisions]}} (present ones only), loras: {env: [shared LoRA names]}, free, idle_since (null = never ran), reserved_gb? (enabled local servers)};
     run: {env, workflow, model?, variant?, precision?, loras (shared, graph order), peak_gb, ram_peak_gb?, needs,
     lora_component?, lost_host?}."""
     run, hosts = fx["run"], fx["hosts"]
@@ -2346,6 +2346,9 @@ def place(fx: dict) -> dict:
     ram_peak = cgb(run["ram_peak_gb"]) if run.get("ram_peak_gb") is not None else None
     needs = {entry_key(n) for n in run["needs"]}
     views = {h: host_view(hosts[h]["keys"]) for h in with_loras}
+    # what enabled local servers reserve on a host is outside the app's control (decide subtracts it too)
+    views = {h: (v[0], None if v[1] is None else v[1] - cgb(hosts[h].get("reserved_gb", 0)), *v[2:])
+             for h, v in views.items()}
     decided = {h: admit(h, v[0], v[1], env, peak, needs, set(), v[3], v[2], ram_peak) for h, v in views.items()}
     eligible = [h for h in with_loras if decided[h]["decision"] != "fail"]
     if not eligible:  # too big everywhere: the largest host's reason (budget, then name)

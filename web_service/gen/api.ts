@@ -1647,7 +1647,8 @@ export interface paths {
          *     `<host>`; each runner of the host applies it at once when idle, else after its run, without a restart, and
          *     reports it in its hosts key (`policy.settings_version`; `HostSettings.applied`). A first PUT creates the row
          *     with no pins. 404 for a host with no present hosts key. 422 `reserve_gb leaves no memory on <host>` (reserve_gb
-         *     ≥ the smallest `machine.ram_gb` the host's keys report).
+         *     ≥ the smallest memory the host's keys cut their budget from: `device.memory_total_gb` (VRAM) for a key whose
+         *     `device.kind` is cuda, else `machine.ram_gb`).
          */
         put: operations["studioAdminPutHostSettings"];
         post?: never;
@@ -5112,7 +5113,7 @@ export interface components {
             after_run: components["schemas"]["AfterRun"];
             /** @description keep_warm: minutes idle before everything but the pins is unloaded; 0 = never */
             idle_unload_min: number;
-            /** @description the host's budget is its RAM minus this */
+            /** @description the host's budget is its RAM (on cuda: its VRAM) minus this */
             reserve_gb: number;
         };
         HostPins: {

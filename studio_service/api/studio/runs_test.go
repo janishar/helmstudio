@@ -18,12 +18,14 @@ func TestCanMove(t *testing.T) {
 	}
 }
 
-// The projector reads the session from the subject evt.run.<session_id>.<kind>.
-func TestSessionOf(t *testing.T) {
-	if got := sessionOf("evt.run.0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10.status"); got != "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10" {
-		t.Fatal(got)
+// The projector reads the publishing host and the session from the subject evt.run.<host>.<session_id>.<kind>.
+func TestRouteOf(t *testing.T) {
+	if host, session := routeOf("evt.run.gcp.0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10.status"); host != "gcp" || session != "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10" {
+		t.Fatal(host, session)
 	}
-	if sessionOf("evt.run.status") != "" || sessionOf("evt.run.a.b.c") != "" {
-		t.Fatal("malformed subjects name no session")
+	for _, subject := range []string{"evt.run.status", "evt.run.0b5c1f8e.status", "evt.run.a.b.c.d"} {
+		if host, session := routeOf(subject); host != "" || session != "" {
+			t.Fatal("malformed subjects name no host or session:", subject)
+		}
 	}
 }

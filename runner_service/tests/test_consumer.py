@@ -10,6 +10,7 @@ from conftest import IMPLS, FakeJS, FakeKV, FakeMsg, FakeQwen, command, consumer
 from conftest import qwen_command as qwen_fixture
 from PIL import Image
 
+from config import HOST
 from consumer import SHUTDOWN, STALLED
 from core.pack import Node
 from core.residency import Residency
@@ -45,7 +46,7 @@ def check_events(js: FakeJS) -> None:
     for n, (subject, msg, headers) in enumerate(evts, 1):
         assert schemas.message_errors(msg) == []
         assert msg["job_id"] == RUN and msg["data"]["seq"] == n
-        assert subject == f"evt.run.{SESSION}.{msg['type'].removeprefix('evt.run.')}"
+        assert subject == f"evt.run.{HOST}.{SESSION}.{msg['type'].removeprefix('evt.run.')}"
         assert headers == {"Nats-Msg-Id": f"{RUN}:1:{n}"}
 
 
@@ -163,7 +164,10 @@ async def test_graph_that_does_not_fit_the_node_schemas_is_rejected_and_reported
     bad = command()
     bad["data"]["workflow"]["nodes"]["echo"]["kind"] = "echo/missing"
     js, _, msg = await run(bad)
-    assert [s for s, _, _ in js.sent] == ["dlq.cmd.run.fake.fake", f"evt.run.{SESSION}.status"]
+    assert [s for s, _, _ in js.sent] == [
+        "dlq.cmd.run.fake.fake",
+        f"evt.run.{HOST}.{SESSION}.status",
+    ]
     check_events(js)
     status = js.events()[0]["data"]
     assert status["status"] == "failed" and "unknown node kind" in status["error"]

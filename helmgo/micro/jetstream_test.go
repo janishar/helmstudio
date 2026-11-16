@@ -397,6 +397,33 @@ func TestNatsJetStreamWatchKVSeesCurrentAndLaterValues(t *testing.T) {
 	}
 }
 
+// NatsJetStreamWatchKVAt hands each put with the server's timestamp of that put.
+func TestNatsJetStreamWatchKVAtGivesServerTime(t *testing.T) {
+	client := startServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	bucket, err := client.jetStream().CreateKeyValue(ctx, jetstream.KeyValueConfig{Bucket: "hosts", History: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now()
+	_, _ = bucket.Put(ctx, "gcp.torch", []byte(`{"updated_at": "2001-01-01T00:00:00Z"}`))
+	var mu sync.Mutex
+	var at time.Time
+	go NatsJetStreamWatchKVAt(ctx, client, "hosts", func(_ string, _ []byte, created time.Time) error {
+		mu.Lock()
+		defer mu.Unlock()
+		at = created
+		return nil
+	}, nil)
+	eventually(t, 5*time.Second, func() bool { mu.Lock(); defer mu.Unlock(); return !at.IsZero() })
+	mu.Lock()
+	defer mu.Unlock()
+	if at.Before(before.Add(-time.Second)) || at.After(time.Now().Add(time.Second)) {
+		t.Errorf("at = %v, want about %v", at, before)
+	}
+}
+
 // A put needs the bucket; once it exists, the value is stored under the key.
 func TestNatsJetStreamPutKV(t *testing.T) {
 	client := startServer(t)

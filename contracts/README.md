@@ -55,9 +55,9 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | Subject | Kind | Body | Producer → consumer |
 |---|---|---|---|
 | `cmd.run.<host>.<env>` | stream `CMD` (work queue) | `cmd.run.execute`, `Nats-Msg-Id <run_id>:<attempt>` | studio outbox relay → the runner of that host and env (durable `runner-<host>-<env>`) |
-| `evt.run.<session_id>.status` | stream `EVT` (7 days) | `evt.run.status`, `Nats-Msg-Id <run_id>:<attempt>:<seq>` | runner → studio projector |
-| `evt.run.<session_id>.progress` | stream `EVT` | `evt.run.progress`, same | runner → studio projector |
-| `evt.run.<session_id>.output` | stream `EVT` | `evt.run.output`, same | runner → studio projector |
+| `evt.run.<host>.<session_id>.status` | stream `EVT` (7 days) | `evt.run.status`, `Nats-Msg-Id <run_id>:<attempt>:<seq>` | runner (or pipelines' `server` env) of `<host>` → studio projector (API 1.18: `<host>` binds the publisher, Several hosts) |
+| `evt.run.<host>.<session_id>.progress` | stream `EVT` | `evt.run.progress`, same | runner → studio projector |
+| `evt.run.<host>.<session_id>.output` | stream `EVT` | `evt.run.output`, same | runner → studio projector |
 | `dlq.<original subject>` | stream `DLQ` (30 days) | the original command, unchanged | runner, for a command that fails its schema |
 | `auth.validate.token`, `auth.validate.role` | core request/reply, queue group `auth` | bare JSON (see the schemas) | studio → auth |
 | `cmd.pipeline.submit`, `.resume`, `.pause`, `.stop`, `.retry`, `.pick` | stream `CMD` (work queue) | `cmd.pipeline.<same>`, `Nats-Msg-Id <batch_id>:<n>` (n = the batch's command counter, submit = 1) | studio outbox relay → pipelines (durable `pipelines`, filter `cmd.pipeline.>`, one at a time, in order) |
@@ -202,7 +202,9 @@ create, terminal status and cancel, and every few seconds.
   `position`); it becomes eligible again on Resume. The no-live-host check still fails it while held.
 - **Attempts in events**: every `evt.run.*` carries `data.attempt` (absent = 1), `seq` restarts at 1 per attempt and
   `Nats-Msg-Id` is `<run_id>:<attempt>:<seq>`. The projector dedupes on `(job_id, attempt, seq)` and drops events of an
-  attempt that is not the run's current one. The runner sets `attempt` in its hosts value while busy.
+  attempt that is not the run's current one, and (API 1.18) events whose subject's `<host>` is not `runs.host` (the
+  host the current attempt was released to): a host's NATS user may publish only `evt.run.<its host>.>`, so the
+  subject, not the body, names the publisher. The runner sets `attempt` in its hosts value while busy.
 - **Cancel** of a run not yet released: `cancelled` at once, never sent. Of a released one: KV `cancels`, as before.
 - **Memory admission and the evict hand-over** between envs of one host: Two envs on one host: the hand-over, below.
 
@@ -429,7 +431,8 @@ mock's `Linux · CUDA` card: `38.2 of 76 GB`, `reserve 4 GB` on an 80 GB card); 
   `ram_peak_gb` or `host_ram`: not checked.
 
 **The runner on CUDA** (plan 6.3; contract-visible parts): weights load per tensor through one pinned host buffer
-(one tensor of host memory at a time, the stated exception to "no CPU copy"); the int8 path is the MPS one (int8
+per file, sized once to the file's largest tensor read (the stated exception to "no CPU copy"); the host-RAM check
+before it counts the allocator's rounding (a pinned block is a power of two: a 1.24 GB tensor holds 2 GiB); the int8 path is the MPS one (int8
 weights on the device); a `bf16` component loads as `fp16` when `capability` < 8.0 (its resident entry and plan say
 `fp16`); freeing the device cache (unload requests, after runs) is `torch.cuda.synchronize()` then
 `torch.cuda.empty_cache()`. The models root on Linux is the host folder bind-mounted at `HELMSTUDIO_MODELS` in the
@@ -462,8 +465,9 @@ not; Starting up still exempts):
 3. **Shared LoRAs**: `<H>.<env>.loras` lists every shared LoRA of the resolved graph. With F = the first host left (by
    name) and L = the first LoRA (graph order) F lacks: `no live host for env <env> has LoRA <L>` when no host left has
    L, else `no live host for env <env> has all of its LoRAs (<L> is not on <F>)`.
-4. **Room**: H's admission would not fail X at once (P ≤ B_H; ram_peak ≤ R_H): else the text of the host with the
-   largest B (then name), `needs <P> GB at its peak; host <H> has <B> GB` or the host-RAM text.
+4. **Room**: H's admission would not fail X at once (P ≤ B_H − S_H, S_H = what H's enabled local servers reserve;
+   ram_peak ≤ R_H): else the text of the host with the largest B_H − S_H (then name), `needs <P> GB at its peak; host <H>
+   has <B − S> GB` or the host-RAM text.
 A retried run (`lost_host` set) fails instead with `runner on host <lost_host> stopped responding; no other live host
 for env <env>`. A run's own LoRA deleted since: `LoRA <name> was deleted`, as before. Media capability is not a run's
 concern: media jobs pick hosts by `media` (Media jobs). A host with a released `delete` / `lora_delete` affecting X
@@ -473,14 +477,17 @@ concern: media jobs pick hosts by `media` (Media jobs). A host with a released `
 released to it is unterminated); (2) **resident** first (The hand-over: Resident, on that host); (3) **fits now**
 first (its admission would release X at once: no victims, no wait); (4) **idle longest** (oldest last terminal run on
 it; never ran = first); (5) host name. A retried run drops `lost_host` from its eligible hosts when another remains.
+A host waiting for its pick this pass (Admission: unload or wait) counts as busy, not free.
 
 **A pass**: line up every queued run; walk the free hosts by name; on each, the Order (The hand-over) picks among the
-runs lined up there and admission decides (release, unload asks, wait or fail); after a release, line up again (that
-host is busy now) and walk again, until a walk releases nothing. A run waiting on H (Admission 5) keeps H only while it
+runs lined up there and admission decides (release, unload asks, wait or fail); after a release, a fail or a wait,
+line up again (a host that released or waits is busy now, so its other runs may go to a free host) and walk again,
+until a walk decides nothing. A run waiting on H (Admission 5) keeps H only while it
 stays lined up there; a later pass may line it up on a host that became free and fits (asks already sent are
 harmless). `Run.position` is counted on the run's lined-up host.
 
-**Recording**: `runs.host` is written at each release (attempt 2 may differ); `Run.lost_host` = attempt 1's host
+**Recording**: `runs.host` is written at each release (attempt 2 may differ) and only there: a status event's
+`data.host` is informational and never overwrites it; `Run.lost_host` = attempt 1's host
 after a host loss (absent or null otherwise); every take of a run records `made_with.host` = the run's host at the
 attempt that stored it (the projector, in the take's transaction). `Run.host` stays visible to the owner; admins see
 each host's current run (`HostAdmin.run`).
@@ -490,7 +497,9 @@ each host's current run (`HostAdmin.run`).
   loss: purge `cmd.run.<H>.<env>`, attempt 2, `queued`, the `queued` event with `attempt: 2`, and `lost_host = H`; the
   next pass lines it up on another eligible host; when H is the only eligible host (fresh again: a blip) it runs there
   again; when none is eligible it fails `runner on host <H> stopped responding; no other live host for env <env>`.
-  Attempt 1's outputs are dropped as before. Second loss: `runner on host <host> stopped responding; gave up after 2
+  Attempt 1's outputs are dropped as before, and only while the run is still open: the retry first moves the run
+  (`queued`, attempt 2) under its row lock, and a run that ended meanwhile (its terminal status applied by the
+  projector) keeps its outputs and is not retried. Second loss: `runner on host <host> stopped responding; gave up after 2
   attempts` (the host of attempt 2). Queued runs lined up on H go to other hosts at the next pass, or fail `no live
   host …` when none is left.
 - **Model jobs**: a released job whose env's hosts key is gone or older than 60 s **and** that was not heard from (its
@@ -501,18 +510,32 @@ each host's current run (`HostAdmin.run`).
 - **Media jobs**: a job not yet terminal whose env's hosts key is gone or older than 60 s and that was not heard from
   for 60 s fails `host_lost` (`host <H> stopped responding`; this replaces "cancelled by studio" for that case), its
   command is purged and its id written to KV cancels; exporting again picks among the live media envs.
+- **Freshness** (API 1.18): a hosts key's age is taken from the KV entry's server timestamp (NATS runs on the
+  stack's machine), not from the runner-written `updated_at`, so a remote host's clock decides nothing (lease, live,
+  60 s host loss, an unload reply's standing).
 - **Keys**: a preempted runner deletes nothing: its hosts key is offline after 30 s and expires after 1 h (bucket TTL);
   until then its entries count only for H. Registry keys have no TTL: from 1.18 studio reads a host's registry keys
   (workflows, models, loras, looks, nodes) only while the host has a **present** hosts key, so they lapse with it; a
   runner that comes back rewrites them at start. A new VM starts with an empty disk: its variants are `missing` until
   downloaded.
 
+**Precedence of shared definitions** (API 1.18): a workflow template id, a starter look id and a node kind are one
+definition for every user, whichever host runs the run. Sources rank by trust: the stack's own hosts (`mac`, `fake`:
+their NATS users are written in `deploy/nats/nats.conf`, outside the generated `gpu-hosts` block) before remote hosts
+(every other name), a `fake` env after every other env, then by key. A source never replaces a definition a
+higher-ranked present source publishes: the template of an id is the highest-ranked source's (a workflow a remote
+host publishes under an id an own host's other env publishes is refused, never the reverse); a look's entry is the
+highest-ranked source's, a higher `version` wins only among sources of the same rank; a kind's schema is the newest
+publish among the highest-ranked sources that publish it. A `published_at` later than when studio received the value
+counts as that receipt time. `.tools/make-secrets` refuses `mac` and `fake` as GPU host names.
+
 **Fixtures** (`place.*.json`): `{description, hosts: {<name>: {keys (as admit fixtures, plus `ram_budget_gb`),
 workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), loras: {env: [shared
-LoRA names]}, free, idle_since}}, run: {env, workflow, model?, variant?, precision?, loras (shared, graph order),
+LoRA names]}, free, idle_since, reserved_gb?}}, run: {env, workflow, model?, variant?, precision?, loras (shared, graph order),
 peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?}, expect: {host, eligible, error}}`; `eligible` is after the
 `lost_host` rule, by name. Cases: resident-first, fits-first, idle-longest, name-order, free-first, variant-missing,
-no-variant, offline, small-gpu, too-big, host-ram, loras, loras-split, lost-elsewhere, lost-same, lost-none. Admission
+no-variant, offline, small-gpu, too-big, host-ram, loras, loras-split, lost-elsewhere, lost-same, lost-none, reserved
+(a local server's reservation leaves the resident host too small: the other host). Admission
 on a cuda host: `admit.cuda-cpu-entry.json` (a `device: cpu` entry is not counted), `admit.cuda-host-ram.json`.
 
 ## A remote GPU host: credentials and TLS (API 1.18, M6; deployment, normative for names and permissions)
@@ -530,7 +553,7 @@ hosts key `<h>.<e>`, unload subject `runner.unload.<h>.<e>`, events `evt.model.<
 runner reads them through `X_FILE` as every service does.
 
 **NATS permissions** of `runner_<h>_<e>` (the local runners' shape, narrowed to its host; nothing of other hosts):
-- publish: `evt.run.>`; `dlq.cmd.run.<h>.<e>`, `dlq.cmd.model.<h>.<e>`, `dlq.cmd.media.<h>.<e>`; `evt.model.<h>.>`,
+- publish: `evt.run.<h>.>`; `dlq.cmd.run.<h>.<e>`, `dlq.cmd.model.<h>.<e>`, `dlq.cmd.media.<h>.<e>`; `evt.model.<h>.>`,
   `evt.media.<h>.>`; `$KV.registry.<h>.<e>.>`, `$KV.hosts.<h>.<e>`; `$JS.API.INFO`, `$JS.API.STREAM.INFO.CMD`; for each
   durable D of `runner-<h>-<e>` (filter `cmd.run.<h>.<e>`), `models-<h>-<e>` (`cmd.model.<h>.<e>`), `media-<h>-<e>`
   (`cmd.media.<h>.<e>`): `$JS.API.CONSUMER.CREATE.CMD.D.<its filter>` only (the filtered CREATE subject; no bare
@@ -545,9 +568,16 @@ runner reads them through `X_FILE` as every service does.
 - subscribe: `_INBOX_runner_<h>_<e>.>`, `runner.unload.<h>.<e>`,
   `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.CMD.runner-<h>-<e>`; `allow_responses: true`.
 - So the runner's clients must create every consumer with the filter in the subject (nats-py's single-filter create;
-  runner_service verifies, a refused create is the test). Limits: `evt.run.<session_id>.*` is keyed by session, not
-  host, so a host can publish run events for any run id it knows (it learns only the ids released to it; the projector
-  drops events of an attempt that is not the run's current one); KV `cancels` is readable whole (run and job ids only).
+  runner_service verifies, a refused create is the test). Run events are bound to the host by subject
+  (`evt.run.<h>.<session_id>.<kind>`): the projector applies an event only when `<h>` is the host the run's current
+  attempt was released to, and an output only under that attempt's `output_prefix`, so a host can neither take over a
+  run retried elsewhere nor stamp another host on it. Limits: KV `cancels` is readable whole (run and job ids only).
+- **JetStream** (one account, `.tools/nats-setup`): every stream has a byte cap (CMD 1 GB, EVT 6 GB discard old, DLQ
+  1 GB discard old; with the KV buckets under the server's 10 GB file store), so EVT or DLQ filling up never leaves
+  CMD without room. **Not enforced**: per-user publish rates or quotas (that needs a separate account per remote host
+  with its own JetStream limits and exported subjects: not in v1): a compromised remote host can flood
+  `evt.run.<h>.>`, `evt.model.<h>.>` and its DLQ subjects (1 MB per message), slowing the projector and pushing the
+  oldest EVT history out before its 7 days.
 
 **Object store.** One S3 identity per remote host, actions `Read:<bucket>` and `Write:<bucket>` on the media bucket
 only (no `List` (ListBuckets answers an empty list), `Tagging`, `Admin`, no other bucket; SeaweedFS's `Write` also
@@ -583,7 +613,11 @@ commands would close it but break the claim-check rule (never signed URLs in mes
   the Mac (`gcloud compute ssh <vm> -- -N -R 127.0.0.1:4222:127.0.0.1:4322 -R 127.0.0.1:8333:127.0.0.1:<s3 https
   port>`) puts them on the VM's loopback; the runner container uses host
   networking and `tls://127.0.0.1:4222`, `https://127.0.0.1:8333` with the self-signed CA, so TLS is exercised end to
-  end inside the tunnel. A real deployment publishes the TLS ports instead (firewalled to its GPU hosts).
+  end inside the tunnel. A real deployment never publishes the NATS client port itself (it allows plain clients:
+  `allow_non_tls`, any user, the unrestricted admin too): it keeps the SSH tunnel, or puts a TLS-only listener in front
+  (a TLS-terminating proxy forwarding to `nats:4222` on the compose network; the S3 https port is TLS-only already),
+  firewalled to its GPU hosts. A runner with `NATS_CA_FILE` set refuses a `NATS_URL` that is not `tls://`, and with
+  `S3_CA_FILE` set an `S3_ENDPOINT` that is not `https://` (it exits at start: never a plain fallback).
 
 ## Takes, the gallery and uploads (plan 9.1, 17.2)
 
