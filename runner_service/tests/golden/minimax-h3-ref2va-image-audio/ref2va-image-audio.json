@@ -1,0 +1,301 @@
+{
+  "name": "ref2va-image-audio",
+  "prompt": "<Picture 1> stands on black volcanic rocks by the sea at sunset, the sound of <Audio 1> all around.",
+  "width": 512,
+  "height": 512,
+  "frames": 22,
+  "steps": 2,
+  "seed": 42,
+  "fps": 24,
+  "speed": "exact",
+  "flags": [
+    "--layers",
+    "50",
+    "--reuse",
+    "1",
+    "--use-int8-row-fc2"
+  ],
+  "argv_equivalent": "h3 -d <models>/MiniMax-H3 -p PROMPT -o OUT.mp4 --width 512 --height 512 --frames 22 --steps 2 --seed 42 --layers 50 --reuse 1 --use-int8-row-fc2 --ref-image input-first-512x512.png --ref-audio input-audio-2s.wav --frames-dir DIR",
+  "inputs": {
+    "ref": {
+      "file": "input-first-512x512.png",
+      "sha256": "982d9ee05955a5b2a0a3f7995efe40313d2ed4adc17a50b3c02fbf2e72487b64",
+      "made_from": "runner_service/tests/golden/minimax-h3-image-edit/input-turbo-768-s42.png (ffmpeg scale bicubic)"
+    },
+    "audio": {
+      "file": "input-audio-2s.wav",
+      "sha256": "d394271ee08ef5fdf5666c412651b59836723ef2d58b6f3f201e6cf20bb99a1d",
+      "made_from": "runner_service/tests/golden/ltx-text-to-video/t2v-512x320-57f-s7.wav (ffmpeg -t 2 -map 0:a:0 -c:a pcm_s16le)"
+    }
+  },
+  "mp4": {
+    "file": "ref2va-image-audio-512x512-22f-s42.mp4",
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "width": 512,
+        "height": 512,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "duration": "0.916667",
+        "nb_frames": "22"
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "sample_rate": "32000",
+        "channels": 2,
+        "r_frame_rate": "0/0",
+        "duration": "0.925000",
+        "nb_frames": "30"
+      }
+    ],
+    "format": {
+      "duration": "0.925000",
+      "bit_rate": "746456"
+    }
+  },
+  "frames_ppm_sha256": "fc941f4687fd4264300daf5aadb0ad8fd440df4fb0178e85f0d5f4a388d7b855",
+  "rgb24_sha256": "f683d5d8ade70febd25cb6f819d29a60e8ce8e49e252eef08d2f2a2a9f3b4c76",
+  "pcm_f32le_sha256": "4b2680ae4ec2ff409c208f058f66f85f41723b3b193c2ddf840a9b494faf1017",
+  "mp4_sha256": "9c3343c4f5c7f823642495bdca654e8a7930e3e136a124fabd775680e33aeeb5",
+  "rgb24_bytes": 17301504,
+  "pcm_f32le_bytes": 236800,
+  "frames_ppm_count": 22,
+  "bit_identical_runs": {
+    "frames_ppm_sha256": false,
+    "rgb24_sha256": false,
+    "pcm_f32le_sha256": false,
+    "mp4_sha256": false
+  },
+  "run2_vs_run1_video_psnr_db": {
+    "average": 37.687992,
+    "min_frame": 36.883014
+  },
+  "runs": [
+    {
+      "wall_s": 42.6,
+      "phases": {
+        "start": {
+          "start_s": 0.0,
+          "s": 0.2,
+          "units": null,
+          "peak_gb": 0.07,
+          "read_gb": 0.01
+        },
+        "tokenizer": {
+          "start_s": 0.2,
+          "s": 0.54,
+          "units": 1,
+          "peak_gb": 0.25,
+          "read_gb": 0.01
+        },
+        "audio VAE encoder": {
+          "start_s": 0.74,
+          "s": 1.43,
+          "units": 7,
+          "peak_gb": 1.74,
+          "read_gb": 0.99
+        },
+        "video VAE encoder": {
+          "start_s": 2.17,
+          "s": 2.79,
+          "units": 9,
+          "peak_gb": 1.33,
+          "read_gb": 0.04
+        },
+        "Qwen vision": {
+          "start_s": 4.96,
+          "s": 0.72,
+          "units": 27,
+          "peak_gb": 4.79,
+          "read_gb": 4.08
+        },
+        "text encoder": {
+          "start_s": 5.68,
+          "s": 4.89,
+          "units": 50,
+          "peak_gb": 7.12,
+          "read_gb": 43.86
+        },
+        "refine text": {
+          "start_s": 10.57,
+          "s": 0.6,
+          "units": 1,
+          "peak_gb": 0.6,
+          "read_gb": 2.45
+        },
+        "precompute AdaLN": {
+          "start_s": 11.17,
+          "s": 6.5,
+          "units": 50,
+          "peak_gb": 0.89,
+          "read_gb": 24.82
+        },
+        "load transformer core": {
+          "start_s": 17.67,
+          "s": 10.0,
+          "units": 50,
+          "peak_gb": 18.18,
+          "read_gb": 34.46
+        },
+        "denoise enqueue": {
+          "start_s": 27.67,
+          "s": 5.22,
+          "units": 2,
+          "peak_gb": 18.58,
+          "read_gb": 0.0
+        },
+        "denoise": {
+          "start_s": 32.89,
+          "s": 0.47,
+          "units": 2,
+          "peak_gb": 18.56,
+          "read_gb": 0.2
+        },
+        "audio VAE": {
+          "start_s": 33.36,
+          "s": 0.37,
+          "units": 7,
+          "peak_gb": 2.31,
+          "read_gb": 0.47
+        },
+        "video VAE load": {
+          "start_s": 33.73,
+          "s": 8.78,
+          "units": 36,
+          "peak_gb": 9.78,
+          "read_gb": 8.61
+        },
+        "FFmpeg": {
+          "start_s": 42.51,
+          "s": 0.09,
+          "units": 22,
+          "peak_gb": 5.22,
+          "read_gb": 0.0
+        }
+      },
+      "peak_footprint_gb": 18.58,
+      "lifetime_max_footprint_gb": 18.58,
+      "peak_resident_gb": 9.56
+    },
+    {
+      "wall_s": 42.05,
+      "phases": {
+        "start": {
+          "start_s": 0.0,
+          "s": 0.21,
+          "units": null,
+          "peak_gb": 0.06,
+          "read_gb": 0.01
+        },
+        "tokenizer": {
+          "start_s": 0.21,
+          "s": 0.23,
+          "units": 1,
+          "peak_gb": 0.25,
+          "read_gb": 0.0
+        },
+        "audio VAE encoder": {
+          "start_s": 0.44,
+          "s": 1.18,
+          "units": 7,
+          "peak_gb": 1.79,
+          "read_gb": 0.99
+        },
+        "video VAE encoder": {
+          "start_s": 1.62,
+          "s": 2.78,
+          "units": 9,
+          "peak_gb": 1.62,
+          "read_gb": 0.04
+        },
+        "Qwen vision": {
+          "start_s": 4.4,
+          "s": 0.58,
+          "units": 27,
+          "peak_gb": 5.05,
+          "read_gb": 4.27
+        },
+        "text encoder": {
+          "start_s": 4.98,
+          "s": 5.01,
+          "units": 50,
+          "peak_gb": 7.1,
+          "read_gb": 43.66
+        },
+        "refine text": {
+          "start_s": 9.99,
+          "s": 0.6,
+          "units": 1,
+          "peak_gb": 0.5,
+          "read_gb": 2.46
+        },
+        "precompute AdaLN": {
+          "start_s": 10.59,
+          "s": 6.36,
+          "units": 50,
+          "peak_gb": 0.89,
+          "read_gb": 24.75
+        },
+        "load transformer core": {
+          "start_s": 16.95,
+          "s": 10.08,
+          "units": 50,
+          "peak_gb": 18.17,
+          "read_gb": 34.52
+        },
+        "denoise enqueue": {
+          "start_s": 27.03,
+          "s": 5.27,
+          "units": 2,
+          "peak_gb": 18.57,
+          "read_gb": 0.01
+        },
+        "denoise": {
+          "start_s": 32.3,
+          "s": 0.51,
+          "units": 2,
+          "peak_gb": 18.55,
+          "read_gb": 0.2
+        },
+        "audio VAE": {
+          "start_s": 32.81,
+          "s": 0.41,
+          "units": 7,
+          "peak_gb": 1.75,
+          "read_gb": 0.34
+        },
+        "video VAE load": {
+          "start_s": 33.22,
+          "s": 8.75,
+          "units": 36,
+          "peak_gb": 9.87,
+          "read_gb": 8.73
+        },
+        "FFmpeg": {
+          "start_s": 41.97,
+          "s": 0.08,
+          "units": 22,
+          "peak_gb": 4.66,
+          "read_gb": 0.0
+        }
+      },
+      "peak_footprint_gb": 18.57,
+      "lifetime_max_footprint_gb": 18.57,
+      "peak_resident_gb": 9.7
+    }
+  ],
+  "env": {},
+  "h3c": "4cafd1773585eb59bb32a99d80c27033d211032b",
+  "versions": {
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "machine": "Darwin 27.2.0 arm64",
+    "macos": "27.2.1"
+  }
+}

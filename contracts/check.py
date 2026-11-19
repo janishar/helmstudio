@@ -158,6 +158,17 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
     return out
 
 
+def is_take(spec) -> bool:
+    """A rows item field that holds a take: ref kind Image or Media, or (API 1.22) a media param."""
+    return spec in ("Image", "Media") or (isinstance(spec, dict) and spec["type"] == "media")
+
+
+def media_field(param: dict) -> str | None:
+    """A rows param's one media field (API 1.22: video or audio references), else None."""
+    fields = [k for k, v in param.get("item", {}).items() if isinstance(v, dict) and v["type"] == "media"]
+    return fields[0] if param["type"] == "rows" and len(fields) == 1 else None
+
+
 def value_error(param: dict, v) -> str | None:
     """What studio checks when it resolves a run (type, min/max, enum); also applied to every default."""
     t = param["type"]
@@ -172,7 +183,7 @@ def value_error(param: dict, v) -> str | None:
     if t == "rows":
         if not isinstance(v, list):
             return f"{v!r} is not a list"
-        if v == [] and any(x in ("Image", "Media") for x in param["item"].values()):
+        if v == [] and any(is_take(x) for x in param["item"].values()):
             return None  # a workflow holds no takes: [] even under min; the run needs min items (README, Video)
         if not param.get("min", 0) <= len(v) <= param["max"]:
             return f"{len(v)} items is outside {param.get('min', 0)}..{param['max']}"
@@ -180,8 +191,9 @@ def value_error(param: dict, v) -> str | None:
             if not isinstance(row, dict) or set(row) - set(param["item"]):
                 return f"item {i}: fields must be among {sorted(param['item'])}"
             for f, spec in param["item"].items():
-                if spec in ("Image", "Media"):  # a take; never in a registry workflow
-                    return f"item {i}.{f}: a workflow cannot fill an image"
+                if is_take(spec):  # a take; never in a registry workflow
+                    return f"item {i}.{f}: a workflow cannot fill an image" if spec in ("Image", "Media") \
+                        else f"item {i}.{f}: a workflow cannot fill a media field"
                 if spec == "Lora":  # required in every item, {lora_id} (README, LoRAs)
                     v_ = row.get(f)
                     if not isinstance(v_, dict) or set(v_) != {"lora_id"} or not LORA_ID.match(str(v_["lora_id"])):
@@ -258,6 +270,13 @@ def schema_errors(n: dict) -> list[str]:
                 out.append(f"{p['name']}: the default is not allowed for {vb['param']} {ep['default']}")
         if auto and not 0 < auto["min_s"] < auto["max_s"]:
             out.append(f"{p['name']}: auto needs 0 < min_s < max_s")
+        if set(p.get("not_with", [])) - {i["name"] for i in n["inputs"] if i.get("optional")}:
+            out.append(f"{p['name']}: not_with must name optional inputs of the node")
+        if "max_total_s" in p and not media_field(p):
+            out.append(f"{p['name']}: max_total_s needs an item with exactly one media field")
+        for x in [p] + [v for v in p.get("item", {}).values() if isinstance(v, dict)]:
+            if x.get("min_s", 0) > x.get("max_s", math.inf):
+                out.append(f"{p['name']}: min_s is above max_s")
     return out
 
 
@@ -423,6 +442,13 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
             for i in s["inputs"]:
                 if not i.get("optional") and i["name"] not in wires:
                     add("required_input", nid, i["name"])
+    for nid, n in nodes.items():  # an optional node (API 1.22): an image source whose wires all go to optional inputs
+        required = lambda m, port: any(i["name"] == port and not i.get("optional")
+                                       for i in palette.get(nodes[m]["kind"], {}).get("inputs", []))
+        if n.get("optional") and (n["kind"] != "image" or any(
+                required(m, port) for m, x in nodes.items() for port, ref in x.get("in", {}).items()
+                if ref.split(".")[0] == nid)):
+            add("not_optional", nid)
     succ = {nid: set() for nid in nodes}
     for nid, n in nodes.items():
         for ref in n.get("in", {}).values():
@@ -968,9 +994,9 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
                     image_field(p) is not None and src[1] <= (1 if timed else p["max"]))
             if src and not fits:
                 add("bind_type", nid, k)
-        for k, p in params.items():
+        for k, p in params.items():  # a param of an optional node (API 1.22) may stay empty
             if (p["type"] in ("image", "media", "span") or (image_field(p) and p.get("min", 0) >= 1)) and k not in binds \
-                    and k not in n.get("inputs", {}):
+                    and k not in n.get("inputs", {}) and not wf["nodes"][k.split(".")[0]].get("optional"):
                 add("unbound_input", nid, k)
         if n.get("seeds", 1) > 1 and not any(p["type"] == "seed" for p in params.values()):
             add("step_seeds", nid)
@@ -1166,13 +1192,20 @@ def scan(text: str) -> list[dict]:
     return parts + ([{"text": buf}] if buf else [])
 
 
+def excluded(n: dict, p: dict) -> bool:
+    """A rows param that must stay empty in this graph: an input its `not_with` names is wired (API 1.22)."""
+    return any(i in n.get("in", {}) for i in p.get("not_with", []))
+
+
 def reference_rows(nodes: dict, palette: dict) -> tuple[str, dict] | None:
     """Where element images go: the first (node id, then schema order) rows param with a `{n}` mention and one
-    Image field, on a known, not bypassed node; None = the family takes text only."""
+    Image field, on a known, not bypassed node, not excluded by a wired `not_with` input; None = the family takes
+    text only."""
     for nid in sorted(nodes):
         n, s = nodes[nid], palette.get(nodes[nid]["kind"])
         for p in (s["params"] if s and not n.get("bypass") else []):
-            if p["type"] == "rows" and "{n}" in p.get("mention", "") and image_field(p) and p["name"] not in n.get("in", {}):
+            if p["type"] == "rows" and "{n}" in p.get("mention", "") and image_field(p) and p["name"] not in n.get("in", {}) \
+                    and not excluded(n, p):
                 return nid, p
     return None
 
@@ -1676,9 +1709,77 @@ def media_fit(p: dict, take: dict) -> str | None:
         return f"take {tid} is {take['width']} × {take['height']}; this input needs sides on a {p['grid']} px grid"
     if picture and p.get("max_frames") and take["frames"] > p["max_frames"]:
         return f"take {tid} has {take['frames']} frames; this input takes at most {p['max_frames']}"
+    if p.get("min_s") and take["duration_s"] < p["min_s"]:  # API 1.22; a trim cannot make it longer
+        return f"take {tid} lasts {take['duration_s']:.1f} s; this input takes at least {p['min_s']:.1f} s"
     if p.get("max_s") and take["duration_s"] > p["max_s"] and not p.get("trim"):
         return f"take {tid} lasts {take['duration_s']:.1f} s; this input takes at most {p['max_s']:.1f} s"
     return None
+
+
+def placed_paths(wf: dict) -> set[str] | None:
+    """The paths a workflow's studio block places (composer, quick, inspector); None without one (every param shows).
+    Create shows exactly those, so "Use in…" fills no other (API 1.22)."""
+    st = wf.get("studio")
+    if st is None:
+        return None
+    return set(st.get("composer", []) + st.get("quick", [])) | {x for sec in st.get("inspector", []) for x in sec["items"]}
+
+
+def media_value(spec: dict, ref: dict, take: dict | None) -> tuple[str | None, dict]:
+    """Studio's check of one media value (a media param or, API 1.22, a rows item's media field): the 422 text after
+    `<path>: ` or None, and the value with a trim field's in / out filled (in 0, out min(duration, max_s)). In / out
+    are taken as already snapped (README, Media inputs: Values)."""
+    if take is None:
+        return f"take {ref['take_id']} not found", ref
+    if err := media_fit(spec, take):
+        return err, ref
+    if not spec.get("trim"):
+        return ("this input takes the whole take (no in or out)" if {"in", "out"} & set(ref) else None), ref
+    d = take["duration_s"]
+    a, b = ref.get("in", 0), ref.get("out", min(d, spec.get("max_s", d)))
+    if a >= b:
+        return "in must be before out", ref
+    if b > d:
+        return f"out {b:.1f} is past the take's end {d:.1f}", ref
+    if spec.get("max_s") and b - a > spec["max_s"]:
+        return f"the part lasts {b - a:.1f} s; this input takes at most {spec['max_s']:.1f} s", ref
+    if spec.get("min_s") and b - a < spec["min_s"]:
+        return f"the part lasts {b - a:.1f} s; this input takes at least {spec['min_s']:.1f} s", ref
+    return None, ref | {"in": a, "out": b}
+
+
+def media_rows(nodes: dict, palette: dict, takes: dict) -> dict:
+    """Studio's run checks of API 1.22 (README, Media inputs: rows of media) on merged, type-checked values: an
+    `optional` node left empty is dropped with its wires, then a rows param with a value while an input its
+    `not_with` names is wired is refused, then every rows param with one media field is checked item by item
+    (`media_value`, items from 1) and over `max_total_s`. Answers {error} or {error: null, dropped, values: path → the
+    rows with in / out filled}."""
+    drop = sorted(nid for nid, n in nodes.items() if n.get("optional") and n.get("params", {}).get("image") is None)
+    nodes = {nid: n | {"in": {k: r for k, r in n.get("in", {}).items() if r.split(".")[0] not in drop}}
+             for nid, n in nodes.items() if nid not in drop}
+    values = {}
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        for p in (s["params"] if s and not n.get("bypass") else []):
+            path, v = f"{nid}.{p['name']}", n.get("params", {}).get(p["name"], p["default"])
+            if p["type"] != "rows" or not v or p["name"] in n.get("in", {}):
+                continue
+            if wired := next((i for i in p.get("not_with", []) if i in n["in"]), None):
+                return {"error": f"{path}: must stay empty while {nid}.{wired} is wired"}
+            if not (f := media_field(p)):
+                continue
+            rows, total = [], 0.0
+            for i, row in enumerate(v, 1):
+                take = takes.get(row[f]["take_id"])
+                err, ref = media_value(p["item"][f], row[f], take)
+                if err:
+                    return {"error": f"{path}[{i}].{f}: {err}"}
+                rows.append(row | {f: ref})
+                total += ref["out"] - ref["in"] if "in" in ref else take["duration_s"]
+            if "max_total_s" in p and total > p["max_total_s"] + 1e-9:
+                return {"error": f"{path}: the takes last {total:.1f} s in all; at most {p['max_total_s']:.1f} s"}
+            values[path] = rows
+    return {"error": None, "dropped": drop, "values": values}
 
 
 def extend_room(take: dict, rng: tuple | None) -> dict | None:
@@ -1702,16 +1803,18 @@ def extend_room(take: dict, rng: tuple | None) -> dict | None:
 
 def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | None = None) -> list[dict]:
     """"Use in…" offers (README, Media inputs: offers): every workflow with exactly one unwired input of the take's
-    sort on a known, not bypassed node (an image: an image param or Image rows; a video or audio take: a media param
-    whose `accepts` names its kind, or `audio` for a video with sound) that the take fits, with the inputs pre-filled.
+    sort on a known, not bypassed, not optional node (an image: an image param or Image rows; a video or audio take: a
+    media param whose `accepts` names its kind, or `audio` for a video with sound) that the take fits, with the inputs
+    pre-filled. From API 1.22 an input counts only when the workflow's studio block places it (none: every input) and
+    a rows param excluded by a wired `not_with` input does not count.
     rng: (in, out) in the take's own seconds (a Timeline clip or selection), else the whole take."""
     out = []
     for wf in workflows:
-        found = []
+        found, shown = [], placed_paths(wf)
         for nid in sorted(wf["nodes"]):
             n, s = wf["nodes"][nid], palette.get(wf["nodes"][nid]["kind"])
-            for p in (s["params"] if s and not n.get("bypass") else []):
-                if p["name"] in n.get("in", {}):
+            for p in (s["params"] if s and not n.get("bypass") and not n.get("optional") else []):
+                if p["name"] in n.get("in", {}) or excluded(n, p) or (shown is not None and f"{nid}.{p['name']}" not in shown):
                     continue
                 if take["kind"] == "image" and (p["type"] == "image" or image_field(p)):
                     found.append((nid, p))
@@ -1743,14 +1846,39 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
 
 # ---------------------------------------------------------------- minimax-h3 generate (README, the minimax-h3 family)
 H3_MAX_PIXELS = 768 * 1344  # 1,032,192: the h3 binary's largest canvas
+H3_MAX_REFS, H3_MAX_SOUNDS, H3_MAX_SOUND_S, H3_SOUND_FRAMES = 12, 3, 15.0, 56  # h3.c's Ref2VA limits
 
 
-def h3_generate_error(node: str, refs: int, first: bool, last: bool, width: int, height: int) -> str | None:
-    """minimax-h3/generate's refusals, before the child starts (the run fails with the text): references with a
-    first or last frame (Ref2VA takes no anchors), a side off 256..1344 or off the 32 px grid, then more than
-    768 × 1344 pixels. A schema cannot say the first or the last (a canvas may come from any Canvas output)."""
-    if refs and (first or last):
+def h3_generate_error(node: str, refs: int, first: bool, last: bool, width: int, height: int, frames: int = 124,
+                      videos: list | None = None, audios: list | None = None) -> str | None:
+    """minimax-h3/generate's refusals, before the child starts (the run fails with the text). refs = image
+    references; videos = [seconds read (out - in), sound] per video reference, sound true when the row keeps it and
+    the take has sound; audios = seconds read per audio reference (API 1.22). In order: any reference with a first
+    or last frame (Ref2VA takes no anchors); audio references without an image or video one; more than 12
+    references; more than 3 sound inputs (audio references and videos with sound); a video with sound under 56
+    frames, or whose part reads under 56 frames (h3 reads a video reference up to the clip's frames, keeps 5 + 17k of
+    them and reads its sound only that long; it needs 2 s); more than 15 s of sound in
+    all (an audio's part, a video's sound up to the clip's length); a side off 256..1344 or off the 32 px grid;
+    more than 768 × 1344 pixels. Studio checks each row (2-15 s), the counts and each kind's 15 s; these cross the
+    params, need the clip's frames or the take's sound, or a canvas that may come from any Canvas output."""
+    videos, audios = videos or [], audios or []
+    sounds = [s for _, s in videos if s]
+    if (refs or videos or audios) and (first or last):
         return f"{node}: references cannot go with a first or last frame"
+    if audios and not (refs or videos):
+        return f"{node}: audio references need an image or video reference"
+    if (n := refs + len(videos) + len(audios)) > H3_MAX_REFS:
+        return f"{node}: at most {H3_MAX_REFS} references in all ({n})"
+    if (n := len(audios) + len(sounds)) > H3_MAX_SOUNDS:
+        return f"{node}: at most {H3_MAX_SOUNDS} sound references (audio references and videos with sound; {n})"
+    if sounds and frames < H3_SOUND_FRAMES:
+        return f"{node}: a video reference with sound needs a clip of at least {H3_SOUND_FRAMES} frames ({frames})"
+    for i, (x, s) in enumerate(videos, 1):
+        if s and (n := round(x * 24)) < H3_SOUND_FRAMES:  # h3 keeps 5 + 17k frames, reads the sound that long
+            return (f"{node}: a video reference with sound needs a part of at least {H3_SOUND_FRAMES} frames at 24 fps "
+                    f"(video {i} reads {n})")
+    if (t := sum(audios) + sum(min(x, frames / 24) for x, s in videos if s)) > H3_MAX_SOUND_S + 1e-9:
+        return f"{node}: the sound references last {t:.1f} s in all; at most {H3_MAX_SOUND_S:.1f} s"
     if any(not 256 <= x <= 1344 or x % 32 for x in (width, height)):
         return f"{node}: the canvas is {width} × {height}; sides must be multiples of 32 from 256 to 1344"
     if width * height > H3_MAX_PIXELS:
@@ -1770,8 +1898,9 @@ def check_media(registry: Registry) -> None:
         if (got := h3_generate_error(*c["args"])) != c["expect"]:
             fail(f"fixtures/video/minimax-h3.json {c['description']!r}: got {json.dumps(got)}")
     print("ok   fixtures/video/minimax-h3.json")
-    pal = {n["kind"]: n for pre in ("ltx.", "qwen-image.", "minimax-h3-image.") for n in json.loads((reg / f"{pre}nodes.valid.json").read_text())["nodes"]}
-    wfs = [w for pre in ("ltx.", "qwen-image.", "minimax-h3-image.") for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]]
+    pres = ("ltx.", "qwen-image.", "minimax-h3-image.", "minimax-h3.")
+    pal = {n["kind"]: n for pre in pres for n in json.loads((reg / f"{pre}nodes.valid.json").read_text())["nodes"]}
+    wfs = [w for pre in pres for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]]
     uses_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/TakeUses"}, registry=registry,
                                   format_checker=FormatChecker())
     fx = json.loads((g / "uses.json").read_text())
@@ -1785,6 +1914,19 @@ def check_media(registry: Registry) -> None:
         if got != c["expect"]:
             fail(f"fixtures/video/uses.json {c['description']!r}: got {json.dumps(got)}")
     print("ok   fixtures/video/uses.json")
+    inputs_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/RunInputs"}, registry=registry,
+                                    format_checker=FormatChecker())
+    fx, by_id = json.loads((g / "media-rows.json").read_text()), {w["id"]: w for w in wfs}
+    takes = {k: t | {"id": k} for k, t in fx["takes"].items()}
+    for c in fx["cases"]:
+        if errs := list(inputs_v.iter_errors(c["inputs"])):
+            fail(f"fixtures/video/media-rows.json {c['description']!r}: not RunInputs: {errs[0].message}")
+        nodes = copy.deepcopy(by_id[c["workflow"]]["nodes"])
+        for k, v in c["inputs"].items():
+            nodes[k.split(".")[0]].setdefault("params", {})[k.split(".")[1]] = v
+        if (got := media_rows(nodes, pal, takes)) != c["expect"]:
+            fail(f"fixtures/video/media-rows.json {c['description']!r}: got {json.dumps(got)}")
+    print("ok   fixtures/video/media-rows.json")
 
 
 def check_video(registry: Registry, palette: dict) -> None:

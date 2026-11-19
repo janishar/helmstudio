@@ -40,7 +40,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/decisions/` | the **shared decision fixtures** (API 1.14): `verdict.json` (a judge answer → `judge_verdict`), `replay.json` (a call → `inputs_hash`); (API 1.15) `agent-turn.json` (a turn's answer, local or native, → `agent_turn`: the calls to run, final, route, or the re-ask error), `agent-schema.json` (a node → the canonical turn schema `turn_schema`). pipelines_service runs them |
 | `fixtures/dispatch/` | the **shared dispatcher fixtures** (Two envs on one host: the hand-over): `admit.*.json` (one admission decision: the host's keys, the run, the other queued runs → `{decision, unload, budget_gb, error}`), `order.*.json` (a simulated queue on one host: plans, runs, batches → `{releases, unloads, loads}`), (API 1.18) `place.*.json` (several hosts: a run's eligible hosts and the one it is lined up on, or its error; Several hosts). studio_service's Go tests run them |
 | `fixtures/timelines/` | the **shared timeline fixtures** (API 1.17, Timeline rules, below): `rates.json`, `normalize.json`, `edits.json`, `snap.json`, `frame-at.json`, `plan.json`, `shot-keyframes.json`, `rerender.json`, each `{description, takes?, cases: [{description, …, expect}]}`. studio_service (Go) and the web (TypeScript) both run them |
-| `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors); `sources.json` and `uses.json` (Media inputs); (API 1.21) `minimax-h3.json` (minimax-h3/generate's refusals → the run's error text: the native runner runs it). studio_service, the web and the mlx runner run them |
+| `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors); `sources.json` and `uses.json` (Media inputs); (API 1.21) `minimax-h3.json` (minimax-h3/generate's refusals → the run's error text: the native runner runs it; 1.22 adds the reference cases); (API 1.22) `media-rows.json` (rows of media, `not_with`, optional nodes → studio's 422 text or the values it sends). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
@@ -198,23 +198,46 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   transformer to int8 at load on M5; not a choice) → `generate` (`minimax-h3/generate`, in `model`, `prompt`, `seed`,
   `canvas`, `duration`, optional `first` and `last`: Image; `steps` 2–50 default 6; `speed` exact | fast default exact
   (exact: all 50 transformer blocks, no reuse; fast: 45 blocks and every other step's velocity reused, as the old
-  studio's fast preset); `refs` rows 0–9 `{image: Image}`, mention `<Picture {n}>`; out `video`: Video) → `output`.
+  studio's fast preset); `refs` rows 0–9 `{image: Image}`, mention `<Picture {n}>`; from 1.22 `videos` rows 0–3
+  `{video: media [video], trim, 2–15 s; sound: keep | silent, default keep}`, mention `<Video {n}>`, `max_total_s` 15,
+  and `audios` rows 0–3 `{audio: media [audio], trim, 2–15 s}`, mention `<Audio {n}>`, `max_total_s` 15 (Media
+  inputs: rows of media); all three rows `not_with: [first, last]`; out `video`: Video) → `output`.
   Templates (`media: video`): `minimax-h3-text-to-video` (`MiniMax H3 Text to video`), `minimax-h3-image-to-video`
-  (`MiniMax H3 Image to video`, action Animate: a core `image` node `first` wired to `generate.first`; a last frame is a
-  second `image` node wired to `generate.last`, added in the workflow editor: `valid.minimax-h3-first-last.json`),
-  `minimax-h3-references` (`MiniMax H3 References`: `generate.refs` in the composer, the elements tile). Modes follow
-  the inputs: references (non-empty `refs`) run the Ref2VA transformer, everything else FL2VA (text only, first,
-  last, or both). **Refusals** (`h3_generate_error`, `fixtures/video/minimax-h3.json`), checked by the runner before
-  the child starts, failing the run: `<node>: references cannot go with a first or last frame`; `<node>: the canvas is
-  <w> × <h>; sides must be multiples of 32 from 256 to 1344`; `<node>: the canvas is <w> × <h>; at most 1032192
-  pixels (768 × 1344)` (in that order; the schema cannot say the area, and a Canvas may come from another node). A
-  first frame is stretched to the canvas, a last frame cropped to cover it, references keep their aspect (the h3 CLI).
-  No video or audio references in this version (a rows item for audio and video takes needs a contract change), no
-  prompt enhancer, no LoRAs (no lora-stack, no look tiles), no ask workflow. Output: one Video value with sound
+  (`MiniMax H3 Image to video`, action Animate: a core `image` node `first` wired to `generate.first` and, from 1.22,
+  an `optional` `image` node `last` wired to `generate.last`: the composer's First frame and Last frame tiles, the
+  last one optional, dropped with its wire when left empty; `valid.minimax-h3-first-last.json` is the same made in the
+  editor without `optional`), `minimax-h3-references` (`MiniMax H3 References`: `generate.refs`, from 1.22
+  `generate.videos` and `generate.audios` in the composer, the elements tile). Modes follow the inputs: references
+  (any non-empty `refs`, `videos` or `audios`) run the Ref2VA transformer, everything else FL2VA (text only, first,
+  last, or both). The runner passes the references in the order images, audios, videos (`--ref-image`; `--ref-audio`; a
+  video row `--ref-video` when `sound` is keep and the take has sound, else `--ref-silent-video`;
+  `--ref-video-audio` is not offered), each the part in..out as studio sent it (cut by the runner before h3 reads
+  it; an audio row holding a video take: its sound); h3 numbers `<Picture n>` and `<Video n>` per kind from 1, but
+  gives `<Audio n>` from one counter to every reference with sound in argv order (a video read with its sound counts),
+  so audio rows go before the videos: they are `<Audio 1..k>` as the mentions say, and a kept video soundtrack is
+  `<Audio k+1>` and beyond. **Refusals**
+  (`h3_generate_error`, `fixtures/video/minimax-h3.json`), checked by the runner before the child starts, failing
+  the run, in this order: `<node>: references cannot go with a first or last frame` (any reference kind; studio
+  already refuses it with `not_with`, this is the backstop); from 1.22 `<node>: audio references need an image or
+  video reference`; `<node>: at most 12 references in all (<n>)`; `<node>: at most 3 sound references (audio
+  references and videos with sound; <n>)` (h3 counts a video read with its sound as a sound input); `<node>: a video
+  reference with sound needs a clip of at least 56 frames (<frames>)` (h3 reads a video reference up to the clip's
+  frames, at 24 fps, and its sound must last 2 s); from 1.22 also `<node>: a video reference with sound needs a part
+  of at least 56 frames at 24 fps (video <i> reads <n>)` (n = round(part × 24); h3 keeps 5 + 17k of the frames it
+  reads and the sound only that long, so a 2.0 s part keeps 39 frames, 1.6 s of sound: a sound part needs 2.34 s); `<node>: the sound references last <d> s in all; at most 15.0 s`
+  (the audio parts plus each video-with-sound's part up to frames / 24 s); then `<node>: the canvas is <w> × <h>;
+  sides must be multiples of 32 from 256 to 1344`; `<node>: the canvas is <w> × <h>; at most 1032192 pixels (768 ×
+  1344)` (the schema cannot say the area, and a Canvas may come from another node). Studio checks the rest before
+  the run: each row 2–15 s, at most 9 / 3 / 3 rows, each kind's 15 s in all (Media inputs: rows of media). A
+  first frame is stretched to the canvas, a last frame cropped to cover it, references keep their aspect (the h3
+  CLI). No `--ref-video-audio` (a video with another sound), no prompt enhancer, no LoRAs (no lora-stack, no look
+  tiles), no ask workflow. Output: one Video value with sound
   (H.264 + AAC 32 kHz stereo, 24 fps, `+faststart`) with poster, last frame and stream facts as ltx's (Video:
   Outputs). The same seed, flags, OS, GPU family and binary give the same frames (noise is made on the CPU from the
-  seed). Mentions: `generate.refs` is the family's reference rows in every template, so an element's images become
-  `<Picture n>` rows (Mentions); in the image-to-video template that run then fails the references refusal.
+  seed). Mentions: `generate.refs` is the family's reference rows unless `first` or `last` is wired (`not_with`), so
+  in text to video and references an element's images become `<Picture n>` rows, and in image to video a mention is
+  the element's name and text only (Mentions). "Use in…" on an image take offers Image to video (its first frame)
+  and References, not Text to video (it does not place `generate.refs`; Media inputs: offers).
   **Memory**: the stage `uses` no component (`uses: []`), so the models value's `memory` item has empty `components`
   and `peak_gb` = the child's measured peak (the whole run; P = `peak_gb`, nothing is kept after it). The
   components (`transformer_fl2va`, `transformer_ref2va`, `text_encoder`, `video_vae`, `audio_vae`) are declared for
@@ -961,7 +984,8 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
   same), and applies a JPEG's EXIF orientation, as studio does when it records an upload's `width` / `height`. Its
   cache key for an image and everything derived from it (VL / VAE encodings) includes `(owner_id, key, etag)`; keys
   are immutable, the ETag guards that.
-- **Lineage.** When the projector stores a take, `parents` = the take ids of every Image value of the run's inputs,
+- **Lineage.** When the projector stores a take, `parents` = the take ids of every Image value of the run's inputs
+  (from 1.19 every media value's, from 1.22 every rows item's media field's too),
   each once, in input order (node, then item); stored as edges. `made_with.inputs` keeps the values as `{take_id}`.
   A deleted parent is left out of `parents`; `GET /v1/studio/takes/{id}` adds `children` (made from it, newest first,
   at most 50, `{id, kind, title, thumb_url}`) for the gallery's "Used in".
@@ -1012,6 +1036,23 @@ unchanged; a video never fills them.
   declared, `thumb_url` = the file. The runner reads the file itself (a declared length that lies fails the run, never
   more). Audio takes are not timeline clips in this version (`wrong_track`; `POST …/clips`: 422 `take_ids[1]: an
   audio take cannot go on the timeline yet`).
+- **Rows of media** (API 1.22, M7 pack 3 step 2; `media_rows`, `fixtures/video/media-rows.json`). A `rows` item field
+  may be a `media` param (registry `itemParam`; required in every item, never a wire): each item holds one video or
+  audio take as a `MediaRef` (`{take_id, in?, out?}`), next to the item's other fields (MiniMax H3: `videos`
+  `{video, sound}`, `audios` `{audio}`). New keys: `min_s` (media, also a top-level one: the shortest it reads; a take
+  shorter is `take <id> lasts <d> s; this input takes at least <min_s> s`, with `trim` a shorter part is `the part
+  lasts <d> s; this input takes at least <min_s> s`), `max_total_s` (rows with exactly one media field: the most
+  seconds the items read together, each item's out − in or the whole take; over it is `<node>.<param>: the takes
+  last <d> s in all; at most <max_total_s> s`, `%.1f`), `not_with` (rows: optional inputs of the same node; while
+  one is wired the rows must stay empty: `<node>.<param>: must stay empty while <node>.<input> is wired`; mentions
+  add no rows to it and offers do not count it). Studio resolves each item's media field exactly like a media param
+  (as the caller, the object HEADed, its ETag; snapping and filling `in` / `out` on `trim`), with the same 422 texts
+  under `<node>.<param>[<i>].<field>: ` (items from 1): `generate.videos[2].video: take <id> is not a video`, a
+  missing field `… a take is required`; the count is the rows `max` (`generate.videos: at most 3 items`). Order: the
+  values are merged and type-checked, `optional` image nodes left empty are dropped with their wires (Graph rules),
+  `not_with` is checked, then the items and `max_total_s`, then mentions and looks. In `cmd.run.execute` the field is
+  defs `media` (with `in` / `out` on `trim`); the claim-check rules hold. **Lineage**: `parents` add each item's
+  take (node, then item, then field order); `made_with.inputs` keep the rows as studio checked them.
 - **`only`** (`GraphNode.only`, registry and user workflows): enum param → the values this workflow allows (a subset of
   its `enum`, holding its value). The form offers only those; another value is 422 / `param_invalid`
   (`model.variant: must be one of dev`). Studio drops it from `cmd.run.execute`. Why: `ltx/model.variant` gains `dev`,
@@ -1021,7 +1062,10 @@ unchanged; a video never fills them.
   family's pre-fused distilled LoRA listed in that host's `lora.prefused`), by family id then in their pack's order (the
   runner's workflows value: `workflows/*.json` by file name, the board's Retake a section, Extend, Audio to video), then
   the caller's own non-text workflows in `GET /workflows` order, with exactly one unwired input of the take's sort on a known, not bypassed node (an image:
-  an `image` or Image rows param; a video or audio take: a `media` param accepting it) that it fits; `inputs` = that
+  an `image` or Image rows param; a video or audio take: a `media` param accepting it) that it fits; from 1.22 an
+  input counts only when the workflow's `studio` block places it (composer, quick or inspector; no block: every
+  input), not on an `optional` node, and not a rows param excluded by a wired `not_with` input (`placed_paths`,
+  `excluded`); rows of media are never offered into; `inputs` = that
   input with the take (rows: as reference 1; trim: `in` 0, `out` = min(its duration, `max_s`)) and every span param =
   the whole take. A template with a `<family>/extend` node (`ltx/extend`, the fake `echo/extend`; `extend_room`) is offered only when one 8-frame step still fits under
   321 frames (ltx_floor(frames) + 8 ≤ 321); when its default 2 s does not fit, `extend.seconds` = the most whole steps
@@ -1153,6 +1197,10 @@ output may feed any number of keys.
 required input wired. **Bypass**: a bypassed node passes through, for each of its outputs, the first input (schema
 order) of the same type; a kind with no outputs or with an output that has no same-type input cannot be bypassed.
 A bypassed node needs exactly those pass-through inputs wired (its other inputs and its params do not matter).
+**Optional nodes** (API 1.22): `optional: true` on a core `image` node whose every wire goes to an optional input (else
+`not_optional`) lets its image stay null: before a run studio drops such a node when its image is null, with every
+wire from it, so those inputs are unwired (the runner never sees `optional`); the form marks its image field
+optional; "Use in…" and pipeline binds never need it.
 
 **Problems.** Each is `{code, message, blocks, node?, port?, param?}`; `port` is the `in` key, `param` a param name.
 The set of `(code, node, port, param)` is what fixtures compare (each at most once; `message` is free text; the API
@@ -1183,6 +1231,7 @@ checked, so the work stays bounded).
 | `preset_invalid` | save | node, param | a preset key that would be `studio_unknown_path`, or a value that is `param_invalid` (`bypass`: not a bool) |
 | `lora_duplicate` | save | node, param | a valid rows value with a `Lora` field names one LoRA id in two items |
 | `lora_unknown` | run | node, param | a node that is not bypassed has a LoRA id the caller cannot use now (unknown, another user's, deleted, pending, rejected, or shared and listed by no live host of the env) |
+| `not_optional` | save | node | (1.22) `optional: true` on a node that is not of kind `image`, or that feeds a required input |
 | `lora_family` | run | node, param | a node that is not bypassed has a LoRA the caller can use whose detected family (`unknown` included) is not `family(kind)` |
 
 Ids: node ids match `^[a-z][a-z0-9_]{0,63}$` (the schema) and are **stable**: made once, never renamed. The editor
@@ -1308,7 +1357,7 @@ without exactly one inputs node. A **capped edge** is a branch's fail edge.
 | `step_input_invalid` | run | node, param | an `inputs` key that is not a settable param (`<node>.<param>` of a known kind, not wired; or `<node>.bypass` of a bypassable node, a bool), or a value that is `param_invalid` (a take included) |
 | `bind_unknown` | run | node, port | a bind key that is not a settable param of the workflow |
 | `bind_type` | run | node, port | the source does not fit: `$x` of type T fits a param whose wire type is T (Text: string/text, Int: int, Float: float, Seed: seed, Image: image), or an Image into a rows param with exactly one Image field (a one-item list); a takes/picked source of at most n takes fits an `image` param when n = 1, or such a rows param when n ≤ its `max`, and n = 1 when its item has a `position: seconds` field (each bound row takes the field's default time, so a second row would repeat a frame) |
-| `unbound_input` | run | node, port | an `image` param, or a rows param with one Image field and `min` ≥ 1, that is not bound (the workflow holds no take, so it has no default) |
+| `unbound_input` | run | node, port | an `image` param, or a rows param with one Image field and `min` ≥ 1, that is not bound (the workflow holds no take, so it has no default); (1.22) never a param of an `optional` node |
 | `step_seeds` | run | node | `seeds` > 1 and the workflow has no unwired `seed` param |
 | `unknown_look` | run | node, param `looks` | a step `looks` id that is not a look the caller can use now (Looks: unknown look) |
 | `look_fit` | run | node, param `looks` | (no `unknown_look`) a step look does not fit the step's workflow as stored (Looks: fit) |
@@ -1903,7 +1952,9 @@ overridden: their reference rows keep positions 1..k and their prompt text stays
 
 **Reference rows** (`reference_rows`): the first (node id, then schema order) unwired `rows` param of a known, not
 bypassed node whose `mention` contains `{n}` and whose `item` has exactly one `Image` field (Qwen and echo:
-`encode.refs` / `echo.refs`, `<image{n}>`, max 10). None = the family takes text only.
+`encode.refs` / `echo.refs`, `<image{n}>`, max 10), and (API 1.22) not excluded: no input its `not_with` names is
+wired (MiniMax H3 image to video: `generate.refs` is excluded while `first` is wired). None = the family takes text
+only. Rows of media (`<Video {n}>`, `<Audio {n}>`) are never reference rows: the user picks those takes.
 
 **Expansion** (`resolve_mentions`), with `used` = the distinct mentioned handles in first-mention order over all
 params:

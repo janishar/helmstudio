@@ -10,6 +10,7 @@ import { ErrorNote, Info } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/refs";
 import {
+  MediaRows,
   MediaTile,
   SourceStage,
   SpanTile,
@@ -17,7 +18,7 @@ import {
   useFrameGrid,
   videoSource,
 } from "@/components/create/source";
-import { offerLabel } from "@/lib/source";
+import { mediaItem, offerLabel } from "@/lib/source";
 import { useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
@@ -524,6 +525,14 @@ export function Create({
             imageInputs(fieldsOf(w)).some((f) => positionOf(f.param)),
         )
       : undefined;
+  // video and audio references (API 1.22) counted after the images: "1 video · 2 audio"
+  const mediaCounts = fields.flatMap((f) => {
+    const m = mediaItem(f.param);
+    const n = Array.isArray(raws[f.key]) ? (raws[f.key] as unknown[]).length : 0;
+    if (!m || !n) return [];
+    const audio = !m[1].accepts?.includes("video");
+    return [`${n} ${audio ? "audio" : `video${n === 1 ? "" : "s"}`}`];
+  });
   // the top bar's label: an edit counts its references; a clip its frames, or offers a first frame
   const workflowLabel = !workflow
     ? ""
@@ -532,10 +541,12 @@ export function Create({
       : [
           workflow.title,
           refs
-            ? `${refs} ${refUnit(refField)}${refs === 1 ? "" : "s"}`
-            : fields.some((f) => f.param.type === "span")
-              ? "the rest of the clip is kept as context" // docs/mock/VideoSource.dc.html
-              : firstFrameIn && "add a first frame to animate it",
+            ? [`${refs} ${refUnit(refField)}${refs === 1 ? "" : "s"}`, ...mediaCounts].join(" · ")
+            : mediaCounts.length
+              ? mediaCounts.join(" · ")
+              : fields.some((f) => f.param.type === "span")
+                ? "the rest of the clip is kept as context" // docs/mock/VideoSource.dc.html
+                : firstFrameIn && "add a first frame to animate it",
         ]
           .filter(Boolean)
           .join(" · ");
@@ -562,6 +573,8 @@ export function Create({
   });
   // media inputs (API 1.19): composer tiles, the source on the stage, the family's frame grid for the readouts
   const mediaFields = fields.filter((f) => f.param.type === "media");
+  // rows of video or audio takes (API 1.22, MiniMax H3 references): their chips in the composer
+  const mediaRowFields = fields.filter((f) => mediaItem(f.param));
   const spanField = fields.find((f) => f.param.type === "span");
   const grid = useFrameGrid(mediaFields.length ? workflow?.family : undefined);
   const source = videoSource(fields);
@@ -999,7 +1012,11 @@ export function Create({
             aria-label="Composer"
             className="panel flex min-w-0 flex-[1_1_520px] flex-col gap-3 bg-s2 px-4 py-3.5 [box-shadow:0_16px_40px_color-mix(in_srgb,var(--shd)_45%,transparent)]"
           >
-            {(refField || textFields.length > 0 || tiles.length > 0 || mediaFields.length > 0) && (
+            {(refField ||
+              textFields.length > 0 ||
+              tiles.length > 0 ||
+              mediaFields.length > 0 ||
+              mediaRowFields.length > 0) && (
               <div className="flex flex-wrap items-center gap-2">
                 {mediaFields.map((f) => (
                   <MediaTile key={f.key} f={f} fields={fields} raws={raws} onChange={change} />
@@ -1035,6 +1052,16 @@ export function Create({
                     <MentionChips texts={texts} />
                   </>
                 )}
+                {mediaRowFields.map((f) => (
+                  <MediaRows
+                    key={f.key}
+                    f={f}
+                    raw={raws[f.key]}
+                    error={errors[f.key]}
+                    onChange={change}
+                    compact
+                  />
+                ))}
                 <QuickTiles
                   tiles={tiles}
                   chosen={looksChosen}

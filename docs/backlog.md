@@ -43,4 +43,18 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   - MiniMax H3 Image paths not run on the GPU in pack 2: LCM, Think on, an edit with the enhancer on, several
     references, more than 4 MP and the 20 MP refusal, and the `MINIMAX=1` contract tests. The enhancer's per-reference
     memory term (`11 + images` GB) is an estimate: measure one enhanced edit with 8–16 references;
+  - MiniMax H3 video paths not run on the GPU in pack 3: a run that mixes a sound video with an audio row (checks
+    the `<Audio n>` order), several references of one kind and the 3-video / 15 s caps, peak_gb with references above
+    512×512, and parts right at the 56-frame edge from a 25 or 30 fps take. One 56-frame run with a sound video took
+    329 s against about 40 s at 22 frames: measure its peak and find why;
   - web: component and end-to-end tests, and every screen side by side with its board at 1440×960.
+
+## Product
+
+- **Generate ETA from size and length** (M7). The estimate under Generate is the last run's time, so after a long
+  run it overstates a small one and the other way round. Scale it by megapixels × frames × steps.
+- **MiniMax H3 image-input runs are not bit-repeatable** (M7 pack 3). With the same seed, first/last frame and
+  reference runs differ by 37–41 dB (a silent video reference by about 30 dB); text to video repeats exactly. The
+  cause is inside h3.c, not found; the goldens use PSNR bars.
+- **Create header wraps with a long session title** (M7 pack 3). The memory chip drops to a second line; the board
+  shows one row. Let the title and the top label truncate (web_service/components/create/create.tsx).

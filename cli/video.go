@@ -189,6 +189,51 @@ func (w workflow) paramType(key string) string {
 	return ""
 }
 
+// mediaRows types a rows value whose items hold one media field (API 1.22: MiniMax H3's videos and audios): a comma
+// list of <take id>[:in:out][:<value>], the last part a value of one of the item's enum fields (sound: keep|silent).
+func mediaRows(key string, item map[string]any, val string) (any, error) {
+	field, enums := "", map[string]string{} // an enum value → its field
+	for f, t := range item {
+		spec, _ := t.(map[string]any)
+		switch spec["type"] {
+		case "media":
+			if field != "" {
+				return nil, fmt.Errorf("%s: its items hold several takes", key)
+			}
+			field = f
+		case "enum":
+			vals, _ := spec["enum"].([]any)
+			for _, v := range vals {
+				if s, ok := v.(string); ok {
+					enums[s] = f
+				}
+			}
+		}
+	}
+	if field == "" {
+		return nil, fmt.Errorf("%s: its items hold no image", key)
+	}
+	rows := []any{}
+	for _, s := range strings.Split(val, ",") {
+		if s = strings.TrimSpace(s); s == "" {
+			continue
+		}
+		row := map[string]any{}
+		if i := strings.LastIndex(s, ":"); i >= 0 {
+			if f, ok := enums[s[i+1:]]; ok {
+				row[f], s = s[i+1:], s[:i]
+			}
+		}
+		ref, err := media(key, s)
+		if err != nil {
+			return nil, err
+		}
+		row[field] = ref
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
 // media is a MediaRef: <take id>[:in:out].
 func media(key, val string) (any, error) {
 	parts := strings.Split(val, ":")

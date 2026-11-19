@@ -534,6 +534,15 @@ export interface paths {
          *     lora block lists as `prefused` for its variant: `lora.rows[1].lora: LoRA <name> is already part of the
          *     distilled weights`; a bake-only stack's `mode: adapter` fails `enum` (`lora.rows[1].mode: must be one of
          *     bake`).
+         *
+         *     From 1.22 (contracts/README.md, Media inputs: rows of media): an `optional` image node left null is dropped
+         *     with its wires first; a rows value while a `not_with` input is wired is 422 `generate.refs: must stay empty
+         *     while generate.first is wired`; a media field of a rows item is resolved like a media param, items from 1:
+         *     `generate.videos[2].video: take <id> not found`, `… take <id> is not a video`, `generate.audios[1].audio: take
+         *     <id> has no sound`, `… take <id> lasts 1.5 s; this input takes at least 2.0 s`, `… the part lasts 16.0 s; this
+         *     input takes at most 15.0 s`, `… in must be before out`, `… out <x> is past the take's end <d>`; a missing media
+         *     field `generate.videos[1].video: a take is required`; then the items together: `generate.videos: the takes
+         *     last 16.5 s in all; at most 15.0 s`. The counts are the rows `max` (`generate.videos: at most 3 items`).
          */
         post: operations["studioCreateRun"];
         delete?: never;
@@ -753,7 +762,7 @@ export interface paths {
         /**
          * "Use in…": inputs that put this take into a workflow's image or media input, to pre-fill Create
          * @description An image take: `inputs` with exactly one key: `param` (or, when absent, the workflow's only `image` param or
-         *     `rows` param whose `item` has an `Image` field) set to this take: `{take_id}` for an `image` param, a one-item
+         *     `rows` param whose `item` has an `Image` field; from 1.22 among the inputs `GET …/uses` counts) set to this take: `{take_id}` for an `image` param, a one-item
          *     list `[{<field>: {take_id}}]` (the take as reference 1) for a rows param. From 1.19 a video or audio take: the
          *     workflow's only `media` param that accepts it (or `param`) set to `{take_id}` (with `trim`: `in` 0, `out` its
          *     duration), and every `span` param set to the whole take `{start: 0, end: duration}` (contracts/README.md, Media
@@ -787,8 +796,11 @@ export interface paths {
          * @description contracts/README.md, Media inputs: offers. The templates a live host could run now (published, model variant
          *     present, `ltx/distill`'s LoRA on the host) and the caller's own non-text workflows, in `GET /v1/studio/workflows`
          *     order, that have exactly one input this take fits (an image take: an `image` param or an Image rows param; a
-         *     video or audio take: a `media` param whose `accepts`, `grid`, `max_s` and `max_frames` it passes), each with `inputs` as
-         *     `POST …/use` answers them. Empty when none fits. 404 for a take that is unknown, another user's, deleted or a
+         *     video or audio take: a `media` param whose `accepts`, `grid`, `max_s`, `min_s` and `max_frames` it passes), each with `inputs` as
+         *     `POST …/use` answers them. From 1.22 an input counts only when the workflow's `studio` block places it (no
+         *     block: every input), not on an `optional` node, and not a rows param excluded by a wired `not_with` input
+         *     (MiniMax H3: an image goes to Image to video's first frame and References, not Text to video). Rows of media
+         *     are never offered into. Empty when none fits. 404 for a take that is unknown, another user's, deleted or a
          *     pending upload.
          */
         get: operations["studioListTakeUses"];
@@ -2412,9 +2424,9 @@ export interface components {
             start: number;
             end: number;
         };
-        /** @description one item of a rows value: field (the param's `item`) → value */
+        /** @description one item of a rows value: field (the param's `item`) → value; from 1.22 a media field's value is a MediaRef */
         RowItem: {
-            [key: string]: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["LoraRef"];
+            [key: string]: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["MediaRef"] | components["schemas"]["LoraRef"];
         };
         /** @description a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null */
         ParamValue: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["MediaRef"] | components["schemas"]["SpanValue"] | components["schemas"]["RowItem"][];
@@ -2441,6 +2453,11 @@ export interface components {
          *     control and its duration); `grid` (a video's sides must be multiples of it), `max_s` (the longest it reads) and
          *     `max_frames` (the most frames of a video it reads) bound it. `span`: a time range `{start, end}` (`SpanValue`, default null; a run needs one) on the workflow's one
          *     `media` param that accepts video; the UI draws it as a range control over that take's poster and duration.
+         *     From 1.22 (contracts/README.md, Media inputs: rows of media): a `rows` item field may be a `media` param (each
+         *     item one video or audio take, `MediaRef`, required in every item; the rows editor draws the take's poster or a
+         *     sound tile with its trim control); `min_s` (media) is the shortest it reads; `max_total_s` (rows with one media
+         *     field) the most seconds the items read together; `not_with` (rows) names optional inputs of the node: while one
+         *     is wired the rows stay empty (mentions add none, "Use in…" skips them).
          */
         ParamSchema: {
             name: string;
@@ -2456,6 +2473,12 @@ export interface components {
             max_s?: number;
             /** @description media only: the most frames of a video take it reads (its frames at any fps; LTX 321) */
             max_frames?: number;
+            /** @description from 1.22, media only: the shortest it reads in seconds (`take <id> lasts <d> s; this input takes at least <min_s> s`; with trim also `the part lasts <d> s; …`) */
+            min_s?: number;
+            /** @description from 1.22, rows with one media field only: the most seconds the items read together (`<node>.<param>: the takes last <d> s in all; at most <max_total_s> s`) */
+            max_total_s?: number;
+            /** @description from 1.22, rows only: optional inputs of the same node; while one is wired the rows must stay empty (`<node>.<param>: must stay empty while <node>.<input> is wired`) */
+            not_with?: string[];
             /** @description frames only: the name of the same node's int or float param holding frames per second */
             fps?: string;
             /** @description frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`) */
@@ -2482,7 +2505,7 @@ export interface components {
             help?: string;
             /** @description visibility expression; absent = always shown */
             when?: string;
-            /** @description rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node's `media`), `Lora`: a LoRA; required in every item) or a param schema without name */
+            /** @description rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node's `media`), `Lora`: a LoRA; required in every item) or a param schema without name (from 1.22 a `media` param: required in every item) */
             item?: {
                 [key: string]: "Image" | "Media" | "Lora" | Record<string, never>;
             };
@@ -2516,6 +2539,8 @@ export interface components {
             };
             /** @description switched off: passes its inputs through (README, Graph rules); absent = false */
             bypass?: boolean;
+            /** @description from 1.22, a core `image` node only: may be left empty; studio then drops it and its wires before the run (its wires must all go to optional inputs, else the problem `not_optional`). The form marks its image field optional (MiniMax H3 Image to video: Last frame) */
+            optional?: boolean;
             position?: components["schemas"]["NodePosition"];
             only?: components["schemas"]["ParamOnly"];
         };
@@ -2667,6 +2692,8 @@ export interface components {
                 [key: string]: string;
             };
             bypass?: boolean;
+            /** @description from 1.22: see GraphNode.optional */
+            optional?: boolean;
             position?: components["schemas"]["NodePosition"];
             only?: components["schemas"]["ParamOnly"];
         };
@@ -2691,7 +2718,7 @@ export interface components {
          * @description meaning and which ones block saving: contracts/README.md, Graph rules. May grow in a minor version; an unknown code blocks running
          * @enum {string}
          */
-        ProblemCode: "too_many_nodes" | "too_large" | "too_many_outputs" | "too_many_seeds" | "wrong_family" | "unknown_kind" | "env_mismatch" | "unknown_param" | "param_invalid" | "unknown_input" | "unknown_source" | "type_mismatch" | "not_bypassable" | "required_input" | "cycle" | "no_output" | "studio_unknown_path" | "studio_duplicate" | "preset_invalid" | "lora_duplicate" | "lora_unknown" | "lora_family";
+        ProblemCode: "too_many_nodes" | "too_large" | "too_many_outputs" | "too_many_seeds" | "wrong_family" | "unknown_kind" | "env_mismatch" | "unknown_param" | "param_invalid" | "unknown_input" | "unknown_source" | "type_mismatch" | "not_bypassable" | "required_input" | "cycle" | "no_output" | "studio_unknown_path" | "studio_duplicate" | "preset_invalid" | "lora_duplicate" | "lora_unknown" | "lora_family" | "not_optional";
         /** @description one broken graph rule; `node` / `port` / `param` say where, for the editor to mark (absent = the whole workflow) */
         Problem: {
             code: components["schemas"]["ProblemCode"];

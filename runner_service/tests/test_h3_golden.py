@@ -1,5 +1,6 @@
 """The minimax_h3 pack against the h3 goldens (runner_service/tests/golden/minimax-h3-*, recorded by
-tests/golden/record_h3.py with the vendored binary at h3.c 4cafd17, 512 x 512 x 22 frames, 4 steps, seed 42, exact):
+tests/golden/record_h3.py with the vendored binary at h3.c 4cafd17, 512 x 512 x 22 frames, 4 steps (the API 1.22
+reference cases: 2 steps, a 2 s audio or silent video reference), seed 42, exact):
 runs the pack's workflows in-process (graph.run with the native residency manager; no NATS) with a golden's
 settings, so the real h3 child runs on the GPU, and compares the MP4's decoded frames and sound with the stored one.
 
@@ -10,7 +11,8 @@ settings, so the real h3 child runs on the GPU, and compares the MP4's decoded f
 Loads the real weights (the child peaks ~18.5 GB at this size): stop the runners first (make runners-stop), build the
 binary (make h3).
 
-    uv run python tests/test_h3_golden.py [t2v fl2va-first fl2va-first-last ref2va-image]
+    uv run python tests/test_h3_golden.py [t2v fl2va-first fl2va-first-last ref2va-image ref2va-image-audio
+        ref2va-silent-video]
     uv run pytest -m gpu -s tests/test_h3_golden.py"""
 
 import argparse
@@ -32,8 +34,13 @@ sys.path.insert(0, str(HERE.parent))
 
 GOLDEN = HERE / "golden"
 CASES = {"t2v": "minimax-h3-t2v", "fl2va-first": "minimax-h3-fl2va-first",
-         "fl2va-first-last": "minimax-h3-fl2va-first-last", "ref2va-image": "minimax-h3-ref2va-image"}  # fmt: skip
+         "fl2va-first-last": "minimax-h3-fl2va-first-last", "ref2va-image": "minimax-h3-ref2va-image",
+         "ref2va-image-audio": "minimax-h3-ref2va-image-audio",
+         "ref2va-silent-video": "minimax-h3-ref2va-silent-video"}  # fmt: skip
 BAR = 30.0  # dB, image modes (below the 36.9-39.8 dB spread of repeated runs)
+# a silent video reference repeats less (2 steps): its two recorded runs differ by 29.5 dB, the pack's run vs the
+# golden 31.8 dB; the pack's cut gives h3 the same decoded pixels as the recorder's input (checked on the CPU)
+BARS = {"ref2va-silent-video": 27.0}
 
 
 def image_value(n: int, rel: str) -> dict:
@@ -45,6 +52,24 @@ def image_value(n: int, rel: str) -> dict:
         w, h = im.size
     return {"take_id": f"00000000-0000-4000-8000-{n:012d}", "key": f"u/golden/{rel}", "content_type": "image/png",
             "width": w, "height": h, "bytes": len(data), "etag": hashlib.sha256(data).hexdigest()[:32]}  # fmt: skip
+
+
+def media_value(n: int, rel: str) -> dict:
+    """A resolved media value (defs media) for a golden WAV or MP4, the whole take as its part (in 0, out its end)."""
+    data = (GOLDEN / rel).read_bytes()
+    r = subprocess.run(["ffprobe", "-v", "error", "-count_packets", "-show_entries",
+                        "format=duration:stream=codec_type,width,height,nb_read_packets", "-of", "json",
+                        str(GOLDEN / rel)], capture_output=True, text=True, check=True)  # fmt: skip
+    info = json.loads(r.stdout)
+    d = round(float(info["format"]["duration"]), 3)
+    v = next((x for x in info["streams"] if x["codec_type"] == "video"), None)
+    out = {"take_id": f"00000000-0000-4000-8000-{n:012d}", "key": f"u/golden/{rel}", "bytes": len(data),
+           "etag": hashlib.sha256(data).hexdigest()[:32], "duration_s": d, "in": 0, "out": d,
+           "has_audio": any(x["codec_type"] == "audio" for x in info["streams"])}  # fmt: skip
+    if v is None:
+        return out | {"kind": "audio", "content_type": "audio/wav"}
+    return out | {"kind": "video", "content_type": "video/mp4", "width": v["width"], "height": v["height"],
+                  "fps": 24, "frames": int(v["nb_read_packets"])}  # fmt: skip
 
 
 async def fetch(key: str, limit: int, etag: str | None = None) -> bytes | None:
@@ -72,7 +97,13 @@ class Bench:
     def nodes(self, name: str) -> dict:
         s = settings(name)
         files = {role: f"{CASES[name]}/{x['file']}" for role, x in s["inputs"].items()}
-        wid = {"t2v": "text-to-video", "ref2va-image": "references"}.get(name, "image-to-video")
+        wid = (
+            "text-to-video"
+            if name == "t2v"
+            else "references"
+            if name.startswith("ref2va")
+            else "image-to-video"
+        )
         nodes = json.loads(json.dumps(self.workflows[f"minimax-h3-{wid}"]["nodes"]))
         nodes["prompt"]["params"]["text"] = s["prompt"]
         nodes["seed"]["params"]["seed"] = s["seed"]
@@ -81,13 +112,22 @@ class Bench:
         nodes["generate"]["params"] |= {"steps": s["steps"], "speed": s["speed"]}
         if "first" in files:
             nodes["first"]["params"]["image"] = image_value(1, files["first"])
-        if (
-            "last" in files
-        ):  # a second image node, as the editor adds it (valid.minimax-h3-first-last.json)
-            nodes["last"] = {"kind": "image", "params": {"image": image_value(2, files["last"])}}
-            nodes["generate"]["in"]["last"] = "last.image"
+        if "last" in files:
+            nodes["last"]["params"]["image"] = image_value(2, files["last"])
+        for nid in [
+            n for n, x in nodes.items() if x.pop("optional", False) and x["params"]["image"] is None
+        ]:
+            del nodes[nid]  # as studio drops an empty optional node with its wires (API 1.22)
+            for x in nodes.values():
+                x["in"] = {k: r for k, r in x.get("in", {}).items() if r.partition(".")[0] != nid}
         if "ref" in files:
             nodes["generate"]["params"]["refs"] = [{"image": image_value(3, files["ref"])}]
+        if "audio" in files:
+            nodes["generate"]["params"]["audios"] = [{"audio": media_value(4, files["audio"])}]
+        if "video" in files:
+            nodes["generate"]["params"]["videos"] = [
+                {"video": media_value(5, files["video"]), "sound": "silent"}
+            ]
         return nodes
 
     def run(self, nodes: dict) -> dict:
@@ -151,7 +191,10 @@ def case(bench: Bench, name: str) -> dict:
         r["psnr"] = psnr(GOLDEN / CASES[name] / s["mp4"]["file"], mp4)
     video = r.pop("video")
     shape = (video["frames"], video["fps"], video["has_audio"]) == (s["frames"], 24, True)
-    r["exact"], r["ok"] = exact, shape and (exact if name == "t2v" else r["psnr"] >= BAR)
+    r["exact"], r["ok"] = (
+        exact,
+        shape and (exact if name == "t2v" else r["psnr"] >= BARS.get(name, BAR)),
+    )
     return r
 
 

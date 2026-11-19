@@ -80,28 +80,60 @@ func snapper(t gallery.MediaTake) func(float64) float64 {
 	return func(s float64) float64 { return math.Round(s*unit) / unit }
 }
 
+// mediaSlot is one media value of a graph: a media param's ("<node>.<param>") or, API 1.22, a rows item's media field
+// ("<node>.<param>[<i>].<field>", items from 1; Rows names the rows param, Total its max_total_s).
+type mediaSlot struct {
+	Path, Rows string
+	Param      registry.Param
+	Total      float64
+	Value      map[string]any
+	set        func(map[string]any)
+}
+
+// mediaSlots lists a graph's media values (null ones left out) in input order: node id, then schema order, then item;
+// unwired params of known, not bypassed nodes.
+func mediaSlots(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) []mediaSlot {
+	var out []mediaSlot
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		node := nodes[id]
+		if node.Bypass {
+			continue
+		}
+		for _, p := range schemas[node.Kind].Params {
+			if _, wired := node.In[p.Name]; wired {
+				continue
+			}
+			path, params := id+"."+p.Name, node.Params
+			if v, ok := params[p.Name].(map[string]any); ok && p.Type == "media" {
+				out = append(out, mediaSlot{Path: path, Param: p, Value: v, set: func(x map[string]any) { params[p.Name] = x }})
+			}
+			field, spec, ok := p.MediaItem()
+			items, _ := params[p.Name].([]any)
+			for i, item := range items {
+				fields, _ := item.(map[string]any)
+				if v, isRef := fields[field].(map[string]any); ok && isRef {
+					out = append(out, mediaSlot{Path: fmt.Sprintf("%s[%d].%s", path, i+1, field), Rows: path, Param: spec,
+						Total: p.MaxTotalS, Value: v, set: func(x map[string]any) { fields[field] = x }})
+				}
+			}
+		}
+	}
+	return out
+}
+
 // checkMedia checks every media and span value of a resolved graph as the owner (contracts/README.md, Media inputs)
-// and snaps them in place: the 422 detail of the first bad one in key order, "" when all are good. A media take must
-// be the owner's completed, undeleted take with its object present (else "take <id> not found", whoever's it is), fit
-// its param (media_fit), and a trim part lie inside it within max_s; a span needs the workflow's one video source.
+// and snaps them in place: the 422 detail of the first bad one, "" when all are good. A media take must be the owner's
+// completed, undeleted take with its object present (else "take <id> not found", whoever's it is); mediaRules does the
+// rest.
 func checkMedia(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, nodes map[string]registry.Node,
 	schemas map[string]registry.NodeSchema) (string, error) {
-	media, spans := mediaParams(nodes, schemas), paramsOf(nodes, schemas, "span")
-	if len(media) == 0 && len(spans) == 0 {
+	slots := mediaSlots(nodes, schemas)
+	if len(slots) == 0 && len(paramsOf(nodes, schemas, "span")) == 0 {
 		return "", nil
 	}
-	value := func(path string) map[string]any {
-		id, name, _ := strings.Cut(path, ".")
-		v, _ := nodes[id].Params[name].(map[string]any)
-		return v
-	}
-	set := func(path string, v any) {
-		id, name, _ := strings.Cut(path, ".")
-		nodes[id].Params[name] = v
-	}
 	var ids []string
-	for path := range media {
-		if id, ok := value(path)["take_id"].(string); ok {
+	for _, slot := range slots {
+		if id, ok := slot.Value["take_id"].(string); ok {
 			ids = append(ids, id)
 		}
 	}
@@ -114,13 +146,13 @@ func checkMedia(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID str
 	if err != nil {
 		return "", err
 	}
+	takes := map[string]gallery.MediaTake{}
 	for i, row := range found {
 		if !there[i] {
-			delete(rows, row.ID)
+			continue
 		} else if row.Etag == nil { // a run output recorded without its etag: hashed on first use (as images)
 			etag, err := contentHash(ctx, store, row.Key)
 			if errors.Is(err, storage.ErrNotFound) {
-				delete(rows, row.ID)
 				continue
 			} else if err != nil {
 				return "", network.NewServiceUnavailableError("could not read an input take; try again", err)
@@ -129,76 +161,110 @@ func checkMedia(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID str
 				return "", err
 			}
 		}
+		takes[row.ID] = gallery.Facts(row.ID, row.Kind, row.Width, row.Height, row.Video, row.Audio)
 	}
+	return mediaRules(nodes, schemas, takes), nil
+}
+
+// mediaRules checks every media and span value of a resolved graph against takes (the owner's usable takes by id) and
+// snaps them in place: the 422 detail of the first bad one, "" when all are good. Each value fits its param
+// (media_fit) and a trim part lies inside the take within min_s..max_s (in 0, out min(d, max_s) when left out); a rows
+// param's items together keep its max_total_s (API 1.22); a span needs the workflow's one video source (a media
+// param, never a rows item).
+func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, takes map[string]gallery.MediaTake) string {
+	slots := mediaSlots(nodes, schemas)
 	var source *gallery.MediaTake // the one media param that accepts video: the spans' source
-	sources := 0
-	for _, path := range slices.Sorted(maps.Keys(media)) {
-		p, v := media[path], value(path)
-		if v == nil {
-			continue // resolve said so
-		}
-		id, _ := v["take_id"].(string)
-		row, ok := rows[id]
+	sources, total := 0, 0.0
+	for i, slot := range slots {
+		id, _ := slot.Value["take_id"].(string)
+		take, ok := takes[id]
 		if !ok {
-			return path + ": take " + id + " not found", nil
+			return slot.Path + ": take " + id + " not found"
 		}
-		take := gallery.Facts(row.ID, row.Kind, row.Width, row.Height, row.Video, row.Audio)
-		if detail := gallery.MediaFit(p, take); detail != "" {
-			return path + ": " + detail, nil
+		if detail := gallery.MediaFit(slot.Param, take); detail != "" {
+			return slot.Path + ": " + detail
 		}
-		if slices.Contains(p.Accepts, "video") {
+		if slot.Rows == "" && slices.Contains(slot.Param.Accepts, "video") {
 			sources++
 			source = &take
 		}
-		if !p.Trim {
+		value, detail := snapMedia(slot.Param, take, slot.Value)
+		if detail != "" {
+			return slot.Path + ": " + detail
+		}
+		slot.set(value)
+		if slot.Rows == "" {
 			continue
 		}
-		snap, d := snapper(take), take.DurationS
-		in, out := 0.0, d
-		if p.MaxS > 0 {
-			out = min(d, p.MaxS)
+		if out, trimmed := value["out"].(float64); trimmed {
+			total += out - value["in"].(float64)
+		} else {
+			total += take.DurationS
 		}
-		if x, ok := v["in"].(float64); ok {
-			in = x
+		if i+1 < len(slots) && slots[i+1].Rows == slot.Rows {
+			continue // the rows param's last item adds up its items
 		}
-		if x, ok := v["out"].(float64); ok {
-			out = x
+		if slot.Total > 0 && total > slot.Total+1e-9 {
+			return fmt.Sprintf("%s: the takes last %.1f s in all; at most %.1f s", slot.Rows, total, slot.Total)
 		}
-		in, out = snap(in), snap(out)
-		if out > snap(d)+1e-9 {
-			return fmt.Sprintf("%s: out %.1f is past the take's end %.1f", path, out, d), nil
-		}
-		if out > d { // rounded up past an off-grid end: the last grid point at or before it (the runner's bound)
-			u := gridUnit(take)
-			out = math.Floor(d*u+1e-9) / u
-		}
-		switch {
-		case in >= out:
-			return path + ": in must be before out", nil
-		case p.MaxS > 0 && out-in > p.MaxS+1e-9:
-			return fmt.Sprintf("%s: the part lasts %.1f s; this input takes at most %.1f s", path, out-in, p.MaxS), nil
-		}
-		set(path, map[string]any{"take_id": id, "in": in, "out": out})
+		total = 0
 	}
-	for _, path := range slices.Sorted(maps.Keys(spans)) {
-		v := value(path)
+	for _, path := range slices.Sorted(maps.Keys(paramsOf(nodes, schemas, "span"))) {
+		id, name, _ := strings.Cut(path, ".")
+		v, _ := nodes[id].Params[name].(map[string]any)
 		if v == nil {
 			continue
 		}
 		if sources != 1 {
-			return path + ": this workflow has no single video source", nil
+			return path + ": this workflow has no single video source"
 		}
 		snap := snapper(*source)
 		start, end := snap(v["start"].(float64)), snap(v["end"].(float64))
 		switch {
 		case start >= end:
-			return path + ": start must be before end", nil
+			return path + ": start must be before end"
 		case end > snap(source.DurationS)+1e-9:
-			return fmt.Sprintf("%s: end %.1f is past the clip's end %.1f", path, end, source.DurationS), nil
+			return fmt.Sprintf("%s: end %.1f is past the clip's end %.1f", path, end, source.DurationS)
 		}
-		set(path, map[string]any{"start": start, "end": end})
+		nodes[id].Params[name] = map[string]any{"start": start, "end": end}
 	}
-	return "", nil
+	return ""
+}
+
+// snapMedia is a trim value with in / out snapped to the take's grid and filled (in 0, out min(d, max_s)), or why the
+// part does not do; a value without trim as it is.
+func snapMedia(p registry.Param, take gallery.MediaTake, v map[string]any) (map[string]any, string) {
+	if !p.Trim {
+		return v, ""
+	}
+	snap, d := snapper(take), take.DurationS
+	in, out := 0.0, d
+	if p.MaxS > 0 {
+		out = min(d, p.MaxS)
+	}
+	if x, ok := number(v["in"]); ok {
+		in = x
+	}
+	if x, ok := number(v["out"]); ok {
+		out = x
+	}
+	in, out = snap(in), snap(out)
+	if out > snap(d)+1e-9 {
+		return nil, fmt.Sprintf("out %.1f is past the take's end %.1f", out, d)
+	}
+	if out > d { // rounded up past an off-grid end: the last grid point at or before it (the runner's bound)
+		u := gridUnit(take)
+		out = math.Floor(d*u+1e-9) / u
+	}
+	switch {
+	case in >= out:
+		return nil, "in must be before out"
+	case p.MaxS > 0 && out-in > p.MaxS+1e-9:
+		return nil, fmt.Sprintf("the part lasts %.1f s; this input takes at most %.1f s", out-in, p.MaxS)
+	case p.MinS > 0 && out-in < p.MinS-1e-9:
+		return nil, fmt.Sprintf("the part lasts %.1f s; this input takes at least %.1f s", out-in, p.MinS)
+	}
+	return map[string]any{"take_id": v["take_id"], "in": in, "out": out}, ""
 }
 
 // mediaDescriptor is a media value resolved for cmd.run.execute (defs media): the take's object and the facts studio

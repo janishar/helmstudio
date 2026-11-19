@@ -175,11 +175,17 @@ describe("canvas auto in an edit", () => {
     ]);
     expect(layout(i2v)).toEqual([
       ["prompt.text"],
-      [["Quick", ["first.image", "generate.speed", "seed.seed"]], ...rest],
+      [["Quick", ["first.image", "last.image", "generate.speed", "seed.seed"]], ...rest],
     ]);
     expect(layout(refs)).toEqual([
       ["prompt.text"],
-      [["Quick", ["generate.refs", "generate.speed", "seed.seed"]], ...rest],
+      [
+        [
+          "Quick",
+          ["generate.refs", "generate.videos", "generate.audios", "generate.speed", "seed.seed"],
+        ],
+        ...rest,
+      ],
     ]);
     // the top bar counts H3 refs as references, a first frame as a frame
     expect([refUnit(imageInputs(fields(refs))[0]), refUnit(imageInputs(fields(i2v))[0])]).toEqual([
@@ -196,8 +202,19 @@ describe("canvas auto in an edit", () => {
       ),
     ).toBe(24);
     const [first, rows] = [imageInputs(fields(i2v)), imageInputs(fields(refs))];
-    expect(first.map((f) => f.key)).toEqual(["first.image", "generate.refs"]);
+    expect(first.map((f) => f.key)).toEqual(["first.image", "last.image", "generate.refs"]);
     expect(i2v.studio!.labels!["first.image"]).toBe("First frame");
+    // the last frame (API 1.22) is optional: left empty it is not sent (null, as the template holds it)
+    const fi = fields(i2v);
+    expect(fi.find((f) => f.key === "last.image")!.optional).toBe(true);
+    expect(fi.find((f) => f.key === "first.image")!.optional).toBeUndefined();
+    expect(buildInputs(fi, { "first.image": A, "prompt.text": "go" })).toEqual({
+      inputs: { "first.image": { take_id: A }, "prompt.text": "go" },
+      errors: {},
+    });
+    expect(buildInputs(fi, { "first.image": A, "last.image": A }).inputs["last.image"]).toEqual({
+      take_id: A,
+    });
     expect([rows[0].param.max, mentionOf(rows[0].param, 3)]).toEqual([9, "<Picture 3>"]);
     const inputs = buildInputs(fields(refs), {
       ...rawsFrom(fields(refs), {}),

@@ -33,3 +33,20 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   deleting this variant's files breaks minimax-h3-image.
 - **GPU watchdog.** Long command buffers can be killed by macOS while the display is busy; the old hint was
   `AGX_RELAX_CDM_CTXSTORE_TIMEOUT=1`. Not seen here; never set silently.
+- **Video and audio references (API 1.22).** Each is cut to its in..out in the per-run folder (`native.cut`, `-ss`
+  after `-i`, frame exact): a video as lossless H.264 in .mov (its sound as PCM only for `--ref-video`), an audio (or a
+  video's sound) as a PCM WAV. h3 reads a video reference at its own size (at most its adapted ~1 MP canvas) for up
+  to the clip's frames, and a video's sound only with >= 56 output frames; all reference sound <= 15 s
+  (`generate_error` refuses these before the child starts). A video reference joins the denoise sequence, so
+  peak_gb counts 1.04 MP per video (capped at 360 frames in all); only 512 x 512 x 22 was measured (18.65 GB, the same
+  as without it). Ref2VA with a silent video repeats less than an image: two runs of one argv at 2 steps differ by
+  29.5 dB (tests/test_h3_golden.py BARS).
+- **Audio numbering spans kinds.** h3 gives `<Audio n>` from one counter to every reference with sound, in argv order,
+  and a `--ref-video` (sound kept) counts; `<Picture n>` and `<Video n>` count per kind. So `native.generate` passes
+  `--ref-audio` before the videos: audio row n stays `<Audio n>` as the mentions say, a kept video soundtrack comes
+  after (h3_multimodal.c, the prefix loop; h3.c sets `has_audio`).
+- **A sound video needs a long part.** A video reference with sound needs its own part to read >= 56 frames too (about
+  2.34 s), not only the clip: h3 cuts the frames it decodes down to 5 + 17k and reads the sound only that long, so a 2.0
+  s part keeps 39 frames (1.6 s of sound) and h3 fails "video soundtrack 1 requires at least 2 seconds; request at least
+  56 output frames" even at 56 output frames (dev run 0de840b4, 2026-11-19). `generate_error` refuses it first ("needs a
+  part of at least 56 frames at 24 fps (video <i> reads <n>)").

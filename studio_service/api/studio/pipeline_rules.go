@@ -633,7 +633,9 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			needsOne := param.Type == "image" || param.Type == "media" || param.Type == "span" ||
 				(rowsOfImages && param.Min != nil && *param.Min >= 1)
 			_, bound := n.Bind[key]
-			if _, set := n.Fixed[key]; needsOne && !bound && !set {
+			wn, _, _ := strings.Cut(key, ".")
+			optional := wf.Nodes[wn].Optional // API 1.22: an optional node's image may stay empty
+			if _, set := n.Fixed[key]; needsOne && !bound && !set && !optional {
 				what := map[string]string{"media": "a take", "span": "a range"}[param.Type]
 				add("unbound_input", id, key, "", "%s: %s needs %s; bind it", id, key, cmp.Or(what, "an image"))
 			}

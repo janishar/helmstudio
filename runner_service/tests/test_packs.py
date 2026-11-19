@@ -324,6 +324,11 @@ def test_minimax_h3_refusals_equal_the_contract_fixture():
     )
     assert native.check_generate(one, {"prompt"}) is None
     assert native.check_generate({"refs": []}, {"first", "last"}) is None
+    for kind in ("videos", "audios"):  # API 1.22: any reference kind
+        assert (
+            native.check_generate({kind: [{}]}, {"last"})
+            == ": references cannot go with a first or last frame"
+        )
 
 
 FAKE_H3 = """#!{python}
@@ -331,8 +336,11 @@ import json, os, subprocess, sys
 a = sys.argv[1:]
 out, w, h, n = a[a.index("-o") + 1], a[a.index("--width") + 1], a[a.index("--height") + 1], int(a[a.index("--frames") + 1])
 images = [a[i + 1] for i, x in enumerate(a) if x in ("--first-frame", "--last-frame", "--ref-image")]
+probe = lambda f: json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=codec_type,codec_name",
+                                            "-of", "json", f], capture_output=True, check=True).stdout)
+media = [(x, probe(a[i + 1])) for i, x in enumerate(a) if x in ("--ref-video", "--ref-silent-video", "--ref-audio")]
 json.dump({{"argv": a, "cwd": os.getcwd(), "env": sorted(os.environ),
-           "images": [open(f, "rb").read(8).hex() for f in images]}}, open(os.environ["H3_FAKE_LOG"], "w"))
+           "images": [open(f, "rb").read(8).hex() for f in images], "media": media}}, open(os.environ["H3_FAKE_LOG"], "w"))
 sys.stderr.write("text encoder     50/50\\n\\rdenoise   2/2\\n")
 s = n / 24
 subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc=s={{w}}x{{h}}:r=24:d={{s}}", "-f", "lavfi",
@@ -346,7 +354,9 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
     """generate with a fake h3 (a script that writes a test MP4 with ffmpeg): the argv in the goldens' order with
     absolute paths, cwd the binary's folder, Image inputs as PNGs deleted after, H3_* passed and secrets not, and the
     Video value like ltx's."""
+    import re
     import shutil
+    import subprocess
     import sys
 
     from PIL import Image
@@ -417,4 +427,63 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
         RunError, match=r"^generate: the canvas is 1344 × 1344; at most 1032192 pixels"
     ):
         native.generate(ctx, params, inputs | {"canvas": {"width": 1344, "height": 1344}})
+    assert not log.exists()
+    # API 1.22: video and audio references, cut to their parts in the per-run folder, after the image ones; audios
+    # before videos, so the audio row is <Audio 1> even next to a video kept with its sound
+    take = lambda kind, data, **f: {"take_id": f"t-{kind}", "kind": kind, "duration_s": 3.0, "in": 0.5, "out": 3.0,
+                                    "has_audio": True, "data": data} | f  # fmt: skip
+    clip, sound = tmp_path / "clip.mp4", tmp_path / "sound.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=s=64x64:r=24:d=3", "-f", "lavfi", "-i",
+                    "sine=sample_rate=32000:d=3", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip)],
+                   check=True)  # fmt: skip
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=sample_rate=32000:d=3", str(sound)],
+                   check=True)  # fmt: skip
+    v, w = clip.read_bytes(), sound.read_bytes()
+    refs = params | {"refs": [{"image": Image.new("RGB", (8, 8))}],
+                     "videos": [{"video": take("video", v)}, {"video": take("video", v), "sound": "silent"},
+                                {"video": take("video", v, has_audio=False), "sound": "keep"}],
+                     "audios": [{"audio": take("audio", w, **{"in": 0, "out": 2.0})}]}  # fmt: skip
+    frames = inputs | {"first": None, "last": None, "duration": {"frames": 56, "fps": 24}}
+    native.generate(ctx, refs, {k: x for k, x in frames.items() if x is not None})
+    run = json.loads(log.read_text())
+    flags = [x for x in run["argv"] if x.startswith("--ref") or x.endswith("-frame")]
+    assert flags == [
+        "--ref-image",
+        "--ref-audio",
+        "--ref-video",
+        "--ref-silent-video",
+        "--ref-silent-video",
+    ]
+    got = [(f, [st["codec_type"] for st in m["streams"]], round(float(m["format"]["duration"]), 1))
+           for f, m in run["media"]]  # fmt: skip
+    assert got == [("--ref-audio", ["audio"], 2.0), ("--ref-video", ["video", "audio"], 2.5),
+                   ("--ref-silent-video", ["video"], 2.5), ("--ref-silent-video", ["video"], 2.5)]  # fmt: skip
+    # refused before the child starts, with the contract's texts
+    log.unlink()
+    for change, why in [
+        (
+            {"duration": {"frames": 22, "fps": 24}},
+            "a video reference with sound needs a clip of at least 56 frames (22)",
+        ),
+        ({"first": Image.new("RGB", (8, 8))}, "references cannot go with a first or last frame"),
+    ]:
+        with pytest.raises(RunError, match=f"^generate: {re.escape(why)}$"):
+            native.generate(ctx, refs, {k: x for k, x in frames.items() if x is not None} | change)
+    with pytest.raises(
+        RunError, match="^generate: audio references need an image or video reference$"
+    ):
+        native.generate(
+            ctx,
+            params | {"audios": refs["audios"]},
+            {k: x for k, x in frames.items() if x is not None},
+        )
+    # a 2 s part with sound: h3 keeps 39 of its 48 frames, under 2 s of sound (the dev run that found it)
+    with pytest.raises(
+        RunError, match=r"part of at least 56 frames at 24 fps \(video 1 reads 48\)$"
+    ):
+        native.generate(
+            ctx,
+            params | {"videos": [{"video": take("video", v, **{"in": 0.5, "out": 2.5})}]},
+            {k: x for k, x in frames.items() if x is not None},
+        )
     assert not log.exists()

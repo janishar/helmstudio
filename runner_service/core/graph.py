@@ -318,6 +318,10 @@ def media_fit(spec: dict, v: dict) -> str | None:
         return f"take {tid} is {v.get('width')} × {v.get('height')}; this input needs sides on a {g} px grid"
     if picture and (n := spec.get("max_frames")) and v.get("frames", 0) > n:
         return f"take {tid} has {v['frames']} frames; this input takes at most {n}"
+    if (m := spec.get("min_s")) and v[
+        "duration_s"
+    ] < m - 1e-6:  # API 1.22; a trim cannot make it longer
+        return f"take {tid} lasts {v['duration_s']:.1f} s; this input takes at least {m:.1f} s"
     if not spec.get("trim"):
         if "in" in v or "out" in v:
             return "this input takes the whole take (no in or out)"
@@ -331,6 +335,8 @@ def media_fit(spec: dict, v: dict) -> str | None:
         return f"out {end:.1f} is past the take's end {v['duration_s']:.1f}"
     if (m := spec.get("max_s")) and end - start > m + 1e-6:
         return f"the part lasts {end - start:.1f} s; this input takes at most {m:.1f} s"
+    if (m := spec.get("min_s")) and end - start < m - 1e-6:
+        return f"the part lasts {end - start:.1f} s; this input takes at least {m:.1f} s"
     return None
 
 
@@ -356,6 +362,8 @@ def _check_rows(spec: dict, value) -> str | None:
                 v = row.get(f)
                 if not isinstance(v, dict) or not LORA_ID.match(str(v.get("lora_id"))):
                     return f"item {i}.{f}: a LoRA is required"
+            elif isinstance(item, dict) and item["type"] == "media" and not _image(row.get(f)):
+                return f"item {i}.{f}: a take is required"  # API 1.22: never left out
             elif f in row and (why := _check_param(item, row[f])):
                 return f"item {i}.{f} {why}"
     return None
@@ -529,6 +537,21 @@ def problems(
         for i in required:
             if i not in wires:
                 add("required_input", nid, i, message=f"{nid}.{i}: not wired")
+    for (
+        nid,
+        n,
+    ) in (
+        nodes.items()
+    ):  # API 1.22: an optional node is an image source whose wires all go to optional inputs
+        feeds = [(m, port) for m, x in nodes.items() for port, ref in x.get("in", {}).items() if ref.partition(".")[0] == nid]  # fmt: skip
+        required = lambda m, port: any(i["name"] == port and not i.get("optional")
+                                       for i in schemas.get(nodes[m]["kind"], {}).get("inputs", []))  # fmt: skip
+        if n.get("optional") and (n["kind"] != "image" or any(required(m, p) for m, p in feeds)):
+            add(
+                "not_optional",
+                nid,
+                message=f"{nid}: only an image node that feeds optional inputs may be optional",
+            )
     succ = {nid: set() for nid in nodes}
     for nid, n in nodes.items():
         for ref in n.get("in", {}).values():

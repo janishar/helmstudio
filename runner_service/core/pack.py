@@ -338,22 +338,22 @@ _ALLOWED = (
 
 def compile_formula(text: str, names: set[str]):
     """Compile a peak_gb formula; ValueError for anything but arithmetic, comparisons, `a if c else b`,
-    min/max, and the names `names`."""
+    min/max/len (len: a rows param's items), and the names `names`."""
     tree = ast.parse(str(text), mode="eval")
     for n in ast.walk(tree):
         if not isinstance(n, _ALLOWED):
             raise ValueError(f"peak_gb {text!r}: {type(n).__name__} is not allowed")  # noqa: TRY004
         if isinstance(n, ast.Call) and not (
-            isinstance(n.func, ast.Name) and n.func.id in ("min", "max")
+            isinstance(n.func, ast.Name) and n.func.id in ("min", "max", "len")
         ):
-            raise ValueError(f"peak_gb {text!r}: only min() and max() may be called")
-        if isinstance(n, ast.Name) and n.id not in names | {"min", "max"}:
+            raise ValueError(f"peak_gb {text!r}: only min(), max() and len() may be called")
+        if isinstance(n, ast.Name) and n.id not in names | {"min", "max", "len"}:
             raise ValueError(f"peak_gb {text!r}: unknown name {n.id!r} (known: {sorted(names)})")
     return compile(tree, f"<peak_gb {text}>", "eval")
 
 
 def evaluate(code, values: dict) -> float:
-    return float(eval(code, {"__builtins__": {}, "min": min, "max": max}, values))
+    return float(eval(code, {"__builtins__": {}, "min": min, "max": max, "len": len}, values))
 
 
 # --- node schemas

@@ -3,6 +3,9 @@
 import { describe, expect, it } from "vitest";
 import sources from "../../contracts/fixtures/video/sources.json";
 import uses from "../../contracts/fixtures/video/uses.json";
+import mediaRows from "../../contracts/fixtures/video/media-rows.json";
+import h3Nodes from "../../contracts/fixtures/registry/minimax-h3.nodes.valid.json";
+import h3Workflows from "../../contracts/fixtures/registry/minimax-h3.workflows.valid.json";
 import ltxNodes from "../../contracts/fixtures/registry/ltx.nodes.valid.json";
 import ltxWorkflows from "../../contracts/fixtures/registry/ltx.workflows.valid.json";
 import type { S } from "@/lib/api";
@@ -16,6 +19,8 @@ import {
   floorGrid,
   markRange,
   mediaFit,
+  mediaItem,
+  mediaRowsError,
   progressive,
   rangeInTake,
   removeTrack,
@@ -51,6 +56,36 @@ describe("uses.json media_fit texts", () => {
         mediaFit((c as { param: S<"ParamSchema"> }).param, { ...takes[c.take], id: c.take }),
       ).toEqual((c.expect as { error: string | null }).error),
     );
+});
+
+describe("media-rows.json (API 1.22: rows of media, per item then in all)", () => {
+  const takes = mediaRows.takes as Record<string, Omit<Facts, "id">>;
+  const facts = (id: string) => (takes[id] ? { ...takes[id], id } : null);
+  const schema = h3Nodes.nodes.find((n) => n.kind === "minimax-h3/generate")!;
+  const rowsParams = (schema.params as S<"ParamSchema">[]).filter((p) => mediaItem(p));
+  it("finds the two media rows params", () =>
+    expect(rowsParams.map((p) => [p.name, mediaItem(p)![0]])).toEqual([
+      ["videos", "video"],
+      ["audios", "audio"],
+    ]));
+  // the item and total checks; the drop of an optional node and not_with are studio's (the form sends neither)
+  for (const c of mediaRows.cases.filter((x) => x.workflow === "minimax-h3-references"))
+    it(c.description, () => {
+      const inputs = c.inputs as unknown as Record<string, S<"RowItem">[]>;
+      const got = rowsParams
+        .map((p) =>
+          mediaRowsError(`generate.${p.name}`, p, inputs[`generate.${p.name}`] ?? [], facts),
+        )
+        .find(Boolean);
+      expect(got ?? null).toEqual(c.expect.error);
+    });
+  it("the references template places both in its composer", () =>
+    expect(h3Workflows.workflows[2].studio.composer).toEqual([
+      "prompt.text",
+      "generate.refs",
+      "generate.videos",
+      "generate.audios",
+    ]));
 });
 
 describe("the board's numbers", () => {

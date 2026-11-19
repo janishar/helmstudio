@@ -333,6 +333,7 @@ export function RowsEditor({
           <span className="min-w-0">
             {f.param.mention &&
               `In the prompt: ${max > 1 ? `${label(0)}, ${label(1)}…` : label(0)}`}
+            {f.optional && "Optional: may stay empty"}
           </span>
           <span aria-label={`${ids.length} of ${max}`} className="shrink-0">
             {ids.length} / {max}
@@ -448,22 +449,27 @@ export function FirstFrameTile({
   id,
   more = 0,
   onPick,
+  label = "First frame",
+  empty = "None · text only",
 }: {
   id?: string;
   more?: number;
   onPick: (takeId: string) => void;
+  /** the tile's label (an image param's: "Last frame") and what it says with no take */
+  label?: string;
+  empty?: string;
 }) {
   const [picking, setPicking] = useState(false);
   const t = useTakes(id ? [id] : [])(id ?? "");
   const thumb = t ? safeUrl(t.thumb_url) : undefined;
-  const name = id ? (t?.title ?? (t === null ? "gone" : "…")) : "None · text only";
+  const name = id ? (t?.title ?? (t === null ? "gone" : "…")) : empty;
   const shown = more ? `${name} +${more}` : name;
   return (
     <>
       <button
         type="button"
         aria-haspopup="dialog"
-        aria-label={`First frame: ${shown}`}
+        aria-label={`${label}: ${shown}`}
         onClick={() => setPicking(true)}
         className="bevel flex h-8 max-w-[28ch] items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]"
       >
@@ -475,7 +481,7 @@ export function FirstFrameTile({
             className="size-6 shrink-0 rounded-md border border-dashed border-dash"
           />
         )}
-        <span className="mono text-[10px] text-t2">First frame</span>
+        <span className="mono text-[10px] text-t2">{label}</span>
         <b className="truncate font-semibold">{shown}</b>
       </button>
       <GalleryPicker

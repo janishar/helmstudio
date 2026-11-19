@@ -45,6 +45,13 @@
         "image": null
       }
     },
+    "last": {
+      "kind": "image",
+      "optional": true,
+      "params": {
+        "image": null
+      }
+    },
     "generate": {
       "kind": "minimax-h3/generate",
       "in": {
@@ -53,12 +60,15 @@
         "seed": "seed.seed",
         "canvas": "canvas.canvas",
         "duration": "duration.duration",
-        "first": "first.image"
+        "first": "first.image",
+        "last": "last.image"
       },
       "params": {
         "steps": 6,
         "speed": "exact",
-        "refs": []
+        "refs": [],
+        "videos": [],
+        "audios": []
       }
     },
     "output": {
@@ -71,7 +81,8 @@
   "studio": {
     "composer": [
       "prompt.text",
-      "first.image"
+      "first.image",
+      "last.image"
     ],
     "quick": [
       "generate.speed",
@@ -99,7 +110,8 @@
       }
     ],
     "labels": {
-      "first.image": "First frame"
+      "first.image": "First frame",
+      "last.image": "Last frame"
     }
   }
 }

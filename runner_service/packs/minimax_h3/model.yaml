@@ -67,7 +67,40 @@ stages:
               help: "exact: all 50 transformer blocks every step. fast: 45 blocks and every other step reused: quicker, slightly different."}
       refs: {type: rows, label: References, default: [], min: 0, max: 9, item: {image: Image},
              mention: "<Picture {n}>",
-             help: "Images the prompt names <Picture 1>, <Picture 2>, …; any reference switches to the Ref2VA model and cannot go with a first or last frame."}
-    peak_gb: "24 + 0.05 * mp * frames"
+             help: "Images the prompt names <Picture 1>, <Picture 2>, …; any reference (image, video or audio) switches to the Ref2VA model and cannot go with a first or last frame.",
+             not_with: [first, last]}
+      videos:
+        type: rows
+        label: Video references
+        default: []
+        min: 0
+        max: 3
+        item:
+          video: {type: media, label: Video, default: null, accepts: [video], trim: true, min_s: 2, max_s: 15,
+                  help: "A video take; in and out pick the part it reads (2 to 15 s)."}
+          sound: {type: enum, label: Sound, default: keep, enum: [keep, silent],
+                  help: "keep: the model also hears the video's sound (a take without sound is read silent). silent: picture only."}
+        mention: "<Video {n}>"
+        max_total_s: 15
+        not_with: [first, last]
+        help: "Videos the prompt names <Video 1>, <Video 2>, <Video 3>: 2 to 15 s each, 15 s in all."
+      audios:
+        type: rows
+        label: Audio references
+        default: []
+        min: 0
+        max: 3
+        item:
+          audio: {type: media, label: Audio, default: null, accepts: [audio], trim: true, min_s: 2, max_s: 15,
+                  help: "An audio take, or a video's sound; in and out pick the part it reads (2 to 15 s)."}
+        mention: "<Audio {n}>"
+        max_total_s: 15
+        not_with: [first, last]
+        help: "Sounds the prompt names <Audio 1>, <Audio 2>, <Audio 3>: 2 to 15 s each, 15 s in all; needs an image or video reference too."
+    # a video reference joins the denoise sequence at its own size (h3_reference_video_canvas: its size on the 32 px
+    # grid, at most h3's adapted canvas, <= 1.04 MP) for up to the clip's frames, and all video parts read <= 15 s
+    # (360 frames at 24 fps): counted as 1.04 MP each (the peak is in the denoise, measure.md). ponytail: the largest
+    # size per video; use each take's own size if this ever refuses runs that fit
+    peak_gb: "24 + 0.05 * (mp * frames + 1.04 * min(len(videos) * frames, 360))"
     # the child is watched by its own idle limit (native.py IDLE_S); this stage passes a cancel point every 0.5 s
     stall_s: 900

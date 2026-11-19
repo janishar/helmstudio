@@ -865,7 +865,11 @@ export function pipelineProblems(
         add("bind_type", `${name(id)}: ${n.bind![k]} does not fit ${k}`, id, k);
     }
     for (const [k, p] of Object.entries(params))
-      if ((p.type === "image" || (imageField(p) && (p.min ?? 0) >= 1)) && !(k in binds))
+      if (
+        (p.type === "image" || (imageField(p) && (p.min ?? 0) >= 1)) &&
+        !(k in binds) &&
+        !wf.nodes[k.split(".")[0]]?.optional // a param of an optional node may stay empty (API 1.22)
+      )
         add("unbound_input", `${name(id)}: ${k} needs an image; bind it`, id, k);
     if ((n.seeds ?? 1) > 1 && !Object.values(params).some((p) => p.type === "seed"))
       add("step_seeds", `${name(id)}: ${wf.title} has no seed, so it makes one take`, id);

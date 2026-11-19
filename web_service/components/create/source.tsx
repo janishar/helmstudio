@@ -5,9 +5,10 @@
 // the In / Out readouts, keyboard nudges by frame, the stretch the family's frame grid snaps it to). An extension
 // (a node's `seconds` and `direction`) shows what it adds. The numbers come from lib/source (check.py's maps).
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, X } from "lucide-react";
 import { Info } from "@/components/kit";
 import { GalleryPicker } from "@/components/gallery/picker";
+import { ItemFields } from "@/components/create/rows";
 import { api, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { audioFormat } from "@/lib/media";
@@ -18,12 +19,17 @@ import {
   familyGrid,
   floorGrid,
   mediaFit,
+  mediaItem,
+  mediaRowsError,
+  mediaValueError,
+  partOf,
   pickable,
   retakeMap,
   spanEdge,
   trimmed,
   type FrameGrid,
 } from "@/lib/source";
+import { mentionOf, move } from "@/lib/refs";
 import { remember, useTakes } from "@/lib/take-cache";
 import { timecode } from "@/lib/timeline";
 import { isRef, isSpan, toRaw, type Field, type Raw, type Update } from "@/lib/workflow";
@@ -121,11 +127,9 @@ function MediaPicker({
 }
 
 /** A new pick's value: the whole take; with `trim`, 0 to the most it takes (as studio fills it). */
-const picked = (f: Field, t: Take): S<"MediaRef"> => {
+const picked = (p: S<"ParamSchema">, t: Take): S<"MediaRef"> => {
   const d = t.video?.duration_s ?? t.audio?.duration_s ?? 0;
-  return f.param.trim
-    ? { take_id: t.id, in: 0, out: Math.min(d, f.param.max_s ?? d) }
-    : { take_id: t.id };
+  return p.trim ? { take_id: t.id, in: 0, out: Math.min(d, p.max_s ?? d) } : { take_id: t.id };
 };
 
 /** A span on the new source: the whole take (as studio prefills an offer). */
@@ -184,7 +188,7 @@ export function MediaTile({
 
 /** Puts a picked take in a media field; a video source also resets every span to the whole take. */
 function pick(f: Field, t: Take, fields: Field[], onChange: Change) {
-  onChange(f.key, picked(f, t));
+  onChange(f.key, picked(f.param, t));
   if (videoSource(fields) === f)
     for (const s of fields.filter((x) => x.param.type === "span")) onChange(s.key, wholeSpan(t));
 }
@@ -738,6 +742,266 @@ export function ExtendControl({
         </>
       )}
       {error && <span className="mono text-[12px] text-bad">{error}</span>}
+    </div>
+  );
+}
+
+/** A rows param of media (API 1.22, docs/mock/CreateMediaRefs.dc.html: MiniMax H3's video and audio references):
+ * `compact` is the composer's chips (the mention, Remove, Add video / Add audio); else the inspector's cards, each
+ * the take (poster or sound tile, facts), its trim with In / Out and the part's length, the item's other fields
+ * (Sound: Keep / Silent) and why it does not fit, then the seconds in all and Add. Reorder by Alt + arrows. */
+export function MediaRows({
+  f,
+  raw,
+  error,
+  onChange,
+  compact = false,
+}: {
+  f: Field;
+  raw: Raw | undefined;
+  error?: string;
+  onChange: Change;
+  compact?: boolean;
+}) {
+  const [picking, setPicking] = useState(false);
+  const list = useRef<HTMLOListElement>(null);
+  const p = f.param;
+  const [k, spec] = mediaItem(p)!;
+  const rows: S<"RowItem">[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(f.initial)
+      ? (f.initial as S<"RowItem">[])
+      : [];
+  const refs = rows.map((r) => (isRef(r[k]) ? (r[k] as S<"MediaRef">) : null));
+  const get = useTakes(refs.flatMap((v) => (v ? [v.take_id] : [])));
+  const facts = (id: string) => {
+    const t = get(id);
+    return t === undefined ? undefined : t && factsOf(t);
+  };
+  const audio = !spec.accepts?.includes("video");
+  const noun = audio ? "audio" : "video";
+  const max = p.max ?? 100;
+  const room = max - rows.length;
+  const set = (u: (rows: S<"RowItem">[]) => S<"RowItem">[]) =>
+    onChange(f.key, (old) => u(Array.isArray(old) ? old : rows));
+  const label = (i: number) => mentionOf(p, i + 1);
+  // studio's text without the path: "row 2: …" for an item, the total as it is
+  const own = mediaRowsError(f.key, p, rows, facts)
+    ?.slice(f.key.length)
+    .replace(/^\[(\d+)\](?:\.\w+)?: /, "row $1: ")
+    .replace(/^: /, "");
+  const total = refs.reduce((n, v) => {
+    const t = v && get(v.take_id);
+    if (!v || !t) return n;
+    const [a, b] = partOf(v, factsOf(t).duration_s ?? 0, spec);
+    return n + b - a;
+  }, 0);
+  const picker = (
+    <GalleryPicker
+      open={picking}
+      onClose={() => setPicking(false)}
+      max={Math.max(room, 0)}
+      title={`Add ${noun}`}
+      kind={audio ? null : "video"}
+      only={(t) => pickable(spec, t)}
+      sub={(t) => takeFacts(t, audio)}
+      audioUpload={audio}
+      onPick={(ts) => {
+        remember(ts);
+        set((old) => [...old, ...ts.map((t) => ({ [k]: picked(spec, t) }))].slice(0, max));
+      }}
+    />
+  );
+  const addButton = room > 0 && (
+    <button
+      type="button"
+      aria-haspopup="dialog"
+      onClick={() => setPicking(true)}
+      className={
+        compact
+          ? "h-8 rounded-lg border border-dashed border-dash bg-transparent px-2.5 text-[12px] text-t2"
+          : "h-10 rounded-[10px] border border-dashed border-dash bg-transparent text-[13px]"
+      }
+    >
+      Add {noun}
+    </button>
+  );
+  const remove = (i: number) => set((old) => old.filter((_, j) => j !== i));
+  const thumbOf = (t: Take | null | undefined, cls: string) => {
+    const src = t?.kind === "video" && !audio ? safeUrl(t.thumb_url) : undefined;
+    return src ? (
+      <img src={src} alt="" draggable={false} className={`${cls} object-cover`} />
+    ) : (
+      <span
+        aria-hidden
+        className={`${cls} ${t || audio ? "wave" : "border border-dashed border-dash"}`}
+      />
+    );
+  };
+
+  if (compact)
+    return (
+      <>
+        <div role="list" aria-label={p.label ?? p.name} className="contents">
+          {refs.map((v, i) => {
+            const t = v ? get(v.take_id) : undefined;
+            return (
+              <div
+                key={i}
+                role="listitem"
+                aria-label={`${label(i)}: ${t ? t.title : t === null ? "gone" : "loading"}`}
+                className="flex h-8 items-center gap-1.5 rounded-lg bg-s5 pr-1 pl-1 text-[12px]"
+              >
+                {thumbOf(t, "h-6 w-9 shrink-0 rounded")}
+                <span className="mono">{label(i)}</span>
+                <button
+                  type="button"
+                  aria-label={`Remove ${label(i)}`}
+                  onClick={() => remove(i)}
+                  className="grid size-6 place-items-center rounded text-t2 hover:text-t1"
+                >
+                  <X size={12} aria-hidden />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        {addButton}
+        {picker}
+      </>
+    );
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="mono flex justify-between gap-2 text-[12px] text-t2">
+        <span className="min-w-0">
+          {p.mention && `In the prompt: ${max > 1 ? `${label(0)}, ${label(1)}…` : label(0)}`}
+        </span>
+        <span aria-label={`${rows.length} of ${max}`} className="shrink-0">
+          {rows.length} / {max}
+        </span>
+      </span>
+      {rows.length > 0 && (
+        <ol
+          ref={list}
+          aria-label={`${p.label ?? p.name}, in order`}
+          className="m-0 flex list-none flex-col gap-2 p-0"
+        >
+          {rows.map((r, i) => {
+            const v = refs[i];
+            const t = v ? get(v.take_id) : undefined;
+            const d = t ? (factsOf(t).duration_s ?? 0) : 0;
+            const part = v && t ? partOf(v, d, spec) : null;
+            const issue = v && t !== undefined ? mediaValueError(spec, v, t && factsOf(t)) : null;
+            return (
+              <li
+                key={i}
+                tabIndex={-1}
+                aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+                onKeyDown={(e) => {
+                  const dir =
+                    e.altKey && e.key === "ArrowUp"
+                      ? -1
+                      : e.altKey && e.key === "ArrowDown"
+                        ? 1
+                        : 0;
+                  if (!dir || e.target !== e.currentTarget) return;
+                  e.preventDefault();
+                  set((old) => move(old, i, i + dir));
+                  requestAnimationFrame(() =>
+                    list.current
+                      ?.querySelectorAll<HTMLElement>(":scope > li")
+                      [Math.max(0, Math.min(rows.length - 1, i + dir))]?.focus(),
+                  );
+                }}
+                className={`flex flex-col gap-2 rounded-[10px] border bg-s1 px-3 py-2.5 ${issue ? "border-bad" : "border-s3"}`}
+              >
+                <div className="flex items-center gap-2">
+                  {thumbOf(t, "h-7 w-11 shrink-0 rounded-md")}
+                  <span className="flex min-w-0 grow flex-col">
+                    <b className="truncate text-[13px]">
+                      {t ? t.title : t === null ? "The take was deleted." : "Loading…"}
+                    </b>
+                    {t && <span className="mono text-[11px] text-t2">{takeFacts(t, audio)}</span>}
+                  </span>
+                  <span className="mono shrink-0 text-[11px] text-t1">{label(i)}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${label(i)}`}
+                    onClick={() => remove(i)}
+                    className="grid size-[22px] shrink-0 place-items-center rounded-lg bg-s3 text-t2 hover:text-t1"
+                  >
+                    <X size={12} aria-hidden />
+                  </button>
+                </div>
+                {part && t && v && spec.trim && (
+                  <>
+                    <RangeBar
+                      label={`Part of ${label(i)}, in ${part[0].toFixed(2)} s, out ${part[1].toFixed(2)} s`}
+                      duration={d}
+                      value={[part[0], part[1]]}
+                      step={t.video && !audio ? 1 / t.video.fps : 0.01}
+                      cells={t.video && !audio ? t.video.frames : undefined}
+                      onEdge={(e, x) =>
+                        set((old) =>
+                          old.map((it, j) =>
+                            j === i
+                              ? { ...it, [k]: trimmed(v, factsOf(t), spec, e ? "out" : "in", x) }
+                              : it,
+                          ),
+                        )
+                      }
+                    />
+                    <Row label="In · Out" value={`${msCode(part[0])} – ${msCode(part[1])}`} />
+                    <Row
+                      label="Part"
+                      value={`${(part[1] - part[0]).toFixed(1)} s${spec.min_s || spec.max_s ? ` · ${spec.min_s ?? 0} to ${spec.max_s ?? "∞"} s` : ""}`}
+                    />
+                  </>
+                )}
+                <ItemFields
+                  p={p}
+                  row={r}
+                  id={`f-${f.key.replace(/\W/g, "-")}-${i}`}
+                  clip={null}
+                  skip={[k]}
+                  onRow={(patch) =>
+                    set((old) => old.map((it, j) => (j === i ? { ...it, ...patch } : it)))
+                  }
+                />
+                {issue && (
+                  <span role="alert" className="mono text-[12px] text-bad">
+                    {issue}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {p.max_total_s != null && rows.length > 0 && (
+        <span
+          className={`mono text-[12px] ${total > p.max_total_s + 1e-9 ? "text-bad" : "text-t2"}`}
+        >
+          {total.toFixed(1)} s of {p.max_total_s.toFixed(1)} s in all
+        </span>
+      )}
+      {addButton}
+      {audio && (
+        <span className="text-[12px] text-t2">
+          Audio takes and videos with sound come from the gallery; Add audio also uploads wav or
+          mp3.
+        </span>
+      )}
+      {(error || (own && !own.startsWith("row "))) && (
+        <span
+          id={`f-${f.key.replace(/[^a-z0-9_]/gi, "-")}-err`}
+          className="mono text-[12px] text-bad"
+        >
+          {error ?? own}
+        </span>
+      )}
+      {picker}
     </div>
   );
 }

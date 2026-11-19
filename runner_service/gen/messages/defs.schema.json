@@ -227,7 +227,7 @@
       }
     },
     "inputValue": {
-      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only); from API 1.19 a Media value as mediaRef and a span as spanValue",
+      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only); from API 1.19 a Media value as mediaRef and a span as spanValue; from API 1.22 a rows item's media field as mediaRef",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -258,6 +258,9 @@
                   "$ref": "#/$defs/scalarValue"
                 },
                 {
+                  "$ref": "#/$defs/mediaRef"
+                },
+                {
                   "$ref": "#/$defs/imageRef"
                 },
                 {
@@ -273,7 +276,7 @@
       ]
     },
     "resolvedValue": {
-      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`; from API 1.19 every Media value resolved to `media`",
+      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`; from API 1.19 every Media value resolved to `media` (from API 1.22 a rows item's media field too)",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -301,6 +304,9 @@
                   "$ref": "#/$defs/scalarValue"
                 },
                 {
+                  "$ref": "#/$defs/media"
+                },
+                {
                   "$ref": "#/$defs/image"
                 },
                 {
@@ -313,7 +319,7 @@
       ]
     },
     "paramValue": {
-      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types. From API 1.19 a `media` param: mediaRef (resolved: media); a `span` param: spanValue",
+      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types. From API 1.19 a `media` param: mediaRef (resolved: media); a `span` param: spanValue; from API 1.22 a rows item's media field: mediaRef (resolved: media)",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -345,6 +351,12 @@
               "anyOf": [
                 {
                   "$ref": "#/$defs/scalarValue"
+                },
+                {
+                  "$ref": "#/$defs/mediaRef"
+                },
+                {
+                  "$ref": "#/$defs/media"
                 },
                 {
                   "$ref": "#/$defs/imageRef"
@@ -428,6 +440,10 @@
               "type": "string"
             }
           }
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "API 1.22: a core `image` node that may be left empty (its image null): studio then drops it and its wires before the run, so the optional inputs it feeds stay unwired (contracts/README.md, Graph rules: optional). Only on kind `image` whose wires all go to optional inputs (else the graph problem not_optional). Never in cmd.run.execute"
         }
       }
     },
@@ -2954,13 +2970,13 @@
           "type": "number",
           "minimum": 0,
           "maximum": 86400,
-          "description": "a `trim` param only, always present there: the snapped start (default 0)"
+          "description": "a `trim` param or rows item field (API 1.22) only, always present there: the snapped start (default 0)"
         },
         "out": {
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 86400,
-          "description": "a `trim` param only, always present there: the snapped end (default duration_s)"
+          "description": "a `trim` param or rows item field (API 1.22) only, always present there: the snapped end (default min(duration_s, max_s))"
         }
       }
     },

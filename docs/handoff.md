@@ -1,12 +1,12 @@
-# Handoff — state of the build on 2026-11-16
+# Handoff — state of the build on 2026-11-19
 
 Written when the work moved from one Claude session to another. Read this, [CLAUDE.md](../CLAUDE.md),
 [docs/README.md](README.md) and the plan's [milestones](plan/08-milestones.md) before doing anything.
 
 ## What is built
 
-Milestones M0 to M6 are built, verified and committed on branch `main` (local git, no remote). `git log --oneline`
-has one or more commits per stage. The working tree was clean at handoff.
+Milestones M0 to M7 are built, verified and committed on branch `main` (local git, no remote). `git log --oneline`
+has one or more commits per stage.
 
 | Milestone | What it added |
 |---|---|
@@ -18,24 +18,21 @@ has one or more commits per stage. The working tree was clean at handoff.
 | M5a | Models screen, download and delete jobs, Admin Hosts (pins, after-run), API keys, `helm import` |
 | M5b | Timeline: sequences, editing with revisions, preview, New shot, Replace, Re-render, export jobs |
 | M6 | CUDA runner in an NVIDIA container, a second GPU host joining the stack, Qwen Image validated on a GCP spot VM |
+| M7 | Three packs: LTX-2.5 retake / extend / audio to video; MiniMax H3 Image (torch); MiniMax H3 video through the native `h3` binary (text, first/last frame, image / video / audio references) |
 
-Last full contract suite on the final M6 code: 481 passed, 34 skipped. Restart checks: 17 pass, 1 skipped by design.
+Last full contract suite on the final M7 code: see the last M7 commit message (pack 3 step 2, API 1.22).
 
-## What is next: M7, more model packs
+## M7 notes
 
-The owner ranked the packs on 2026-11-16:
-
-1. **LTX-2.5 retake, extend and audio-to-video** (MLX; weights already under `~/GenAI/models/ltx-2.5`; they run on the
-   dev transformer plus the distilled LoRA, so check they fit the 52 GB host budget before generating).
-2. **MiniMax H3 Image** (weights on the external drive, 64 GB plus a 17 GB PE folder).
-3. **MiniMax H3 video** (weights on the external drive, 196 GB).
-
-Pack 1 has NOT been started: a workflow for it was launched and stopped by the owner within a minute; no files
-changed. Its workflow script (scout → contracts → runner, studio, web, tests builders) can be reused or rewritten.
-Pack 1's web work should also add a way to remove an audio track in the Timeline (see [backlog.md](backlog.md)).
-
-Weights not under `~/GenAI/models` are on the external drive `/Volumes/ALI T9/models` (read-only; use in place; do
-not copy tens of GB to the internal disk without asking; nothing is downloaded without the owner's say).
+- The owner ranked the packs (2026-11-16) and moved ZONOS3, Qwen3-TTS, FLUX.3 Klein and Wan 2.2 to the
+  [backlog](backlog.md) (2026-11-19).
+- All M7 weights are on the internal disk under `~/GenAI/models` (the external drive was ejected).
+- MiniMax H3 video runs the vendored h3.c (`runner_service/vendor/h3c/`, built by `make h3`) as a child process in
+  the **native** runner env (health on 8093). Cancel kills the child's process group. Pack facts and traps:
+  `runner_service/packs/minimax_h3/GOTCHAS.md` and `docs/reference-notes/minimax-h3.md`.
+- M7 ran lean checks at the owner's request (one combined reviewer, the full suite once per pack). The robust pass
+  is a to-do in the backlog.
+- Test runs on the GPU stay small and short (owner): at most 512×512, 22 frames, 2 steps, reference media 2–3 s.
 
 ## How each stage has been built
 
@@ -60,7 +57,7 @@ Lessons that cost time:
 - **Dev stack** (compose project `helmstudio`, Kong on 127.0.0.1:8300): up and healthy, with `STACK_TLS=on` in
   `deploy/.env` (needed for a remote GPU host). Use `http://127.0.0.1:8300`, not `localhost` (separate sessions).
   Test admin: the fake-mode admin in `deploy/compose/fake.yml`.
-- **Native runners** on the Mac (`make runners`, health on 8091 torch and 8092 mlx): running and idle.
+- **Native runners** on the Mac (`make runners`, health on 8091 torch, 8092 mlx, 8093 native): running and idle.
 - **Test stack** (`helmstudio-test`): up; it has two fake hosts and NATS TLS.
 - **GCP**: one spot VM `helm-gpu` in us-central1-b, STOPPED, disk kept (Qwen weights, the built CUDA image, that
   host's credentials). It bills for storage only. Rules are in the project memory `gcp-for-cuda.md`: spot only; say
@@ -90,5 +87,9 @@ Lessons that cost time:
 - M6: four checklist items unproven on the GPU host (a local model server reserving memory; a returning runner's
   late result being dropped; two smaller ones); a remote host can flood its own NATS subjects (no per-host quota);
   its S3 identity can get, put and delete any object in the bucket but not list.
+- M7: the Generate ETA uses the last run's time, not the size and length; MiniMax H3 runs that take an image input
+  are not bit-repeatable (two runs differ at 37–41 dB; text to video is exact); a 56-frame Ref2VA run with a sound
+  video took 329 s against about 40 s at 22 frames, not looked into; the Create header wraps the memory chip to a
+  second line when the session title is long.
 - Web: no component or end-to-end tests; gallery thumbnails are originals; several screens were checked against
   their boards at the browser pane's size, not side by side at 1440×960.

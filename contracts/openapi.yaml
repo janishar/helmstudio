@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.21.0
+  version: 1.22.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -707,6 +707,15 @@ paths:
         lora block lists as `prefused` for its variant: `lora.rows[1].lora: LoRA <name> is already part of the
         distilled weights`; a bake-only stack's `mode: adapter` fails `enum` (`lora.rows[1].mode: must be one of
         bake`).
+
+        From 1.22 (contracts/README.md, Media inputs: rows of media): an `optional` image node left null is dropped
+        with its wires first; a rows value while a `not_with` input is wired is 422 `generate.refs: must stay empty
+        while generate.first is wired`; a media field of a rows item is resolved like a media param, items from 1:
+        `generate.videos[2].video: take <id> not found`, `… take <id> is not a video`, `generate.audios[1].audio: take
+        <id> has no sound`, `… take <id> lasts 1.5 s; this input takes at least 2.0 s`, `… the part lasts 16.0 s; this
+        input takes at most 15.0 s`, `… in must be before out`, `… out <x> is past the take's end <d>`; a missing media
+        field `generate.videos[1].video: a take is required`; then the items together: `generate.videos: the takes
+        last 16.5 s in all; at most 15.0 s`. The counts are the rows `max` (`generate.videos: at most 3 items`).
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       requestBody:
         required: true
@@ -917,7 +926,7 @@ paths:
       summary: '"Use in…": inputs that put this take into a workflow''s image or media input, to pre-fill Create'
       description: |
         An image take: `inputs` with exactly one key: `param` (or, when absent, the workflow's only `image` param or
-        `rows` param whose `item` has an `Image` field) set to this take: `{take_id}` for an `image` param, a one-item
+        `rows` param whose `item` has an `Image` field; from 1.22 among the inputs `GET …/uses` counts) set to this take: `{take_id}` for an `image` param, a one-item
         list `[{<field>: {take_id}}]` (the take as reference 1) for a rows param. From 1.19 a video or audio take: the
         workflow's only `media` param that accepts it (or `param`) set to `{take_id}` (with `trim`: `in` 0, `out` its
         duration), and every `span` param set to the whole take `{start: 0, end: duration}` (contracts/README.md, Media
@@ -951,8 +960,11 @@ paths:
         contracts/README.md, Media inputs: offers. The templates a live host could run now (published, model variant
         present, `ltx/distill`'s LoRA on the host) and the caller's own non-text workflows, in `GET /v1/studio/workflows`
         order, that have exactly one input this take fits (an image take: an `image` param or an Image rows param; a
-        video or audio take: a `media` param whose `accepts`, `grid`, `max_s` and `max_frames` it passes), each with `inputs` as
-        `POST …/use` answers them. Empty when none fits. 404 for a take that is unknown, another user's, deleted or a
+        video or audio take: a `media` param whose `accepts`, `grid`, `max_s`, `min_s` and `max_frames` it passes), each with `inputs` as
+        `POST …/use` answers them. From 1.22 an input counts only when the workflow's `studio` block places it (no
+        block: every input), not on an `optional` node, and not a rows param excluded by a wired `not_with` input
+        (MiniMax H3: an image goes to Image to video's first frame and References, not Text to video). Rows of media
+        are never offered into. Empty when none fits. 404 for a take that is unknown, another user's, deleted or a
         pending upload.
       parameters: [{$ref: '#/components/parameters/TakeId'}]
       responses:
@@ -2648,8 +2660,8 @@ components:
         end: {type: number, exclusiveMinimum: 0, maximum: 86400}
     RowItem:
       type: object
-      description: 'one item of a rows value: field (the param''s `item`) → value'
-      additionalProperties: {anyOf: [{$ref: '#/components/schemas/ScalarValue'}, {$ref: '#/components/schemas/ImageRef'}, {$ref: '#/components/schemas/LoraRef'}]}
+      description: 'one item of a rows value: field (the param''s `item`) → value; from 1.22 a media field''s value is a MediaRef'
+      additionalProperties: {anyOf: [{$ref: '#/components/schemas/ScalarValue'}, {$ref: '#/components/schemas/ImageRef'}, {$ref: '#/components/schemas/MediaRef'}, {$ref: '#/components/schemas/LoraRef'}]}
     ParamValue:
       description: 'a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null'
       anyOf:
@@ -2683,6 +2695,11 @@ components:
         control and its duration); `grid` (a video's sides must be multiples of it), `max_s` (the longest it reads) and
         `max_frames` (the most frames of a video it reads) bound it. `span`: a time range `{start, end}` (`SpanValue`, default null; a run needs one) on the workflow's one
         `media` param that accepts video; the UI draws it as a range control over that take's poster and duration.
+        From 1.22 (contracts/README.md, Media inputs: rows of media): a `rows` item field may be a `media` param (each
+        item one video or audio take, `MediaRef`, required in every item; the rows editor draws the take's poster or a
+        sound tile with its trim control); `min_s` (media) is the shortest it reads; `max_total_s` (rows with one media
+        field) the most seconds the items read together; `not_with` (rows) names optional inputs of the node: while one
+        is wired the rows stay empty (mentions add none, "Use in…" skips them).
       required: [name, type, default]
       properties:
         name: {type: string}
@@ -2692,6 +2709,9 @@ components:
         grid: {type: integer, description: 'media only: a video take''s width and height must be multiples of it'}
         max_s: {type: number, description: 'media only: the longest it reads in seconds (the take, or out - in with trim)'}
         max_frames: {type: integer, minimum: 1, description: 'media only: the most frames of a video take it reads (its frames at any fps; LTX 321)'}
+        min_s: {type: number, description: 'from 1.22, media only: the shortest it reads in seconds (`take <id> lasts <d> s; this input takes at least <min_s> s`; with trim also `the part lasts <d> s; …`)'}
+        max_total_s: {type: number, description: 'from 1.22, rows with one media field only: the most seconds the items read together (`<node>.<param>: the takes last <d> s in all; at most <max_total_s> s`)'}
+        not_with: {type: array, items: {type: string}, description: 'from 1.22, rows only: optional inputs of the same node; while one is wired the rows must stay empty (`<node>.<param>: must stay empty while <node>.<input> is wired`)'}
         fps: {type: string, description: 'frames only: the name of the same node''s int or float param holding frames per second'}
         auto:
           type: object
@@ -2716,7 +2736,7 @@ components:
         when: {type: string, description: visibility expression; absent = always shown}
         item:
           type: object
-          description: 'rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node''s `media`), `Lora`: a LoRA; required in every item) or a param schema without name'
+          description: 'rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node''s `media`), `Lora`: a LoRA; required in every item) or a param schema without name (from 1.22 a `media` param: required in every item)'
           additionalProperties: {anyOf: [{type: string, const: Image}, {type: string, const: Media}, {type: string, const: Lora}, {type: object, description: 'a ParamSchema without name (registry.schema.json itemParam); a float may add `position: seconds` (a time on the clip)'}]}
         mention: {type: string, description: 'rows only: the prompt''s name for item n, with `{n}` from 1', examples: ['<image{n}>']}
     NodeSchema:
@@ -2738,6 +2758,7 @@ components:
         params: {type: object, additionalProperties: {$ref: '#/components/schemas/ParamValue'}, description: 'overrides of the node schema defaults'}
         in: {type: object, additionalProperties: {type: string, pattern: '^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$'}, description: 'input port (or a wired value param) → `<node id>.<output>`'}
         bypass: {type: boolean, description: 'switched off: passes its inputs through (README, Graph rules); absent = false'}
+        optional: {type: boolean, description: 'from 1.22, a core `image` node only: may be left empty; studio then drops it and its wires before the run (its wires must all go to optional inputs, else the problem `not_optional`). The form marks its image field optional (MiniMax H3 Image to video: Last frame)'}
         position: {$ref: '#/components/schemas/NodePosition'}
         only: {$ref: '#/components/schemas/ParamOnly'}
     ParamOnly:
@@ -2876,6 +2897,7 @@ components:
           additionalProperties: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}$'}
           description: 'input port, or wired value param → `<node id>.<output>`; one wire per key (connecting again replaces it)'
         bypass: {type: boolean}
+        optional: {type: boolean, description: 'from 1.22: see GraphNode.optional'}
         position: {$ref: '#/components/schemas/NodePosition'}
         only: {$ref: '#/components/schemas/ParamOnly'}
     WorkflowCreate:
@@ -2909,7 +2931,7 @@ components:
         title: {type: string, minLength: 1, maxLength: 80, description: 'trimmed; blank = 422'}
     ProblemCode:
       type: string
-      enum: [too_many_nodes, too_large, too_many_outputs, too_many_seeds, wrong_family, unknown_kind, env_mismatch, unknown_param, param_invalid, unknown_input, unknown_source, type_mismatch, not_bypassable, required_input, cycle, no_output, studio_unknown_path, studio_duplicate, preset_invalid, lora_duplicate, lora_unknown, lora_family]
+      enum: [too_many_nodes, too_large, too_many_outputs, too_many_seeds, wrong_family, unknown_kind, env_mismatch, unknown_param, param_invalid, unknown_input, unknown_source, type_mismatch, not_bypassable, required_input, cycle, no_output, studio_unknown_path, studio_duplicate, preset_invalid, lora_duplicate, lora_unknown, lora_family, not_optional]
       description: 'meaning and which ones block saving: contracts/README.md, Graph rules. May grow in a minor version; an unknown code blocks running'
     Problem:
       type: object

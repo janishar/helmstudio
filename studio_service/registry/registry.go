@@ -48,6 +48,11 @@ type Param struct {
 	Grid      int      `json:"grid,omitempty"`
 	MaxS      float64  `json:"max_s,omitempty"`
 	MaxFrames int      `json:"max_frames,omitempty"`
+	// API 1.22 (contracts/README.md "Media inputs: rows of media"): media: the shortest it reads; rows with one media
+	// field: the most seconds its items read together; rows: optional inputs of the node that, wired, keep it empty
+	MinS      float64  `json:"min_s,omitempty"`
+	MaxTotalS float64  `json:"max_total_s,omitempty"`
+	NotWith   []string `json:"not_with,omitempty"`
 }
 
 // Auto is a frames param's auto length bounds in seconds.
@@ -67,6 +72,12 @@ func IsImageField(raw json.RawMessage) bool { return string(raw) == `"Image"` }
 
 // IsMediaField reports whether a rows item field holds an image or a video take (API 1.14, an ask node's media).
 func IsMediaField(raw json.RawMessage) bool { return string(raw) == `"Media"` }
+
+// IsTakeField reports whether a rows item field holds a take: an Image, a Media, or (API 1.22) a media item param.
+func IsTakeField(raw json.RawMessage) bool {
+	var item Param
+	return IsImageField(raw) || IsMediaField(raw) || (json.Unmarshal(raw, &item) == nil && item.Type == "media")
+}
 
 // IsLoraField reports whether a rows item field holds a Lora ({lora_id}).
 func IsLoraField(raw json.RawMessage) bool { return string(raw) == `"Lora"` }
@@ -104,6 +115,33 @@ func (p Param) ImageInput() (field string, ok bool) {
 	return field, ok
 }
 
+// MediaItem is a rows param's one media item field (API 1.22: video or audio references) and its schema; ok false for
+// any other param.
+func (p Param) MediaItem() (field string, spec Param, ok bool) {
+	if p.Type != "rows" {
+		return "", Param{}, false
+	}
+	n := 0
+	for _, name := range slices.Sorted(maps.Keys(p.Item)) {
+		var item Param
+		if json.Unmarshal(p.Item[name], &item) == nil && item.Type == "media" {
+			field, spec, n = name, item, n+1
+		}
+	}
+	return field, spec, n == 1
+}
+
+// Excluded reports whether a rows param must stay empty on node: an input its not_with names is wired (API 1.22); the
+// second result is that input.
+func (p Param) Excluded(node Node) (string, bool) {
+	for _, input := range p.NotWith {
+		if _, wired := node.In[input]; wired {
+			return input, true
+		}
+	}
+	return "", false
+}
+
 // Port is a typed input or output of a node.
 type Port struct {
 	Name     string `json:"name"`
@@ -130,6 +168,8 @@ type Node struct {
 	Bypass   bool                `json:"bypass,omitempty"`
 	Position *Position           `json:"position,omitempty"`
 	Only     map[string][]string `json:"only,omitempty"` // API 1.19: enum param → the values this workflow allows
+	// API 1.22: a core image node that may stay empty: studio drops it and its wires before a run (never sent)
+	Optional bool `json:"optional,omitempty"`
 }
 
 // Position is a node card's top-left in the Graph view.

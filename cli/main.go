@@ -47,6 +47,7 @@ const usage = `usage:
   helm take uses <take_id>            "Use in…": each workflow the take fits, with its helm run command pre-filled
 
 An image input takes a comma list of take ids and @files (uploaded first): -p encode.refs=@a.png,<take_id>
+Rows of video or audio takes take <take>[:in:out][:<value>] each: -p generate.videos=<take>:0:2.5:silent,<take>
   helm workflows [--media image|video]   templates, then your own (id, source, version, env, media, title)
   helm workflow get <id> > file.json  a workflow as a file (yours: with id and version; a template: based_on)
   helm workflow save file.json        replace yours (id + version; stale = 409) or create one; prints problems

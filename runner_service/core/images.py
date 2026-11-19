@@ -116,16 +116,39 @@ async def read(value: dict, owner: str, fetch, media: bool = False) -> Image.Ima
 
 
 def media(specs: list[dict], params: dict) -> list[str]:
-    """The names of the `media` params of `params` that hold a take."""
-    return [
-        s["name"] for s in specs if s["type"] == "media" and isinstance(params.get(s["name"]), dict)
-    ]
+    """The names of the `media` params of `params` that hold a take, and of the rows params with a `media` item
+    field (API 1.22, README Media inputs: rows of media) that hold items."""
+    return [s["name"] for s in specs if (s["type"] == "media" and isinstance(params.get(s["name"]), dict))
+            or (s["type"] == "rows" and params.get(s["name"]) and media_fields(s))]  # fmt: skip
+
+
+def media_fields(spec: dict) -> list[str]:
+    """A rows param's item fields that are `media` params (API 1.22)."""
+    return [f for f, t in spec["item"].items() if isinstance(t, dict) and t["type"] == "media"]
 
 
 async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
     """`params` with every Image value replaced by its PIL image, every Media value by {take_id, image | mp4}
-    (each key read once) and every `media` value given its `data`."""
-    params = params | {n: params[n] | {"data": await read(params[n], owner, fetch, True)} for n in media(specs, params)}  # fmt: skip
+    (each key read once) and every `media` value (a param or a rows item's field) given its `data`."""
+    params = dict(params)
+    for s in specs:
+        if s["name"] not in media(specs, params):
+            continue
+        if s["type"] == "media":
+            params[s["name"]] = params[s["name"]] | {
+                "data": await read(params[s["name"]], owner, fetch, True)
+            }
+            continue
+        rows = []
+        for row in params[s["name"]]:
+            rows.append(
+                row
+                | {
+                    f: row[f] | {"data": await read(row[f], owner, fetch, True)}
+                    for f in media_fields(s)
+                }
+            )
+        params[s["name"]] = rows
     pics = {}
     for v in values(specs, params):
         if v["key"] not in pics:

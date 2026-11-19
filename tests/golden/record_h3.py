@@ -4,6 +4,7 @@ h3.c is pinned and vendored at runner_service/vendor/h3c (VERSION names the comm
 
     make -C runner_service/vendor/h3c h3
     python3 -I tests/golden/record_h3.py golden t2v fl2va-first fl2va-first-last ref2va-image
+    python3 -I tests/golden/record_h3.py golden ref2va-image-audio ref2va-silent-video
     python3 -I tests/golden/record_h3.py measure --width 864 --height 480 --frames 124 --steps 4 [--first IMG]
         [--env H3_ZERO_COPY_WEIGHTS=0] [--extra --ssd-streaming] [--bin <other h3>] [--json out.jsonl]
 
@@ -16,7 +17,8 @@ the time and peak per phase.
 
 `golden` runs each case twice (separate processes) with the pack's exact flags (seed 42, 4 steps, --layers 50
 --reuse 1 --use-int8-row-fc2) and the default env, and writes runner_service/tests/golden/minimax-h3-<case>/: the
-input PNGs (made here from minimax-h3-image-edit/input-turbo-768-s42.png with ffmpeg), the MP4, and <case>.json with
+input PNGs (made here from minimax-h3-image-edit/input-turbo-768-s42.png with ffmpeg), the 2 s reference WAV / MP4
+(API 1.22 Ref2VA references, cut here from the ltx goldens' takes, 2 steps), the MP4, and <case>.json with
 sha256 of the final frames as h3 wrote them (--frames-dir PPM), of the MP4's decoded RGB24 frames and f32le PCM, the
 MP4's own sha256, ffprobe, time and memory, whether the two runs were bit-identical and, when not, the PSNR between
 them. With --bin it records nothing: it prints the hashes of one run of each case with that binary (to compare
@@ -62,9 +64,22 @@ CASES = {
                          "inputs": {"first": "first", "last": "last"}},
     "ref2va-image": {"prompt": "<Picture 1> runs across a wide snowy field toward the camera, birds calling "
                                "in the distance.", "inputs": {"ref": "first"}},
+    # API 1.22: video and audio references, 2 steps (the owner's speed rule for new GPU runs)
+    "ref2va-image-audio": {"prompt": "<Picture 1> stands on black volcanic rocks by the sea at sunset, the sound of "
+                                     "<Audio 1> all around.", "inputs": {"ref": "first", "audio": "audio"}, "steps": 2},
+    "ref2va-silent-video": {"prompt": "<Video 1>: the puppy keeps running across the sunny park lawn toward the camera.",
+                            "inputs": {"video": "video"}, "steps": 2},
 }  # fmt: skip
-FLAG = {"first": "--first-frame", "last": "--last-frame", "ref": "--ref-image"}
+FLAG = {"first": "--first-frame", "last": "--last-frame", "ref": "--ref-image", "video": "--ref-silent-video",
+        "audio": "--ref-audio"}  # fmt: skip
 SHAPE = {"width": 512, "height": 512, "frames": 22, "steps": 4, "seed": 42}
+# the 2 s reference takes: the first 2 s of an ltx golden's sound (PCM as stored) and of its picture (no sound)
+MEDIA = {
+    "audio": ("input-audio-2s.wav", GOLDEN / "ltx-text-to-video" / "t2v-512x320-57f-s7.wav",
+              ["-t", "2", "-map", "0:a:0", "-c:a", "pcm_s16le"]),
+    "video": ("input-video-2s.mp4", GOLDEN / "ltx-text-to-video" / "t2v-448x256-49f-s42.mp4",
+              ["-t", "2", "-map", "0:v:0", "-an", "-c:v", "libx264", "-crf", "16", "-pix_fmt", "yuv420p"]),
+}  # fmt: skip
 
 _libc = ctypes.CDLL(None)
 _RU = (ctypes.c_uint64 * 64)()  # rusage_info_v4: a 16-byte uuid, then u64 fields
@@ -232,6 +247,12 @@ def make_inputs(out: Path, case: dict) -> dict[str, Path]:
     vf = {"first": f"scale={w}:{h}:flags=bicubic", "last": f"scale={w}:{h}:flags=bicubic,hflip"}
     files = {}
     for role, which in case["inputs"].items():
+        if which in MEDIA:
+            name, src, args = MEDIA[which]
+            f = files[role] = out / name
+            if not f.exists():
+                subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), *args, str(f)], check=True)
+            continue
         f = out / f"input-{which}-{w}x{h}.png"
         if not f.exists():
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(SOURCE_IMG), "-vf", vf[which], "-frames:v", "1",
@@ -240,10 +261,17 @@ def make_inputs(out: Path, case: dict) -> dict[str, Path]:
     return files
 
 
+def made_from(f: Path) -> str:
+    media = next((m for m in MEDIA.values() if m[0] == f.name), None)
+    if media:
+        return f"{media[1].relative_to(REPO)} (ffmpeg {' '.join(media[2])})"
+    return f"{SOURCE_IMG.relative_to(REPO)} (ffmpeg scale bicubic" + (", hflip)" if "last" in f.name else ")")
+
+
 def case_args(case: dict, files: dict[str, Path], mp4: Path, frames_dir: Path | None) -> list[str]:
     a = ["-d", str(MODELS / "MiniMax-H3"), "-p", case["prompt"], "-o", str(mp4)]
     for k in ("width", "height", "frames", "steps", "seed"):
-        a += [f"--{k}", str(SHAPE[k])]
+        a += [f"--{k}", str(case.get(k, SHAPE[k]))]
     a += EXACT
     for role, f in files.items():
         a += [FLAG[role], str(f)]
@@ -281,14 +309,13 @@ def golden(names: list[str], binary: Path, record: bool) -> None:
         keep.cleanup()
         keys = ("frames_ppm_sha256", "rgb24_sha256", "pcm_f32le_sha256", "mp4_sha256")
         doc = {
-            "name": name, "prompt": case["prompt"], **SHAPE, "fps": 24, "speed": "exact", "flags": EXACT,
+            "name": name, "prompt": case["prompt"], **SHAPE, "steps": case.get("steps", SHAPE["steps"]), "fps": 24, "speed": "exact", "flags": EXACT,
             "argv_equivalent": "h3 -d <models>/MiniMax-H3 -p PROMPT -o OUT.mp4 "
                 + " ".join(
-                f"--{k} {SHAPE[k]}" for k in ("width", "height", "frames", "steps", "seed")) + " " + " ".join(EXACT)
+                f"--{k} {case.get(k, SHAPE[k])}" for k in ("width", "height", "frames", "steps", "seed")) + " " + " ".join(EXACT)
                 + "".join(f" {FLAG[r]} {f.name}" for r, f in files.items()) + " --frames-dir DIR",
             "inputs": {r: {"file": f.name, "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
-                           "made_from": f"{SOURCE_IMG.relative_to(REPO)} (ffmpeg scale bicubic"
-                                        + (", hflip)" if "last" in f.name else ")")} for r, f in files.items()},
+                           "made_from": made_from(f)} for r, f in files.items()},
             "mp4": {"file": f"{name}-512x512-22f-s42.mp4", **runs[0].pop("ffprobe")},
             **{k: runs[0]["hashes"][k] for k in keys}, "rgb24_bytes": runs[0]["hashes"]["rgb24_bytes"],
             "pcm_f32le_bytes": runs[0]["hashes"]["pcm_f32le_bytes"],

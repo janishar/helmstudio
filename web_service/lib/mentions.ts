@@ -156,8 +156,8 @@ const known = (nodes: Record<string, Node>, schemas: Schemas) =>
       return s && !nodes[id].bypass ? [{ id, n: nodes[id], params: s.params }] : [];
     });
 
-/** Where element images go: the first unwired rows param with a `{n}` mention and one Image field; null = the
- * family takes text only. */
+/** Where element images go: the first unwired rows param with a `{n}` mention and one Image field, not excluded by
+ * a wired `not_with` input; null = the family takes text only. */
 export function referenceRows(nodes: Record<string, Node>, schemas: Schemas) {
   for (const { id, n, params } of known(nodes, schemas))
     for (const p of params)
@@ -165,7 +165,9 @@ export function referenceRows(nodes: Record<string, Node>, schemas: Schemas) {
         p.type === "rows" &&
         p.mention?.includes("{n}") &&
         imageField(p) &&
-        !(p.name in (n.in ?? {}))
+        !(p.name in (n.in ?? {})) &&
+        // API 1.22: rows that must stay empty while an input their `not_with` names is wired
+        !p.not_with?.some((i) => i in (n.in ?? {}))
       )
         return { node: id, param: p };
   return null;

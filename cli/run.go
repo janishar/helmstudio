@@ -147,7 +147,7 @@ func (w workflow) images(key, typ string, item map[string]any, val string) (any,
 		}
 	}
 	if typ == "rows" && field == "" {
-		return nil, fmt.Errorf("%s: its items hold no image", key)
+		return mediaRows(key, item, val)
 	}
 	refs := []any{}
 	for _, s := range strings.Split(val, ",") {

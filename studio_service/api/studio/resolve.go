@@ -66,6 +66,28 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 		}
 		nodes[nodeID].Params[param.Name] = value
 	}
+	// API 1.22 (contracts/README.md, Media inputs: rows of media): an optional image node left empty goes, with every
+	// wire from it; then a rows param must stay empty while an input its not_with names is wired
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		if node := nodes[id]; workflow.Nodes[id].Optional && node.Kind == "image" && node.Params["image"] == nil {
+			delete(nodes, id)
+			for _, other := range nodes {
+				maps.DeleteFunc(other.In, func(_, ref string) bool { return strings.Split(ref, ".")[0] == id })
+			}
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		node := nodes[id]
+		for _, param := range workflow.NodeSchemas[node.Kind].Params {
+			_, wired := node.In[param.Name]
+			if items, _ := node.Params[param.Name].([]any); node.Bypass || wired || len(items) == 0 {
+				continue
+			}
+			if input, excluded := param.Excluded(node); excluded {
+				return nil, fmt.Sprintf("%s.%s: must stay empty while %s.%s is wired", id, param.Name, id, input)
+			}
+		}
+	}
 	// what a default or the workflow left unfilled: an image param needs an image, a rows param its min items, a node
 	// its inputs (a bypassed one only those it passes through); a bypassed node's params do not matter
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
@@ -312,8 +334,8 @@ func checkRows(param registry.Param, value any) (any, string) {
 	if param.Max != nil && float64(len(items)) > *param.Max {
 		return nil, fmt.Sprintf("at most %s items", format(*param.Max))
 	}
-	_, takesImages := param.ImageInput()
-	// a workflow holds no takes: an image rows param may be [] under its min; the run needs min items (resolve)
+	takesImages := slices.ContainsFunc(slices.Collect(maps.Values(param.Item)), registry.IsTakeField)
+	// a workflow holds no takes: a rows param of takes may be [] under its min; the run needs min items (resolve)
 	if param.Min != nil && float64(len(items)) < *param.Min && (len(items) > 0 || !takesImages) {
 		return nil, fmt.Sprintf("at least %s items", format(*param.Min))
 	}
@@ -361,6 +383,9 @@ func checkRows(param registry.Param, value any) (any, string) {
 			}
 			if !given { // the merged item is checked: a default may not do (a beat's text)
 				field = itemParam.Default
+			}
+			if itemParam.Type == "media" && field == nil { // API 1.22: a video or audio take, required in every item
+				return nil, at + "." + name + ": a take is required"
 			}
 			checked, detail := check(itemParam, field)
 			if detail != "" {

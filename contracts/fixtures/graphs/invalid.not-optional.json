@@ -1,0 +1,130 @@
+{
+  "description": "optional (API 1.22) is only for a core image node whose wires all go to optional inputs: prompt and canvas are not image nodes (and feed required inputs); first and last are fine",
+  "workflow": {
+    "title": "Optional on a required input",
+    "family": "minimax-h3",
+    "env": "native",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        },
+        "optional": true
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "canvas": {
+        "kind": "minimax-h3/canvas",
+        "params": {
+          "width": 864,
+          "height": 480
+        },
+        "optional": true
+      },
+      "duration": {
+        "kind": "minimax-h3/duration",
+        "params": {
+          "frames": 124,
+          "fps": 24
+        }
+      },
+      "model": {
+        "kind": "minimax-h3/model",
+        "params": {
+          "variant": "base",
+          "precision": "int8"
+        }
+      },
+      "first": {
+        "kind": "image",
+        "params": {
+          "image": null
+        },
+        "optional": true
+      },
+      "last": {
+        "kind": "image",
+        "optional": true,
+        "params": {
+          "image": null
+        }
+      },
+      "generate": {
+        "kind": "minimax-h3/generate",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text",
+          "seed": "seed.seed",
+          "canvas": "canvas.canvas",
+          "duration": "duration.duration",
+          "first": "first.image",
+          "last": "last.image"
+        },
+        "params": {
+          "steps": 6,
+          "speed": "exact",
+          "refs": [],
+          "videos": [],
+          "audios": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "generate.video"
+        }
+      }
+    },
+    "studio": {
+      "composer": [
+        "prompt.text",
+        "first.image",
+        "last.image"
+      ],
+      "quick": [
+        "generate.speed",
+        "seed.seed"
+      ],
+      "inspector": [
+        {
+          "title": "Canvas",
+          "items": [
+            "canvas.width",
+            "canvas.height"
+          ]
+        },
+        {
+          "title": "Duration",
+          "items": [
+            "duration.frames"
+          ]
+        },
+        {
+          "title": "Quality",
+          "items": [
+            "generate.steps"
+          ]
+        }
+      ],
+      "labels": {
+        "first.image": "First frame",
+        "last.image": "Last frame"
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "not_optional",
+      "node": "prompt"
+    },
+    {
+      "code": "not_optional",
+      "node": "canvas"
+    }
+  ]
+}

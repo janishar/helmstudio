@@ -107,10 +107,12 @@ func TestResolvedLengthIsPrinted(t *testing.T) {
 }
 
 const retakeWorkflow = `{"id":"echo-retake","title":"Echo retake","family":"echo","env":"fake","media":"video",
- "nodes":{"prompt":{"kind":"prompt"},"retake":{"kind":"echo/retake","in":{"text":"prompt.text"}},"a2v":{"kind":"echo/a2v"},"output":{"kind":"output"}},
+ "nodes":{"prompt":{"kind":"prompt"},"retake":{"kind":"echo/retake","in":{"text":"prompt.text"}},"a2v":{"kind":"echo/a2v"},"refs":{"kind":"echo/refs"},"output":{"kind":"output"}},
  "node_schemas":{"prompt":{"params":[{"name":"text","type":"text"}]},
   "echo/retake":{"params":[{"name":"source","type":"media","accepts":["video"],"grid":32},{"name":"span","type":"span"},{"name":"delay_ms","type":"int"}]},
-  "echo/a2v":{"params":[{"name":"source","type":"media","accepts":["audio"],"trim":true}]},"output":{"params":[]}}}`
+  "echo/a2v":{"params":[{"name":"source","type":"media","accepts":["audio"],"trim":true}]},
+  "echo/refs":{"params":[{"name":"videos","type":"rows","item":{"video":{"type":"media","accepts":["video"],"trim":true},"sound":{"type":"enum","enum":["keep","silent"],"default":"keep"}}},
+   {"name":"audios","type":"rows","item":{"audio":{"type":"media","accepts":["audio"],"trim":true}}}]},"output":{"params":[]}}}`
 
 const t2Uses = `{"uses":[
  {"workflow_id":"echo-retake","title":"Echo retake","action":"Retake a section","family":"echo","media":"video","param":"retake.source",
@@ -146,6 +148,29 @@ func TestRunMediaAndSpan(t *testing.T) {
 		if code := helm([]string{"run", c.wf, c.flag, c.val, "-o", t.TempDir()}, nil, &out, &errb, nil); code != 1 || !strings.Contains(errb.String(), c.msg) {
 			t.Errorf("%s %s: %d %q", c.flag, c.val, code, errb.String())
 		}
+	}
+}
+
+// API 1.22: -p types rows of media (MiniMax H3's video and audio references): <take>[:in:out][:<enum value>] each.
+func TestRunMediaRows(t *testing.T) {
+	f, _ := setup(t, "succeeded")
+	var out, errb bytes.Buffer
+	args := []string{"run", "echo-retake", "-p", "refs.videos=v1:0.5:2.5:silent, v2", "-o", t.TempDir()}
+	if code := helm(args, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("run: %d %s", code, errb.String())
+	}
+	if got := fmt.Sprint(f.inputs["refs.videos"]); got != "[map[sound:silent video:map[in:0.5 out:2.5 take_id:v1]] map[video:map[take_id:v2]]]" {
+		t.Fatalf("videos %s", got)
+	}
+	// audios has no enum field: "keep" is no value of it, so it reads as part of the take ref and is refused
+	if code := helm([]string{"run", "echo-retake", "-p", "refs.audios=a1:keep", "-o", t.TempDir()}, nil, &out, &errb, nil); code != 1 ||
+		!strings.Contains(errb.String(), "refs.audios: want <take id>[:in:out]") {
+		t.Fatalf("audios: %d %q", code, errb.String())
+	}
+	errb.Reset()
+	if code := helm([]string{"run", "echo-retake", "-p", "refs.audios=a1:0:3,a2", "-o", t.TempDir()}, nil, &out, &errb, nil); code != 0 ||
+		fmt.Sprint(f.inputs["refs.audios"]) != "[map[audio:map[in:0 out:3 take_id:a1]] map[audio:map[take_id:a2]]]" {
+		t.Fatalf("audios: %d %v %s", code, f.inputs, errb.String())
 	}
 }
 

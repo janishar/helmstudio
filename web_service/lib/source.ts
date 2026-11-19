@@ -122,9 +122,74 @@ export function mediaFit(p: Param, t: Facts): string | null {
     return `take ${t.id} is ${t.width} × ${t.height}; this input needs sides on a ${p.grid} px grid`;
   if (picture && p.max_frames && (t.frames ?? 0) > p.max_frames)
     return `take ${t.id} has ${t.frames} frames; this input takes at most ${p.max_frames}`;
+  // API 1.22: a trim cannot make a take longer
+  if (p.min_s && (t.duration_s ?? 0) < p.min_s)
+    return `take ${t.id} lasts ${s1(t.duration_s!)} s; this input takes at least ${s1(p.min_s)} s`;
   if (p.max_s && (t.duration_s ?? 0) > p.max_s && !p.trim)
     return `take ${t.id} lasts ${s1(t.duration_s!)} s; this input takes at most ${s1(p.max_s)} s`;
   return null;
+}
+
+// ---------------------------------------------------------------- rows of media (API 1.22)
+
+/** A rows param's one `media` item field and its schema (MiniMax H3's videos and audios), else null. */
+export function mediaItem(p: Param): [string, Param] | null {
+  if (p.type !== "rows") return null;
+  const m = Object.entries(p.item ?? {}).filter(
+    ([, v]) => typeof v === "object" && (v as unknown as Param).type === "media",
+  );
+  return m.length === 1 ? [m[0][0], { ...(m[0][1] as unknown as Param), name: m[0][0] }] : null;
+}
+
+/** The part a media value reads: in..out with trim (in 0, out min(duration, max_s) when left out), else the whole
+ * take. */
+export function partOf(v: S<"MediaRef">, d: number, p: Param): [number, number] {
+  return p.trim ? [v.in ?? 0, v.out ?? Math.min(d, p.max_s ?? d)] : [0, d];
+}
+
+/** media_value: why one media value does not fit (the 422 text after its path), else null. */
+export function mediaValueError(p: Param, v: S<"MediaRef">, t: Facts | null): string | null {
+  if (!t) return `take ${v.take_id} not found`;
+  const unfit = mediaFit(p, t);
+  if (unfit) return unfit;
+  if (!p.trim)
+    return v.in != null || v.out != null ? "this input takes the whole take (no in or out)" : null;
+  const d = t.duration_s ?? 0;
+  const [a, b] = partOf(v, d, p);
+  if (a >= b) return "in must be before out";
+  if (b > d) return `out ${s1(b)} is past the take's end ${s1(d)}`;
+  if (p.max_s && b - a > p.max_s)
+    return `the part lasts ${s1(b - a)} s; this input takes at most ${s1(p.max_s)} s`;
+  if (p.min_s && b - a < p.min_s)
+    return `the part lasts ${s1(b - a)} s; this input takes at least ${s1(p.min_s)} s`;
+  return null;
+}
+
+/** media_rows for one rows param of media (studio's 422 with its path): each item (from 1), then `max_total_s`.
+ * `facts`: a take's facts, null when it is gone, undefined while it loads (not checked yet). */
+export function mediaRowsError(
+  path: string,
+  p: Param,
+  rows: S<"RowItem">[],
+  facts: (id: string) => Facts | null | undefined,
+): string | null {
+  const m = mediaItem(p);
+  if (!m) return null;
+  const [k, spec] = m;
+  let total = 0;
+  for (const [i, row] of rows.entries()) {
+    const v = row[k] as S<"MediaRef"> | undefined;
+    if (!v?.take_id) return `${path}[${i + 1}].${k}: a take is required`;
+    const t = facts(v.take_id);
+    if (t === undefined) return null;
+    const err = mediaValueError(spec, v, t);
+    if (err) return `${path}[${i + 1}].${k}: ${err}`;
+    const [a, b] = partOf(v, t!.duration_s ?? 0, spec);
+    total += b - a;
+  }
+  return p.max_total_s && total > p.max_total_s + 1e-9
+    ? `${path}: the takes last ${s1(total)} s in all; at most ${s1(p.max_total_s)} s`
+    : null;
 }
 
 /** Whether a take shows in a media param's picker: its kind fits (an audio input takes a video with sound). */

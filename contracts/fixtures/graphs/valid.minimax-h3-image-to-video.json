@@ -1,5 +1,5 @@
 {
-  "description": "the canonical minimax-h3-image-to-video template: a core image node feeds generate's optional first input (its image param is null in a workflow); last stays unwired",
+  "description": "the canonical minimax-h3-image-to-video template: a core image node feeds generate's optional first input, a second one marked optional (API 1.22) feeds last: the Create form's Last frame tile, dropped when left empty (image params are null in a workflow)",
   "workflow": {
     "title": "MiniMax H3 Image to video",
     "family": "minimax-h3",
@@ -44,6 +44,13 @@
           "image": null
         }
       },
+      "last": {
+        "kind": "image",
+        "optional": true,
+        "params": {
+          "image": null
+        }
+      },
       "generate": {
         "kind": "minimax-h3/generate",
         "in": {
@@ -52,12 +59,15 @@
           "seed": "seed.seed",
           "canvas": "canvas.canvas",
           "duration": "duration.duration",
-          "first": "first.image"
+          "first": "first.image",
+          "last": "last.image"
         },
         "params": {
           "steps": 6,
           "speed": "exact",
-          "refs": []
+          "refs": [],
+          "videos": [],
+          "audios": []
         }
       },
       "output": {
@@ -70,7 +80,8 @@
     "studio": {
       "composer": [
         "prompt.text",
-        "first.image"
+        "first.image",
+        "last.image"
       ],
       "quick": [
         "generate.speed",
@@ -98,7 +109,8 @@
         }
       ],
       "labels": {
-        "first.image": "First frame"
+        "first.image": "First frame",
+        "last.image": "Last frame"
       }
     }
   },

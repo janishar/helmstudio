@@ -1,0 +1,115 @@
+{
+  "type": "cmd.run.execute",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000101",
+  "job_id": "5e2c7a19-3b4d-4f6e-8a1c-7d9e0f2a4b61",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-14T10:15:37Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "run_id": "5e2c7a19-3b4d-4f6e-8a1c-7d9e0f2a4b61",
+    "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+    "attempt": 1,
+    "workflow": {
+      "id": "minimax-h3-references",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "<Picture 1> walks out of <Video 1>, humming <Audio 1>"
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": 42
+          }
+        },
+        "canvas": {
+          "kind": "minimax-h3/canvas",
+          "params": {
+            "width": 864,
+            "height": 480
+          }
+        },
+        "duration": {
+          "kind": "minimax-h3/duration",
+          "params": {
+            "frames": 124,
+            "fps": 24
+          }
+        },
+        "model": {
+          "kind": "minimax-h3/model",
+          "params": {
+            "variant": "base",
+            "precision": "int8"
+          }
+        },
+        "generate": {
+          "kind": "minimax-h3/generate",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text",
+            "seed": "seed.seed",
+            "canvas": "canvas.canvas",
+            "duration": "duration.duration"
+          },
+          "params": {
+            "steps": 6,
+            "speed": "exact",
+            "refs": [
+              {
+                "image": {
+                  "take_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b36",
+                  "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b36.png",
+                  "content_type": "image/png",
+                  "width": 1024,
+                  "height": 1024,
+                  "bytes": 1532001,
+                  "etag": "1f2e3d4c5b6a79880f1e2d3c4b5a6978"
+                }
+              }
+            ],
+            "videos": [
+              {
+                "video": {
+                  "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b",
+                  "in": 0,
+                  "out": 4.0
+                },
+                "sound": "silent"
+              }
+            ],
+            "audios": [
+              {
+                "audio": {
+                  "take_id": "9b2e1d33-5c6e-4f70-8b8c-2d3e4f5a6b7c",
+                  "kind": "audio",
+                  "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/9b2e1d33-5c6e-4f70-8b8c-2d3e4f5a6b7c.wav",
+                  "content_type": "audio/wav",
+                  "bytes": 192044,
+                  "etag": "0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+                  "duration_s": 3.0,
+                  "has_audio": true,
+                  "in": 0,
+                  "out": 3.0
+                }
+              }
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "generate.video"
+          },
+          "params": {}
+        }
+      }
+    },
+    "output_prefix": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/5e2c7a19-3b4d-4f6e-8a1c-7d9e0f2a4b61/1/"
+  }
+}

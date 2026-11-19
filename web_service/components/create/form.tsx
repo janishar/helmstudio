@@ -7,8 +7,14 @@ import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
 import { FirstFrameTile, RowsEditor, type RefUploads } from "@/components/create/refs";
 import { LoraRows } from "@/components/create/loras";
-import { ExtendControl, MediaControl, SpanControl, extensionOf } from "@/components/create/source";
-import type { FrameGrid } from "@/lib/source";
+import {
+  ExtendControl,
+  MediaControl,
+  MediaRows,
+  SpanControl,
+  extensionOf,
+} from "@/components/create/source";
+import { mediaItem, type FrameGrid } from "@/lib/source";
 import { PlainRows } from "@/components/create/rows";
 import {
   allowedInts,
@@ -268,7 +274,9 @@ export function Inspector({
     );
   };
   const rowsEditor = (f: Field) =>
-    s.rows.includes(f) ? (
+    mediaItem(f.param) ? (
+      <MediaRows key={f.key} f={f} raw={raws[f.key]} error={errors[f.key]} onChange={onChange} />
+    ) : s.rows.includes(f) ? (
       <PlainRows
         key={f.key}
         f={f}
@@ -1015,6 +1023,19 @@ export function RefChips({
 }: FormProps & { uploads: RefUploads; extra?: React.ReactNode }) {
   const clip = clipOf(fields, raws);
   return imageInputs(fields).map((f, i) => {
+    // one image (MiniMax H3's First frame, its optional Last frame): a tile with its label, as the boards draw it
+    if (f.param.type === "image")
+      return (
+        <Fragment key={f.key}>
+          <FirstFrameTile
+            label={f.param.label ?? f.param.name}
+            empty={f.optional ? "None · optional" : "None"}
+            id={refIds(f, raws[f.key])[0]}
+            onPick={(id) => onChange(f.key, id)}
+          />
+          {i === 0 && extra}
+        </Fragment>
+      );
     if (!positionOf(f.param))
       return (
         <RowsEditor

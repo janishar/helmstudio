@@ -1,5 +1,5 @@
 {
-  "description": "minimax-h3/generate's refusals: h3_generate_error(node, refs, first, last, width, height) → the run's error text, or null (contracts/README.md, the minimax-h3 family). refs = the number of reference rows, first / last = whether those inputs are wired. The runner fails the run with the text before the h3 child starts",
+  "description": "minimax-h3/generate's refusals: h3_generate_error(node, refs, first, last, width, height, frames = 124, videos = [], audios = []) → the run's error text, or null (contracts/README.md, the minimax-h3 family). refs = the number of image reference rows, first / last = whether those inputs are wired, frames = the clip's frames, videos = [seconds read, sound] per video row (sound: kept and the take has sound), audios = seconds read per audio row (API 1.22). The runner fails the run with the text before the h3 child starts",
   "cases": [
     {"description": "the template default, 864 × 480, text to video", "args": ["generate", 0, false, false, 864, 480], "expect": null},
     {"description": "first and last frame, no references", "args": ["generate", 0, true, true, 864, 480], "expect": null},
@@ -14,6 +14,21 @@
     {"description": "a side off the 32 px grid", "args": ["generate", 0, false, false, 850, 480], "expect": "generate: the canvas is 850 × 480; sides must be multiples of 32 from 256 to 1344"},
     {"description": "a side under 256", "args": ["generate", 0, false, false, 224, 480], "expect": "generate: the canvas is 224 × 480; sides must be multiples of 32 from 256 to 1344"},
     {"description": "a side over 1344", "args": ["generate", 0, false, false, 1376, 256], "expect": "generate: the canvas is 1376 × 256; sides must be multiples of 32 from 256 to 1344"},
-    {"description": "the reference check comes first", "args": ["sample", 3, true, false, 1344, 1344], "expect": "sample: references cannot go with a first or last frame"}
+    {"description": "the reference check comes first", "args": ["sample", 3, true, false, 1344, 1344], "expect": "sample: references cannot go with a first or last frame"},
+    {"description": "a video reference with a first frame", "args": ["generate", 0, true, false, 864, 480, 124, [[3.0, false]], []], "expect": "generate: references cannot go with a first or last frame"},
+    {"description": "an audio reference with a last frame", "args": ["generate", 1, false, true, 864, 480, 124, [], [3.0]], "expect": "generate: references cannot go with a first or last frame"},
+    {"description": "audio alone", "args": ["generate", 0, false, false, 864, 480, 124, [], [3.0]], "expect": "generate: audio references need an image or video reference"},
+    {"description": "audio with a silent video", "args": ["generate", 0, false, false, 864, 480, 124, [[2.0, false]], [3.0]], "expect": null},
+    {"description": "9 images + 3 videos = 12: the most", "args": ["generate", 9, false, false, 864, 480, 124, [[2.0, false], [2.0, false], [2.0, false]], []], "expect": null},
+    {"description": "9 images + 3 videos + 1 audio = 13", "args": ["generate", 9, false, false, 864, 480, 124, [[2.0, false], [2.0, false], [2.0, false]], [2.0]], "expect": "generate: at most 12 references in all (13)"},
+    {"description": "2 audio + 2 videos with sound = 4 sound inputs", "args": ["generate", 0, false, false, 864, 480, 124, [[2.0, true], [2.0, true]], [2.0, 2.0]], "expect": "generate: at most 3 sound references (audio references and videos with sound; 4)"},
+    {"description": "a video with sound at 22 frames", "args": ["generate", 0, false, false, 512, 512, 22, [[2.0, true]], []], "expect": "generate: a video reference with sound needs a clip of at least 56 frames (22)"},
+    {"description": "the same video silent at 22 frames", "args": ["generate", 0, false, false, 512, 512, 22, [[2.0, false]], []], "expect": null},
+    {"description": "a 2 s video with sound at 56 frames: h3 keeps 39 of its 48 frames (5 + 17k), under 2 s of sound", "args": ["generate", 0, false, false, 512, 512, 56, [[2.0, true]], []], "expect": "generate: a video reference with sound needs a part of at least 56 frames at 24 fps (video 1 reads 48)"},
+    {"description": "a 2.5 s video with sound at 56 frames: the smallest that works", "args": ["generate", 0, false, false, 512, 512, 56, [[2.5, true]], []], "expect": null},
+    {"description": "a short video with sound second: numbered by its row", "args": ["generate", 0, false, false, 512, 512, 56, [[2.5, false], [2.0, true]], []], "expect": "generate: a video reference with sound needs a part of at least 56 frames at 24 fps (video 2 reads 48)"},
+    {"description": "a short silent video next to a sound one: only the sound one counts", "args": ["generate", 0, false, false, 512, 512, 56, [[2.0, false], [2.4, true]], []], "expect": null},
+    {"description": "sound in all: 10 s of audio + a 10 s video with sound in a 124-frame clip (its sound read for 5.2 s) = 15.2 s", "args": ["generate", 1, false, false, 864, 480, 124, [[10.0, true]], [10.0]], "expect": "generate: the sound references last 15.2 s in all; at most 15.0 s"},
+    {"description": "the same in a 56-frame clip: the video's sound is read for 2.3 s, 12.3 s in all", "args": ["generate", 1, false, false, 864, 480, 56, [[10.0, true]], [10.0]], "expect": null}
   ]
 }

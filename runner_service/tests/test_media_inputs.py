@@ -77,6 +77,18 @@ def audio_value(data: bytes, **facts) -> dict:
             f": take {TAKE} lasts 20.0 s; this input takes at most 13.4 s",
         ),
         (VIDEO, None, "must be a take"),  # an unresolved value (no key)
+        # API 1.22 min_s: the take, then (with trim) the part
+        (AUDIO | {"min_s": 2}, {"in": 0, "out": 2}, None),
+        (
+            AUDIO | {"min_s": 3},
+            {"in": 0, "out": 1},
+            f": take {TAKE} lasts 2.0 s; this input takes at least 3.0 s",
+        ),
+        (
+            AUDIO | {"min_s": 2},
+            {"in": 0.5, "out": 2},
+            ": the part lasts 1.5 s; this input takes at least 2.0 s",
+        ),
     ],
 )
 def test_media_params_recheck_the_caps(spec, facts, why):
@@ -241,8 +253,50 @@ def codecs(clip: bytes) -> list[str]:
 
 
 def test_the_canonical_media_commands_fit_the_message_schema():
-    for n in (8,):
+    for n in (8, 9):
         cmd = json.loads(
             (CONTRACTS / f"fixtures/messages/cmd.run.execute.valid.{n}.json").read_text()
         )
         assert schemas.message_errors(cmd) == []
+
+
+# --- API 1.22: rows of media (minimax-h3/generate's videos and audios)
+H3_VIDEOS = {"name": "videos", "type": "rows", "default": [], "min": 0, "max": 3,
+             "item": {"video": {"type": "media", "default": None, "accepts": ["video"], "trim": True, "min_s": 2,
+                                "max_s": 15},
+                      "sound": {"type": "enum", "default": "keep", "enum": ["keep", "silent"]}}}  # fmt: skip
+
+
+def test_a_rows_media_field_is_required_and_rechecked():
+    v = value(duration_s=3.0, **{"in": 0, "out": 3.0})
+    assert graph._check_param(H3_VIDEOS, [{"video": v, "sound": "silent"}, {"video": v}]) is None
+    assert graph._check_param(H3_VIDEOS, [{"sound": "keep"}]) == "item 1.video: a take is required"
+    assert graph._check_param(H3_VIDEOS, [{"video": None}]) == "item 1.video: a take is required"
+    short = v | {"in": 1.5}
+    assert graph._check_param(H3_VIDEOS, [{"video": v}, {"video": short}]) == (
+        "item 2.video : the part lasts 1.5 s; this input takes at least 2.0 s")  # fmt: skip
+
+
+async def test_rows_media_values_are_read_with_the_claim_check():
+    from core import images
+
+    data = b"0123456789"
+    v = value(data, duration_s=3.0, **{"in": 0, "out": 3.0})
+    store = {v["key"]: data}
+
+    async def fetch(key, limit, etag):
+        return store.get(key) if etag == "e1" else None
+
+    params = {"videos": [{"video": v, "sound": "keep"}], "steps": 2}
+    assert (
+        images.media([H3_VIDEOS], params) == ["videos"]
+        and images.media([H3_VIDEOS], {"videos": []}) == []
+    )
+    got = await images.load([H3_VIDEOS], params, OWNER, fetch)
+    assert got["videos"] == [{"video": v | {"data": data}, "sound": "keep"}] and got["steps"] == 2
+    with pytest.raises(graph.RunError, match="is not the run owner's"):
+        await images.load(
+            [H3_VIDEOS], {"videos": [{"video": v | {"key": "u/other/x.mp4"}}]}, OWNER, fetch
+        )
+    with pytest.raises(graph.RunError, match="is gone"):
+        await images.load([H3_VIDEOS], {"videos": [{"video": v | {"etag": "e2"}}]}, OWNER, fetch)

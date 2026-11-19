@@ -1,0 +1,282 @@
+{
+  "name": "ref2va-silent-video",
+  "prompt": "<Video 1>: the puppy keeps running across the sunny park lawn toward the camera.",
+  "width": 512,
+  "height": 512,
+  "frames": 22,
+  "steps": 2,
+  "seed": 42,
+  "fps": 24,
+  "speed": "exact",
+  "flags": [
+    "--layers",
+    "50",
+    "--reuse",
+    "1",
+    "--use-int8-row-fc2"
+  ],
+  "argv_equivalent": "h3 -d <models>/MiniMax-H3 -p PROMPT -o OUT.mp4 --width 512 --height 512 --frames 22 --steps 2 --seed 42 --layers 50 --reuse 1 --use-int8-row-fc2 --ref-silent-video input-video-2s.mp4 --frames-dir DIR",
+  "inputs": {
+    "video": {
+      "file": "input-video-2s.mp4",
+      "sha256": "9c0f1d918d49701b4567abc84eb1b0cde68cadd19aa62087b6efdd8c58aada24",
+      "made_from": "runner_service/tests/golden/ltx-text-to-video/t2v-448x256-49f-s42.mp4 (ffmpeg -t 2 -map 0:v:0 -an -c:v libx264 -crf 16 -pix_fmt yuv420p)"
+    }
+  },
+  "mp4": {
+    "file": "ref2va-silent-video-512x512-22f-s42.mp4",
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "width": 512,
+        "height": 512,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "duration": "0.916667",
+        "nb_frames": "22"
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "sample_rate": "32000",
+        "channels": 2,
+        "r_frame_rate": "0/0",
+        "duration": "0.925000",
+        "nb_frames": "30"
+      }
+    ],
+    "format": {
+      "duration": "0.925000",
+      "bit_rate": "6146776"
+    }
+  },
+  "frames_ppm_sha256": "48b370705eb9b4c51a09c74cc130b3bd53b0e32c345aa1840d12fa60fccd3d10",
+  "rgb24_sha256": "675fa4d17670d6bb87c41d6f03230c1444c70b41aceb8ad5c8b9e60b889a86e9",
+  "pcm_f32le_sha256": "343042e4bb12dc54f3e191402d51512adc0e801df7ccb38254240a816db2d8c5",
+  "mp4_sha256": "64d4efa528f9d880b59007530bb21e9c7e67e1847d696ad436ba742ac12aeb04",
+  "rgb24_bytes": 17301504,
+  "pcm_f32le_bytes": 236800,
+  "frames_ppm_count": 22,
+  "bit_identical_runs": {
+    "frames_ppm_sha256": false,
+    "rgb24_sha256": false,
+    "pcm_f32le_sha256": false,
+    "mp4_sha256": false
+  },
+  "run2_vs_run1_video_psnr_db": {
+    "average": 29.477796,
+    "min_frame": 28.891321
+  },
+  "runs": [
+    {
+      "wall_s": 50.53,
+      "phases": {
+        "start": {
+          "start_s": 0.0,
+          "s": 0.23,
+          "units": null,
+          "peak_gb": 0.07,
+          "read_gb": 0.01
+        },
+        "tokenizer": {
+          "start_s": 0.23,
+          "s": 12.76,
+          "units": 1,
+          "peak_gb": 8.61,
+          "read_gb": 0.67
+        },
+        "video VAE encoder": {
+          "start_s": 12.99,
+          "s": 0.07,
+          "units": 2,
+          "peak_gb": 2.08,
+          "read_gb": 0.04
+        },
+        "Qwen vision": {
+          "start_s": 13.06,
+          "s": 0.57,
+          "units": 27,
+          "peak_gb": 4.88,
+          "read_gb": 4.24
+        },
+        "text encoder": {
+          "start_s": 13.63,
+          "s": 4.93,
+          "units": 50,
+          "peak_gb": 6.99,
+          "read_gb": 43.69
+        },
+        "refine text": {
+          "start_s": 18.56,
+          "s": 0.61,
+          "units": 1,
+          "peak_gb": 0.34,
+          "read_gb": 2.52
+        },
+        "precompute AdaLN": {
+          "start_s": 19.17,
+          "s": 6.4,
+          "units": 50,
+          "peak_gb": 0.81,
+          "read_gb": 24.68
+        },
+        "load transformer core": {
+          "start_s": 25.57,
+          "s": 10.1,
+          "units": 50,
+          "peak_gb": 18.16,
+          "read_gb": 34.53
+        },
+        "denoise enqueue": {
+          "start_s": 35.67,
+          "s": 5.16,
+          "units": 2,
+          "peak_gb": 18.58,
+          "read_gb": 0.0
+        },
+        "denoise": {
+          "start_s": 40.83,
+          "s": 0.49,
+          "units": 2,
+          "peak_gb": 18.57,
+          "read_gb": 0.2
+        },
+        "audio VAE": {
+          "start_s": 41.32,
+          "s": 0.36,
+          "units": 7,
+          "peak_gb": 0.78,
+          "read_gb": 0.47
+        },
+        "video VAE load": {
+          "start_s": 41.68,
+          "s": 8.78,
+          "units": 36,
+          "peak_gb": 9.8,
+          "read_gb": 8.61
+        },
+        "FFmpeg": {
+          "start_s": 50.46,
+          "s": 0.07,
+          "units": 22,
+          "peak_gb": 4.2,
+          "read_gb": 0.0
+        }
+      },
+      "peak_footprint_gb": 18.58,
+      "lifetime_max_footprint_gb": 18.58,
+      "peak_resident_gb": 9.64
+    },
+    {
+      "wall_s": 50.33,
+      "phases": {
+        "start": {
+          "start_s": 0.0,
+          "s": 0.22,
+          "units": null,
+          "peak_gb": 0.07,
+          "read_gb": 0.01
+        },
+        "tokenizer": {
+          "start_s": 0.22,
+          "s": 12.51,
+          "units": 1,
+          "peak_gb": 8.61,
+          "read_gb": 0.67
+        },
+        "video VAE encoder": {
+          "start_s": 12.73,
+          "s": 0.08,
+          "units": 2,
+          "peak_gb": 3.28,
+          "read_gb": 0.04
+        },
+        "Qwen vision": {
+          "start_s": 12.81,
+          "s": 0.57,
+          "units": 27,
+          "peak_gb": 4.88,
+          "read_gb": 4.08
+        },
+        "text encoder": {
+          "start_s": 13.38,
+          "s": 4.84,
+          "units": 50,
+          "peak_gb": 7.49,
+          "read_gb": 43.85
+        },
+        "refine text": {
+          "start_s": 18.22,
+          "s": 0.62,
+          "units": 1,
+          "peak_gb": 0.46,
+          "read_gb": 2.49
+        },
+        "precompute AdaLN": {
+          "start_s": 18.84,
+          "s": 6.34,
+          "units": 50,
+          "peak_gb": 0.92,
+          "read_gb": 24.78
+        },
+        "load transformer core": {
+          "start_s": 25.18,
+          "s": 10.35,
+          "units": 50,
+          "peak_gb": 18.16,
+          "read_gb": 34.45
+        },
+        "denoise enqueue": {
+          "start_s": 35.53,
+          "s": 5.08,
+          "units": 2,
+          "peak_gb": 18.57,
+          "read_gb": 0.01
+        },
+        "denoise": {
+          "start_s": 40.61,
+          "s": 0.48,
+          "units": 2,
+          "peak_gb": 18.56,
+          "read_gb": 0.2
+        },
+        "audio VAE": {
+          "start_s": 41.09,
+          "s": 0.38,
+          "units": 7,
+          "peak_gb": 0.72,
+          "read_gb": 0.41
+        },
+        "video VAE load": {
+          "start_s": 41.47,
+          "s": 8.79,
+          "units": 36,
+          "peak_gb": 9.72,
+          "read_gb": 8.67
+        },
+        "FFmpeg": {
+          "start_s": 50.26,
+          "s": 0.07,
+          "units": 22,
+          "peak_gb": 4.7,
+          "read_gb": 0.0
+        }
+      },
+      "peak_footprint_gb": 18.57,
+      "lifetime_max_footprint_gb": 18.57,
+      "peak_resident_gb": 9.56
+    }
+  ],
+  "env": {},
+  "h3c": "4cafd1773585eb59bb32a99d80c27033d211032b",
+  "versions": {
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "machine": "Darwin 27.2.0 arm64",
+    "macos": "27.2.1"
+  }
+}

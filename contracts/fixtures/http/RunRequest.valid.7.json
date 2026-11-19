@@ -1,0 +1,30 @@
+{
+  "workflow_id": "minimax-h3-references",
+  "inputs": {
+    "prompt.text": "<Picture 1> walks out of <Video 1>, humming <Audio 1>",
+    "generate.refs": [
+      {
+        "image": {
+          "take_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b36"
+        }
+      }
+    ],
+    "generate.videos": [
+      {
+        "video": {
+          "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b",
+          "in": 0,
+          "out": 4.0
+        },
+        "sound": "silent"
+      }
+    ],
+    "generate.audios": [
+      {
+        "audio": {
+          "take_id": "9b2e1d33-5c6e-4f70-8b8c-2d3e4f5a6b7c"
+        }
+      }
+    ]
+  }
+}

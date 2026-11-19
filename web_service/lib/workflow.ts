@@ -25,6 +25,8 @@ export type Field = {
   family?: string | null;
   /** the node's params as the workflow has them (defaults filled): what `values_by` and a frame rate read */
   siblings?: Record<string, Value>;
+  /** an `optional` image node's param (API 1.22): may stay empty (null), studio then drops the node */
+  optional?: boolean;
 };
 
 /** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's
@@ -64,6 +66,7 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
           model: schema.outputs.some((o) => o.type === "Model"),
           family: schema.family,
           siblings,
+          ...(n.optional && { optional: true }),
         }))
     );
   });
@@ -281,7 +284,9 @@ export function buildInputs(fs: Field[], raws: Record<string, Raw>) {
   const inputs: Record<string, Value> = {};
   const errors: Record<string, string> = {};
   for (const f of fs) {
-    const r = readValue(f.param, raws[f.key] ?? toRaw(f.initial, f.param));
+    const raw = raws[f.key] ?? toRaw(f.initial, f.param);
+    // an optional image left empty is null (sent only when the workflow holds one)
+    const r = f.optional && raw === "" ? { value: null } : readValue(f.param, raw);
     const allowed = allowedInts(f, raws);
     if ("error" in r) errors[f.key] = r.error;
     else if (allowed && !allowed.includes(r.value as number))

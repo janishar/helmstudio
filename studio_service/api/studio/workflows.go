@@ -128,7 +128,7 @@ func (s *Service) FindWorkflow(ctx context.Context, caller common.Caller, id str
 	}
 	doc := rowDoc(row)
 	return registry.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env, Nodes: doc.Nodes,
-		NodeSchemas: s.schemasOf(doc.Nodes)}, &row.Version, nil
+		Studio: row.Studio, NodeSchemas: s.schemasOf(doc.Nodes)}, &row.Version, nil
 }
 
 // runnable returns the workflow a run or batch names, as the caller sees it in tx: a template, or the caller's own
@@ -266,7 +266,7 @@ func (s *Service) offerable(ctx context.Context, caller common.Caller, mine bool
 			schemas := s.schemasOf(doc.Nodes)
 			if media := workflowMedia(doc.Nodes, schemas); media != "text" {
 				out = append(out, registry.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env,
-					Media: media, Nodes: doc.Nodes, NodeSchemas: schemas})
+					Media: media, Nodes: doc.Nodes, Studio: row.Studio, NodeSchemas: schemas})
 			}
 		}
 		return err

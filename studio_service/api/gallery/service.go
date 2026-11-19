@@ -626,10 +626,8 @@ func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.
 	var keys []string
 	params := map[string]registry.Param{}
 	for _, nodeID := range slices.Sorted(maps.Keys(workflow.Nodes)) {
-		node := workflow.Nodes[nodeID]
-		for _, p := range workflow.NodeSchemas[node.Kind].Params {
-			_, wired := node.In[p.Name]
-			if !wired && !node.Bypass && p.Type == "media" && (slices.Contains(p.Accepts, take.Kind) ||
+		for _, p := range workflow.NodeSchemas[workflow.Nodes[nodeID].Kind].Params {
+			if Counts(workflow, nodeID, p) && p.Type == "media" && (slices.Contains(p.Accepts, take.Kind) ||
 				(take.Kind == "video" && slices.Contains(p.Accepts, "audio"))) {
 				keys = append(keys, nodeID+"."+p.Name)
 				params[nodeID+"."+p.Name] = p
@@ -665,12 +663,8 @@ func imageInput(workflow registry.Workflow, want *string) (string, registry.Para
 	var keys []string
 	params := map[string]registry.Param{}
 	for _, nodeID := range slices.Sorted(maps.Keys(workflow.Nodes)) {
-		node := workflow.Nodes[nodeID]
-		for _, param := range workflow.NodeSchemas[node.Kind].Params {
-			if _, wired := node.In[param.Name]; wired {
-				continue // filled from upstream, not settable
-			}
-			if _, ok := param.ImageInput(); ok {
+		for _, param := range workflow.NodeSchemas[workflow.Nodes[nodeID].Kind].Params {
+			if _, ok := param.ImageInput(); ok && Counts(workflow, nodeID, param) {
 				keys = append(keys, nodeID+"."+param.Name)
 				params[nodeID+"."+param.Name] = param
 			}

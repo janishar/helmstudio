@@ -147,7 +147,8 @@ func mentionedHandles(nodes map[string]registry.Node, schemas map[string]registr
 }
 
 // referenceRows is where element images go: the first unwired rows param (node id, then schema order) of a known, not
-// bypassed node whose mention has {n} and whose item has one Image field; ok false = the family takes text only.
+// bypassed node whose mention has {n} and whose item has one Image field, not excluded by a wired not_with input; ok
+// false = the family takes text only.
 func referenceRows(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) (string, registry.Param, string, bool) {
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
 		node := nodes[id]
@@ -157,7 +158,8 @@ func referenceRows(nodes map[string]registry.Node, schemas map[string]registry.N
 		}
 		for _, param := range schema.Params {
 			field, ok := imageField(param)
-			if _, wired := node.In[param.Name]; ok && field != "" && !wired && strings.Contains(param.Mention, "{n}") {
+			_, excluded := param.Excluded(node) // API 1.22: refs must stay empty while a first frame is wired
+			if _, wired := node.In[param.Name]; ok && field != "" && !wired && !excluded && strings.Contains(param.Mention, "{n}") {
 				return id, param, field, true
 			}
 		}

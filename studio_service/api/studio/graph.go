@@ -90,7 +90,7 @@ func valueBad(param registry.Param, value any) bool {
 	case "rows":
 		if items, ok := value.([]any); ok && len(items) > 0 {
 			for _, raw := range param.Item {
-				if registry.IsImageField(raw) || registry.IsMediaField(raw) {
+				if registry.IsTakeField(raw) {
 					return true
 				}
 			}
@@ -214,6 +214,22 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode,
 			if _, wired := node.In[input]; !wired {
 				add("required_input", id, input, "", "%s.%s: not wired", id, input)
 			}
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(nodes)) { // API 1.22: an optional node is an image source feeding optional inputs
+		if !nodes[id].Optional {
+			continue
+		}
+		feedsRequired := false
+		for _, other := range nodes {
+			for port, ref := range other.In {
+				inputs := palette[other.Kind].Inputs
+				i := slices.IndexFunc(inputs, func(p registry.Port) bool { return p.Name == port })
+				feedsRequired = feedsRequired || strings.Split(ref, ".")[0] == id && i >= 0 && !inputs[i].Optional
+			}
+		}
+		if nodes[id].Kind != "image" || feedsRequired {
+			add("not_optional", id, "", "", "%s: only an image node whose wires all go to optional inputs may be optional", id)
 		}
 	}
 	for _, id := range onCycles(nodes) {

@@ -1,5 +1,5 @@
 {
-  "description": "take_uses(take, workflows, palette, range) → the \"Use in…\" offers over the canonical ltx, qwen-image and minimax-h3-image templates in registry order (GET /v1/studio/takes/{take_id}/uses; a clip's actions add a range in the take's own seconds); with `param`: media_fit(param, take) → the 422 text after `<node>.<param>: `, or null (contracts/README.md, Media inputs)",
+  "description": "take_uses(take, workflows, palette, range) → the \"Use in…\" offers over the canonical ltx, qwen-image, minimax-h3-image and minimax-h3 templates in registry order (GET /v1/studio/takes/{take_id}/uses; a clip's actions add a range in the take's own seconds); with `param`: media_fit(param, take) → the 422 text after `<node>.<param>: `, or null (contracts/README.md, Media inputs)",
   "takes": {
     "11111111-0000-4000-8000-000000000001": {
       "kind": "video",
@@ -74,6 +74,13 @@
       "fps": 24,
       "frames": 321,
       "duration_s": 13.375,
+      "has_audio": true
+    },
+    "11111111-0000-4000-8000-000000000010": {
+      "kind": "audio",
+      "width": null,
+      "height": null,
+      "duration_s": 1.5,
       "has_audio": true
     }
   },
@@ -283,7 +290,7 @@
       }
     },
     {
-      "description": "an image: Animate and Edit, as before",
+      "description": "an image: Animate and Edit as before; MiniMax H3 Image to video (its first frame: the last frame is optional, references are excluded while first is wired and not placed) and References, never Text to video (its refs are not placed in its studio block)",
       "take": "11111111-0000-4000-8000-000000000006",
       "expect": {
         "uses": [
@@ -330,6 +337,35 @@
             "param": "encode.refs",
             "inputs": {
               "encode.refs": [
+                {
+                  "image": {
+                    "take_id": "11111111-0000-4000-8000-000000000006"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "minimax-h3-image-to-video",
+            "title": "MiniMax H3 Image to video",
+            "action": "Animate",
+            "family": "minimax-h3",
+            "media": "video",
+            "param": "first.image",
+            "inputs": {
+              "first.image": {
+                "take_id": "11111111-0000-4000-8000-000000000006"
+              }
+            }
+          },
+          {
+            "workflow_id": "minimax-h3-references",
+            "title": "MiniMax H3 References",
+            "family": "minimax-h3",
+            "media": "video",
+            "param": "generate.refs",
+            "inputs": {
+              "generate.refs": [
                 {
                   "image": {
                     "take_id": "11111111-0000-4000-8000-000000000006"
@@ -705,6 +741,25 @@
       },
       "expect": {
         "error": "take 11111111-0000-4000-8000-000000000007 has 390 frames; this input takes at most 321"
+      }
+    },
+    {
+      "description": "Media inputs text (API 1.22): a 1.5 s audio take under min_s (a trim cannot make it longer)",
+      "take": "11111111-0000-4000-8000-000000000010",
+      "param": {
+        "name": "audio",
+        "type": "media",
+        "label": "Audio",
+        "default": null,
+        "accepts": [
+          "audio"
+        ],
+        "trim": true,
+        "min_s": 2,
+        "max_s": 15
+      },
+      "expect": {
+        "error": "take 11111111-0000-4000-8000-000000000010 lasts 1.5 s; this input takes at least 2.0 s"
       }
     }
   ]

@@ -357,6 +357,23 @@ export function graphProblems(
           add("required_input", `${id}.${i.name}: needs a ${i.type} wire`, id, i.name);
     }
   }
+  // an optional node (API 1.22): a core image node whose wires all go to optional inputs
+  for (const [id, n] of Object.entries(nodes)) {
+    if (!n.optional) continue;
+    const feedsRequired = Object.values(nodes).some((m) =>
+      Object.entries(m.in ?? {}).some(
+        ([port, ref]) =>
+          splitRef(ref)[0] === id &&
+          palette[m.kind]?.inputs.some((i) => i.name === port && !i.optional),
+      ),
+    );
+    if (n.kind !== "image" || feedsRequired)
+      add(
+        "not_optional",
+        `${id}: only an image node that feeds optional inputs can be optional`,
+        id,
+      );
+  }
   const succ = successors(doc);
   for (const id of Object.keys(nodes))
     if (reaches(succ, id, id)) add("cycle", `${id}: its wires loop back to it`, id);

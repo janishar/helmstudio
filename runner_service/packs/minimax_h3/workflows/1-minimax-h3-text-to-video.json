@@ -50,7 +50,9 @@
       "params": {
         "steps": 6,
         "speed": "exact",
-        "refs": []
+        "refs": [],
+        "videos": [],
+        "audios": []
       }
     },
     "output": {

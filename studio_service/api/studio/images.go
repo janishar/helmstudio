@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -29,8 +28,10 @@ import (
 // From API 1.19 it also checks and snaps the graph's media and span values (checkMedia; schemas: the workflow's).
 func checkImages(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, nodes map[string]registry.Node,
 	schemas map[string]registry.NodeSchema) (string, error) {
-	media := mediaParams(nodes, schemas)
-	refs := slices.DeleteFunc(images(nodes), func(at imageAt) bool { _, ok := media[at.Path]; return ok })
+	slots := mediaSlots(nodes, schemas)
+	refs := slices.DeleteFunc(images(nodes), func(at imageAt) bool {
+		return slices.ContainsFunc(slots, func(slot mediaSlot) bool { return slot.Path == at.Path })
+	})
 	problems, err := vetTakes(ctx, tx, store, ownerID, refs, registry.IsText(nodes))
 	if detail := firstBad(refs, problems); detail != "" || err != nil {
 		return detail, err
@@ -157,9 +158,9 @@ func contentHash(ctx context.Context, store storage.Store, key string) (string, 
 }
 
 // resolveImages returns run's graph with every {take_id} replaced by the take's object descriptor (defs image; from
-// API 1.19 a video or audio take of a media param: defs media), read as System with an explicit owner check. A media
-// value is told by its take: create let a video or audio take only into a media param (or a text workflow's Media
-// rows, which stay images). gone names the first take that is no longer usable (deleted since the run was created):
+// API 1.19 a video or audio take of a media param, from 1.22 of a rows item's media field: defs media), read as System
+// with an explicit owner check. A media value is told by its take: create let a video or audio take only into a media
+// value (or a text workflow's Media rows, which stay images). gone names the first take that is no longer usable (deleted since the run was created):
 // the run must fail rather than send a dead key.
 func resolveImages(ctx context.Context, tx pgx.Tx, ownerID string, graph []byte) (map[string]registry.Node, string, error) {
 	var nodes map[string]registry.Node
@@ -182,7 +183,7 @@ func resolveImages(ctx context.Context, tx pgx.Tx, ownerID string, graph []byte)
 	gone := ""
 	eachImage(nodes, func(at imageAt) any {
 		row, ok := rows[at.TakeID]
-		media := ok && row.Kind != "image" && !text && !strings.Contains(at.Path, "[")
+		media := ok && row.Kind != "image" && !text // a media param's or (API 1.22) a rows item's media field
 		image := ok && (row.Kind == "image" || (text && row.Kind == "video")) && row.Width != nil && row.Height != nil
 		switch {
 		case ok && row.Etag != nil && media:

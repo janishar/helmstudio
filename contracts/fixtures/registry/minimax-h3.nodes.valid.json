@@ -216,7 +216,79 @@
             "image": "Image"
           },
           "mention": "<Picture {n}>",
-          "help": "Images the prompt names <Picture 1>, <Picture 2>, …; any reference switches to the Ref2VA model and cannot go with a first or last frame."
+          "help": "Images the prompt names <Picture 1>, <Picture 2>, …; any reference (image, video or audio) switches to the Ref2VA model and cannot go with a first or last frame.",
+          "not_with": [
+            "first",
+            "last"
+          ]
+        },
+        {
+          "name": "videos",
+          "type": "rows",
+          "label": "Video references",
+          "default": [],
+          "min": 0,
+          "max": 3,
+          "item": {
+            "video": {
+              "type": "media",
+              "label": "Video",
+              "default": null,
+              "accepts": [
+                "video"
+              ],
+              "trim": true,
+              "min_s": 2,
+              "max_s": 15,
+              "help": "A video take; in and out pick the part it reads (2 to 15 s)."
+            },
+            "sound": {
+              "type": "enum",
+              "label": "Sound",
+              "default": "keep",
+              "enum": [
+                "keep",
+                "silent"
+              ],
+              "help": "keep: the model also hears the video's sound (a take without sound is read silent). silent: picture only."
+            }
+          },
+          "mention": "<Video {n}>",
+          "max_total_s": 15,
+          "not_with": [
+            "first",
+            "last"
+          ],
+          "help": "Videos the prompt names <Video 1>, <Video 2>, <Video 3>: 2 to 15 s each, 15 s in all."
+        },
+        {
+          "name": "audios",
+          "type": "rows",
+          "label": "Audio references",
+          "default": [],
+          "min": 0,
+          "max": 3,
+          "item": {
+            "audio": {
+              "type": "media",
+              "label": "Audio",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "trim": true,
+              "min_s": 2,
+              "max_s": 15,
+              "help": "An audio take, or a video's sound; in and out pick the part it reads (2 to 15 s)."
+            }
+          },
+          "mention": "<Audio {n}>",
+          "max_total_s": 15,
+          "not_with": [
+            "first",
+            "last"
+          ],
+          "help": "Sounds the prompt names <Audio 1>, <Audio 2>, <Audio 3>: 2 to 15 s each, 15 s in all; needs an image or video reference too."
         }
       ],
       "inputs": [

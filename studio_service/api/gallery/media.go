@@ -75,6 +75,8 @@ func MediaFit(p registry.Param, t MediaTake) string {
 		return fmt.Sprintf("take %s is %d × %d; this input needs sides on a %d px grid", t.ID, t.Width, t.Height, p.Grid)
 	case picture && p.MaxFrames > 0 && t.Frames > p.MaxFrames:
 		return fmt.Sprintf("take %s has %d frames; this input takes at most %d", t.ID, t.Frames, p.MaxFrames)
+	case p.MinS > 0 && t.DurationS < p.MinS: // API 1.22; a trim cannot make it longer
+		return fmt.Sprintf("take %s lasts %.1f s; this input takes at least %.1f s", t.ID, t.DurationS, p.MinS)
 	case p.MaxS > 0 && t.DurationS > p.MaxS && !p.Trim:
 		return fmt.Sprintf("take %s lasts %.1f s; this input takes at most %.1f s", t.ID, t.DurationS, p.MaxS)
 	}
@@ -111,8 +113,8 @@ func ExtendRoom(t MediaTake, rng *[2]float64) (map[string]any, bool) {
 	return out, true
 }
 
-// Offers is "Use in…" (take_uses): every workflow, in the order given, with exactly one unwired input of the take's
-// sort on a known, not bypassed node (an image: an image param or Image rows; a video or audio take: a media param
+// Offers is "Use in…" (take_uses): every workflow, in the order given, with exactly one input of the take's sort that
+// counts (Counts) (an image: an image param or Image rows; a video or audio take: a media param
 // whose accepts names its kind, or audio for a video with sound) that the take fits, with the inputs pre-filled. rng:
 // (in, out) in the take's own seconds (a Timeline clip or selection), nil = the whole take.
 func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.TakeOffer {
@@ -124,13 +126,8 @@ func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.T
 		}
 		var found []at
 		for _, id := range slices.Sorted(maps.Keys(wf.Nodes)) {
-			n := wf.Nodes[id]
-			s, ok := wf.NodeSchemas[n.Kind]
-			if !ok || n.Bypass {
-				continue
-			}
-			for _, p := range s.Params {
-				if _, wired := n.In[p.Name]; wired {
+			for _, p := range wf.NodeSchemas[wf.Nodes[id].Kind].Params {
+				if !Counts(wf, id, p) {
 					continue
 				}
 				_, image := p.ImageInput()
@@ -152,6 +149,31 @@ func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.T
 			Media: cmp.Or(wf.Media, "image"), Param: path, Inputs: inputs})
 	}
 	return out
+}
+
+// Counts reports whether param p of node id is an input "Use in…" may fill (API 1.22): on a known node that is not
+// bypassed or optional, not wired, not excluded by a wired not_with input, and placed by the workflow's studio block
+// (none: every param).
+func Counts(wf registry.Workflow, id string, p registry.Param) bool {
+	n := wf.Nodes[id]
+	_, known := wf.NodeSchemas[n.Kind]
+	_, wired := n.In[p.Name]
+	_, excluded := p.Excluded(n)
+	if !known || n.Bypass || n.Optional || wired || excluded {
+		return false
+	}
+	var layout struct {
+		Composer, Quick []string
+		Inspector       []struct{ Items []string }
+	}
+	if len(wf.Studio) == 0 || string(wf.Studio) == "null" || json.Unmarshal(wf.Studio, &layout) != nil {
+		return true
+	}
+	placed := append(layout.Composer, layout.Quick...)
+	for _, section := range layout.Inspector {
+		placed = append(placed, section.Items...)
+	}
+	return slices.Contains(placed, id+"."+p.Name)
 }
 
 // mediaInputs puts the take into the input p at path: an image as {take_id} or rows' reference 1; a media value

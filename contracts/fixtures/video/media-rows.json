@@ -1,0 +1,491 @@
+{
+  "description": "media_rows(nodes, palette, takes): studio's run checks of API 1.22 on a canonical minimax-h3 template with `inputs` merged into its params (contracts/README.md, Media inputs: rows of media): optional image nodes left empty are dropped (with their wires), a rows value while a `not_with` input is wired is refused, then each media field of a rows item (items from 1; a trim field's in / out filled: in 0, out min(duration, max_s)) and each rows param's max_total_s. expect: {error} or {error: null, dropped, values: path → rows as studio sends them}. in / out are on the take's frames already (no snapping here). The counts (rows max) and the cross-param rules (audio needs an image or video, 12 in all, sound) are elsewhere: the rows max and fixtures/video/minimax-h3.json",
+  "takes": {
+    "11111111-0000-4000-8000-000000000021": {
+      "kind": "video",
+      "width": 448,
+      "height": 256,
+      "fps": 24,
+      "frames": 192,
+      "duration_s": 8.0,
+      "has_audio": true
+    },
+    "11111111-0000-4000-8000-000000000022": {
+      "kind": "video",
+      "width": 448,
+      "height": 256,
+      "fps": 24,
+      "frames": 48,
+      "duration_s": 2.0,
+      "has_audio": false
+    },
+    "11111111-0000-4000-8000-000000000023": {
+      "kind": "video",
+      "width": 640,
+      "height": 360,
+      "fps": 30,
+      "frames": 600,
+      "duration_s": 20.0,
+      "has_audio": true
+    },
+    "11111111-0000-4000-8000-000000000024": {
+      "kind": "audio",
+      "width": null,
+      "height": null,
+      "duration_s": 3.0,
+      "has_audio": true
+    },
+    "11111111-0000-4000-8000-000000000025": {
+      "kind": "image",
+      "width": 1024,
+      "height": 1024
+    },
+    "11111111-0000-4000-8000-000000000026": {
+      "kind": "audio",
+      "width": null,
+      "height": null,
+      "duration_s": 1.5,
+      "has_audio": true
+    },
+    "11111111-0000-4000-8000-000000000027": {
+      "kind": "video",
+      "width": 448,
+      "height": 256,
+      "fps": 24,
+      "frames": 384,
+      "duration_s": 16.0,
+      "has_audio": true
+    },
+    "11111111-0000-4000-8000-000000000028": {
+      "kind": "audio",
+      "width": null,
+      "height": null,
+      "duration_s": 6.0,
+      "has_audio": true
+    }
+  },
+  "cases": [
+    {
+      "description": "one video (sound kept) and one audio: trim fields get in 0 and out = min(duration, 15)",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.refs": [
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000025"
+            }
+          }
+        ],
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021"
+            },
+            "sound": "keep"
+          }
+        ],
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000024"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": null,
+        "dropped": [],
+        "values": {
+          "generate.audios": [
+            {
+              "audio": {
+                "take_id": "11111111-0000-4000-8000-000000000024",
+                "in": 0,
+                "out": 3.0
+              }
+            }
+          ],
+          "generate.videos": [
+            {
+              "video": {
+                "take_id": "11111111-0000-4000-8000-000000000021",
+                "in": 0,
+                "out": 8.0
+              },
+              "sound": "keep"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "description": "a 20 s video at 30 fps: its part is capped at 15 s (out = min(duration, max_s)); sound left out takes its default keep",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000023"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": null,
+        "dropped": [],
+        "values": {
+          "generate.videos": [
+            {
+              "video": {
+                "take_id": "11111111-0000-4000-8000-000000000023",
+                "in": 0,
+                "out": 15.0
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "description": "two videos, 8 s + 8 s: over 15 s in all",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021"
+            }
+          },
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021",
+              "in": 0,
+              "out": 8.0
+            },
+            "sound": "silent"
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos: the takes last 16.0 s in all; at most 15.0 s"
+      }
+    },
+    {
+      "description": "two videos trimmed to 7.5 s each: exactly 15 s fits",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021",
+              "in": 0.5,
+              "out": 8.0
+            }
+          },
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000023",
+              "in": 10,
+              "out": 17.5
+            },
+            "sound": "silent"
+          }
+        ]
+      },
+      "expect": {
+        "error": null,
+        "dropped": [],
+        "values": {
+          "generate.videos": [
+            {
+              "video": {
+                "take_id": "11111111-0000-4000-8000-000000000021",
+                "in": 0.5,
+                "out": 8.0
+              }
+            },
+            {
+              "video": {
+                "take_id": "11111111-0000-4000-8000-000000000023",
+                "in": 10,
+                "out": 17.5
+              },
+              "sound": "silent"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "description": "an audio take of 1.5 s: shorter than a reference takes",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.refs": [
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000025"
+            }
+          }
+        ],
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000024"
+            }
+          },
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000026"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.audios[2].audio: take 11111111-0000-4000-8000-000000000026 lasts 1.5 s; this input takes at least 2.0 s"
+      }
+    },
+    {
+      "description": "a part of 1.0 s of a 3 s audio",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000024",
+              "in": 1,
+              "out": 2
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.audios[1].audio: the part lasts 1.0 s; this input takes at least 2.0 s"
+      }
+    },
+    {
+      "description": "a 16 s part of a 20 s video",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000023",
+              "in": 2,
+              "out": 18
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos[1].video: the part lasts 16.0 s; this input takes at most 15.0 s"
+      }
+    },
+    {
+      "description": "out past the take's end",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021",
+              "in": 2,
+              "out": 9
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos[1].video: out 9.0 is past the take's end 8.0"
+      }
+    },
+    {
+      "description": "an image take in a video row",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000025"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos[1].video: take 11111111-0000-4000-8000-000000000025 is not a video"
+      }
+    },
+    {
+      "description": "a silent video in an audio row",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000022"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.audios[1].audio: take 11111111-0000-4000-8000-000000000022 has no sound"
+      }
+    },
+    {
+      "description": "a video's sound in an audio row: its part like an audio take's",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.refs": [
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000025"
+            }
+          }
+        ],
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000021",
+              "in": 1,
+              "out": 5
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": null,
+        "dropped": [],
+        "values": {
+          "generate.audios": [
+            {
+              "audio": {
+                "take_id": "11111111-0000-4000-8000-000000000021",
+                "in": 1,
+                "out": 5
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "description": "three audio takes, 6 + 6 + 6 s: over 15 s in all",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.refs": [
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000025"
+            }
+          }
+        ],
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000028"
+            }
+          },
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000028"
+            }
+          },
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000028"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.audios: the takes last 18.0 s in all; at most 15.0 s"
+      }
+    },
+    {
+      "description": "an unknown take",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000099"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos[1].video: take 11111111-0000-4000-8000-000000000099 not found"
+      }
+    },
+    {
+      "description": "image to video, last frame left empty: the optional node is dropped with its wire",
+      "workflow": "minimax-h3-image-to-video",
+      "inputs": {
+        "first.image": {
+          "take_id": "11111111-0000-4000-8000-000000000025"
+        }
+      },
+      "expect": {
+        "error": null,
+        "dropped": [
+          "last"
+        ],
+        "values": {}
+      }
+    },
+    {
+      "description": "image to video with a last frame: nothing dropped",
+      "workflow": "minimax-h3-image-to-video",
+      "inputs": {
+        "first.image": {
+          "take_id": "11111111-0000-4000-8000-000000000025"
+        },
+        "last.image": {
+          "take_id": "11111111-0000-4000-8000-000000000025"
+        }
+      },
+      "expect": {
+        "error": null,
+        "dropped": [],
+        "values": {}
+      }
+    },
+    {
+      "description": "references while the first frame is wired: refused at once (not_with)",
+      "workflow": "minimax-h3-image-to-video",
+      "inputs": {
+        "first.image": {
+          "take_id": "11111111-0000-4000-8000-000000000025"
+        },
+        "generate.refs": [
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000025"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.refs: must stay empty while generate.first is wired"
+      }
+    },
+    {
+      "description": "video references in image to video: refused the same way",
+      "workflow": "minimax-h3-image-to-video",
+      "inputs": {
+        "first.image": {
+          "take_id": "11111111-0000-4000-8000-000000000025"
+        },
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos: must stay empty while generate.first is wired"
+      }
+    }
+  ]
+}

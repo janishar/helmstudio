@@ -7,18 +7,31 @@ native), and studio refuses a canvas side over the max and a length off the 5 + 
 otherwise these skip.
 
 Opt-in (MINIMAX_H3=1, the Mac native runner joined to the stack BASE_URL points at, as test_minimax): the runner's
-refusals (contracts/fixtures/video/minimax-h3.json: references with a first frame, a side off the 32 px grid, a canvas
-over 768 x 1344), each failing its run before the h3 child starts, then one tiny text-to-video (256 x 256, 22 frames,
-2 steps; under a minute warm). A released run may unload the torch and mlx runners' weights first (the hand-over)."""
+refusals (contracts/fixtures/video/minimax-h3.json: a side off the 32 px grid, a canvas over 768 x 1344, audio
+without an image or video reference), each failing its run before the h3 child starts, then one tiny text-to-video
+(256 x 256, 22 frames, 2 steps; under a minute warm). A released run may unload the torch and mlx runners' weights
+first (the hand-over).
+
+API 1.22 (contracts/README.md, Media inputs: rows of media), no GPU: studio refuses every media-rows case of
+contracts/fixtures/video/media-rows.json (a short or long take or part, out past the end, the wrong kind, an unknown
+take, more than 15 s in all, references while the first frame is wired) and the counts (9 images, 3 videos, 3 audio)
+with 422 before anything is queued; the takes are uploads (WAV) and admin imports with the fixture's facts. "Use in…"
+offers an image take H3 Image to video (first frame) and References, never Text to video, and a video take never
+H3 References. Another user's video or audio take in a rows param is `take <id> not found`. Opt-in: an @element in
+Image to video adds its name and text only (the run succeeds), and one tiny Ref2VA run with an image and a 2 s audio
+reference (512 x 512, 22 frames, 2 steps)."""
 
 import json
 import os
+import uuid
 
 import pytest
 from conftest import headers, make_client, sign_in
 from helpers import STUDIO, TERMINAL, new_session, png_bytes, ref, start_run, upload, wait_for
+from test_elements import element
 from test_qwen import events_of, get
 from test_user_workflows import CONTRACTS
+from test_video_source import import_video, wav
 
 FAMILY = "minimax-h3"
 T2V, I2V, REFS = (f"{FAMILY}-{w}" for w in ("text-to-video", "image-to-video", "references"))
@@ -116,6 +129,86 @@ def test_studio_refuses_a_side_over_the_max_and_a_length_off_the_grid(hapi, sid)
     assert "duration.frames" in detail and "frame grid 5 + 17k up to 362" in detail, detail
 
 
+# ---------------------------------------------------------------- rows of media (API 1.22, no GPU)
+
+ROWS = json.loads((CONTRACTS / "fixtures" / "video" / "media-rows.json").read_text())
+
+
+@pytest.fixture(scope="module")
+def media(admin, hapi, anon, h3_user, live) -> dict[str, str]:
+    """fixture take id → a take of the h3 user with its facts (videos are admin imports, audio WAV uploads)."""
+    owner, out = h3_user["user"]["id"], {}
+    for fid, t in ROWS["takes"].items():
+        if t["kind"] == "video":
+            w, h, n, fps, snd = t["width"], t["height"], t["frames"], t["fps"], t["has_audio"]
+            out[fid] = import_video(admin, anon, owner, w, h, n, fps, snd)["id"]
+        elif t["kind"] == "audio":
+            out[fid] = wav(hapi, anon, t["duration_s"])["id"]
+        else:
+            out[fid] = upload(hapi, anon, png_bytes(64, 64))["id"]
+    return out
+
+
+def swap(v, ids: dict[str, str]):
+    """The fixture's take ids in a value (or a text) replaced by the live ones."""
+    text = json.dumps(v)
+    for a, b in ids.items():
+        text = text.replace(a, b)
+    return json.loads(text)
+
+
+@pytest.mark.parametrize(
+    "case", [c for c in ROWS["cases"] if c["expect"]["error"]], ids=lambda c: c["description"]
+)
+def test_studio_refuses_media_rows(hapi, sid, media, case):
+    """Each refusal of media-rows.json is studio's 422, word for word, before anything is queued (no GPU)."""
+    ids = media | {"11111111-0000-4000-8000-000000000099": str(uuid.uuid4())}
+    detail = refused(
+        hapi, sid, case["workflow"], {"prompt.text": "a dance"} | swap(case["inputs"], ids)
+    )
+    assert detail == swap(case["expect"]["error"], ids)
+
+
+def test_studio_refuses_more_rows_than_the_caps(hapi, sid, media):
+    img, vid, aud = (media[f"11111111-0000-4000-8000-0000000000{n}"] for n in ("25", "22", "24"))
+    for param, item, cap in (
+        ("generate.refs", ref(img), 9),
+        ("generate.videos", {"video": {"take_id": vid}}, 3),
+        ("generate.audios", {"audio": {"take_id": aud}}, 3),
+    ):
+        detail = refused(hapi, sid, REFS, {"prompt.text": "a dance", param: [item] * (cap + 1)})
+        assert f"{param}: at most {cap} items" in detail, detail
+
+
+def test_use_in_offers_for_h3(hapi, media):
+    """An image take: H3 Image to video's first frame and References (reference 1), never Text to video (its refs are
+    not placed); a video take: never References (rows of media are not offered into)."""
+    img, vid = (media[f"11111111-0000-4000-8000-0000000000{n}"] for n in ("25", "21"))
+    offers = get(hapi, f"{STUDIO}/takes/{img}/uses")["uses"]
+    h3 = [(o["workflow_id"], o["param"], o["inputs"]) for o in offers if o["family"] == FAMILY]
+    assert h3 == [
+        (I2V, "first.image", {"first.image": {"take_id": img}}),
+        (REFS, "generate.refs", {"generate.refs": [ref(img)]}),
+    ], offers
+    r = hapi.post(f"{STUDIO}/takes/{img}/use", json={"workflow_id": I2V})
+    assert r.status_code == 200 and r.json()["inputs"] == {"first.image": {"take_id": img}}, r.text
+    offers = get(hapi, f"{STUDIO}/takes/{vid}/uses")["uses"]
+    assert not [o for o in offers if o["family"] == FAMILY], offers
+
+
+def test_another_users_media_in_rows_is_not_found(api_b, media):
+    """User B cannot name the h3 user's video or audio takes in a rows param (studio's `take <id> not found`, as for
+    a media param) nor list their offers."""
+    sid_b = new_session(api_b, "Contract B h3 rows")["id"]
+    vid, aud = (media[f"11111111-0000-4000-8000-0000000000{n}"] for n in ("21", "24"))
+    for param, field, tid in (("generate.videos", "video", vid), ("generate.audios", "audio", aud)):
+        detail = refused(
+            api_b, sid_b, REFS, {"prompt.text": "x", param: [{field: {"take_id": tid}}]}
+        )
+        assert detail == f"{param}[1].{field}: take {tid} not found", detail
+        assert api_b.get(f"{STUDIO}/takes/{tid}/uses").status_code == 404
+
+
 # ---------------------------------------------------------------- runs (MINIMAX_H3=1)
 
 
@@ -132,25 +225,26 @@ def finished(client, run: dict) -> dict:
 @pytest.mark.parametrize(
     "case",
     [
-        "references with a first frame",
         "a side off the 32 px grid",
         "1344 × 1344 is over the area",
+        "audio alone",
     ],
 )
 def test_runner_refusals(hapi, anon, sid, case):
-    """The run fails with h3_generate_error's text (contracts/fixtures/video/minimax-h3.json) before the child starts."""
+    """The run fails with h3_generate_error's text (contracts/fixtures/video/minimax-h3.json) before the child starts.
+    References with a first frame are studio's 422 from API 1.22 (test_studio_refuses_media_rows)."""
     fixture = json.loads((CONTRACTS / "fixtures" / "video" / "minimax-h3.json").read_text())
     (c,) = [c for c in fixture["cases"] if c["description"] == case]
-    node, refs, first, _, width, height = c["args"]
-    assert node == "generate"
+    node, refs, first, _, width, height, *rest = c["args"]
+    audios = rest[2] if len(rest) > 2 else []
+    assert node == "generate" and not refs and not first
     inputs = {"prompt.text": "a red fox", "canvas.width": width, "canvas.height": height}
     workflow_id = T2V
-    if refs or first:
-        img = upload(hapi, anon, png_bytes(64, 64))["id"]
-        workflow_id = I2V if first else REFS
-        inputs |= {"generate.refs": [ref(img)] * refs} | (
-            {"first.image": {"take_id": img}} if first else {}
-        )
+    if audios:
+        workflow_id = REFS
+        inputs |= {
+            "generate.audios": [{"audio": {"take_id": wav(hapi, anon, s)["id"]}} for s in audios]
+        }
     done = finished(hapi, start_run(hapi, sid, inputs, workflow_id))
     assert (done["status"], done["outputs"]) == ("failed", []), done
     assert c["expect"] in done["error"], done
@@ -184,3 +278,54 @@ def test_tiny_text_to_video(hapi, sid):
     v = take["video"]
     assert (v["frames"], v["fps"], v["has_audio"]) == (22, 24, True) and v["poster_url"], v
     assert take["made_with"]["workflow_id"] == T2V
+
+
+@gpu
+def test_image_to_video_mention_adds_text_only(hapi, anon, sid):
+    """In Image to video (first frame wired) an @element adds its name and text, never references (API 1.22,
+    contracts/fixtures/mentions/resolve.minimax-h3-image-to-video.json): the run succeeds."""
+    still = upload(hapi, anon, png_bytes(256, 256))["id"]
+    hero = element(hapi, f"hero{uuid.uuid4().hex[:6]}", [still], text="a tall woman in a red coat")
+    inputs = {
+        "prompt.text": f"@{hero['handle']} turns to the camera",
+        "first.image": {"take_id": still},
+        "seed.seed": 42,
+        "canvas.width": 256,
+        "canvas.height": 256,
+        "duration.frames": 22,
+        "generate.steps": 2,
+    }
+    done = finished(hapi, start_run(hapi, sid, inputs, I2V))
+    assert done["status"] == "succeeded", done
+    mw = get(hapi, f"{STUDIO}/takes/{done['outputs'][0]['take_id']}")["made_with"]
+    assert mw["inputs"].get("generate.refs", []) == [], mw["inputs"]
+    assert mw["inputs"]["prompt.text"].endswith(f"{hero['name']}: a tall woman in a red coat"), mw
+
+
+@gpu
+def test_tiny_ref2va_with_an_audio_reference(hapi, anon, sid):
+    """Ref2VA with an image and a 2 s audio reference (speed rule: 512 x 512, 22 frames, 2 steps): one video with
+    sound; the audio take is a parent."""
+    img = upload(hapi, anon, png_bytes(512, 512))["id"]
+    sound = wav(hapi, anon, 2.5)["id"]
+    inputs = {
+        "prompt.text": "<Picture 1> sways gently to the beat of <Audio 1>",
+        "generate.refs": [ref(img)],
+        "generate.audios": [{"audio": {"take_id": sound, "in": 0, "out": 2}}],
+        "seed.seed": 42,
+        "canvas.width": 512,
+        "canvas.height": 512,
+        "duration.frames": 22,
+        "generate.steps": 2,
+    }
+    done = finished(hapi, start_run(hapi, sid, inputs, REFS))
+    assert done["status"] == "succeeded", done
+    (out,) = done["outputs"]
+    take = get(hapi, f"{STUDIO}/takes/{out['take_id']}")
+    assert (take["kind"], take["width"], take["height"], take["video"]["frames"]) == (
+        "video",
+        512,
+        512,
+        22,
+    )
+    assert {img, sound} <= set(take["parents"]), take["parents"]

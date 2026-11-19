@@ -1,0 +1,13 @@
+{
+  "workflow_id": "minimax-h3-references",
+  "inputs": {
+    "generate.videos": [
+      {
+        "video": {
+          "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b",
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b.mp4"
+        }
+      }
+    ]
+  }
+}
