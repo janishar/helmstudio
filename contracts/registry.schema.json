@@ -1251,8 +1251,7 @@
                               },
                               "components": {
                                 "type": "array",
-                                "minItems": 1,
-                                "description": "every component such a run loads, in the order of their last use in the run (the hosts value's resident entries of the same key)",
+                                "description": "every component such a run loads, in the order of their last use in the run (the hosts value's resident entries of the same key). From API 1.21 it may be empty: a native pack's stage runs a child process that loads its own weights and exits, so nothing stays resident and the plan is peak_gb alone",
                                 "items": {
                                   "type": "object",
                                   "required": [
@@ -1515,7 +1514,7 @@
                         "runtime": {
                           "type": "string",
                           "pattern": "^[a-z][a-z0-9_]{0,31}$",
-                          "description": "torch, mlx, fake"
+                          "description": "torch, mlx, native (from API 1.21: a stage runs a child process, Apple silicon only), fake"
                         },
                         "env": {
                           "$ref": "messages/defs.schema.json#/$defs/envName"
@@ -1531,11 +1530,11 @@
                               "cpu"
                             ]
                           },
-                          "description": "from API 1.18: the devices the runtime runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime (mlx: mps)"
+                          "description": "from API 1.18: the devices the runtime runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime (mlx, native: mps)"
                         }
                       }
                     },
-                    "description": "from API 1.16: every runtime the pack has (model.yaml `runtimes`), also those of other envs: a model whose only runtime is mlx runs only on Apple silicon"
+                    "description": "from API 1.16: every runtime the pack has (model.yaml `runtimes`), also those of other envs: a model whose only runtimes are mlx or native runs only on Apple silicon"
                   }
                 }
               }
@@ -1735,7 +1734,7 @@
             "memory_total_gb"
           ],
           "additionalProperties": false,
-          "description": "from API 1.18: the device the runner computes on (its torch device, or MLX's Metal = mps), picked once per process (mps, then cuda, then cpu)",
+          "description": "from API 1.18: the device the runner computes on (its torch device, or MLX's Metal = mps; native: its child's Metal = mps), picked once per process (mps, then cuda, then cpu)",
           "properties": {
             "kind": {
               "enum": [
@@ -1773,7 +1772,7 @@
             "runtime": {
               "type": "string",
               "maxLength": 80,
-              "description": "the compute stack (`torch 2.15.0 \u00b7 CUDA 13.2`, `torch 2.15.0 \u00b7 MPS`, `mlx 0.30.0`)"
+              "description": "the compute stack (`torch 2.15.0 \u00b7 CUDA 13.2`, `torch 2.15.0 \u00b7 MPS`, `mlx 0.30.0`; native: the binary, `h3 4cafd17`)"
             }
           }
         },

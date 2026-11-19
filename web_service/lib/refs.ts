@@ -1,7 +1,7 @@
 // Image inputs (contracts/README.md "Image inputs"): an `image` param holds one take, a `rows` param whose item has an
 // Image field holds an ordered list of them (the references). Over HTTP an image is always `{take_id}`.
 import type { S } from "@/lib/api";
-import { roundEven } from "@/lib/video";
+import { positionOf, roundEven } from "@/lib/video";
 import { isRef, toRaw, type Field, type Raw } from "@/lib/workflow";
 
 type Param = S<"ParamSchema">;
@@ -109,6 +109,11 @@ export const autoCanvas = (
   first
     ? sizeFor(Math.min(4, Math.max(1 / 4, ref.width / ref.height)), w * h)
     : autoSize(ref.width, ref.height);
+
+/** What a video workflow's image input holds, for the top bar's count: frames on the clip (a first frame, keyframe
+ * rows), or references (rows without a position, as MiniMax H3's `<Picture N>` refs). */
+export const refUnit = (f: Field | undefined) =>
+  f?.param.type === "rows" && !positionOf(f.param) ? "reference" : "frame";
 
 /** The top bar's workflow label: "Qwen Image · Edit · 2 references", or the title alone without references. */
 export const editLabel = (title: string, n: number) =>

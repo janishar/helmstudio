@@ -15,6 +15,7 @@ import {
   autoBounds,
   clipOf,
   firstFrameRow,
+  fpsOf,
   positionOf,
   setFirstFrame,
 } from "@/lib/video";
@@ -27,7 +28,6 @@ import {
   ASPECTS,
   aspectOf,
   display,
-  fpsKey,
   megapixelChoices,
   megapixelsOf,
   pretty,
@@ -142,12 +142,6 @@ const sizeText = (w: number, h: number, grid = 1) =>
 const mpText = (w: number, h: number) => {
   const mp = (w * h) / 1e6;
   return `${+(mp < 0.1 ? mp.toPrecision(2) : mp.toFixed(1))} MP`;
-};
-
-/** A frames field's frame rate now (its `fps` field's value), 0 when it names none. */
-const fpsOf = (f: Field, fs: Field[], raws: Record<string, Raw>) => {
-  const r = fs.find((x) => x.key === fpsKey(f));
-  return r ? Number(rawOf(r, raws)) || 0 : 0;
 };
 
 /** Which inspector editor is open (a field key), and how to open or close one. */

@@ -88,6 +88,9 @@ describe("variant tags", () => {
     expect(runtimeTags(ltx)).toEqual(["MLX"]);
     expect(macOnly(ltx)).toBe(true);
     expect(macOnly(qwen)).toBe(false);
+    const h3 = { ...ltx, runtimes: [{ runtime: "native", env: "native" }] };
+    expect(runtimeTags(h3)).toEqual(["Native"]);
+    expect(macOnly(h3)).toBe(true);
     expect(folderOf(list, turbo, "mac")).toBe("~/GenAI/models/Qwen-Image-2.1-Turbo");
   });
 });

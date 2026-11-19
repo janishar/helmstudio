@@ -8,6 +8,7 @@ import { Monitor, Server } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { api, message, ok, type S } from "@/lib/api";
+import { MAC_RUNTIMES } from "@/lib/models";
 import {
   AFTER_RUN,
   afterRunTag,
@@ -213,7 +214,8 @@ function HostSection({
   onPin: (e: HostEntry) => void;
   onConfirm: (c: Confirm) => void;
 }) {
-  const mac = c.machine?.os === "macos" || (!c.machine && c.envs.some((e) => e.env === "mlx"));
+  const mac =
+    c.machine?.os === "macos" || (!c.machine && c.envs.some((e) => MAC_RUNTIMES.includes(e.env)));
   const Icon = mac ? Monitor : Server;
   const pct = (gb: number) => (c.budget_gb ? `${Math.min(100, (gb / c.budget_gb) * 100)}%` : "0%");
   const cachedEnvs = c.envs.filter((e) => (e.cached_gb ?? 0) > 0);

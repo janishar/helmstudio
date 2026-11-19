@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.20.0
+  version: 1.21.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -4984,7 +4984,7 @@ components:
         family: {type: string, examples: [qwen-image]}
         title: {type: string, examples: [Qwen Image 2.1]}
         media: {type: array, items: {type: string, enum: [image, video, audio]}, description: 'the board''s `image`, `video + audio`'}
-        runtimes: {type: array, items: {type: object, required: [runtime, env], properties: {runtime: {type: string}, env: {type: string}, devices: {type: array, items: {type: string, enum: [cuda, mps, cpu]}, description: 'from 1.18: the devices it runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime'}}}, description: 'every runtime the pack has; only mlx = runs on Apple silicon only (the board''s `Mac only`)'}
+        runtimes: {type: array, items: {type: object, required: [runtime, env], properties: {runtime: {type: string}, env: {type: string}, devices: {type: array, items: {type: string, enum: [cuda, mps, cpu]}, description: 'from 1.18: the devices it runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime'}}}, description: 'every runtime the pack has; only mlx or native (from 1.21: a pack whose stage runs a child process, the MiniMax H3 video model) = runs on Apple silicon only (the board''s `Mac only`)'}
         variants: {type: array, items: {$ref: '#/components/schemas/ModelVariant'}}
     ModelVariant:
       type: object

@@ -63,6 +63,7 @@ This section owns version numbers; other sections name libraries without them.
 | mlx | ≥ 0.32.4 (mlx-lm is not used: the llm pack runs text and images through mlx-vlm) |
 | mlx-vlm | ≥ 0.7.12 (Mac-only: the mlx env's extra `llm`, with llguidance for constrained JSON; `make runners` syncs it) |
 | numpy, pillow | ≥ 2.5.4, ≥ 13.0.0 |
+| h3.c (env native) | vendored at commit 4cafd17 in `runner_service/vendor/h3c/` (MIT; built by `make h3` with the Command Line Tools clang); a new pin means new goldens |
 
 **Web** (exact for framework and compiler, ranges for the rest; lockfile committed)
 

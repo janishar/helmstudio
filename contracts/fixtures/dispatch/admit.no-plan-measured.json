@@ -1,0 +1,35 @@
+{
+  "description": "a run planned at the whole budget (larger than its plan) with nothing resident anywhere, only each idle runner's own measured footprint: the other envs' excess lowers its P instead of holding it; released, budget_gb = 52 - torch's 0.9 - mlx's 0.6",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "used_gb": 0.9,
+      "resident": []
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "used_gb": 0.6,
+      "resident": []
+    },
+    "native": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "used_gb": 0.2,
+      "resident": []
+    }
+  },
+  "run": {
+    "env": "native",
+    "peak_gb": null,
+    "needs": []
+  },
+  "expect": {
+    "decision": "release",
+    "unload": {},
+    "budget_gb": 50.5,
+    "error": null
+  }
+}

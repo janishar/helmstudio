@@ -1,0 +1,19 @@
+{
+  "description": "minimax-h3/generate's refusals: h3_generate_error(node, refs, first, last, width, height) → the run's error text, or null (contracts/README.md, the minimax-h3 family). refs = the number of reference rows, first / last = whether those inputs are wired. The runner fails the run with the text before the h3 child starts",
+  "cases": [
+    {"description": "the template default, 864 × 480, text to video", "args": ["generate", 0, false, false, 864, 480], "expect": null},
+    {"description": "first and last frame, no references", "args": ["generate", 0, true, true, 864, 480], "expect": null},
+    {"description": "nine references (Ref2VA)", "args": ["generate", 9, false, false, 864, 480], "expect": null},
+    {"description": "references with a first frame", "args": ["generate", 1, true, false, 864, 480], "expect": "generate: references cannot go with a first or last frame"},
+    {"description": "references with a last frame only", "args": ["generate", 2, false, true, 864, 480], "expect": "generate: references cannot go with a first or last frame"},
+    {"description": "the largest canvas, 768 × 1344 (1,032,192 pixels)", "args": ["generate", 0, false, false, 768, 1344], "expect": null},
+    {"description": "1344 × 768 is the same area", "args": ["generate", 0, false, false, 1344, 768], "expect": null},
+    {"description": "the smallest, 256 × 256", "args": ["generate", 0, false, false, 256, 256], "expect": null},
+    {"description": "800 × 1312 is over the area by 17,408 pixels", "args": ["generate", 0, false, false, 800, 1312], "expect": "generate: the canvas is 800 × 1312; at most 1032192 pixels (768 × 1344)"},
+    {"description": "1344 × 1344 is over the area", "args": ["generate", 0, false, false, 1344, 1344], "expect": "generate: the canvas is 1344 × 1344; at most 1032192 pixels (768 × 1344)"},
+    {"description": "a side off the 32 px grid", "args": ["generate", 0, false, false, 850, 480], "expect": "generate: the canvas is 850 × 480; sides must be multiples of 32 from 256 to 1344"},
+    {"description": "a side under 256", "args": ["generate", 0, false, false, 224, 480], "expect": "generate: the canvas is 224 × 480; sides must be multiples of 32 from 256 to 1344"},
+    {"description": "a side over 1344", "args": ["generate", 0, false, false, 1376, 256], "expect": "generate: the canvas is 1376 × 256; sides must be multiples of 32 from 256 to 1344"},
+    {"description": "the reference check comes first", "args": ["sample", 3, true, false, 1344, 1344], "expect": "sample: references cannot go with a first or last frame"}
+  ]
+}

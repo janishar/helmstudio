@@ -160,3 +160,12 @@ export function setFirstFrame(p: Param, rows: Row[], takeId: string, clip: Clip 
   if (i >= 0) return rows.map((r, j) => (j === i ? { ...r, [img]: ref } : r));
   return [{ [img]: ref, ...(pos && { [pos[0]]: 0 }) }, ...rows];
 }
+
+/** A frames field's frame rate now (its `fps` field's value, else the node's set value when the workflow does not
+ * show that field, as MiniMax H3's fixed 24), 0 when it names none. */
+export const fpsOf = (f: Field, fs: Field[], raws: Record<string, Raw>) => {
+  const r = fs.find((x) => x.key === fpsKey(f));
+  return (
+    Number(r ? (raws[r.key] ?? toRaw(r.initial, r.param)) : f.siblings?.[f.param.fps ?? ""]) || 0
+  );
+};

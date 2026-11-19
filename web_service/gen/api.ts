@@ -5110,7 +5110,7 @@ export interface components {
             title: string;
             /** @description the board's `image`, `video + audio` */
             media: ("image" | "video" | "audio")[];
-            /** @description every runtime the pack has; only mlx = runs on Apple silicon only (the board's `Mac only`) */
+            /** @description every runtime the pack has; only mlx or native (from 1.21: a pack whose stage runs a child process, the MiniMax H3 video model) = runs on Apple silicon only (the board's `Mac only`) */
             runtimes: {
                 runtime: string;
                 env: string;

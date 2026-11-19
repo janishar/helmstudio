@@ -6,14 +6,15 @@ Python identifier, e.g. `qwen_image`) holding:
 | File | What |
 |---|---|
 | `model.yaml` | the model: variants, weight components, stages (node kinds) and their params, ports, memory |
-| `<runtime>.py` | one module per runtime named in `runtimes` (`torch.py`, `mlx.py`; the fake echo pack has `fake.py`): one function per stage, plus `build()` / `rename()` (and on MLX `convert()`) for weight components |
+| `<runtime>.py` | one module per runtime named in `runtimes` (`torch.py`, `mlx.py`, `native.py`; the fake echo pack has `fake.py`): one function per stage, plus `build()` / `rename()` (and on MLX `convert()`) for weight components |
 | `workflows/*.json` | the workflows the runner publishes, one registry `workflow` object per file |
 | `looks/*.yaml` | (optional) starter looks, shown to every user read-only (below) |
 | `GOTCHAS.md` | (optional) hard-won notes |
 
 The runner (`RUNNER_ENV`) loads every pack with a runtime whose `env` equals it: `fake` → `echo`, `torch` → the
 torch packs (uv project `runner_service/`, extra `torch`), `mlx` → the mlx packs (`ltx`; uv project
-`runner_service/envs/mlx`, its own lockfile). A runner process imports only its own runtime: the core imports neither
+`runner_service/envs/mlx`, its own lockfile), `native` → the native packs (`minimax_h3`: a child process; uv project
+`runner_service/` with no extra, below). A runner process imports only its own runtime: the core imports neither
 torch nor mlx (`tests/test_mlx.py`). From each pack the core builds the registry values `<host>.<env>.{nodes,workflows,models}`
 (`core/pack.py`, `core/registry.py`), plus `.loras` (the host's shared LoRA index) and `.looks` (the packs' starter
 looks, `core/looks.py`); they are checked against `contracts/registry.schema.json` and every
@@ -457,6 +458,31 @@ node: the core also builds its handle with `ctx` None. LoRA on MLX is bake only
 `loading <component>` (`fusing LoRA` when the rows are only the pack's `prefused` files: ltx's `distill`); a baked
 component is its own residency entry. There are no MLX adapters.
 
+## Native packs (`native.py`, API 1.21)
+
+A stage that runs a **child process** loading its own weights (today `minimax_h3`: the `h3` binary, h3.c on Metal)
+instead of components in the runner. The env `native` runs on the runner core's dependencies only (`RUNNER_ENV=native
+uv run python main.py`, health port 8093 from the root Makefile); its loader `core/loaders_native.py` loads nothing:
+device `mps`, the budget cut from RAM, `free` a no-op, and the measure is the runner's footprint plus the live
+child's (`phys_footprint`), so the hosts key's `used_gb` shows the run's real use.
+
+- **The stage** has `uses: []` and puts the child's whole peak in `peak_gb` (its memory item has `components: []`,
+  P = `peak_gb`); the components are still declared, for presence, bytes and downloads. Nothing is resident after
+  the run (the child exited), so unload requests, pins and `RUNNER_AFTER_RUN` do nothing.
+- **`core.child.run(ctx, argv, cwd=, phases=, idle_s=)`** starts the child in its own session with a cut-down
+  environment (`PATH`, `HOME`, `TMPDIR`, `LANG`, `LC_ALL`, `USER`, `H3_*`: never the runner's secrets), reads its
+  stderr split on `\r` and `\n` (a line `<phase> <n>/<total>` is progress, mapped through `phases`, forwarded at most
+  every 0.5 s), passes a cancel point every 0.5 s (so the stage's `stall_s` never fires: `idle_s` is the child's own
+  limit, failing the run when no progress line came for that long), kills the process group on cancel, shutdown or
+  any error (SIGTERM, SIGKILL after 3 s) and fails a non-zero exit with the child's last `h3: ` line (paths
+  replaced). Every path in `argv` must be absolute (cwd is the binary's folder for h3). The child's pid is kept in
+  `RUNNER_CACHE/child-<env>.pid`; at start the runner kills a child a killed runner left behind, only when that pid
+  still runs the same binary.
+- **The binary** is a pinned, vendored copy (`runner_service/vendor/h3c`, `VERSION`, with its licence and notices),
+  built by `make h3` in runner_service (Apple clang, about 1 s); never a binary from another checkout.
+- Inputs are files: the stage writes Image values as PNGs into a per-run temp folder (deleted after, with the
+  child's MP4) and builds the Video value as ltx does (`core.media.probe`, poster and last frame).
+
 ## Checking a pack
 
 `cd runner_service && uv sync --extra torch && uv run pytest -q` (test_packs compares the generated values with
@@ -464,3 +490,7 @@ the fixtures); `uv run pytest -m gpu` runs the tests that load real weights. The
 `uv sync --project envs/mlx && uv run --project envs/mlx pytest -q`; the ltx goldens:
 `uv run --project envs/mlx python tests/test_ltx_golden.py [case ...] [--reseed]` (stop both runners first; the
 M7 dev cases `retake-448x256-49f-s42 extend-448x256-49f+8-s42 a2v-448x256-49f-s42` take 2-5 min each).
+The native env: `uv run pytest -q` covers `core.child` with a fake child script (`tests/test_child.py`) and the
+minimax_h3 pack's values; its goldens (`make h3`, stop the runners first):
+`uv run python tests/test_h3_golden.py [t2v fl2va-first fl2va-first-last ref2va-image]` or
+`uv run pytest -m gpu tests/test_h3_golden.py`.

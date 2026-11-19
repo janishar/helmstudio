@@ -47,7 +47,7 @@ REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
 # Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
-CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server.", "minimax-h3-image."]
+CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server.", "minimax-h3-image.", "minimax-h3."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",
@@ -1741,6 +1741,23 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
     return out
 
 
+# ---------------------------------------------------------------- minimax-h3 generate (README, the minimax-h3 family)
+H3_MAX_PIXELS = 768 * 1344  # 1,032,192: the h3 binary's largest canvas
+
+
+def h3_generate_error(node: str, refs: int, first: bool, last: bool, width: int, height: int) -> str | None:
+    """minimax-h3/generate's refusals, before the child starts (the run fails with the text): references with a
+    first or last frame (Ref2VA takes no anchors), a side off 256..1344 or off the 32 px grid, then more than
+    768 × 1344 pixels. A schema cannot say the first or the last (a canvas may come from any Canvas output)."""
+    if refs and (first or last):
+        return f"{node}: references cannot go with a first or last frame"
+    if any(not 256 <= x <= 1344 or x % 32 for x in (width, height)):
+        return f"{node}: the canvas is {width} × {height}; sides must be multiples of 32 from 256 to 1344"
+    if width * height > H3_MAX_PIXELS:
+        return f"{node}: the canvas is {width} × {height}; at most {H3_MAX_PIXELS} pixels (768 × 1344)"
+    return None
+
+
 def check_media(registry: Registry) -> None:
     g, reg = HERE / "fixtures" / "video", HERE / "fixtures" / "registry"
     fx = json.loads((g / "sources.json").read_text())
@@ -1749,6 +1766,10 @@ def check_media(registry: Registry) -> None:
         if (got := fn(*c["args"])) != c["expect"]:
             fail(f"fixtures/video/sources.json {c['description']!r}: got {json.dumps(got)}")
     print("ok   fixtures/video/sources.json")
+    for c in json.loads((g / "minimax-h3.json").read_text())["cases"]:
+        if (got := h3_generate_error(*c["args"])) != c["expect"]:
+            fail(f"fixtures/video/minimax-h3.json {c['description']!r}: got {json.dumps(got)}")
+    print("ok   fixtures/video/minimax-h3.json")
     pal = {n["kind"]: n for pre in ("ltx.", "qwen-image.", "minimax-h3-image.") for n in json.loads((reg / f"{pre}nodes.valid.json").read_text())["nodes"]}
     wfs = [w for pre in ("ltx.", "qwen-image.", "minimax-h3-image.") for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]]
     uses_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/TakeUses"}, registry=registry,
@@ -2437,6 +2458,8 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
         return {"decision": "release", "unload": {}, "budget_gb": None, "error": None}
     p = budget if peak is None else peak
     counted = [x for x in entries if not (x[0] == env and x[1] in needs)]
+    if peak is None:  # P = B takes what it can get: other envs' measured excess (never freed) lowers it, never holds it
+        p -= sum(x[2] for x in counted if x[0] != env and x[1][0] == "(measured)")
     c = sum(x[2] for x in counted)
     own = sum(x[2] for x in counted if x[0] == env and x[1][0] == "(measured)")  # the run's own runner's excess
     if p > budget:  # a pin never fails a run: pinned entries are victims too, the last ones (below)

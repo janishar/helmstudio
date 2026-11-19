@@ -121,8 +121,9 @@ def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: 
         plans = [memory_plan(pack, variant, precision, impls, node_schemas, media)]
     plans += [memory_plan(pack, variant, precision, impls, node_schemas, [w]) | {"workflow": w["id"]}
               for w in text]  # fmt: skip
-    # a workflow that loads nothing (echo-ask) has no plan
-    return [p for p in plans if p["components"]]
+    # a workflow that loads nothing (echo-ask) has no plan; a native stage (`uses: []`, a child process) has its
+    # peak_gb only (contracts/README.md, The native runtime)
+    return [p for p in plans if p["components"] or p["peak_gb"] > 0.01]
 
 
 def allows(

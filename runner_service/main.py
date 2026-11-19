@@ -1,5 +1,6 @@
 """runner_service: `python main.py`. RUNNER_HOST / RUNNER_ENV say which runner: fake/fake (the compose fake
-runner, the echo pack), mac/torch or mac/mlx (native, `make runners`: the torch packs, the mlx packs).
+runner, the echo pack), mac/torch, mac/mlx or mac/native (`make runners`: the torch packs, the mlx packs, the native
+packs: a stage runs a child process, core.child; core deps only, no torch or MLX).
 
 Loads the packs of its env, indexes the host's shared LoRAs, stores the starter looks' thumbnails, checks and publishes its registry values, keeps its hosts key fresh (with memory and
 resident components when it has a residency manager), then pulls cmd.run.<host>.<env> from CMD (durable
@@ -34,7 +35,7 @@ import config
 import health
 from config import ENV, HOST, INBOX_PREFIX, NATS_URL
 from consumer import ACK_WAIT, Consumer
-from core import download, looks, lora, media, models, registry
+from core import child, download, looks, lora, media, models, registry
 from core.graph import GPU
 from core.residency import POLICIES, Residency, host_device, ram_gb
 from messaging import media as media_jobs
@@ -155,6 +156,7 @@ async def main() -> None:
     if why := config.plain_with_ca():
         raise SystemExit(why)
     download.environment(config.CACHE)  # before huggingface_hub is imported
+    await asyncio.to_thread(child.sweep)  # a child (h3) a killed runner of this env left running
     models.hashes = models.Hashes(config.CACHE / f"model-hashes-{ENV}.json")
     models.hashes.start()  # hashes what no sidecar records, in the background
     values, impls, packs = (

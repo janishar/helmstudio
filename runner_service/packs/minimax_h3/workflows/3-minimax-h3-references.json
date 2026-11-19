@@ -1,0 +1,95 @@
+{
+  "id": "minimax-h3-references",
+  "title": "MiniMax H3 References",
+  "family": "minimax-h3",
+  "env": "native",
+  "media": "video",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "canvas": {
+      "kind": "minimax-h3/canvas",
+      "params": {
+        "width": 864,
+        "height": 480
+      }
+    },
+    "duration": {
+      "kind": "minimax-h3/duration",
+      "params": {
+        "frames": 124,
+        "fps": 24
+      }
+    },
+    "model": {
+      "kind": "minimax-h3/model",
+      "params": {
+        "variant": "base",
+        "precision": "int8"
+      }
+    },
+    "generate": {
+      "kind": "minimax-h3/generate",
+      "in": {
+        "model": "model.model",
+        "prompt": "prompt.text",
+        "seed": "seed.seed",
+        "canvas": "canvas.canvas",
+        "duration": "duration.duration"
+      },
+      "params": {
+        "steps": 6,
+        "speed": "exact",
+        "refs": []
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "generate.video"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "generate.refs"
+    ],
+    "quick": [
+      "elements",
+      "generate.speed",
+      "seed.seed"
+    ],
+    "inspector": [
+      {
+        "title": "Canvas",
+        "items": [
+          "canvas.width",
+          "canvas.height"
+        ]
+      },
+      {
+        "title": "Duration",
+        "items": [
+          "duration.frames"
+        ]
+      },
+      {
+        "title": "Quality",
+        "items": [
+          "generate.steps"
+        ]
+      }
+    ]
+  }
+}

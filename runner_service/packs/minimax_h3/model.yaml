@@ -1,0 +1,73 @@
+# MiniMax H3 video with sound, run by the native h3 binary (h3.c, Metal; the pinned copy in vendor/h3c, built with
+# `make h3`) as a child process of the native runner (core/child.py; docs/reference-notes/minimax-h3.md). One stage
+# does everything (tokenize, Qwen3-VL encode, the 33B DiT, video + audio VAE decode, the MP4 mux), so the runner loads
+# no component: `uses: []`, and peak_gb is the child's whole peak (P = peak_gb, contracts/README.md "The native
+# runtime"). Generates exactly the canonical minimax-h3 node schemas and workflows (tests/test_packs.py).
+# peak_gb, measured 2026-11-19 (M5 Pro 64 GB, macOS 27.2, exact flags, zero-copy default; child phys_footprint with
+# its ffmpeg, 25 ms sampling): 18.5 at 512 x 512 x 22, 20.6-20.7 at 864 x 480 x 124 (T2VA and FL2VA), 25.0 there with
+# H3_ZERO_COPY_WEIGHTS=0, 24.2 at 1344 x 768 x 124, 30.3 at 1344 x 768 x 243; fit 18.2 + 0.048 mp x frames. The
+# formula keeps >= 5.6 GB above every measured peak (the ~4.4 GB of DiT weights mapped from the shards are not in the
+# footprint but RAM holds them); 42.7 at the largest canvas x 362 frames (not run). GOTCHAS.md.
+id: minimax-h3
+family: minimax-h3
+title: MiniMax H3
+runtimes:
+  native: {env: native, devices: [mps]}   # Metal only; validated on M5 (int8 TensorOps), GOTCHAS.md
+model:
+  help: "The weights to load: FL2VA for text and frames to video, Ref2VA for references (one folder holds both)."
+  variant: {label: Variant}
+  precision:
+    label: Precision
+    default: int8
+    help: "Stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). Not a choice."
+media: [video, audio]
+variants:
+  base: {dir: MiniMax-H3, title: Base}   # h3 takes this folder (FL2VA/ links its shared parts into Ref2VA/)
+# presence, bytes and downloads only: the child loads them. The precisions only shape the model node's enum ([int8]);
+# Ref2VA/text_encoder is also MiniMax-H3-Image's text encoder (its folder links here): never delete it alone.
+components:
+  transformer_fl2va: {files: "FL2VA/transformer/*.safetensors", dtype: stored, precision: [int8]}
+  transformer_ref2va: {files: "Ref2VA/transformer/*.safetensors", dtype: stored, precision: [int8]}
+  text_encoder: {files: "Ref2VA/text_encoder/*.safetensors", dtype: stored, precision: [int8]}
+  video_vae: {files: "Ref2VA/video_vae/source/*.safetensors", dtype: stored, precision: [fp32]}
+  audio_vae: {files: "Ref2VA/audio_vae/model.safetensors", dtype: stored, precision: [fp32]}
+stages:
+  canvas:
+    title: Canvas
+    help: "The video size in pixels: sides multiples of 32 from 256 to 1344, at most 768 × 1344 pixels in all (1,032,192). 864 × 480 is 16:9."
+    params:
+      width: {type: int, label: Width, default: 864, min: 256, max: 1344, step: 32}
+      height: {type: int, label: Height, default: 480, min: 256, max: 1344, step: 32}
+    outputs: {canvas: Canvas}
+  duration:
+    title: Duration
+    help: "The clip's length on MiniMax H3's 5 + 17k frame grid at 24 fps: 124 frames is about 5 s, 362 about 15 s."
+    params:
+      frames: {type: frames, label: Length, default: 124, min: 5, max: 362, step: 17, fps: fps}
+      fps: {type: int, label: Frame rate, default: 24, min: 1, max: 60, step: 1, values: [24],
+            help: MiniMax H3 runs at 24 fps.}
+    outputs: {duration: Duration}
+  generate:
+    title: Generate
+    help: "Runs MiniMax H3 end to end in its own process (the native h3 binary): encodes the prompt and any frames or references, denoises, decodes picture and sound, and writes an MP4 (H.264 + AAC 32 kHz, 24 fps). References use the Ref2VA model, everything else FL2VA."
+    uses: []
+    inputs:
+      model: Model
+      prompt: Text
+      seed: Seed
+      canvas: Canvas
+      duration: Duration
+      first: {type: Image, optional: true}
+      last: {type: Image, optional: true}
+    outputs: {video: Video}
+    params:
+      steps: {type: int, label: Steps, default: 6, min: 2, max: 50, step: 1,
+              help: "Denoising passes: 50 is the reference quality, 4 to 7 a fast draft."}
+      speed: {type: enum, label: Speed, default: exact, enum: [exact, fast],
+              help: "exact: all 50 transformer blocks every step. fast: 45 blocks and every other step reused: quicker, slightly different."}
+      refs: {type: rows, label: References, default: [], min: 0, max: 9, item: {image: Image},
+             mention: "<Picture {n}>",
+             help: "Images the prompt names <Picture 1>, <Picture 2>, …; any reference switches to the Ref2VA model and cannot go with a first or last frame."}
+    peak_gb: "24 + 0.05 * mp * frames"
+    # the child is watched by its own idle limit (native.py IDLE_S); this stage passes a cancel point every 0.5 s
+    stall_s: 900

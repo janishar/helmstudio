@@ -57,12 +57,13 @@ def ram_gb() -> float:
 _RUSAGE = (ctypes.c_uint64 * 64)()
 
 
-def footprint_gb() -> float | None:
-    """This process's physical footprint (macOS phys_footprint, what Activity Monitor and jetsam count: Metal
-    buffers and the allocators' caches included) in GB; None where the call does not exist."""
+def footprint_gb(pid: int | None = None) -> float | None:
+    """This process's (or `pid`'s: a child of the native runtime) physical footprint (macOS phys_footprint, what
+    Activity Monitor and jetsam count: Metal buffers and the allocators' caches included) in GB; None where the call
+    does not exist or the process is gone."""
     if sys.platform != "darwin":
         return None
-    if ctypes.CDLL(None).proc_pid_rusage(os.getpid(), 4, ctypes.byref(_RUSAGE)) != 0:
+    if ctypes.CDLL(None).proc_pid_rusage(pid or os.getpid(), 4, ctypes.byref(_RUSAGE)) != 0:
         return None
     return _RUSAGE[2 + 7] / 2**30
 

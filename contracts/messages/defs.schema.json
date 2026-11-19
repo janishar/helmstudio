@@ -46,7 +46,7 @@
     "envName": {
       "type": "string",
       "pattern": "^[a-z0-9]{1,32}$",
-      "description": "a runner env on a host (mlx, torch, fake)"
+      "description": "a runner env on a host (mlx, torch, native, fake)"
     },
     "workflowId": {
       "type": "string",

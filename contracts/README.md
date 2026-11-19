@@ -32,6 +32,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/registry/minimax-h3-image.{nodes,workflows}.valid.json` | (API 1.20) **canonical** torch-runner values of the minimax-h3-image family (workflow `minimax-h3-image`), published with the qwen-image values (the core kinds they share are identical); `minimax-h3-image.models.valid.json` is an example (bytes and sizes measured) |
+| `fixtures/registry/minimax-h3.{nodes,workflows}.valid.json` | (API 1.21) **canonical** native-runner values (minimax-h3 family, host `mac`, env `native`, workflows `minimax-h3-text-to-video`, `minimax-h3-image-to-video`, `minimax-h3-references`): published verbatim; `minimax-h3.models.valid.json` is an example (bytes measured, `peak_gb` a placeholder until measured; `components: []` in its memory item: the native runtime) |
 | `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflows `ltx-text-to-video`, `ltx-image-to-video`): published verbatim; `ltx.models.valid.json` (with the canonical ltx `lora` block; its `prefused` id is a placeholder the runner fills from its index) and `host.valid.6.json` are examples (sizes measured) |
 | `fixtures/registry/llm.{nodes,workflows}.valid.json` | **canonical** mlx-runner values of the llm pack (API 1.14; family `llm`, workflow `llm-ask`), published with the ltx values; `llm.models.valid.json` is an example (sizes measured, peak extrapolated). `qwen-image.*` add `qwen-image/ask`, `answer`, `qwen-image-ask`; the echo values add `echo/ask`, `answer`, `echo-ask` |
 | `fixtures/registry/server.{nodes,workflows}.valid.json` | (API 1.15) **canonical** values pipelines_service's server executor publishes for each host it serves (host `mac` here, env `server`: kind `server/ask`, workflow `server-ask`; Model sources) |
@@ -39,12 +40,12 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/decisions/` | the **shared decision fixtures** (API 1.14): `verdict.json` (a judge answer → `judge_verdict`), `replay.json` (a call → `inputs_hash`); (API 1.15) `agent-turn.json` (a turn's answer, local or native, → `agent_turn`: the calls to run, final, route, or the re-ask error), `agent-schema.json` (a node → the canonical turn schema `turn_schema`). pipelines_service runs them |
 | `fixtures/dispatch/` | the **shared dispatcher fixtures** (Two envs on one host: the hand-over): `admit.*.json` (one admission decision: the host's keys, the run, the other queued runs → `{decision, unload, budget_gb, error}`), `order.*.json` (a simulated queue on one host: plans, runs, batches → `{releases, unloads, loads}`), (API 1.18) `place.*.json` (several hosts: a run's eligible hosts and the one it is lined up on, or its error; Several hosts). studio_service's Go tests run them |
 | `fixtures/timelines/` | the **shared timeline fixtures** (API 1.17, Timeline rules, below): `rates.json`, `normalize.json`, `edits.json`, `snap.json`, `frame-at.json`, `plan.json`, `shot-keyframes.json`, `rerender.json`, each `{description, takes?, cases: [{description, …, expect}]}`. studio_service (Go) and the web (TypeScript) both run them |
-| `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors). studio_service, the web and the mlx runner run them |
+| `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors); `sources.json` and `uses.json` (Media inputs); (API 1.21) `minimax-h3.json` (minimax-h3/generate's refusals → the run's error text: the native runner runs it). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors`, the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -86,7 +87,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 Host and env names are lower-case letters and digits (one subject token each). The fake runner is host `fake`,
 env `fake`; the native torch runner is host `mac`, env `torch` (durable `runner-mac-torch`, subject `cmd.run.mac.torch`);
 the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subject `cmd.run.mac.mlx`, registry keys
-`mac.mlx.*`, hosts key `mac.mlx`, unload subject `runner.unload.mac.mlx`): two processes, one GPU and one memory budget (Two envs on one host: the hand-over). From API 1.18 a remote GPU host joins the same way (host `gcp`, env `torch`: `cmd.run.gcp.torch`, durable `runner-gcp-torch`, NATS user `runner_gcp_torch`; A remote GPU host), with its own budget (Hosts with a discrete GPU; Several hosts). The envelope `type` is the kind of message, never the subject.
+`mac.mlx.*`, hosts key `mac.mlx`, unload subject `runner.unload.mac.mlx`): two processes, one GPU and one memory budget (Two envs on one host: the hand-over). From API 1.21 a third, the native runner (env `native`: durable `runner-mac-native`, subject `cmd.run.mac.native`, registry keys `mac.native.*`, hosts key `mac.native`, unload subject `runner.unload.mac.native`, NATS user `runner_mac_native`), shares that GPU and budget; the hand-over's rules are written for any number of envs on a host. From API 1.18 a remote GPU host joins the same way (host `gcp`, env `torch`: `cmd.run.gcp.torch`, durable `runner-gcp-torch`, NATS user `runner_gcp_torch`; A remote GPU host), with its own budget (Hosts with a discrete GPU; Several hosts). The envelope `type` is the kind of message, never the subject.
 
 ## How the pieces meet
 
@@ -186,6 +187,40 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   a time in 52 GB: each stage evicts the one before (enhancer and text encoder `unloads_after`); a re-roll with the
   same prompt and references keeps the transformer + VAE and the cached encoding. A component's `precision` may be
   `fp32` from 1.20 (the VAE: registry components, hosts `resident`, `req.runner.unload`, openapi `Precision`).
+- **The minimax-h3 family (native, API 1.21, M7 pack 3;** docs/reference-notes/minimax-h3.md**).** MiniMax H3 video
+  with sound, run by the native `h3` binary (h3.c, Metal; a pinned copy vendored in runner_service) as a **child
+  process** of the runner of env `native` (host `mac`, Apple silicon only; the native runtime, below). One stage does
+  everything (tokenize, Qwen3-VL encode, the 33B transformer, video and audio VAE decode, the MP4 mux), so each
+  workflow is `prompt` · `seed` · `canvas` · `duration` · `model` → `generate` → `output`, and a new seed re-runs it
+  all. Kinds: `canvas` (`minimax-h3/canvas`: `width` 864, `height` 480, 256–1344 step 32) · `duration`
+  (`minimax-h3/duration`: `frames` 124, 5–362 step 17 (5 + 17k), `fps` = `fps`, no auto; `fps` 24, `values [24]`) ·
+  `model` (`minimax-h3/model`: `variant` base, `precision` int8 only: stored bf16, the binary quantizes the
+  transformer to int8 at load on M5; not a choice) → `generate` (`minimax-h3/generate`, in `model`, `prompt`, `seed`,
+  `canvas`, `duration`, optional `first` and `last`: Image; `steps` 2–50 default 6; `speed` exact | fast default exact
+  (exact: all 50 transformer blocks, no reuse; fast: 45 blocks and every other step's velocity reused, as the old
+  studio's fast preset); `refs` rows 0–9 `{image: Image}`, mention `<Picture {n}>`; out `video`: Video) → `output`.
+  Templates (`media: video`): `minimax-h3-text-to-video` (`MiniMax H3 Text to video`), `minimax-h3-image-to-video`
+  (`MiniMax H3 Image to video`, action Animate: a core `image` node `first` wired to `generate.first`; a last frame is a
+  second `image` node wired to `generate.last`, added in the workflow editor: `valid.minimax-h3-first-last.json`),
+  `minimax-h3-references` (`MiniMax H3 References`: `generate.refs` in the composer, the elements tile). Modes follow
+  the inputs: references (non-empty `refs`) run the Ref2VA transformer, everything else FL2VA (text only, first,
+  last, or both). **Refusals** (`h3_generate_error`, `fixtures/video/minimax-h3.json`), checked by the runner before
+  the child starts, failing the run: `<node>: references cannot go with a first or last frame`; `<node>: the canvas is
+  <w> × <h>; sides must be multiples of 32 from 256 to 1344`; `<node>: the canvas is <w> × <h>; at most 1032192
+  pixels (768 × 1344)` (in that order; the schema cannot say the area, and a Canvas may come from another node). A
+  first frame is stretched to the canvas, a last frame cropped to cover it, references keep their aspect (the h3 CLI).
+  No video or audio references in this version (a rows item for audio and video takes needs a contract change), no
+  prompt enhancer, no LoRAs (no lora-stack, no look tiles), no ask workflow. Output: one Video value with sound
+  (H.264 + AAC 32 kHz stereo, 24 fps, `+faststart`) with poster, last frame and stream facts as ltx's (Video:
+  Outputs). The same seed, flags, OS, GPU family and binary give the same frames (noise is made on the CPU from the
+  seed). Mentions: `generate.refs` is the family's reference rows in every template, so an element's images become
+  `<Picture n>` rows (Mentions); in the image-to-video template that run then fails the references refusal.
+  **Memory**: the stage `uses` no component (`uses: []`), so the models value's `memory` item has empty `components`
+  and `peak_gb` = the child's measured peak (the whole run; P = `peak_gb`, nothing is kept after it). The
+  components (`transformer_fl2va`, `transformer_ref2va`, `text_encoder`, `video_vae`, `audio_vae`) are declared for
+  presence, bytes and downloads only. `minimax-h3.models.valid.json` is an example: its bytes are measured on disk,
+  its `peak_gb` is a placeholder until the runner's measurement replaces it. The text encoder folder is shared with
+  `minimax-h3-image` (its `text_encoder` links into this variant's `Ref2VA/text_encoder`).
 - **Models and memory.** The registry `models` value lists, per model id, `variants` with `presence`
   (`present` | `missing`), `bytes` on disk and the `precisions` it can load as: a full-precision variant offers
   load-time quantization (`[bf16, int8]`; MLX also `int4`), an already-quantized one only its own (`[int8]`), and from
@@ -253,7 +288,8 @@ create, terminal status and cancel, and every few seconds.
 
 ## Two envs on one host: the hand-over (API 1.13, M4 stage C; normative)
 
-Host `mac` runs two native runners, env `torch` (Qwen) and env `mlx` (LTX): two processes, one GPU, **one memory
+Host `mac` runs native runners for env `torch` (Qwen), env `mlx` (LTX) and, from 1.21, env `native` (MiniMax H3
+video): one process each, one GPU, **one memory
 budget** (64 GB unified memory). Studio's dispatcher alone decides what may be loaded across a host's envs: memory
 admission per host, and an evict hand-over that names components (it replaces stage A's gate, which unloaded
 everything on the other env). studio_service implements exactly these rules and runs `fixtures/dispatch/`; `check.py`
@@ -279,7 +315,10 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
   `bake` rows, as for resident below). **Planned peak** P = `peak_gb` + the bytes of X's LoRA files / 2^30. No plan
   (no models key, no `memory` item for that precision): P = B. A run larger than its plan (the item's `planned_at`:
   some node's `width` × `height` / 10^6 above its `mp`, or a numeric `frames` above its `frames`), or one with two
-  `<family>/model` nodes: P = B, its needs still reused. Fixtures give P directly.
+  `<family>/model` nodes: P = B, its needs still reused. (API 1.21) P = B asks for whatever the host can give, not a
+  size: the measured excess of H's other envs (never a victim, no unload frees it) lowers that P by as much instead
+  of making X wait (its `budget_gb` is B minus those envs' entries anyway), so an idle runner's own footprint in a
+  third env never holds it (`admit.no-plan-measured.json`). Fixtures give P directly.
 - **Measured**: a present key whose `memory.used_gb` exceeds Σ `gb` of its entries holds one more entry of that excess
   (the runtime, device caches, cached node results, a quantized module's real footprint), counted like an offline
   entry: never a victim (a runner frees its device cache and cached node results after every unload and every run).
@@ -389,7 +428,7 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   recently used components (`admit.measured-own-env.json`), so on the real host LTX loads once per burst of clips like
   Qwen (1 + ⌈(n − 1) / W⌉), and no still reloads the text encoder.
 
-**Runners** (both native runners):
+**Runners** (every native runner: `torch`, `mlx` and, from API 1.21, `native`):
 - **Hosts value**: every resident entry with `gb` (at the target dtype), `last_used` (UTC: its last use by a stage; a
   load is a use), `pinned` (in use by the running run, or RUNNER_PIN), `loras` for a baked set; `memory.budget_gb`
   = RAM − RUNNER_RESERVE_GB. Written every 10 s and after every load, unload and run (before the terminal status).
@@ -420,6 +459,16 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   (`RUNNER_IDLE_UNLOAD_S`) stay.
 - **By hand** (goldens, debugging): stop the runners first (`make runners-stop`); never load a model outside a runner
   while either runner holds weights.
+- **The native runtime** (API 1.21; runtime and env `native`, devices `[mps]`). A pack whose stage runs a child
+  process (a native binary that loads its own weights; today the minimax-h3 family's `h3`) instead of loading
+  components into the runner. The runner itself loads nothing: its stage starts the child, turns the child's progress
+  lines into `evt.run.progress`, cancels by killing the child's process group (SIGTERM, then SIGKILL after 3 s), and
+  fails the run with the child's last error line when it exits non-zero. **Memory is measured with the child**:
+  `memory.used_gb` = the runner's own footprint plus the live child's (`phys_footprint` of both), so studio sees the
+  run's real use; the stage's `peak_gb` is the child's whole peak and its memory item has `components: []` (P =
+  `peak_gb`); nothing is resident after the run (the child exited), so `resident` stays empty, an unload request
+  frees nothing, and `RUNNER_AFTER_RUN` and pins do not apply. Like mlx, native runs only on Apple silicon (Metal):
+  a model whose only runtimes are mlx or native is `Mac only`.
 
 **Hosts data and the memory chip.** `GET /v1/studio/hosts` gives every entry `host_memory {budget_gb, used_gb}` (the
 same for all envs of a host: B, and per present key the larger of its entries' Σ `gb` and its measured `used_gb`,
@@ -430,8 +479,8 @@ env of it is. The admin Hosts screen adds Hosts admin (API 1.16), below.
 
 ## Hosts with a discrete GPU (API 1.18, M6; plan 03-runtime 6.1-6.3, 13-services 17.7; normative)
 
-A GPU host is one machine with one device and its own memory budget. Today: `mac` (Apple silicon, envs `torch` and
-`mlx`, unified memory) and, from M6, a Linux host with one NVIDIA GPU (`gcp` in the test rig, env `torch` only: v1 runs
+A GPU host is one machine with one device and its own memory budget. Today: `mac` (Apple silicon, envs `torch`,
+`mlx` and, from 1.21, `native`, unified memory) and, from M6, a Linux host with one NVIDIA GPU (`gcp` in the test rig, env `torch` only: v1 runs
 Qwen Image on CUDA; LTX and the llm pack stay MLX). Multi-GPU in one host is out of scope: a runner uses device 0.
 
 **The device** is picked once per process: `mps`, then `cuda`, then `cpu` (runner_service `loaders_torch`; MLX is
@@ -1160,7 +1209,7 @@ The `lora_*` codes need the caller's LoRA library (studio: as the caller, at rea
 may carry `loras` (id → detected family: the library), absent = empty.
 
 **Fixtures** (`fixtures/graphs/`, all against `palette.json`, which adds a fictional `test` family to the canonical
-echo, qwen-image, ltx and minimax-h3-image kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
+echo, qwen-image, ltx, minimax-h3-image and minimax-h3 kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
 and `float` params), `count` (an Int source), `model`, `lora` (bypassable Model → Model), `upscale` (torch only)):
 `valid.*.json` / `invalid.*.json` `{description, workflow, problems: [{code, node?, port?, param?}]}`;
 `autowire.*.json` `{description, workflow, selected, add: {id, kind}, expect_in}`; `wiredrop.*.json`
@@ -2227,7 +2276,7 @@ every model of their models keys with each variant's components and per-host sta
 state, done_bytes, total_bytes}`) while a download of that host, model and variant is queued or running. Nothing in it
 is per user; admins additionally see `hub_token`. The board's per-variant licence, size (`download_bytes`, else the
 host's `bytes`), `bf16 | int8 at load` (`precisions`), `shares 2 with Base` (components whose `from_variant` is
-another), `Mac only` (only mlx in `runtimes`) and the detail panel's path (`models_root` + `/` + `dir`) all come from it.
+another), `Mac only` (only mlx or native in `runtimes`: both run on Apple silicon only) and the detail panel's path (`models_root` + `/` + `dir`) all come from it.
 
 **Model jobs** (admin only; openapi `studioAdmin…ModelJob…`, `ModelJob`). Kinds `download`, `delete`, `lora_delete`.
 - **Queue**: studio stores the job `queued` and releases at most one job per host at a time, oldest first (an

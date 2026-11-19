@@ -578,3 +578,58 @@ func TestMinimaxPlan(t *testing.T) {
 		t.Fatal(a)
 	}
 }
+
+// minimax-h3 (API 1.21) runs on a third env of the Mac, native: its plan names no components (P = peak_gb, the h3
+// child's whole peak), so a run there evicts the torch and mlx keys' weights to fit, asking each env, and is released
+// at the budget once they are gone.
+func TestNativeHandoverWithThreeEnvs(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", "minimax-h3.models.valid.json"))
+	reg := &registry.Registry{}
+	withHosts(reg, "mac.native")
+	if err == nil {
+		err = reg.SetRegistry("mac.native.models", data)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosts := func(torch, mlx string) []registry.Host {
+		values := &registry.Registry{}
+		memory := `, "memory": {"budget_gb": 52, "used_gb": 0}, "resident": [`
+		for key, value := range map[string][]byte{
+			"mac.torch":  hostValue("mac", "torch", t0, memory+torch+`]`),
+			"mac.mlx":    hostValue("mac", "mlx", t0, memory+mlx+`]`),
+			"mac.native": hostValue("mac", "native", t0, memory+`]`)} {
+			if err := values.SetHost(key, value); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return values.Hosts()
+	}
+	graph, _ := json.Marshal(map[string]registry.Node{"model": {Kind: "minimax-h3/model",
+		Params: map[string]any{"variant": "base", "precision": "int8"}}, "canvas": {Kind: "minimax-h3/canvas",
+		Params: map[string]any{"width": 864.0, "height": 480.0}}, "duration": {Kind: "minimax-h3/duration",
+		Params: map[string]any{"frames": 124.0, "fps": 24.0}}})
+	run := placed{run: model.Run{ID: "h", Env: "native", WorkflowID: "minimax-h3-text-to-video", Nodes: graph}, host: "mac", env: "native"}
+	if p := planOf(reg, "mac", run.run); p.peak != 4200 || len(p.needs) != 0 {
+		t.Fatal("P = peak_gb, no needs:", p)
+	}
+	d := NewDispatcher(nil, reg, nil, nil)
+	var asked []string
+	d.Unload = func(_ context.Context, subject string, _ []byte) ([]byte, error) {
+		asked = append(asked, subject)
+		return []byte(`{"error": "a run is in progress", "code": "busy"}`), nil
+	}
+	qwen := `{"component": "transformer", "model": "qwen-image-2.1", "variant": "base", "precision": "bf16", "gb": 38.1, "pinned": false}`
+	ltx := `{"component": "transformer", "model": "ltx-2.5", "variant": "distilled", "precision": "bf16", "gb": 12, "pinned": false}`
+	got := d.handover(context.Background(), snapshot{values: hosts(qwen, ltx)}, run, t0)
+	d.Settle()
+	slices.Sort(asked)
+	if got.decision != "unload" || len(got.unload["torch"]) != 1 || len(got.unload["mlx"]) != 1 ||
+		!slices.Equal(asked, []string{"runner.unload.mac.mlx", "runner.unload.mac.torch"}) {
+		t.Fatal("both other envs give way:", got, asked)
+	}
+	small := strings.Replace(ltx, `"gb": 12`, `"gb": 10`, 1)
+	if got := d.decide(snapshot{values: hosts("", small)}, run, t0); got.decision != "release" || *got.budget != 42 {
+		t.Fatal("42 GB fits beside mlx's 10, released at the budget less the other envs':", got)
+	}
+}

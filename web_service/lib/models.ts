@@ -66,14 +66,19 @@ export const titleOf = (m: Model, id: string) => m.variants.find((v) => v.id ===
 /** "image", "video + audio". */
 export const mediaText = (m: Model) => m.media.join(" + ");
 
-/** The runtimes as the board names them ("torch", "MLX"), each once. */
+const RUNTIME_LABELS: Record<string, string> = { mlx: "MLX", native: "Native" };
+
+/** The Apple-silicon-only runtimes (API 1.21: native runs a Metal binary as a child process). */
+export const MAC_RUNTIMES = ["mlx", "native"];
+
+/** The runtimes as the board names them ("torch", "MLX", "Native"), each once. */
 export const runtimeTags = (m: Model) => [
-  ...new Set(m.runtimes.map((r) => (r.runtime === "mlx" ? "MLX" : r.runtime))),
+  ...new Set(m.runtimes.map((r) => RUNTIME_LABELS[r.runtime] ?? r.runtime)),
 ];
 
-/** Only an MLX runtime exists: only Apple silicon hosts can run it (the board's "Mac only"). */
+/** Only MLX or native runtimes exist: only Apple silicon hosts can run it (the board's "Mac only"). */
 export const macOnly = (m: Model) =>
-  m.runtimes.length > 0 && m.runtimes.every((r) => r.runtime === "mlx");
+  m.runtimes.length > 0 && m.runtimes.every((r) => MAC_RUNTIMES.includes(r.runtime));
 
 /** The size the variant card shows: the expected download, else its files on the host (or the largest seen). */
 export function variantBytes(v: Variant, host?: string): number | null {

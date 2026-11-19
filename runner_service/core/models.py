@@ -375,10 +375,32 @@ def kept_components(pack, deleted: set[str]) -> tuple[list[str], list[str] | Non
     return kept, only
 
 
+def linked_from_outside(root: Path, base: Path) -> set[str]:
+    """The files of `base` (relative) that a link elsewhere under the models root resolves to: another model reads
+    them (MiniMax-H3-Image/text_encoder links into MiniMax-H3/Ref2VA), so a delete of `base` keeps them."""
+    b = base.resolve()
+    out: set[str] = set()
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        d = Path(dirpath)
+        if d == base:
+            dirnames[:] = []
+            continue
+        for name in filenames + dirnames:
+            p = d / name
+            if not p.is_symlink():
+                continue
+            t = p.resolve()
+            if not t.is_relative_to(b):
+                continue
+            targets = [f for f in t.rglob("*") if f.is_file()] if t.is_dir() else [t]
+            out |= {f.relative_to(b).as_posix() for f in targets}
+    return out
+
+
 def delete_variant(pack, vid: str, only: list[str] | None = None) -> tuple[int, int]:
     """Remove the variant's files under its folder (`only`: just those under these folder prefixes ending in /,
     or matching these globs), sidecars with them, then the empty folders. Never follows a link: a link is removed,
-    not its target. Returns (files removed, bytes freed)."""
+    not its target; a file another model's link resolves to stays. Returns (files removed, bytes freed)."""
     root = packs.models_root()
     base = folder(pack, vid)
     if not base.exists():
@@ -388,12 +410,16 @@ def delete_variant(pack, vid: str, only: list[str] | None = None) -> tuple[int, 
             f"{pack.spec['variants'][vid]['dir']} is a link or outside the models root: remove it by hand"
         )
 
+    lent = linked_from_outside(root, base)
+
     def kept(rel: str) -> bool:
-        if only is None:
-            return False
         side = SIDECARS.as_posix() + "/"
         if rel.startswith(side):  # a sidecar goes with its file
             rel = re.sub(r"\.(metadata|lock)$", "", rel[len(side) :])
+        if rel in lent:
+            return True
+        if only is None:
+            return False
         return not any(rel.startswith(k) if k.endswith("/") else fnmatchcase(rel, k) for k in only)
 
     files = freed = 0

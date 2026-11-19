@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "native",
+  "published_at": "2026-11-19T10:00:00Z",
+  "published_by": "runner native 0.1.0",
+  "models": [
+    {
+      "id": "minimax-h3",
+      "family": "minimax-h3",
+      "title": "MiniMax H3",
+      "media": [
+        "video",
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "native",
+          "env": "native",
+          "devices": [
+            "mps"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "base",
+          "title": "Base",
+          "dir": "MiniMax-H3",
+          "presence": "present",
+          "bytes": 210331809046,
+          "precisions": [
+            "int8"
+          ],
+          "components": [
+            {
+              "component": "transformer_fl2va",
+              "from_variant": "base",
+              "precisions": [
+                "int8"
+              ],
+              "bytes": 66280485936
+            },
+            {
+              "component": "transformer_ref2va",
+              "from_variant": "base",
+              "precisions": [
+                "int8"
+              ],
+              "bytes": 66280485936
+            },
+            {
+              "component": "text_encoder",
+              "from_variant": "base",
+              "precisions": [
+                "int8"
+              ],
+              "bytes": 66714912872
+            },
+            {
+              "component": "video_vae",
+              "from_variant": "base",
+              "precisions": [
+                "fp32"
+              ],
+              "bytes": 10415548320
+            },
+            {
+              "component": "audio_vae",
+              "from_variant": "base",
+              "precisions": [
+                "fp32"
+              ],
+              "bytes": 605429308
+            }
+          ],
+          "memory": [
+            {
+              "precision": "int8",
+              "peak_gb": 42.0,
+              "planned_at": {
+                "mp": 0.4147,
+                "frames": 124
+              },
+              "components": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

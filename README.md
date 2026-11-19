@@ -39,7 +39,7 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 | `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test-down` stops it |
 | `make resilience` | restart each service of `helmstudio-test` mid-run and check the stack recovers (`contract_tests/resilience.sh`) |
 | `.tools/test-db` | Postgres for the services' DB tests (`helmstudio-test`, port 5464) |
-| `make runners` | both native runners of this Mac (torch, mlx) in the background (`make runners-stop` stops them) |
+| `make runners` | the native runners of this Mac (torch, mlx, native) in the background (`make runners-stop` stops them) |
 
 Each service has its own `Makefile` (at least `test` and `lint`; `dev` and `gen` where they apply).
 
@@ -57,23 +57,27 @@ For `helmstudio-test`, `.tools/test-db` does the same.
 
 ## Native runners
 
-Real models run outside Docker, natively on the GPU host. On Apple Silicon there are two envs, each its own process
-and lockfile: `torch` (PyTorch MPS; the Qwen Image pack; uv project `runner_service/`) and `mlx` (MLX; the LTX pack;
-uv project `runner_service/envs/mlx`).
+Real models run outside Docker, natively on the GPU host. On Apple Silicon there are three envs, each its own
+process: `torch` (PyTorch MPS; the Qwen Image and MiniMax H3 Image packs; uv project `runner_service/`), `mlx` (MLX;
+the LTX and LLM packs; uv project `runner_service/envs/mlx`) and `native` (packs that run a native binary as a child
+process: MiniMax H3 video through the vendored `h3`, `runner_service/vendor/h3c`; uv project `runner_service/` with no
+extra, so no torch or MLX in the process). `make runner-native` builds `h3` first (`make h3`, about a second, Command
+Line Tools clang); `h3` must run with its folder as the working directory (it compiles its Metal shaders from there).
 
 ```sh
 make up                         # the stack (the fake runner stays in it for the contract suite)
-make runners                    # both, in the background (host mac, envs torch and mlx)
-make runner-torch / runner-mlx  # one of them
-make runners-stop               # stops both (only processes make started, by their pid files)
+make runners                    # all three, in the background (host mac, envs torch, mlx and native)
+make runner-torch / runner-mlx / runner-native   # one of them
+make runners-stop               # stops them (only processes make started, by their pid files)
 ```
 
 They join the stack through the loopback ports compose publishes for them: NATS on `4322` as user `runner_mac_<env>`
 (`deploy/secrets/nats_runner_mac_<env>_url`; each may only consume its `cmd.run.mac.<env>`, write its `mac.<env>`
 registry and hosts keys and answer its `runner.unload.mac.<env>`) and the SeaweedFS S3 API on `8433`. Weights are read from
 `HELMSTUDIO_MODELS` (default `~/GenAI/models`) and never downloaded, built into an image or put in the object store.
-Each has a pid file and a log, `runner_service/.run/runner-mac-<env>.{pid,log}`; a small sh supervisor restarts
-it after a stall (exit 70) or a SIGKILL (137).
+Each has a pid file and a log, `runner_service/.run/runner-mac-<env>.{pid,log}`, and a `GET /health` on its own
+port (torch `8091`, mlx `8092`, native `8093`); a small sh supervisor restarts it after a stall (exit 70) or a
+SIGKILL (137).
 
 One GPU, one memory budget: studio admits a run only when its planned peak plus everything resident on the host's
 envs fits the host's budget; otherwise it asks the env(s) holding the least recently used components to unload exactly
@@ -114,7 +118,7 @@ kong/             gateway config + the API-key plugin
 auth_service/     Go: sign-in, users, roles, API keys
 studio_service/   Go: /v1/studio (sessions, workflows, runs, events, hosts, batches)
 files_service/    Go: signed /files links from the object store
-runner_service/   Python: runs workflows (the fake runner in Docker; native envs torch and mlx)
+runner_service/   Python: runs workflows (the fake runner in Docker; native envs torch, mlx and native)
 pipelines_service/ Python, LangGraph: runs batches (NATS only, database pipelines, health on 8082)
 web_service/      Next.js app and its BFF
 cli/              Go: the `helm` command (login, run)

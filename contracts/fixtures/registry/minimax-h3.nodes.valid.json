@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "native",
+  "published_at": "2026-11-19T10:00:00Z",
+  "published_by": "runner native 0.1.0",
+  "nodes": [
+    {
+      "kind": "prompt",
+      "title": "Prompt",
+      "family": null,
+      "help": "The text the workflow starts from.",
+      "params": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Prompt",
+          "default": "",
+          "min": 0,
+          "max": 4000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ]
+    },
+    {
+      "kind": "seed",
+      "title": "Seed",
+      "family": null,
+      "help": "The noise seed; -1 picks a random one, reported with the result.",
+      "params": [
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ]
+    },
+    {
+      "kind": "image",
+      "title": "Image",
+      "family": null,
+      "help": "An image from the gallery, as an input.",
+      "params": [
+        {
+          "name": "image",
+          "type": "image",
+          "label": "Image",
+          "default": null
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "Image"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3/canvas",
+      "title": "Canvas",
+      "family": "minimax-h3",
+      "help": "The video size in pixels: sides multiples of 32 from 256 to 1344, at most 768 × 1344 pixels in all (1,032,192). 864 × 480 is 16:9.",
+      "params": [
+        {
+          "name": "width",
+          "type": "int",
+          "label": "Width",
+          "default": 864,
+          "min": 256,
+          "max": 1344,
+          "step": 32
+        },
+        {
+          "name": "height",
+          "type": "int",
+          "label": "Height",
+          "default": 480,
+          "min": 256,
+          "max": 1344,
+          "step": 32
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3/duration",
+      "title": "Duration",
+      "family": "minimax-h3",
+      "help": "The clip's length on MiniMax H3's 5 + 17k frame grid at 24 fps: 124 frames is about 5 s, 362 about 15 s.",
+      "params": [
+        {
+          "name": "frames",
+          "type": "frames",
+          "label": "Length",
+          "default": 124,
+          "min": 5,
+          "max": 362,
+          "step": 17,
+          "fps": "fps"
+        },
+        {
+          "name": "fps",
+          "type": "int",
+          "label": "Frame rate",
+          "default": 24,
+          "min": 1,
+          "max": 60,
+          "step": 1,
+          "values": [
+            24
+          ],
+          "help": "MiniMax H3 runs at 24 fps."
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "duration",
+          "type": "Duration"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3/model",
+      "title": "MiniMax H3",
+      "family": "minimax-h3",
+      "help": "The weights to load: FL2VA for text and frames to video, Ref2VA for references (one folder holds both).",
+      "params": [
+        {
+          "name": "variant",
+          "type": "enum",
+          "label": "Variant",
+          "default": "base",
+          "enum": [
+            "base"
+          ]
+        },
+        {
+          "name": "precision",
+          "type": "enum",
+          "label": "Precision",
+          "default": "int8",
+          "enum": [
+            "int8"
+          ],
+          "help": "Stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). Not a choice."
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3/generate",
+      "title": "Generate",
+      "family": "minimax-h3",
+      "help": "Runs MiniMax H3 end to end in its own process (the native h3 binary): encodes the prompt and any frames or references, denoises, decodes picture and sound, and writes an MP4 (H.264 + AAC 32 kHz, 24 fps). References use the Ref2VA model, everything else FL2VA.",
+      "params": [
+        {
+          "name": "steps",
+          "type": "int",
+          "label": "Steps",
+          "default": 6,
+          "min": 2,
+          "max": 50,
+          "step": 1,
+          "help": "Denoising passes: 50 is the reference quality, 4 to 7 a fast draft."
+        },
+        {
+          "name": "speed",
+          "type": "enum",
+          "label": "Speed",
+          "default": "exact",
+          "enum": [
+            "exact",
+            "fast"
+          ],
+          "help": "exact: all 50 transformer blocks every step. fast: 45 blocks and every other step reused: quicker, slightly different."
+        },
+        {
+          "name": "refs",
+          "type": "rows",
+          "label": "References",
+          "default": [],
+          "min": 0,
+          "max": 9,
+          "item": {
+            "image": "Image"
+          },
+          "mention": "<Picture {n}>",
+          "help": "Images the prompt names <Picture 1>, <Picture 2>, …; any reference switches to the Ref2VA model and cannot go with a first or last frame."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "prompt",
+          "type": "Text"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        },
+        {
+          "name": "duration",
+          "type": "Duration"
+        },
+        {
+          "name": "first",
+          "type": "Image",
+          "optional": true
+        },
+        {
+          "name": "last",
+          "type": "Image",
+          "optional": true
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "Video"
+        }
+      ]
+    },
+    {
+      "kind": "output",
+      "title": "Output",
+      "family": null,
+      "help": "Stores its input as a run output: an image or a video take.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "media",
+          "type": "Media"
+        }
+      ],
+      "outputs": []
+    }
+  ]
+}

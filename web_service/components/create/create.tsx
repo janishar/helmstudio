@@ -76,6 +76,7 @@ import {
   capacity,
   carriesImage,
   editLabel,
+  refUnit,
   imageInputs,
   refCount,
   refIds,
@@ -531,7 +532,7 @@ export function Create({
       : [
           workflow.title,
           refs
-            ? `${refs} frame${refs === 1 ? "" : "s"}`
+            ? `${refs} ${refUnit(refField)}${refs === 1 ? "" : "s"}`
             : fields.some((f) => f.param.type === "span")
               ? "the rest of the clip is kept as context" // docs/mock/VideoSource.dc.html
               : firstFrameIn && "add a first frame to animate it",

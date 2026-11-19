@@ -12,8 +12,8 @@ for _k, _v in list(os.environ.items()):
         os.environ[_k.removesuffix("_FILE")] = Path(_v).read_text().strip()
 
 VERSION = "0.3.0"
-# which runner this is: fake/fake is the compose fake runner (the echo pack); the native Mac runners are mac/torch
-# and mac/mlx.
+# which runner this is: fake/fake is the compose fake runner (the echo pack); the native Mac runners are mac/torch,
+# mac/mlx and mac/native (HEALTH_PORT 8091, 8092, 8093 from the root Makefile).
 # RUNNER_ENV picks the packs (those with a runtime of that env).
 HOST = os.environ.get("RUNNER_HOST", "fake")
 ENV = os.environ.get("RUNNER_ENV", "fake")

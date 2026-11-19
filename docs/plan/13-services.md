@@ -21,7 +21,7 @@ section 16.
 | **studio_service** | Go on helmgo | Every `/v1/studio/*` route: sessions, workflows, takes and the gallery, library items, pipelines, batches, sequences, the model catalog, hosts. Owner scoping. The resolver (defaults, presets, library items, `when` / `requires`). Outbox → commands. Projector: events → tables. The event stream (SSE). The **dispatcher** (section 17.5). Signs `/files` links. | `studio` DB |
 | **files_service** | Go on helmgo | Serves signed `/files/*` links from the object store with range requests; receives uploads; storage janitor | — |
 | **pipelines_service** | Python, LangGraph | Runs pipeline graphs (section 16): consumes `cmd.pipeline.*`, asks studio to create runs, resumes threads when runs finish; calls remote models | `pipelines` DB (inbox, per-job seq, LangGraph checkpoints and store) |
-| **runner_service** | Python, one process per env (`mlx`, `torch`) on each GPU host | Executes workflow runs (section 6): node graph, cache, residency manager, loaders, LoRA. Local LLM calls. ffmpeg jobs (thumbnails, export). Publishes its part of the registry and its host state. | no database |
+| **runner_service** | Python, one process per env (`mlx`, `torch`, `native`) on each GPU host | Executes workflow runs (section 6): node graph, cache, residency manager, loaders, LoRA. Local LLM calls. ffmpeg jobs (thumbnails, export). Publishes its part of the registry and its host state. | no database |
 | **web_service** | Next.js | The UI (section 8) and a backend-for-frontend that holds the web API key and the user's tokens in httpOnly cookies | nothing persistent |
 | **nats** | NATS + JetStream | Streams `CMD`, `EVT`, `DLQ`; KV `registry`, `hosts`, `cancels`; core request/reply and live subjects | streams, KV |
 | **postgres** | Postgres | One instance, one database and owner role per service | — |
@@ -36,8 +36,9 @@ service. `cli/` is `helm`, an API client.
                                                └▶ files_service   │
                           studio ◀──▶ NATS JetStream ◀──▶ pipelines_service
                                           ▲
-                                          └──▶ runner_service (mlx)   ┐ native on a Mac,
-                                          └──▶ runner_service (torch) ┘ containers on CUDA
+                                          └──▶ runner_service (mlx)    ┐ native on a Mac,
+                                          └──▶ runner_service (torch)  │ containers on CUDA
+                                          └──▶ runner_service (native) ┘ (native: Mac only)
         studio, files, pipelines, runners ──▶ object store (S3 API)
         runners ──▶ model weights on the host's own disk
 ```
@@ -218,9 +219,15 @@ Rules carried over from the reference:
 | | Apple Silicon | Linux + CUDA |
 |---|---|---|
 | kong, auth, studio, files, web, pipelines, postgres, nats, object store | Docker Compose | Docker Compose |
-| runner_service (`mlx`, `torch`) | **Native on the host** (Docker cannot reach the Apple GPU), started by `make runners` or a launch agent | Container with the NVIDIA runtime, or native |
+| runner_service (`mlx`, `torch`, `native`) | **Native on the host** (Docker cannot reach the Apple GPU), started by `make runners` or a launch agent | Container with the NVIDIA runtime, or native |
 | Model weights | The host's own disk, never inside an image (section 9.2) | The host's disk, bind-mounted read-only into the runner |
 
+- The `native` env (M7 pack 3) loads no model in Python: its packs run a
+  native binary as a child process (MiniMax H3 video: the vendored `h3`,
+  `runner_service/vendor/h3c`, built by `make h3`), so its process has no torch
+  or MLX, its memory is measured with the child's, and nothing stays resident
+  after a run. On a Mac it is the third runner (`make runner-native`, health
+  port 8093, NATS user `runner_mac_native`) sharing the host's one budget.
 - A runner connects only to NATS and the object store, never to Postgres. On
   the stack's own machine those two ports are published on `127.0.0.1`;
   another GPU host connects over TLS with its own NATS and S3 credentials.

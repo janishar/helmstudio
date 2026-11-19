@@ -1,0 +1,284 @@
+{
+  "name": "fl2va-first-last",
+  "prompt": "The fox turns around in the snow to face the other way, a soft winter wind.",
+  "width": 512,
+  "height": 512,
+  "frames": 22,
+  "steps": 4,
+  "seed": 42,
+  "fps": 24,
+  "speed": "exact",
+  "flags": [
+    "--layers",
+    "50",
+    "--reuse",
+    "1",
+    "--use-int8-row-fc2"
+  ],
+  "argv_equivalent": "h3 -d <models>/MiniMax-H3 -p PROMPT -o OUT.mp4 --width 512 --height 512 --frames 22 --steps 4 --seed 42 --layers 50 --reuse 1 --use-int8-row-fc2 --first-frame input-first-512x512.png --last-frame input-last-512x512.png --frames-dir DIR",
+  "inputs": {
+    "first": {
+      "file": "input-first-512x512.png",
+      "sha256": "982d9ee05955a5b2a0a3f7995efe40313d2ed4adc17a50b3c02fbf2e72487b64",
+      "made_from": "runner_service/tests/golden/minimax-h3-image-edit/input-turbo-768-s42.png (ffmpeg scale bicubic)"
+    },
+    "last": {
+      "file": "input-last-512x512.png",
+      "sha256": "f1c14ba1cc1b042fdfc880eadade3a3881d9f637760917c1e7d5d8198878f398",
+      "made_from": "runner_service/tests/golden/minimax-h3-image-edit/input-turbo-768-s42.png (ffmpeg scale bicubic, hflip)"
+    }
+  },
+  "mp4": {
+    "file": "fl2va-first-last-512x512-22f-s42.mp4",
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "profile": "High",
+        "codec_type": "video",
+        "width": 512,
+        "height": 512,
+        "pix_fmt": "yuv420p",
+        "r_frame_rate": "24/1",
+        "duration": "0.916667",
+        "nb_frames": "22"
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "sample_rate": "32000",
+        "channels": 2,
+        "r_frame_rate": "0/0",
+        "duration": "0.925000",
+        "nb_frames": "30"
+      }
+    ],
+    "format": {
+      "duration": "0.925000",
+      "bit_rate": "1415091"
+    }
+  },
+  "frames_ppm_sha256": "e728905ab44113a794338a1f6f619358be03965f674c1ee40d1069dd047acf5d",
+  "rgb24_sha256": "dc71d229976ab27b1ecbce8f7d88a0e62d07be104cc61cdfef1f46fc65d1fddd",
+  "pcm_f32le_sha256": "da976d52b71499dd948f3a3b9923c758f5ad39ce81cd7aa3b91ff2ac6b627693",
+  "mp4_sha256": "a872b506c46c0e611402feb91bb2062fa6e4f4dea00ea4a77d1d1e4c96bb2fcf",
+  "rgb24_bytes": 17301504,
+  "pcm_f32le_bytes": 236800,
+  "frames_ppm_count": 22,
+  "bit_identical_runs": {
+    "frames_ppm_sha256": true,
+    "rgb24_sha256": true,
+    "pcm_f32le_sha256": true,
+    "mp4_sha256": true
+  },
+  "run2_vs_run1_video_psnr_db": null,
+  "runs": [
+    {
+      "wall_s": 54.53,
+      "phases": {
+        "start": {
+          "start_s": 0.0,
+          "s": 0.21,
+          "units": null,
+          "peak_gb": 0.06,
+          "read_gb": 0.01
+        },
+        "tokenizer": {
+          "start_s": 0.21,
+          "s": 1.01,
+          "units": 1,
+          "peak_gb": 1.37,
+          "read_gb": 0.67
+        },
+        "video VAE encoder": {
+          "start_s": 1.22,
+          "s": 6.59,
+          "units": 9,
+          "peak_gb": 1.98,
+          "read_gb": 0.04
+        },
+        "Qwen vision": {
+          "start_s": 7.81,
+          "s": 0.86,
+          "units": 27,
+          "peak_gb": 6.42,
+          "read_gb": 4.42
+        },
+        "text encoder": {
+          "start_s": 8.67,
+          "s": 4.86,
+          "units": 50,
+          "peak_gb": 8.46,
+          "read_gb": 43.51
+        },
+        "refine text": {
+          "start_s": 13.53,
+          "s": 0.67,
+          "units": 1,
+          "peak_gb": 0.4,
+          "read_gb": 2.52
+        },
+        "precompute AdaLN": {
+          "start_s": 14.2,
+          "s": 6.79,
+          "units": 50,
+          "peak_gb": 0.93,
+          "read_gb": 24.68
+        },
+        "load transformer core": {
+          "start_s": 20.99,
+          "s": 10.1,
+          "units": 50,
+          "peak_gb": 18.2,
+          "read_gb": 34.53
+        },
+        "denoise enqueue": {
+          "start_s": 31.09,
+          "s": 12.5,
+          "units": 4,
+          "peak_gb": 18.66,
+          "read_gb": 0.01
+        },
+        "denoise": {
+          "start_s": 43.59,
+          "s": 0.48,
+          "units": 4,
+          "peak_gb": 18.62,
+          "read_gb": 0.2
+        },
+        "audio VAE": {
+          "start_s": 44.07,
+          "s": 0.37,
+          "units": 7,
+          "peak_gb": 1.17,
+          "read_gb": 0.36
+        },
+        "video VAE load": {
+          "start_s": 44.44,
+          "s": 10.02,
+          "units": 36,
+          "peak_gb": 9.8,
+          "read_gb": 8.72
+        },
+        "FFmpeg": {
+          "start_s": 54.46,
+          "s": 0.07,
+          "units": 22,
+          "peak_gb": 0.0,
+          "read_gb": 0.0
+        }
+      },
+      "peak_footprint_gb": 18.66,
+      "lifetime_max_footprint_gb": 18.66,
+      "peak_resident_gb": 9.65
+    },
+    {
+      "wall_s": 54.84,
+      "phases": {
+        "start": {
+          "start_s": 0.0,
+          "s": 0.21,
+          "units": null,
+          "peak_gb": 0.06,
+          "read_gb": 0.01
+        },
+        "tokenizer": {
+          "start_s": 0.21,
+          "s": 1.02,
+          "units": 1,
+          "peak_gb": 1.32,
+          "read_gb": 0.67
+        },
+        "video VAE encoder": {
+          "start_s": 1.23,
+          "s": 6.96,
+          "units": 9,
+          "peak_gb": 1.95,
+          "read_gb": 0.04
+        },
+        "Qwen vision": {
+          "start_s": 8.19,
+          "s": 0.81,
+          "units": 27,
+          "peak_gb": 6.02,
+          "read_gb": 4.15
+        },
+        "text encoder": {
+          "start_s": 9.0,
+          "s": 4.8,
+          "units": 50,
+          "peak_gb": 8.13,
+          "read_gb": 43.79
+        },
+        "refine text": {
+          "start_s": 13.8,
+          "s": 0.88,
+          "units": 1,
+          "peak_gb": 0.32,
+          "read_gb": 2.46
+        },
+        "precompute AdaLN": {
+          "start_s": 14.68,
+          "s": 6.79,
+          "units": 50,
+          "peak_gb": 0.93,
+          "read_gb": 24.73
+        },
+        "load transformer core": {
+          "start_s": 21.47,
+          "s": 10.26,
+          "units": 50,
+          "peak_gb": 18.2,
+          "read_gb": 34.53
+        },
+        "denoise enqueue": {
+          "start_s": 31.73,
+          "s": 12.33,
+          "units": 4,
+          "peak_gb": 18.66,
+          "read_gb": 0.01
+        },
+        "denoise": {
+          "start_s": 44.06,
+          "s": 0.47,
+          "units": 4,
+          "peak_gb": 18.63,
+          "read_gb": 0.2
+        },
+        "audio VAE": {
+          "start_s": 44.53,
+          "s": 0.36,
+          "units": 7,
+          "peak_gb": 0.8,
+          "read_gb": 0.48
+        },
+        "video VAE load": {
+          "start_s": 44.89,
+          "s": 9.89,
+          "units": 36,
+          "peak_gb": 9.77,
+          "read_gb": 8.59
+        },
+        "FFmpeg": {
+          "start_s": 54.78,
+          "s": 0.06,
+          "units": 22,
+          "peak_gb": 0.0,
+          "read_gb": 0.0
+        }
+      },
+      "peak_footprint_gb": 18.66,
+      "lifetime_max_footprint_gb": 18.67,
+      "peak_resident_gb": 9.61
+    }
+  ],
+  "env": {},
+  "h3c": "4cafd1773585eb59bb32a99d80c27033d211032b",
+  "versions": {
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "machine": "Darwin 27.2.0 arm64",
+    "macos": "27.2.1"
+  }
+}

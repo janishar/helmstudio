@@ -222,8 +222,8 @@ function ModelSection({
           <span className="flex items-center text-[12px] text-t2">
             Mac only
             <Info>
-              Only an MLX runtime exists for this model, so hosts without Apple silicon cannot run
-              it.
+              Only {runtimeTags(m).includes("MLX") ? "an MLX" : "a Native"} runtime exists for this
+              model, so hosts without Apple silicon cannot run it.
             </Info>
           </span>
         ) : (

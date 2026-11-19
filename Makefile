@@ -14,7 +14,7 @@ TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_
 # the test admin set by deploy/compose/fake.yml
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
 
-.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runners-stop \
+.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runner-native runners-stop h3 \
         gpu-host-secrets gpu-host-reload gpu-host-tunnel gpu-host-tunnel-stop
 
 secrets:          ## deploy/secrets/ (git-ignored); never overwrites
@@ -63,8 +63,9 @@ resilience: secrets envs  ## contract_tests/resilience.sh on the helmstudio-test
 test-down:        ## stop the test stack; its volumes stay
 	$(TEST) down
 
-# The native runners of this Mac outside Docker, host mac: env torch (the torch packs; uv project runner_service/) and
-# env mlx (the mlx packs; uv project runner_service/envs/mlx), joined to the dev stack through the loopback ports
+# The native runners of this Mac outside Docker, host mac: env torch (the torch packs; uv project runner_service/),
+# env mlx (the mlx packs; uv project runner_service/envs/mlx) and env native (packs that run a native binary as a child
+# process, MiniMax H3's h3; uv project runner_service/ without extras), joined to the dev stack through the loopback ports
 # compose publishes (NATS_HOST_PORT, S3_HOST_PORT). Each runs in the background with its own pid file and log,
 # runner_service/.run/runner-mac-<env>.{pid,log}; the pid file names a small sh supervisor that restarts the runner
 # after a stall (exit 70) or a SIGKILL (137: jetsam) and stops it on SIGTERM (make runners-stop).
@@ -76,12 +77,20 @@ UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo
 SECRETS := $(CURDIR)/deploy/secrets
 UV_RUN_torch := run --extra torch
 UV_RUN_mlx := run --project envs/mlx --extra llm
-HEALTH_PORT_torch := 8091   # each runner's GET /health on 0.0.0.0 (two on one Mac need two ports)
+UV_RUN_native := run
+HEALTH_PORT_torch := 8091   # each runner's GET /health on 0.0.0.0 (envs on one Mac need their own ports)
 HEALTH_PORT_mlx := 8092
+HEALTH_PORT_native := 8093
 
-runners: runner-torch runner-mlx  ## both native runners in the background (needs make up); make runners-stop stops them
+runners: runner-torch runner-mlx runner-native  ## the native runners in the background (needs make up); make runners-stop stops them
 
-runner-torch runner-mlx: runner-%: secrets  ## one native runner (env torch or mlx) in the background
+# the native env runs the vendored h3 (runner_service/vendor/h3c, pinned h3.c): make rebuilds it only when a source changed
+runner-native: h3
+
+h3:               ## build the vendored h3 binary (Command Line Tools clang; about 1 s)
+	$(MAKE) -C runner_service/vendor/h3c -j8 h3
+
+runner-torch runner-mlx runner-native: runner-%: secrets  ## one native runner (env torch, mlx or native) in the background
 	@mkdir -p $(RUN_DIR); pid=$$(cat $(RUN_DIR)/runner-mac-$*.pid 2>/dev/null); \
 	if [ -n "$$pid" ] && ps -p $$pid -o command= | grep -q 'uv run'; then echo "runner $* already runs ($$pid)"; exit 0; fi; \
 	cd runner_service && nohup sh -c 'echo $$$$ > .run/runner-mac-$*.pid; trap "kill \$$c; wait \$$c; exit 143" TERM INT; \
@@ -94,8 +103,8 @@ runner-torch runner-mlx: runner-%: secrets  ## one native runner (env torch or m
 	  echo "runner exited $$s: restarting"; sleep 2; done' > .run/runner-mac-$*.log 2>&1 & \
 	sleep 1; echo "runner $* started ($$(cat $(RUN_DIR)/runner-mac-$*.pid)); log runner_service/.run/runner-mac-$*.log"
 
-runners-stop:     ## stops both native runners (each by its pid file; only a process make started)
-	@for env in torch mlx; do f=$(RUN_DIR)/runner-mac-$$env.pid; pid=$$(cat $$f 2>/dev/null) || continue; \
+runners-stop:     ## stops the native runners (each by its pid file; only a process make started)
+	@for env in torch mlx native; do f=$(RUN_DIR)/runner-mac-$$env.pid; pid=$$(cat $$f 2>/dev/null) || continue; \
 	if ps -p $$pid -o command= | grep -q 'uv run'; then kill $$pid && echo "stopped runner $$env ($$pid)"; \
 	else echo "runner $$env ($$pid) is not running"; fi; rm -f $$f; done
 

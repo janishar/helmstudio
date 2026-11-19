@@ -3,6 +3,8 @@ import qwenNodes from "../../contracts/fixtures/registry/qwen-image.nodes.valid.
 import qwenWorkflows from "../../contracts/fixtures/registry/qwen-image.workflows.valid.json";
 import minimaxNodes from "../../contracts/fixtures/registry/minimax-h3-image.nodes.valid.json";
 import minimaxWorkflows from "../../contracts/fixtures/registry/minimax-h3-image.workflows.valid.json";
+import h3Nodes from "../../contracts/fixtures/registry/minimax-h3.nodes.valid.json";
+import h3Workflows from "../../contracts/fixtures/registry/minimax-h3.workflows.valid.json";
 import nodesFixture from "../../contracts/fixtures/registry/nodes.valid.json";
 import workflowsFixture from "../../contracts/fixtures/registry/workflows.valid.json";
 import type { S } from "@/lib/api";
@@ -20,9 +22,11 @@ import {
   move,
   refCount,
   refIds,
+  refUnit,
   withIds,
 } from "@/lib/refs";
 import { studioView } from "@/lib/studio";
+import { fpsOf } from "@/lib/video";
 import { buildInputs, fields, rawsFrom, readValue, toRaw, type Field } from "@/lib/workflow";
 
 const qwen = {
@@ -149,6 +153,61 @@ describe("canvas auto in an edit", () => {
     const w = fs.find((f) => f.key === "canvas.width")!.param;
     expect([w.min, w.max, w.step]).toEqual([256, 8192, 32]);
     expect(Object.keys(minimax.studio!.presets!)).toEqual(["Plain", "Enhanced", "Enhanced, think"]);
+  });
+
+  it("lays out the three minimax-h3 video templates (API 1.21) from their node schemas and studio blocks", () => {
+    const schemas = Object.fromEntries(h3Nodes.nodes.map((n) => [n.kind, n]));
+    const [t2v, i2v, refs] = h3Workflows.workflows.map(
+      (w) => ({ ...w, node_schemas: schemas }) as unknown as S<"Workflow">,
+    );
+    const layout = (w: S<"Workflow">) => {
+      const v = studioView(w, fields(w))!;
+      return [v.text.map((f) => f.key), v.groups.map((g) => [g.title, g.fields.map((f) => f.key)])];
+    };
+    const rest = [
+      ["Canvas", ["canvas.width", "canvas.height"]],
+      ["Duration", ["duration.frames"]],
+      ["Quality", ["generate.steps"]],
+    ];
+    expect(layout(t2v)).toEqual([
+      ["prompt.text"],
+      [["Quick", ["generate.speed", "seed.seed"]], ...rest],
+    ]);
+    expect(layout(i2v)).toEqual([
+      ["prompt.text"],
+      [["Quick", ["first.image", "generate.speed", "seed.seed"]], ...rest],
+    ]);
+    expect(layout(refs)).toEqual([
+      ["prompt.text"],
+      [["Quick", ["generate.refs", "generate.speed", "seed.seed"]], ...rest],
+    ]);
+    // the top bar counts H3 refs as references, a first frame as a frame
+    expect([refUnit(imageInputs(fields(refs))[0]), refUnit(imageInputs(fields(i2v))[0])]).toEqual([
+      "reference",
+      "frame",
+    ]);
+    // the fps field is not shown: the Duration label's seconds use the node's fixed 24, not 0
+    const shown = studioView(t2v, fields(t2v))!.groups.flatMap((g) => g.fields);
+    expect(
+      fpsOf(
+        shown.find((f) => f.key === "duration.frames")!,
+        shown,
+        {},
+      ),
+    ).toBe(24);
+    const [first, rows] = [imageInputs(fields(i2v)), imageInputs(fields(refs))];
+    expect(first.map((f) => f.key)).toEqual(["first.image", "generate.refs"]);
+    expect(i2v.studio!.labels!["first.image"]).toBe("First frame");
+    expect([rows[0].param.max, mentionOf(rows[0].param, 3)]).toEqual([9, "<Picture 3>"]);
+    const inputs = buildInputs(fields(refs), {
+      ...rawsFrom(fields(refs), {}),
+      "prompt.text": "<Picture 1> runs",
+      "generate.refs": [{ image: { take_id: A } }],
+    });
+    expect(inputs).toEqual({
+      inputs: { "prompt.text": "<Picture 1> runs", "generate.refs": [{ image: { take_id: A } }] },
+      errors: {},
+    });
   });
 
   it("labels the workflow as an edit with its reference count", () => {

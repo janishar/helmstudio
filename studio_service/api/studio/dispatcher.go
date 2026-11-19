@@ -600,7 +600,7 @@ type admission struct {
 }
 
 // admit is the host memory admission (contracts/README.md "Two envs on one host: the hand-over", check.py admit): a
-// run of env with planned peak (-1: the budget) and needs (entry keys) on a host of budget (hundredths) holding
+// run of env with planned peak (-1: the budget less other envs' measured excess) and needs (entry keys) on a host of budget (hundredths) holding
 // entries; referenced holds "<env> <key>" of what the host's other queued runs need; running is the first env by name
 // whose key still names a run ("": none): that run may still use up to the budget_gb it was released with, more than
 // its key declares, so the run waits (nothing asked) until that key's next write. ram is the host's host-RAM budget
@@ -621,6 +621,8 @@ func admit(host string, entries []entry, budget int, env string, run plan, refer
 		c += e.gb
 		if e.env == env && e.key == "(measured)" {
 			own += e.gb // the run's own runner measured beyond its entries
+		} else if run.peak < 0 && e.key == "(measured)" {
+			p -= e.gb // P = B takes what it can get: another env's measured excess (never freed) lowers it, never holds it
 		}
 	}
 	if why := tooBig(host, p, budget, run.ramPeak, ram); why != "" { // a pin never fails a run: pins are its last victims

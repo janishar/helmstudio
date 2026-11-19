@@ -1,4 +1,4 @@
-.PHONY: dev test test-torch lint gen image image-cuda
+.PHONY: dev test test-torch lint gen image image-cuda h3
 # uv 0.13.8 is required (pyproject [tool.uv] required-version); `uvx --from uv==0.13.8 uv` stands in for an older uv
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')
 
@@ -25,6 +25,11 @@ gen:
 	rm -rf gen && mkdir -p gen/messages
 	cp ../contracts/messages/*.schema.json gen/messages/
 	cp ../contracts/registry.schema.json gen/
+
+# the env native's binary (packs/minimax_h3): the pinned h3.c in vendor/h3c (VERSION), Apple clang, about 1 s; it runs
+# with cwd = vendor/h3c (h3_shaders.metal is compiled at run time). Needs Metal: macOS only.
+h3:
+	$(MAKE) -C vendor/h3c -j8 h3
 
 image:
 	docker build -t helmstudio/runner:dev .

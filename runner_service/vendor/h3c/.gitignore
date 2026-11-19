@@ -1,0 +1,7 @@
+# build outputs of make h3 / make all
+*.o
+*.d
+*.air
+*.metallib
+h3
+libh3.a

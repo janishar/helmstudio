@@ -371,6 +371,22 @@ def test_delete_keeps_a_shared_component_another_variant_loads(pack):
     assert presence(pack) == {"base": "missing", "turbo": "missing"}
 
 
+def test_delete_keeps_files_another_model_links_to(pack):
+    with hub_of(t_tiny=Repo(files())) as hub:
+        run(pack, hub=hub)
+    other = config.MODELS / "Other/text_encoder"
+    other.mkdir(parents=True)
+    (other / "a.safetensors").symlink_to(
+        config.MODELS / "Tiny/transformer/a.safetensors"
+    )  # a file link
+    (config.MODELS / "Other/vae").symlink_to(config.MODELS / "Tiny/vae")  # a folder link
+    models.delete_variant(pack, "base")
+    assert (config.MODELS / "Tiny/transformer/a.safetensors").is_file()
+    assert not (config.MODELS / "Tiny/transformer/b.safetensors").exists()
+    assert (config.MODELS / "Tiny/vae/config.json").is_file()
+    assert (other / "a.safetensors").read_bytes() == BLOB
+
+
 def test_delete_refuses_a_linked_folder(pack, tmp_path):
     (tmp_path / "theirs").mkdir()
     (tmp_path / "theirs/w.safetensors").write_bytes(b"x")
