@@ -17,7 +17,7 @@ Each ends with something usable. Order matters more than dates.
 | M5a | Models and admin | Model and LoRA management per host, downloads as jobs, the admin's Hosts screen (pins, the after-run setting), import from `~/.helmstudio`. |
 | M5b | Timeline | Editor, export, sequence defaults and New shot (section 15). Needs M3 and M4. |
 | M6 | CUDA | Runners in NVIDIA containers on Linux, a second GPU host joining one stack, validated for Qwen Image. Verified on the owner's existing spot GPU VM in GCP (spot only; decided 2026-11-14), which joins the Mac's stack over TLS. |
-| M7 | More packs | FLUX.3 Klein, MiniMax H3 Image, Wan 2.2 (MLX), LTX retake / extend / audio-to-video (which also light up as take actions on timeline clips), then MiniMax H3 video. |
+| M7 | More packs | In the owner's order (2026-11-16): LTX retake / extend / audio-to-video (which also light up as take actions on timeline clips), MiniMax H3 Image, then MiniMax H3 video. FLUX.3 Klein, Wan 2.2 (MLX) and ZONOS3 voices are not in a milestone: they are in [the backlog](../backlog.md) (owner, 2026-11-19). |
 
 This table is the only place milestones are assigned.
 
