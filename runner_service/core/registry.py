@@ -159,7 +159,8 @@ def memory_plan(
     """The models key's `memory` item of (variant, precision) (contracts/README.md, Two envs on one host: the
     hand-over): over the pack's workflows at their default sizes, run in `graph.run`'s order, the components a run
     loads in the order of their last use (`unloads_after` when the stage that last uses one unloads it) and
-    peak_gb = max over stages of (kept components + the stage's own + its peak_gb formula), starting warm; planned_at:
+    peak_gb = max over stages of (kept components + the stage's own + its peak_gb formula), starting warm (an `alone`
+    stage: without the kept ones); planned_at:
     the largest mp and frames those formulas saw."""
     comps: dict[tuple, dict] = {}  # residency key → component item, in order of last use
     stages = []  # (keys, peak) per stage
@@ -203,7 +204,7 @@ def memory_plan(
                 continue
             keys = graph._components(nodes, impls, node_schemas, nid)
             peak = graph.stage_peak(nodes, node_schemas, nid, impl, nodes[nid]["params"], {})
-            stages.append((set(keys), peak))
+            stages.append((set(keys), peak, impl.alone))
             if impl.peak is not None:
                 sizes = graph.stage_sizes(nodes, node_schemas, nid, {})
                 if nodes[nid]["kind"].endswith(
@@ -220,7 +221,10 @@ def memory_plan(
                 comps[key] = {"component": key[2], "variant": key[1], "precision": key[3],
                               "gb": model.gb(key[2])[0]} | ({"unloads_after": True} if key[2] in impl.unload_after else {})  # fmt: skip
     kept = {k for k, c in comps.items() if not c.get("unloads_after")}
-    peak = max((sum(comps[k]["gb"] for k in kept | keys) + p for keys, p in stages), default=0.0)
+    # an `alone` stage (model.yaml) runs with none of the kept ones resident: admission evicts them (MiniMax: no two
+    # of its models fit together)
+    peak = max((sum(comps[k]["gb"] for k in (set() if alone else kept) | keys) + p for keys, p, alone in stages),
+               default=0.0)  # fmt: skip
     # one item per (component, variant, precision): a baked copy (ltx/distill) that replaces the plain one in the run
     # is the same entry to studio, as the old in-place fuse (README Media inputs); the later use's place and flags win
     merged: dict[tuple, dict] = {}

@@ -5,6 +5,7 @@ package tests
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -128,14 +129,16 @@ func TestAutoLength(t *testing.T) {
 	e.emit(userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "mac"})
 	e.emit(userA, sessionID, runID, "output", 2, output)
 	e.emit(userA, sessionID, runID, "status", 3, map[string]any{"status": "succeeded",
-		"resolved": map[string]any{"seed": 42, "params": map[string]any{"duration.frames": 89}}})
+		"resolved": map[string]any{"seed": 42, "params": map[string]any{"duration.frames": 89},
+			"texts": map[string]any{"enhance.text": "a red fox"}}}) // API 1.20: served, never made_with
 	run := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200)
-	if got, _ := json.Marshal(run["resolved"]); string(got) != `{"params":{"duration.frames":89},"seed":42}` {
+	if got, _ := json.Marshal(run["resolved"]); string(got) != `{"params":{"duration.frames":89},"seed":42,"texts":{"enhance.text":"a red fox"}}` {
 		t.Fatalf("%s", got)
 	}
 	take := e.call(userA, "GET", "/v1/studio/takes/"+run["outputs"].([]any)[0].(map[string]any)["take_id"].(string), nil, 200)
 	made := take["made_with"].(map[string]any)
-	if made["inputs"].(map[string]any)["duration.frames"] != float64(89) || made["typed"].(map[string]any)["duration.frames"] != "auto" {
+	if made["inputs"].(map[string]any)["duration.frames"] != float64(89) || made["typed"].(map[string]any)["duration.frames"] != "auto" ||
+		strings.Contains(fmt.Sprint(made), "red fox") {
 		t.Fatal(made)
 	}
 }

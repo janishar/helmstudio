@@ -138,7 +138,7 @@ export function track(t: Record<string, RunTrack>, e: S<"SessionEvent">): Record
 export type Segment = {
   node: string;
   title: string;
-  state: "done" | "active" | "stopped" | "pending";
+  state: "done" | "active" | "stopped" | "pending" | "bypassed";
   seconds?: number;
   steps?: number;
 };
@@ -185,6 +185,9 @@ export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
     const p = w.nodes[node]?.params?.steps;
     const asked = run.inputs[`${node}.steps`] ?? p;
     const steps = typeof asked === "number" ? asked : undefined;
+    // a bypassed node did no work: struck through, as the mock's Enhance (docs/mock/Main.dc.html)
+    if ((run.inputs[`${node}.bypass`] ?? w.nodes[node]?.bypass) === true && !n)
+      return { node, title, state: "bypassed" };
     if (i === cur) return { node, title, state: isActive(run.status) ? "active" : "stopped" };
     if (i < cur || i <= seen) return { node, title, state: "done", seconds };
     return { node, title, state: "pending", steps };

@@ -1,0 +1,283 @@
+{
+  "name": "t2i-1024-s42",
+  "seed": 42,
+  "mp": 1.0,
+  "sampler": "euler",
+  "prompt": "A red fox sitting in a snowy pine forest at dawn, soft golden light, photograph",
+  "width": 1024,
+  "height": 1024,
+  "steps": [
+    {
+      "timestep": 0.0,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "0ae19b37fa735fdca9dbd032dc82bd79af7d60e84cdee5914b44eaaca87ed17a",
+        "mean": -0.016328,
+        "std": 1.335167
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "210552b96a387012b1bedc8d9e78624d06110a7c196f4d6bb84de1b20315f808",
+        "mean": -0.00194,
+        "std": 0.970065
+      }
+    },
+    {
+      "timestep": 0.032476,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "e29547d29636949174a1f3506104507cec4ca7928437e11b3b86c5134fa5c744",
+        "mean": -0.023757,
+        "std": 1.309373
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "9945ae30fbb0ea3a9d20eb28161e5c13d946ab43c31c06f8a5eb0baf3142242d",
+        "mean": -0.00384,
+        "std": 0.896906
+      }
+    },
+    {
+      "timestep": 0.112451,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "a29c91a95948341bc66f27bada6784467a9484a5a72b9bc35e1d2f2b411d13ac",
+        "mean": -0.025745,
+        "std": 1.305257
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "151031d4ab234fc5538ebe588139d69f722d28d829807b80014cf733a25912f2",
+        "mean": -0.007381,
+        "std": 0.793418
+      }
+    },
+    {
+      "timestep": 0.25,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "14a082d471d6e56d1c6850446e6173ccc7d48500a3997c1fac494a3e2d6bc612",
+        "mean": -0.022528,
+        "std": 1.289687
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "de5ebca0cb9facdf8fe30c47c845eb9a9349f03c3f3645ec8d712d9269ced646",
+        "mean": -0.012275,
+        "std": 0.709519
+      }
+    },
+    {
+      "timestep": 0.467226,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "adda5417496912a0767595d6aa874183ccd7e968644252b4c3e36dc1f228c138",
+        "mean": -0.029377,
+        "std": 1.254723
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "048bb40c4b9f64b2ca619f0e15fd85b4ba7e26ac875990b5532d10fc76dea820",
+        "mean": -0.02111,
+        "std": 0.793316
+      }
+    },
+    {
+      "timestep": 0.767991,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "bbf00d792c6f1436581b68c9629e4f5fa69cd193b6707f835a10f6a75e0e517a",
+        "mean": -0.028956,
+        "std": 1.107468
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "37c200a56b2371f227771a88a3ee7781c0851e40945d98d512cde078e889d3bf",
+        "mean": -0.027828,
+        "std": 0.977301
+      }
+    }
+  ],
+  "precision": "int8 (transformer blocks, text-encoder LM layers)",
+  "text_layers": 51,
+  "generator": "torch.Generator('cpu').manual_seed(noise_seed); torch.manual_seed too",
+  "noise_seed": 42,
+  "output_mode": "RGB",
+  "output_size": [
+    1024,
+    1024
+  ],
+  "png_sha256": "9a31991dad6e047f470c28f63ac638049f76c63915f7fb1472a6b9f213c035b9",
+  "encoder_state": {
+    "image": null,
+    "prompt": "A red fox sitting in a snowy pine forest at dawn, soft golden light, photograph",
+    "prompt_embeds": {
+      "shape": [
+        1,
+        17,
+        5120
+      ],
+      "dtype": "bfloat16",
+      "sha256": "9430d98681f40728d7a8b5eb80da695687ff6321997b026bbc904da7959e9e7a",
+      "mean": 0.214212,
+      "std": 52.063347
+    },
+    "text_token_tags": {
+      "shape": [
+        17
+      ],
+      "dtype": "int64",
+      "sha256": "a384cb79a3c2a477eecd4d6f6a5c9960d6064280f00f0a996d8682cd862b8ce5",
+      "mean": 1.0,
+      "std": 0.0
+    }
+  },
+  "initial_noise": {
+    "shape": [
+      4096,
+      96
+    ],
+    "dtype": "float32",
+    "sha256": "252e4eb532b772faa27ccac0a87ad8fbd3740e3dd48668ac832ed24db5bbd08d",
+    "mean": -0.001409,
+    "std": 1.001827
+  },
+  "render_state": {
+    "height": 2048,
+    "width": 2048,
+    "output_height": 1024,
+    "output_width": 1024,
+    "latent_height": 128,
+    "latent_width": 128,
+    "num_reference_rows": 0,
+    "reference_images": null,
+    "vision_images": null,
+    "reference_latents": null,
+    "timesteps": {
+      "shape": [
+        6
+      ],
+      "dtype": "float32",
+      "sha256": "a5b7441cbe22d584f2587e615c4849f85a7bd7ffe6cb0911a63b6be34cd3ff7f",
+      "mean": 0.271691,
+      "std": 0.297125
+    }
+  },
+  "sigmas_used": [
+    1.0,
+    0.96752369,
+    0.88754851,
+    0.75,
+    0.53277391,
+    0.23200887,
+    0.0
+  ],
+  "timesteps_used": [
+    0.0,
+    0.03247631,
+    0.11245149,
+    0.25,
+    0.46722609,
+    0.76799113
+  ],
+  "scheduler": {
+    "shift": 12.0,
+    "stochastic_sampling": false,
+    "shift_provided_sigmas": false,
+    "euler_update_form": "velocity",
+    "_use_default_values": [
+      "stochastic_sampling",
+      "shift"
+    ],
+    "_class_name": "MiniMaxH3Scheduler",
+    "_diffusers_version": "0.42.0.dev0"
+  },
+  "sample_sigmas_config": [
+    1.0,
+    0.9675236940383911,
+    0.8875485062599182,
+    0.75,
+    0.5327739119529724,
+    0.23200887441635132,
+    0.0
+  ],
+  "model_dir": "~/GenAI/models/MiniMax-H3-Image",
+  "versions": {
+    "torch": "2.14.1",
+    "diffusers": "0.43.0",
+    "transformers": "5.22.2",
+    "python": "3.12.13",
+    "device": "mps",
+    "machine": "Darwin 27.2.0 arm64"
+  },
+  "timing_s": {
+    "start": 0.0,
+    "encode_load": 16.9,
+    "encode": 3.1,
+    "encode_free": 0.5,
+    "load": 45.8,
+    "prepare": 0.1,
+    "denoise": 55.6,
+    "decode": 6.4,
+    "save": 0.8,
+    "total": 129.2
+  },
+  "peak_gb_mps_driver": {
+    "encode_load": 31.75,
+    "encode": 31.51,
+    "encode_free": 31.51,
+    "load": 40.94,
+    "prepare": 37.26,
+    "denoise": 39.42,
+    "decode": 39.53,
+    "save": 39.53
+  }
+}

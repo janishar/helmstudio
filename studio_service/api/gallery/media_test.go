@@ -22,11 +22,11 @@ func asJSON(t *testing.T, v any) any {
 	return out
 }
 
-// The ltx and qwen-image templates with their schemas, as check.py check_media reads them.
+// The ltx, qwen-image and minimax-h3-image templates with their schemas, as check.py check_media reads them.
 func mediaWorkflows(t *testing.T) []registry.Workflow {
 	dir := filepath.Join("..", "..", "..", "contracts", "fixtures", "registry")
 	var out []registry.Workflow
-	for _, family := range []string{"ltx.", "qwen-image."} {
+	for _, family := range []string{"ltx.", "qwen-image.", "minimax-h3-image."} {
 		var nodes struct{ Nodes []registry.NodeSchema }
 		var workflows struct{ Workflows []registry.Workflow }
 		for name, into := range map[string]any{"nodes": &nodes, "workflows": &workflows} {

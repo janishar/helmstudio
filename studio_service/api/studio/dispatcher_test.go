@@ -543,3 +543,38 @@ func TestSkipCountsSurviveAHold(t *testing.T) {
 		}
 	}
 }
+
+// minimax-h3-image (API 1.20): its plan (contracts/fixtures/registry/minimax-h3-image.models.valid.json) peaks at
+// 41 GB with the fp32 vae among its needs; its own warm transformer + vae are reused inside the peak, another
+// family's transformer goes first.
+func TestMinimaxPlan(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", "minimax-h3-image.models.valid.json"))
+	reg := &registry.Registry{}
+	if err == nil {
+		err = reg.SetRegistry("mac.torch.models", data)
+	}
+	if err == nil {
+		err = reg.SetHost("mac.torch", hostValue("mac", "torch", t0, ""))
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	graph, _ := json.Marshal(map[string]registry.Node{"model": {Kind: "minimax-h3-image/model",
+		Params: map[string]any{"variant": "base", "precision": "int8"}}})
+	got := planOf(reg, "mac", model.Run{WorkflowID: "minimax-h3-image", Env: "torch", Nodes: graph})
+	vae := entryKey("vae", "minimax-h3-image", "base", "fp32", nil)
+	if got.peak != 4100 || len(got.needs) != 4 || !slices.Contains(got.needs, vae) {
+		t.Fatal(got)
+	}
+	warm := []entry{
+		newEntry("torch", registry.Resident{Component: "transformer", Model: "minimax-h3-image", Variant: "base", Precision: "int8", GB: 35.1}, true),
+		newEntry("torch", registry.Resident{Component: "vae", Model: "minimax-h3-image", Variant: "base", Precision: "fp32", GB: 2.2}, true)}
+	if a := admit("mac", warm, 5200, "torch", got, nil, "", -1); a.decision != "release" {
+		t.Fatal(a)
+	}
+	qwen := newEntry("torch", registry.Resident{Component: "transformer", Model: "qwen-image-2.1", Variant: "base", Precision: "bf16", GB: 38.1}, true)
+	if a := admit("mac", append(warm, qwen), 5200, "torch", got, nil, "", -1); a.decision != "unload" ||
+		len(a.unload["torch"]) != 1 || a.unload["torch"][0].key != qwen.key {
+		t.Fatal(a)
+	}
+}

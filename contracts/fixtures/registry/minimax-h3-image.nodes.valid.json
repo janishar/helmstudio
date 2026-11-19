@@ -1,0 +1,290 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-19T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "nodes": [
+    {
+      "kind": "prompt",
+      "title": "Prompt",
+      "family": null,
+      "help": "The text the workflow starts from.",
+      "params": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Prompt",
+          "default": "",
+          "min": 0,
+          "max": 4000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ]
+    },
+    {
+      "kind": "seed",
+      "title": "Seed",
+      "family": null,
+      "help": "The noise seed; -1 picks a random one, reported with the result.",
+      "params": [
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3-image/canvas",
+      "title": "Canvas",
+      "family": "minimax-h3-image",
+      "help": "The output size in pixels; auto follows the first reference in an edit. Under 4 MP the model still renders 4 MP and resizes after decode.",
+      "params": [
+        {
+          "name": "mode",
+          "type": "enum",
+          "label": "Size",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "fixed"
+          ],
+          "help": "auto: with references, the first reference's aspect (clamped to 1:4…4:1) at the area of width × height, sides rounded to 32; without, width × height. fixed: always width × height."
+        },
+        {
+          "name": "width",
+          "label": "Width",
+          "type": "int",
+          "default": 2048,
+          "min": 256,
+          "max": 8192,
+          "step": 32
+        },
+        {
+          "name": "height",
+          "label": "Height",
+          "type": "int",
+          "default": 2048,
+          "min": 256,
+          "max": 8192,
+          "step": 32
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3-image/model",
+      "title": "MiniMax H3 Image",
+      "family": "minimax-h3-image",
+      "help": "The weights to load.",
+      "params": [
+        {
+          "name": "variant",
+          "type": "enum",
+          "label": "Variant",
+          "default": "base",
+          "enum": [
+            "base"
+          ]
+        },
+        {
+          "name": "precision",
+          "type": "enum",
+          "label": "Precision",
+          "default": "int8",
+          "enum": [
+            "int8"
+          ],
+          "help": "Stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32."
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3-image/enhance",
+      "title": "Enhance prompt",
+      "family": "minimax-h3-image",
+      "help": "Rewrites the prompt with MiniMax's prompt enhancer (27B, thinking on) and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through.",
+      "params": [
+        {
+          "name": "think",
+          "type": "bool",
+          "label": "Think",
+          "default": false,
+          "help": "Think longer (reasoning effort xhigh instead of low): better prompts, slower."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "Text"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3-image/encode",
+      "title": "Encode prompt",
+      "family": "minimax-h3-image",
+      "help": "Encodes the prompt and up to 16 reference images; with references the run is an edit.",
+      "params": [
+        {
+          "name": "refs",
+          "type": "rows",
+          "label": "References",
+          "default": [],
+          "min": 0,
+          "max": 16,
+          "item": {
+            "image": "Image"
+          },
+          "mention": "<Picture {n}>",
+          "help": "Images to edit or combine, in order; the prompt names them <Picture 1>, <Picture 2>, … Alpha is dropped."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "prompt",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3-image/sample",
+      "title": "Sample",
+      "family": "minimax-h3-image",
+      "help": "Denoises from the seed's noise in 6 fixed steps (guidance-distilled: no steps, CFG or negative prompt).",
+      "params": [
+        {
+          "name": "sampler",
+          "type": "enum",
+          "label": "Sampler",
+          "default": "euler",
+          "enum": [
+            "euler",
+            "lcm"
+          ],
+          "help": "Euler repeats exactly with the same seed. LCM re-noises every step from the device's RNG, so it does not repeat on another device."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ]
+    },
+    {
+      "kind": "minimax-h3-image/decode",
+      "title": "Decode",
+      "family": "minimax-h3-image",
+      "help": "Turns the latent into an RGB image with the VAE, always tiled (256 px tiles, as released); under 4 MP resized to the canvas.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "image",
+          "type": "Image"
+        }
+      ]
+    },
+    {
+      "kind": "output",
+      "title": "Output",
+      "family": null,
+      "help": "Stores its input as a run output: an image or a video take.",
+      "params": [],
+      "inputs": [
+        {
+          "name": "media",
+          "type": "Media"
+        }
+      ],
+      "outputs": []
+    }
+  ]
+}

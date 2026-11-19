@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Check, ChevronDown, Cpu, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
-import { ErrorNote } from "@/components/kit";
+import { ErrorNote, Info } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/refs";
 import {
@@ -933,6 +933,7 @@ export function Create({
             onCancel={() => void cancel(shown.id)}
           />
         )}
+        {shown && shownWorkflow && <ResolvedTexts run={shown} workflow={shownWorkflow} />}
 
         {!!items.length && (
           <div
@@ -1085,6 +1086,11 @@ export function Create({
                 show={show}
                 compact={video}
                 toggles={toggles}
+                models={
+                  layout && !fields.some((f) => f.model && f.param.type === "enum")
+                    ? all.filter((f) => f.model && f.param.type === "enum")
+                    : undefined
+                }
               />
               <div className="grow" />
               {seedField && (
@@ -1514,7 +1520,7 @@ function RunStrip({
         ) : (
           <span
             key={s.node}
-            className={`step text-t2 ${s.state === "stopped" ? "line-through" : ""}`}
+            className={`step text-t2 ${s.state === "stopped" || s.state === "bypassed" ? "line-through" : ""}`}
           >
             {s.title}
             {s.state === "pending" && s.steps != null && (
@@ -1536,6 +1542,31 @@ function RunStrip({
       )}
     </div>
   );
+}
+
+/** The texts the runner wrote that the user did not (`Run.resolved.texts`: an enhancer's prompt), each under its
+ * node's title, one line until opened (docs/mock/CreateEnhance.dc.html). */
+function ResolvedTexts({ run, workflow }: { run: Run; workflow: S<"Workflow"> }) {
+  return Object.entries(run.resolved?.texts ?? {}).map(([path, text]) => {
+    const node = path.split(".")[0];
+    const title = workflow.node_schemas[workflow.nodes[node]?.kind]?.title ?? node;
+    return (
+      <details
+        key={path}
+        aria-label={title}
+        className="shrink-0 rounded-xl border border-s3 bg-s1 px-3.5 py-2.5 text-[13px]"
+      >
+        <summary className="flex cursor-pointer list-none items-baseline gap-2">
+          <span className="heading flex shrink-0 items-center">
+            {title}
+            <Info>What it wrote and the model drew from; the take keeps your prompt.</Info>
+          </span>
+          <span className="min-w-0 truncate text-[var(--t1b)]">{text}</span>
+        </summary>
+        <p className="mt-2 whitespace-pre-wrap text-[var(--t1b)]">{text}</p>
+      </details>
+    );
+  });
 }
 
 /** The strip's label for a seed: a random seed is 16 digits, so the middle goes (the title keeps the whole). */

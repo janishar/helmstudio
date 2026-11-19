@@ -19,7 +19,7 @@ import {
 } from "@/lib/runs";
 import {
   ASPECTS,
-  MEGAPIXELS,
+  megapixelChoices,
   aspectOf,
   buildInputs,
   display,
@@ -388,8 +388,10 @@ describe("the inspector and the canvas", () => {
   it("keeps every aspect and size on the grid and still that aspect", () => {
     for (const grid of [1, 8, 16, 32, 64])
       for (const [label, r] of ASPECTS)
-        for (const m of MEGAPIXELS) {
-          const s = sizeFor(r, m, grid, 256, 4096);
+        for (const [m, max] of [4096, 8192].flatMap((x) =>
+          megapixelChoices(256, x, Infinity).map((m) => [m, x]),
+        )) {
+          const s = sizeFor(r, m, grid, 256, max);
           expect([label, m, aspectOf(s.width, s.height), megapixelsOf(s.width, s.height)]).toEqual([
             label,
             m,

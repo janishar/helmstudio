@@ -114,6 +114,17 @@ def test_settings_refusals(admin, api):
     assert admin.put(f"{ADMIN}/hosts/nohost/pins", json={"pins": []}).status_code == 404
 
 
+def test_pin_precision_fp32(admin, tiny):
+    """API 1.20: fp32 is a Precision (a component kept at its stored float32); the runner takes the pin as is."""
+    s = put_pins(admin, [PIN | {"precision": "fp32"}])
+    assert plain(s["pins"]) == [PIN | {"precision": "fp32"}], s
+    r = admin.put(f"{ADMIN}/hosts/{HOST}/pins", json={"pins": [PIN | {"precision": "fp64"}]})
+    assert r.status_code == 422 and r.json()["detail"] == (
+        "pins[0]: precision must be bf16, fp16, int8, int4 or fp32"
+    ), r.text
+    put_pins(admin, [])
+
+
 def test_unload_requests(admin):
     a = ok(admin.post(f"{ADMIN}/hosts/{HOST}/unload", json={"all": True}), 202)
     assert a["host"] == HOST and {"env": ENV, "state": "asked"} in a["requests"], a

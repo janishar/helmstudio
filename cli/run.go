@@ -100,6 +100,9 @@ func (w workflow) value(key, val string) (any, error) {
 			typ, item = ps.Type, ps.Item
 		}
 	}
+	if name == "bypass" { // <node>.bypass switches a bypassable node (README, Resolving a run of a graph)
+		typ = "bool"
+	}
 	var v any = val
 	var err error
 	switch typ {
@@ -184,7 +187,7 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	out := fs.String("out", ".", "directory for the outputs")
 	fs.StringVar(out, "o", ".", "directory for the outputs (as --out)")
 	var ps params
-	fs.Var(&ps, "p", "node.param=value (repeatable; a seed takes a number or random)")
+	fs.Var(&ps, "p", "node.param=value (repeatable; a seed takes a number or random; node.bypass=true|false switches a node)")
 	var loras params
 	fs.Var(&loras, "lora", "<lora_id>:<strength> (repeatable): the rows of the workflow's LoRA stack, in order")
 	var looks params

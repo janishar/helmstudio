@@ -20,7 +20,7 @@ import {
 } from "@/lib/video";
 import { modeOf } from "@/lib/loras";
 import type { S } from "@/lib/api";
-import { autoSize, imageInputs, mentionOf, refIds } from "@/lib/refs";
+import { FIRST_REF_CANVAS, autoCanvas, imageInputs, mentionOf, refIds } from "@/lib/refs";
 import { useTakes } from "@/lib/take-cache";
 import { durationText, gridOf, secondsText, seconds } from "@/lib/media";
 import {
@@ -117,15 +117,20 @@ export function canvasOf(
   // without a mode param there is no Auto: the size is what it reads
   const auto = !!mode && rawOf(mode, raws) === "auto";
   const fromRef = auto && !!mode && !!ref;
-  const size = fromRef ? autoSize(ref.width, ref.height) : { width: w, height: h };
-  return { width, height, mode, w: size.width, h: size.height, auto, fromRef };
+  const first = firstRef(fs);
+  const size = fromRef ? autoCanvas(ref, w, h, first) : { width: w, height: h };
+  return { width, height, mode, w: size.width, h: size.height, auto, fromRef, first };
 }
 
-/** The last reference's size (canvas auto follows it), once its take is known. */
-function useLastRef(fs: Field[], raws: Record<string, Raw>) {
+/** Whether the canvas's auto follows the first reference (else the last). */
+const firstRef = (fs: Field[]) =>
+  fs.some((f) => f.canvas && f.param.name === "mode" && FIRST_REF_CANVAS.has(f.kind ?? ""));
+
+/** The size of the reference canvas auto follows (the last, or the first), once its take is known. */
+function useAutoRef(fs: Field[], raws: Record<string, Raw>) {
   const last = imageInputs(fs)
     .flatMap((f) => refIds(f, raws[f.key]))
-    .at(-1);
+    .at(firstRef(fs) ? 0 : -1);
   const t = useTakes(last ? [last] : [])(last ?? "");
   return t?.width && t.height ? { width: t.width, height: t.height } : null;
 }
@@ -205,7 +210,7 @@ export function Inspector({
   const s = sections(fields);
   const ext = extensionOf(fields);
   const clip = clipOf(fields, raws);
-  const c = canvasOf(fields, raws, useLastRef(fields, raws));
+  const c = canvasOf(fields, raws, useAutoRef(fields, raws));
   const extra = s.canvas.filter((f) => f !== c?.width && f !== c?.height && f !== c?.mode);
   if (
     !s.refs.length &&
@@ -400,9 +405,10 @@ function CanvasPicker({
   const grid = width.param.step ?? 1;
   const min = Math.max(width.param.min ?? 0, height.param.min ?? 0);
   const max = Math.min(width.param.max ?? Infinity, height.param.max ?? Infinity);
-  const choices = megapixelChoices(min, max);
+  // ponytail: by kind, like FIRST_REF_CANVAS; a schema hint on the canvas would make this generic
+  const choices = megapixelChoices(min, max, FIRST_REF_CANVAS.has(width.kind ?? "") ? Infinity : 4);
   const fit = (ratio: number, mp: number) => sizeFor(ratio, mp, grid, min, max);
-  // a size picked is fixed: in an edit, Auto would follow the last reference instead
+  // a size picked is fixed: in an edit, Auto would follow a reference instead
   const set = (s: { width: number; height: number }) => {
     if (mode) onChange(mode.key, "fixed");
     onChange(width.key, String(s.width));
@@ -443,7 +449,10 @@ function CanvasPicker({
             type="button"
             className="opt bevel"
             aria-pressed={aspect === "Auto"}
-            title="The workflow's own size; with references, about 1 MP at the last one's aspect"
+            title={
+              mode.param.help ??
+              "The workflow's own size; with references, about 1 MP at the last one's aspect"
+            }
             onClick={() => {
               onChange(mode.key, "auto");
               onChange(width.key, toRaw(width.initial, width.param));
@@ -468,14 +477,14 @@ function CanvasPicker({
       <div
         role="group"
         aria-label="Size"
-        className="grid grid-flow-col gap-1.5"
+        className="grid auto-cols-fr grid-flow-col gap-1.5"
         hidden={compact && opened !== "size"}
       >
         {choices.map((m) => (
           <button
             key={m}
             type="button"
-            className="opt bevel"
+            className="opt bevel min-w-0 px-0"
             aria-pressed={mp === m}
             onClick={() => set(fit(ratio, m))}
           >
@@ -485,7 +494,9 @@ function CanvasPicker({
       </div>
       <span className="mono text-[12px] text-t2">
         {w} × {h} · {mpText(w, h)}
-        {c.fromRef ? " · from the last reference" : grid > 1 && ` · on the ${grid} px grid`}
+        {c.fromRef
+          ? ` · from the ${c.first ? "first" : "last"} reference`
+          : grid > 1 && ` · on the ${grid} px grid`}
       </span>
       <FieldError k={width.key} errors={errors} />
       <FieldError k={height.key} errors={errors} />
@@ -602,22 +613,27 @@ function Presets({
         Preset
       </h2>
       <div className="flex flex-wrap gap-2">
-        {Object.entries(presets).map(([name, values]) => (
-          <button
-            key={name}
-            type="button"
-            aria-pressed={holds(values)}
-            onClick={() =>
-              Object.entries(values).forEach(([k, v]) => {
-                const f = fields.find((x) => x.key === k);
-                if (f) onChange(k, toRaw(v, f.param));
-              })
-            }
-            className="h-9 rounded-full border border-transparent bg-s3 px-3.5 text-[13px] aria-pressed:border-a2 aria-pressed:bg-s1"
-          >
-            {name}
-          </button>
-        ))}
+        {/* the fewest values first, then by name (a JSON object's order is not kept): Plain, Enhanced… / Draft, Final */}
+        {Object.entries(presets)
+          .sort(
+            ([a, x], [b, y]) => Object.keys(x).length - Object.keys(y).length || a.localeCompare(b),
+          )
+          .map(([name, values]) => (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={holds(values)}
+              onClick={() =>
+                Object.entries(values).forEach(([k, v]) => {
+                  const f = fields.find((x) => x.key === k);
+                  if (f) onChange(k, toRaw(v, f.param));
+                })
+              }
+              className="h-9 rounded-full border border-transparent bg-s3 px-3.5 text-[13px] aria-pressed:border-a2 aria-pressed:bg-s1"
+            >
+              {name}
+            </button>
+          ))}
       </div>
     </section>
   );
@@ -882,24 +898,35 @@ export function Chips({
   show,
   compact,
   toggles = [],
+  models,
 }: Omit<FormProps, "errors"> & {
   show: (key: string) => void;
   /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
   compact?: boolean;
   /** bool params placed on the composer (`studio.quick`): a chip each that switches it ("Audio on") */
   toggles?: Field[];
+  /** a Studio block's unplaced model choices: the chip still names them (docs/mock/CreateEnhance.dc.html), read-only */
+  models?: Field[];
 }) {
   const s = sections(fields);
-  const model = s.tiles.filter((f) => f.model && f.param.type === "enum");
+  const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
   const first = model[0];
-  const c = canvasOf(fields, raws, useLastRef(fields, raws));
+  const c = canvasOf(fields, raws, useAutoRef(fields, raws));
   const seed = compact ? undefined : s.tiles.find((f) => f.param.type === "seed");
   const frames = s.duration.filter((f) => f.param.type === "frames");
   const chip = "chip bevel rounded-[10px] bg-s4";
   const random = seed && rawOf(seed, raws) === "";
   return (
     <>
-      {first && (
+      {first && models && (
+        <span
+          className={`${chip} inline-flex items-center`}
+          title={model.map((f) => f.param.label ?? f.param.name).join(" · ")}
+        >
+          {model.map((f) => pretty(String(rawOf(f, raws)))).join(" · ")}
+        </span>
+      )}
+      {first && !models && (
         <button
           type="button"
           className={chip}

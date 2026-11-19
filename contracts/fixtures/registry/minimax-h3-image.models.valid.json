@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-19T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "models": [
+    {
+      "id": "minimax-h3-image",
+      "family": "minimax-h3-image",
+      "title": "MiniMax H3 Image",
+      "variants": [
+        {
+          "id": "base",
+          "presence": "present",
+          "bytes": 153635572206,
+          "precisions": [
+            "int8"
+          ],
+          "memory": [
+            {
+              "precision": "int8",
+              "peak_gb": 41.0,
+              "planned_at": {
+                "mp": 4.1944,
+                "frames": 0
+              },
+              "components": [
+                {
+                  "component": "enhancer",
+                  "variant": "base",
+                  "precision": "int8",
+                  "gb": 27.0,
+                  "unloads_after": true
+                },
+                {
+                  "component": "text_encoder",
+                  "variant": "base",
+                  "precision": "int8",
+                  "gb": 29.5,
+                  "unloads_after": true
+                },
+                {
+                  "component": "transformer",
+                  "variant": "base",
+                  "precision": "int8",
+                  "gb": 35.1
+                },
+                {
+                  "component": "vae",
+                  "variant": "base",
+                  "precision": "fp32",
+                  "gb": 2.2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

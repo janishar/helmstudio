@@ -43,6 +43,9 @@ from core.graph import RunError
 log = logging.getLogger("residency")
 
 POLICIES = ("unload", "keep_warm", "keep_pinned")
+SETTLE_S = (
+    10.0  # at most this long waiting for the measured footprint to fall after a free (_make_room)
+)
 
 
 def ram_gb() -> float:
@@ -189,9 +192,14 @@ class Residency:
         for drop in self.on_short:
             drop()
         self.free()
-        over = (
-            self._over()
-        )  # ponytail: assumed fixed while evicting (weights go back on free, the rest stays)
+        # macOS takes freed GPU pages back late: right after an unload the footprint still counts most of it (measured:
+        # 14-22 GB a moment after the 25.7 GB MiniMax text encoder went, 1.7 GB a second later), so wait for it to
+        # settle while it is what is short
+        over, until = self._over(), time.monotonic() + SETTLE_S
+        while over > 0 and self.used_gb + over + need > self.limit and time.monotonic() < until:
+            time.sleep(0.25)
+            over = self._over()
+        # ponytail: `over` assumed fixed while evicting (weights go back on free, the rest stays)
         lru = list(self.entries)
 
         def order(

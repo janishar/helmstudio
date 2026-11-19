@@ -67,6 +67,19 @@
                 "minimum": 1
               },
               "description": "`<node>.<param>` -> the value the runner chose for a param the run set to \"auto\" (a frames param: the predicted length, on its grid). Studio records it in made_with.inputs (made_with.typed keeps \"auto\")"
+            },
+            "texts": {
+              "type": "object",
+              "maxProperties": 4,
+              "propertyNames": {
+                "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16384
+              },
+              "description": "from API 1.20: `<node>.<output>` -> a Text output the runner made that the user did not write (an enhancer's prompt: `enhance.text`), so the UI shows what was rendered. Studio stores it as Run.resolved.texts; never in made_with.inputs"
             }
           }
         },

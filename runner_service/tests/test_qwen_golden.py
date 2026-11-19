@@ -70,12 +70,13 @@ class Bench:
         self.lt, self.graph = lt, graph
         values, impls, packs = registry.build("torch")
         self.schemas = registry.node_schemas(values)
+        self.packs = packs
         self.workflow = next(w for p in packs for w in p.workflows if w["id"] == "qwen-image")
         self.ran: list[str] = []
         self.impls = {k: dataclasses.replace(n, fn=self._record(k, n.fn)) for k, n in impls.items()}
         self.residency = Residency(ram_gb() - 12, free=lt.free, measure=lt.measure_gb)
         self.cache = graph.Cache()
-        self.residency.on_short.append(self.cache.clear)
+        self.residency.on_short.append(self.cache.shed)
 
     def _record(self, kind: str, fn):
         def run(ctx, params, inputs):
@@ -156,6 +157,7 @@ class Bench:
                 out["s"][last[0]] = round(time.monotonic() - last[1], 1)
             self.residency.done()
         out["ran"] = list(self.ran)
+        out["texts"] = dict(ctx.texts)
         out["peak_gb"] = {k: round(v, 2) for k, v in out["peak_gb"].items()}
         return out
 

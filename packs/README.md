@@ -159,9 +159,12 @@ Keys the core understands; anything else is ignored:
   files, in the first variant's `dir` (one folder, two variants: such a variant owns only its own components' files
   there, for its manifest, bytes and delete; every shared component stays the first variant's).
 - **`components.<name>`**: `files` (a glob, or a list of globs: one component may take keys from several files),
-  `dtype` (`bf16` | `fp16` | `fp32`, default bf16; `stored` keeps each tensor's own dtype, MLX), `precision` (default
-  `[bf16]`; `int8`, and `int4` on MLX), `quantize` (fnmatch globs over module names, used only at a quantized
-  precision). Only the keys the module's `rename()` keeps count towards the component's size.
+  `dtype` (`bf16` | `fp16` | `fp32`, default bf16; `stored` keeps each tensor's own dtype, MLX and torch: MiniMax's
+  float32 tensors), `precision` (default `[bf16]`; `int8`, and `int4` on MLX; `fp32` from API 1.20, a component that
+  only loads full precision, MiniMax's VAE: never in the model node's enum), `quantize` (fnmatch globs over module
+  names, used only at a quantized precision; a stored `U8` weight counts as two values per byte, NVFP4) and `dir` (a
+  folder of its own under the models root, for every variant: a model the family loads beside its own, MiniMax's
+  prompt enhancer; its files count towards presence, never towards the variant's own files, bytes or delete). Only the keys the module's `rename()` keeps count towards the component's size.
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
   `renames` (ordered `{from, to[, at: end]}` rewrites of a key's module part: a prefix, or with `at: end` a suffix,
   as ltx's `.to_out.0` → `.to_out`), `ignore` (fnmatch globs over raw keys counted as ignored), `modes`
@@ -179,7 +182,14 @@ Keys the core understands; anything else is ignored:
   `precision` (enum: every precision a component offers, in the order bf16, fp16, int8, int4; `model.precision.enum`
   may reorder it), output `model: Model`. A model pack's source stages (no inputs: `ltx/canvas`) come before it.
 - **`stages.<name>`**: `title`, `help`, `params`, `inputs`, `outputs`, `uses`, `unload_after` (components of `uses`
-  unloaded as soon as the stage has run: ltx's Gemma never sits beside its DiT), `peak_gb`, `stall_s`.
+  unloaded as soon as the stage has run: ltx's Gemma never sits beside its DiT), `peak_gb`, `stall_s`, and (API 1.20,
+  minimax) `alone` (true: before the stage the model's other resident components are unloaded, and the memory plan
+  counts it without the kept ones: MiniMax's enhancer, text encoder and transformer never fit two at a time),
+  `sees` (`{param: output}`: the stage also gets that param of the first node, graph order, whose input is wired to
+  its `output`, read and cache-keyed like its own: minimax/enhance reads the encode node's `refs`) and `reports`
+  (Text outputs sent as the run's `resolved.texts` `{"<node>.<output>": …}` on succeeded, a cache hit too). A stage
+  with `uses` and no Model input loads from `core.pack.default_model` (the first variant at the model node's default
+  precision): minimax/enhance.
   - `params`: name → a registry `paramSchema` without `name`, copied verbatim (`type` int | float | bool |
     string | text | enum | seed | image | rows | frames (a frame count on `min + k × step`, `fps` naming the node's
     frame-rate param; `auto {min_s, max_s}` allows the value `"auto"`: the pack resolves it, `core.graph.auto_frames`
@@ -201,7 +211,7 @@ Keys the core understands; anything else is ignored:
     `bypass` (the runner refuses to start otherwise).
   - `title` and `help` are what the Graph view's palette and node cards show (the core publishes them as is).
   - `peak_gb`: a Python expression over `mp` (megapixels of the nearest upstream Canvas, 0 without one),
-    `images` (how many Image values the params of the stage and of every node upstream of it hold), `mp_in`
+    `images` (how many Image values the params of the stage, the params it `sees` and every node upstream of it hold), `mp_in`
     (megapixels of the largest of them, 0 without), `frames` (the length an input carries as an int `frames`
     attribute, such as a Latent after an auto length resolved; else the `frames` param of the nearest upstream node
     that has one, `"auto"` counting as its longest clip, 0 without; without a Canvas or a frames param a media value
@@ -237,7 +247,10 @@ def build(component: str, model) -> torch.nn.Module:      # the component on the
         return Transformer.from_config(Transformer.load_config(model.folder(component) / component))
 
 def rename(component: str, key: str) -> str | None:     # optional: checkpoint key → module name, None = skip
-    return key
+    return key                                            # (a skipped key is never read: MiniMax's 13 unused layers)
+
+def tensor_hook(component: str, model):                  # optional: None, or hook(name, tensor) -> tensor, run on
+    return None                                           # the device before the cast (MiniMax: NVFP4 → bf16)
 ```
 
 - **`params`**: the node's params, resolved and validated against its schema (a `seed` param arrives as an
@@ -294,7 +307,9 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   - Fail a run with a readable message: `raise core.graph.RunError("empty prompt")`. Any other exception
     fails it as `<node>: internal error (<Type>)` and is logged with its traceback.
 - **Memory**: before a stage runs, admission needs its not-yet-loaded `uses` components (their size computed from
-  the safetensors headers at the target dtype) plus `peak_gb`; when short, cached node results are dropped,
+  the safetensors headers at the target dtype) plus `peak_gb`; when short, cached node results of 64 MB or more are
+  dropped (a small encoding stays: reloading its encoder costs more), the footprint is given up to 10 s to fall (macOS
+  takes freed GPU pages back late),
   then components: first those the rest of the run does not need, within each group a baked LoRA set the run does
   not use before plain ones, then least recently used. The budget is RAM (on CUDA: VRAM) minus `RUNNER_RESERVE_GB` (12), capped
   for one run by its command's `budget_gb` (what the host's other env leaves: contracts/README.md "Two envs on one
@@ -303,7 +318,7 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   `last_used`, `pinned` and a baked set's `loras`; the `models` key carries each present variant's `memory` plan per
   precision, computed from the pack's workflows at their default sizes (components in order of last use,
   `unloads_after` from `unload_after`, `peak_gb` = max over stages of kept components + the stage's own + its
-  `peak_gb`), so write `peak_gb` for the default sizes honestly: studio admits runs across envs with it.
+  `peak_gb`; an `alone` stage without the kept ones), so write `peak_gb` for the default sizes honestly: studio admits runs across envs with it.
   `runner.unload` naming components unloads exactly those (never a RUNNER_PIN one). After a run `RUNNER_AFTER_RUN` = `keep_warm` (default; idle unload after
   `RUNNER_IDLE_UNLOAD_S`), `unload`, or `keep_pinned` (`RUNNER_PIN=transformer,vae`). Eviction drops the
   module, runs `gc` and `torch.mps.empty_cache()` (synchronised first; on CUDA `torch.cuda.synchronize()`, then

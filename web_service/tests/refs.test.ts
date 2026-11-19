@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import qwenNodes from "../../contracts/fixtures/registry/qwen-image.nodes.valid.json";
 import qwenWorkflows from "../../contracts/fixtures/registry/qwen-image.workflows.valid.json";
+import minimaxNodes from "../../contracts/fixtures/registry/minimax-h3-image.nodes.valid.json";
+import minimaxWorkflows from "../../contracts/fixtures/registry/minimax-h3-image.workflows.valid.json";
 import nodesFixture from "../../contracts/fixtures/registry/nodes.valid.json";
 import workflowsFixture from "../../contracts/fixtures/registry/workflows.valid.json";
 import type { S } from "@/lib/api";
 import { cellValue, inputSummary, lineFields } from "@/lib/batches";
 import {
+  FIRST_REF_CANVAS,
   addIds,
+  autoCanvas,
   autoSize,
   cellRef,
   editLabel,
@@ -18,11 +22,16 @@ import {
   refIds,
   withIds,
 } from "@/lib/refs";
+import { studioView } from "@/lib/studio";
 import { buildInputs, fields, rawsFrom, readValue, toRaw, type Field } from "@/lib/workflow";
 
 const qwen = {
   ...qwenWorkflows.workflows[0],
   node_schemas: Object.fromEntries(qwenNodes.nodes.map((n) => [n.kind, n])),
+} as unknown as S<"Workflow">;
+const minimax = {
+  ...minimaxWorkflows.workflows[0],
+  node_schemas: Object.fromEntries(minimaxNodes.nodes.map((n) => [n.kind, n])),
 } as unknown as S<"Workflow">;
 const echo = {
   ...workflowsFixture.workflows[0],
@@ -102,6 +111,46 @@ describe("canvas auto in an edit", () => {
     expect([s.width % 32, s.height % 32]).toEqual([0, 0]);
   });
 
+  it("follows the first reference, clamped to 1:4…4:1, at the canvas's area on a FIRST_REF_CANVAS", () => {
+    expect(autoCanvas({ width: 1536, height: 2048 }, 2048, 2048, true)).toEqual({
+      width: 1792,
+      height: 2368,
+    });
+    expect(autoCanvas({ width: 2048, height: 1536 }, 2048, 2048, true)).toEqual({
+      width: 2368,
+      height: 1792,
+    });
+    expect(autoCanvas({ width: 8000, height: 1000 }, 1024, 1024, true)).toEqual({
+      width: 2048,
+      height: 512,
+    });
+    expect(autoCanvas({ width: 1920, height: 1080 }, 2048, 2048, false)).toEqual(
+      autoSize(1920, 1080),
+    );
+    const canvas = fields(minimax).find((f) => f.canvas && f.param.name === "mode")!;
+    expect(FIRST_REF_CANVAS.has(canvas.kind!)).toBe(true);
+    expect(fields(qwen).some((f) => FIRST_REF_CANVAS.has(f.kind ?? ""))).toBe(false);
+  });
+
+  it("lays out the minimax-h3-image template from its node schemas and studio block alone", () => {
+    const fs = fields(minimax);
+    const v = studioView(minimax, fs)!;
+    expect(v.text.map((f) => f.key)).toEqual(["prompt.text"]);
+    expect(v.groups.map((g) => [g.title, g.fields.map((f) => f.key)])).toEqual([
+      ["Quick", ["encode.refs", "enhance.bypass", "canvas.mode", "seed.seed"]],
+      ["Canvas", ["canvas.width", "canvas.height"]],
+      ["Enhance", ["enhance.think"]],
+      ["Quality", ["sample.sampler"]],
+    ]);
+    expect(v.groups[0].fields[1].param.label).toBe("No enhance");
+    expect(v.groups[0].fields[1].initial).toBe(true);
+    const refs = imageInputs(fs)[0];
+    expect([refs.param.max, mentionOf(refs.param, 2)]).toEqual([16, "<Picture 2>"]);
+    const w = fs.find((f) => f.key === "canvas.width")!.param;
+    expect([w.min, w.max, w.step]).toEqual([256, 8192, 32]);
+    expect(Object.keys(minimax.studio!.presets!)).toEqual(["Plain", "Enhanced", "Enhanced, think"]);
+  });
+
   it("labels the workflow as an edit with its reference count", () => {
     expect(editLabel("Qwen Image", 2)).toBe("Qwen Image · Edit · 2 references");
     expect(editLabel("Qwen Image", 1)).toBe("Qwen Image · Edit · 1 reference");
@@ -146,5 +195,16 @@ describe("inOrder", () => {
     finishScene("scene");
     await all;
     expect(seen).toEqual(["scene", "hat", "2: too big"]);
+  });
+});
+
+describe("the run strip on a bypassed node", () => {
+  it("strikes the enhancer through when it is bypassed, and runs it when it is not", async () => {
+    const { segments } = await import("@/lib/runs");
+    const run = (inputs: Record<string, unknown>) =>
+      ({ id: "r", status: "succeeded", inputs }) as unknown as S<"Run">;
+    const state = (r: S<"Run">) => segments(minimax, r).find((x) => x.node === "enhance")?.state;
+    expect(state(run({}))).toBe("bypassed");
+    expect(state(run({ "enhance.bypass": false }))).toBe("done");
   });
 });

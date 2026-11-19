@@ -74,13 +74,41 @@ export function move<T>(list: T[], from: number, to: number): T[] {
 export const mentionOf = (p: Param, n: number) =>
   p.mention ? p.mention.replaceAll("{n}", String(n)) : `image ${n}`;
 
-/** Canvas `auto` in an edit: about 1 MP at the last reference's aspect, sides on the 32 px grid (the diffusers
+/** Canvas `auto` in an edit: about 1 MP (or `area`) at the reference's aspect, sides on the 32 px grid (the diffusers
  * pipeline's calculate_dimensions(1024², w / h)). */
-export function autoSize(width: number, height: number) {
+export function autoSize(width: number, height: number, area = 1024 * 1024) {
   const r = width / height;
-  const w = Math.sqrt(1024 * 1024 * r);
+  const w = Math.sqrt(area * r);
   return { width: roundEven(w / 32) * 32, height: roundEven(w / r / 32) * 32 };
 }
+
+/** Canvas kinds whose `auto` follows the FIRST reference, clamped to 1:4…4:1, at the canvas's own width × height
+ * (contracts/README.md, the minimax-h3-image family); the core `canvas` follows the last one at 1 MP.
+ * ponytail: by kind, as the contract states it; a schema hint on the canvas would make this generic. */
+export const FIRST_REF_CANVAS = new Set(["minimax-h3-image/canvas"]);
+
+/** The runner's minimax size_for: `area` at `ratio`, worked out on the long side (3:4 is 4:3 turned), the short
+ * side from the rounded long side, both on the 32 px grid. */
+function sizeFor(ratio: number, area: number): { width: number; height: number } {
+  if (ratio < 1) {
+    const s = sizeFor(1 / ratio, area);
+    return { width: s.height, height: s.width };
+  }
+  const width = roundEven(Math.sqrt(area * ratio) / 32) * 32;
+  return { width, height: roundEven(width / ratio / 32) * 32 };
+}
+
+/** What canvas auto gives with a reference of this size: 1 MP at its aspect, or for a FIRST_REF_CANVAS its aspect
+ * clamped to 1:4…4:1 at the canvas's own width × height (as the runner's size_for). */
+export const autoCanvas = (
+  ref: { width: number; height: number },
+  w: number,
+  h: number,
+  first: boolean,
+) =>
+  first
+    ? sizeFor(Math.min(4, Math.max(1 / 4, ref.width / ref.height)), w * h)
+    : autoSize(ref.width, ref.height);
 
 /** The top bar's workflow label: "Qwen Image · Edit · 2 references", or the title alone without references. */
 export const editLabel = (title: string, n: number) =>

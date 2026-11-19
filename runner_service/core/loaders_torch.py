@@ -6,7 +6,9 @@ time: on MPS safetensors reads each tensor straight into a GPU buffer (safe_open
 no CPU copy); on CUDA each tensor is read into one pinned host buffer and copied to the device with non_blocking
 (`staged`: one tensor of host memory at a time, the stated exception to "no CPU copy", checked against the host-RAM
 budget); on the CPU through safetensors. Each tensor passes the hook chain
-rename (the pack's `rename(component, key)`, optional) → cast (floating tensors to the component's dtype) →
+rename (the pack's `rename(component, key)`, optional; a key it drops is never read) → the pack's tensor hook
+(`tensor_hook(component, model)`, optional: MiniMax's NVFP4 dequant) → cast (floating tensors to the component's
+dtype; `dtype: stored` keeps each tensor's own) →
 LoRA bake (rows of mode bake: W + s * B @ A in fp32, cast back) → quantize (a Linear matched by the component's `quantize` globs at precision int8 becomes an Int8Linear: int8
 weight, one bf16 scale per output row, quantized on the device as the tensor arrives). The int8 technique is the
 streaming loader of the earlier studios, made generic.
@@ -136,8 +138,11 @@ def device_info() -> dict:
     return out | ({"driver": d} if (d := _driver()) else {})
 
 
-def dtype_of(name: str) -> torch.dtype:
-    """A component's dtype here: bf16 loads as fp16 on CUDA below compute capability 8.0 (no native bf16)."""
+def dtype_of(name: str) -> torch.dtype | None:
+    """A component's dtype here (None for `stored`: no cast): bf16 loads as fp16 on CUDA below compute capability
+    8.0 (no native bf16)."""
+    if name == "stored":
+        return None
     if name == "bf16" and device() == "cuda" and torch.cuda.get_device_capability(0) < (8, 0):
         name = "fp16"
     return DTYPES[name]
@@ -384,15 +389,17 @@ def load(
     files: list,
     *,
     dev: str,
-    dtype: torch.dtype,
+    dtype: torch.dtype | None,
     quantize=lambda name: False,
     rename=lambda key: key,
+    hook=None,
     bake=None,
     check=lambda: None,
     progress=lambda done, total: None,
 ) -> nn.Module:
     """Fill `module` (parameters on meta) from `files`. `quantize(module name)` picks the Linears stored int8;
-    `rename(key)` maps a checkpoint key to the module's name for it, or None to skip it. `bake` (module name →
+    `rename(key)` maps a checkpoint key to the module's name for it, or None to skip it (it is not read); `hook(name,
+    tensor)` may replace a tensor on the device before the cast; `dtype` None keeps stored dtypes. `bake` (module name →
     [(A, B, s)], LoRA bake) merges W + sum s * (B @ A) in fp32 into those Linears' weights after the cast and before
     quantization. `check` runs before each tensor (a cancel point); `progress(done, total)` after each."""
     bake, baked = bake or {}, set()
@@ -402,10 +409,11 @@ def load(
             if type(child) is nn.Linear and quantize(name):
                 setattr(parent, child_name, Int8Linear(child))
     modules = dict(module.named_modules())
-    total = sum(len(packs.header(p)) for p in files)
+    wanted = {p: {k for k in packs.header(p) if rename(k) is not None} for p in files}
+    total = sum(map(len, wanted.values()))
     done, read = 0, 0
     for path in files:
-        for key, tensor in tensors(path, dev):
+        for key, tensor in tensors(path, dev, wanted[path]):
             check()
             read += tensor.numel() * tensor.element_size()
             name = rename(key)
@@ -414,13 +422,15 @@ def load(
                 owner = modules.get(owner_name)
                 if owner is None:
                     raise KeyError(f"{path.name}: {key} has no place in {type(module).__name__}")
-                if tensor.is_floating_point() and tensor.dtype != dtype:
+                if hook is not None:
+                    tensor = hook(name, tensor)
+                if dtype is not None and tensor.is_floating_point() and tensor.dtype != dtype:
                     tensor = tensor.to(dtype)
                 if attr == "weight" and owner_name in bake:
                     merged = tensor.float()
                     for a, b, s in bake[owner_name]:
                         merged += s * (b.float() @ a.float())
-                    tensor = merged.to(dtype)
+                    tensor = merged.to(dtype or tensor.dtype)
                     baked.add(owner_name)
                 if isinstance(owner, Int8Linear) and attr == "weight":
                     owner.quantize(tensor)
@@ -470,6 +480,7 @@ def load_component(model, component: str, ctx):
             for name, (a, b, factor) in deltas.items():
                 bake.setdefault(name, []).append((a, b, use.strength * factor))
     rename = getattr(model.pack.module, "rename", None)
+    hook = getattr(model.pack.module, "tensor_hook", None)
     phase, last = f"loading {component}", [0.0]
 
     def progress(done: int, total: int) -> None:
@@ -485,6 +496,7 @@ def load_component(model, component: str, ctx):
         dtype=dtype_of(spec.get("dtype", "bf16")),
         quantize=lambda name: packs.quantized(spec, precision, name),
         rename=(lambda key: rename(component, key)) if rename else (lambda key: key),
+        hook=hook(component, model) if hook else None,
         bake=bake,
         check=ctx.check,
         progress=progress,

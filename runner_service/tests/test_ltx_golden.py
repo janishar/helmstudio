@@ -104,7 +104,7 @@ class Bench:
         self.impls = {k: dataclasses.replace(n, fn=self._record(n.fn)) for k, n in impls.items()}
         self.residency = Residency(ram_gb() - 12, free=lm.free, measure=lm.measure_gb)
         self.cache = graph.Cache()
-        self.residency.on_short.append(self.cache.clear)
+        self.residency.on_short.append(self.cache.shed)
         self.wav: Path | None = None
         self.files: dict[str, Path] = {}  # object key → local file (image takes, the LoRA)
         self.stages, self.images, self.fused, self.loads = [], [], {}, {}

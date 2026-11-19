@@ -22,15 +22,17 @@ def test_readme_example_generates_the_canonical_qwen_image_nodes(tmp_path, monke
     assert list(q.schemas.values()) == want
 
 
-def test_real_qwen_pack_matches_the_fixtures_when_present():
-    if not (pack.PACKS / "qwen_image" / "model.yaml").is_file():
-        pytest.skip("packs/qwen_image is not written yet")
+@pytest.mark.parametrize("family", ["qwen-image", "minimax-h3-image"])
+def test_real_torch_packs_match_the_fixtures(family):
+    """The torch runner publishes both families merged (contracts README): each family's canonical nodes, in its
+    order (the core kinds they share are identical), and its workflows."""
     pytest.importorskip("torch")
     values, _, _ = registry.build("torch")
-    assert values["nodes"]["nodes"] == fixture("qwen-image.nodes.valid.json")["nodes"]
-    assert (
-        values["workflows"]["workflows"] == fixture("qwen-image.workflows.valid.json")["workflows"]
-    )
+    want = fixture(f"{family}.nodes.valid.json")["nodes"]
+    kinds = {n["kind"] for n in want}
+    assert [n for n in values["nodes"]["nodes"] if n["kind"] in kinds] == want
+    got = [w for w in values["workflows"]["workflows"] if w["family"] == family]
+    assert got == fixture(f"{family}.workflows.valid.json")["workflows"]
 
 
 @pytest.mark.parametrize("env", ["torch", "mlx"])

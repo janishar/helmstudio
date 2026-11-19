@@ -47,7 +47,7 @@ REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
 # Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
-CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server."]
+CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server.", "minimax-h3-image."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",
@@ -1188,12 +1188,14 @@ def auto_size(width: int, height: int) -> tuple[int, int]:
 def pin_canvases(nodes: dict, palette: dict, before: list, field: str, sizes: dict, changed: dict, typed: dict) -> None:
     """Mentions step 2, Canvas: element rows must not change the output size. Each `canvas` on `auto` is pinned to
     `fixed` at the size auto gives without them: its own width x height without user rows, else the auto size of the
-    last user row's take (clamped to the params' min and max; unknown size: mode only)."""
+    last user row's take (clamped to the params' min and max; unknown size: mode only). A `minimax-h3-image/canvas`
+    (auto follows the first row) is pinned only without user rows, its width x height kept."""
     last = before[-1].get(field) if before else None
     size = sizes.get(last["take_id"]) if isinstance(last, dict) else None
     for nid in sorted(nodes):
         n, s = nodes[nid], palette.get(nodes[nid]["kind"])
-        if n["kind"] != "canvas" or not s or n.get("bypass"):
+        first = n["kind"] == "minimax-h3-image/canvas"
+        if n["kind"] != "canvas" and not first or not s or n.get("bypass") or first and before:
             continue
         ps = {p["name"]: p for p in s["params"]}
         val = {name: n.get("params", {}).get(name, p["default"]) for name, p in ps.items()}
@@ -1747,8 +1749,8 @@ def check_media(registry: Registry) -> None:
         if (got := fn(*c["args"])) != c["expect"]:
             fail(f"fixtures/video/sources.json {c['description']!r}: got {json.dumps(got)}")
     print("ok   fixtures/video/sources.json")
-    pal = {n["kind"]: n for pre in ("ltx.", "qwen-image.") for n in json.loads((reg / f"{pre}nodes.valid.json").read_text())["nodes"]}
-    wfs = [w for pre in ("ltx.", "qwen-image.") for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]]
+    pal = {n["kind"]: n for pre in ("ltx.", "qwen-image.", "minimax-h3-image.") for n in json.loads((reg / f"{pre}nodes.valid.json").read_text())["nodes"]}
+    wfs = [w for pre in ("ltx.", "qwen-image.", "minimax-h3-image.") for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]]
     uses_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/TakeUses"}, registry=registry,
                                   format_checker=FormatChecker())
     fx = json.loads((g / "uses.json").read_text())

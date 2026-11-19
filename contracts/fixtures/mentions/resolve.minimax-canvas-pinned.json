@@ -1,0 +1,101 @@
+{
+  "description": "minimax-h3-image, an element in a text-to-image prompt: its image becomes <Picture 1>; the auto canvas (which follows the first row) is pinned to fixed at its own width x height so the element's image does not set the aspect",
+  "workflow": {
+    "title": "MiniMax H3 Image",
+    "family": "minimax-h3-image",
+    "env": "torch",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "A portrait of @owl"
+        }
+      },
+      "seed": {
+        "kind": "seed"
+      },
+      "canvas": {
+        "kind": "minimax-h3-image/canvas"
+      },
+      "model": {
+        "kind": "minimax-h3-image/model"
+      },
+      "enhance": {
+        "kind": "minimax-h3-image/enhance",
+        "bypass": true,
+        "in": {
+          "prompt": "prompt.text",
+          "canvas": "canvas.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "encode": {
+        "kind": "minimax-h3-image/encode",
+        "in": {
+          "model": "model.model",
+          "prompt": "enhance.text"
+        }
+      },
+      "sample": {
+        "kind": "minimax-h3-image/sample",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "canvas": "enhance.canvas",
+          "seed": "seed.seed"
+        }
+      },
+      "decode": {
+        "kind": "minimax-h3-image/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample.latent"
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.image"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e0000000-0000-4000-8000-000000000004",
+      "handle": "owl",
+      "name": "Owl",
+      "version": 1,
+      "text": "",
+      "images": [
+        "00000000-0000-4000-8000-000000000011"
+      ]
+    }
+  ],
+  "expect": {
+    "inputs": {
+      "prompt.text": "A portrait of Owl <Picture 1>",
+      "encode.refs": [
+        {
+          "image": {
+            "take_id": "00000000-0000-4000-8000-000000000011"
+          }
+        }
+      ],
+      "canvas.mode": "fixed"
+    },
+    "typed": {
+      "prompt.text": "A portrait of @owl",
+      "encode.refs": [],
+      "canvas.mode": "auto"
+    },
+    "elements": [
+      {
+        "id": "e0000000-0000-4000-8000-000000000004",
+        "handle": "owl",
+        "name": "Owl",
+        "version": 1
+      }
+    ]
+  }
+}

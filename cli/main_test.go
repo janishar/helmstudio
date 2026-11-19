@@ -349,7 +349,7 @@ func TestInputsRejectsBadValues(t *testing.T) {
 	if err := json.Unmarshal([]byte(echoWorkflow), &wf); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{"echo.steps=ten", "echo.fail=maybe", "nodot=1", "echo.steps"} {
+	for _, p := range []string{"echo.steps=ten", "echo.fail=maybe", "enhance.bypass=off", "nodot=1", "echo.steps"} {
 		if _, err := wf.inputs([]string{p}); err == nil {
 			t.Errorf("%s accepted", p)
 		}
@@ -367,8 +367,8 @@ func TestInputsRejectsBadValues(t *testing.T) {
 	if _, err := qwen.inputs([]string{"seed.seed=4.5"}); err == nil {
 		t.Error("seed 4.5 accepted")
 	}
-	got, err := wf.inputs([]string{"echo.unknown=1", "prompt.text=2"})
-	if err != nil || got["echo.unknown"] != "1" || got["prompt.text"] != "2" {
+	got, err := wf.inputs([]string{"echo.unknown=1", "prompt.text=2", "enhance.bypass=false"})
+	if err != nil || got["echo.unknown"] != "1" || got["prompt.text"] != "2" || got["enhance.bypass"] != false {
 		t.Fatalf("%v %v", got, err)
 	}
 }

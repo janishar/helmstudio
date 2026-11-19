@@ -40,4 +40,7 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
     per host scoped to its own keys (today it can get, put and delete any object);
   - the full contract suite twice and make resilience on the final M7 code;
   - every golden case of each pack on both MLX versions, plus the earlier packs' regression cases;
+  - MiniMax H3 Image paths not run on the GPU in pack 2: LCM, Think on, an edit with the enhancer on, several
+    references, more than 4 MP and the 20 MP refusal, and the `MINIMAX=1` contract tests. The enhancer's per-reference
+    memory term (`11 + images` GB) is an estimate: measure one enhanced edit with 8–16 references;
   - web: component and end-to-end tests, and every screen side by side with its board at 1440×960.

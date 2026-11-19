@@ -52,6 +52,15 @@ class Node:
     pack: Pack | None = None
     check: object = None  # the pack's check_<stage>(params, wired, models) -> problem text or None, run before anything
     unload_after: tuple[str, ...] = ()  # components unloaded once the stage has run
+    alone: bool = (
+        False  # its components never sit beside the model's others: plans count no kept ones
+    )
+    sees: dict = field(
+        default_factory=dict
+    )  # param → output: that param of the node(s) the output feeds
+    reports: tuple[
+        str, ...
+    ] = ()  # Text outputs reported as the run's resolved.texts (`<node>.<output>`)
 
 
 @dataclass(eq=False)
@@ -171,8 +180,10 @@ class ModelRef:
         return component_files(self.pack, self.owner(component), component)
 
     def folder(self, component: str | None = None) -> Path:
-        """The variant's model folder (with `component`: the folder of the variant owning its files), for the
-        small non-weight files a pack reads itself (configs, tokenizer, scheduler)."""
+        """The variant's model folder (with `component`: the folder of the variant owning its files, or the
+        component's own `dir`), for the small non-weight files a pack reads itself (configs, tokenizer, scheduler)."""
+        if component and (own := self.pack.component(component).get("dir")):
+            return models_root() / own
         variant = self.owner(component) if component else self.variant
         return models_root() / self.pack.spec["variants"][variant]["dir"]
 
@@ -210,6 +221,14 @@ class ModelRef:
         return gb, transient + self.lora_gb(self.baked(component), 4)
 
 
+def default_model(pack: Pack) -> ModelRef:
+    """The Model a stage with `uses` but no Model input loads from (MiniMax's enhance: a model of its own beside the
+    family's): the first variant at the model node's default precision."""
+    return ModelRef(
+        pack, next(iter(pack.spec["variants"])), model_schema(pack)["params"][1]["default"]
+    )
+
+
 def models_root() -> Path:
     import config
 
@@ -243,8 +262,11 @@ def component_globs(pack: Pack, variant: str, component: str) -> list[str]:
 
 
 def component_files(pack: Pack, variant: str, component: str) -> list[Path]:
-    """The files of a component in a variant's folder, sorted per glob."""
-    root = models_root() / pack.spec["variants"][variant]["dir"]
+    """The files of a component in a variant's folder (or the component's own `dir`: a model of its own the family
+    loads, as MiniMax's prompt enhancer), sorted per glob."""
+    root = models_root() / (
+        pack.component(component).get("dir") or pack.spec["variants"][variant]["dir"]
+    )
     return [p for g in component_globs(pack, variant, component) for p in sorted(root.glob(g))]
 
 
@@ -294,8 +316,8 @@ def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, flo
                             numel * (8 if precision == "int8" else 4) // 8
                             + numel // QUANT_GROUP * 4
                         )
-                    else:
-                        total += numel + t["shape"][0] * 2
+                    else:  # a U8 weight packs two 4-bit values per byte (NVFP4, dequantized at load)
+                        total += numel * (2 if t["dtype"] == "U8" else 1) + t["shape"][0] * 2
                 else:
                     total += numel * (
                         STORED.get(t["dtype"], 2) if dtype == "stored" else BYTES[dtype]
@@ -505,10 +527,14 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
                 f"{schema['kind']}: unload_after names components outside its uses {sorted(unknown)}"
             )
         check = getattr(module, f"check_{name}", None)
-        out[schema["kind"]] = (
-            schema,
-            Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack, check, unload),
-        )
+        node = Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack, check, unload,
+                    bool(stage.get("alone")), dict(stage.get("sees") or {}), tuple(stage.get("reports", ())))  # fmt: skip
+        outs = {o["name"]: o["type"] for o in schema["outputs"]}
+        if bad := [o for o in (*node.sees.values(), *node.reports) if outs.get(o) != "Text"]:
+            raise ValueError(
+                f"{schema['kind']}: sees / reports name outputs that are not Text: {bad}"
+            )
+        out[schema["kind"]] = (schema, node)
     return out
 
 

@@ -93,6 +93,14 @@ class Cache(OrderedDict):
         super().clear()
         self.sizes.clear()
 
+    SHED = 64 * 2**20  # bytes: a result smaller than this is not worth a reload to drop
+
+    def shed(self) -> None:
+        """When memory is short (Residency.on_short): drop the results that hold memory, keep the small ones (an
+        encoding of a few MB saves reloading its 26 GB text encoder: MiniMax's re-roll)."""
+        for key in [k for k, n in self.sizes.items() if n >= self.SHED]:
+            del self[key]
+
     def trim(self) -> None:
         """At a run's end: within BYTES again (the newest entry, kept at any size for its run, goes when too big)."""
         while self and sum(self.sizes.values()) > self.BYTES:
@@ -130,6 +138,9 @@ class Ctx:
             str
         ] = []  # `<node>.<param>` of the run's frames params set to "auto" (graph.run)
         self.resolved: dict[str, int] = {}  # what they resolved to: the stored clip's frame count
+        self.texts: dict[
+            str, str
+        ] = {}  # `<node>.<output>` → a reported Text output (resolved.texts)
         self.started = time.monotonic()  # when the running node started
         self.alive = (
             time.monotonic()
@@ -619,6 +630,23 @@ def _model(nodes: dict, impls: dict, schemas: dict, ref: str):
     return impls[src["kind"]].fn(None, src.get("params", {}), inputs)[out]
 
 
+def seen(nodes: dict, schemas: dict, nid: str, sees: dict) -> tuple[dict, list]:
+    """(param → value, their specs) a stage `sees` (model.yaml): for each `param: output`, that param of the first
+    node (graph order) whose input is wired to `<nid>.<output>` and whose kind has it (MiniMax's enhance reads the
+    references of the encode node its text feeds); a param no such node has is left out."""
+    values, specs = {}, []
+    for param, output in sees.items():
+        for m in order(nodes):
+            spec = next(
+                (p for p in schemas[nodes[m]["kind"]]["params"] if p["name"] == param), None
+            )
+            if spec and f"{nid}.{output}" in nodes[m].get("in", {}).values():
+                values[param] = nodes[m].get("params", {}).get(param, spec.get("default"))
+                specs.append(spec)
+                break
+    return values, specs
+
+
 def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
     """node id → cache key, over what the node computes from, never its id or its sources' ids: the owner, kind,
     pack code, its own params (not those wired from upstream) and per wired key the source's key and output."""
@@ -633,8 +661,12 @@ def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
             else:
                 src, _, name = ref.partition(".")
                 ins[port] = [out[src], name]
+        if (implicit := _implicit(impl, types, node)) is not None:
+            ins["(model)"] = implicit.fingerprint(impl.uses)
         wired = _wired_params(node, schemas[node["kind"]])
         params = {p: v for p, v in node.get("params", {}).items() if p not in wired}
+        if impl.sees:
+            params |= seen(nodes, schemas, nid, impl.sees)[0]
         blob = [owner, node["kind"], impl.code, params, ins]
         out[nid] = hashlib.sha256(json.dumps(blob, sort_keys=True).encode()).hexdigest()
     return out
@@ -657,8 +689,9 @@ def _images(nodes: dict, schemas: dict, nid: str) -> int:
 
 
 def _canvas_mp(nodes: dict, schemas: dict, nid: str) -> float:
-    """Megapixels of the Canvas nearest upstream of `nid` (breadth first), or 0 without one. Canvas `auto` with Image
-    values upstream is sized from the last one (images.auto_size), as the stage sizes its output."""
+    """Megapixels of the Canvas nearest upstream of `nid` (breadth first; a node passing a Canvas through, without a
+    size of its own, is skipped), or 0 without one. The core canvas on `auto` with Image values upstream is sized from
+    the last one (images.auto_size), as the stage sizes its output."""
     queue, seen = [nid], set()
     while queue:
         cur = queue.pop(0)
@@ -666,9 +699,12 @@ def _canvas_mp(nodes: dict, schemas: dict, nid: str) -> float:
             continue
         seen.add(cur)
         node = nodes[cur]
-        if any(o["type"] == "Canvas" for o in schemas[node["kind"]]["outputs"]):
-            p, refs = node.get("params", {}), _image_values(nodes, schemas, nid)
-            if p.get("mode") == "auto" and refs:
+        p = node.get("params", {})
+        if "width" in p and any(o["type"] == "Canvas" for o in schemas[node["kind"]]["outputs"]):
+            refs = _image_values(
+                nodes, schemas, nid
+            )  # a family canvas (minimax) keeps its area on auto
+            if node["kind"] == "canvas" and p.get("mode") == "auto" and refs:
                 width, height = images.auto_size(refs[-1]["width"], refs[-1]["height"])
                 return width * height / 1e6
             return p["width"] * p["height"] / 1e6
@@ -710,10 +746,21 @@ def _frames(nodes: dict, schemas: dict, nid: str) -> int:
     return 0
 
 
+def _implicit(impl, types: dict, node: dict):
+    """The Model of a pack stage with `uses` and no Model input (core.pack.default_model), else None."""
+    if not impl.uses or impl.pack is None or "Model" in types.values():
+        return None
+    from core.pack import default_model
+
+    return default_model(impl.pack)
+
+
 def _components(nodes: dict, impls: dict, schemas: dict, nid: str) -> dict[tuple, object]:
     """residency key → Model handle, for the components the stage at `nid` uses."""
     node, impl = nodes[nid], impls[nodes[nid]["kind"]]
     types = {p["name"]: p["type"] for p in schemas[node["kind"]]["inputs"]}
+    if (implicit := _implicit(impl, types, node)) is not None:
+        return {implicit.key(c): implicit for c in impl.uses}
     out = {}
     for port, ref in node.get("in", {}).items():
         if types.get(port) == "Model":
@@ -758,12 +805,17 @@ def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
 
 
 def stage_peak(nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict) -> float:
-    """The stage's peak_gb formula at `nid` (0 without one), over its params and the graph's sizes."""
+    """The stage's peak_gb formula at `nid` (0 without one), over its params and the graph's sizes; `images` also
+    counts the Image values of the params the stage `sees` (minimax/enhance: the encode node's refs)."""
     if impl.peak is None:
         return 0.0
     from core.pack import evaluate
 
-    return evaluate(impl.peak, params | stage_sizes(nodes, schemas, nid, inputs))
+    sizes = stage_sizes(nodes, schemas, nid, inputs)
+    if impl.sees:
+        values, specs = seen(nodes, schemas, nid, impl.sees)
+        sizes["images"] += len(images.values(specs, values))
+    return evaluate(impl.peak, params | sizes)
 
 
 def pull_order(nodes: dict, sinks: list[str]) -> list[str]:
@@ -802,6 +854,13 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         if ctx.residency is not None and (impl.uses or impl.peak is not None):
             comps = _components(nodes, impls, schemas, nid)
             needs = {key: m.gb(key[2])[0] for key, m in comps.items()}
+            if (
+                impl.alone
+            ):  # model.yaml: none of its model's other components stay beside it (the plan says so)
+                ids = {key[0] for key in comps}
+                ctx.residency.release(
+                    {key for key in ctx.residency.entries if key[0] in ids and key not in needs}
+                )
             peak = stage_peak(nodes, schemas, nid, impl, params, inputs)
             ctx.residency.admit(needs, peak, later() - set(needs))
         outs = impl.fn(ctx, params, inputs)
@@ -823,6 +882,7 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
             log.info("%s: cache hit", nid)
             done[nid] = hit
             pending.discard(nid)
+            report(nid, impl, hit)
             return hit
         wired = _wired_params(node, schema)
         inputs, upstream_params = {}, {}
@@ -833,6 +893,9 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         pending.discard(nid)
         specs = schema["params"]
         params = {p: v for p, v in node.get("params", {}).items() if p not in wired}
+        if impl.sees:  # model.yaml: params of the nodes its outputs feed (read like its own)
+            extra, extra_specs = seen(nodes, schemas, nid, impl.sees)
+            params, specs = params | extra, specs + extra_specs
         # read the Image values before the node's first step; the bytes go after decoding
         if images.values(specs, params) or images.media(specs, params):
             params = await images.load(specs, params, ctx.owner, ctx.fetch)
@@ -842,7 +905,14 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         if not uncached:
             cache[k[nid]] = outs
         done[nid] = outs
+        report(nid, impl, outs)
         return outs
+
+    def report(nid: str, impl, outs: dict) -> None:
+        """model.yaml `reports`: the run's resolved.texts (evt.run.status succeeded), cache hits included."""
+        for o in impl.reports:
+            if outs[o]:  # defs: 1-16384 characters
+                ctx.texts[f"{nid}.{o}"] = outs[o][:16384]
 
     for nid in pull_order(
         nodes, sinks

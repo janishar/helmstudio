@@ -1,0 +1,350 @@
+{
+  "name": "edit-1024-s42",
+  "seed": 42,
+  "mp": 1.0,
+  "sampler": "euler",
+  "prompt": "Keep the fox in <Picture 1> exactly as it is, but turn the snowy forest into a green summer meadow with wildflowers",
+  "width": 1024,
+  "height": 1024,
+  "steps": [
+    {
+      "timestep": 0.0,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "f2d1c3cc2c6216b56d4ea8f1fc59751d7532a5dc94d935cbd7a634bc0dd71aab",
+        "mean": 0.026376,
+        "std": 1.667917
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "2a8bb5dc5d9bb63a4b99c59a165d8cc211d4c1eb3d1acd7886b4efa6b04ae2d5",
+        "mean": -0.000878,
+        "std": 0.968133
+      }
+    },
+    {
+      "timestep": 0.032476,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "893b66be169e83debf3318e011a98dbbe6109bfa75b6a5e611f314fcdc90decc",
+        "mean": 0.029175,
+        "std": 1.488619
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "2ad501bc30e0f4bee7465bac0450e424fe357c55c8c5bf9e8b1e19f09686745e",
+        "mean": 0.001455,
+        "std": 0.897235
+      }
+    },
+    {
+      "timestep": 0.112451,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "30b39232c6065aaf99c8a862e4102fef92b60cc54b82c85cfda5bb3d5e1e4f70",
+        "mean": 0.0256,
+        "std": 1.480619
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "ddf5b35031eaf20457287b2e5474d79cc126722501ccc2d0faaf1e4cedb8350d",
+        "mean": 0.004976,
+        "std": 0.806417
+      }
+    },
+    {
+      "timestep": 0.25,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "957e9d28f37d5f0697d4a7b31525cf7a7ad60714c77db7a14c313987a693f335",
+        "mean": 0.02334,
+        "std": 1.460033
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "53b6f7866ed1778fa89da0c8a9ee6fd4f84047282367a425d5d634d604dd44b0",
+        "mean": 0.010046,
+        "std": 0.766567
+      }
+    },
+    {
+      "timestep": 0.467226,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "e85855ea62c7e940875e24c414e5fd161a478ae084fc1186cfa9e881afa46423",
+        "mean": 0.019962,
+        "std": 1.421539
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "17b3665bf51d5a3761b0bcaf265a0478abf9a4f3997b0d73ea5772946e7b420a",
+        "mean": 0.01605,
+        "std": 0.927036
+      }
+    },
+    {
+      "timestep": 0.767991,
+      "velocity": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "9de30b25d65f726074893c93972fb6dfd2d2ae9f906d894925b7d5a4881bd0f1",
+        "mean": 0.021109,
+        "std": 1.289073
+      },
+      "latent": {
+        "shape": [
+          4096,
+          96
+        ],
+        "dtype": "float32",
+        "sha256": "e18d4aeca63445a0950dccb724e1cf587d823ddb8f40b55750b7a5aa5f7eb0df",
+        "mean": 0.020948,
+        "std": 1.162264
+      }
+    }
+  ],
+  "precision": "int8 (transformer blocks, text-encoder LM layers)",
+  "text_layers": 51,
+  "generator": "torch.Generator('cpu').manual_seed(noise_seed); torch.manual_seed too",
+  "noise_seed": 1347983934447411591,
+  "output_mode": "RGB",
+  "output_size": [
+    1024,
+    1024
+  ],
+  "png_sha256": "307c26af5585b8fb02646d55c26c471ee8413d538c26637b74930e3196127208",
+  "refs": [
+    {
+      "file": "turbo-768-s42.png",
+      "source": "tests/golden/qwen-image/turbo-768-s42.png",
+      "opened_as": "RGB",
+      "size": [
+        768,
+        768
+      ],
+      "sha256": "d89c2194a5df89923fc3fe1af60563ee7a9347f2cba0f710bc326ada48123030"
+    }
+  ],
+  "encoder_state": {
+    "image": [
+      {
+        "mode": "RGB",
+        "size": [
+          768,
+          768
+        ]
+      }
+    ],
+    "prompt": "Keep the fox in <Picture 1> exactly as it is, but turn the snowy forest into a green summer meadow with wildflowers",
+    "reference_images": [
+      {
+        "mode": "RGB",
+        "size": [
+          1024,
+          1024
+        ]
+      }
+    ],
+    "vision_images": [
+      {
+        "mode": "RGB",
+        "size": [
+          1024,
+          1024
+        ]
+      }
+    ],
+    "prompt_embeds": {
+      "shape": [
+        1,
+        1059,
+        5120
+      ],
+      "dtype": "bfloat16",
+      "sha256": "28fd5c284bf7f5b3e9955e9498efc4166f6285a25bb23a4269484c975a27e1ed",
+      "mean": 0.015994,
+      "std": 15.828681
+    },
+    "text_token_tags": {
+      "shape": [
+        1059
+      ],
+      "dtype": "int64",
+      "sha256": "0539ace0c03f28b64ce05578a3ccb3f0135badf43a14d6b4990dcbf1fc6201bd",
+      "mean": 0.031161,
+      "std": 0.173836
+    }
+  },
+  "initial_noise": {
+    "shape": [
+      4096,
+      96
+    ],
+    "dtype": "float32",
+    "sha256": "728576c15ce45cda50479d1b8a33bb6ac0a03ecb9588182670b0b0d9254ed027",
+    "mean": -0.001735,
+    "std": 0.999785
+  },
+  "render_state": {
+    "height": 2048,
+    "width": 2048,
+    "output_height": 1024,
+    "output_width": 1024,
+    "latent_height": 128,
+    "latent_width": 128,
+    "num_reference_rows": 1024,
+    "reference_images": [
+      {
+        "mode": "RGB",
+        "size": [
+          1024,
+          1024
+        ]
+      }
+    ],
+    "vision_images": [
+      {
+        "mode": "RGB",
+        "size": [
+          1024,
+          1024
+        ]
+      }
+    ],
+    "reference_latents": [
+      {
+        "shape": [
+          1,
+          24,
+          64,
+          64
+        ],
+        "dtype": "float32",
+        "sha256": "e833b645e82b72740ce68bea182f857f0380724fbd44b4cabecca7bf890e0a87",
+        "mean": -0.187438,
+        "std": 0.968445
+      }
+    ],
+    "timesteps": {
+      "shape": [
+        6
+      ],
+      "dtype": "float32",
+      "sha256": "a5b7441cbe22d584f2587e615c4849f85a7bd7ffe6cb0911a63b6be34cd3ff7f",
+      "mean": 0.271691,
+      "std": 0.297125
+    }
+  },
+  "sigmas_used": [
+    1.0,
+    0.96752369,
+    0.88754851,
+    0.75,
+    0.53277391,
+    0.23200887,
+    0.0
+  ],
+  "timesteps_used": [
+    0.0,
+    0.03247631,
+    0.11245149,
+    0.25,
+    0.46722609,
+    0.76799113
+  ],
+  "scheduler": {
+    "shift": 12.0,
+    "stochastic_sampling": false,
+    "shift_provided_sigmas": false,
+    "euler_update_form": "velocity",
+    "_use_default_values": [
+      "stochastic_sampling",
+      "shift"
+    ],
+    "_class_name": "MiniMaxH3Scheduler",
+    "_diffusers_version": "0.42.0.dev0"
+  },
+  "sample_sigmas_config": [
+    1.0,
+    0.9675236940383911,
+    0.8875485062599182,
+    0.75,
+    0.5327739119529724,
+    0.23200887441635132,
+    0.0
+  ],
+  "model_dir": "~/GenAI/models/MiniMax-H3-Image",
+  "versions": {
+    "torch": "2.14.1",
+    "diffusers": "0.43.0",
+    "transformers": "5.22.2",
+    "python": "3.12.13",
+    "device": "mps",
+    "machine": "Darwin 27.2.0 arm64"
+  },
+  "timing_s": {
+    "start": 0.0,
+    "encode_load": 15.8,
+    "encode": 6.5,
+    "encode_free": 0.4,
+    "load": 43.0,
+    "vae_encode": 1.2,
+    "denoise": 84.0,
+    "decode": 6.2,
+    "save": 0.7,
+    "total": 157.8
+  },
+  "peak_gb_mps_driver": {
+    "encode_load": 31.75,
+    "encode": 31.49,
+    "encode_free": 31.49,
+    "load": 40.94,
+    "vae_encode": 38.65,
+    "denoise": 41.87,
+    "decode": 41.65,
+    "save": 41.65
+  }
+}

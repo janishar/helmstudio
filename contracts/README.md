@@ -31,6 +31,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
 | `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
+| `fixtures/registry/minimax-h3-image.{nodes,workflows}.valid.json` | (API 1.20) **canonical** torch-runner values of the minimax-h3-image family (workflow `minimax-h3-image`), published with the qwen-image values (the core kinds they share are identical); `minimax-h3-image.models.valid.json` is an example (bytes and sizes measured) |
 | `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflows `ltx-text-to-video`, `ltx-image-to-video`): published verbatim; `ltx.models.valid.json` (with the canonical ltx `lora` block; its `prefused` id is a placeholder the runner fills from its index) and `host.valid.6.json` are examples (sizes measured) |
 | `fixtures/registry/llm.{nodes,workflows}.valid.json` | **canonical** mlx-runner values of the llm pack (API 1.14; family `llm`, workflow `llm-ask`), published with the ltx values; `llm.models.valid.json` is an example (sizes measured, peak extrapolated). `qwen-image.*` add `qwen-image/ask`, `answer`, `qwen-image-ask`; the echo values add `echo/ask`, `answer`, `echo-ask` |
 | `fixtures/registry/server.{nodes,workflows}.valid.json` | (API 1.15) **canonical** values pipelines_service's server executor publishes for each host it serves (host `mac` here, env `server`: kind `server/ask`, workflow `server-ask`; Model sources) |
@@ -156,6 +157,35 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   references through `cond`); the take's `width` / `height` are the real size, `made_with` keeps `mode: auto`.
   The registry also has the core source kind `image` (param `image`: image, output `image`: Image), unused by
   `qwen-image` in this version.
+- **The minimax-h3-image family (torch, API 1.20, M7 pack 2;** docs/reference-notes/minimax-h3-image.md**).** Workflow
+  `minimax-h3-image` (title `MiniMax H3 Image`, action Edit), text-to-image, and an edit of up to 16 references when
+  `encode.refs` is not empty. What differs from qwen-image:
+  `canvas` (`minimax-h3-image/canvas`: `mode` auto|fixed, `width` / `height` 256–8192 step 32, default 2048 × 2048 =
+  4 MP; auto with references = the **first** reference's aspect, clamped to 1:4…4:1, at the area of `width` × `height`,
+  sides rounded to 32; under 4 MP the model renders a 4 MP canvas of that aspect and resizes after decode, so it is no
+  cheaper; above 20 MP the run fails `<node>: at most 20 MP (<w> × <h>)`) · `model` (`minimax-h3-image/model`:
+  `variant` base, `precision` int8 only: stored bf16, quantized at load; float32 tensors and the VAE keep float32) ·
+  `enhance` (`minimax-h3-image/enhance`, **bypassed** in the template; in `prompt`: Text, `canvas`: Canvas, `seed`:
+  Seed; out `text`: Text, `canvas`: Canvas, so bypassed both pass through; `think` bool default false = reasoning
+  effort xhigh instead of low, thinking is always on) → `encode` (`minimax-h3-image/encode`, in `model`, `prompt` =
+  `enhance.text`; `refs` rows 0–16 `{image: Image}`, mention `<Picture {n}>`, opened as RGB: alpha dropped; no
+  `transparent`) → `sample` (`minimax-h3-image/sample`, in `model`, `cond`, `canvas` = `enhance.canvas`, `seed`;
+  `sampler` euler|lcm default euler; 6 fixed steps, no steps / CFG / negative prompt; lcm re-noises from the device
+  RNG and does not repeat across devices) → `decode` (`minimax-h3-image/decode`, no params: RGB, always tiled as
+  released) → `output`. No lora-stack (no LoRAs, so no look tiles), no ask workflow.
+  **Enhance** (MiniMax-H3-Image-PE, one model for both tasks): it reads the references of the encode node its `text`
+  feeds (none: the text-to-image prompt). Canvas `auto`: the answer's aspect (text-to-image: one of 1:1 5:4 4:3 3:2
+  16:9 21:9 4:5 3:4 2:3 9:16; edit: its target aspect, asked `adaptive`) at the canvas's area replaces the canvas
+  aspect; `fixed`: the size is kept (an edit passes its reduced W:H to the enhancer). It samples with the run's seed
+  on the device RNG (same device, same text). An answer without JSON after `</think>` fails the run `<node>: the
+  enhancer gave no answer`. The runner reports the text in `evt.run.status` succeeded `resolved.texts`
+  (`{"enhance.text": …}`; studio serves it as `Run.resolved.texts`, the UI shows it under the take's prompt);
+  `made_with` keeps the user's prompt.
+  Progress phases: `enhancing`, `encoding`, `loading transformer`, `sampling`, `decoding`. **Memory**: the enhancer
+  (int8, ~27 GB), the text encoder (int8, ~29.5 GB) and the transformer + VAE (int8 + fp32, ~37.3 GB) never fit two at
+  a time in 52 GB: each stage evicts the one before (enhancer and text encoder `unloads_after`); a re-roll with the
+  same prompt and references keeps the transformer + VAE and the cached encoding. A component's `precision` may be
+  `fp32` from 1.20 (the VAE: registry components, hosts `resident`, `req.runner.unload`, openapi `Precision`).
 - **Models and memory.** The registry `models` value lists, per model id, `variants` with `presence`
   (`present` | `missing`), `bytes` on disk and the `precisions` it can load as: a full-precision variant offers
   load-time quantization (`[bf16, int8]`; MLX also `int4`), an already-quantized one only its own (`[int8]`), and from
@@ -365,7 +395,9 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   = RAM − RUNNER_RESERVE_GB. Written every 10 s and after every load, unload and run (before the terminal status).
 - **Models key**: a `memory` item for every present variant and every precision it lists: `components` in the order
   of their last use in a run, with `unloads_after` for a stage's `unload_after`; `peak_gb` = max over the run's stages,
-  at the canonical workflow's default sizes, of (kept components + the stage's components + its `peak_gb` formula).
+  at the canonical workflow's default sizes, of (kept components + the stage's components + its `peak_gb` formula);
+  a stage the pack marks `alone` (minimax-h3-image enhance and encode) evicts the model's other components first and
+  counts no kept ones.
 - **`budget_gb`** in `cmd.run.execute`: for that run the residency budget is min(its own, `budget_gb`); its own
   admission then evicts or fails the run with numbers as before, so a run larger than its plan never crosses into
   another env's memory.
@@ -1025,7 +1057,8 @@ graph is saved first: "Save" for one's own, "Save as my workflow" for a template
   holds the library tiles `elements`, `look:<group>`: Looks, composer tiles),
   `inspector` (`[{title, items}]`), `labels` (path → field title), `presets` (name → `{path: value}`, at most 8).
   A path is `<node>.<param>` or `<node>.bypass`. Present = Create shows exactly the placed paths, each at most once;
-  every other param keeps its graph value. Absent = the derived form (every param, as today). Graph view "Show in
+  every other param keeps its graph value (the composer's model chip still names an unplaced model node's choices,
+  read-only). Create lists `presets` with the fewest values first, then by name (object order is not kept). Absent = the derived form (every param, as today). Graph view "Show in
   Studio" on a param: if `studio` is absent the editor first writes the derived form out as a block (the web's own
   derivation, kept stable), then appends the path to the inspector section titled like the node's schema title
   (created last when missing); "Hide" removes the path from wherever it is placed (and its label). Deleting a node
@@ -1127,7 +1160,7 @@ The `lora_*` codes need the caller's LoRA library (studio: as the caller, at rea
 may carry `loras` (id → detected family: the library), absent = empty.
 
 **Fixtures** (`fixtures/graphs/`, all against `palette.json`, which adds a fictional `test` family to the canonical
-echo, qwen-image and ltx kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
+echo, qwen-image, ltx and minimax-h3-image kinds: `test/noise`, `enhance` (bypassable Text → Text), `mix` (optional input `b`, wireable `int`
 and `float` params), `count` (an Int source), `model`, `lora` (bypassable Model → Model), `upscale` (torch only)):
 `valid.*.json` / `invalid.*.json` `{description, workflow, problems: [{code, node?, port?, param?}]}`;
 `autowire.*.json` `{description, workflow, selected, add: {id, kind}, expect_in}`; `wiredrop.*.json`
@@ -1838,7 +1871,9 @@ params:
    gives without them: `mode` → `fixed`; with no user rows its own `width` × `height` stay; with user rows, `width`
    and `height` → the auto size of the last user row's take (r = its width / height, `w = √(1024²·r)`: `round(w/32)·32`
    × `round(w/r/32)·32`, rounding half to even, as the runner), clamped to the params' `min` / `max`. A take whose
-   size studio does not know (it fails the image checks anyway) pins `mode` only. The pinned params are changed
+   size studio does not know (it fails the image checks anyway) pins `mode` only. A `minimax-h3-image/canvas` on
+   `auto` (it follows the *first* row) is pinned only when there are no user rows: `mode` → `fixed`, its `width` ×
+   `height` stay (after user rows the first row is unchanged, so nothing is pinned). The pinned params are changed
    paths like the others (`inputs` / `typed`).
 3. **Prompts**: each mention becomes `<name>` followed by its tokens, space-separated (`Fox <image3> <image4>`;
    the name alone without reference rows or without live images); each text part becomes its raw text with every

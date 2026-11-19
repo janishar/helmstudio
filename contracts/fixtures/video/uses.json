@@ -1,5 +1,5 @@
 {
-  "description": "take_uses(take, workflows, palette, range) → the \"Use in…\" offers over the canonical ltx and qwen-image templates in registry order (GET /v1/studio/takes/{take_id}/uses; a clip's actions add a range in the take's own seconds); with `param`: media_fit(param, take) → the 422 text after `<node>.<param>: `, or null (contracts/README.md, Media inputs)",
+  "description": "take_uses(take, workflows, palette, range) → the \"Use in…\" offers over the canonical ltx, qwen-image and minimax-h3-image templates in registry order (GET /v1/studio/takes/{take_id}/uses; a clip's actions add a range in the take's own seconds); with `param`: media_fit(param, take) → the 422 text after `<node>.<param>: `, or null (contracts/README.md, Media inputs)",
   "takes": {
     "11111111-0000-4000-8000-000000000001": {
       "kind": "video",
@@ -309,6 +309,23 @@
             "title": "Qwen Image",
             "action": "Edit",
             "family": "qwen-image",
+            "media": "image",
+            "param": "encode.refs",
+            "inputs": {
+              "encode.refs": [
+                {
+                  "image": {
+                    "take_id": "11111111-0000-4000-8000-000000000006"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "minimax-h3-image",
+            "title": "MiniMax H3 Image",
+            "action": "Edit",
+            "family": "minimax-h3-image",
             "media": "image",
             "param": "encode.refs",
             "inputs": {

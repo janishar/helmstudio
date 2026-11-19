@@ -3,6 +3,7 @@
 // mentions add and the cap error before Generate). Tested against contracts/fixtures/mentions; check.py is the
 // reference implementation.
 import type { S } from "@/lib/api";
+import { FIRST_REF_CANVAS } from "@/lib/refs";
 
 type Param = S<"ParamSchema">;
 type Value = S<"ParamValue">;
@@ -415,12 +416,19 @@ export function resolveMentions(
       inputs[path] = rows;
       typed[path] = before;
       // element and look rows never change the output size: each auto canvas is pinned to what auto gives without them
+      // (one that follows the first row, FIRST_REF_CANVAS, is pinned only when there are no user rows)
       const last = before.at(-1)?.[field] as { take_id?: string } | null | undefined;
       const size =
         last && typeof last === "object" && last.take_id ? sizes[last.take_id] : undefined;
       for (const { id, n, params } of known(nodes, schemas)) {
         const ps = Object.fromEntries(params.map((p) => [p.name, p]));
-        if (n.kind !== "canvas" || val(n, ps.mode) !== "auto") continue;
+        const first = FIRST_REF_CANVAS.has(n.kind);
+        if (
+          (n.kind !== "canvas" && !first) ||
+          (first && before.length) ||
+          val(n, ps.mode) !== "auto"
+        )
+          continue;
         inputs[`${id}.mode`] = "fixed";
         typed[`${id}.mode`] = "auto";
         if (!size) continue;

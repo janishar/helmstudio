@@ -428,7 +428,8 @@ func addLookLoras(nodes map[string]registry.Node, schemas map[string]registry.No
 
 // pinCanvases keeps the output size the element rows would change (Mentions, step 2, Canvas): each canvas on auto
 // becomes fixed at the size auto gives without them: its own without user rows, else the auto size of the last
-// user row's take (clamped to the params' range; an unknown size pins the mode only).
+// user row's take (clamped to the params' range; an unknown size pins the mode only). A minimax-h3-image/canvas (auto
+// follows the first row) is pinned only without user rows, its width × height kept.
 func pinCanvases(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, before []any, field string,
 	sizes map[string][2]int, out expansion) {
 	var size [2]int
@@ -442,7 +443,8 @@ func pinCanvases(nodes map[string]registry.Node, schemas map[string]registry.Nod
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
 		node := nodes[id]
 		schema, ok := schemas[node.Kind]
-		if !ok || node.Bypass || node.Kind != "canvas" {
+		first := node.Kind == "minimax-h3-image/canvas"
+		if !ok || node.Bypass || node.Kind != "canvas" && !first || first && len(before) > 0 {
 			continue
 		}
 		params := map[string]registry.Param{}

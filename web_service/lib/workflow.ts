@@ -19,6 +19,8 @@ export type Field = {
   canvas: boolean;
   /** the node outputs a Model handle (its params pick the weights) */
   model: boolean;
+  /** the node's kind */
+  kind?: string;
   /** the node kind's family (a LoRA must fit it), null for a core kind */
   family?: string | null;
   /** the node's params as the workflow has them (defaults filled): what `values_by` and a frame rate read */
@@ -57,6 +59,7 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
           nodeHelp: schema.help,
           param: twin ? { ...param, label: `${param.label ?? param.name} (${node})` } : param,
           initial: n.params?.[param.name] ?? param.default,
+          kind: n.kind,
           canvas: schema.outputs.some((o) => o.type === "Canvas"),
           model: schema.outputs.some((o) => o.type === "Model"),
           family: schema.family,
@@ -367,11 +370,16 @@ export const ASPECTS: [string, number][] = [
   ["9:16", 9 / 16],
 ];
 /** The canvas size choices, in megapixels (10^6 pixels), before a canvas's bounds narrow them (megapixelChoices). */
-export const MEGAPIXELS = [0.25, 0.5, 1, 2, 4];
+export const MEGAPIXELS = [0.25, 0.5, 1, 2, 4, 8, 16];
 
-/** The size choices a canvas with sides in [min, max] can reach (at least one). */
-export function megapixelChoices(min = 0, max = Infinity) {
-  const ok = MEGAPIXELS.filter((m) => m * 1e6 >= min * min && m * 1e6 <= max * max);
+/** The size choices a canvas with sides in [min, max] can reach at every aspect (at least one), at most `top` MP:
+ * above 4 MP only for a family measured there (form.tsx: a FIRST_REF_CANVAS; Qwen's sample at 8 MP is over the
+ * 52 GB budget in bf16). */
+export function megapixelChoices(min = 0, max = Infinity, top = 4) {
+  const r = Math.max(...ASPECTS.map(([, x]) => Math.max(x, 1 / x)));
+  const ok = MEGAPIXELS.filter(
+    (m) => m <= top && m * 1e6 >= min * min * r && m * 1e6 * r <= max * max,
+  );
   return ok.length
     ? ok
     : [

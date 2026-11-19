@@ -1277,7 +1277,8 @@
                                         "bf16",
                                         "fp16",
                                         "int8",
-                                        "int4"
+                                        "int4",
+                                        "fp32"
                                       ],
                                       "description": "what it is loaded at (a vae stays bf16 in an int8 run): the resident entry's precision"
                                     },
@@ -1410,7 +1411,8 @@
                                     "bf16",
                                     "fp16",
                                     "int8",
-                                    "int4"
+                                    "int4",
+                                    "fp32"
                                   ]
                                 },
                                 "description": "first = as stored; the rest are load-time quantizations"
@@ -1828,7 +1830,8 @@
                   "bf16",
                   "fp16",
                   "int8",
-                  "int4"
+                  "int4",
+                  "fp32"
                 ]
               },
               "gb": {
@@ -2530,7 +2533,8 @@
             "bf16",
             "fp16",
             "int8",
-            "int4"
+            "int4",
+            "fp32"
           ]
         },
         "loras": {

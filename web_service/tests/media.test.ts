@@ -136,7 +136,9 @@ describe("the frame grid and the Duration slider", () => {
 
   it("offers sizes a 64 px canvas reaches and names its aspect within a grid step", () => {
     expect(megapixelChoices(128, 1920)).toEqual([0.25, 0.5, 1, 2]);
-    expect(megapixelChoices(256, 4096)).toEqual([0.25, 0.5, 1, 2, 4]);
+    expect(megapixelChoices(256, 4096)).toEqual([0.25, 0.5, 1, 2, 4]); // 8 MP only when allowed (Qwen bf16 at 8 MP > 52 GB)
+    expect(megapixelChoices(256, 4096, Infinity)).toEqual([0.25, 0.5, 1, 2, 4, 8]);
+    expect(megapixelChoices(256, 8192, Infinity)).toEqual([0.25, 0.5, 1, 2, 4, 8, 16]); // minimax-h3-image's bounds
     expect(aspectOf(704, 448, 64)).toBe("3:2");
     expect(aspectOf(704, 448)).toBeNull();
     const s = sizeFor(3 / 2, 0.25, 64, 128, 1920);

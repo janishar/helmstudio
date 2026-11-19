@@ -3393,6 +3393,15 @@ export interface components {
             params?: {
                 [key: string]: number;
             };
+            /**
+             * @description from 1.20: `<node>.<output>` → a Text output the runner made that the user did not write (an enhancer's prompt); absent when none
+             * @example {
+             *       "enhance.text": "A ginger cat asleep on a green velvet sofa, soft window light"
+             *     }
+             */
+            texts?: {
+                [key: string]: string;
+            };
         };
         RunList: {
             runs: components["schemas"]["Run"][];
@@ -3524,8 +3533,11 @@ export interface components {
                 component: string;
                 model: string;
                 variant: string;
-                /** @enum {string} */
-                precision: "bf16" | "fp16" | "int8" | "int4";
+                /**
+                 * @description fp32 from 1.20: a component kept at its stored float32 (the MiniMax H3 Image VAE)
+                 * @enum {string}
+                 */
+                precision: "bf16" | "fp16" | "int8" | "int4" | "fp32";
                 gb: number;
                 pinned: boolean;
                 /**
@@ -5056,8 +5068,11 @@ export interface components {
         CustomNodeList: {
             nodes: components["schemas"]["CustomNode"][];
         };
-        /** @enum {string} */
-        Precision: "bf16" | "fp16" | "int8" | "int4";
+        /**
+         * @description fp32 from 1.20, components only: kept at its stored float32 (the MiniMax H3 Image VAE)
+         * @enum {string}
+         */
+        Precision: "bf16" | "fp16" | "int8" | "int4" | "fp32";
         ModelList: {
             hosts: components["schemas"]["ModelHost"][];
             /** @description every licence a listed variant names, each once (the text shown before a download) */

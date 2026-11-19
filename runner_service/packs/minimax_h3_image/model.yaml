@@ -1,0 +1,104 @@
+# MiniMax H3 Image on torch: text-to-image and an edit of up to 16 references, ported from the MiniMax-H3-Image
+# studio's generation path (diffusers' modular MiniMaxH3ImageBlocks) and its prompt enhancer
+# (docs/reference-notes/minimax-h3-image.md). Generates exactly the canonical minimax-h3-image node schemas
+# (tests/test_packs.py). No two of its three big models fit together in 52 GB: enhance and encode are `alone` and
+# unload after themselves, so a run holds the enhancer, then the text encoder, then the transformer + VAE.
+# peak_gb: measured on MPS (64 GB, torch 2.15, int8) with tests/test_minimax_golden.py; see the numbers there.
+id: minimax-h3-image
+family: minimax-h3-image
+title: MiniMax H3 Image
+runtimes:
+  torch: {env: torch, devices: [mps]}   # the old studio ran on Apple Silicon only; CUDA is untested
+model:
+  help: The weights to load.
+  variant: {label: Variant}
+  precision:
+    label: Precision
+    default: int8
+    help: "Stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32."
+media: [image]
+variants:
+  base: {dir: MiniMax-H3-Image, title: Base}   # text_encoder/ links into MiniMax-H3/Ref2VA/text_encoder
+components:
+  enhancer:                       # MiniMax-H3-Image-PE (Qwen3.5 27B), shipped only as NVFP4: dequantized, then int8
+    dir: MiniMax-H3-Image-PE      # a folder of its own (packs/README.md, components.dir)
+    files: "model-*.safetensors"
+    dtype: stored
+    precision: [int8]
+    quantize: ["lm_head", "model.language_model.layers.*.mlp.*_proj", "model.language_model.layers.*.self_attn.*_proj",
+               "model.language_model.layers.*.linear_attn.in_proj_qkv", "model.language_model.layers.*.linear_attn.in_proj_z",
+               "model.language_model.layers.*.linear_attn.out_proj"]   # exactly the NVFP4 Linears (tests)
+  text_encoder:                   # Qwen3-VL, 51 of 64 text layers (torch.py build/rename)
+    files: "text_encoder/*.safetensors"
+    dtype: stored
+    precision: [int8]
+    quantize: ["*.language_model.layers.*"]
+  transformer:                    # 18 float32 tensors (time embedder, proj_in, the six output heads) stay float32
+    files: "transformer_diffusers/*.safetensors"
+    dtype: stored
+    precision: [int8]
+    quantize: ["*blocks.*"]
+  vae: {files: "vae_diffusers/*.safetensors", dtype: stored, precision: [fp32]}
+stages:
+  canvas:
+    title: Canvas
+    help: "The output size in pixels; auto follows the first reference in an edit. Under 4 MP the model still renders 4 MP and resizes after decode."
+    params:
+      mode: {type: enum, label: Size, default: auto, enum: [auto, fixed],
+             help: "auto: with references, the first reference's aspect (clamped to 1:4…4:1) at the area of width × height, sides rounded to 32; without, width × height. fixed: always width × height."}
+      width: {label: Width, type: int, default: 2048, min: 256, max: 8192, step: 32}
+      height: {label: Height, type: int, default: 2048, min: 256, max: 8192, step: 32}
+    outputs: {canvas: Canvas}
+  enhance:
+    title: Enhance prompt
+    help: "Rewrites the prompt with MiniMax's prompt enhancer (27B, thinking on) and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through."
+    uses: [enhancer]
+    unload_after: [enhancer]
+    alone: true                   # packs/README.md: none of the model's other components stay beside it
+    sees: {refs: text}            # the refs param of the node its text feeds (the encode node)
+    reports: [text]               # evt.run.status resolved.texts {"<node>.text": …}
+    inputs: {prompt: Text, canvas: Canvas, seed: Seed}
+    outputs: {text: Text, canvas: Canvas}
+    params:
+      think: {type: bool, label: Think, default: false,
+              help: "Think longer (reasoning effort xhigh instead of low): better prompts, slower."}
+    # measured 8.9 GB above its 27.1 (T2I, 3516 prompt tokens, 692 new; phys_footprint); an edit's ~8.5k-token prompt
+    # with one reference is covered by the constant (old README: 38 GB driver, about 0.8 GB per 1k prompt tokens).
+    # `images` counts the encode node's refs (graph.stage_peak, `sees`): each adds ~1k vision tokens (shrunk to 1 MP),
+    # ~1 GB at that slope. ponytail: extrapolated, unmeasured past one reference; measure a 16-reference edit
+    peak_gb: "11 + images"
+    stall_s: 900                  # an edit's ~8.5k-token prefill is one forward
+  encode:
+    title: Encode prompt
+    help: Encodes the prompt and up to 16 reference images; with references the run is an edit.
+    uses: [text_encoder]
+    unload_after: [text_encoder]
+    alone: true
+    inputs: {model: Model, prompt: Text}
+    outputs: {cond: Conditioning}
+    params:
+      refs: {type: rows, label: References, default: [], min: 0, max: 16, item: {image: Image},
+             mention: "<Picture {n}>",
+             help: "Images to edit or combine, in order; the prompt names them <Picture 1>, <Picture 2>, … Alpha is dropped."}
+    # measured 4.33-4.84 GB above its 25.7 (T2I, the load transient included), 4.83 with one 768² reference
+    peak_gb: "4.9 + 0.5 * images"
+  sample:
+    title: Sample
+    help: "Denoises from the seed's noise in 6 fixed steps (guidance-distilled: no steps, CFG or negative prompt)."
+    uses: [transformer, vae]      # the vae encodes the references from the run's generator, before the noise
+    inputs: {model: Model, cond: Conditioning, canvas: Canvas, seed: Seed}
+    outputs: {latent: Latent}
+    params:
+      sampler: {type: enum, label: Sampler, default: euler, enum: [euler, lcm],
+                help: "Euler repeats exactly with the same seed. LCM re-noises every step from the device's RNG, so it does not repeat on another device."}
+    # the canvas is at least 4 MP: measured 5.24-5.68 GB above transformer + VAE (33.2) T2I, 5.52 with one 768² reference
+    # (its VAE copy at 1024²), the loads included; the old README's 16 MP run held ~4 GB more than at 4 MP
+    peak_gb: "4.5 + 0.3 * max(mp, 4.2) + 0.5 * images * max(1, min(mp_in, 4.2))"
+    stall_s: 600
+  decode:
+    title: Decode
+    help: "Turns the latent into an RGB image with the VAE, always tiled (256 px tiles, as released); under 4 MP resized to the canvas."
+    uses: [vae]
+    inputs: {model: Model, latent: Latent}
+    outputs: {image: Image}
+    peak_gb: "4.5 + 0.1 * max(mp, 4.2)"   # measured 4.23 GB above transformer + VAE (256 px tiles, one at a time)

@@ -58,7 +58,7 @@ class Consumer:
         self.loras = loras  # the host's core.lora.Library
         self.cache = Cache()
         if residency is not None:
-            residency.on_short.append(self.cache.clear)
+            residency.on_short.append(self.cache.shed)
         self.stopping = False  # set on SIGTERM: the run stops at its next cancel point
         self.cancel_requested = False  # the current run's cancel key was written
         self.ctx: Ctx | None = None  # the run in progress
@@ -186,7 +186,9 @@ class Consumer:
                 end = (
                     "succeeded",
                     None,
-                    resolved | ({"params": ctx.resolved} if ctx.resolved else {}),
+                    resolved
+                    | ({"params": ctx.resolved} if ctx.resolved else {})
+                    | ({"texts": ctx.texts} if ctx.texts else {}),
                     ctx.answer,
                 )
         except Exception as e:  # the cancels KV or a publish broke: still try to end the run

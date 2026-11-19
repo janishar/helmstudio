@@ -1,0 +1,132 @@
+{
+  "id": "minimax-h3-image",
+  "title": "MiniMax H3 Image",
+  "action": "Edit",
+  "family": "minimax-h3-image",
+  "env": "torch",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "canvas": {
+      "kind": "minimax-h3-image/canvas",
+      "params": {
+        "mode": "auto",
+        "width": 2048,
+        "height": 2048
+      }
+    },
+    "model": {
+      "kind": "minimax-h3-image/model",
+      "params": {
+        "variant": "base",
+        "precision": "int8"
+      }
+    },
+    "enhance": {
+      "kind": "minimax-h3-image/enhance",
+      "bypass": true,
+      "in": {
+        "prompt": "prompt.text",
+        "canvas": "canvas.canvas",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "think": false
+      }
+    },
+    "encode": {
+      "kind": "minimax-h3-image/encode",
+      "in": {
+        "model": "model.model",
+        "prompt": "enhance.text"
+      },
+      "params": {
+        "refs": []
+      }
+    },
+    "sample": {
+      "kind": "minimax-h3-image/sample",
+      "in": {
+        "model": "model.model",
+        "cond": "encode.cond",
+        "canvas": "enhance.canvas",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "sampler": "euler"
+      }
+    },
+    "decode": {
+      "kind": "minimax-h3-image/decode",
+      "in": {
+        "model": "model.model",
+        "latent": "sample.latent"
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "decode.image"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "encode.refs"
+    ],
+    "quick": [
+      "elements",
+      "enhance.bypass",
+      "canvas.mode",
+      "seed.seed"
+    ],
+    "inspector": [
+      {
+        "title": "Canvas",
+        "items": [
+          "canvas.width",
+          "canvas.height"
+        ]
+      },
+      {
+        "title": "Enhance",
+        "items": [
+          "enhance.think"
+        ]
+      },
+      {
+        "title": "Quality",
+        "items": [
+          "sample.sampler"
+        ]
+      }
+    ],
+    "labels": {
+      "enhance.bypass": "No enhance"
+    },
+    "presets": {
+      "Plain": {
+        "enhance.bypass": true
+      },
+      "Enhanced": {
+        "enhance.bypass": false,
+        "enhance.think": false
+      },
+      "Enhanced, think": {
+        "enhance.bypass": false,
+        "enhance.think": true
+      }
+    }
+  }
+}
