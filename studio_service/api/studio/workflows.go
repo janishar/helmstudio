@@ -81,7 +81,7 @@ func templateDoc(workflow registry.Workflow) dto.WorkflowDoc {
 
 // templateDTO maps a template (its media as published); problems nil leaves them out.
 func (s *Service) templateDTO(workflow registry.Workflow, problems *[]dto.Problem) dto.Workflow {
-	return dto.Workflow{ID: workflow.ID, Title: workflow.Title, Family: workflow.Family, Env: workflow.Env,
+	return dto.Workflow{ID: workflow.ID, Title: workflow.Title, Action: workflow.Action, Family: workflow.Family, Env: workflow.Env,
 		Media: cmp.Or(workflow.Media, "image"), Nodes: workflow.Nodes, NodeSchemas: workflow.NodeSchemas, Source: "template",
 		Studio: templateDoc(workflow).Studio, Problems: problems, Keyframes: timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas)}
 }
@@ -220,6 +220,54 @@ func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, sourc
 			ORDER BY updated_at DESC, id LIMIT $1`, MaxWorkflows)
 		for _, row := range rows {
 			keep(s.mineDTO(row, nil))
+		}
+		return err
+	})
+	return out, err
+}
+
+// Offerable is what "Use in…" may offer (API 1.19; contracts/README.md, Media inputs: offers): the templates a live host
+// could run now with their own values (eligible), by family then in their pack's order, then the caller's own non-text
+// workflows (GET /workflows order).
+func (s *Service) Offerable(ctx context.Context, caller common.Caller) ([]registry.Workflow, error) {
+	return s.offerable(ctx, caller, true)
+}
+
+// offerable is Offerable; mine false leaves the caller's own workflows out (a Timeline clip's actions).
+func (s *Service) offerable(ctx context.Context, caller common.Caller, mine bool) ([]registry.Workflow, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	var out []registry.Workflow
+	templates, now := s.registry.Workflows(), time.Now()
+	slices.SortStableFunc(templates, func(a, b registry.Workflow) int { // by family, then its pack's order
+		return cmp.Or(strings.Compare(a.Family, b.Family), cmp.Compare(a.Order, b.Order))
+	})
+	for _, workflow := range templates {
+		graph := map[string]registry.Node{}
+		for id, node := range workflow.Nodes {
+			node.Params = merged(workflow.NodeSchemas[node.Kind], node.Params)
+			graph[id] = node
+		}
+		nodes, _ := json.Marshal(graph)
+		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: nodes}
+		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, now); reason == "" && !registry.IsText(workflow.Nodes) {
+			out = append(out, workflow)
+		}
+	}
+	if !mine {
+		return out, nil
+	}
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		rows, err := collect[model.UserWorkflow](ctx, tx, `SELECT `+model.UserWorkflowCols+` FROM user_workflows
+			ORDER BY updated_at DESC, id LIMIT $1`, MaxWorkflows)
+		for _, row := range rows {
+			doc := rowDoc(row)
+			schemas := s.schemasOf(doc.Nodes)
+			if media := workflowMedia(doc.Nodes, schemas); media != "text" {
+				out = append(out, registry.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env,
+					Media: media, Nodes: doc.Nodes, NodeSchemas: schemas})
+			}
 		}
 		return err
 	})

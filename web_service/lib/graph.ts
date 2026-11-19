@@ -111,12 +111,26 @@ export function valueError(
   const min = p.min as number | undefined;
   const max = p.max as number | undefined;
   if (t === "seed" && v === null) return null;
-  if (t === "image") return v === null ? null : "a workflow cannot fill an image param";
+  if (t === "image" || t === "media")
+    return v === null ? null : `a workflow cannot fill an ${t} param`;
+  if (t === "span") {
+    const r = v as { start?: unknown; end?: unknown } | null;
+    const ok =
+      v === null ||
+      (!!r &&
+        typeof r === "object" &&
+        Object.keys(r).length === 2 &&
+        typeof r.start === "number" &&
+        typeof r.end === "number" &&
+        0 <= r.start &&
+        r.start < r.end);
+    return ok ? null : "not a range {start, end} with 0 <= start < end";
+  }
   if (t === "rows") {
     if (!Array.isArray(v)) return "not a list";
     const item = (p.item ?? {}) as Record<string, unknown>;
     // a workflow holds no takes: [] even under min; the run needs min items (README, Video)
-    if (!v.length && Object.values(item).includes("Image")) return null;
+    if (!v.length && Object.values(item).some((x) => x === "Image" || x === "Media")) return null;
     if (v.length < (min ?? 0) || (max != null && v.length > max))
       return `${v.length} items is outside ${min ?? 0}..${max}`;
     for (let i = 0; i < v.length; i++) {
@@ -125,7 +139,8 @@ export function valueError(
         return `item ${i + 1}: not a record`;
       if (Object.keys(row).some((k) => !(k in item))) return `item ${i + 1}: unknown field`;
       for (const [f, spec] of Object.entries(item)) {
-        if (spec === "Image") return `item ${i + 1}.${f}: a workflow cannot fill an image`;
+        if (spec === "Image" || spec === "Media")
+          return `item ${i + 1}.${f}: a workflow cannot fill an image`;
         if (spec === "Lora") {
           const l = (row as Record<string, unknown>)[f] as Record<string, unknown> | undefined;
           const ok =
@@ -178,6 +193,21 @@ export function valuesByErrors(s: { params: Param[] }, values: Record<string, un
     return p.values.includes(v) && !allowed.includes(v)
       ? [[p.name, `must be one of ${allowed.join(", ")}`]]
       : [];
+  });
+}
+
+/** [param, message] for a node's `only` (API 1.19): an enum param, a subset of its enum, holding the node's value. */
+export function onlyErrors(
+  s: { params: Param[] },
+  n: { params?: Record<string, unknown>; only?: Record<string, string[]> },
+) {
+  return Object.entries(n.only ?? {}).flatMap(([k, allowed]): [string, string][] => {
+    const p = s.params.find((x) => x.name === k);
+    if (!p || p.type !== "enum" || allowed.some((a) => !p.enum?.includes(a)))
+      return [[k, "only must name an enum param and values of it"]];
+    return allowed.includes(String(n.params?.[k] ?? p.default))
+      ? []
+      : [[k, `must be one of ${allowed.join(", ")}`]];
   });
 }
 
@@ -297,6 +327,8 @@ export function graphProblems(
         )
       )
         add("param_invalid", `${id}.${k}: ${msg}`, id, undefined, k);
+    for (const [k, msg] of onlyErrors(s, n))
+      add("param_invalid", `${id}.${k}: ${msg}`, id, undefined, k);
     for (const [port, ref] of Object.entries(wires)) {
       const want = portType(s, port);
       if (!want) {
@@ -380,7 +412,11 @@ export function graphProblems(
         for (const [k, x] of Object.entries(values))
           if (splitRef(k)[0] === id && splitRef(k)[1] !== "bypass") merged[splitRef(k)[1]] = x;
         const byErr = valuesByErrors(palette[nodes[id].kind], merged).some(([k]) => k === param);
-        if (valueError(spec, v) || byErr) add("preset_invalid", msg, id, undefined, param);
+        const onlyErr = onlyErrors(palette[nodes[id].kind], { ...nodes[id], params: merged }).some(
+          ([k]) => k === param,
+        );
+        if (valueError(spec, v) || byErr || onlyErr)
+          add("preset_invalid", msg, id, undefined, param);
       }
     }
   return sortProblems([...out.values()]);

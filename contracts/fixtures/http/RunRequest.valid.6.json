@@ -1,0 +1,14 @@
+{
+  "workflow_id": "ltx-audio-to-video",
+  "inputs": {
+    "prompt.text": "A musician plays a glowing synthesizer",
+    "seed.seed": 42,
+    "canvas.width": 448,
+    "canvas.height": 256,
+    "audio.source": {
+      "take_id": "9b2e1d33-5c6e-4f70-8b8c-2d3e4f5a6b7c",
+      "in": 0,
+      "out": 2.0416666666666665
+    }
+  }
+}

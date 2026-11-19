@@ -95,12 +95,19 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 			switch {
 			case param.Type == "image" && value == nil:
 				return nil, id + "." + param.Name + ": an image is required"
+			case param.Type == "media" && value == nil:
+				return nil, id + "." + param.Name + ": a take is required"
+			case param.Type == "span" && value == nil:
+				return nil, id + "." + param.Name + ": a range is required"
 			case param.Type == "rows" && param.Min != nil:
 				if items, _ := value.([]any); float64(len(items)) < *param.Min {
 					return nil, fmt.Sprintf("%s.%s: at least %s items", id, param.Name, format(*param.Min))
 				}
 			}
 			if detail := valuesByDetail(param, node.Params); detail != "" {
+				return nil, id + "." + param.Name + ": " + detail
+			}
+			if detail := onlyDetail(workflow.Nodes[id].Only, param.Name, node.Params); detail != "" {
 				return nil, id + "." + param.Name + ": " + detail
 			}
 		}
@@ -183,6 +190,16 @@ func check(param registry.Param, value any) (any, string) {
 			return nil, "" // resolve says it is required
 		}
 		return imageRef(value)
+	case "media":
+		if value == nil {
+			return nil, "" // resolve says it is required
+		}
+		return mediaRef(param, value)
+	case "span":
+		if value == nil {
+			return nil, "" // resolve says it is required
+		}
+		return spanValue(value)
 	case "rows":
 		return checkRows(param, value)
 	case "frames":
@@ -220,6 +237,59 @@ func imageRef(value any) (any, string) {
 		return nil, `must be {"take_id": <uuid>}`
 	}
 	return map[string]any{"take_id": id}, ""
+}
+
+// mediaRef returns a Media value as {"take_id": id[, "in": s, "out": s]} (in/out only on a trim param), or why it is
+// not one (contracts/README.md, Media inputs).
+func mediaRef(param registry.Param, value any) (any, string) {
+	ref, ok := value.(map[string]any)
+	id, isText := ref["take_id"].(string)
+	out := map[string]any{"take_id": id}
+	for key, v := range ref {
+		n, isNumber := v.(float64)
+		if key == "take_id" {
+			continue
+		} else if (key != "in" && key != "out") || !isNumber || n < 0 || n > 86400 || (key == "out" && n == 0) {
+			ok = false
+		}
+		out[key] = n
+	}
+	if !ok || !isText || !utility.IsUUID(id) {
+		return nil, `must be {"take_id": <uuid>, "in"?: <seconds>, "out"?: <seconds>}`
+	}
+	if len(out) > 1 && !param.Trim {
+		return nil, "this input takes the whole take (no in or out)"
+	}
+	if in, hasIn := out["in"].(float64); hasIn {
+		if end, hasOut := out["out"].(float64); hasOut && in >= end {
+			return nil, "in must be before out"
+		}
+	}
+	return out, ""
+}
+
+// spanValue returns a span as {"start": s, "end": s}, or why it is not one.
+func spanValue(value any) (any, string) {
+	span, ok := value.(map[string]any)
+	start, okStart := span["start"].(float64)
+	end, okEnd := span["end"].(float64)
+	if !ok || len(span) != 2 || !okStart || !okEnd || start < 0 || end <= 0 || start > 86400 || end > 86400 {
+		return nil, `must be {"start": <seconds>, "end": <seconds>}`
+	}
+	if start >= end {
+		return nil, "start must be before end"
+	}
+	return map[string]any{"start": start, "end": end}, ""
+}
+
+// onlyDetail says why a node's merged value of an enum param is outside the workflow's `only` for it (API 1.19), ""
+// when it is inside or the param has none.
+func onlyDetail(only map[string][]string, name string, params map[string]any) string {
+	allowed, pinned := only[name]
+	if value, _ := params[name].(string); !pinned || slices.Contains(allowed, value) {
+		return ""
+	}
+	return "must be one of " + strings.Join(allowed, ", ")
 }
 
 // loraRef returns a Lora value as {"lora_id": id}, or why it is not one.
@@ -433,6 +503,7 @@ func positionErrors(nodes map[string]registry.Node, schemas map[string]registry.
 // imageAt is one Image value of a graph: where it is ("encode.refs[2].image", items from 1) and its take.
 type imageAt struct {
 	Path, TakeID string
+	Value        map[string]any // the value as stored ({take_id}, a media value's in / out too)
 }
 
 // eachImage visits every {take_id} value of nodes in input order (node id, param name, item, field name) and puts
@@ -445,7 +516,7 @@ func eachImage(nodes map[string]registry.Node, fn func(at imageAt) any) {
 			switch value := params[name].(type) {
 			case map[string]any:
 				if takeID, ok := value["take_id"].(string); ok {
-					params[name] = fn(imageAt{Path: key, TakeID: takeID})
+					params[name] = fn(imageAt{Path: key, TakeID: takeID, Value: value})
 				}
 			case []any:
 				for i, item := range value {
@@ -453,7 +524,7 @@ func eachImage(nodes map[string]registry.Node, fn func(at imageAt) any) {
 					for _, field := range slices.Sorted(maps.Keys(fields)) {
 						if ref, ok := fields[field].(map[string]any); ok {
 							if takeID, ok := ref["take_id"].(string); ok {
-								fields[field] = fn(imageAt{Path: fmt.Sprintf("%s[%d].%s", key, i+1, field), TakeID: takeID})
+								fields[field] = fn(imageAt{Path: fmt.Sprintf("%s[%d].%s", key, i+1, field), TakeID: takeID, Value: ref})
 							}
 						}
 					}
@@ -468,7 +539,7 @@ func images(nodes map[string]registry.Node) []imageAt {
 	var out []imageAt
 	eachImage(nodes, func(at imageAt) any {
 		out = append(out, at)
-		return map[string]any{"take_id": at.TakeID}
+		return at.Value // as it was (a media value keeps its in / out)
 	})
 	return out
 }

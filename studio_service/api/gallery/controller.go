@@ -34,6 +34,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.DELETE("/takes/:id", c.deleteHandler)
 	group.POST("/takes/:id/reuse", c.reuseHandler)
 	group.POST("/takes/:id/use", c.useHandler)
+	group.GET("/takes/:id/uses", c.usesHandler)
 	group.GET("/sessions/:id/takes", c.sessionTakesHandler)
 	group.POST("/uploads", c.createUploadHandler)
 	group.POST("/uploads/:id/complete", c.completeUploadHandler)
@@ -73,6 +74,12 @@ func (c *controller) createImportHandler(ctx *gin.Context) {
 // completeImportHandler: POST /admin/imports/takes/{take_id}/complete.
 func (c *controller) completeImportHandler(ctx *gin.Context) {
 	out, err := c.service.CompleteImport(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// usesHandler: GET /takes/{take_id}/uses (API 1.19).
+func (c *controller) usesHandler(ctx *gin.Context) {
+	out, err := c.service.Uses(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
 	reply(ctx, http.StatusOK, out, err)
 }
 

@@ -44,10 +44,14 @@ func (s *Service) CreateUpload(ctx context.Context, caller common.Caller, body *
 	id := utility.NewID()
 	key := common.OwnerPrefix(caller.ID) + "uploads/" + id + "." + dto.UploadTypes[body.ContentType]
 	var expiry time.Time
+	kind, audio := "image", (*dto.AudioInfo)(nil)
+	if body.Audio() { // API 1.19: its length as declared; the runner reads the file itself
+		kind, audio = "audio", &dto.AudioInfo{DurationS: *body.DurationS}
+	}
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, bytes, ready)
-			VALUES ($1, $2, 'image', 'upload', $3, $4, $5, $6, false) RETURNING created_at`,
-			id, caller.ID, body.Title(), key, body.ContentType, body.Bytes).Scan(&expiry)
+		err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, bytes, ready, audio)
+			VALUES ($1, $2, $3, 'upload', $4, $5, $6, $7, false, $8) RETURNING created_at`,
+			id, caller.ID, kind, body.Title(), key, body.ContentType, body.Bytes, audio).Scan(&expiry)
 		expiry = expiry.Add(UploadLink)
 		return err
 	})
@@ -90,7 +94,8 @@ func (s *Service) CompleteUpload(ctx context.Context, caller common.Caller, id s
 		return dto.Take{}, err
 	}
 	err = s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
-		row, err = take(ctx, tx, `UPDATE takes t SET ready = true, width = $2, height = $3, etag = $4, created_at = clock_timestamp()
+		row, err = take(ctx, tx, `UPDATE takes t SET ready = true, width = nullif($2, 0), height = nullif($3, 0), etag = $4,
+			created_at = clock_timestamp()
 			WHERE t.id = $1 AND NOT t.ready AND t.deleted_at IS NULL RETURNING `+model.TakeCols, id, width, height, etag)
 		if errors.Is(err, errNotFound) { // completed (or deleted) by a call that ran alongside
 			row, err = take(ctx, tx, `SELECT `+model.TakeCols+` FROM takes t WHERE t.id = $1 AND `+visible, id)
@@ -125,8 +130,27 @@ func (s *Service) inspect(ctx context.Context, row model.Take) (width, height in
 	if err != nil {
 		return 0, 0, "", "", network.NewServiceUnavailableError("could not read the upload; try again", err)
 	}
-	width, height, detail = checkImage(head, row.ContentType)
+	if row.Kind == "audio" {
+		detail = checkAudio(head, row.ContentType)
+	} else {
+		width, height, detail = checkImage(head, row.ContentType)
+	}
 	return width, height, hex.EncodeToString(hash.Sum(nil)), detail, nil
+}
+
+// checkAudio checks an audio upload's header (API 1.19): RIFF….WAVE for a wav; an ID3v2 tag or an MPEG audio frame
+// sync for an mp3. Its length is the client's (the runner reads the file itself).
+func checkAudio(head []byte, contentType string) string {
+	if contentType == "audio/wav" {
+		if len(head) < 12 || string(head[:4]) != "RIFF" || string(head[8:12]) != "WAVE" {
+			return "not a valid wav file"
+		}
+		return ""
+	}
+	if len(head) < 3 || (string(head[:3]) != "ID3" && (head[0] != 0xFF || head[1]&0xE0 != 0xE0)) {
+		return "not a valid mp3 file"
+	}
+	return ""
 }
 
 // checkImage decodes an image header: its upright size, or why it is not a valid image of contentType at most MaxSide

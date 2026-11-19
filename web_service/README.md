@@ -44,6 +44,12 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   the stage adds one; sent as `{take_id}`. `?use=<take>&w=<workflow>` (and the strip's "Use in…") call
   `POST /v1/studio/takes/{id}/use`. Canvas Auto with references follows the last one (about 1 MP); a picked size sets
   `canvas.mode: fixed`.
+- Media inputs (API 1.19, `lib/source.ts`, `components/create/source.tsx`; boards VideoSource, TakeActions): a `media`
+  param is a gallery pick (videos, or audio takes and videos with sound; wav / mp3 upload with the length read in
+  the browser) drawn as its poster or a sound tile with its facts, Replace… / Clear and a trim when `trim`; a `span`
+  is the trim bar over the source's frames on the stage (drag or ← → by frame, the range plays on a loop) with what
+  the family's frame grid regenerates; an extension shows the frames it adds and the room left. `only` narrows an
+  enum's choices. "Use in…" (strip, Gallery) lists `GET …/takes/{id}/uses`.
 - LoRAs (`lib/loras.ts` logic, `lib/lora-library.ts` the cached `GET /v1/studio/loras`, `components/create/loras.tsx`):
   a rows param whose item has a `Lora` field is the inspector's LoRA section and the graph card's rows (name,
   strength over the schema's range, the mode toggle, remove, drag or Alt + arrows, each row's problem), with Add LoRA
@@ -73,7 +79,9 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   Download to host (licence text and accept, the gated note; Cancel while it downloads) and Delete from host with the
   server's refusal. `?tab=loras`: the LoRA library (yours: upload, quota, rename, delete; shared per host, which an
   admin deletes from one host).
-- `/timeline` — placeholder until its milestone.
+- `/timeline` (`components/timeline/`): the editor; Mark in / out (I / O) sets a range, the clip inspector's take
+  actions (`GET …/clips/{clip}/actions`, `components/timeline/actions.tsx`) run by `POST …/shots` with Replace or
+  Insert after / before; an audio lane's × removes the track (asking first when it has clips).
 - `/admin` (admins only in the dock) — Users: add, roles (`user`, `dev`), reset password, disable/enable; the
   `ADMIN_EMAIL` account is locked. `/admin?tab=hosts` — Hosts (docs/mock/Hosts.dc.html, `lib/hosts.ts`): each
   host's envs, memory, current run, resident components with Pin and Unload, Unload all / Evict all, and the

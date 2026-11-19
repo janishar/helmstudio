@@ -105,3 +105,69 @@ func TestResolvedLengthIsPrinted(t *testing.T) {
 		t.Fatalf("%q", out.String())
 	}
 }
+
+const retakeWorkflow = `{"id":"echo-retake","title":"Echo retake","family":"echo","env":"fake","media":"video",
+ "nodes":{"prompt":{"kind":"prompt"},"retake":{"kind":"echo/retake","in":{"text":"prompt.text"}},"a2v":{"kind":"echo/a2v"},"output":{"kind":"output"}},
+ "node_schemas":{"prompt":{"params":[{"name":"text","type":"text"}]},
+  "echo/retake":{"params":[{"name":"source","type":"media","accepts":["video"],"grid":32},{"name":"span","type":"span"},{"name":"delay_ms","type":"int"}]},
+  "echo/a2v":{"params":[{"name":"source","type":"media","accepts":["audio"],"trim":true}]},"output":{"params":[]}}}`
+
+const t2Uses = `{"uses":[
+ {"workflow_id":"echo-retake","title":"Echo retake","action":"Retake a section","family":"echo","media":"video","param":"retake.source",
+  "inputs":{"retake.source":{"take_id":"t2"},"retake.span":{"start":0,"end":2.125}}},
+ {"workflow_id":"echo-a2v","title":"Echo audio to video","action":"Audio to video","family":"echo","media":"video","param":"a2v.source",
+  "inputs":{"a2v.source":{"take_id":"t2","in":0,"out":2.125}}},
+ {"workflow_id":"w9","title":"My clip","family":"echo","media":"video","param":"x.source","inputs":{"x.source":{"take_id":"t2"},"x.seconds":1.3,"x.direction":"after"}}]}`
+
+func TestRunMediaAndSpan(t *testing.T) {
+	f, _ := setup(t, "succeeded")
+	var out, errb bytes.Buffer
+	args := []string{"run", "echo-retake", "--media", "retake.source=t2", "--span", "0.5:1.25", "-p", "a2v.source=t3:0.25:2", "-o", t.TempDir()}
+	if code := helm(args, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("run: %d %s\n%s", code, errb.String(), out.String())
+	}
+	want := `map[a2v.source:map[in:0.25 out:2 take_id:t3] retake.source:map[take_id:t2] retake.span:map[end:1.25 start:0.5]]`
+	if got := fmt.Sprint(f.inputs); got != want {
+		t.Fatalf("inputs %s", got)
+	}
+	errb.Reset()
+	if code := helm([]string{"run", "echo-retake", "--media", "a2v.source=t3:1:2", "-o", t.TempDir()}, nil, &out, &errb, nil); code != 0 ||
+		fmt.Sprint(f.inputs["a2v.source"]) != "map[in:1 out:2 take_id:t3]" {
+		t.Fatalf("trim via --media: %d %v %s", code, f.inputs, errb.String())
+	}
+	for _, c := range []struct{ wf, flag, val, msg string }{
+		{"echo-retake", "--media", "retake.delay_ms=t2", "want <node.param>=<take id>[:in:out] on a media input"},
+		{"echo-retake", "--media", "retake.source=t2:1", "retake.source: want <take id>[:in:out]"},
+		{"echo-retake", "--media", "retake.source=t2:x:2", "retake.source: in is not a number of seconds"},
+		{"echo-retake", "--span", "1", "retake.span: want start:end in seconds"},
+		{"echo", "--span", "0:1", "--span: workflow echo takes no range"},
+	} {
+		errb.Reset()
+		if code := helm([]string{"run", c.wf, c.flag, c.val, "-o", t.TempDir()}, nil, &out, &errb, nil); code != 1 || !strings.Contains(errb.String(), c.msg) {
+			t.Errorf("%s %s: %d %q", c.flag, c.val, code, errb.String())
+		}
+	}
+}
+
+func TestTakeUses(t *testing.T) {
+	setup(t, "")
+	var out, errb bytes.Buffer
+	if code := helm([]string{"take", "uses", "t2"}, nil, &out, &errb, nil); code != 0 {
+		t.Fatalf("uses: %d %s", code, errb.String())
+	}
+	want := "Retake a section · Echo retake\n  helm run echo-retake -p retake.source=t2 -p retake.span=0:2.125\n" +
+		"Audio to video · Echo audio to video\n  helm run echo-a2v -p a2v.source=t2:0:2.125\n" +
+		"My clip\n  helm run w9 -p x.direction=after -p x.seconds=1.3 -p x.source=t2\n"
+	if out.String() != want {
+		t.Fatalf("got\n%s", out.String())
+	}
+	out.Reset()
+	if code := helm([]string{"take", "uses", "t3"}, nil, &out, &errb, nil); code != 0 || out.String() != "no workflow takes it\n" {
+		t.Fatalf("none: %d %q", code, out.String())
+	}
+	for _, bad := range [][]string{{"take"}, {"take", "uses"}, {"take", "list", "t2"}} {
+		if code := helm(bad, nil, &out, &errb, nil); code != 1 {
+			t.Errorf("%v: %d", bad, code)
+		}
+	}
+}

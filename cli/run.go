@@ -120,6 +120,10 @@ func (w workflow) value(key, val string) (any, error) {
 		}
 	case "image", "rows":
 		return w.images(key, typ, item, val)
+	case "media": // a video or audio take: <take id>[:in:out] (seconds of the take; in/out only on a trim param)
+		return media(key, val)
+	case "span": // start:end, seconds of the workflow's video source
+		return span(key, val)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: not a valid %s", key, typ)
@@ -189,6 +193,9 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	var keyframes params
 	fs.Var(&keyframes, "keyframe", "<frame>:<take id or file> (repeatable): an image pinned at that frame")
 	duration := fs.String("duration", "", "the clip's length in frames, or auto (the model picks it)")
+	var medias params
+	fs.Var(&medias, "media", "<node.param>=<take id>[:in:out] (repeatable): a video or audio take as that input")
+	spanFlag := fs.String("span", "", "start:end: the range (seconds of the source video) of the workflow's one span param")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -227,6 +234,9 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 		inputs[k] = v
 	}
 	if err := wf.videoInputs(inputs, *image, keyframes, *duration); err != nil {
+		return err
+	}
+	if err := wf.mediaInputs(inputs, medias, *spanFlag); err != nil {
 		return err
 	}
 

@@ -8,6 +8,7 @@ and every workflow against the node schemas, so a bad pack stops the runner inst
 
 import json
 import logging
+import math
 
 from config import ENV, HOST, PUBLISHED_BY
 from core import graph, models
@@ -98,18 +99,58 @@ ASK_IMAGES = (
 
 
 def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: dict) -> list[dict]:
-    """The `memory` items of (variant, precision): one over the media workflows, and one per text (ask) workflow,
-    named by `workflow` and planned at ASK_IMAGES thumbnails; a pack with only text workflows (llm) has one item
-    without `workflow`."""
-    text = [w for w in pack.workflows if w.get("media") == "text"]
-    media = [w for w in pack.workflows if w.get("media") != "text"]
+    """The `memory` items of (variant, precision), over the workflows whose `only` allows them: one over the media
+    workflows, and one per text (ask) workflow, named by `workflow` and planned at ASK_IMAGES thumbnails, and one per
+    media workflow model.yaml `planned_alone` names; a pack with only text workflows (llm) has one item without
+    `workflow`. A media param is planned at model.yaml `plan_media` (its accepted kind's facts)."""
+    allowed = [
+        w for w in pack.workflows if allows(pack, w, variant, precision, impls, node_schemas)
+    ]
+    alone = set(
+        pack.spec.get("planned_alone", [])
+    )  # model.yaml: media workflows with an item of their own
+    text = [w for w in allowed if w.get("media") == "text" or w["id"] in alone]
+    media = [w for w in allowed if w not in text]
+    if not media and not text:
+        return []
     if not media:
-        return [memory_plan(pack, variant, precision, impls, node_schemas, text)]
-    plans = [memory_plan(pack, variant, precision, impls, node_schemas, media)]
+        if all(w.get("media") == "text" for w in text):
+            return [memory_plan(pack, variant, precision, impls, node_schemas, text)]
+        plans = []
+    else:
+        plans = [memory_plan(pack, variant, precision, impls, node_schemas, media)]
     plans += [memory_plan(pack, variant, precision, impls, node_schemas, [w]) | {"workflow": w["id"]}
               for w in text]  # fmt: skip
     # a workflow that loads nothing (echo-ask) has no plan
     return [p for p in plans if p["components"]]
+
+
+def allows(
+    pack, workflow: dict, variant: str, precision: str, impls: dict, node_schemas: dict
+) -> bool:
+    """Whether a workflow is planned at (variant, precision): its model node's `only` (README, Media inputs) allows
+    both and no stage's pack check refuses that model (LTX text to video needs the distilled variant)."""
+    nodes = json.loads(json.dumps(workflow["nodes"]))
+    for n in nodes.values():
+        if n["kind"] == f"{pack.family}/model":
+            only = n.get("only", {})
+            if variant not in only.get("variant", [variant]) or precision not in only.get(
+                "precision", [precision]
+            ):
+                return False
+            n["params"] = n.get("params", {}) | {"variant": variant, "precision": precision}
+    for n in nodes.values():
+        impl = impls[n["kind"]]
+        if impl.check is None:
+            continue
+        types = {i["name"]: i["type"] for i in node_schemas[n["kind"]]["inputs"]}
+        models = {p: graph._model(nodes, impls, node_schemas, r) for p, r in n.get("in", {}).items() if types.get(p) == "Model"}  # fmt: skip
+        params = {s["name"]: s.get("default") for s in node_schemas[n["kind"]]["params"]} | n.get(
+            "params", {}
+        )
+        if impl.check(params, set(n.get("in", {})), models):
+            return False
+    return True
 
 
 def memory_plan(
@@ -133,6 +174,11 @@ def memory_plan(
             for spec in node_schemas[node["kind"]]["params"]:
                 if "default" in spec:
                     params.setdefault(spec["name"], spec["default"])
+                if (
+                    spec["type"] == "media" and params.get(spec["name"]) is None
+                ):  # planned at model.yaml plan_media
+                    params[spec["name"]] = {"take_id": "", "key": "", "kind": spec["accepts"][0]} | pack.spec.get(
+                        "plan_media", {}).get(spec["accepts"][0], {})  # fmt: skip
                 if (
                     spec["type"] == "rows"
                     and "Media" in spec["item"].values()
@@ -160,6 +206,11 @@ def memory_plan(
             stages.append((set(keys), peak))
             if impl.peak is not None:
                 sizes = graph.stage_sizes(nodes, node_schemas, nid, {})
+                if nodes[nid]["kind"].endswith(
+                    "/extend"
+                ):  # README Media inputs: planned_at counts an extend's + 8N
+                    p = nodes[nid]["params"]
+                    sizes["frames"] += 8 * math.ceil(p["seconds"] * sizes["fps"] / 8)
                 at = {
                     "mp": max(at["mp"], sizes["mp"]),
                     "frames": max(at["frames"], sizes["frames"]),
@@ -170,7 +221,13 @@ def memory_plan(
                               "gb": model.gb(key[2])[0]} | ({"unloads_after": True} if key[2] in impl.unload_after else {})  # fmt: skip
     kept = {k for k, c in comps.items() if not c.get("unloads_after")}
     peak = max((sum(comps[k]["gb"] for k in kept | keys) + p for keys, p in stages), default=0.0)
-    items = [c | {"gb": round(c["gb"], 2)} for c in comps.values()]
+    # one item per (component, variant, precision): a baked copy (ltx/distill) that replaces the plain one in the run
+    # is the same entry to studio, as the old in-place fuse (README Media inputs); the later use's place and flags win
+    merged: dict[tuple, dict] = {}
+    for c in comps.values():
+        merged.pop(k := (c["component"], c["variant"], c["precision"]), None)
+        merged[k] = c
+    items = [c | {"gb": round(c["gb"], 2)} for c in merged.values()]
     at = {"mp": round(at["mp"], 4), "frames": at["frames"]} | (
         {"images": ASK_IMAGES} if asks else {}
     )

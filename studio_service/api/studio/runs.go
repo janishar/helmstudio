@@ -97,24 +97,28 @@ func (s *Service) createRun(ctx context.Context, tx pgx.Tx, caller common.Caller
 			return network.NewUnprocessableError(details[0], nil)
 		}
 		nodes := graphs[0].Nodes
-		if detail, err := checkImages(ctx, tx, s.store, caller.ID, nodes); err != nil {
+		if detail, err := checkImages(ctx, tx, s.store, caller.ID, nodes, workflow.NodeSchemas); err != nil {
 			return err
 		} else if detail != "" {
 			return network.NewUnprocessableError(detail, nil)
 		}
 		graph, _ := json.Marshal(nodes)
+		media, err := mediaAt(ctx, tx, caller.ID, nodes, workflow.NodeSchemas)
+		if err != nil {
+			return err
+		}
 		status, failure := "queued", (*string)(nil)
 		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version,
-			Loras: lorasJSON(graphs[0].Loras)}
+			Loras: lorasJSON(graphs[0].Loras), MediaAt: media}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			status, failure = "failed", &reason
 		}
 		inputs, _ := json.Marshal(body.Inputs)
 		run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-			nodes, finished_at, workflow_version, workflow_title, mentions, loras, looks) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13, $14)
+			nodes, finished_at, workflow_version, workflow_title, mentions, loras, looks, media_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13, $14, $15)
 			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure,
-			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion), lorasJSON(graphs[0].Loras), looksJSON(body.Looks))
+			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion), lorasJSON(graphs[0].Loras), looksJSON(body.Looks), media)
 		if err != nil {
 			return err
 		}

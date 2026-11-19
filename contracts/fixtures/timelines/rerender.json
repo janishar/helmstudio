@@ -1113,6 +1113,138 @@
         "error": "rerender_cycle",
         "clip": "b"
       }
+    },
+    {
+      "description": "1.19 take actions: b is clip a's source extended (insert after), so it binds source.source to a's new take and runs after it; a is a retake of its own source (same clip): no edge",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "44444444-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "11111111-0000-4000-8000-000000000002",
+                  "44444444-0000-4000-8000-000000000002"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "44444444-0000-4000-8000-000000000001",
+                "in": 2.0416666666666665,
+                "out": 4.041666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "44444444-0000-4000-8000-000000000001"
+                ],
+                "at": 1.0
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.0,
+        "frames": 72
+      },
+      "takes": {
+        "11111111-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 4.041666666666667,
+          "fps": 24,
+          "frames": 97,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "ltx-extend",
+            "inputs": {
+              "prompt.text": "x",
+              "source.source": {
+                "take_id": "11111111-0000-4000-8000-000000000002"
+              }
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "ltx-retake",
+            "inputs": {
+              "prompt.text": "x",
+              "source.source": {
+                "take_id": "11111111-0000-4000-8000-000000000002"
+              },
+              "retake.span": {
+                "start": 0.5,
+                "end": 1.0
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "steps": [
+          {
+            "step": "clip_a",
+            "clip": "a",
+            "binds": {}
+          },
+          {
+            "step": "clip_b",
+            "clip": "b",
+            "binds": {
+              "source.source": "clip_a.takes"
+            }
+          }
+        ]
+      }
     }
-  ]
+  ],
+  "media": {
+    "ltx-extend": [
+      "source.source"
+    ],
+    "ltx-retake": [
+      "source.source"
+    ]
+  }
 }

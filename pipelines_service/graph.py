@@ -254,6 +254,9 @@ def run_inputs(plan, state, spec, item: str | None = None) -> tuple[dict | None,
                 return None, f"nothing from {src.split('.')[0]} yet"
             rows = _is_rows(wf, k)
             v = [{IMAGE_FIELD: {"take_id": t}} for t in ids] if rows else {"take_id": ids[0]}
+            # API 1.19: a media value keeps its in / out
+            if not rows and isinstance(was := out.get(k), dict):
+                v |= {x: was[x] for x in ("in", "out") if x in was}
         out[k] = v
     return out, None
 

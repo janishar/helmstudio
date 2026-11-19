@@ -258,12 +258,14 @@ func (b *TimelineAddClips) Validate() string {
 	return ""
 }
 
-// TimelineSlot is where a New shot goes: an existing clip, or a new empty slot at the cut nearest at.
+// TimelineSlot is where a New shot goes: an existing clip, a new empty slot at the cut nearest at, or (API 1.19, a
+// take action's insert after) a new empty slot right after V1 clip After.
 type TimelineSlot struct {
 	Clip   string   `json:"clip"`
 	At     *float64 `json:"at"`
 	Length *float64 `json:"length"`
 	ID     string   `json:"id"`
+	After  string   `json:"after"`
 }
 
 // TimelineShotCreate is POST /timelines/{id}/shots.
@@ -279,15 +281,17 @@ func (b *TimelineShotCreate) Validate() string {
 		return "slot is required"
 	case b.Run == nil:
 		return "run is required"
-	case s.Clip != "" && (s.At != nil || s.Length != nil || s.ID != ""):
-		return "slot is {clip} or {at, length, id?}"
+	case (s.Clip != "" && (s.At != nil || s.Length != nil || s.ID != "" || s.After != "")) || (s.After != "" && s.At != nil):
+		return "slot is {clip}, {at, length, id?} or {after, length, id?}"
 	case s.Clip != "" && !ClipID.MatchString(s.Clip):
 		return "unknown clip " + s.Clip
-	case s.Clip == "" && s.At == nil:
-		return "slot.clip or slot.at is required"
+	case s.After != "" && !ClipID.MatchString(s.After):
+		return "unknown clip " + s.After
+	case s.Clip == "" && s.At == nil && s.After == "":
+		return "slot.clip, slot.at or slot.after is required"
 	case s.Clip == "" && s.Length == nil:
 		return "length is required to insert a slot"
-	case s.Clip == "" && (*s.At < 0 || *s.At > 86400 || *s.Length <= 0 || *s.Length > 3600):
+	case s.Clip == "" && (*s.Length <= 0 || *s.Length > 3600 || (s.At != nil && (*s.At < 0 || *s.At > 86400))):
 		return "slot.at must be seconds from 0 and slot.length more than 0 and at most 3600"
 	case s.ID != "" && !ClipID.MatchString(s.ID):
 		return "slot.id must be 1-16 lowercase letters or digits"
@@ -491,4 +495,9 @@ type MediaJobList struct {
 type TakeFrame struct {
 	Take *gallerydto.Take `json:"take,omitempty"`
 	Job  *MediaJob        `json:"job,omitempty"`
+}
+
+// ClipActions is GET /timelines/{id}/clips/{clip_id}/actions (API 1.19).
+type ClipActions struct {
+	Actions []gallerydto.TakeOffer `json:"actions"`
 }

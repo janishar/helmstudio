@@ -239,7 +239,7 @@ def test_a_video_take_is_not_an_image(api, video_done):
     )
     assert r.status_code == 422 and f"echo.refs[1].image: take {vid} is not an image" in r.text
     r = api.post(f"{STUDIO}/takes/{vid}/use", json={"workflow_id": "echo"})
-    assert r.status_code == 422 and f"take {vid} is not an image" in r.json()["detail"], r.text
+    assert r.status_code == 422 and "takes no video input" in r.json()["detail"], r.text
     element = {"kind": "element", "group": "prop", "name": "Clip", "handle": "clip-vid",
                "text": "", "images": [{"take_id": vid}]}  # fmt: skip
     look = {

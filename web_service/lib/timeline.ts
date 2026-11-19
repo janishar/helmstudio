@@ -38,10 +38,16 @@ export type Doc = { target: Target; tracks: Track[]; duration_s?: number; frames
 /** A normalized document: names, V1 `at`, defaults filled, every time snapped. */
 export type Norm = Doc & { duration_s: number; frames: number };
 /** What the rules need of a take. */
-export type Facts = { kind: string; duration_s?: number; has_audio?: boolean };
+export type SourceMap = { take_id: string; offset_s: number; new_in_s: number; new_out_s: number };
+export type Facts = {
+  kind: string;
+  duration_s?: number;
+  has_audio?: boolean;
+  source_map?: SourceMap;
+};
 export type Takes = Record<string, Facts>;
 export type Problem = [string, string | null, string | null];
-export type Kind = "slot" | "video" | "image";
+export type Kind = "slot" | "video" | "image" | "audio";
 
 /** The rate table: fps as JSON writes it → the exact rate num/den. */
 export const RATES: [number, number, number][] = [
@@ -87,11 +93,11 @@ const tk = (takes: Takes, id: string | null | undefined) => (id ? takes[id] : un
 /** A clip whose shot is queued or running: it cannot be edited until the shot ends (a failed one can, and retried). */
 export const shotBusy = (c: Clip) => !!c.shot && c.shot.status !== "failed";
 
-/** slot (no take), video or image; an offline clip by its fields (hold = image). */
+/** slot (no take), video, image or audio (never a clip yet); an offline clip by its fields (hold = image). */
 export function kindOf(c: Clip, takes: Takes): Kind {
   if (!c.take_id) return "slot";
   const t = takes[c.take_id];
-  if (t) return t.kind === "image" ? "image" : "video";
+  if (t) return t.kind === "image" || t.kind === "audio" ? t.kind : "video";
   return "hold" in c ? "image" : "video";
 }
 
@@ -155,6 +161,10 @@ export function normalize(
       const kind = kindOf(c, takes);
       if (ids.has(cid)) add("duplicate_clip", name, cid);
       ids.add(cid);
+      if (kind === "audio") {
+        add("wrong_track", name, cid); // an audio take is not a clip in this version
+        continue;
+      }
       if (
         [...(tid ? [tid] : []), ...(c.alternatives ?? [])].some((x) => !takes[x] && !known.has(x))
       )
@@ -442,12 +452,33 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
   } else if (op.op === "fill") {
     const take = takes[op.take_id];
     const ln = lenOf(c, kind, g);
+    const cur = tk(takes, c.take_id);
+    const [i0, o0] = [c.in, c.out];
+    const sm = take.source_map;
     delete c.in;
     delete c.out;
     delete c.hold;
     delete c.shot;
     if (take.kind === "image") c.hold = g.s(ln);
-    else {
+    else if (sm) {
+      // the generated part; replacing its source (or a take made from it): the clip's window, grown on a side only
+      // where the generated part lies outside the source (extend), never by the 8-frame snap (retake)
+      let [a, b] = [sm.new_in_s, sm.new_out_s];
+      const off = sm.offset_s;
+      const mine =
+        c.take_id === sm.take_id
+          ? 0
+          : cur?.source_map?.take_id === sm.take_id
+            ? cur.source_map.offset_s
+            : null;
+      if (mine !== null && o0 !== undefined) {
+        const end = off + takes[sm.take_id].duration_s!;
+        if (!(g.f(a) < g.f(off))) a = i0! - mine + off;
+        if (!(g.f(b) > g.f(end))) b = o0 - mine + off;
+      }
+      c.in = g.s(Math.max(g.f(a), 0));
+      c.out = g.s(Math.min(g.f(b), g.f(take.duration_s!)));
+    } else {
       c.in = 0;
       c.out = g.s(Math.min(g.f(take.duration_s!), ln));
     }

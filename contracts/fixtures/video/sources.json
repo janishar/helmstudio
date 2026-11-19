@@ -1,0 +1,261 @@
+{
+  "description": "Media inputs: retake_map(start, end, fps, frames), extend_map(seconds, direction, fps, frames), audio_map(in, out, fps) → the latent span or count, the output's frames and its source_map (offset_s, new_in_s, new_out_s), or the run's error text (contracts/README.md, Media inputs: the ltx templates). The runner reports the map in evt.run.output source_map",
+  "cases": [
+    {
+      "description": "the retake golden: latent [2,5) of the 49-frame t2v golden = pixels 9-32",
+      "kind": "retake",
+      "args": [
+        0.6666666666666666,
+        1.6666666666666667,
+        24,
+        49
+      ],
+      "expect": {
+        "latent": [
+          2,
+          5
+        ],
+        "frames": 49,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 0.375,
+          "new_out_s": 1.375
+        }
+      }
+    },
+    {
+      "description": "the old UI's seconds (Math.round, half up): 0.5 s and 1.5 s at 24 fps are frames 12 and 36, 1.5 and 4.5 latent frames: [2,5)",
+      "kind": "retake",
+      "args": [
+        0.5,
+        1.5,
+        24,
+        49
+      ],
+      "expect": {
+        "latent": [
+          2,
+          5
+        ],
+        "frames": 49,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 0.375,
+          "new_out_s": 1.375
+        }
+      }
+    },
+    {
+      "description": "half up on whole frames: frame 20 (2.5 latent) starts at 3, frame 27 (3.375) ends at 3 so E = S + 1: [3,4)",
+      "kind": "retake",
+      "args": [
+        0.8333333333333334,
+        1.125,
+        24,
+        49
+      ],
+      "expect": {
+        "latent": [
+          3,
+          4
+        ],
+        "frames": 49,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 0.7083333333333334,
+          "new_out_s": 1.0416666666666667
+        }
+      }
+    },
+    {
+      "description": "the whole clip (end = its duration): [0,7), every pixel",
+      "kind": "retake",
+      "args": [
+        0,
+        2.0416666666666665,
+        24,
+        49
+      ],
+      "expect": {
+        "latent": [
+          0,
+          7
+        ],
+        "frames": 49,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 0.0,
+          "new_out_s": 2.0416666666666665
+        }
+      }
+    },
+    {
+      "description": "an end past the clip is clamped to its 7 latent frames",
+      "kind": "retake",
+      "args": [
+        1.0,
+        3.0,
+        24,
+        49
+      ],
+      "expect": {
+        "latent": [
+          3,
+          7
+        ],
+        "frames": 49,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 0.7083333333333334,
+          "new_out_s": 2.0416666666666665
+        }
+      }
+    },
+    {
+      "description": "a 50-frame source is read as 49; a span that snaps to nothing",
+      "kind": "retake",
+      "args": [
+        2.2,
+        2.25,
+        24,
+        50
+      ],
+      "expect": {
+        "error": "retake.span: nothing to regenerate on the 8-frame grid"
+      }
+    },
+    {
+      "description": "the extend golden: 0.3 s after = 1 latent frame, 57 frames",
+      "kind": "extend",
+      "args": [
+        0.3,
+        "after",
+        24,
+        49
+      ],
+      "expect": {
+        "latent": 1,
+        "frames": 57,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 2.0416666666666665,
+          "new_out_s": 2.375
+        }
+      }
+    },
+    {
+      "description": "the default 2 s after: 6 latent frames, 97 frames",
+      "kind": "extend",
+      "args": [
+        2,
+        "after",
+        24,
+        49
+      ],
+      "expect": {
+        "latent": 6,
+        "frames": 97,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 2.0416666666666665,
+          "new_out_s": 4.041666666666667
+        }
+      }
+    },
+    {
+      "description": "2 s before: the source moves 2 s later",
+      "kind": "extend",
+      "args": [
+        2,
+        "before",
+        24,
+        49
+      ],
+      "expect": {
+        "latent": 6,
+        "frames": 97,
+        "map": {
+          "offset_s": 2.0,
+          "new_in_s": 0,
+          "new_out_s": 2.0
+        }
+      }
+    },
+    {
+      "description": "a 300-frame source (read as 297) plus 2 s is past 321",
+      "kind": "extend",
+      "args": [
+        2,
+        "after",
+        24,
+        300
+      ],
+      "expect": {
+        "error": "extend.seconds: the clip would be 345 frames; at most 321"
+      }
+    },
+    {
+      "description": "the a2v golden: 49 frames of a tone from 0",
+      "kind": "audio",
+      "args": [
+        0,
+        2.0416666666666665,
+        24
+      ],
+      "expect": {
+        "frames": 49,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 0,
+          "new_out_s": 2.0416666666666665
+        }
+      }
+    },
+    {
+      "description": "a 3 s part from 1.5 s: 65 frames, the output's 0 is the source's 1.5 s",
+      "kind": "audio",
+      "args": [
+        1.5,
+        4.5,
+        24
+      ],
+      "expect": {
+        "frames": 65,
+        "map": {
+          "offset_s": -1.5,
+          "new_in_s": 0,
+          "new_out_s": 2.7083333333333335
+        }
+      }
+    },
+    {
+      "description": "a 20 s part is capped at 321 frames",
+      "kind": "audio",
+      "args": [
+        0,
+        20,
+        24
+      ],
+      "expect": {
+        "frames": 321,
+        "map": {
+          "offset_s": 0,
+          "new_in_s": 0,
+          "new_out_s": 13.375
+        }
+      }
+    },
+    {
+      "description": "under 9 frames",
+      "kind": "audio",
+      "args": [
+        0,
+        0.3,
+        24
+      ],
+      "expect": {
+        "error": "audio.source: the part from in to out is shorter than 9 frames"
+      }
+    }
+  ]
+}

@@ -59,6 +59,7 @@ type env struct {
 	revoked   atomic.Bool // the token check of open event streams fails
 	unreached bool        // the KV cancels write fails
 	service   *studio.Service
+	gallery   *gallery.Service
 	store     *storage.Memory // the objects reference images are checked against
 }
 
@@ -125,8 +126,10 @@ func setup(t *testing.T) *env {
 		return nil
 	}
 	e.service = studio.NewService(pool, signer, e.registry, cancel, e.store)
+	e.gallery = gallery.NewService(pool, signer, e.store, e.registry, e.service.FindWorkflow)
+	e.gallery.SetOffers(e.service.Offerable)
 	router.LoadControllers(studio.NewController(e.service, recheck, shutdown),
-		gallery.NewController(gallery.NewService(pool, signer, e.store, e.registry, e.service.FindWorkflow)),
+		gallery.NewController(e.gallery),
 		lora.NewController(lora.NewService(pool, signer, e.store, e.registry)))
 	e.srv = httptest.NewServer(router.Engine())
 	t.Cleanup(e.srv.Close)

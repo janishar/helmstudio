@@ -1,11 +1,13 @@
 "use client";
 // The gallery picker (plan 9.1: the one way to choose media): the Gallery's grid, search and filters in a dialog,
-// images only (or every kind: `kind` null), picking up to `max` takes.
-import { useState } from "react";
+// images only (or every kind: `kind` null), picking up to `max` takes. A media input's picker (API 1.19,
+// docs/mock/VideoSource.dc.html) narrows it further (`only`: audio takes and videos with sound), says each tile's
+// facts and may upload wav or mp3.
+import { useRef, useState } from "react";
 import { ErrorNote, Modal } from "@/components/kit";
 import { Chip, TakeCard, useTakePages } from "@/components/gallery/gallery";
-import type { S } from "@/lib/api";
-import type { Filter } from "@/lib/takes";
+import { message, type S } from "@/lib/api";
+import { AUDIO_TYPES, MAX_AUDIO_S, uploadFile, type Filter } from "@/lib/takes";
 
 type Take = S<"Take">;
 
@@ -22,6 +24,10 @@ export function GalleryPicker({
   max,
   onPick,
   kind = "image",
+  title = "Add from gallery",
+  only,
+  sub,
+  audioUpload,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,11 +35,68 @@ export function GalleryPicker({
   onPick: (takes: Take[]) => void;
   /** the kind offered; null: images and videos */
   kind?: S<"TakeKind"> | null;
+  title?: string;
+  /** the takes shown (of those the kind lets through) */
+  only?: (t: Take) => boolean;
+  /** a tile's facts line ("448 × 256 · 49 f · 2.04 s"), else the gallery's */
+  sub?: (t: Take) => string;
+  /** offers "Upload wav or mp3" (an audio input) */
+  audioUpload?: boolean;
 }) {
   return (
-    <Modal open={open} onClose={onClose} title="Add from gallery" width="w-[min(94vw,880px)]">
-      <Picker max={max} onClose={onClose} onPick={onPick} kind={kind ?? undefined} />
+    <Modal open={open} onClose={onClose} title={title} width="w-[min(94vw,880px)]">
+      <Picker
+        max={max}
+        onClose={onClose}
+        onPick={onPick}
+        kind={kind ?? undefined}
+        only={only}
+        sub={sub}
+        audioUpload={audioUpload}
+      />
     </Modal>
+  );
+}
+
+/** "Upload wav or mp3": the length is read here, the take picked once it is stored. */
+function AudioUpload({ onDone }: { onDone: (t: Take) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [state, setState] = useState<{ progress?: number; error?: string }>({});
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        ref={input}
+        type="file"
+        accept={[...AUDIO_TYPES, ".wav", ".mp3"].join(",")}
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          setState({ progress: 0 });
+          uploadFile(f, (progress) => setState({ progress }), undefined, true)
+            .then((t) => {
+              setState({});
+              onDone(t);
+            })
+            .catch((err) => setState({ error: message(err) }));
+        }}
+      />
+      <button
+        type="button"
+        className="h-10 rounded-[10px] border border-dashed border-dash bg-transparent px-3.5 text-[13px]"
+        disabled={state.progress !== undefined}
+        onClick={() => input.current?.click()}
+      >
+        {state.progress !== undefined
+          ? `Uploading… ${Math.round(state.progress * 100)}%`
+          : "Upload wav or mp3"}
+      </button>
+      <span className="mono text-[12px] text-t2">
+        Up to 50 MB and {MAX_AUDIO_S} s; the length is read in the browser
+      </span>
+      {state.error && <p className="mono m-0 w-full text-[12px] text-bad">{state.error}</p>}
+    </div>
   );
 }
 
@@ -43,20 +106,24 @@ function Picker({
   onClose,
   onPick,
   kind,
+  only,
+  sub,
+  audioUpload,
 }: {
   max: number;
   onClose: () => void;
   onPick: (takes: Take[]) => void;
   kind?: S<"TakeKind">;
+  only?: (t: Take) => boolean;
+  sub?: (t: Take) => string;
+  audioUpload?: boolean;
 }) {
   const [filter, setFilter] = useState<Filter>({ kind });
   const [q, setQ] = useState("");
-  const { takes, next, loading, error, fetchPage, sentinel } = useTakePages(
-    filter,
-    q,
-    undefined,
-    40,
-  );
+  const pages = useTakePages(filter, q, undefined, 40);
+  const { next, loading, error, fetchPage, sentinel } = pages;
+  // ponytail: an audio input filters a page of every kind here; a kind list in the API if galleries grow
+  const takes = only ? (pages.takes?.filter(only) ?? null) : pages.takes;
   const [picked, setPicked] = useState<Take[]>([]);
   const toggle = (t: Take) =>
     setPicked((p) =>
@@ -118,6 +185,7 @@ function Picker({
                   selecting
                   disabled={!on && picked.length >= max}
                   onClick={() => toggle(t)}
+                  sub={sub?.(t)}
                 />
               </div>
             );
@@ -137,6 +205,14 @@ function Picker({
         )}
         <div ref={sentinel} aria-hidden className="h-px" />
       </div>
+      {audioUpload && (
+        <AudioUpload
+          onDone={(t) => {
+            onPick([t]);
+            onClose();
+          }}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="mono mr-auto text-[12px] text-t2" aria-live="polite">
           {picked.length} picked · up to {max}

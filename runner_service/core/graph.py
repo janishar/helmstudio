@@ -173,11 +173,14 @@ class Ctx:
         video=None,
         poster=None,
         last=None,
+        source_map=None,
     ) -> None:
         """A video also passes `video` ({duration_s, fps, frames, has_audio[, stream]}), `poster` and `last` (the
-        last frame; PNG bytes)."""
+        last frame; PNG bytes), and `source_map` when it was made from a media take (README, Media inputs)."""
         index, self.outputs = self.outputs, self.outputs + 1
         extra = {"video": video, "poster": poster, "last": last} if video is not None else {}
+        if source_map is not None:
+            extra["source_map"] = source_map
         if video is not None and self.auto:  # auto length: the clip's real frames (README, Video)
             self.resolved |= dict.fromkeys(self.auto, video["frames"])
             extra["resolved"] = {"params": dict(self.resolved)}
@@ -237,6 +240,21 @@ def _check_param(spec: dict, value) -> str | None:
     # image: null (a registry workflow) or resolved (the message schema checked its fields)
     if t == "image":
         return None if value is None or _image(value) else "must be an image"
+    if t == "media":  # README, Media inputs: the caps re-checked on the facts studio sent
+        if value is None:
+            return None
+        if not _image(value):
+            return "must be a take"
+        why = media_fit(spec, value)
+        return f": {why}" if why else None
+    if t == "span":
+        if value is None:
+            return None
+        ok = isinstance(value, dict) and value.keys() == {"start", "end"} and all(
+            isinstance(value[k], (int, float)) and not isinstance(value[k], bool) for k in value)  # fmt: skip
+        if not ok:
+            return "must be a range {start, end}"
+        return None if value["start"] < value["end"] else ": start must be before end"
     if t == "rows":
         return _check_rows(spec, value)
     if t == "bool":
@@ -275,6 +293,34 @@ def _check_param(spec: dict, value) -> str | None:
 
 def _image(value) -> bool:
     return isinstance(value, dict) and "key" in value
+
+
+def media_fit(spec: dict, v: dict) -> str | None:
+    """Why a resolved media value does not fit its `media` param (contracts check.py media_fit and the trim texts,
+    README Media inputs), else None; the runner re-checks what studio checked (each file's own facts are re-read by
+    the pack that decodes it)."""
+    tid, kinds = v.get("take_id"), spec.get("accepts", [])
+    picture = v.get("kind") == "video" and "video" in kinds
+    if not picture and not ("audio" in kinds and v.get("has_audio")):
+        return f"take {tid} has no sound" if kinds == ["audio"] else f"take {tid} is not a video"
+    if picture and (g := spec.get("grid")) and (v.get("width", 0) % g or v.get("height", 0) % g):
+        return f"take {tid} is {v.get('width')} × {v.get('height')}; this input needs sides on a {g} px grid"
+    if picture and (n := spec.get("max_frames")) and v.get("frames", 0) > n:
+        return f"take {tid} has {v['frames']} frames; this input takes at most {n}"
+    if not spec.get("trim"):
+        if "in" in v or "out" in v:
+            return "this input takes the whole take (no in or out)"
+        if (m := spec.get("max_s")) and v["duration_s"] > m:
+            return f"take {tid} lasts {v['duration_s']:.1f} s; this input takes at most {m:.1f} s"
+        return None
+    start, end = v.get("in", 0), v.get("out", v["duration_s"])
+    if start >= end:
+        return "in must be before out"
+    if end > v["duration_s"] + 1e-6:
+        return f"out {end:.1f} is past the take's end {v['duration_s']:.1f}"
+    if (m := spec.get("max_s")) and end - start > m + 1e-6:
+        return f"the part lasts {end - start:.1f} s; this input takes at most {m:.1f} s"
+    return None
 
 
 def _check_rows(spec: dict, value) -> str | None:
@@ -317,6 +363,10 @@ WIREABLE = {
     "text": "Text",
     "image": "Image",
 }
+REQUIRED = {
+    "media": "a take",
+    "span": "a range",
+}  # null in a workflow, set in a run (README, Media inputs)
 MAX_NODES, MAX_BYTES, MAX_OUTPUTS = 64, 262144, 4
 SINKS = (
     "output",
@@ -405,6 +455,9 @@ def problems(
         params, specs = n.get("params", {}), {p["name"]: p for p in s["params"]}
         for name in params.keys() - specs.keys():
             add("unknown_param", nid, param=name, message=f"{nid}.{name}: unknown param")
+        for name, allowed in n.get("only", {}).items():  # an enum param and a subset of its values
+            if specs.get(name, {}).get("type") != "enum" or set(allowed) - set(specs[name]["enum"]):
+                add("param_invalid", nid, param=name, message=f"{nid}.{name}: only must name an enum param and values of it")  # fmt: skip
         for name, spec in specs.items():
             if name not in params:
                 add("param_missing", nid, param=name, message=f"{nid}.{name}: missing")
@@ -416,6 +469,11 @@ def problems(
             ):  # README, Video: steps allowed for the node's role
                 add("param_invalid", nid, param=name,
                     message=f"{nid}.{name}: must be one of {', '.join(map(str, ok))}")  # fmt: skip
+            elif (
+                name in n.get("only", {}) and params[name] not in n["only"][name]
+            ):  # README, Media inputs: only
+                add("param_invalid", nid, param=name,
+                    message=f"{nid}.{name}: must be one of {', '.join(map(str, n['only'][name]))}")  # fmt: skip
             elif field := lora_field(spec):  # README, LoRAs: one LoRA once per stack
                 ids = [r[field]["lora_id"] for r in params[name]]
                 if dup := next((x for i, x in enumerate(ids) if x in ids[:i]), None):
@@ -483,8 +541,10 @@ def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[st
     run. Checked here, independently of studio: the graph rules (`problems`), every param present, no bypassed
     node (studio splices them out before it sends a graph) and, for a run, `min` items in a rows param of takes
     (`run=False`: a registry workflow, which holds no takes)."""
-    errs = [
-        f"{nid}: a bypassed node reached the runner" for nid, n in nodes.items() if n.get("bypass")
+    errs = [  # a registry workflow may bypass a node (studio splices it out of a run)
+        f"{nid}: a bypassed node reached the runner"
+        for nid, n in nodes.items()
+        if run and n.get("bypass")
     ]
     for nid, n in nodes.items() if run else ():  # takes rows: [] in a workflow, min items in a run
         for spec in schemas.get(n["kind"], {}).get("params", []):
@@ -496,6 +556,8 @@ def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[st
                 and spec.get("min")
             ):
                 errs.append(f"{nid}.{spec['name']}: at least {spec['min']} items")
+            if spec["type"] in REQUIRED and n.get("params", {}).get(spec["name"]) is None:
+                errs.append(f"{nid}.{spec['name']}: {REQUIRED[spec['type']]} is required")
     # a registry workflow may leave params at their defaults (the ask fixtures give only max_tokens); a run has all
     return errs + [p[4] for p in problems(nodes, schemas) if run or p[0] != "param_missing"]
 
@@ -660,17 +722,39 @@ def _components(nodes: dict, impls: dict, schemas: dict, nid: str) -> dict[tuple
     return out
 
 
+def _media_values(nodes: dict, schemas: dict, nid: str) -> list[dict]:
+    """The media values (README, Media inputs) in the params of `nid` and of every node upstream of it."""
+    seen = upstream(nodes, [nid])
+    return [v for n in order(nodes) if n in seen for p in schemas[nodes[n]["kind"]]["params"]
+            if p["type"] == "media" and isinstance(v := nodes[n].get("params", {}).get(p["name"]), dict)]  # fmt: skip
+
+
 def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
-    """The graph's sizes a peak_gb formula at `nid` sees: mp, images, frames, mp_in."""
+    """The graph's sizes a peak_gb formula at `nid` sees: mp, images, frames, mp_in, fps. Without a Canvas or a
+    frames param upstream, a media value gives them: a video take its size, frames and fps, an audio part its
+    length at 24 fps (README, Media inputs: planned_at counts the media facts)."""
     mp, refs = _canvas_mp(nodes, schemas, nid), _image_values(nodes, schemas, nid)
+    media = _media_values(nodes, schemas, nid)
+    video = next((v for v in media if v.get("kind") == "video" and "width" in v), None)
+    if not mp and video:
+        mp = video["width"] * video["height"] / 1e6
     # an input that carries its clip's frames (a Latent after stage 1) has the resolved length, which an "auto"
     # param upstream only bounds
     known = [v.frames for v in inputs.values() if isinstance(getattr(v, "frames", None), int)]
     frames = known[0] if known else _frames(nodes, schemas, nid)
+    if not frames and media:
+        m = media[0]
+        frames = (
+            m["frames"]
+            if video is m
+            else int((m.get("out", m["duration_s"]) - m.get("in", 0)) * 24)
+        )
+    fps = next((v.fps for v in inputs.values() if isinstance(getattr(v, "fps", None), (int, float))),
+               video["fps"] if video else 24)  # fmt: skip
     mp_in = max((v["width"] * v["height"] / 1e6 for v in refs), default=0.0)
     # a video take reaches an ask stage as its keyframes: each one is an image (core.ask.KEYFRAMES)
     n = sum(3 if images.video(v) else 1 for v in refs)
-    return {"mp": mp, "images": n, "frames": frames, "mp_in": mp_in}
+    return {"mp": mp, "images": n, "frames": frames, "mp_in": mp_in, "fps": fps}
 
 
 def stage_peak(nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict) -> float:
@@ -750,7 +834,7 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         specs = schema["params"]
         params = {p: v for p, v in node.get("params", {}).items() if p not in wired}
         # read the Image values before the node's first step; the bytes go after decoding
-        if images.values(specs, params):
+        if images.values(specs, params) or images.media(specs, params):
             params = await images.load(specs, params, ctx.owner, ctx.fetch)
         params |= upstream_params  # a wired value param gets the upstream value
         outs = await loop.run_in_executor(GPU, job, nid, impl, params, inputs)
@@ -760,9 +844,15 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         done[nid] = outs
         return outs
 
-    for nid in upstream(nodes, sinks):  # a pack's own checks, before anything loads or runs
+    for nid in pull_order(
+        nodes, sinks
+    ):  # a pack's own checks, before anything loads or runs (in run order)
         impl, node = impls[nodes[nid]["kind"]], nodes[nid]
-        if impl.check and (why := impl.check(node.get("params", {}), set(node.get("in", {})))):
+        if impl.check is None:
+            continue
+        types = {i["name"]: i["type"] for i in schemas[node["kind"]]["inputs"]}
+        models = {p: _model(nodes, impls, schemas, r) for p, r in node.get("in", {}).items() if types.get(p) == "Model"}  # fmt: skip
+        if why := impl.check(node.get("params", {}), set(node.get("in", {})), models):
             raise RunError(f"{nid}{why}")
     for nid in sinks:
         await get(nid)

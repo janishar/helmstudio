@@ -92,8 +92,12 @@ def test_ltx_pack_publishes_the_canonical_fixtures():
         assert values[kind][kind] == want[kind] and values[kind]["env"] == "mlx"
     (model,) = values["models"]["models"]
     assert (model["id"], model["family"], model["title"]) == ("ltx-2.5", "ltx", "LTX-2.5")
-    assert [v["id"] for v in model["variants"]] == ["distilled"]
-    assert model["variants"][0]["precisions"] == ["bf16", "int8", "int4"]
+    assert [v["id"] for v in model["variants"]] == ["distilled", "dev"]
+    assert (
+        model["variants"][0]["precisions"]
+        == model["variants"][1]["precisions"]
+        == ["bf16", "int8", "int4"]
+    )
 
 
 @needs_mlx
@@ -518,3 +522,230 @@ def test_the_metal_cache_is_capped_and_measure_is_the_process_footprint():
     mx.set_cache_limit(limit)
     assert limit <= loaders_mlx.CACHE_GB * 2**30
     assert loaders_mlx.measure_gb() == pytest.approx(footprint_gb(), abs=0.05)
+
+
+# --- M7 pack 1: retake, extend, audio to video (no weights: the maps, the schedule, every state the loops start
+# from equal the goldens' recorded shas; the variant checks before anything loads; the memory plans)
+
+
+@needs_mlx
+def test_media_maps_follow_the_contract_fixture():
+    from packs.ltx import mlx as ltx_mlx
+
+    fx = json.loads((CONTRACTS / "fixtures/video/sources.json").read_text())
+    fns = {"retake": ltx_mlx.retake_map, "extend": ltx_mlx.extend_map, "audio": ltx_mlx.audio_map}
+    for c in fx["cases"]:
+        assert fns[c["kind"]](*c["args"]) == c["expect"], c["description"]
+
+
+class Probe:
+    """What a node function sees of a run, without one: progress dropped, components refused."""
+
+    node = "retake"
+
+    def check(self):
+        pass
+
+    def progress(self, *a):
+        pass
+
+    def component(self, model, name):
+        return f"<{name}>"
+
+
+def source_latent(g: dict):
+    """A Latent shaped like the golden's source (the t2v golden: 7 x 8 x 14 latent, 51 audio tokens)."""
+    from packs.ltx import mlx as ltx_mlx
+
+    f, h, w = g["source"]["video_latent"]["shape"][2:]
+    t = g["source"]["audio_latent"]["shape"][2]
+    return ltx_mlx.Latent(mx.zeros((1, f * h * w, 128), dtype=mx.bfloat16), mx.zeros((1, t, 128)), (f, h, w),
+                          g["source"]["meta"]["num_frames"], g["source"]["meta"]["frame_rate"],
+                          source_map={"take_id": "t"})  # fmt: skip
+
+
+def edited_states(monkeypatch, fn, params: dict, latent):
+    from packs.ltx import mlx as ltx_mlx
+
+    seen = {}
+
+    def edit(ctx, params, inputs, video, audio, src, fhw, frames, smap):
+        seen.update(video=video, audio=audio, fhw=fhw, frames=frames, smap=smap)
+        return {}
+
+    monkeypatch.setattr(ltx_mlx, "_edit", edit)
+    fn(Probe(), params, {"latent": latent})
+    return seen
+
+
+@needs_mlx
+@pytest.mark.parametrize(
+    "case", ["ltx-retake/retake-448x256-49f-s42", "ltx-extend/extend-448x256-49f+8-s42"]
+)
+def test_retake_and_extend_states_are_the_goldens(case, on_cpu, monkeypatch):
+    """The masks (video float32 for retake, bf16 for extend; audio bf16), the keyframes mask on the first latent
+    frame, the positions at the source's fps and the sigmas of the 30-step schedule over the whole clip."""
+    from packs.ltx import mlx as ltx_mlx
+
+    g = golden(case)
+    loop, src = g["loops"][0], source_latent(g)
+    if g["kind"] == "retake":
+        fps = g["source"]["meta"]["frame_rate"]
+        params = {
+            "span": {"start": 8 * g["start"] / fps, "end": 8 * g["end"] / fps},
+            "audio": g["regenerate_audio"],
+        }
+        seen = edited_states(monkeypatch, ltx_mlx.retake, params, src)
+        assert seen["smap"] == {
+            "offset_s": 0,
+            "new_in_s": 9 / 24,
+            "new_out_s": 33 / 24,
+        }  # pixels 9-32
+    else:
+        params = {"seconds": 0.3, "direction": g["direction"]}
+        seen = edited_states(monkeypatch, ltx_mlx.extend, params, src)
+        assert seen["frames"] == 57 and seen["smap"]["new_in_s"] == 49 / 24
+    v, a = seen["video"], seen["audio"]
+    for (part, k), x in {("video_in", "denoise_mask"): v.denoise_mask, ("video_in", "keyframes_mask"): v.keyframes_mask,
+                         ("video_in", "positions"): v.positions, ("audio_in", "denoise_mask"): a.denoise_mask,
+                         ("audio_in", "positions"): a.positions}.items():  # fmt: skip
+        assert sha(x) == loop[part][k]["sha256_f32"], (part, k)
+        assert str(x.dtype).split(".")[-1] == loop[part][k]["dtype"], (part, k)
+    tokens = seen["fhw"][0] * seen["fhw"][1] * seen["fhw"][2]
+    assert tokens == loop["video_in"]["tokens"]
+    assert (
+        max(
+            abs(x - y)
+            for x, y in zip(ltx_mlx.ltx2_schedule(30, tokens), loop["sigmas"], strict=True)
+        )
+        < 1e-6
+    )
+
+
+@needs_mlx
+def test_audio_to_video_stage1_state_is_the_golden(on_cpu, monkeypatch):
+    """Stage 1: noise from the seed at half size (the scalar blend), positions at the default 24 fps, the first
+    latent frame marked, the audio frozen (mask 0); the schedule over the half-size tokens."""
+    from packs.ltx import mlx as ltx_mlx
+
+    g = golden("ltx-audio-to-video/a2v-448x256-49f-s42")
+    loop, seen = g["loops"][0], {}
+
+    def guided(ctx, x0, video, audio, cond, factories, sigmas, phase):
+        seen.update(video=video, audio=audio, sigmas=sigmas, factories=factories)
+        return video.latent, audio.latent
+
+    monkeypatch.setattr(ltx_mlx, "_guided", guided)
+    monkeypatch.setattr(ltx_mlx, "X0Model", lambda m: m)
+    cond = ltx_mlx.Cond(mx.zeros((1, 4, 8)), mx.zeros((1, 4, 8)), neg_video=mx.zeros((1, 4, 8)),
+                        neg_audio=mx.zeros((1, 4, 8)))  # fmt: skip
+    audio = ltx_mlx.Latent(
+        None, mx.zeros((1, 51, 128)), None, 49, 24.0, source_map={"take_id": "t"}, sound=(b"", 0)
+    )
+    inputs = {"model": None, "cond": cond, "seed": g["seed"], "canvas": {"width": 448, "height": 256},
+              "duration": {"frames": 49, "fps": 24}, "audio": audio}  # fmt: skip
+    out = ltx_mlx.sample_guided(Probe(), {"steps": 30, "cfg": 3.0, "stg": 1.0}, inputs)["latent"]
+    v, a = seen["video"], seen["audio"]
+    for (part, k), x in {("video_in", "latent"): v.latent, ("video_in", "denoise_mask"): v.denoise_mask,
+                         ("video_in", "keyframes_mask"): v.keyframes_mask, ("video_in", "positions"): v.positions,
+                         ("audio_in", "denoise_mask"): a.denoise_mask, ("audio_in", "positions"): a.positions}.items():  # fmt: skip
+        assert sha(x) == loop[part][k]["sha256_f32"], (part, k)
+    assert max(abs(x - y) for x, y in zip(seen["sigmas"], loop["sigmas"], strict=True)) < 1e-6
+    vg, ag = (f.build_from_sigma(1.0) for f in seen["factories"])
+    assert (
+        vg.params.cfg_scale,
+        vg.params.stg_blocks,
+        ag.params.cfg_scale,
+        ag.params.stg_scale,
+    ) == (3.0, [28], 1.0, 0.0)
+    assert out.sound == (b"", 0) and out.fhw == (7, 4, 7)
+
+
+def dev_workflow(name: str) -> tuple[dict, dict, dict]:
+    values, impls, _ = ltx()
+    nodes = json.loads(
+        json.dumps(next(w for w in values["workflows"]["workflows"] if w["id"] == name)["nodes"])
+    )
+    return nodes, impls, registry.node_schemas(values)
+
+
+@needs_mlx
+@pytest.mark.parametrize(
+    ("name", "edit", "error"),
+    [
+        (
+            "ltx-retake",
+            lambda n: n["model"]["params"].update(variant="distilled"),
+            "retake: needs model variant dev",
+        ),
+        (
+            "ltx-audio-to-video",
+            lambda n: n["sample2"]["in"].update(model="model.model"),
+            "sample2: needs model variant distilled",
+        ),
+        (
+            "ltx-text-to-video",
+            lambda n: n["model"]["params"].update(variant="dev"),
+            "sample1: needs model variant distilled",
+        ),
+    ],
+)
+def test_the_model_variant_is_checked_before_anything_loads(name, edit, error):
+    nodes, impls, schemas = dev_workflow(name)
+    for n in nodes.values():
+        n.pop("only", None)  # studio drops it from a command
+        n.pop("bypass", None) if n["kind"] != "ltx/keyframes" else None
+    nodes.pop("keyframes", None)
+    for n in (
+        nodes.values()
+    ):  # keyframes bypassed: studio splices it out (its input feeds its consumers)
+        for port, ref in n.get("in", {}).items():
+            if ref == "keyframes.cond":
+                n["in"][port] = "encode.cond"
+    nodes["prompt"]["params"]["text"] = "a cat"
+    edit(nodes)
+    with pytest.raises(RunError, match=error):
+        run_graph(nodes, impls, schemas)
+
+
+@needs_mlx
+def test_distill_is_the_dev_model_with_the_distilled_lora_baked():
+    """A second transformer entry (its own residency key, the LoRA listed); stage 2 accepts it."""
+    from packs.ltx import mlx as ltx_mlx
+
+    _, _, p = ltx()
+    dev = pack.ModelRef(p, "dev", "int8")
+    baked = ltx_mlx.distill(None, {}, {"model": dev})["model"]
+    assert baked.variant == "dev" and [(u.strength, u.mode) for u in baked.loras] == [(1.0, "bake")]
+    assert ltx_mlx.distilled_lora(baked) and not ltx_mlx.distilled_lora(dev)
+    if baked.files("transformer"):
+        assert (
+            baked.key("transformer")[:4] == dev.key("transformer")
+            and len(baked.key("transformer")) == 5
+        )
+    assert (
+        ltx_mlx.check_sample({"role": "stage2", "steps": 3}, {"latent"}, {"model": baked}) is None
+    )
+    assert ltx_mlx.check_sample({"role": "stage1", "steps": 8}, {"canvas", "duration"}, {"model": baked}) == \
+        ": needs model variant distilled"  # fmt: skip
+
+
+@needs_mlx
+def test_dev_memory_plans_cover_only_the_runs_that_can_use_it():
+    """Retake and extend in one item at the goldens' source size, audio to video its own; text to video is planned on
+    the distilled variant only, and nothing is planned at bf16 for the dev templates (`only`)."""
+    values, impls, p = ltx()
+    schemas = registry.node_schemas(values)
+    if not pack.ModelRef(p, "dev", "int8").files("transformer"):
+        pytest.skip("the dev transformer is not on this host")
+    plans = registry.memory_plans(p, "dev", "int8", impls, schemas)
+    assert [x.get("workflow") for x in plans] == [None, "ltx-audio-to-video"]
+    assert plans[0]["planned_at"] == {"mp": 0.1147, "frames": 97}  # 49 + the default 2 s extend
+    assert {c["variant"] for c in plans[0]["components"] if c["component"] == "transformer"} == {
+        "dev"
+    }
+    assert registry.memory_plans(p, "dev", "bf16", impls, schemas) == []
+    assert all(
+        x.get("workflow") is None
+        for x in registry.memory_plans(p, "distilled", "int8", impls, schemas)
+    )

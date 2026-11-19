@@ -113,6 +113,12 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, videoWorkflow)
 	case "GET /v1/studio/workflows/echo-image-to-video":
 		fmt.Fprint(w, i2vWorkflow)
+	case "GET /v1/studio/workflows/echo-retake":
+		fmt.Fprint(w, retakeWorkflow)
+	case "GET /v1/studio/takes/t2/uses":
+		fmt.Fprint(w, t2Uses)
+	case "GET /v1/studio/takes/t3/uses":
+		fmt.Fprint(w, `{"uses":[]}`)
 	case "GET /v1/studio/workflows/" + mineID:
 		fmt.Fprint(w, mineWorkflow)
 	case "GET /v1/studio/workflows/w1":

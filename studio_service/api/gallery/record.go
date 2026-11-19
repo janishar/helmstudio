@@ -23,10 +23,11 @@ type Output struct {
 	Bytes                     int64
 	Etag                      *string // md5 hex of the object, when the runner sent it (evt.run.output etag)
 	MadeWith                  dto.MadeWith
-	CreatedAt                 *time.Time // when the output was made; nil: now
-	BatchID                   *string    // a batch run's: the take's source is pipeline
-	Parents                   []string   // the takes of the run's Image values, each once, in input order
-	Video                     *dto.Video // kind video: its metadata and poster
+	CreatedAt                 *time.Time     // when the output was made; nil: now
+	BatchID                   *string        // a batch run's: the take's source is pipeline
+	Parents                   []string       // the takes of the run's Image values, each once, in input order
+	Video                     *dto.Video     // kind video: its metadata and poster
+	SourceMap                 *dto.SourceMap // API 1.19: a video made from a media take (one of Parents)
 }
 
 // contentTypes maps a run output key's extension to its content type.
@@ -42,13 +43,13 @@ func Record(ctx context.Context, tx pgx.Tx, output Output) (string, error) {
 	}
 	var id string
 	err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
-		session_id, run_id, output_idx, made_with, ready, created_at, batch_id, etag, video)
+		session_id, run_id, output_idx, made_with, ready, created_at, batch_id, etag, video, source_map)
 		VALUES ($1, $2, $3, CASE WHEN $15::uuid IS NULL THEN 'create' ELSE 'pipeline' END, $4, $5, $6, $7, $8, $9, $10, $11,
-		$12, $13, true, coalesce($14, clock_timestamp()), $15, $16, $17)
+		$12, $13, true, coalesce($14, clock_timestamp()), $15, $16, $17, $18)
 		ON CONFLICT (run_id, output_idx) DO UPDATE SET run_id = EXCLUDED.run_id RETURNING id::text`,
 		utility.NewID(), output.OwnerID, output.Kind, Title(output.MadeWith), output.Key, contentType, output.Width,
 		output.Height, output.Bytes, output.SessionID, output.RunID, output.Index, output.MadeWith, output.CreatedAt,
-		output.BatchID, output.Etag, output.Video).Scan(&id)
+		output.BatchID, output.Etag, output.Video, output.SourceMap).Scan(&id)
 	if err != nil || len(output.Parents) == 0 {
 		return id, err
 	}

@@ -282,6 +282,23 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 - `made_with.host` = the run's host; a read-only models root (`models_disk.writable: false`) refuses download and
   delete (409). Tests: `TestPlaceFixtures` (every `place.*`), tests/hosts_test.go.
 
+## Media inputs and take actions (API 1.19, M7 pack 1)
+
+- `media` / `span` params (`resolve.go` shapes and `only`; `media.go` `checkMedia`): at create (Create, batch rows,
+  `studio.runs.create`) each media take is checked as the caller (another user's is `take <id> not found`), fitted
+  (`gallery.MediaFit`, check.py `media_fit`), trim in/out and spans snapped with `rnd` (video frames, audio ms) and
+  filled, all stored in the run's graph; `runs.media_at` keeps the largest media facts for the memory plan. Release
+  (`resolveImages`) sends a video or audio take of a top-level param as defs `media`. `only` never reaches the command.
+- Takes: `takes.audio` (an audio upload's declared length) and `takes.source_map` (from `evt.run.output`, kept only
+  for a video and one of the run's own media takes); migration 00021. `parents` include media takes.
+- "Use in…": `GET /takes/{id}/uses` (`gallery.Offers`, check.py `take_uses` / `extend_room`, tested on
+  `fixtures/video/uses.json`) over `Service.Offerable` (eligible templates, then the caller's non-text workflows);
+  `POST /takes/{id}/use` takes video and audio takes.
+- Timeline: `GET …/clips/{clip}/actions` (`ClipActions`), `POST …/shots` with `slot {after, length}`, the `fill` edit
+  placing a take by its `source_map` (its source loaded by `loadTakes`), re-render binding media params
+  (`RerenderSteps` media), audio takes refused as clips (`wrong_track`, `take_ids[n]: …`).
+- Eligibility: a run with `<family>/distill` needs a host whose models key lists the pre-fused distilled LoRA.
+
 ## Layout
 
 | Path | What |

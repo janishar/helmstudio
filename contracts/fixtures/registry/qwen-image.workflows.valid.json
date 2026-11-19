@@ -8,6 +8,7 @@
     {
       "id": "qwen-image",
       "title": "Qwen Image",
+      "action": "Edit",
       "family": "qwen-image",
       "env": "torch",
       "nodes": {

@@ -1,6 +1,7 @@
 // Takes: the gallery's filters, labels and the upload flow (contracts/README.md "Takes, the gallery and uploads").
 import { api, ApiError, errorText, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import { audioFormat, secondsText } from "@/lib/media";
 import { pretty } from "@/lib/workflow";
 
 type Take = S<"Take">;
@@ -36,7 +37,9 @@ export function appendPage(list: Take[], page: Take[]): Take[] {
 /** The tile's mono line: what made it and where ("Qwen Image · Create", "Qwen Image · Pipeline", "Upload"). */
 export const subLine = (t: Take) =>
   t.source === "upload"
-    ? "Upload"
+    ? t.audio
+      ? `Upload · ${audioFormat(t.content_type)} · ${secondsText(t.audio.duration_s)}`
+      : "Upload"
     : [t.made_with?.workflow_title, t.source === "pipeline" ? "Pipeline" : "Create"]
         .filter(Boolean)
         .join(" · ");
@@ -68,17 +71,52 @@ export function stripItems(runs: Run[], takes: Take[]): StripItem[] {
   return items.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).map((x) => x.item);
 }
 
-/** The image types and the size an upload may have (UploadCreate). */
+/** The types and the size an upload may have (UploadCreate; audio from 1.19). */
 export const UPLOAD_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+export const AUDIO_TYPES = ["audio/wav", "audio/mpeg"] as const;
 export const MAX_UPLOAD = 52_428_800;
+export const MAX_AUDIO_S = 600;
 
-/** Why a file can't be uploaded (worded like studio_service's 422), or null. */
-export function checkFile(f: { type: string; size: number }): string | null {
-  if (!(UPLOAD_TYPES as readonly string[]).includes(f.type))
-    return "only png, jpeg and webp images can be uploaded";
+/** The upload type of a file: browsers name wav and mp3 several ways (audio/x-wav, audio/mp3). */
+export function typeOf(f: { type: string; name?: string }): string {
+  const ext = f.name?.split(".").pop()?.toLowerCase();
+  if (/^audio\/(x-|vnd\.)?wave?$/.test(f.type) || (!f.type && ext === "wav")) return "audio/wav";
+  if (/^audio\/(mpeg|mp3|x-mpeg)$/.test(f.type) || (!f.type && ext === "mp3")) return "audio/mpeg";
+  return f.type;
+}
+export const isAudio = (type: string) => (AUDIO_TYPES as readonly string[]).includes(type);
+
+/** Why a file can't be uploaded (worded like studio_service's 422), or null. `audio` false: images only. */
+export function checkFile(f: { type: string; size: number; name?: string }, audio = false) {
+  const t = typeOf(f);
+  if (!(UPLOAD_TYPES as readonly string[]).includes(t) && !(audio && isAudio(t)))
+    return audio
+      ? "only png, jpeg and webp images or wav and mp3 audio can be uploaded"
+      : "only png, jpeg and webp images can be uploaded";
   if (f.size > MAX_UPLOAD) return "file is larger than 50 MB";
   if (f.size < 1) return "file is empty";
   return null;
+}
+
+/** An audio file's length as this browser decodes it (studio records it; the runner reads the file itself). */
+export function audioDuration(file: Blob): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const a = new Audio();
+    const done = (f: () => void) => {
+      URL.revokeObjectURL(url);
+      f();
+    };
+    a.preload = "metadata";
+    a.onloadedmetadata = () =>
+      done(() =>
+        Number.isFinite(a.duration) && a.duration > 0
+          ? resolve(a.duration)
+          : reject(new Error("could not read the audio's length")),
+      );
+    a.onerror = () => done(() => reject(new Error("could not read the audio's length")));
+    a.src = url;
+  });
 }
 
 /** The three calls of an upload; the defaults go through the BFF and the signed link. */
@@ -91,6 +129,8 @@ export type UploadIO = {
     onProgress: (f: number) => void,
   ) => Promise<void>;
   complete: (takeId: string) => Promise<Take>;
+  /** an audio file's length in seconds */
+  duration: (file: Blob) => Promise<number>;
 };
 
 /** PUTs the bytes to a signed link with XHR (fetch has no upload progress); `onProgress` gets 0..1. */
@@ -125,21 +165,32 @@ const defaultIO: UploadIO = {
   put: xhrPut,
   complete: (id) =>
     ok(api.POST("/v1/studio/uploads/{take_id}/complete", { params: { path: { take_id: id } } })),
+  duration: audioDuration,
 };
 
-/** Uploads one image: checks it, starts the upload, PUTs the bytes to the signed link (same-origin path, see
- * safeUrl) and completes it. Throws an Error fit to show. */
+/** Uploads one image (or, with `audio`, a wav or mp3 with its length read here): checks it, starts the upload,
+ * PUTs the bytes to the signed link (same-origin path, see safeUrl) and completes it. Throws an Error fit to show. */
 export async function uploadFile(
   file: File,
   onProgress: (f: number) => void,
   io: UploadIO = defaultIO,
+  audio = false,
 ): Promise<Take> {
-  const bad = checkFile(file);
+  const bad = checkFile(file, audio);
   if (bad) throw new Error(bad);
+  const type = typeOf(file) as S<"UploadCreate">["content_type"];
+  let duration_s: number | undefined;
+  if (isAudio(type)) {
+    duration_s = await io.duration(file).catch(() => {
+      throw new Error(`not a valid ${type === "audio/wav" ? "wav" : "mp3"} file`);
+    });
+    if (duration_s > MAX_AUDIO_S) throw new Error(`audio is longer than ${MAX_AUDIO_S} s`);
+  }
   const up = await io.create({
     filename: file.name.slice(0, 255) || "upload",
-    content_type: file.type as S<"UploadCreate">["content_type"],
+    content_type: type,
     bytes: file.size,
+    ...(duration_s !== undefined && { duration_s }),
   });
   const url = safeUrl(up.upload_url);
   if (!url) throw new Error("The server gave an unusable upload link.");

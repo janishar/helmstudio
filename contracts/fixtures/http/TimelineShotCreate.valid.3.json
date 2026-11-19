@@ -1,0 +1,15 @@
+{
+  "slot": {
+    "after": "c3",
+    "length": 2.0
+  },
+  "run": {
+    "workflow_id": "ltx-extend",
+    "inputs": {
+      "prompt.text": "The puppy keeps running toward the camera and barks",
+      "source.source": {
+        "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b"
+      }
+    }
+  }
+}

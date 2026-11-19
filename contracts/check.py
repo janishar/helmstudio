@@ -74,7 +74,7 @@ HTTP_SCHEMAS = [
     "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "HostPins", "HostUnload",
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
     "Timeline", "TimelineList", "TimelineCreate", "TimelineUpdate", "TimelineAddClips", "TimelineShotCreate",
-    "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame",
+    "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -145,6 +145,7 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
             elif err := value_error(params[k], v):
                 out.append(f"{nid}.{k}: {err}")
         out += [f"{nid}.{k}: {err}" for k, err in values_by_errors(schema, node.get("params", {}))]
+        out += [f"{nid}.{k}: {err}" for k, err in only_errors(schema, node)]
         inputs = {p["name"]: p["type"] for p in schema["inputs"]}
         for port, ref in node.get("in", {}).items():
             src_id, src_port = ref.split(".")
@@ -162,8 +163,12 @@ def value_error(param: dict, v) -> str | None:
     t = param["type"]
     if t == "seed" and v is None:
         return None
-    if t == "image":  # a registry workflow holds no takes: an image param stays empty
-        return None if v is None else f"{v!r}: a workflow cannot fill an image param"
+    if t in ("image", "media"):  # a registry workflow holds no takes: an image or media param stays empty
+        return None if v is None else f"{v!r}: a workflow cannot fill an {t} param"
+    if t == "span":  # {start, end} seconds, start < end (README, Media inputs); null = none yet
+        ok = v is None or (isinstance(v, dict) and set(v) == {"start", "end"} and all(
+            isinstance(x, (int, float)) and not isinstance(x, bool) for x in v.values()) and 0 <= v["start"] < v["end"])
+        return None if ok else f"{v!r} is not a range {{start, end}} with 0 <= start < end"
     if t == "rows":
         if not isinstance(v, list):
             return f"{v!r} is not a list"
@@ -209,6 +214,19 @@ def value_error(param: dict, v) -> str | None:
     if t != "enum" and t != "bool" and not param.get("min", n) <= n <= param.get("max", n):
         return f"{v!r} is outside {param.get('min')}..{param.get('max')}"
     return None
+
+
+def only_errors(schema: dict, node: dict) -> list[tuple[str, str]]:
+    """(param, message) for a workflow node's `only` (API 1.19): an enum param, a subset of its enum, holding the
+    node's merged value; the form offers only those values (README, Media inputs: pinned variant)."""
+    params, out = {p["name"]: p for p in schema["params"]}, []
+    for k, allowed in node.get("only", {}).items():
+        p = params.get(k)
+        if not p or p["type"] != "enum" or set(allowed) - set(p["enum"]):
+            out.append((k, "only must name an enum param and values of it"))
+        elif node.get("params", {}).get(k, p["default"]) not in allowed:
+            out.append((k, f"must be one of {', '.join(allowed)}"))
+    return out
 
 
 def values_by_errors(schema: dict, values: dict) -> list[tuple[str, str]]:
@@ -377,6 +395,8 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
         for k, _ in values_by_errors(s, n.get("params", {})):
             if k not in n.get("params", {}) or not value_error(params[k], n["params"][k]):
                 add("param_invalid", nid, param=k)
+        for k, _ in only_errors(s, n):
+            add("param_invalid", nid, param=k)
         for port, ref in wires.items():
             want = port_type(s, port)
             if not want:
@@ -451,7 +471,8 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
                 spec = {"type": "bool"} if param == "bypass" else next(p for p in s["params"] if p["name"] == param)
                 merged = nodes[nid].get("params", {}) | {k.split(".")[1]: x for k, x in values.items()
                                                          if k.split(".")[0] == nid and k.split(".")[1] != "bypass"}
-                if value_error(spec, v) or param in dict(values_by_errors(s, merged)):
+                if (value_error(spec, v) or param in dict(values_by_errors(s, merged))
+                        or param in dict(only_errors(s, nodes[nid] | {"params": merged}))):
                     add("preset_invalid", nid, param=param)
     return out
 
@@ -943,11 +964,13 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
                 fits = p["type"] in INPUT_FITS[src[1]] or (src[1] == "Image" and image_field(p) is not None)
             elif src:
                 timed = any(isinstance(v, dict) and v.get("position") == "seconds" for v in p.get("item", {}).values())
-                fits = (p["type"] == "image" and src[1] == 1) or (image_field(p) is not None and src[1] <= (1 if timed else p["max"]))
+                fits = (p["type"] in ("image", "media") and src[1] == 1) or (
+                    image_field(p) is not None and src[1] <= (1 if timed else p["max"]))
             if src and not fits:
                 add("bind_type", nid, k)
         for k, p in params.items():
-            if (p["type"] == "image" or (image_field(p) and p.get("min", 0) >= 1)) and k not in binds:
+            if (p["type"] in ("image", "media", "span") or (image_field(p) and p.get("min", 0) >= 1)) and k not in binds \
+                    and k not in n.get("inputs", {}):
                 add("unbound_input", nid, k)
         if n.get("seeds", 1) > 1 and not any(p["type"] == "seed" for p in params.values()):
             add("step_seeds", nid)
@@ -1594,7 +1617,155 @@ def position_errors(nodes: dict, palette: dict) -> list[str]:
     return out
 
 
+# ---------------------------------------------------------------- media inputs (README, "Media inputs")
+LTX_MAX_FRAMES = 321  # ltx/duration's max: the longest clip retake, extend and audio to video make
+
+
+def ltx_floor(n: int) -> int:
+    """A source's frames floored to LTX's 8k + 1 (k ≥ 1), as the old studio reads it."""
+    return 8 * max(1, (n - 1) // 8) + 1
+
+
+def retake_map(start: float, end: float, fps: float, frames: int) -> dict:
+    """ltx/retake on whole frames (studio snaps the span to the take's frames): f = rnd(t·fps), S = ⌊(f_start + 4)/8⌋,
+    E = max(⌊(f_end + 4)/8⌋, S + 1) clamped to the F latent frames (end exclusive), in integer arithmetic: f/8 rounded
+    half up, as the old UI's Math.round (tasks.js). Pixels max(8S − 7, 0) … 8(E − 1) are regenerated. An end at or past
+    the clip's end (f_end ≥ n) is the last latent frame (ours: the old UI's round(duration·fps/8) left the last 8
+    frames out). The output is the whole source (floored to 8k + 1), offset 0."""
+    n, fs, fe = ltx_floor(frames), rnd(start * fps), rnd(end * fps)
+    s, last = (fs + 4) // 8, (n - 1) // 8 + 1
+    e = last if fe >= n else min(max((fe + 4) // 8, s + 1), last)
+    if s >= e:
+        return {"error": "retake.span: nothing to regenerate on the 8-frame grid"}
+    return {"latent": [s, e], "frames": n,
+            "map": {"offset_s": 0, "new_in_s": max(8 * s - 7, 0) / fps, "new_out_s": (8 * (e - 1) + 1) / fps}}
+
+
+def extend_map(seconds: float, direction: str, fps: float, frames: int) -> dict:
+    """ltx/extend: N = max(1, ceil(seconds·fps/8)) latent frames (8N pixel frames) after or before the source floored
+    to 8k + 1; the output is the whole extended clip, at most 321 frames."""
+    n = ltx_floor(frames)
+    k = max(1, math.ceil(seconds * fps / 8 - 1e-9))
+    total, add = n + 8 * k, 8 * k / fps
+    if total > LTX_MAX_FRAMES:
+        return {"error": f"extend.seconds: the clip would be {total} frames; at most {LTX_MAX_FRAMES}"}
+    m = {"offset_s": 0, "new_in_s": n / fps, "new_out_s": total / fps} if direction == "after" else \
+        {"offset_s": add, "new_in_s": 0, "new_out_s": add}
+    return {"latent": k, "frames": total, "map": m}
+
+
+def audio_map(in_s: float, out_s: float, fps: float) -> dict:
+    """ltx/encode-audio: the clip's frames = the part in..out at fps, floored to 8k + 1 (at most 321); the output's 0
+    is the source's `in`."""
+    f = min(LTX_MAX_FRAMES, (math.floor((out_s - in_s) * fps + 1e-6) - 1) // 8 * 8 + 1)
+    if f < 9:
+        return {"error": "audio.source: the part from in to out is shorter than 9 frames"}
+    return {"frames": f, "map": {"offset_s": -in_s, "new_in_s": 0, "new_out_s": f / fps}}
+
+
+def media_fit(p: dict, take: dict) -> str | None:
+    """Why a take does not fit a `media` param (the 422 text after `<node>.<param>: `), else None. A trim part longer
+    than max_s is the value's own 422 (README, Media inputs); an offer caps it instead."""
+    tid, kinds = take["id"], p["accepts"]
+    picture = take["kind"] == "video" and "video" in kinds
+    if not picture and not ("audio" in kinds and take["kind"] in ("audio", "video") and take.get("has_audio", True)):
+        return f"take {tid} has no sound" if kinds == ["audio"] else f"take {tid} is not a video"
+    if picture and p.get("grid") and (take["width"] % p["grid"] or take["height"] % p["grid"]):
+        return f"take {tid} is {take['width']} × {take['height']}; this input needs sides on a {p['grid']} px grid"
+    if picture and p.get("max_frames") and take["frames"] > p["max_frames"]:
+        return f"take {tid} has {take['frames']} frames; this input takes at most {p['max_frames']}"
+    if p.get("max_s") and take["duration_s"] > p["max_s"] and not p.get("trim"):
+        return f"take {tid} lasts {take['duration_s']:.1f} s; this input takes at most {p['max_s']:.1f} s"
+    return None
+
+
+def extend_room(take: dict, rng: tuple | None) -> dict | None:
+    """ltx/extend's pre-fill for a video take (None: not offered): the default 2 s, or the most whole 8-frame steps
+    under 321 frames as seconds (a 0.1 s step, rounded down); a Timeline range gives the direction: after when it ends
+    at the take's end (within one frame), else before when it starts at 0, else none."""
+    fps, n = take["fps"], ltx_floor(take["frames"])
+    k = (LTX_MAX_FRAMES - n) // 8
+    if k < 1:
+        return None
+    out = {} if n + 8 * math.ceil(2 * fps / 8) <= LTX_MAX_FRAMES else {"seconds": math.floor(8 * k / fps * 10) / 10}
+    if rng:
+        if take["duration_s"] - rng[1] < 1 / fps:
+            out["direction"] = "after"
+        elif rng[0] < 0.5 / fps:
+            out["direction"] = "before"
+        else:
+            return None
+    return out
+
+
+def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | None = None) -> list[dict]:
+    """"Use in…" offers (README, Media inputs: offers): every workflow with exactly one unwired input of the take's
+    sort on a known, not bypassed node (an image: an image param or Image rows; a video or audio take: a media param
+    whose `accepts` names its kind, or `audio` for a video with sound) that the take fits, with the inputs pre-filled.
+    rng: (in, out) in the take's own seconds (a Timeline clip or selection), else the whole take."""
+    out = []
+    for wf in workflows:
+        found = []
+        for nid in sorted(wf["nodes"]):
+            n, s = wf["nodes"][nid], palette.get(wf["nodes"][nid]["kind"])
+            for p in (s["params"] if s and not n.get("bypass") else []):
+                if p["name"] in n.get("in", {}):
+                    continue
+                if take["kind"] == "image" and (p["type"] == "image" or image_field(p)):
+                    found.append((nid, p))
+                elif take["kind"] != "image" and p["type"] == "media" and (
+                        take["kind"] in p["accepts"] or (take["kind"] == "video" and "audio" in p["accepts"])):
+                    found.append((nid, p))
+        if len(found) != 1 or (take["kind"] != "image" and media_fit(found[0][1], take)):
+            continue
+        (nid, p), path = found[0], f"{found[0][0]}.{found[0][1]['name']}"
+        a, b = rng or (0, take.get("duration_s"))
+        if p["type"] == "image":
+            inputs = {path: {"take_id": take["id"]}}
+        elif p["type"] == "rows":
+            inputs = {path: [{image_field(p): {"take_id": take["id"]}}]}
+        else:
+            cap = min(b, a + p["max_s"]) if p.get("max_s") else b
+            inputs = {path: {"take_id": take["id"]} | ({"in": a, "out": cap} if p.get("trim") else {})}
+            if take["kind"] == "video" and "video" in p["accepts"]:
+                inputs |= {f"{x}.{q['name']}": {"start": a, "end": b} for x in sorted(wf["nodes"])
+                           for q in palette.get(wf["nodes"][x]["kind"], {}).get("params", []) if q["type"] == "span"}
+                ext = [x for x in sorted(wf["nodes"]) if wf["nodes"][x]["kind"].endswith("/extend")]  # ltx/extend, echo/extend
+                if ext and (room := extend_room(take, rng)) is None:
+                    continue
+                inputs |= {f"{x}.{k}": v for x in ext for k, v in room.items()} if ext else {}
+        out.append({"workflow_id": wf["id"], "title": wf["title"]} | ({"action": wf["action"]} if "action" in wf else {})
+                   | {"family": wf["family"], "media": wf.get("media", "image"), "param": path, "inputs": inputs})
+    return out
+
+
+def check_media(registry: Registry) -> None:
+    g, reg = HERE / "fixtures" / "video", HERE / "fixtures" / "registry"
+    fx = json.loads((g / "sources.json").read_text())
+    for c in fx["cases"]:
+        fn = {"retake": retake_map, "extend": extend_map, "audio": audio_map}[c["kind"]]
+        if (got := fn(*c["args"])) != c["expect"]:
+            fail(f"fixtures/video/sources.json {c['description']!r}: got {json.dumps(got)}")
+    print("ok   fixtures/video/sources.json")
+    pal = {n["kind"]: n for pre in ("ltx.", "qwen-image.") for n in json.loads((reg / f"{pre}nodes.valid.json").read_text())["nodes"]}
+    wfs = [w for pre in ("ltx.", "qwen-image.") for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]]
+    uses_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/TakeUses"}, registry=registry,
+                                  format_checker=FormatChecker())
+    fx = json.loads((g / "uses.json").read_text())
+    for c in fx["cases"]:
+        take = fx["takes"][c["take"]] | {"id": c["take"]}
+        got = {"uses": take_uses(take, wfs, pal, tuple(c["range"]) if "range" in c else None)}
+        if c.get("param"):
+            got = {"error": media_fit(c["param"], take)}
+        elif errs := list(uses_v.iter_errors(got)):
+            fail(f"fixtures/video/uses.json {c['description']!r}: not TakeUses: {errs[0].message}")
+        if got != c["expect"]:
+            fail(f"fixtures/video/uses.json {c['description']!r}: got {json.dumps(got)}")
+    print("ok   fixtures/video/uses.json")
+
+
 def check_video(registry: Registry, palette: dict) -> None:
+    check_media(registry)
     g = HERE / "fixtures" / "video"
     fx = json.loads((g / "auto-frames.json").read_text())
     for c in fx["cases"]:
@@ -1695,6 +1866,9 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
             if cid in ids:
                 add("duplicate_clip", name, cid)
             ids.add(cid)
+            if kind == "audio":  # an audio take is not a clip in this version (README, Timeline rules)
+                add("wrong_track", name, cid)
+                continue
             if any(x not in takes and x not in known for x in [tid] * bool(tid) + c.get("alternatives", [])):
                 add("take_not_found", name, cid)
             if "shot" in c and shots.get(cid) != shot_ref(c["shot"]):
@@ -1920,12 +2094,23 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
                     c.pop(k, None)
                 else:
                     c[k] = op[k]
-    elif o == "fill":  # studio: a shot's take fills its slot (README, Timeline: New shot)
-        tk, ln = takes[op["take_id"]], t_len(c, kind, g)
+    elif o == "fill":  # studio: a shot's take fills its slot (README, Timeline: New shot; take actions)
+        tk, ln, cur = takes[op["take_id"]], t_len(c, kind, g), takes.get(c.get("take_id")) or {}
+        sm, i0, o0 = tk.get("source_map"), c.get("in"), c.get("out")
         for k in ("in", "out", "hold", "shot"):
             c.pop(k, None)
         if tk["kind"] == "image":
             c["hold"] = g.s(ln)
+        elif sm:  # the generated part; replacing its source (or a take made from it): the clip's window, grown on a
+            # side only where the generated part lies outside the source (extend), never by the 8-frame snap (retake)
+            a, b, off = sm["new_in_s"], sm["new_out_s"], sm["offset_s"]
+            mine = 0 if c.get("take_id") == sm["take_id"] else \
+                cur.get("source_map", {}).get("offset_s") if cur.get("source_map", {}).get("take_id") == sm["take_id"] else None
+            if mine is not None and o0 is not None:
+                end = off + takes[sm["take_id"]]["duration_s"]
+                a = a if g.f(a) < g.f(off) else i0 - mine + off
+                b = b if g.f(b) > g.f(end) else o0 - mine + off
+            c["in"], c["out"] = g.s(max(g.f(a), 0)), g.s(min(g.f(b), g.f(tk["duration_s"])))
         else:
             c["in"], c["out"] = 0, g.s(min(g.f(tk["duration_s"]), ln))
         c["take_id"] = op["take_id"]
@@ -2125,11 +2310,13 @@ def shot_keyframes(nodes: dict, palette: dict) -> dict | None:
     return found[0] if len(found) == 1 else None
 
 
-def rerender_steps(doc: dict, takes: dict, clips: list[str] | None, keyframes: dict) -> dict:
+def rerender_steps(doc: dict, takes: dict, clips: list[str] | None, keyframes: dict, media: dict | None = None) -> dict:
     """Re-render's pipeline order and binds (README, Timeline: re-render): a step `clip_<id>` per selected V1 clip;
     a keyframe row whose image is a frame take of a take in another selected clip's alternatives binds that clip's
     step (`<param>[<row>]` ← `clip_<other>.first_frame|last_frame`) and runs after it; ties in timeline order.
-    keyframes: workflow id → its `shot_keyframes` (absent: none)."""
+    keyframes: workflow id → its `shot_keyframes` (absent: none). From 1.19 a media input (media: workflow id → its
+    `media` param paths) holding a take of another selected clip binds `<param>` ← `clip_<other>.takes` (in / out
+    kept) and runs after it: a retake or extend re-renders on its source clip's new take."""
     v1 = [c for c in doc["tracks"][0]["clips"] if (c["id"] in clips if clips is not None else c.get("take_id"))]
     if len(v1) > T_MAX_RERENDER:
         return {"error": "too_many", "clip": None}
@@ -2148,6 +2335,11 @@ def rerender_steps(doc: dict, takes: dict, clips: list[str] | None, keyframes: d
             src = owner.get(fo["take_id"]) if fo else None
             if src and src != c["id"]:
                 binds[c["id"]][f"{kf['param']}[{r}]"] = f"clip_{src}.{fo['at']}_frame"
+                deps[c["id"]].add(src)
+        for path in (media or {}).get(mw["workflow_id"], []):
+            src = owner.get((mw["inputs"].get(path) or {}).get("take_id"))
+            if src and src != c["id"]:
+                binds[c["id"]][path] = f"clip_{src}.takes"
                 deps[c["id"]].add(src)
     order, left = [], [c["id"] for c in v1]
     while left:
@@ -2205,7 +2397,7 @@ def check_timelines(registry: Registry, palette: dict) -> None:
             elif p.name.startswith("shot-keyframes."):
                 got = {"keyframes": shot_keyframes(c["workflow"]["nodes"], palette)}
             elif p.name.startswith("rerender."):
-                got = rerender_steps(c["document"], takes, c.get("clips"), fx["keyframes"])
+                got = rerender_steps(c["document"], takes, c.get("clips"), fx["keyframes"], fx.get("media"))
             else:
                 fail(f"{name}: unknown timeline fixture")
                 break

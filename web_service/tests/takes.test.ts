@@ -144,6 +144,10 @@ describe("checkFile", () => {
     expect(checkFile({ type: "image/gif", size: 1 })).toMatch(/only png, jpeg and webp/);
     expect(checkFile({ type: "image/jpeg", size: 52_428_801 })).toMatch(/larger than 50 MB/);
     expect(checkFile({ type: "image/jpeg", size: 0 })).toMatch(/empty/);
+    expect(checkFile({ type: "audio/wav", size: 1 }, true)).toBeNull();
+    expect(checkFile({ type: "video/mp4", size: 1 }, true)).toBe(
+      "only png, jpeg and webp images or wav and mp3 audio can be uploaded",
+    );
   });
 });
 
@@ -159,6 +163,7 @@ describe("uploadFile", () => {
     })),
     put: vi.fn(async (_u, _f, _ct, p) => p(1)),
     complete: vi.fn(async () => take({ id: "u1", source: "upload", made_with: null })),
+    duration: vi.fn(async () => 20),
     ...over,
   });
   const file = (type = "image/png", body = "abc") => new File([body], "fox.png", { type });
@@ -181,6 +186,31 @@ describe("uploadFile", () => {
     );
     expect(progress).toHaveBeenCalledWith(1);
     expect(x.complete).toHaveBeenCalledWith("u1");
+  });
+
+  it("sends an audio file's type and length (audio pickers only)", async () => {
+    const x = io();
+    await uploadFile(new File(["abc"], "song.mp3", { type: "audio/mp3" }), () => {}, x, true);
+    expect(x.create).toHaveBeenCalledWith({
+      filename: "song.mp3",
+      content_type: "audio/mpeg",
+      bytes: 3,
+      duration_s: 20,
+    });
+    await expect(
+      uploadFile(new File(["abc"], "a.wav", { type: "audio/wav" }), () => {}, x),
+    ).rejects.toThrow(/only png, jpeg and webp images can/);
+  });
+
+  it("refuses audio over 600 s or that the browser cannot read", async () => {
+    const wav = new File(["abc"], "a.wav", { type: "audio/x-wav" });
+    const long = io({ duration: vi.fn(async () => 601) });
+    await expect(uploadFile(wav, () => {}, long, true)).rejects.toThrow(
+      "audio is longer than 600 s",
+    );
+    const bad = io({ duration: vi.fn(async () => Promise.reject(new Error("x"))) });
+    await expect(uploadFile(wav, () => {}, bad, true)).rejects.toThrow("not a valid wav file");
+    expect(long.create).not.toHaveBeenCalled();
   });
 
   it("refuses a wrong type before calling the API", async () => {

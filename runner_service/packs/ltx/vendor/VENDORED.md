@@ -20,4 +20,9 @@ DurationHead for auto length). `loader/fuse_loras.py` is the reference the core'
 (core/loaders_mlx.py); the image preprocessing (`ltx_pipelines_mlx.utils.media_io`) and the image conditioning
 order (`_orchestration.combined_image_conditionings`, `helpers.create_noised_state`) are re-written in `../mlx.py`.
 
+M7 pack 1 added, also unchanged: `utils/audio.py` (`load_audio`: ffmpeg → float32 PCM, as the old studio reads a
+retake source's sound and audio-to-video's input). The retake / extend / audio-to-video pipelines
+(`ltx_pipelines_mlx.retake`, `a2vid_two_stage`, `utils.samplers.guided_denoise_loop`, `scheduler.ltx2_schedule`,
+`utils.constants.DEFAULT_NEGATIVE_PROMPT`, `ltx_core_mlx.utils.image.load_video_frames`) are re-written in `../mlx.py`.
+
 To refresh: copy the same files from a newer commit, re-run `tests/golden/compare_ltx.py` and update this note.

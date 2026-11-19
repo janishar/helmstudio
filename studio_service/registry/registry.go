@@ -22,7 +22,7 @@ const Stale = 30 * time.Second
 // Param is one param of a node schema.
 type Param struct {
 	Name    string   `json:"name"`
-	Type    string   `json:"type"` // int | float | bool | string | text | enum | seed | image | rows | frames
+	Type    string   `json:"type"` // int | float | bool | string | text | enum | seed | image | rows | frames | media | span
 	Label   string   `json:"label,omitempty"`
 	Default any      `json:"default"`
 	Min     *float64 `json:"min,omitempty"`
@@ -41,6 +41,13 @@ type Param struct {
 	Values   []int64   `json:"values,omitempty"`
 	ValuesBy *ValuesBy `json:"values_by,omitempty"`
 	Position string    `json:"position,omitempty"` // a float item field: "seconds" = a time on the clip (a keyframe's)
+	// media only (API 1.19, contracts/README.md "Media inputs"): the take kinds it takes (video, audio), whether the
+	// value may carry in/out, the px grid a video's sides keep, the longest it reads and the most video frames
+	Accepts   []string `json:"accepts,omitempty"`
+	Trim      bool     `json:"trim,omitempty"`
+	Grid      int      `json:"grid,omitempty"`
+	MaxS      float64  `json:"max_s,omitempty"`
+	MaxFrames int      `json:"max_frames,omitempty"`
 }
 
 // Auto is a frames param's auto length bounds in seconds.
@@ -117,11 +124,12 @@ type NodeSchema struct {
 
 // Node is one node of a workflow graph. Bypass and Position belong to an edited workflow: a command never carries them.
 type Node struct {
-	Kind     string            `json:"kind"`
-	Params   map[string]any    `json:"params"` // never nil: a command must carry every node's params
-	In       map[string]string `json:"in,omitempty"`
-	Bypass   bool              `json:"bypass,omitempty"`
-	Position *Position         `json:"position,omitempty"`
+	Kind     string              `json:"kind"`
+	Params   map[string]any      `json:"params"` // never nil: a command must carry every node's params
+	In       map[string]string   `json:"in,omitempty"`
+	Bypass   bool                `json:"bypass,omitempty"`
+	Position *Position           `json:"position,omitempty"`
+	Only     map[string][]string `json:"only,omitempty"` // API 1.19: enum param → the values this workflow allows
 }
 
 // Position is a node card's top-left in the Graph view.
@@ -167,10 +175,12 @@ type Workflow struct {
 	Title       string                `json:"title"`
 	Family      string                `json:"family"`
 	Env         string                `json:"env"`
-	Media       string                `json:"media,omitempty"` // image | video as published; "" = image
+	Media       string                `json:"media,omitempty"`  // image | video as published; "" = image
+	Action      string                `json:"action,omitempty"` // API 1.19: the take action's label ("Use in…"); "" = the title
 	Nodes       map[string]Node       `json:"nodes"`
 	Studio      json.RawMessage       `json:"studio,omitempty"` // a StudioLayout as published; absent = the derived form
 	NodeSchemas map[string]NodeSchema `json:"node_schemas"`
+	Order       int                   `json:"-"` // its place in its runner's workflows value (the pack's file order)
 }
 
 // Host is one hosts KV value.
@@ -938,12 +948,13 @@ func (r *Registry) Workflows() []Workflow {
 		for _, schema := range r.nodes[source] {
 			schemas[schema.Kind] = schema
 		}
-		for _, workflow := range r.workflows[source] {
+		for i, workflow := range r.workflows[source] {
 			if seen[workflow.ID] {
 				continue
 			}
 			if complete := withSchemas(workflow, schemas); complete != nil {
 				seen[workflow.ID] = true
+				complete.Order = i
 				out = append(out, *complete)
 			}
 		}

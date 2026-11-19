@@ -281,11 +281,28 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				}
 			}
 		}
-	case "fill": // studio: a shot's take fills its slot (README, Timeline: New shot)
-		tk, ln := takes[op.TakeID], Len(*c, kind, g, false)
+	case "fill": // studio: a shot's take fills its slot (README, Timeline: New shot; take actions)
+		tk, ln, in0, out0 := takes[op.TakeID], Len(*c, kind, g, false), c.In, c.Out
 		c.In, c.Out, c.Hold, c.Shot = nil, nil, nil, nil
-		if tk.Kind == "image" {
+		if sm := tk.SourceMap; tk.Kind == "image" {
 			c.Hold = f64(g.S(ln))
+		} else if sm != nil {
+			// the generated part; replacing its source (or a take made from it): the clip's window, grown on a side
+			// only where the generated part lies outside the source (extend), never by the 8-frame snap (retake)
+			a, b, mine, own := sm.NewInS, sm.NewOutS, 0.0, c.Take() == sm.TakeID
+			if cur := takes[c.Take()].SourceMap; !own && cur != nil && cur.TakeID == sm.TakeID {
+				mine, own = cur.OffsetS, true
+			}
+			if own && out0 != nil {
+				end := sm.OffsetS + takes[sm.TakeID].DurationS
+				if g.F(a) >= g.F(sm.OffsetS) {
+					a = val(in0) - mine + sm.OffsetS
+				}
+				if g.F(b) <= g.F(end) {
+					b = *out0 - mine + sm.OffsetS
+				}
+			}
+			c.In, c.Out = f64(g.S(max(g.F(a), 0))), f64(g.S(min(g.F(b), g.F(tk.DurationS))))
 		} else {
 			c.In, c.Out = f64(0), f64(g.S(min(g.F(tk.DurationS), ln)))
 		}

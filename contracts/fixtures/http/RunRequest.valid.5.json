@@ -1,0 +1,14 @@
+{
+  "workflow_id": "ltx-retake",
+  "inputs": {
+    "prompt.text": "The puppy sits down and wags its tail",
+    "seed.seed": 42,
+    "source.source": {
+      "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b"
+    },
+    "retake.span": {
+      "start": 0.375,
+      "end": 1.375
+    }
+  }
+}

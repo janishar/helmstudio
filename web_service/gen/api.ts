@@ -482,7 +482,10 @@ export interface paths {
          *     numbered from 1 as in `<image{n}>`), not an image (`… take <id> is not an image`), without a size (`… take <id>
          *     has no size`), or its object is missing; a
          *     rows value outside `min`/`max` (`encode.refs: at most 10 items`), an item field not in `item`, or an image param
-         *     left null (`image.image: an image is required`) is 422 too. When no host is eligible (none live with the env and the workflow),
+         *     left null (`image.image: an image is required`) is 422 too. From 1.19 media and span values have their own texts
+         *     (`source.source: take <id> is not a video`, `audio.source: take <id> has no sound`, `retake.span: a range is
+         *     required`, … contracts/README.md, Media inputs) and a value outside a node's `only` is `model.variant: must be one
+         *     of dev`. When no host is eligible (none live with the env and the workflow),
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
          *     From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
          *     planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility.
@@ -691,7 +694,8 @@ export interface paths {
          * Delete a take (soft)
          * @description The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it, takes made from
          *     it leave it out of `parents`); a sweep removes the object later. Deleting again is 404. A run that already
-         *     references it and has not read it yet may fail (`input image <take_id> is gone`). Never refused for an
+         *     references it and has not read it yet may fail (`input image <take_id> is gone`; a video or audio take: `input
+         *     take <take_id> is gone`). Never refused for an
          *     element that uses it: the image drops out of that element (contracts/README.md, Elements).
          */
         delete: operations["studioDeleteTake"];
@@ -747,18 +751,49 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * "Use in…": inputs that put this take into a workflow's image input, to pre-fill Create
-         * @description Answers `inputs` with exactly one key: `param` (or, when absent, the workflow's only `image` param or `rows`
-         *     param whose `item` has an `Image` field) set to this take: `{take_id}` for an `image` param, a one-item list
-         *     `[{<field>: {take_id}}]` (the take as reference 1) for a rows param. The client merges it over the form; nothing
-         *     is created. 404 for a take that is unknown, another user's, deleted or a pending upload. 422 when the take is
-         *     not an image (`take <id> is not an image`: a video take too, in 1.11 no workflow takes a video input; the
-         *     client offers "Use in…" per media type, so a video take offers none yet) or has no size (`take <id> has no size`), the workflow is unknown (`unknown workflow <id>`), it has no such
-         *     param (`workflow <id> takes no image input`), several and no `param` (`workflow <id> has several image inputs;
-         *     name one in param`), or `param` is not one of them. The client lists the workflows to offer from
-         *     `GET /v1/studio/workflows` (those with such a param).
+         * "Use in…": inputs that put this take into a workflow's image or media input, to pre-fill Create
+         * @description An image take: `inputs` with exactly one key: `param` (or, when absent, the workflow's only `image` param or
+         *     `rows` param whose `item` has an `Image` field) set to this take: `{take_id}` for an `image` param, a one-item
+         *     list `[{<field>: {take_id}}]` (the take as reference 1) for a rows param. From 1.19 a video or audio take: the
+         *     workflow's only `media` param that accepts it (or `param`) set to `{take_id}` (with `trim`: `in` 0, `out` its
+         *     duration), and every `span` param set to the whole take `{start: 0, end: duration}` (contracts/README.md, Media
+         *     inputs: offers; a trim part is capped at `max_s`: `out` = min(duration, `max_s`); an Extend whose clip would
+         *     pass 321 frames gets the largest `seconds` that fits). The client merges it over the form; nothing is created. 404 for a take that is unknown,
+         *     another user's, deleted or a pending upload. 422 when the take does not fit the input (the run texts of Image
+         *     inputs and Media inputs: `take <id> is not an image`, `take <id> has no size`, `take <id> is not a video`,
+         *     `take <id> has no sound`, `take <id> is 450 × 256; this input needs sides on a 32 px grid`, `take <id> has 390
+         *     frames; this input takes at most 321`; an Extend with no 8-frame step left under 321 frames: `take <id> has
+         *     <n> frames; extending it would pass 321`), the workflow is unknown (`unknown workflow <id>`), it has no such
+         *     param (`workflow <id> takes no image input`; a video or audio take: `workflow <id> takes no <kind> input`),
+         *     several and no `param` (`workflow <id> has several image inputs; name one in param`), or `param` is not one of
+         *     them. The client lists the workflows to offer with `GET /v1/studio/takes/{take_id}/uses`.
          */
         post: operations["studioUseTake"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/takes/{take_id}/uses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * "Use in…" (from 1.19): the workflows this take can go into, each with its inputs pre-filled
+         * @description contracts/README.md, Media inputs: offers. The templates a live host could run now (published, model variant
+         *     present, `ltx/distill`'s LoRA on the host) and the caller's own non-text workflows, in `GET /v1/studio/workflows`
+         *     order, that have exactly one input this take fits (an image take: an `image` param or an Image rows param; a
+         *     video or audio take: a `media` param whose `accepts`, `grid`, `max_s` and `max_frames` it passes), each with `inputs` as
+         *     `POST …/use` answers them. Empty when none fits. 404 for a take that is unknown, another user's, deleted or a
+         *     pending upload.
+         */
+        get: operations["studioListTakeUses"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -844,10 +879,11 @@ export interface paths {
         /**
          * Start an upload; answers a signed files_service URL to PUT the bytes to
          * @description Stores a pending take (source `upload`, invisible until completed) and signs a single-use `PUT` link for the
-         *     key `u/<caller>/uploads/<take_id>.<png|jpg|webp>`, valid 15 minutes (`PUT /files/{path}`). Images only in this
-         *     version: `image/png`, `image/jpeg`, `image/webp`, at most 50 MB (52428800 bytes). 422 for any other type or
-         *     size ("only png, jpeg and webp images can be uploaded", "file is larger than 50 MB"). A pending upload not
-         *     completed within an hour is discarded.
+         *     key `u/<caller>/uploads/<take_id>.<png|jpg|webp|wav|mp3>`, valid 15 minutes (`PUT /files/{path}`): `image/png`,
+         *     `image/jpeg`, `image/webp` and, from 1.19, `audio/wav` and `audio/mpeg` (an audio take; `duration_s` required,
+         *     at most 600 s), at most 50 MB (52428800 bytes). 422 for any other type or size ("only png, jpeg and webp
+         *     images or wav and mp3 audio can be uploaded", "file is larger than 50 MB", "audio is longer than 600 s"). A
+         *     pending upload not completed within an hour is discarded.
          */
         post: operations["studioCreateUpload"];
         delete?: never;
@@ -873,7 +909,9 @@ export interface paths {
          *     the runner show it). The original serves as its own thumbnail in this version (`thumb_url` signs the same
          *     key). 409 "upload not received" when the object is not there yet (PUT it, then call again). 422 when a check
          *     fails ("size differs from the declared bytes", "not a valid png image", "image is larger than 16384 px",
-         *     "image is larger than 50 MP"): the
+         *     "image is larger than 50 MP"; from 1.19 audio: the header must be RIFF/WAVE, or an ID3v2 tag or MPEG audio frame
+         *     sync, else "not a valid wav file" / "not a valid mp3 file"; the take is `kind: audio`, `width` / `height` null,
+         *     `audio.duration_s` as declared): the
          *     upload is discarded and its take_id is 404 from then on. Calling it again after success answers the same take.
          */
         post: operations["studioCompleteUpload"];
@@ -1805,10 +1843,39 @@ export interface paths {
          * @description Applies the `add` edit to the current revision (so a gallery action never holds a revision) and stores revision
          *     + 1. V1 (default): a video take whole (`in` 0, `out` its length), an image take held 3 s. An audio track
          *     (`track: A2`…): a video take's sound, whole, at the track's end. 422 `take_ids[2]: take <id> not found`,
-         *     `take_ids[1]: take <id> has no sound` (on an audio track), `take_ids[1]: an image cannot go on an audio track`,
+         *     `take_ids[1]: take <id> has no sound` (on an audio track), `take_ids[1]: an image cannot go on an audio track`, (1.19) `take_ids[1]: an audio take cannot go on the timeline yet`,
          *     `unknown track A4`, or a rule (`TimelineError`, e.g. `too_many_clips`).
          */
         post: operations["studioAddTimelineClips"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/clips/{clip_id}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A V1 clip's take actions (from 1.19, plan 15.3): Extend, Retake…, with inputs pre-filled from the clip
+         * @description contracts/README.md, Timeline: take actions. The clip's take's offers (`…/takes/{take_id}/uses`) restricted to
+         *     templates of the family of the workflow that made the take (an upload, import or export: every family), with
+         *     `start` / `end` (the selection in sequence seconds; absent = the clip's extent; clamped to the clip) mapped to
+         *     the take's own time (t − `at` + `in`), snapped to the take's frames, for every `span` param and a `trim` media
+         *     param's in / out. `ltx-extend` only at an end of the take: `extend.direction` `after` when the range ends at
+         *     the take's end (within one frame), else `before` when it starts at 0, else not offered. Run one with
+         *     `POST …/shots` (`slot {clip}` = replace; insert: `slot {after: <clip>}`, an extend before `slot {at: <clip's
+         *     at>}`). Empty for an empty slot, an offline
+         *     clip or a take nothing fits. 404 unknown sequence; 422 `unknown clip <id>`, `clip <id> is not on V1`, `start
+         *     must be before end`.
+         */
+        get: operations["studioListClipActions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1868,9 +1935,11 @@ export interface paths {
          * New shot: a run whose take fills a slot
          * @description contracts/README.md, Timeline: New shot. `run` is checked and created exactly as `POST
          *     /v1/studio/sessions/{session_id}/runs` (same 422 texts, same 409 at 100 runs) in the sequence's session; the
-         *     slot gets `shot {run_id}` (an inserted slot first: the `insert` edit) as revision + 1, applied to the current
-         *     revision. The run's first take fills the slot (the `fill` edit, by studio). 409 `clip <id> already has a shot
-         *     running`; 422 `unknown clip <id>`, `clip <id> is not on V1`, `length is required to insert a slot`.
+         *     slot gets `shot {run_id}` (an inserted slot first: the `insert` edit; from 1.19 `slot {after}`: the `insert`
+         *     edit at that clip's end cut) as revision + 1, applied to the current revision. The run's first take fills the
+         *     slot (the `fill` edit, by studio; a take with `source_map` is placed by it: contracts/README.md, Timeline: take
+         *     actions). 409 `clip <id> already has a shot running` (`slot {clip}`); 422 `unknown clip <id>`, `clip <id> is
+         *     not on V1`, `length is required to insert a slot`.
          */
         post: operations["studioCreateTimelineShot"];
         delete?: never;
@@ -2327,12 +2396,28 @@ export interface components {
         LoraRef: {
             lora_id: string;
         };
+        /**
+         * @description A Media value (API 1.19; a `media` param): a video or audio take of the caller, by id. `in` / `out` (seconds of
+         *     the take's own time; studio snaps them: a video's frames, audio to the millisecond) only on a param with `trim`:
+         *     the part it reads (absent: 0 / the take's end). Never an object key or URL (contracts/README.md, Media inputs).
+         */
+        MediaRef: {
+            /** Format: uuid */
+            take_id: string;
+            in?: number;
+            out?: number;
+        };
+        /** @description A `span` param's value (API 1.19): a time range on the workflow's one video media source, in that take's own seconds (Retake: the stretch to regenerate) */
+        SpanValue: {
+            start: number;
+            end: number;
+        };
         /** @description one item of a rows value: field (the param's `item`) → value */
         RowItem: {
             [key: string]: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["LoraRef"];
         };
-        /** @description a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items */
-        ParamValue: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["RowItem"][];
+        /** @description a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null */
+        ParamValue: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["MediaRef"] | components["schemas"]["SpanValue"] | components["schemas"]["RowItem"][];
         /**
          * @description One form field. `int`/`float`/`seed`: `min`/`max` bound the value, `step` is the increment; `string`/`text`
          *     (multi-line): `min`/`max` bound the length; `enum`: one of `enum`; `bool`: a switch. `seed`: an int where null
@@ -2350,12 +2435,27 @@ export interface components {
          *     predicts the length; the value `"auto"`, the Duration slider's Auto length switch; contracts/README.md, Video);
          *     an `int` may declare `values` (the only allowed values: a choice, one value a read-only readout) and
          *     `values_by` (the allowed values per value of an enum param of the same node: LTX `steps` per `role`); a
-         *     float item field may declare `position: seconds` (a keyframe's time on the clip).
+         *     float item field may declare `position: seconds` (a keyframe's time on the clip). From 1.19 (contracts/README.md,
+         *     Media inputs): `media`: one video or audio take (`MediaRef`, default null; a run needs one) of the kinds in
+         *     `accepts`; with `trim` the value may carry `in` / `out` (the UI draws the take's poster or waveform with a trim
+         *     control and its duration); `grid` (a video's sides must be multiples of it), `max_s` (the longest it reads) and
+         *     `max_frames` (the most frames of a video it reads) bound it. `span`: a time range `{start, end}` (`SpanValue`, default null; a run needs one) on the workflow's one
+         *     `media` param that accepts video; the UI draws it as a range control over that take's poster and duration.
          */
         ParamSchema: {
             name: string;
             /** @enum {string} */
-            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows" | "frames";
+            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows" | "frames" | "media" | "span";
+            /** @description media only: the take kinds it takes; video: a video take; audio: an audio take, or a video take's sound */
+            accepts?: ("video" | "audio")[];
+            /** @description media only: true = the value may carry in / out (the part read); absent = the whole take */
+            trim?: boolean;
+            /** @description media only: a video take's width and height must be multiples of it */
+            grid?: number;
+            /** @description media only: the longest it reads in seconds (the take, or out - in with trim) */
+            max_s?: number;
+            /** @description media only: the most frames of a video take it reads (its frames at any fps; LTX 321) */
+            max_frames?: number;
             /** @description frames only: the name of the same node's int or float param holding frames per second */
             fps?: string;
             /** @description frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`) */
@@ -2417,6 +2517,11 @@ export interface components {
             /** @description switched off: passes its inputs through (README, Graph rules); absent = false */
             bypass?: boolean;
             position?: components["schemas"]["NodePosition"];
+            only?: components["schemas"]["ParamOnly"];
+        };
+        /** @description from 1.19: enum param → the values this workflow allows (a subset of its `enum` holding the node's value); the form offers only those, another value is 422 `<node>.<param>: must be one of <values>` (LTX dev templates pin `model.variant` to dev) */
+        ParamOnly: {
+            [key: string]: string[];
         };
         /** @description the card's top-left in the Graph view, canvas pixels; absent = laid out by the client (elkjs, "Tidy layout") */
         NodePosition: {
@@ -2441,6 +2546,8 @@ export interface components {
              */
             id: string;
             title: string;
+            /** @description from 1.19, templates only (registry `action`): the take action's label when it is offered for a take ("Use in…", a clip's actions): Animate, Edit, Extend, Retake a section; absent = the title */
+            action?: string;
             family: string;
             /** @description the runner env that executes it */
             env: string;
@@ -2561,6 +2668,7 @@ export interface components {
             };
             bypass?: boolean;
             position?: components["schemas"]["NodePosition"];
+            only?: components["schemas"]["ParamOnly"];
         };
         /** @description a whole document (based_on optional: "Save as" from an open workflow), or `{based_on, title?}` to copy one */
         WorkflowCreate: ({
@@ -3518,7 +3626,7 @@ export interface components {
             title: string;
             /** @description the file: an image, or a video's MP4 (GET /files serves Range requests) */
             url: components["schemas"]["SignedUrl"];
-            /** @description a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0) */
+            /** @description a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0); from 1.19 an audio take: the file itself (the gallery draws a sound tile by `kind`) */
             thumb_url: components["schemas"]["SignedUrl"];
             /**
              * @example image/png
@@ -3550,7 +3658,7 @@ export interface components {
             frame_of?: components["schemas"]["TakeFrameOf"];
             /** @description from 1.17, source export only: the sequence and revision it is (`made_with` null; `parents` = its clips' takes) */
             export?: components["schemas"]["TakeExport"];
-            /** @description lineage: the takes it was made from, in input order (every image value of `made_with.inputs`, each once); deleted ones left out; empty for a take made from no image */
+            /** @description lineage: the takes it was made from, in input order (every image and, from 1.19, media value of `made_with.inputs`, each once); deleted ones left out; empty for a take made from no take */
             parents: string[];
             /** @description only in `GET /v1/studio/takes/{take_id}`: the takes made from this one ("Used in"), newest first, at most 50, deleted ones left out */
             children?: components["schemas"]["TakeRef"][];
@@ -3561,9 +3669,13 @@ export interface components {
             batch_id?: string | null;
             /** @description kind video only (absent for an image): length, frame rate, audio and the poster */
             video?: components["schemas"]["VideoInfo"];
+            /** @description from 1.19, kind audio only: its length */
+            audio?: components["schemas"]["AudioInfo"];
+            /** @description from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take */
+            source_map?: components["schemas"]["SourceMap"];
             /** @description from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions) */
             decisions?: components["schemas"]["TakeDecision"][];
-        };
+        } & (unknown & unknown);
         TakeDecision: {
             decision_id: string;
             /** Format: uuid */
@@ -3597,6 +3709,21 @@ export interface components {
             /** @description the MP4 has an audio track (LTX: AAC 48 kHz stereo) */
             has_audio: boolean;
             poster_url: components["schemas"]["SignedUrl"];
+        };
+        AudioInfo: {
+            /** @description as the client declared it at upload (contracts/README.md, Media inputs: audio uploads) */
+            duration_s: number;
+        };
+        /** @description from 1.19 (evt.run.output `source_map`): output time t = source time t + `offset_s`; the generated part is [`new_in_s`, `new_out_s`) of the output. A Timeline fill places the result by it (contracts/README.md, Timeline: take actions) */
+        SourceMap: {
+            /**
+             * Format: uuid
+             * @description the media take it was made from (it may be deleted since)
+             */
+            take_id: string;
+            offset_s: number;
+            new_in_s: number;
+            new_out_s: number;
         };
         /** @description a snapshot taken when the take was stored: it survives the run and the session */
         MadeWith: {
@@ -3676,10 +3803,32 @@ export interface components {
         TakeUse: {
             workflow_id: string;
             /**
-             * @description which image input (`<node id>.<param>`); absent = the only one
+             * @description which image (or, from 1.19, media) input (`<node id>.<param>`); absent = the only one
              * @example encode.refs
              */
             param?: string;
+        };
+        /** @description one "Use in…" entry (from 1.19): label it `<action> · <title>`, or the title when `action` is absent */
+        TakeOffer: {
+            workflow_id: string;
+            title: string;
+            /** @description the template's `action` (Animate, Edit, Extend, Retake a section, Audio to video); absent for a user workflow or a template without one */
+            action?: string;
+            family: string;
+            media: components["schemas"]["WorkflowMedia"];
+            /**
+             * @description the input that holds the take (`<node id>.<param>`)
+             * @example source.source
+             */
+            param: string;
+            /** @description as POST …/use answers (a clip action: the clip's range); merge over the form */
+            inputs: components["schemas"]["RunInputs"];
+        };
+        TakeUses: {
+            uses: components["schemas"]["TakeOffer"][];
+        };
+        ClipActions: {
+            actions: components["schemas"]["TakeOffer"][];
         };
         TakeReuse: {
             workflow_id: string;
@@ -3904,9 +4053,14 @@ export interface components {
         UploadCreate: {
             /** @description the file's name; only its base name (without extension) is kept, as the title */
             filename: string;
-            /** @enum {string} */
-            content_type: "image/png" | "image/jpeg" | "image/webp";
+            /**
+             * @description from 1.19 also WAV and MP3 (an audio take)
+             * @enum {string}
+             */
+            content_type: "image/png" | "image/jpeg" | "image/webp" | "audio/wav" | "audio/mpeg";
             bytes: number;
+            /** @description audio only (required): its length as the browser decoded it; studio records it, the runner reads the file itself */
+            duration_s?: number;
         };
         Upload: {
             /**
@@ -5421,9 +5575,15 @@ export interface components {
         TimelineList: {
             timelines: components["schemas"]["TimelineSummary"][];
         };
-        /** @description where a New shot goes: an existing V1 slot (an empty slot is filled; a take's clip is redone: "from this clip"), or a new empty slot at the V1 cut nearest `at` (the playhead) of `length` seconds */
+        /** @description where a New shot goes: an existing V1 slot (an empty slot is filled; a take's clip is redone: "from this clip"; a take action's "replace"), a new empty slot at the V1 cut nearest `at` (the playhead; from 1.19 also an extend before's insert, at the clip's `at`) of `length` seconds, or (from 1.19, a take action's "insert after") a new empty slot of `length` right after V1 clip `after` */
         TimelineSlot: {
             clip: components["schemas"]["TimelineClipId"];
+        } | {
+            after: components["schemas"]["TimelineClipId"];
+            /** @description the placeholder's length until the take fills it (the client's estimate) */
+            length: number;
+            /** @description the new slot's id; absent = studio makes one */
+            id?: components["schemas"]["TimelineClipId"];
         } | {
             at: components["schemas"]["TimelineSeconds"];
             length: number;
@@ -7262,6 +7422,32 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioListTakeUses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the offers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakeUses"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     studioSaveTakeAsPipeline: {
         parameters: {
             query?: never;
@@ -8740,6 +8926,40 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["TimelineUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListClipActions: {
+        parameters: {
+            query?: {
+                /** @description the selection's start, sequence seconds */
+                start?: number;
+                /** @description the selection's end, sequence seconds */
+                end?: number;
+            };
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+                /** @description a V1 slot id */
+                clip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the actions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipActions"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

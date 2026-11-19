@@ -226,7 +226,9 @@ class ModelJobs:
             files = freed = 0
             for vid in variants:
                 if vid in deleted:
-                    f, b = models.delete_variant(p, vid, only if vid == first else None)
+                    # a variant in the first's folder deletes only its own files (models.own_globs)
+                    own = models.own_globs(p, vid)
+                    f, b = models.delete_variant(p, vid, only if vid == first else own)
                     files, freed = files + f, freed + b
             return files, freed
 

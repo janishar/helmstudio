@@ -216,6 +216,14 @@ def load(
     return module
 
 
+def prefused(model, baked) -> bool:
+    """Whether the baked rows are only the pack's pre-fused LoRA files (LTX ltx/distill: the phase `fusing LoRA`,
+    contracts README Media inputs), by file name."""
+    files = {p.rsplit("/", 1)[-1].removesuffix(".safetensors") for p in
+             (x["file"] for x in (model.pack.spec.get("lora") or {}).get("prefused", []))}  # fmt: skip
+    return bool(baked) and all(u.name in files for u in baked)
+
+
 def load_component(model, component: str, ctx):
     """Load one component of a Model handle (core.pack.ModelRef) for ctx's run, reporting the phase
     `loading <component>` (underscores as spaces) under the node that needs it."""
@@ -254,5 +262,7 @@ def load_component(model, component: str, ctx):
         convert=(lambda name, v: convert(component, name, v)) if convert else (lambda name, v: v),
         bake=bake,
         check=ctx.check,
-        baking=lambda: ctx.progress(1, 1, "baking LoRAs"),
+        baking=lambda: ctx.progress(
+            1, 1, "fusing LoRA" if prefused(model, baked) else "baking LoRAs"
+        ),
     )

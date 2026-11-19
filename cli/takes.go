@@ -4,10 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -24,6 +26,9 @@ type take struct {
 	Video     *struct {
 		DurationS float64 `json:"duration_s"`
 	} `json:"video"` // a video take only
+	Audio *struct {
+		DurationS float64 `json:"duration_s"`
+	} `json:"audio"` // an audio take only
 }
 
 func (t take) line() string {
@@ -36,6 +41,8 @@ func (t take) line() string {
 	}
 	if t.Video != nil {
 		length = fmt.Sprintf("%.1fs", t.Video.DurationS)
+	} else if t.Audio != nil {
+		length = fmt.Sprintf("%.1fs", t.Audio.DurationS)
 	}
 	return fmt.Sprintf("%s %s %-5s %-6s %-9s %-6s %s %s", t.ID, star, t.Kind, t.Source, size, length, t.CreatedAt, t.Title)
 }
@@ -183,12 +190,74 @@ func useCmd(args []string, stdout, stderr io.Writer) error {
 	if err := c.call(http.MethodPost, "/v1/studio/takes/"+url.PathEscape(fs.Arg(0))+"/use", body, http.StatusOK, &reuse); err != nil {
 		return err
 	}
-	line := "helm run " + reuse.WorkflowID
-	for key, v := range reuse.Inputs { // one key: the image input
-		line += fmt.Sprintf(" -p %s=%s", key, strings.Join(takeIDs(v), ","))
-	}
-	fmt.Fprintln(stdout, line)
+	fmt.Fprintln(stdout, runLine(reuse.WorkflowID, reuse.Inputs))
 	return nil
+}
+
+// takeCmd: helm take uses <take_id> lists the workflows the take can go into ("Use in…"), each as its label and the
+// helm run command with the take and the pre-filled inputs.
+func takeCmd(args []string, stdout io.Writer) error {
+	if len(args) != 2 || args[0] != "uses" {
+		return fmt.Errorf("usage: helm take uses <take_id>")
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	var ans struct {
+		Uses []struct {
+			WorkflowID string         `json:"workflow_id"`
+			Title      string         `json:"title"`
+			Action     string         `json:"action"`
+			Inputs     map[string]any `json:"inputs"`
+		} `json:"uses"`
+	}
+	if err := c.call(http.MethodGet, "/v1/studio/takes/"+url.PathEscape(args[1])+"/uses", nil, http.StatusOK, &ans); err != nil {
+		return err
+	}
+	if len(ans.Uses) == 0 {
+		fmt.Fprintln(stdout, "no workflow takes it")
+	}
+	for _, u := range ans.Uses {
+		label := u.Title
+		if u.Action != "" {
+			label = u.Action + " · " + u.Title
+		}
+		fmt.Fprintf(stdout, "%s\n  %s\n", label, runLine(u.WorkflowID, u.Inputs))
+	}
+	return nil
+}
+
+// runLine is the helm run command for a workflow and RunInputs, each as -p: an image or rows value as its take ids,
+// a media value as <take>[:in:out], a span as start:end.
+func runLine(workflowID string, inputs map[string]any) string {
+	line := "helm run " + workflowID
+	for _, key := range slices.Sorted(maps.Keys(inputs)) {
+		switch v := inputs[key].(type) {
+		case map[string]any:
+			switch id, ok := v["take_id"].(string); {
+			case ok && v["in"] != nil: // a trimmed media value
+				line += fmt.Sprintf(" -p %s=%s:%s:%s", key, id, num(v["in"]), num(v["out"]))
+			case v["start"] != nil: // a span
+				line += fmt.Sprintf(" -p %s=%s:%s", key, num(v["start"]), num(v["end"]))
+			default: // an image or media value
+				line += fmt.Sprintf(" -p %s=%s", key, strings.Join(takeIDs(v), ","))
+			}
+		case []any:
+			line += fmt.Sprintf(" -p %s=%s", key, strings.Join(takeIDs(v), ","))
+		default:
+			line += fmt.Sprintf(" -p %s=%s", key, num(v))
+		}
+	}
+	return line
+}
+
+// num prints a JSON scalar as helm run reads it back (a number without exponent or trailing zeros).
+func num(v any) string {
+	if f, ok := v.(float64); ok {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return fmt.Sprint(v)
 }
 
 // takeIDs lists the take ids of an image value ({take_id}) or a rows value (items holding one).

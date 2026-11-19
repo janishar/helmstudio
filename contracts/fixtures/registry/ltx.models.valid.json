@@ -81,6 +81,145 @@
               }
             }
           ]
+        },
+        {
+          "id": "dev",
+          "presence": "present",
+          "bytes": 42000000000,
+          "precisions": [
+            "bf16",
+            "int8",
+            "int4"
+          ],
+          "memory": [
+            {
+              "precision": "int8",
+              "peak_gb": 44.98,
+              "components": [
+                {
+                  "component": "text_encoder",
+                  "variant": "distilled",
+                  "precision": "int8",
+                  "gb": 12.66,
+                  "unloads_after": true
+                },
+                {
+                  "component": "connector",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 5.91,
+                  "unloads_after": true
+                },
+                {
+                  "component": "vae_encoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.59
+                },
+                {
+                  "component": "audio_encoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.04
+                },
+                {
+                  "component": "transformer",
+                  "variant": "dev",
+                  "precision": "int8",
+                  "gb": 19.18
+                },
+                {
+                  "component": "vae",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.76
+                },
+                {
+                  "component": "audio_vae",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.06
+                },
+                {
+                  "component": "vocoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.48
+                }
+              ],
+              "planned_at": {
+                "mp": 0.1147,
+                "frames": 97
+              }
+            },
+            {
+              "precision": "int8",
+              "workflow": "ltx-audio-to-video",
+              "peak_gb": 45.91,
+              "components": [
+                {
+                  "component": "text_encoder",
+                  "variant": "distilled",
+                  "precision": "int8",
+                  "gb": 12.66,
+                  "unloads_after": true
+                },
+                {
+                  "component": "connector",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 5.91,
+                  "unloads_after": true
+                },
+                {
+                  "component": "audio_encoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.04
+                },
+                {
+                  "component": "upscaler",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.93
+                },
+                {
+                  "component": "transformer",
+                  "variant": "dev",
+                  "precision": "int8",
+                  "gb": 19.18
+                },
+                {
+                  "component": "vae_encoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.59
+                },
+                {
+                  "component": "vae",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.76
+                },
+                {
+                  "component": "audio_vae",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.06
+                },
+                {
+                  "component": "vocoder",
+                  "variant": "distilled",
+                  "precision": "bf16",
+                  "gb": 0.48
+                }
+              ],
+              "planned_at": {
+                "mp": 0.3154,
+                "frames": 49
+              }
+            }
+          ]
         }
       ],
       "lora": {

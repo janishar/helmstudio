@@ -47,11 +47,12 @@ func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id
 				return network.NewUnprocessableError("unknown clip "+c, nil)
 			}
 		}
-		if _, rerr := timeline.RerenderSteps(doc, rules, body.Clips, nil); rerr != nil {
+		if _, rerr := timeline.RerenderSteps(doc, rules, body.Clips, nil, nil); rerr != nil {
 			return rerenderError(*rerr, doc, rules)
 		}
 		// each selected clip's workflow, as it runs now
 		workflows, versions, keyframes := map[string]registry.Workflow{}, map[string]int{}, map[string]*timeline.Keyframes{}
+		media := map[string][]string{} // workflow id → its media param paths (API 1.19)
 		selected := map[string]timeline.Clip{}
 		for _, c := range doc.Tracks[0].Clips {
 			if (body.Clips == nil && c.Take() != "") || slices.Contains(body.Clips, c.ID) {
@@ -78,11 +79,12 @@ func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id
 				return err
 			}
 			workflows[wid], keyframes[wid] = workflow, timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas)
+			media[wid] = slices.Sorted(maps.Keys(mediaParams(workflow.Nodes, workflow.NodeSchemas)))
 			if version != nil {
 				versions[wid] = *version
 			}
 		}
-		steps, rerr := timeline.RerenderSteps(doc, rules, body.Clips, keyframes)
+		steps, rerr := timeline.RerenderSteps(doc, rules, body.Clips, keyframes, media)
 		if rerr != nil {
 			return rerenderError(*rerr, doc, rules)
 		}

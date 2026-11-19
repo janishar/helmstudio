@@ -142,7 +142,10 @@ Keys the core understands; anything else is ignored:
   `runtimes` (`<runtime>: {env, devices?}`), `model`, `variants`, `components`, `lora`, `stages`, and from API 1.16 `media`
   (what the model makes: `[image]`, `[video, audio]`) and `licences` (`<id>: {title, url?}`; the text is
   `licences/<id>.md` in the pack, shown to the admin before a download). A pack without `variants` has no model
-  node and its `models` entry is `{id, family, title}`.
+  node and its `models` entry is `{id, family, title}`. From API 1.19 `plan_media` (`{video: {width, height,
+  frames, fps, duration_s, has_audio}, audio: {duration_s, has_audio, in, out}}`: the take a memory plan assumes for
+  an empty `media` param) and `planned_alone` (media workflow ids planned in a `memory` item of their own, named by
+  `workflow`).
 - **`variants.<id>`**: `dir`, `shares` (component names loaded from the first variant's folder, so they are one
   residency entry and one cache identity across variants; a share made by hand with links into that folder is still
   a share, a real copy in the variant's own folder is `separate`), `title` (the display name; default the id) and
@@ -151,7 +154,10 @@ Keys the core understands; anything else is ignored:
   `.cache/huggingface/download/*.metadata` sidecars when the weights are already on disk); `allow_patterns` are
   fnmatch globs over repo paths naming the variant's own components and their configs, never a shared component
   (that comes from the first variant's source into its folder); `must_accept` makes the admin accept the licence
-  text; `gated` makes the runner send the host's Hub token (RUNNER_HF_TOKEN_FILE).
+  text; `gated` makes the runner send the host's Hub token (RUNNER_HF_TOKEN_FILE). `files` (`{<component>:
+  glob}`) gives a component other files for this variant: ltx's `dev` keeps its transformer beside the distilled
+  files, in the first variant's `dir` (one folder, two variants: such a variant owns only its own components' files
+  there, for its manifest, bytes and delete; every shared component stays the first variant's).
 - **`components.<name>`**: `files` (a glob, or a list of globs: one component may take keys from several files),
   `dtype` (`bf16` | `fp16` | `fp32`, default bf16; `stored` keeps each tensor's own dtype, MLX), `precision` (default
   `[bf16]`; `int8`, and `int4` on MLX), `quantize` (fnmatch globs over module names, used only at a quantized
@@ -182,7 +188,11 @@ Keys the core understands; anything else is ignored:
     `values_by {param, values: {<enum value>: [...]}}` (the subset for the node's value of that enum param), and for
     rows `item` (field → `Image`, `Lora` or a param schema; a float field may say `position: seconds`, a time on the
     clip) and `mention` (`<image{n}>`)). Order is kept. Item fields left out of a row take their defaults; a rows
-    param with an `Image` field may be `[]` in a workflow, and a run needs its `min` items.
+    param with an `Image` field may be `[]` in a workflow, and a run needs its `min` items. From API 1.19 (contracts
+    README "Media inputs") `media` (one video or audio take: `accepts` [video] | [audio], optional `trim`, `grid`,
+    `max_s`, `max_frames`) and `span` (`{start, end}` seconds on the workflow's one video source): null in a
+    workflow, required in a run (`<node>.<param>: a take is required` / `a range is required`); the core re-checks
+    the caps on the facts studio sent, with studio's texts.
     **YAML 1.1 reads bare `on`, `off`, `yes`, `no` as booleans: quote them.**
   - `inputs` / `outputs`: port name → port type, in order. Types: `Text`, `Image`, `Int`, `Float`, `Seed`,
     `Canvas`, `Duration`, `Video` (plain values; `Media` is an input that takes Image or Video) and the
@@ -194,7 +204,9 @@ Keys the core understands; anything else is ignored:
     `images` (how many Image values the params of the stage and of every node upstream of it hold), `mp_in`
     (megapixels of the largest of them, 0 without), `frames` (the length an input carries as an int `frames`
     attribute, such as a Latent after an auto length resolved; else the `frames` param of the nearest upstream node
-    that has one, `"auto"` counting as its longest clip, 0 without) and the
+    that has one, `"auto"` counting as its longest clip, 0 without; without a Canvas or a frames param a media value
+    upstream gives `mp` and `frames`: a video take's size and frames, an audio part at 24 fps), `fps` (an input's
+    `fps`, else a video take's, else 24) and the
     stage's own params: numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
     `max()`. Anything else fails at start. The value is GB the stage holds at its peak above the components resident
     after it, as the runner measures memory (the process footprint: device buffers and the allocators' caches
@@ -234,7 +246,11 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   stage's first step the core reads the command's resolved value (`{take_id, key, …, bytes, etag}`) from the
   object store, only under `u/<owner_id>/`, at most 64 MB and exactly `bytes` long (else the run fails `input
   image <take_id> is gone`), decodes it with Pillow (PNG, JPEG or WebP) and applies its EXIF orientation. The
-  mode is kept as decoded (RGB, RGBA, P, …); the bytes are dropped. A `rows` param is a list of dicts.
+  mode is kept as decoded (RGB, RGBA, P, …); the bytes are dropped. A `rows` param is a list of dicts. A `media`
+  param arrives as its resolved value (defs media: `take_id`, `kind`, the video facts or `duration_s`, the snapped
+  `in` / `out` on a `trim` param) plus `data`, the file's bytes (read the same way, at most 1 GiB, failing `input
+  take <take_id> is gone`); the pack decodes them itself and re-reads the file's own facts. A `span` is
+  `{"start", "end"}`.
 - **`inputs`**: port → upstream value; an unwired optional input has no key. A value param (`int`, `float`, `seed`,
   `string`, `text`, `image`) wired from upstream in a user's graph arrives in `params` with the upstream value (an
   `image` param wired from an `image` node: a `PIL.Image`), so a stage reads params the same way either way.
@@ -243,7 +259,9 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
   `Image`: a `PIL.Image` (the core `output` node stores it as PNG; RGBA is fine). `Video`: the encoded clip
   `{"mp4": bytes, "poster": PIL.Image (frame 0, the video's size), "frames", "fps", "has_audio"}`; the `output` node
   stores `<prefix><n>.poster.png`, then `<prefix><n>.mp4` (H.264 + AAC, `+faststart`), and reports
-  `video {duration_s, fps, frames, has_audio, poster}`. `Model`: a `core.pack.ModelRef`
+  `video {duration_s, fps, frames, has_audio, poster}`; a clip made from a media take adds `"source_map":
+  {take_id, offset_s, new_in_s, new_out_s}` (output time = source time + offset; the generated part), reported as
+  `evt.run.output` `source_map`. `Model`: a `core.pack.ModelRef`
   (`variant`, `precision`, `loras` (the ordered LoRA rows of the stacks upstream), `pack.spec`, `folder(component=None)` → the variant's folder for configs, the
   tokenizer and the scheduler, which the pack reads itself). `Conditioning` / `Latent`: whatever object the
   pack returns. Handles never leave the process.
@@ -414,15 +432,20 @@ channels-last), casts only for an explicit `dtype`, quantizes the matching 2-D `
 loads with `strict=True`. Phase `loading <component>` (underscores as spaces) is reported under the node that needs
 it. Memory: the process footprint; eviction runs `gc` + `mx.clear_cache()`; the Metal cache is capped at 2 GB
 (`CACHE_GB`: at the default one VAE decode kept 27 GB of freed buffers).
-A stage that must refuse a wiring before anything runs defines `check_<stage>(params, wired) -> str | None` (the
-text after the node id, e.g. `": stage 2 needs latent, not canvas or duration"`). LoRA on MLX is bake only
+A stage that must refuse a wiring before anything runs defines `check_<stage>(params, wired, models) -> str | None`
+(`models`: input port → the Model handle wired there; the text after the node id, e.g. `": stage 2 needs latent,
+not canvas or duration"`, `": needs model variant dev"`); the checks run in run order, and the memory plans leave
+out a workflow a check refuses at that variant. A Model → Model stage (ltx's `distill`) is pure, like the model
+node: the core also builds its handle with `ctx` None. LoRA on MLX is bake only
 (`modes: [bake]`): the rows are normalised like torch's, then merged after quantization module by module
 (dequantize, + float32 delta, requantize; a float Linear: W.f32 + delta cast back), phase `baking LoRAs` after
-`loading <component>`; a baked component is its own residency entry. There are no MLX adapters.
+`loading <component>` (`fusing LoRA` when the rows are only the pack's `prefused` files: ltx's `distill`); a baked
+component is its own residency entry. There are no MLX adapters.
 
 ## Checking a pack
 
 `cd runner_service && uv sync --extra torch && uv run pytest -q` (test_packs compares the generated values with
 the fixtures); `uv run pytest -m gpu` runs the tests that load real weights. The mlx env:
 `uv sync --project envs/mlx && uv run --project envs/mlx pytest -q`; the ltx goldens:
-`uv run --project envs/mlx python tests/test_ltx_golden.py [case ...] [--reseed]` (stop both runners first).
+`uv run --project envs/mlx python tests/test_ltx_golden.py [case ...] [--reseed]` (stop both runners first; the
+M7 dev cases `retake-448x256-49f-s42 extend-448x256-49f+8-s42 a2v-448x256-49f-s42` take 2-5 min each).

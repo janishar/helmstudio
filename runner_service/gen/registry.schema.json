@@ -76,7 +76,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role)",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role). From API 1.19: media: one video or audio take (`accepts`), written {take_id[, in, out]} by clients (default null; a run needs one); `trim`: it reads the part in..out (the UI's trim control over the take); `grid`: a video's sides must be multiples of it; `max_s`: the longest take (or part) it reads; `max_frames`: the most frames of a video take it reads. span: a time range {start, end} on the workflow's one video media source (default null; a run needs one; the UI's range control over that take). contracts/README.md, Media inputs",
       "required": [
         "name",
         "type",
@@ -103,7 +103,9 @@
             "seed",
             "image",
             "rows",
-            "frames"
+            "frames",
+            "media",
+            "span"
           ]
         },
         "fps": {
@@ -234,6 +236,39 @@
           "pattern": "\\{n\\}",
           "maxLength": 40,
           "description": "rows only: the text by which a prompt refers to item n (from 1), e.g. <image{n}>; the prompt carries it as is, the pack does not rewrite it"
+        },
+        "accepts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "video",
+              "audio"
+            ]
+          },
+          "description": "media only (required): the take kinds it takes. video: a video take (its picture and sound); audio: an audio take, or a video take's sound (one without sound is refused)"
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "media only: true = the value may carry in/out (the part read; the UI draws a trim control on the take); absent/false = the whole take, in/out refused"
+        },
+        "grid": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 256,
+          "description": "media only: a video take's width and height must be multiples of it (LTX: 32)"
+        },
+        "max_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "media only: the longest it reads, in seconds: a whole take's duration, or out - in with trim"
+        },
+        "max_frames": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "media only (API 1.19): the most frames of a video take it reads (its `frames`, at any fps; LTX: 321)"
         }
       },
       "allOf": [
@@ -577,6 +612,100 @@
                 {
                   "required": [
                     "values_by"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "media"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "accepts"
+            ],
+            "properties": {
+              "default": {
+                "type": "null"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "accepts"
+                  ]
+                },
+                {
+                  "required": [
+                    "trim"
+                  ]
+                },
+                {
+                  "required": [
+                    "grid"
+                  ]
+                },
+                {
+                  "required": [
+                    "max_s"
+                  ]
+                },
+                {
+                  "required": [
+                    "max_frames"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "span"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "default": {
+                "type": "null"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
                   ]
                 }
               ]
@@ -937,6 +1066,12 @@
         "studio": {
           "$ref": "#/$defs/studioLayout",
           "description": "the Studio (Create) layout studio sends as the template's Workflow.studio; absent = the derived form. Its paths obey the graph rules for a user workflow's block (studio_unknown_path, studio_duplicate)"
+        },
+        "action": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "API 1.19: the take action's label when this workflow is offered for a take (\"Use in\u2026\", a Timeline clip's actions): Animate, Edit, Extend, Retake a section; absent = the title"
         }
       }
     },

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "host": "mac",
   "env": "mlx",
-  "published_at": "2026-11-15T10:00:00Z",
-  "published_by": "runner mlx 0.3.0",
+  "published_at": "2026-11-16T10:00:00Z",
+  "published_by": "runner mlx 0.4.0",
   "workflows": [
     {
       "id": "ltx-text-to-video",
@@ -184,6 +184,7 @@
     {
       "id": "ltx-image-to-video",
       "title": "LTX-2.5 Image to video",
+      "action": "Animate",
       "family": "ltx",
       "env": "mlx",
       "media": "video",
@@ -361,6 +362,421 @@
           },
           "Quality": {
             "model.precision": "bf16"
+          },
+          "Low memory": {
+            "model.precision": "int4"
+          }
+        }
+      }
+    },
+    {
+      "id": "ltx-retake",
+      "title": "LTX-2.5 Retake",
+      "action": "Retake a section",
+      "family": "ltx",
+      "env": "mlx",
+      "media": "video",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "ltx/model",
+          "params": {
+            "variant": "dev",
+            "precision": "int8"
+          },
+          "only": {
+            "variant": [
+              "dev"
+            ],
+            "precision": [
+              "int8",
+              "int4"
+            ]
+          }
+        },
+        "encode": {
+          "kind": "ltx/encode-guided",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {}
+        },
+        "source": {
+          "kind": "ltx/encode-video",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {
+            "source": null
+          }
+        },
+        "retake": {
+          "kind": "ltx/retake",
+          "in": {
+            "model": "model.model",
+            "cond": "encode.cond",
+            "seed": "seed.seed",
+            "latent": "source.latent"
+          },
+          "params": {
+            "span": null,
+            "audio": true,
+            "steps": 30,
+            "cfg": 3,
+            "stg": 1
+          }
+        },
+        "decode": {
+          "kind": "ltx/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "retake.latent"
+          },
+          "params": {
+            "audio": true
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.video"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "source.source",
+          "retake.span"
+        ],
+        "quick": [
+          "elements",
+          "retake.audio",
+          "decode.audio"
+        ],
+        "inspector": [
+          {
+            "title": "Quality",
+            "items": [
+              "model.precision",
+              "retake.steps",
+              "retake.cfg",
+              "retake.stg"
+            ]
+          }
+        ],
+        "presets": {
+          "Fast": {
+            "model.precision": "int8"
+          },
+          "Low memory": {
+            "model.precision": "int4"
+          }
+        }
+      }
+    },
+    {
+      "id": "ltx-extend",
+      "title": "LTX-2.5 Extend",
+      "action": "Extend",
+      "family": "ltx",
+      "env": "mlx",
+      "media": "video",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "ltx/model",
+          "params": {
+            "variant": "dev",
+            "precision": "int8"
+          },
+          "only": {
+            "variant": [
+              "dev"
+            ],
+            "precision": [
+              "int8",
+              "int4"
+            ]
+          }
+        },
+        "encode": {
+          "kind": "ltx/encode-guided",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {}
+        },
+        "source": {
+          "kind": "ltx/encode-video",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {
+            "source": null
+          }
+        },
+        "extend": {
+          "kind": "ltx/extend",
+          "in": {
+            "model": "model.model",
+            "cond": "encode.cond",
+            "seed": "seed.seed",
+            "latent": "source.latent"
+          },
+          "params": {
+            "seconds": 2,
+            "direction": "after",
+            "steps": 30,
+            "cfg": 3,
+            "stg": 1
+          }
+        },
+        "decode": {
+          "kind": "ltx/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "extend.latent"
+          },
+          "params": {
+            "audio": true
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.video"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "source.source"
+        ],
+        "quick": [
+          "elements",
+          "extend.seconds",
+          "extend.direction",
+          "decode.audio"
+        ],
+        "inspector": [
+          {
+            "title": "Quality",
+            "items": [
+              "model.precision",
+              "extend.steps",
+              "extend.cfg",
+              "extend.stg"
+            ]
+          }
+        ],
+        "presets": {
+          "Fast": {
+            "model.precision": "int8"
+          },
+          "Low memory": {
+            "model.precision": "int4"
+          }
+        }
+      }
+    },
+    {
+      "id": "ltx-audio-to-video",
+      "title": "LTX-2.5 Audio to video",
+      "action": "Audio to video",
+      "family": "ltx",
+      "env": "mlx",
+      "media": "video",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "canvas": {
+          "kind": "ltx/canvas",
+          "params": {
+            "width": 704,
+            "height": 448
+          }
+        },
+        "model": {
+          "kind": "ltx/model",
+          "params": {
+            "variant": "dev",
+            "precision": "int8"
+          },
+          "only": {
+            "variant": [
+              "dev"
+            ],
+            "precision": [
+              "int8",
+              "int4"
+            ]
+          }
+        },
+        "encode": {
+          "kind": "ltx/encode-guided",
+          "in": {
+            "model": "model.model",
+            "prompt": "prompt.text"
+          },
+          "params": {}
+        },
+        "audio": {
+          "kind": "ltx/encode-audio",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {
+            "source": null,
+            "fps": 24
+          }
+        },
+        "keyframes": {
+          "kind": "ltx/keyframes",
+          "in": {
+            "cond": "encode.cond"
+          },
+          "params": {
+            "images": []
+          },
+          "bypass": true
+        },
+        "sample1": {
+          "kind": "ltx/sample-guided",
+          "in": {
+            "model": "model.model",
+            "cond": "keyframes.cond",
+            "seed": "seed.seed",
+            "canvas": "canvas.canvas",
+            "duration": "audio.duration",
+            "audio": "audio.latent"
+          },
+          "params": {
+            "steps": 30,
+            "cfg": 3,
+            "stg": 1
+          }
+        },
+        "upscale": {
+          "kind": "ltx/upscale",
+          "in": {
+            "model": "model.model",
+            "latent": "sample1.latent"
+          },
+          "params": {}
+        },
+        "distill": {
+          "kind": "ltx/distill",
+          "in": {
+            "model": "model.model"
+          },
+          "params": {}
+        },
+        "sample2": {
+          "kind": "ltx/sample",
+          "in": {
+            "model": "distill.model",
+            "cond": "keyframes.cond",
+            "seed": "seed.seed",
+            "latent": "upscale.latent"
+          },
+          "params": {
+            "role": "stage2",
+            "steps": 3
+          }
+        },
+        "decode": {
+          "kind": "ltx/decode",
+          "in": {
+            "model": "model.model",
+            "latent": "sample2.latent"
+          },
+          "params": {
+            "audio": true
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "decode.video"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "audio.source"
+        ],
+        "quick": [
+          "keyframes.bypass",
+          "keyframes.images",
+          "elements",
+          "decode.audio"
+        ],
+        "inspector": [
+          {
+            "title": "Canvas",
+            "items": [
+              "canvas.width",
+              "canvas.height"
+            ]
+          },
+          {
+            "title": "Quality",
+            "items": [
+              "model.precision",
+              "sample1.steps",
+              "sample1.cfg",
+              "sample1.stg",
+              "sample2.steps",
+              "audio.fps"
+            ]
+          }
+        ],
+        "labels": {
+          "keyframes.bypass": "No keyframes",
+          "keyframes.images": "Frames",
+          "sample1.steps": "Stage 1 steps",
+          "sample2.steps": "Stage 2 steps"
+        },
+        "presets": {
+          "Fast": {
+            "model.precision": "int8"
           },
           "Low memory": {
             "model.precision": "int4"

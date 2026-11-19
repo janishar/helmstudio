@@ -95,6 +95,8 @@ type Output struct {
 	Video *dto.Video `json:"video"`
 	// the values the runner chose for params the run set to "auto"
 	Resolved *Resolved `json:"resolved"`
+	// API 1.19, a video made from a media take: how its time lines up with that take (Take.source_map)
+	SourceMap *dto.SourceMap `json:"source_map"`
 }
 
 // Resolved is an output's resolved: "<node>.<param>" → the value the runner chose for "auto" (a predicted length).

@@ -3,6 +3,7 @@ package registry
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -67,9 +68,14 @@ func TestWorkflows(t *testing.T) {
 	}
 	_ = r.SetRegistry("other.fake.workflows", []byte(`{"workflows": [{"id": "echo", "env": "fake", "nodes": {"a": {"kind": "prompt"}}},
 		{"id": "lost", "env": "fake", "nodes": {"a": {"kind": "nope"}}}]}`))
-	if list := r.Workflows(); len(list) != 5 || list[0].ID != "echo" || list[1].ID != "echo-ask" || list[2].ID != "echo-image-to-video" ||
-		list[3].ID != "echo-tiny" || list[4].ID != "echo-video" || list[1].Media != "text" || !IsText(list[1].Nodes) || IsText(list[0].Nodes) {
-		t.Fatalf("echo, echo-ask (text), echo-image-to-video, echo-tiny and echo-video, no lost: %+v", list)
+	ids := []string{}
+	for _, w := range r.Workflows() {
+		ids = append(ids, w.ID)
+	}
+	if list := r.Workflows(); !slices.Equal(ids, []string{"echo", "echo-a2v", "echo-ask", "echo-extend", "echo-image-to-video",
+		"echo-retake", "echo-tiny", "echo-video"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
+		list[5].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" {
+		t.Fatalf("the echo workflows (echo-ask text), no lost: %v", ids)
 	}
 	if _, ok := r.Workflow("lost"); ok {
 		t.Fatal("lost has no schema for its kind")

@@ -1,4 +1,5 @@
-"""Deterministic inputs for the LTX-2.5 stage-B goldens: the conditioning images and the synthetic LoRA.
+"""Deterministic inputs for the LTX-2.5 goldens: the conditioning images, the synthetic LoRA (M4) and the
+audio-to-video tones (M7).
 
 numpy + Pillow + stdlib only, so the port's tests can rebuild them byte for byte (record_ltx.py records the sha256
 of each). Nothing here loads weights; `synthetic_lora` reads only the transformer file's safetensors header.
@@ -43,6 +44,26 @@ def test_image(path: Path, variant: int = 0, width: int = 640, height: int = 400
     d.rectangle(square, fill=(30, 60, 220))
     im.save(path, format="PNG")
     return hashlib.sha256(np.asarray(im).tobytes()).hexdigest()
+
+
+def test_tones(path: Path, seconds: float = 3.0, rate: int = 48000) -> str:
+    """A stereo 16-bit WAV: four 0.75 s notes (220, 330, 440, 660 Hz, 10 ms fades) with a click every 0.5 s, the
+    right channel 6 dB quieter. Deterministic (no RNG). Returns sha256 of the file."""
+    import wave
+
+    t = np.arange(int(seconds * rate)) / rate
+    freq = np.array([220.0, 330.0, 440.0, 660.0])[np.minimum((t / 0.75).astype(int), 3)]
+    note_t = t % 0.75
+    env = np.minimum(1.0, np.minimum(note_t, 0.75 - note_t) / 0.01)
+    x = 0.4 * env * np.sin(2 * np.pi * freq * t)
+    x += 0.5 * ((t % 0.5) < 0.004) * np.sin(2 * np.pi * 2000 * t)  # clicks
+    pcm = (np.clip(np.stack([x, 0.5 * x], 1), -1, 1) * 32767).round().astype("<i2")
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm.tobytes())
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _header(path: Path) -> dict:
@@ -96,4 +117,5 @@ if __name__ == "__main__":  # self-check: bf16 rounding and determinism of the i
 
     with tempfile.TemporaryDirectory() as t:
         assert test_image(Path(t) / "a.png") == test_image(Path(t) / "b.png")
+        assert test_tones(Path(t) / "a.wav") == test_tones(Path(t) / "b.wav")
     print("ok")

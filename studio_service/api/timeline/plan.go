@@ -339,8 +339,9 @@ type Step struct {
 type RerenderError struct{ Code, Clip string }
 
 // RerenderSteps is re-render's order and binds (rerender_steps). clips nil = every V1 clip with a take; keyframes:
-// workflow id → its ShotKeyframes (absent: none).
-func RerenderSteps(doc Doc, takes map[string]Take, clips []string, keyframes map[string]*Keyframes) ([]Step, *RerenderError) {
+// workflow id → its ShotKeyframes (absent: none); media: workflow id → its media param paths (API 1.19): a media input
+// holding a take of another selected clip binds `<param>` ← `clip_<other>.takes` and runs after it.
+func RerenderSteps(doc Doc, takes map[string]Take, clips []string, keyframes map[string]*Keyframes, media map[string][]string) ([]Step, *RerenderError) {
 	var v1 []Clip
 	for _, c := range doc.Tracks[0].Clips {
 		if (clips != nil && slices.Contains(clips, c.ID)) || (clips == nil && c.Take() != "") {
@@ -373,6 +374,14 @@ func RerenderSteps(doc Doc, takes map[string]Take, clips []string, keyframes map
 	}
 	for _, c := range v1 {
 		mw := takes[c.Take()].MadeWith
+		for _, path := range media[mw.WorkflowID] {
+			ref, _ := mw.Inputs[path].(map[string]any)
+			tid, _ := ref["take_id"].(string)
+			if src := owner[tid]; src != "" && src != c.ID {
+				binds[c.ID][path] = "clip_" + src + ".takes"
+				deps[c.ID][src] = true
+			}
+		}
 		kf := keyframes[mw.WorkflowID]
 		if kf == nil {
 			continue

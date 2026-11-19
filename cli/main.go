@@ -22,6 +22,8 @@ const usage = `usage:
              --lora fills the rows of the workflow's LoRA stack, in order
              [--image <take|file>] [--keyframe <frame>:<take|file> ...] [--duration <frames>|auto]   a video's first
              frame and keyframes (files are uploaded first); auto: the model picks the length (printed when it ends)
+             [--media node.param=<take>[:in:out] ...] [--span start:end]   a video or audio take as a media input (in/out:
+             the part, on a trim input) and the range of the workflow's one span param (Retake), in the take's seconds
   helm batch <workflow_id> (--lines <file|-> [--param node.param] | --csv <file> | --grid node.param=a,b,c ...)
              [-p node.param=value ...] [--seeds N] [--session <id>] [--title <t>]   exit 1 if any row failed
   helm batch --pipeline <pipeline_id> (--lines ... [--param inputs.name] | --csv ... | --grid inputs.name=a,b ...) [-p inputs.name=value ...]
@@ -41,6 +43,8 @@ const usage = `usage:
              else export the current revision, follow it (Ctrl-C cancels) and save the MP4
   helm upload <file>                  a png, jpeg or webp image, into the gallery
   helm use [--param node.param] <take_id> <workflow_id>   print the helm run command with the take as reference 1
+             (a video or audio take: as the media input)
+  helm take uses <take_id>            "Use in…": each workflow the take fits, with its helm run command pre-filled
 
 An image input takes a comma list of take ids and @files (uploaded first): -p encode.refs=@a.png,<take_id>
   helm workflows [--media image|video]   templates, then your own (id, source, version, env, media, title)
@@ -119,6 +123,8 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = uploadCmd(args[1:], stdout)
 	case "use":
 		err = useCmd(args[1:], stdout, stderr)
+	case "take":
+		err = takeCmd(args[1:], stdout)
 	case "workflows":
 		err = workflows(args[1:], stdout, stderr)
 	case "workflow":

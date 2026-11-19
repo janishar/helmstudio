@@ -138,3 +138,83 @@ func (w workflow) keyframeParam() (key, image, at string, err error) {
 	}
 	return key, image, at, nil
 }
+
+// mediaInputs adds helm run's --media (node.param=<take>[:in:out], each a media param) and --span (start:end, the
+// workflow's one span param) to inputs.
+func (w workflow) mediaInputs(inputs map[string]any, medias []string, spanVal string) error {
+	for _, m := range medias {
+		key, val, ok := strings.Cut(m, "=")
+		if !ok || w.paramType(key) != "media" {
+			return fmt.Errorf("--media %q: want <node.param>=<take id>[:in:out] on a media input", m)
+		}
+		v, err := media(key, val)
+		if err != nil {
+			return fmt.Errorf("--media %w", err)
+		}
+		inputs[key] = v
+	}
+	if spanVal == "" {
+		return nil
+	}
+	key := ""
+	for nid, n := range w.Nodes {
+		for _, p := range w.NodeSchemas[n.Kind].Params {
+			if p.Type == "span" {
+				if key != "" {
+					return errors.New("--span: the workflow has several ranges; use -p")
+				}
+				key = nid + "." + p.Name
+			}
+		}
+	}
+	if key == "" {
+		return fmt.Errorf("--span: workflow %s takes no range", w.ID)
+	}
+	v, err := span(key, spanVal)
+	if err != nil {
+		return fmt.Errorf("--span %w", err)
+	}
+	inputs[key] = v
+	return nil
+}
+
+// paramType is the schema type of node.param ("" when the workflow has no such param).
+func (w workflow) paramType(key string) string {
+	node, name, _ := strings.Cut(key, ".")
+	for _, p := range w.NodeSchemas[w.Nodes[node].Kind].Params {
+		if p.Name == name {
+			return p.Type
+		}
+	}
+	return ""
+}
+
+// media is a MediaRef: <take id>[:in:out].
+func media(key, val string) (any, error) {
+	parts := strings.Split(val, ":")
+	if parts[0] == "" || (len(parts) != 1 && len(parts) != 3) {
+		return nil, fmt.Errorf("%s: want <take id>[:in:out]", key)
+	}
+	ref := map[string]any{"take_id": parts[0]}
+	if len(parts) == 3 {
+		for i, name := range []string{"in", "out"} {
+			f, err := strconv.ParseFloat(parts[i+1], 64)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %s is not a number of seconds", key, name)
+			}
+			ref[name] = f
+		}
+	}
+	return ref, nil
+}
+
+// span is a SpanValue: start:end.
+func span(key, val string) (any, error) {
+	a, b, ok := strings.Cut(val, ":")
+	start, err1 := strconv.ParseFloat(a, 64)
+	end, err2 := strconv.ParseFloat(b, 64)
+	if !ok || err1 != nil || err2 != nil {
+		return nil, fmt.Errorf("%s: want start:end in seconds", key)
+	}
+	return map[string]any{"start": start, "end": end}, nil
+}

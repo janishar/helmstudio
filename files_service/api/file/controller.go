@@ -34,7 +34,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/*path", c.uploadHandler)
 }
 
-// MaxUpload is the largest image an upload link may carry (50 MB); MaxLoraUpload the largest LoRA (2 GiB). studio_service
+// MaxUpload is the largest image or audio upload a link may carry (50 MB); MaxLoraUpload the largest LoRA (2 GiB). studio_service
 // signs nothing larger.
 const (
 	MaxUpload     = 52428800
@@ -52,9 +52,19 @@ var loraKey = regexp.MustCompile(`^u/[0-9a-f-]{36}/loras/[0-9a-f-]{36}\.safetens
 // importVideoKey is the only key shape a video upload may have: an imported take, u/<owner>/imports/<take_id>.mp4.
 var importVideoKey = regexp.MustCompile(`^u/[0-9a-f-]{36}/imports/[0-9a-f-]{36}\.mp4$`)
 
+// audioUploadKey is an audio upload's key (API 1.19): u/<owner>/uploads/<take_id>.wav|.mp3, its type by its extension.
+var audioUploadKey = regexp.MustCompile(`^u/[^/]+/uploads/[^/]+\.(wav|mp3)$`)
+
+// audioTypes maps an audio upload key's extension to its one content type.
+var audioTypes = map[string]string{"wav": "audio/wav", "mp3": "audio/mpeg"}
+
 // uploadLimit is the cap and the allowed content types of a key: a LoRA key takes application/octet-stream up to
-// 2 GiB, an import's video key video/mp4 up to 2 GiB, any other key an image up to 50 MB.
+// 2 GiB, an import's video key video/mp4 up to 2 GiB, an audio upload's key its wav or mp3 type up to 50 MB, any
+// other key an image up to 50 MB.
 func uploadLimit(key string) (int64, func(string) bool) {
+	if m := audioUploadKey.FindStringSubmatch(key); m != nil {
+		return MaxUpload, func(ct string) bool { return ct == audioTypes[m[1]] }
+	}
 	if loraKey.MatchString(key) {
 		return MaxLoraUpload, func(ct string) bool { return ct == "application/octet-stream" }
 	}

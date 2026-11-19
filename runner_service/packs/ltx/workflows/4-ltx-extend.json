@@ -1,0 +1,118 @@
+{
+  "id": "ltx-extend",
+  "title": "LTX-2.5 Extend",
+  "action": "Extend",
+  "family": "ltx",
+  "env": "mlx",
+  "media": "video",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "ltx/model",
+      "params": {
+        "variant": "dev",
+        "precision": "int8"
+      },
+      "only": {
+        "variant": [
+          "dev"
+        ],
+        "precision": [
+          "int8",
+          "int4"
+        ]
+      }
+    },
+    "encode": {
+      "kind": "ltx/encode-guided",
+      "in": {
+        "model": "model.model",
+        "prompt": "prompt.text"
+      },
+      "params": {}
+    },
+    "source": {
+      "kind": "ltx/encode-video",
+      "in": {
+        "model": "model.model"
+      },
+      "params": {
+        "source": null
+      }
+    },
+    "extend": {
+      "kind": "ltx/extend",
+      "in": {
+        "model": "model.model",
+        "cond": "encode.cond",
+        "seed": "seed.seed",
+        "latent": "source.latent"
+      },
+      "params": {
+        "seconds": 2,
+        "direction": "after",
+        "steps": 30,
+        "cfg": 3,
+        "stg": 1
+      }
+    },
+    "decode": {
+      "kind": "ltx/decode",
+      "in": {
+        "model": "model.model",
+        "latent": "extend.latent"
+      },
+      "params": {
+        "audio": true
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "decode.video"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "source.source"
+    ],
+    "quick": [
+      "elements",
+      "extend.seconds",
+      "extend.direction",
+      "decode.audio"
+    ],
+    "inspector": [
+      {
+        "title": "Quality",
+        "items": [
+          "model.precision",
+          "extend.steps",
+          "extend.cfg",
+          "extend.stg"
+        ]
+      }
+    ],
+    "presets": {
+      "Fast": {
+        "model.precision": "int8"
+      },
+      "Low memory": {
+        "model.precision": "int4"
+      }
+    }
+  }
+}

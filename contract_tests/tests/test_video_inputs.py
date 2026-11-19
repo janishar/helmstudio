@@ -165,7 +165,10 @@ def test_a_video_take_is_not_a_first_frame(api, sid, first):
     detail = refused(api, sid, {KF: [row(vid)]})
     assert f"{KF}[1].image: take {vid} is not an image" in detail, detail
     r = api.post(f"{STUDIO}/takes/{vid}/use", json={"workflow_id": WF})
-    assert r.status_code == 422 and f"take {vid} is not an image" in r.json()["detail"], r.text
+    # API 1.19: a video take goes to a media input, which this workflow has none of
+    assert (r.status_code, r.json()["detail"]) == (422, f"workflow {WF} takes no video input"), (
+        r.text
+    )
 
 
 # ---------------------------------------------------------------- auto length

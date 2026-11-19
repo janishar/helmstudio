@@ -67,12 +67,18 @@ export const framesFor = (p: Param, s: number, fps: number) => snapFrames(p, s *
 export const durationText = (frames: number, fps: number) =>
   `${frames} frames · ${secondsText(seconds(frames, fps))}`;
 
-/** What a take or run output shows small: its picture (an image's thumbnail, a video's poster) and a video's
- * length ("2.0 s"). */
+/** What a take or run output shows small: its picture (an image's thumbnail, a video's poster; audio has none) and
+ * a video's or audio's length ("2.0 s"). */
 export function thumbOf(t: S<"Take"> | S<"RunOutput">): { src?: string; length?: string } {
+  const audio = "audio" in t ? t.audio : undefined;
+  if (t.kind === "audio") return { length: audio && secondsText(audio.duration_s) };
   const src = "thumb_url" in t ? t.thumb_url : t.kind === "video" ? t.video?.poster_url : t.url;
   return { src, length: t.video ? secondsText(t.video.duration_s) : undefined };
 }
+
+/** An audio take's format from its type ("mp3", "wav"). */
+export const audioFormat = (contentType: string) =>
+  contentType === "audio/mpeg" ? "mp3" : contentType.replace(/^audio\/(x-)?/, "");
 
 /** The take's line in a details panel: "2.0 s · 24 fps · 49 frames · audio"; "" for an image. */
 export const videoLine = (v?: S<"VideoInfo">) =>

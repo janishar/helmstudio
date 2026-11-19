@@ -1,0 +1,34 @@
+{
+  "id": "echo-extend",
+  "title": "Echo extend",
+  "action": "Extend",
+  "family": "echo",
+  "env": "fake",
+  "media": "video",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "extend": {
+      "kind": "echo/extend",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "source": null,
+        "seconds": 2,
+        "direction": "after",
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "extend.video"
+      }
+    }
+  }
+}

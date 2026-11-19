@@ -127,6 +127,39 @@ type Take struct {
 	// source frame: the video take and frame it is; source export: the sequence and revision (API 1.17)
 	FrameOf json.RawMessage `json:"frame_of,omitempty"`
 	Export  json.RawMessage `json:"export,omitempty"`
+	// API 1.19: an audio take's length; a video made from a media take: how it lines up with that take
+	Audio     *AudioInfo `json:"audio,omitempty"`
+	SourceMap *SourceMap `json:"source_map,omitempty"`
+}
+
+// AudioInfo is an audio take's length as the client declared it at upload (takes.audio).
+type AudioInfo struct {
+	DurationS float64 `json:"duration_s"`
+}
+
+// SourceMap is evt.run.output's source_map, stored as takes.source_map: output time = source time + OffsetS; the
+// generated part is [NewInS, NewOutS).
+type SourceMap struct {
+	TakeID  string  `json:"take_id"`
+	OffsetS float64 `json:"offset_s"`
+	NewInS  float64 `json:"new_in_s"`
+	NewOutS float64 `json:"new_out_s"`
+}
+
+// TakeOffer is one "Use in…" entry (API 1.19): a workflow this take fits, with the inputs that put it there.
+type TakeOffer struct {
+	WorkflowID string         `json:"workflow_id"`
+	Title      string         `json:"title"`
+	Action     string         `json:"action,omitempty"`
+	Family     string         `json:"family"`
+	Media      string         `json:"media"`
+	Param      string         `json:"param"`
+	Inputs     map[string]any `json:"inputs"`
+}
+
+// TakeUses is GET /takes/{id}/uses.
+type TakeUses struct {
+	Uses []TakeOffer `json:"uses"`
 }
 
 // TakeDecision is one judge decision about a take: kept (by the judge or the user's pick), passed or failed.
@@ -274,15 +307,23 @@ func (b *TakePatch) Validate() string {
 const MaxUploadBytes = 52428800
 
 // UploadTypes maps each content type an upload may have to its key's extension.
-var UploadTypes = map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+var UploadTypes = map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "audio/wav": "wav",
+	"audio/mpeg": "mp3"}
+
+// MaxAudioS is the longest audio upload (API 1.19).
+const MaxAudioS = 600
 
 // UploadCreate is POST /uploads.
 type UploadCreate struct {
-	Filename    string `json:"filename"`
-	ContentType string `json:"content_type"`
-	Bytes       int64  `json:"bytes"`
+	Filename    string   `json:"filename"`
+	ContentType string   `json:"content_type"`
+	Bytes       int64    `json:"bytes"`
+	DurationS   *float64 `json:"duration_s"` // audio only (required): its length as the browser decoded it
 	unknown     string
 }
+
+// Audio reports whether the upload is an audio take.
+func (b *UploadCreate) Audio() bool { return strings.HasPrefix(b.ContentType, "audio/") }
 
 // UnmarshalJSON decodes the fields and remembers an unknown one (additionalProperties: false).
 func (b *UploadCreate) UnmarshalJSON(data []byte) error {
@@ -290,7 +331,7 @@ func (b *UploadCreate) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, (*plain)(b)); err != nil {
 		return err
 	}
-	b.unknown = unknownField(data, "filename", "content_type", "bytes")
+	b.unknown = unknownField(data, "filename", "content_type", "bytes", "duration_s")
 	return nil
 }
 
@@ -302,11 +343,17 @@ func (b *UploadCreate) Validate() string {
 	case b.Filename == "" || utf8.RuneCountInString(b.Filename) > 255:
 		return "filename must be 1-255 characters"
 	case UploadTypes[b.ContentType] == "":
-		return "only png, jpeg and webp images can be uploaded"
+		return "only png, jpeg and webp images or wav and mp3 audio can be uploaded"
 	case b.Bytes < 1:
 		return "bytes must be at least 1"
 	case b.Bytes > MaxUploadBytes:
 		return "file is larger than 50 MB"
+	case !b.Audio() && b.DurationS != nil:
+		return "duration_s is for audio only"
+	case b.Audio() && (b.DurationS == nil || *b.DurationS <= 0):
+		return "duration_s is required for audio"
+	case b.Audio() && *b.DurationS > MaxAudioS:
+		return "audio is longer than 600 s"
 	}
 	return ""
 }

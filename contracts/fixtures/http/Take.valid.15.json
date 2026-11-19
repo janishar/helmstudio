@@ -1,0 +1,61 @@
+{
+  "id": "ab3f2e44-6d7f-4081-9c9d-3e4f5a6b7c8d",
+  "kind": "video",
+  "source": "create",
+  "title": "The puppy sits down and wags its tail",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.mp4?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.poster.png?exp=1767225600&sig=cd34",
+  "content_type": "video/mp4",
+  "width": 448,
+  "height": 256,
+  "bytes": 412907,
+  "created_at": "2026-11-14T10:16:20Z",
+  "starred": false,
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "run_id": "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35",
+  "made_with": {
+    "workflow_id": "ltx-retake",
+    "workflow_title": "LTX-2.5 Retake",
+    "inputs": {
+      "prompt.text": "The puppy sits down and wags its tail",
+      "seed.seed": 42,
+      "model.variant": "dev",
+      "model.precision": "int8",
+      "source.source": {
+        "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b"
+      },
+      "retake.span": {
+        "start": 0.375,
+        "end": 1.375
+      },
+      "retake.audio": true,
+      "retake.steps": 30,
+      "retake.cfg": 3,
+      "retake.stg": 1,
+      "decode.audio": true
+    },
+    "prompt": "The puppy sits down and wags its tail",
+    "seed": 42,
+    "model": {
+      "id": "ltx-2.5",
+      "variant": "dev",
+      "precision": "int8"
+    }
+  },
+  "parents": [
+    "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b"
+  ],
+  "video": {
+    "duration_s": 2.0416666666666665,
+    "fps": 24,
+    "frames": 49,
+    "has_audio": true,
+    "poster_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35/1/0.poster.png?exp=1767225600&sig=cd34"
+  },
+  "source_map": {
+    "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b",
+    "offset_s": 0,
+    "new_in_s": 0.375,
+    "new_out_s": 1.375
+  }
+}

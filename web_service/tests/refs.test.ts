@@ -11,7 +11,6 @@ import {
   cellRef,
   editLabel,
   imageInputs,
-  imageWorkflows,
   inOrder,
   mentionOf,
   move,
@@ -42,10 +41,9 @@ const image: Field = {
 };
 
 describe("image inputs", () => {
-  it("finds the references param of qwen-image and echo, and the workflows that take images", () => {
+  it("finds the references param of qwen-image and echo", () => {
     expect(imageInputs(fields(qwen)).map((f) => f.key)).toEqual(["encode.refs"]);
     expect(imageInputs(fields(echo)).map((f) => f.key)).toEqual(["echo.refs"]);
-    expect(imageWorkflows([qwen, echo]).map((w) => w.id)).toEqual(["qwen-image", "echo"]);
   });
 
   it("names item n with the schema's mention", () => {

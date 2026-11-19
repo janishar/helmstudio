@@ -2,7 +2,7 @@
 // Image field holds an ordered list of them (the references). Over HTTP an image is always `{take_id}`.
 import type { S } from "@/lib/api";
 import { roundEven } from "@/lib/video";
-import { fields, isRef, toRaw, type Field, type Raw } from "@/lib/workflow";
+import { isRef, toRaw, type Field, type Raw } from "@/lib/workflow";
 
 type Param = S<"ParamSchema">;
 
@@ -86,11 +86,6 @@ export function autoSize(width: number, height: number) {
 export const editLabel = (title: string, n: number) =>
   n ? `${title} · Edit · ${n} reference${n === 1 ? "" : "s"}` : title;
 
-/** The take action's label for a workflow that takes images ("Edit · Qwen Image"; a video one by its title: the
- * image is its first frame). */
-export const targetLabel = (w: S<"Workflow">) =>
-  w.media === "video" ? w.title : `Edit · ${w.title}`;
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A batch cell (a take id) as an image field's value: `{take_id}`, or the one-item list for a rows param. */
@@ -112,10 +107,6 @@ export function dropped(dt: DataTransfer) {
 /** Whether a drag carries something a reference list takes. */
 export const carriesImage = (dt: DataTransfer) =>
   dt.types.includes("Files") || dt.types.includes(TAKE_MIME);
-
-/** The workflows a take can be used in: those with an image input. */
-export const imageWorkflows = (ws: S<"Workflow">[]) =>
-  ws.filter((w) => imageInputs(fields(w)).length > 0);
 
 /** How many references the form holds now, over every image input. */
 export const refCount = (fs: Field[], raws: Record<string, Raw>) =>

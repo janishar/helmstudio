@@ -16,6 +16,7 @@ import (
 type Workflow struct {
 	ID          string                         `json:"id"`
 	Title       string                         `json:"title"`
+	Action      string                         `json:"action,omitempty"` // API 1.19, templates: the take action's label
 	Family      string                         `json:"family"`
 	Env         string                         `json:"env"`
 	Media       string                         `json:"media"` // image | video

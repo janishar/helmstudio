@@ -140,3 +140,43 @@ run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 G
 | decode (audio, VAE, mux) | 10.57 | 23.41 | 10.57 | 21.41 / 22.00 |
 | process footprint peak (whole run) | 27.7 (was 49.1) | 39.8 (was 49.8) | 28.1 | |
 | run time | 26.0 s (was 30.8) | 62.7 s (was 64.5) | 25.1 s | |
+
+## M7 pack 1: retake, extend, audio to video (docs/reference-notes/ltx.md section 12; contracts README, Media inputs)
+
+- **Proven on the GPU** (Measured below). Without weights (CPU, `tests/test_mlx.py`) every state the loops start from
+  equals the goldens' recorded sha: the retake mask (float32) and keyframes mask, extend's bf16 masks, both audio
+  masks, the positions at the source fps, a2v stage 1's noise and positions, and the 30-step `ltx2_schedule`. The
+  weight-loading proof is `tests/test_ltx_golden.py retake-448x256-49f-s42 extend-448x256-49f+8-s42
+  a2v-448x256-49f-s42` on mlx 0.32.2 (bit-exact per recorded point), then on 0.32.4 against `DEV_BARS`.
+- **Guidance**: 4 sequential DiT passes per step (cond, negative prompt, STG block 28, modality), x0 =
+  cond + (cfg-1)(cond-neg) + stg(cond-ptb) + (mod-1)(cond-mod), rescaled 0.7; audio cfg 7 for retake / extend, the
+  audio guider off for a2v (`MultiModalGuiderParams()`). Deterministic Euler; the mask blends x0 every step.
+- **Noise**: `noise_latent_state` (mask x sigma, not the scalar blend) for retake / extend, video `seed`, audio
+  `seed + 1`; a2v stage 1 is the scalar blend (as t2v). Retake's video mask is float32 (TemporalRegionMask), extend's
+  bf16: the per-token timesteps differ by dtype; keep both.
+- **Retake audio range**: `round(S * (T / F))` with the float ratio first, as the old code (not `S * T / F`).
+- **a2v RoPE** ignores fps (positions at the default 24.0): `ltx/encode-audio.fps` allows only 24.
+- **a2v stage 2** is `ltx/sample` stage2 on the handle `ltx/distill` makes: the dev transformer loaded again and the
+  distilled LoRA (3320 keys, all applied) baked at load, a second residency entry (`loras: [{prefused id, 1}]`);
+  the old code fused in place after stage 1. `sample-guided` unloads the plain dev transformer after it runs, so one
+  transformer is resident at a time. The stage-2 audio starts from stage 1's output audio, which equals the encoded
+  source exactly (mask 0: x0 is the clean latent, Euler leaves it unchanged).
+- **a2v output** muxes the source part re-read at 48 kHz from `in`, `int(frames / fps * 48000)` samples; never the
+  generated audio.
+- **Sources**: the video is re-probed (vendored `probe_video_info`): sides on the 32 grid and at most 321 frames are
+  re-checked on the file, frames floored to 8k + 1, read at their own size with the old ffmpeg arguments, encoded
+  all at once (8.7 GiB MLX peak at 448x256x49, old studio 6.9; grows with mp x frames). A source without
+  sound gets the old zero audio latent. Audio is read with the vendored `load_audio` (16 kHz stereo).
+- **Memory plans** (`model.yaml` `plan_media`, `planned_alone`): retake / extend planned at the goldens' source
+  (448x256x49), a2v alone at its template canvas; the dev templates pin int8 / int4 (`only`), so nothing is planned
+  at bf16 for dev. `peak_gb` measured on this port (model.yaml header); `encode-video` re-fitted to its 8.7 GiB.
+- **Measured 2026-11-19** (64 GB M-series, int8, 448x256x49 goldens): on mlx 0.32.2 retake, extend and a2v are
+  bit-exact at every recorded point (embeds, source latents, loop states, finals; every frame PSNR inf, WAV
+  identical), so the bake-at-reload of the distilled LoRA equals the old in-place fuse. On 0.32.4 (`DEV_BARS`):
+  retake 36.06 / 34.50 dB, log-mel 0.248; extend 36.13 / 26.65 (the added frames drift most), 0.331; a2v 24.50 /
+  20.79, 0.000 (source audio kept). Times: encode 9 s, retake 262 s, extend 283 s (30 steps x 4 passes), a2v 137 s
+  (stage 1 105 s, the baked reload 13 s, stage 2 19 s). Process footprint: retake 26.8 GiB, extend 27.5, a2v 32.8;
+  the baked load peaks 29.5 GiB over what was resident (20.3 kept). Residency may keep the baked copy after a2v: a
+  retake right after it held both transformers (39.4 GiB) and peaked at a 45.7 GiB footprint, under the 52 budget.
+- **Harness**: a load or loop resets MLX's peak counter; `Bench.reset_peak` keeps the node's peak across them (before
+  it, a node's `peak_gib` was only what followed its last load).

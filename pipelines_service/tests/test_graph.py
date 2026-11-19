@@ -154,6 +154,22 @@ def test_an_uncapped_loop_does_not_validate():
     assert ("uncapped_cycle", "still", None, None) in pipeline.problems(doc)
 
 
+def test_rerender_media_bind_keeps_in_and_out():
+    """API 1.19 Re-render: `<param>` ← `<step>.takes` into a media param is that step's first take, with the bound
+    value's in / out kept."""
+    plan = {
+        "workflows": {"w": {"nodes": {"audio": {"params": {"source": None}}}}},
+        "inputs_node": "inputs",
+    }
+    spec = {
+        "workflow": "w",
+        "inputs": {"audio.source": {"take_id": "old", "in": 0.5, "out": 2}},
+        "bind": {"audio.source": "clip_a.takes"},
+    }
+    got, err = graph.run_inputs(plan, {"inputs": {}, "takes": {"clip_a": ["t1", "t2"]}}, spec)
+    assert err is None and got["audio.source"] == {"take_id": "t1", "in": 0.5, "out": 2}
+
+
 def test_rerender_row_bind_sends_a_frame_ref():
     """API 1.17 Re-render: `<node>.<param>[<row>]` ← `<step>.last_frame` fills that row's Image with a frameRef and
     keeps its other fields."""

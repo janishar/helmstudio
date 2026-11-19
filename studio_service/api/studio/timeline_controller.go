@@ -3,7 +3,9 @@ package studio
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -44,6 +46,22 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 		network.SendNoContent(ctx)
 	})
 	group.POST("/timelines/:id/clips", timelineIDBody(c.service.AddTimelineClips, http.StatusOK))
+	group.GET("/timelines/:id/clips/:clip_id/actions", func(ctx *gin.Context) {
+		var bounds [2]*float64
+		for i, name := range []string{"start", "end"} {
+			if text, ok := ctx.GetQuery(name); ok {
+				v, err := strconv.ParseFloat(text, 64)
+				if err != nil || v < 0 || math.IsInf(v, 0) || math.IsNaN(v) {
+					network.SendMixedError(ctx, network.NewUnprocessableError(name+" must be seconds from 0", nil))
+					return
+				}
+				bounds[i] = &v
+			}
+		}
+		out, err := c.service.ClipActions(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("clip_id"),
+			bounds[0], bounds[1])
+		reply(ctx, http.StatusOK, out, err)
+	})
 	group.POST("/timelines/:id/undo", timelineIDBody(c.service.UndoTimeline, http.StatusOK))
 	group.POST("/timelines/:id/redo", timelineIDBody(c.service.RedoTimeline, http.StatusOK))
 	group.POST("/timelines/:id/shots", timelineIDBody(c.service.CreateShot, http.StatusAccepted))

@@ -531,6 +531,153 @@
       "help": "Fake two-stage video model: as Echo video, with steps fixed by the stage (stage1 4, stage2 2)."
     },
     {
+      "kind": "echo/retake",
+      "title": "Echo retake",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Source video",
+          "default": null,
+          "accepts": [
+            "video"
+          ],
+          "grid": 32,
+          "max_frames": 321,
+          "help": "The video the fake reads (and checks) before it renders."
+        },
+        {
+          "name": "span",
+          "type": "span",
+          "label": "Retake",
+          "default": null,
+          "help": "Reported back as the generated part."
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "Video"
+        }
+      ],
+      "help": "Fake retake: reads the source, then a still MP4 of its text as long as the source (the source's size and fps), reporting source_map {source, 0, span}."
+    },
+    {
+      "kind": "echo/a2v",
+      "title": "Echo audio to video",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Audio",
+          "default": null,
+          "accepts": [
+            "audio"
+          ],
+          "trim": true,
+          "max_s": 13.375,
+          "help": "The audio (or a video's sound) the fake reads (and checks) before it renders; in and out pick the part."
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "Video"
+        }
+      ],
+      "help": "Fake audio to video: reads the part in..out, then a still MP4 of its text as long as the part (24 fps, 256 x 128) with that part as its sound, reporting source_map {source, -in, 0, out - in}."
+    },
+    {
+      "kind": "echo/extend",
+      "title": "Echo extend",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Source video",
+          "default": null,
+          "accepts": [
+            "video"
+          ],
+          "grid": 32,
+          "max_frames": 321,
+          "help": "The video the fake reads (and checks) before it renders."
+        },
+        {
+          "name": "seconds",
+          "type": "float",
+          "label": "Add",
+          "default": 2,
+          "min": 0.1,
+          "max": 10,
+          "step": 0.1,
+          "help": "Seconds to add, rounded up to whole 8-frame steps."
+        },
+        {
+          "name": "direction",
+          "type": "enum",
+          "label": "Where",
+          "default": "after",
+          "enum": [
+            "after",
+            "before"
+          ]
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "Video"
+        }
+      ],
+      "help": "Fake extend: reads the source, then a still MP4 of its text at the source's size and fps, as long as ltx/extend's result, reporting its source_map (extend_map)."
+    },
+    {
       "kind": "output",
       "title": "Output",
       "family": null,

@@ -1527,6 +1527,57 @@
           "frames": 48
         }
       }
+    },
+    {
+      "description": "an audio take is not a clip yet (1.19): wrong_track on any track",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001"
+              }
+            ]
+          },
+          {
+            "kind": "audio",
+            "clips": [
+              {
+                "id": "m",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "in": 0,
+                "out": 3.0,
+                "at": 0
+              }
+            ]
+          }
+        ]
+      },
+      "takes": {
+        "ffffffff-0000-4000-8000-000000000001": {
+          "kind": "audio",
+          "duration_s": 3.0,
+          "has_audio": true,
+          "bytes": 576044
+        }
+      },
+      "expect": {
+        "problems": [
+          [
+            "wrong_track",
+            "A2",
+            "m"
+          ]
+        ]
+      }
     }
   ]
 }

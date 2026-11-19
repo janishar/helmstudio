@@ -1,0 +1,90 @@
+{
+  "description": "1.19 only: a copy of ltx-retake set to the distilled variant its model node does not allow",
+  "workflow": {
+    "title": "My retake",
+    "family": "ltx",
+    "env": "mlx",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "model": {
+        "kind": "ltx/model",
+        "params": {
+          "variant": "distilled",
+          "precision": "int8"
+        },
+        "only": {
+          "variant": [
+            "dev"
+          ]
+        }
+      },
+      "encode": {
+        "kind": "ltx/encode-guided",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {}
+      },
+      "source": {
+        "kind": "ltx/encode-video",
+        "in": {
+          "model": "model.model"
+        },
+        "params": {
+          "source": null
+        }
+      },
+      "retake": {
+        "kind": "ltx/retake",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "seed": "seed.seed",
+          "latent": "source.latent"
+        },
+        "params": {
+          "span": null,
+          "audio": true,
+          "steps": 30,
+          "cfg": 3,
+          "stg": 1
+        }
+      },
+      "decode": {
+        "kind": "ltx/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "retake.latent"
+        },
+        "params": {
+          "audio": true
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.video"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "param_invalid",
+      "node": "model",
+      "param": "variant"
+    }
+  ]
+}

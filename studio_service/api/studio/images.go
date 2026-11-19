@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -25,10 +26,16 @@ import (
 // checkImages returns the 422 detail of the first Image value of nodes whose take is not the owner's completed,
 // undeleted image with its object in the store ("encode.refs[2].image: take <id> not found"), "" when all are good.
 // A text (ask) workflow's takes may also be videos (its Media rows; API 1.14).
-func checkImages(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, nodes map[string]registry.Node) (string, error) {
-	refs := images(nodes)
+// From API 1.19 it also checks and snaps the graph's media and span values (checkMedia; schemas: the workflow's).
+func checkImages(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, nodes map[string]registry.Node,
+	schemas map[string]registry.NodeSchema) (string, error) {
+	media := mediaParams(nodes, schemas)
+	refs := slices.DeleteFunc(images(nodes), func(at imageAt) bool { _, ok := media[at.Path]; return ok })
 	problems, err := vetTakes(ctx, tx, store, ownerID, refs, registry.IsText(nodes))
-	return firstBad(refs, problems), err
+	if detail := firstBad(refs, problems); detail != "" || err != nil {
+		return detail, err
+	}
+	return checkMedia(ctx, tx, store, ownerID, nodes, schemas)
 }
 
 // firstBad is the detail of the first ref whose take has a problem.
@@ -149,9 +156,11 @@ func contentHash(ctx context.Context, store storage.Store, key string) (string, 
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// resolveImages returns run's graph with every {take_id} replaced by the take's object descriptor (defs image), read
-// as System with an explicit owner check. gone names the first take that is no longer usable (deleted since the run
-// was created): the run must fail rather than send a dead key.
+// resolveImages returns run's graph with every {take_id} replaced by the take's object descriptor (defs image; from
+// API 1.19 a video or audio take of a media param: defs media), read as System with an explicit owner check. A media
+// value is told by its take: create let a video or audio take only into a media param (or a text workflow's Media
+// rows, which stay images). gone names the first take that is no longer usable (deleted since the run was created):
+// the run must fail rather than send a dead key.
 func resolveImages(ctx context.Context, tx pgx.Tx, ownerID string, graph []byte) (map[string]registry.Node, string, error) {
 	var nodes map[string]registry.Node
 	if err := json.Unmarshal(graph, &nodes); err != nil {
@@ -165,32 +174,27 @@ func resolveImages(ctx context.Context, tx pgx.Tx, ownerID string, graph []byte)
 	for i, ref := range refs {
 		ids[i] = ref.TakeID
 	}
-	type descriptor struct {
-		TakeID      string `json:"take_id"`
-		Key         string `json:"key"`
-		ContentType string `json:"content_type"`
-		Width       int    `json:"width"`
-		Height      int    `json:"height"`
-		Bytes       int64  `json:"bytes"`
-		Etag        string `json:"etag"`
-	}
-	rows, err := collect[descriptor](ctx, tx, `SELECT id::text, key, content_type, width, height, bytes, etag FROM takes
-		WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND deleted_at IS NULL AND ready AND (kind = 'image' OR $3 AND kind = 'video')
-		AND width IS NOT NULL AND height IS NOT NULL AND etag IS NOT NULL`, ids, ownerID, registry.IsText(nodes))
+	rows, err := inputTakes(ctx, tx, ownerID, ids)
 	if err != nil {
 		return nil, "", err
 	}
-	byID := map[string]descriptor{}
-	for _, row := range rows {
-		byID[row.TakeID] = row
-	}
+	text := registry.IsText(nodes)
 	gone := ""
 	eachImage(nodes, func(at imageAt) any {
-		row, ok := byID[at.TakeID]
-		if !ok && gone == "" {
+		row, ok := rows[at.TakeID]
+		media := ok && row.Kind != "image" && !text && !strings.Contains(at.Path, "[")
+		image := ok && (row.Kind == "image" || (text && row.Kind == "video")) && row.Width != nil && row.Height != nil
+		switch {
+		case ok && row.Etag != nil && media:
+			return mediaDescriptor(row, at.Value)
+		case ok && row.Etag != nil && image:
+			return map[string]any{"take_id": row.ID, "key": row.Key, "content_type": row.ContentType, "width": *row.Width,
+				"height": *row.Height, "bytes": row.Bytes, "etag": *row.Etag}
+		}
+		if gone == "" {
 			gone = at.TakeID
 		}
-		return row
+		return nil
 	})
 	return nodes, gone, nil
 }

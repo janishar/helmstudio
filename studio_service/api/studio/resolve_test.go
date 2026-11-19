@@ -173,7 +173,7 @@ func TestResolveImages(t *testing.T) {
 		t.Fatal(detail)
 	}
 	got := images(nodes)
-	if len(got) != 3 || got[1] != (imageAt{Path: "encode.refs[2].image", TakeID: takeB}) {
+	if len(got) != 3 || got[1].Path != "encode.refs[2].image" || got[1].TakeID != takeB {
 		t.Fatalf("%+v", got)
 	}
 	graph, _ := json.Marshal(nodes)
@@ -203,7 +203,7 @@ func TestResolveImages(t *testing.T) {
 		t.Fatal(detail)
 	}
 	nodes, detail = resolve(workflow, inputs(t, `{"image.image": {"take_id": "`+takeB+`"}}`))
-	if detail != "" || images(nodes)[0] != (imageAt{Path: "image.image", TakeID: takeB}) {
+	if detail != "" || images(nodes)[0].Path != "image.image" || images(nodes)[0].TakeID != takeB {
 		t.Fatal(detail, images(nodes))
 	}
 	one := 1.0

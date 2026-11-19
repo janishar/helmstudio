@@ -1,6 +1,7 @@
 {
   "id": "ltx-image-to-video",
   "title": "LTX-2.5 Image to video",
+  "action": "Animate",
   "family": "ltx",
   "env": "mlx",
   "media": "video",

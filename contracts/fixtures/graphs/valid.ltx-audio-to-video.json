@@ -1,0 +1,179 @@
+{
+  "description": "1.19: the ltx-audio-to-video template as a user workflow (media and span params, only, ltx/distill, a bypassed keyframes node)",
+  "workflow": {
+    "title": "My audio to video",
+    "family": "ltx",
+    "env": "mlx",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "canvas": {
+        "kind": "ltx/canvas",
+        "params": {
+          "width": 704,
+          "height": 448
+        }
+      },
+      "model": {
+        "kind": "ltx/model",
+        "params": {
+          "variant": "dev",
+          "precision": "int8"
+        },
+        "only": {
+          "variant": [
+            "dev"
+          ]
+        }
+      },
+      "encode": {
+        "kind": "ltx/encode-guided",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {}
+      },
+      "audio": {
+        "kind": "ltx/encode-audio",
+        "in": {
+          "model": "model.model"
+        },
+        "params": {
+          "source": null,
+          "fps": 24
+        }
+      },
+      "keyframes": {
+        "kind": "ltx/keyframes",
+        "in": {
+          "cond": "encode.cond"
+        },
+        "params": {
+          "images": []
+        },
+        "bypass": true
+      },
+      "sample1": {
+        "kind": "ltx/sample-guided",
+        "in": {
+          "model": "model.model",
+          "cond": "keyframes.cond",
+          "seed": "seed.seed",
+          "canvas": "canvas.canvas",
+          "duration": "audio.duration",
+          "audio": "audio.latent"
+        },
+        "params": {
+          "steps": 30,
+          "cfg": 3,
+          "stg": 1
+        }
+      },
+      "upscale": {
+        "kind": "ltx/upscale",
+        "in": {
+          "model": "model.model",
+          "latent": "sample1.latent"
+        },
+        "params": {}
+      },
+      "distill": {
+        "kind": "ltx/distill",
+        "in": {
+          "model": "model.model"
+        },
+        "params": {}
+      },
+      "sample2": {
+        "kind": "ltx/sample",
+        "in": {
+          "model": "distill.model",
+          "cond": "keyframes.cond",
+          "seed": "seed.seed",
+          "latent": "upscale.latent"
+        },
+        "params": {
+          "role": "stage2",
+          "steps": 3
+        }
+      },
+      "decode": {
+        "kind": "ltx/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "sample2.latent"
+        },
+        "params": {
+          "audio": true
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.video"
+        }
+      }
+    },
+    "studio": {
+      "composer": [
+        "prompt.text",
+        "audio.source"
+      ],
+      "quick": [
+        "keyframes.bypass",
+        "keyframes.images",
+        "elements",
+        "decode.audio"
+      ],
+      "inspector": [
+        {
+          "title": "Canvas",
+          "items": [
+            "canvas.width",
+            "canvas.height"
+          ]
+        },
+        {
+          "title": "Quality",
+          "items": [
+            "model.precision",
+            "sample1.steps",
+            "sample1.cfg",
+            "sample1.stg",
+            "sample2.steps",
+            "audio.fps"
+          ]
+        }
+      ],
+      "labels": {
+        "keyframes.bypass": "No keyframes",
+        "keyframes.images": "Frames",
+        "sample1.steps": "Stage 1 steps",
+        "sample2.steps": "Stage 2 steps"
+      },
+      "presets": {
+        "Fast": {
+          "model.precision": "int8"
+        },
+        "Quality": {
+          "model.precision": "bf16"
+        },
+        "Low memory": {
+          "model.precision": "int4"
+        }
+      }
+    }
+  },
+  "problems": []
+}

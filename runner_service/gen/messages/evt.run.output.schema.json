@@ -199,6 +199,10 @@
               "description": "from API 1.17: the stream facts of the MP4 (the export plan's input); absent = not probed (the plan re-encodes that clip: not_probed)"
             }
           }
+        },
+        "source_map": {
+          "$ref": "defs.schema.json#/$defs/sourceMap",
+          "description": "API 1.19, a video made from a media take (ltx retake, extend, audio to video): how its time lines up with that take; studio stores it as Take.source_map. Absent otherwise"
         }
       },
       "allOf": [

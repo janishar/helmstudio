@@ -187,7 +187,7 @@ func TestUseIn(t *testing.T) {
 			t.Errorf("%s: %v", body, bad["detail"])
 		}
 	}
-	if bad := use(userA, video, map[string]any{"workflow_id": "echo"}, 422); bad["detail"] != "take "+video+" is not an image" {
+	if bad := use(userA, video, map[string]any{"workflow_id": "echo"}, 422); bad["detail"] != "workflow echo takes no video input" {
 		t.Fatal(bad)
 	}
 	sizeless := e.image(userA)

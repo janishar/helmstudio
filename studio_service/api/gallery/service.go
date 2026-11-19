@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/url"
@@ -54,7 +55,14 @@ type Service struct {
 	store    storage.Store
 	registry *registry.Registry
 	find     Find
+	offers   Offerable
 }
+
+// Offerable lists the workflows "Use in…" may offer, in offer order (studio's Offerable; API 1.19).
+type Offerable func(ctx context.Context, caller common.Caller) ([]registry.Workflow, error)
+
+// SetOffers sets where GET /takes/{id}/uses reads its workflows.
+func (s *Service) SetOffers(offers Offerable) { s.offers = offers }
 
 // NewService returns the service.
 func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, registry *registry.Registry, find Find) *Service {
@@ -542,15 +550,36 @@ func settable(workflow registry.Workflow, key string) bool {
 	return !wired && slices.ContainsFunc(schema.Params, func(p registry.Param) bool { return p.Name == name })
 }
 
+// Uses lists "Use in…" (API 1.19, take_uses): every workflow the take fits, with its inputs pre-filled.
+func (s *Service) Uses(ctx context.Context, caller common.Caller, id string) (dto.TakeUses, error) {
+	row, err := s.get(ctx, caller, id)
+	if err != nil {
+		return dto.TakeUses{}, err
+	}
+	if !s.registry.Ready() {
+		return dto.TakeUses{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	out := dto.TakeUses{Uses: []dto.TakeOffer{}}
+	if row.Kind == "image" && (row.Width == nil || row.Height == nil) {
+		return out, nil // an image without a size goes into no workflow (Use: has no size)
+	}
+	workflows, err := s.offers(ctx, caller)
+	if err == nil {
+		out.Uses = Offers(FactsOf(row), workflows, nil)
+	}
+	return out, err
+}
+
 // Use answers "Use in…": the inputs that put the take into the workflow's image input (body.Param, else its only
-// one): {take_id} for an image param, [{<field>: {take_id}}] for a rows param whose item has one Image field.
+// one): {take_id} for an image param, [{<field>: {take_id}}] for a rows param whose item has one Image field. From
+// API 1.19 a video or audio take goes into a media param that accepts it, as Offers fills it.
 func (s *Service) Use(ctx context.Context, caller common.Caller, id string, body *dto.TakeUse) (dto.TakeReuse, error) {
 	row, err := s.get(ctx, caller, id)
 	if err != nil {
 		return dto.TakeReuse{}, err
 	}
 	if row.Kind != "image" {
-		return dto.TakeReuse{}, network.NewUnprocessableError("take "+id+" is not an image", nil)
+		return s.useMedia(ctx, caller, row, body)
 	}
 	if row.Width == nil || row.Height == nil { // release needs them (studio vetTakes)
 		return dto.TakeReuse{}, network.NewUnprocessableError("take "+id+" has no size", nil)
@@ -578,6 +607,56 @@ func (s *Service) Use(ctx context.Context, caller common.Caller, id string, body
 		value = []any{map[string]any{field: value}}
 	}
 	return dto.TakeReuse{WorkflowID: workflow.ID, Inputs: map[string]any{key: value}}, nil
+}
+
+// useMedia is Use for a video or audio take: the workflow's media param that accepts it (body.Param, else its only
+// one), the take fitting it (media_fit), with the inputs an offer has.
+func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.Take, body *dto.TakeUse) (dto.TakeReuse, error) {
+	if !s.registry.Ready() {
+		return dto.TakeReuse{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	workflow, _, err := s.find(ctx, caller, body.WorkflowID)
+	var notFound *network.APIError
+	if errors.As(err, &notFound) && notFound.Code == http.StatusNotFound {
+		return dto.TakeReuse{}, network.NewUnprocessableError("unknown workflow "+body.WorkflowID, nil)
+	} else if err != nil {
+		return dto.TakeReuse{}, err
+	}
+	take := FactsOf(row)
+	var keys []string
+	params := map[string]registry.Param{}
+	for _, nodeID := range slices.Sorted(maps.Keys(workflow.Nodes)) {
+		node := workflow.Nodes[nodeID]
+		for _, p := range workflow.NodeSchemas[node.Kind].Params {
+			_, wired := node.In[p.Name]
+			if !wired && !node.Bypass && p.Type == "media" && (slices.Contains(p.Accepts, take.Kind) ||
+				(take.Kind == "video" && slices.Contains(p.Accepts, "audio"))) {
+				keys = append(keys, nodeID+"."+p.Name)
+				params[nodeID+"."+p.Name] = p
+			}
+		}
+	}
+	unprocessable := func(detail string) (dto.TakeReuse, error) {
+		return dto.TakeReuse{}, network.NewUnprocessableError(detail, nil)
+	}
+	switch _, ok := params[deref(body.Param)]; {
+	case body.Param != nil && !ok:
+		return unprocessable(*body.Param + ": not a " + take.Kind + " input of workflow " + workflow.ID)
+	case body.Param != nil:
+		keys = []string{*body.Param}
+	case len(keys) == 0:
+		return unprocessable("workflow " + workflow.ID + " takes no " + take.Kind + " input")
+	case len(keys) > 1:
+		return unprocessable("workflow " + workflow.ID + " has several " + take.Kind + " inputs; name one in param")
+	}
+	if detail := MediaFit(params[keys[0]], take); detail != "" {
+		return unprocessable(detail)
+	}
+	inputs, ok := mediaInputs(take, workflow, params[keys[0]], keys[0], nil)
+	if !ok {
+		return unprocessable(fmt.Sprintf("take %s has %d frames; extending it would pass %d", take.ID, take.Frames, LtxMaxFrames))
+	}
+	return dto.TakeReuse{WorkflowID: workflow.ID, Inputs: inputs}, nil
 }
 
 // imageInput picks the workflow's image input: want ("<node>.<param>") when given, else its only one. The third
@@ -638,6 +717,8 @@ func TakeDTO(signer *common.Signer, row model.Take) dto.Take {
 		}
 	}
 	_ = json.Unmarshal(row.MadeWith, &out.MadeWith)
+	_ = json.Unmarshal(row.Audio, &out.Audio) // null leaves them nil
+	_ = json.Unmarshal(row.SourceMap, &out.SourceMap)
 	if out.Parents == nil {
 		out.Parents = []string{}
 	}

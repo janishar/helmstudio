@@ -85,7 +85,7 @@ func paramOf(schema registry.NodeSchema, name string) (registry.Param, bool) {
 // stays null, a rows param whose item has an Image field holds no items).
 func valueBad(param registry.Param, value any) bool {
 	switch param.Type {
-	case "image":
+	case "image", "media": // a workflow holds no takes
 		return value != nil
 	case "rows":
 		if items, ok := value.([]any); ok && len(items) > 0 {
@@ -171,6 +171,9 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode,
 			if detail := valuesByDetail(param, merged(schema, node.Params)); detail != "" && (!given || !valueBad(param, value)) {
 				add("param_invalid", id, "", param.Name, "%s.%s: %s", id, param.Name, detail)
 			}
+		}
+		for name, detail := range onlyProblems(schema, node.Only, merged(schema, node.Params)) {
+			add("param_invalid", id, "", name, "%s.%s: %s", id, name, detail)
 		}
 		for _, key := range slices.Sorted(maps.Keys(node.In)) {
 			want := portType(schema, key)
@@ -284,10 +287,27 @@ func sortedProblems(found map[[4]string]dto.Problem) []dto.Problem {
 	return out
 }
 
+// onlyProblems checks a node's `only` (API 1.19; check.py only_errors) against its merged values: param → why.
+func onlyProblems(schema registry.NodeSchema, only map[string][]string, values map[string]any) map[string]string {
+	out := map[string]string{}
+	for name, allowed := range only {
+		param, ok := paramOf(schema, name)
+		if !ok || param.Type != "enum" || slices.ContainsFunc(allowed, func(v string) bool { return !slices.Contains(param.Enum, v) }) {
+			out[name] = "only must name an enum param and values of it"
+		} else if detail := onlyDetail(only, name, values); detail != "" {
+			out[name] = detail
+		}
+	}
+	return out
+}
+
 // invalidReason says why a workflow may not hold value for param.
 func invalidReason(param registry.Param, value any) string {
 	if _, detail := check(param, value); detail != "" {
 		return detail
+	}
+	if param.Type == "media" {
+		return "a workflow holds no take; leave it empty"
 	}
 	return "a workflow holds no image; leave it empty"
 }
@@ -386,6 +406,8 @@ func studioProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode
 				if valueBad(param, value) {
 					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, invalidReason(param, value))
 				} else if detail := valuesByDetail(param, merged(kind.NodeSchema, values)); detail != "" {
+					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, detail)
+				} else if detail := onlyProblems(kind.NodeSchema, node.Only, merged(kind.NodeSchema, values))[name]; detail != "" {
 					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, detail)
 				}
 			}

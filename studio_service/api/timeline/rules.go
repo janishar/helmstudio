@@ -163,13 +163,23 @@ func (d Doc) Clone() Doc {
 // Take is what the rules know of a take the document names (the caller's: one that is missing is offline or not
 // found).
 type Take struct {
-	Kind      string    `json:"kind"`
-	DurationS float64   `json:"duration_s"`
-	HasAudio  bool      `json:"has_audio"`
-	Bytes     int64     `json:"bytes"`
-	Stream    *Stream   `json:"stream,omitempty"`
-	MadeWith  *MadeWith `json:"made_with,omitempty"`
-	FrameOf   *FrameOf  `json:"frame_of,omitempty"`
+	Kind      string     `json:"kind"`
+	DurationS float64    `json:"duration_s"`
+	HasAudio  bool       `json:"has_audio"`
+	Bytes     int64      `json:"bytes"`
+	Stream    *Stream    `json:"stream,omitempty"`
+	MadeWith  *MadeWith  `json:"made_with,omitempty"`
+	FrameOf   *FrameOf   `json:"frame_of,omitempty"`
+	SourceMap *SourceMap `json:"source_map,omitempty"`
+}
+
+// SourceMap is how a take made from a media take lines up with it (API 1.19, Take.source_map): output time = source
+// time + OffsetS; [NewInS, NewOutS) is the generated part.
+type SourceMap struct {
+	TakeID  string  `json:"take_id"`
+	OffsetS float64 `json:"offset_s"`
+	NewInS  float64 `json:"new_in_s"`
+	NewOutS float64 `json:"new_out_s"`
 }
 
 // MadeWith is the part of a take's made_with re-render reads.
@@ -313,6 +323,10 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				add("duplicate_clip", name, cid)
 			}
 			ids[cid] = true
+			if kind == "audio" { // an audio take is not a clip in this version (API 1.19)
+				add("wrong_track", name, cid)
+				continue
+			}
 			refs := slices.Clone(c.Alternatives)
 			if tid != "" {
 				refs = append([]string{tid}, refs...)

@@ -618,7 +618,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			if src.kind == "input" {
 				fits = slices.Contains(inputFits[src.typ], param.Type) || (src.typ == "Image" && rowsOfImages)
 			} else {
-				fits = (param.Type == "image" && src.n == 1) ||
+				fits = ((param.Type == "image" || param.Type == "media") && src.n == 1) ||
 					(rowsOfImages && (param.Max == nil || float64(src.n) <= *param.Max) && (src.n == 1 || !timed(param)))
 			}
 			if !fits {
@@ -630,9 +630,12 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			param := params[key]
 			hasSeed = hasSeed || param.Type == "seed"
 			_, rowsOfImages := imageField(param)
-			needsOne := param.Type == "image" || (rowsOfImages && param.Min != nil && *param.Min >= 1)
-			if _, bound := n.Bind[key]; needsOne && !bound {
-				add("unbound_input", id, key, "", "%s: %s needs an image; bind it", id, key)
+			needsOne := param.Type == "image" || param.Type == "media" || param.Type == "span" ||
+				(rowsOfImages && param.Min != nil && *param.Min >= 1)
+			_, bound := n.Bind[key]
+			if _, set := n.Fixed[key]; needsOne && !bound && !set {
+				what := map[string]string{"media": "a take", "span": "a range"}[param.Type]
+				add("unbound_input", id, key, "", "%s: %s needs %s; bind it", id, key, cmp.Or(what, "an image"))
 			}
 		}
 		if n.SeedsOr1() > 1 && !hasSeed {

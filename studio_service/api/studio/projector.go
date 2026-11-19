@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -193,10 +194,13 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	if err != nil {
 		return nil, err
 	}
+	lineage := parents(typedView(run.Nodes, run.Mentions))
+	if sm := data.SourceMap; sm != nil && (data.Kind != "video" || !slices.Contains(lineage, sm.TakeID)) {
+		data.SourceMap = nil // only a video, and only from one of the run's own media takes
+	}
 	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
-		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: parents(typedView(run.Nodes, run.Mentions)),
-		Video: data.Video})
+		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: lineage, Video: data.Video, SourceMap: data.SourceMap})
 	if err == nil && data.Index == 0 {
 		err = fillShot(ctx, tx, run, takeID) // API 1.17: the run's first take fills its slot
 	}

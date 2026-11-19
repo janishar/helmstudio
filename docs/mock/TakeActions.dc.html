@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Take actions: Use in… on video and audio, the clip inspector, remove a track</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:10px;border:0;background:var(--s4);font-size:13px;font-weight:500}
+.lane{display:flex;align-items:stretch;height:56px}
+.lane>span:first-child{flex:0 0 72px;display:flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.clip{outline:3px solid var(--s1);outline-offset:-1px;flex:0 0 auto;box-sizing:border-box;height:56px;border-radius:8px;padding:6px 8px;text-align:left;font-size:11px;line-height:14px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.clip b{font-weight:600;font-size:12px;white-space:nowrap}
+.clip small{font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+.tile{flex:1 1 130px;min-height:48px;text-align:left;padding:6px 12px;border-radius:12px;border:0;background:var(--s3)}
+.tile small{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.tile b{display:block;font-size:13px;font-weight:600}
+.set{text-align:left;padding:10px 12px;border-radius:12px;border:0;background:var(--s2);display:flex;flex-direction:column;gap:2px}
+.set small{font-size:12px;color:var(--t2)}
+.set b{font-weight:600}
+.h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.step{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;background:var(--s1);font-size:13px}
+.mono{font-family:'JetBrains Mono',monospace;color:var(--t2)}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+.thumb{width:44px;height:28px;flex:0 0 auto;border-radius:6px;border:1px dashed var(--dash);background:var(--s3)}
+.x{width:22px;height:22px;padding:0;border:0;border-radius:8px;background:var(--s3);color:var(--t2);font-size:12px}
+.pk{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px;box-shadow:none!important}
+.pk i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.pk b{font-size:12px;font-weight:600}
+.pk small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.err{margin:0;font-size:12px;line-height:17px;color:#ff8a80;font-family:'JetBrains Mono',monospace}
+/* media inputs: the trim bar on the source's frame grid, the waveform */
+.bar{position:relative;height:44px;border-radius:10px;background:repeating-linear-gradient(90deg,var(--s3) 0 calc(100% / 49 - 1px),var(--s1) calc(100% / 49 - 1px) calc(100% / 49));border:1px solid var(--s5)}
+.bar .sel{position:absolute;top:-3px;bottom:-3px;border:2px solid var(--a2);border-radius:8px;background:color-mix(in srgb, var(--a2) 14%, transparent);box-sizing:border-box}
+.bar .sel::before,.bar .sel::after{content:"";position:absolute;top:8px;bottom:8px;width:6px;border-radius:3px;background:var(--a2)}
+.bar .sel::before{left:-4px}.bar .sel::after{right:-4px}
+.bar .snap{position:absolute;bottom:-12px;height:6px;border-radius:3px;background:var(--a1)}
+.wave{height:44px;border-radius:10px;border:1px solid var(--s5);background:repeating-linear-gradient(90deg,transparent 0 3px,var(--s1) 3px 5px),linear-gradient(180deg,var(--s1) 22%,var(--s4) 22% 78%,var(--s1) 78%)}
+.seg{display:flex;padding:3px;border-radius:10px;background:var(--s1);border:1px solid var(--s3)}
+.seg button{height:30px;padding:0 12px;border-radius:8px;border:0;background:transparent;color:var(--t2);font-size:13px;font-weight:500;box-shadow:none!important}
+.seg button[aria-pressed="true"]{background:var(--s5);color:var(--t1)}
+.card{position:relative;box-sizing:border-box;padding:18px 20px;border-radius:16px;background:var(--s2);border:1px solid var(--s5);display:flex;flex-direction:column;gap:12px}
+.note{font-size:12px;color:var(--t2);margin:0}
+/* organic layer */
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR SEQUENCE]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">1280 × 704 · 24 fps · 0:21</span>
+<button class="chip">Cast · @fox @snowfield</button>
+<button class="chip">Look · Window light</button>
+<div style="flex-grow: 1"></div>
+<button class="chip">Undo</button>
+<button class="chip">Redo</button>
+<button class="chip">New sequence</button>
+<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Export</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">re-encode · 1 still, 1 dissolve</span></button>
+</div>
+
+<div style="flex-grow: 1; min-height: 230px; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
+<div style="width: 100%; max-width: 420px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px">Sequence preview · plays the range on a loop</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px">
+<button class="chip" aria-label="Previous frame">‹</button>
+<button aria-label="Play" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: var(--t1); color: var(--g); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button>
+<button class="chip" aria-label="Next frame">›</button>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 0 8px">0:12.50 <span style="color: var(--t2)">/ 0:21.00</span></span>
+<button class="chip">Split at playhead</button>
+<button class="chip" title="Mark in (I)">Mark in</button>
+<button class="chip" title="Mark out (O)">Mark out</button>
+<button class="chip">Clear range</button>
+</div>
+<span class="mono" style="font-size: 12px">Range 0:12.50 – 0:14.00 · 1.50 s · on Shot 3</span>
+</div>
+
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 12px 14px 14px; overflow-x: auto">
+<div style="position: relative; width: 912px; display: flex; flex-direction: column; gap: 6px">
+<div aria-hidden="true" style="display: flex; padding-left: 72px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--t2); height: 18px">
+<span style="flex: 0 0 200px">0:00</span><span style="flex: 0 0 200px">0:05</span><span style="flex: 0 0 200px">0:10</span><span style="flex: 0 0 200px">0:15</span><span style="flex: 0 0 40px">0:20</span>
+</div>
+
+<div class="lane"><span>V1</span>
+<button class="clip" style="width: 120px; border: 1px solid var(--a1); background: color-mix(in srgb, var(--a1) 14%, transparent)"><b>Still · take 43</b><small>Qwen · 3.0 s</small></button>
+<button class="clip" style="width: 200px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 2 · fox trots in</b><small>LTX · 5.0 s · dissolve in 12 f</small></button>
+<button class="clip" style="width: 120px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 4 · birches</b><small>LTX · 3.0 s</small></button>
+<button class="clip" aria-pressed="true" style="width: 200px; border: 2px solid var(--t1); background: rgba(255,122,89,0.22)"><b>Shot 3 · tree line</b><small>LTX · 5.0 s</small></button>
+<button class="clip" style="width: 200px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 5 · clearing</b><small>LTX · 5.0 s</small></button>
+</div>
+
+<div class="lane" style="height: 36px"><span>A1</span>
+<span style="flex: 0 0 120px"></span>
+<div class="clip" style="width: 200px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>clip audio · 0 dB</small></div>
+<div class="clip" style="width: 120px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>clip audio · 0 dB</small></div>
+<div class="clip" style="width: 200px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>clip audio · 0 dB</small></div>
+<div class="clip" style="width: 200px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>clip audio · 0 dB</small></div>
+</div>
+
+<div class="lane" style="height: 36px"><span style="gap: 4px">A2<button class="x" aria-label="Remove A2" title="Remove track">×</button></span>
+<button class="clip" style="width: 840px; height: 36px; border: 1px solid #86cdea; background: rgba(62,224,255,0.12); justify-content: center"><small>[YOUR MUSIC] · −6 dB</small></button>
+</div>
+
+<div class="lane" style="height: 36px"><span style="gap: 4px">A3<button class="x" aria-label="Remove A3" title="Remove track">×</button></span>
+<span style="flex: 0 0 160px"></span>
+<div class="clip" style="width: 120px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>Shot 2 sound · −3 dB</small></div>
+<span style="flex: 0 0 240px"></span>
+<div class="clip" style="width: 120px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>Shot 5 sound · −3 dB</small></div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding-left: 72px"><button class="chip" style="height: 30px">+ Audio track</button></div>
+
+<span aria-label="Range 0:12.50 to 0:14.00" style="position: absolute; left: 572px; width: 60px; top: 0; height: 80px; box-sizing: border-box; border-left: 2px solid var(--a2); border-right: 2px solid var(--a2); background: color-mix(in srgb, var(--a2) 20%, transparent); display: block"></span>
+<span aria-hidden="true" style="position: absolute; left: 566px; top: 0; padding: 0 3px; border-radius: 4px; background: var(--a2); color: var(--on2); font: 600 9px/14px 'JetBrains Mono', monospace">I</span>
+<span aria-hidden="true" style="position: absolute; left: 626px; top: 0; padding: 0 3px; border-radius: 4px; background: var(--a2); color: var(--on2); font: 600 9px/14px 'JetBrains Mono', monospace">O</span>
+<span aria-hidden="true" style="position: absolute; left: 572px; top: 14px; bottom: 0; width: 2px; background: var(--t1); display: block"></span>
+</div>
+</div>
+</main>
+
+<aside aria-label="Clip inspector" style="flex: 1 1 320px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em">Shot 3</h2>
+<span style="font-size: 12px; color: var(--t2)">From take seed 11 · LTX Text to video · 121 frames</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div style="padding: 10px 12px; border-radius: 12px; background: var(--s2)"><span style="display: block; font-size: 12px; color: var(--t2)">In</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">0:00.00</span></div>
+<div style="padding: 10px 12px; border-radius: 12px; background: var(--s2)"><span style="display: block; font-size: 12px; color: var(--t2)">Out</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">0:05.04</span></div>
+<div style="grid-column: 1 / -1; padding: 10px 12px; border-radius: 12px; background: var(--s2); border: 1px solid var(--a2)"><span style="display: block; font-size: 12px; color: var(--t2)">Range in the take</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">0:01.50 – 0:03.00 · frames 36 – 72</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Generate from this clip<button class="i" aria-label="More information" title="Each one queues a normal run. The result drops into the sequence and keeps its lineage to this clip.">i</button></h3>
+<button class="act" aria-expanded="true" style="background: var(--s5)">Retake a section</button>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--s2)">
+<label for="rp" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Prompt</label>
+<textarea id="rp" rows="2" placeholder="What happens in this stretch" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 8px; background: var(--s3); color: var(--t1); font: inherit; font-size: 13px; padding: 8px 10px">The fox stops at the tree line and looks back</textarea>
+<span class="mono" style="font-size: 12px">Regenerates frames 33 – 64 · 1.38 – 2.71 s on the 8-frame grid</span>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><span title="Off: the sound is not regenerated (it is re-encoded through the audio VAE).">Regenerate audio</span><button role="switch" aria-checked="true" aria-label="Regenerate audio" style="flex: 0 0 auto; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--ln); background: var(--a1); padding: 2px; display: flex; justify-content: flex-end"><span style="width: 20px; height: 20px; border-radius: 999px; background: var(--on1); display: block"></span></button></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span>Result</span><div class="seg" role="group" aria-label="Where the result goes"><button aria-pressed="true">Replace</button><button aria-pressed="false">Insert after</button></div></div>
+<span style="font-size: 12px; color: var(--t2)">Replace keeps the clip's in and out; nothing moves.</span>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><button class="chip">LTX-2.5 · Dev · int8</button><button class="chip">Open in Create</button><div style="flex-grow: 1"></div><button style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Generate</button></div>
+</div>
+<button class="act">Audio to video</button>
+<button class="act">Replace with another take</button>
+<button class="act">Redo this shot</button>
+<span style="font-size: 12px; color: var(--t2)">Extend shows when the range reaches the take's end (after) or starts at its first frame (before).</span>
+</div>
+</aside>
+
+<div style="flex: 1 0 100%; box-sizing: border-box; padding: 4px 20px 24px 96px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; gap: 20px">
+<p class="note" style="grid-column: 1 / -1; font-size: 13px">Take actions: the clip inspector of Timeline.dc.html ("Generate from this clip") with no range and at a clip's start, the placeholders, "Use in…" on a video and an audio take in the Gallery, and removing an audio track. Offers are listed as &lt;action&gt; · &lt;title&gt;; the inspector shows the action alone.</p>
+
+<section aria-label="Extend after" class="card" style="background: var(--p0)">
+<p class="note">No range: the whole clip. It ends at the take's end, so Extend works after it.</p>
+<h3 class="h">Generate from this clip</h3>
+<button class="act" aria-expanded="true" style="background: var(--s5)">Extend</button>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--s2)">
+<textarea aria-label="Prompt" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 8px; background: var(--s3); color: var(--t1); font: inherit; font-size: 13px; padding: 8px 10px">The fox slips between the birches and is gone</textarea>
+<label for="xa" style="display: flex; justify-content: space-between; gap: 8px"><span>Add</span><span class="mono" style="font-size: 12px">2.0 s · + 48 frames · after</span></label>
+<input id="xa" type="range" min="0.1" max="10" step="0.1" value="2" style="width: 100%; accent-color: var(--a2)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span>Result</span><div class="seg" role="group" aria-label="Where the result goes"><button aria-pressed="false">Replace</button><button aria-pressed="true">Insert after</button></div></div>
+<span style="font-size: 12px; color: var(--t2)">Insert after: a 2.0 s clip after Shot 3 holds only the new part. Replace: Shot 3 runs on to 7.04 s; later clips move.</span>
+<div style="display: flex; justify-content: flex-end"><button style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Generate</button></div>
+</div>
+<button class="act">Retake a section</button>
+<button class="act">Audio to video</button>
+</section>
+
+<section aria-label="Extend before" class="card" style="background: var(--p0)">
+<p class="note">Shot 4 is trimmed to 0:00 – 0:03.00 of its 4.04 s take. It starts at the take's first frame, so Extend works before it.</p>
+<h3 class="h">Generate from this clip</h3>
+<button class="act" aria-expanded="true" style="background: var(--s5)">Extend</button>
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--s2)">
+<textarea aria-label="Prompt" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 8px; background: var(--s3); color: var(--t1); font: inherit; font-size: 13px; padding: 8px 10px">The fox steps out of its den into the snow</textarea>
+<label for="xb" style="display: flex; justify-content: space-between; gap: 8px"><span>Add</span><span class="mono" style="font-size: 12px">1.0 s · + 24 frames · before</span></label>
+<input id="xb" type="range" min="0.1" max="10" step="0.1" value="1" style="width: 100%; accent-color: var(--a2)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span>Result</span><div class="seg" role="group" aria-label="Where the result goes"><button aria-pressed="true">Replace</button><button aria-pressed="false">Insert before</button></div></div>
+<span style="font-size: 12px; color: var(--t2)">Replace: Shot 4 starts at the new part and keeps its end. Insert before: a 1.0 s clip before Shot 4.</span>
+<div style="display: flex; justify-content: flex-end"><button style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Generate</button></div>
+</div>
+<button class="act">Retake a section</button>
+<button class="act">Audio to video</button>
+</section>
+
+<section aria-label="Placeholders" class="card" style="background: var(--s1)">
+<p class="note">While it runs, the slot holds the shot's placeholder (New shot's rules: a clip with a shot running cannot take another).</p>
+<div class="lane"><span>Replace</span>
+<div class="clip" style="width: 200px; border: 2px solid var(--t1); background: var(--s2)"><b>Retaking Shot 3</b><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 40%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><small>guided 12 / 30</small></span></div>
+</div>
+<div class="lane"><span>Insert</span>
+<div class="clip" style="width: 140px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 3 · tree line</b><small>LTX · 5.0 s</small></div>
+<div class="clip" style="width: 80px; border: 1px solid var(--a2); background: var(--s2)"><b>Extending</b><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 13%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><small>4 / 30</small></span></div>
+</div>
+<div class="lane"><span>Failed</span>
+<div class="clip" style="width: 240px; border: 1px solid #ff8a80; background: var(--s2)"><b>Retake failed</b><small style="color: #ff8a80; white-space: normal">retake.span: nothing to regenerate on the 8-frame grid</small></div>
+</div>
+<div style="display: flex; gap: 8px"><button class="chip">Retry</button><button class="chip">Remove</button></div>
+<p class="note">Done, the take fills the slot and joins its alternatives; one undo takes it back.</p>
+</section>
+
+<section aria-label="Use in on a video take" class="card" style="background: var(--p0)">
+<p class="note">Gallery, a video take selected (the Gallery board's detail panel).</p>
+<div style="aspect-ratio: 16 / 9; border-radius: 12px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px">Shot 3 · tree line</div>
+<div class="row"><span>Size · frames</span><span>704 × 448 · 121 f · 24 fps</span></div>
+<div class="row"><span>Length · sound</span><span>5.04 s · yes</span></div>
+<h2 class="h">Use in…<button class="i" aria-label="More information" title="The same actions appear on this take wherever it shows up: under a stage, in a pipeline step, on a timeline clip. Every image, video or audio input in the app is picked from here.">i</button></h2>
+<button class="act" style="background: var(--a1); color: var(--on1); font-weight: 600">Retake a section · LTX-2.5 Retake</button>
+<button class="act">Extend · LTX-2.5 Extend</button>
+<button class="act">Audio to video · LTX-2.5 Audio to video</button>
+<p class="note">Each opens Create with this take as the source, the range over the whole take.</p>
+</section>
+
+<section aria-label="Use in on an audio take" class="card" style="background: var(--p0)">
+<p class="note">Gallery, an uploaded audio take selected.</p>
+<div style="height: 96px; border-radius: 12px; border: 1px dashed var(--dash); background: repeating-linear-gradient(90deg, var(--ln) 0 2px, transparent 2px 6px) center / 100% 48px no-repeat; display: flex; align-items: flex-end; justify-content: center; color: var(--t2); font-size: 13px; padding-bottom: 6px; box-sizing: border-box">[YOUR MUSIC]</div>
+<div class="row"><span>Kind · length</span><span>Upload · mp3 · 20.0 s</span></div>
+<h2 class="h">Use in…</h2>
+<button class="act" style="background: var(--a1); color: var(--on1); font-weight: 600">Audio to video · LTX-2.5 Audio to video</button>
+<p class="note">Opens Create with the part 0 – 13.375 s, the most it takes. Audio is not a timeline clip yet, so Add to timeline is not offered.</p>
+<button class="act">Export file</button>
+</section>
+
+<section aria-label="Remove an audio track" class="card">
+<p class="note">A lane's × (or Remove track when its name is selected) removes the track. An empty one goes at once; with clips it asks:</p>
+<div role="dialog" aria-label="Remove A3" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px; background: var(--s3); border: 1px solid var(--s5)">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Remove A3 and its 2 clips?</h2>
+<p class="note">Later tracks move up and are renamed. Undo brings it back.</p>
+<div style="display: flex; justify-content: flex-end; gap: 8px"><button class="chip">Cancel</button><button style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: #ff8a80; color: #2b0c02; font-weight: 600; font-size: 13px">Remove</button></div>
+</div>
+<p class="note">A1 is V1's own sound, not a track: it has no ×.</p>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":2200}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>

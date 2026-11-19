@@ -94,7 +94,8 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   the run is created `failed` (`no live host for env <env>`) and nothing is sent.
 - **Workflows.** A workflow (registry `workflows`) is `{id, title, family, env, nodes}`; `nodes` maps a node id to
   `{kind, params, in}`, `in` wires an input port to `<node id>.<output>`. A node schema (registry `nodes`) gives a
-  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed`, `image`, `rows`, `frames` with
+  kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed`, `image`, `rows`, `frames`, from 1.19
+  `media`, `span` with
   `default`, `min`, `max`, `step`, `enum`, `item`, `mention`, `fps`, `auto`, `values`, `values_by`, `help`, `when`;
   item fields may add `position`; see Image inputs, Video) and typed
   `inputs` / `outputs`. Port types: `Text`, `Image`, `Video`, `Int`, `Float`, `Seed`, `Canvas`, `Duration`, the
@@ -124,6 +125,18 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   fails the run with the keyframe-position texts of Video); `echo/sample` (echo/video with `role` stage1|stage2 and
   `steps` `values [2, 4]`, `values_by {role: stage1 [4], stage2 [2]}`); workflow `echo-image-to-video`: prompt,
   canvas, duration → keyframes → sample → output.
+  Media stand-in (API 1.19; Media inputs): `echo/retake` (Text → Video; `source` media accepts video, grid 32,
+  max_frames 321; `span`; `delay_ms`): reads the source like an image ref, writes a still MP4 of its text with the source's
+  size, fps and frames, and reports `source_map {source, 0, span.start, span.end}`; workflow `echo-retake` (action
+  Retake a section): prompt → retake → output. `echo/a2v` (Text → Video; `source` media accepts audio, trim, max_s
+  13.375; `delay_ms`): reads the part in..out (an audio take or a video's sound), writes a still 256 × 128 24 fps MP4
+  of its text as long as the part with that part as its sound, and reports `source_map {source, −in, 0, out − in}`;
+  workflow `echo-a2v` (action Audio to video): prompt → a2v → output. `echo/extend` (Text → Video; `source` as
+  echo/retake; `seconds` 0.1–10 step 0.1 default 2, `direction` after|before, as ltx/extend; `delay_ms`): reads the
+  source, writes a still MP4 of its text at the source's size and fps with `extend_map`'s frames (the source floored to
+  8k + 1, + 8N; past 321: the run fails `<node>.seconds: the clip would be <n> frames; at most 321`) and reports
+  `extend_map`'s `source_map` (after: `{source, 0, n/fps, total/fps}`; before: `{source, 8N/fps, 0, 8N/fps}`);
+  workflow `echo-extend` (action Extend): prompt → extend → output.
 - **Seeds.** A `seed` param is an integer (≤ 2^53−1); `null` or `-1` means random: the runner picks one and reports it
   in `evt.run.status` `succeeded` `data.resolved.seed` and in each `evt.run.output` `data.seed` (both ≥ 0).
 - **The qwen-image family (torch).** Workflow `qwen-image` (env `torch`), text-to-image, and multi-reference edit
@@ -637,7 +650,8 @@ commands would close it but break the claim-check rule (never signed URLs in mes
   with exactly the signed `Content-Type` and `Content-Length`; files_service streams them to the object store and never
   overwrites an object. `POST /v1/studio/uploads/{take_id}/complete` checks size and image header (HEAD + a 64 KB
   range read of the object), records width and height and shows the take. The original is its own thumbnail in API
-  1.2. Images only (png, jpeg, webp), at most 50 MB; Kong must let a 50 MB `PUT /files/*` through.
+  1.2. Images (png, jpeg, webp) and, from 1.19, audio (wav, mp3: Media inputs, audio uploads), at most 50 MB; Kong must
+  let a 50 MB `PUT /files/*` through.
 - **`/files` signatures** (the shared `FILE_URL_SECRET`, lower-case hex HMAC-SHA256):
   - `GET`/`HEAD /files/<key>?exp=&sig=`: `sig = HMAC(key + "\n" + exp)`.
   - `PUT /files/<key>?exp=&bytes=&ct=&sig=`: `sig = HMAC("PUT\n" + key + "\n" + exp + "\n" + bytes + "\n" + ct)`
@@ -755,8 +769,9 @@ audio track) plus a poster image; uploads stay images.
   `ReviewCandidate` carries the take's `kind` and, for a video, `video` (its `thumb_url` the poster, `url` the MP4).
 - **Playback.** `GET /files/<key>` answers `Range` requests (206, `Accept-Ranges: bytes`, 416; openapi
   `filesGetFile`) with the stored `Content-Type`, so `<video src=url poster=poster_url controls>` streams and seeks.
-- **Where a take goes in.** Image params, reference rows, keyframe rows, element and look images and "Use in…" take
-  images only: a video take is 422 `… take <id> is not an image` (Image inputs). A clip's `parents` are its keyframe
+- **Where a take goes in.** Image params, reference rows, keyframe rows, element and look images take images only: a
+  video take is 422 `… take <id> is not an image` (Image inputs). From 1.19 a video or audio take goes into a `media`
+  param (Media inputs), and "Use in…" offers what fits it. A clip's `parents` are its keyframe
   images in row order (Lineage). "Use in…" on an image take offers the workflows with exactly such a param: among the
   ltx templates only `ltx-image-to-video` (row 1 = the take at 0 s, strength 1: image to video).
 - **Mentions and looks on LTX**: the prompt always (`prompt.text`); keyframe rows have no `mention`, so ltx has no
@@ -859,7 +874,8 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
 - **The runner** reads only the keys in the command's image values, only under the envelope owner's prefix (anything
   else: the command fails its check and goes to `dlq`), straight from the object store, never through a URL. It checks
   the size against `bytes` and reads with `If-Match: <etag>`; a missing object, another size or another ETag (the object
-  was PUT again after studio checked it) fails the run (`input image <take_id> is gone`). It decodes PNG, JPEG (a
+  was PUT again after studio checked it) fails the run (`input image <take_id> is gone`; a video or audio take, Media
+  inputs: `input take <take_id> is gone`, from studio at release or from the runner). It decodes PNG, JPEG (a
   multi-picture JPEG: its first frame) and WebP of at most 50 MP (`… is larger than 50 MP`; uploads are capped the
   same), and applies a JPEG's EXIF orientation, as studio does when it records an upload's `width` / `height`. Its
   cache key for an image and everything derived from it (VL / VAE encodings) includes `(owner_id, key, etag)`; keys
@@ -870,7 +886,121 @@ A batch runs one workflow once per row of inputs. Studio owns the API and the ba
   at most 50, `{id, kind, title, thumb_url}`) for the gallery's "Used in".
 - **"Use in…"** `POST /v1/studio/takes/{id}/use {workflow_id, param?}` → `{workflow_id, inputs}` with one key: the
   workflow's only image or Image-rows param (or `param`) holding this take (as reference 1). The client merges it
-  over the form. 422 when the workflow has no such param, several and no `param`, or the take is not an image.
+  over the form. 422 when the workflow has no such param, several and no `param`, or the take is not an image. From
+  1.19 it also takes a video or audio take into a `media` param, and `GET …/takes/{id}/uses` lists the offers (Media
+  inputs).
+
+## Media inputs (API 1.19, M7 pack 1; normative)
+
+A video or audio take as a workflow's input (plan 01: the Video and Audio sources; 06-platform 9.1, "Use in…"; the
+old studio's retake, extend and audio to video, docs/reference-notes/ltx.md part 12). Image params and rows are
+unchanged; a video never fills them.
+
+- **Params** (registry `paramSchema`): `media` = one take, default null (a run needs one: `<node>.<param>: a take is
+  required`), `accepts` (`video`: a video take; `audio`: an audio take or a video take's sound), optional `trim` (the
+  value may carry `in` / `out`: the part read), `grid` (a video's sides must be multiples of it), `max_s` (the longest
+  it reads: a whole take, or out − in with `trim`), `max_frames` (the most frames of a video take it reads, at any
+  fps). `span` = a range `{start, end}` (seconds) on the workflow's **one** `media` param that accepts video,
+  default null (`<node>.<param>: a range is required`). Neither takes a wire; a registry workflow holds null. The UI:
+  a media param is a gallery pick drawn as the take's poster (a sound tile for audio) with its duration, plus a trim
+  control when `trim`; a span is a range control over that take's poster and duration (the board's "Retake a
+  section"). No model-specific code.
+- **Values** over HTTP and in pipelines: `{take_id, in?, out?}` (`MediaRef`, defs `mediaRef`) and `{start, end}`
+  (`SpanValue`, defs `spanValue`), in the take's own seconds. Studio snaps `in` / `out` (a video, its sound on an
+  audio param included: `rnd(s·fps)/fps` on its frames; an audio take: whole milliseconds; `rnd` = half away from zero, Timeline rules) and fills them on a `trim` param
+  (`in` 0, `out` = min(the duration, `max_s`)); an `out` that snaps up past an off-grid duration d (still ≤ snap(d))
+  is the last grid point at or before d (`⌊d·unit⌋/unit`), so the runner's `out ≤ d` holds; it snaps a span's `start` / `end` to the source video's frames the
+  same way, so every service computes on whole frames.
+- **Studio resolves** a media value like an Image (as the caller, completed, not deleted, the object HEADed, its
+  ETag), with 422 texts naming `<node>.<param>`: `take <id> not found`; `take <id> is not a video` (a video input,
+  any other kind); `take <id> has no sound` (an audio input: an image, or a video with `has_audio` false); `take <id>
+  is <w> × <h>; this input needs sides on a <grid> px grid`; `take <id> lasts <d> s; this input takes at most <max_s>
+  s` (both `%.1f`; a whole take); `take <id> has <n> frames; this input takes at most <max_frames>`; `the part lasts
+  <d> s; this input takes at most <max_s> s` (`%.1f`; out − in with `trim`); `this input takes the whole take (no in or out)` (in/out without `trim`); `in must be
+  before out`; `out <x> is past the take's end <d>` (both `%.1f`). A span: `start must be before end`; `end <e> is past
+  the clip's end <d>` (both `%.1f`; d = the source's duration); `this workflow has no single video source`. Reference: `media_fit`
+  (`fixtures/video/uses.json`). In `cmd.run.execute` a media value is defs `media` (key, kind, content type, bytes,
+  etag, the video facts or the audio duration, and the snapped `in` / `out` of a trim param); the claim-check rules of
+  Image inputs hold. **Lineage**: `parents` add every media value's take (input order); `made_with.inputs` keep the
+  values as studio checked them (in / out and a span snapped to frames or ms, a trim param's in / out filled), so
+  reuse answers exactly what ran.
+- **Audio uploads** (`POST /v1/studio/uploads`): `audio/wav` or `audio/mpeg`, at most 50 MB, `duration_s` (≤ 600,
+  what the browser decoded: required for audio, refused for images) → key `u/<owner>/uploads/<take_id>.wav|.mp3`
+  (files_service accepts those types on such keys). Complete checks the size and the header (`RIFF….WAVE`; an ID3v2
+  tag or an MPEG audio frame sync) and stores `kind: audio`, `width` / `height` null, `audio {duration_s}` as
+  declared, `thumb_url` = the file. The runner reads the file itself (a declared length that lies fails the run, never
+  more). Audio takes are not timeline clips in this version (`wrong_track`; `POST …/clips`: 422 `take_ids[1]: an
+  audio take cannot go on the timeline yet`).
+- **`only`** (`GraphNode.only`, registry and user workflows): enum param → the values this workflow allows (a subset of
+  its `enum`, holding its value). The form offers only those; another value is 422 / `param_invalid`
+  (`model.variant: must be one of dev`). Studio drops it from `cmd.run.execute`. Why: `ltx/model.variant` gains `dev`,
+  and t2v / i2v keep offering only Distilled while the dev templates pin Dev.
+- **Offers** ("Use in…", `GET /v1/studio/takes/{id}/uses`, `take_uses`): the templates a live host could run now (the
+  dispatcher's eligibility: published, model variant present, Several hosts rule 2, and for `ltx/distill` the
+  family's pre-fused distilled LoRA listed in that host's `lora.prefused`), by family id then in their pack's order (the
+  runner's workflows value: `workflows/*.json` by file name, the board's Retake a section, Extend, Audio to video), then
+  the caller's own non-text workflows in `GET /workflows` order, with exactly one unwired input of the take's sort on a known, not bypassed node (an image:
+  an `image` or Image rows param; a video or audio take: a `media` param accepting it) that it fits; `inputs` = that
+  input with the take (rows: as reference 1; trim: `in` 0, `out` = min(its duration, `max_s`)) and every span param =
+  the whole take. A template with a `<family>/extend` node (`ltx/extend`, the fake `echo/extend`; `extend_room`) is offered only when one 8-frame step still fits under
+  321 frames (ltx_floor(frames) + 8 ≤ 321); when its default 2 s does not fit, `extend.seconds` = the most whole steps
+  that fit, as seconds rounded down to 0.1.
+  Labels: `<action> · <title>` (registry workflow `action`: `qwen-image` Edit, `ltx-image-to-video` Animate,
+  `ltx-retake` Retake a section, `ltx-extend` Extend, `ltx-audio-to-video` Audio to video; none: the title).
+  `POST …/use` answers the same inputs for one workflow (with `param` when several); a take an offer would leave out
+  is its 422: the media_fit text, or for an extend without room `take <id> has <n> frames; extending it would pass
+  321`.
+- **The ltx templates** (`fixtures/registry/ltx.{nodes,workflows,models}.valid.json`; none is distilled except a2v's
+  stage 2). New kinds: `ltx/encode-guided` (Model, Text → Conditioning: the prompt plus the fixed negative prompt,
+  constants.py; its cache key adds a version tag of that text); `ltx/encode-video` (`source`: media, accepts video, grid
+  32, max_frames 321; Model → Latent: frames floored to 8k + 1, at its own size and fps, audio at 16 kHz, a source
+  without sound gets the old zero audio latent); `ltx/encode-audio` (`source`: media, accepts audio, trim, max_s 13.375; `fps` int
+  `values [24]`; Model → Latent (audio, frozen) + Duration = the part's frames floored to 8k + 1, at most 321); `ltx/retake`
+  (Model, Conditioning, Seed, Latent → Latent; `span`, `audio` bool "Regenerate audio" default true (off: the audio mask is 0, so the sound is
+  re-encoded through the audio VAE, not muxed from the source, as the old code), `steps` 1–60
+  default 30, `cfg` 1–10 step 0.1 default 3, `stg` 0–3 step 0.1 default 1); `ltx/extend` (same inputs; `seconds`
+  0.1–10 step 0.1 default 2, `direction` after|before, steps / cfg / stg); `ltx/sample-guided` (a2v stage 1: + Canvas,
+  Duration, `audio` Latent; steps / cfg / stg); `ltx/distill` (Model → Model: the dev transformer with the distilled
+  LoRA fused at 1.0, the old MLX bake). `ltx/model.variant` = distilled | dev. Fixed as the old code: retake and extend
+  guide audio with cfg 7, rescale 0.7, modality 3, STG block 28; `ltx/sample-guided` (a2v stage 1, its audio frozen)
+  leaves the audio guider off (`MultiModalGuiderParams()`: cfg 1, no STG, no modality); all use the 30-step
+  `ltx2_schedule` on video tokens and 4 sequential passes per step.
+  Templates: `ltx-retake` (prompt, seed, model dev, encode-guided, `source` encode-video → `retake` → decode → output),
+  `ltx-extend` (the same with `extend`), `ltx-audio-to-video` (canvas, model dev, encode-guided, `audio`
+  encode-audio, `keyframes` bypassed (on: optional image rows, as i2v) → `sample1` sample-guided → upscale → `sample2`
+  (`ltx/sample` stage2, 3 steps, model ← `distill`) → decode → output). Each pins `only {variant: [dev], precision: [int8, int4]}` and has
+  no Quality (bf16) preset: bf16 is unmeasured (the scout's estimate for a2v, 47–50 GiB plus the LoRA fuse's
+  transient, is too close to the 52 GB budget); offered when a measured bf16 memory item exists.
+- **The runner** checks before it loads: `<node>: needs model variant dev` (retake, extend, sample-guided, distill),
+  `<node>: needs model variant distilled` (`ltx/sample` stage 1; stage 2 also takes a model through `ltx/distill`).
+  The maps (`retake_map`, `extend_map`, `audio_map`, `fixtures/video/sources.json`): retake on whole frames f =
+  rnd(t·fps) (the span arrives snapped), S = ⌊(f_start + 4)/8⌋, E = max(⌊(f_end + 4)/8⌋, S + 1) clamped to F, in
+  integer arithmetic (f/8 rounded half up: the old UI's `Math.round`, tasks.js; scripts/ltx_run.py's half to even is
+  not used), f_end ≥ n = F (ours: the old UI left the last latent frame out); pixels max(8S − 7, 0) … 8(E − 1) regenerated (the golden's [2,5) = pixels 9–32; the scout's
+  "9–40" is a slip); audio [round(S·T/F), round(E·T/F)) unless `audio` is false. Extend N = max(1, ⌈s·fps/8⌉), the
+  result n + 8N ≤ 321 (else the run fails `extend.seconds: the clip would be <n> frames; at most 321`). a2v: frames =
+  the part (a part under 9 frames fails `audio.source: the part from in to out is shorter than 9 frames`; a file
+  shorter than its declared `duration_s`, so `out` is past its real end, fails `audio.source: out <x> is past the
+  audio's end <d>`, `%.1f`), the MP4 muxes the source part (48 kHz) trimmed to the clip (decode does so when its latent's audio came
+  from encode-audio; `audio` false: no track); fps 24 as the old RoPE (parity). Every output reports
+  `evt.run.output source_map {take_id, offset_s, new_in_s, new_out_s}` (retake: 0, the regenerated pixels; extend after:
+  0, [n/fps, (n+8N)/fps); before: 8N/fps, [0, 8N/fps); a2v: −in, [0, frames/fps)); studio stores `Take.source_map`.
+  Progress: `retake`, `extend` and `sample1` (guided) send `guided` 1..steps, `sample2` `stage 2` after `fusing
+  LoRA` 1/1 (the distill fuse, under `sample2`), the encodes `encoding` 1/1; decode as t2v.
+  Cache: the encode nodes key on (owner, key, etag, in, out); the samplers on their params and inputs, so a span or
+  seed change re-runs only the sampler. Goldens: `runner_service/tests/golden/ltx-{retake,extend,audio-to-video}`.
+- **Memory** (models `ltx-2.5` variant `dev`: present when the dev transformer is; components share the distilled
+  variant's text encoder, connector, VAEs, audio encoder and vocoder; the transformer is `variant: dev`): int8 peak
+  44.98 (retake, extend; planned at 0.1147 MP, 97 frames: the plan source plus the default 2 s extend) and,
+  `workflow: ltx-audio-to-video`, 45.91 (0.3154 MP, 49 frames; one transformer entry: the baked stage-2 copy replaces
+  the plain one, as the old in-place fuse). Both follow the Runners rule (starting warm: the prompt is encoded while
+  the dev transformer is resident from an earlier run); the old studio's cold one-shot process measured 21.9 (retake,
+  extend) and 28.0 (a2v) at the goldens, which the stages' `peak_gb` formulas are fitted to.
+  `planned_at` also counts each media value: a video take's width × height and frames (an extend: + 8N), an audio
+  part's frames; above it P = B. `ltx/distill` is not a bake row: after an a2v run the runner reports its transformer
+  with `loras: [{pre-fused id, 1}]`, which no plain-dev run counts as resident. Eligibility adds: a run with
+  `ltx/distill` needs a host whose models key lists the family's `lora.prefused` entry for variant distilled, else it
+  fails `no live host for env <env> has the distilled LoRA`.
 
 ## User workflows (API 1.5)
 
@@ -2269,7 +2399,7 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
     next clip's take, as the last row at `seconds` = frames / fps (Video: Keyframes, the last frame).
   - *From this clip*: `POST /v1/studio/takes/{take}/reuse` prefills the composer; `slot {clip}` redoes it. Offered
     when the clip's take has `workflow_id` (`TimelineTake`; not an upload, import, frame or export).
-  - Take actions (Extend, Retake, audio to video) need templates no family has yet: none is offered in M5b.
+  - Take actions (Extend, Retake, audio to video): from 1.19, Take actions below.
 - **Replace** = a pick among the slot's `alternatives` (the board's "Replace with another take · seed 42 / 44 / 45",
   seeds from `takes`): the `replace` edit, sent by PUT.
 
@@ -2309,6 +2439,44 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   step that never ran loses its shot (studio revision), and a failed step's slot shows `failed` (neither locks the clip). Refusals: 422 for an
   empty slot, an offline clip, a take not made by a workflow, a workflow gone, a preset a workflow lacks; 409 for a
   clip whose shot is running.
+
+### Take actions (API 1.19; plan 15.3)
+
+- **List**: `GET …/timelines/{id}/clips/{clip}/actions?start=&end=` (a V1 clip) = the clip's take's offers (Media
+  inputs: offers) of the family of the workflow that made it (an upload, import or export: every family), with the
+  range = the selection in sequence seconds (absent: the clip's extent), clamped to the clip and mapped to the take's
+  own time `t − at + in` (snapped to the take's frames), put in every span param and a trim media param's `in` /
+  `out`. Extend works from an end of the take, so an extend template (`ltx-extend`, `echo-extend`) is offered only at one: `extend.direction` `after`
+  when the range ends at the take's end (within one frame), else `before` when it starts at 0, else not at all
+  (`extend_room`; a trimmed clip's hidden tail would otherwise be skipped or restored). Empty for an empty slot, an
+  offline clip, or nothing fitting. 422 `unknown clip <id>`, `clip <id> is not on V1`, `start must be before end`.
+  The inspector shows them as the board's "Extend" and "Retake a section" (labels from `action`), each with Replace
+  and Insert after.
+- **Run**: `POST …/shots {slot, run}` with `run` = the action's workflow and inputs (as edited): Replace = `slot
+  {clip}`; Insert after = `slot {after: <clip>, length}` (the `insert` edit at that clip's end cut; `length` the
+  client's estimate: extend's seconds, the span's or the part's length); an extend before inserts before the clip
+  with the existing `slot {at: <the clip's at>, length}` (never `slot {after}`); the web shows that only when a board
+  draws it. New shot's rules hold: the shot placeholder,
+  409 for a clip with a shot running (`slot {clip}`), alternatives, a failed run keeping the shot, a cancelled one
+  dropping it.
+- **Fill** (`t_edit` `fill`, `fixtures/timelines/edits.json`): a take with `source_map` fills `[new_in, new_out)` of
+  itself; when the slot's take is the map's source (or a take whose own map has the same source, offset `o'`; else
+  `o'` = 0 for the source), the clip's window is kept, mapped (in − o' + offset, out − o' + offset), and grows on a side only where
+  the generated part lies outside the source: in = new_in when frames(new_in) < frames(offset), out = new_out when
+  frames(new_out) > frames(offset + the source's duration); clamped to the take, on frames. So Replace keeps a
+  retake's in / out (even off the 8-frame grid), an extend after runs
+  from the clip's in to the extension's end (later clips move, the sequence grows), an extend before starts at the new
+  part and keeps the clip's end; Insert after holds only the generated part. One studio revision (as every fill); V1
+  ripples; a dissolve the new take cannot carry is dropped.
+- **Re-render**: a clip whose take's media input holds a take of another selected clip binds `<param>` ←
+  `clip_<other>.takes` (its first take; in / out kept) and runs after it (`rerender_steps` with `media` = the
+  workflows' media param paths, `fixtures/timelines/rerender.json`); pipelines_service resolves a step's `.takes` into a
+  media param as `{take_id}` with the bound value's in / out. A media param bound from `<step>.takes` (one take) fits;
+  an unbound media or span param of a step is `unbound_input` unless the step's `inputs` set it.
+- **Removing an audio track** (backlog): the `remove_track {track}` edit sent by PUT, for A2…A9, empty or with clips
+  (its clips go with it; the web asks first when it has clips: `Remove A3 and its 2 clips?`); later tracks are renamed
+  by position; A1 (V1's own sound) is not a track and stays; undo brings it back. Empty tracks never disappear on their
+  own. V1: `video_track`.
 
 ### Export (plan 15.4)
 
@@ -2412,7 +2580,7 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
 | `image_trim` | `in` / `out` on an image or an empty slot |
 | `hold_required` | an image or empty slot on V1 without `hold` |
 | `hold` | a hold under one frame |
-| `wrong_track` | an image or an empty slot on an audio track |
+| `wrong_track` | an image or an empty slot on an audio track; (1.19) an audio take on any track (not a clip in this version) |
 | `no_audio` | a take without sound on an audio track |
 | `at_required` | an audio-track clip without `at` |
 | `overlap` | an audio clip starting (in samples) before the previous one on its track ends |
@@ -2440,7 +2608,7 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
   (one of its alternatives, else `not_alternative`: in kept within the new take, length kept within it; an image: hold
   = the length); `set {clip, gain_db?, mute?, hold?, transition_in?}` (null removes); `add {take_ids, track, ids}` (V1:
   video whole, image hold 3 s; audio track: whole, at the first frame at or after the track's end in samples, so it never overlaps); `insert {at, hold, id}` (an empty slot
-  at the V1 cut nearest frames(at), a tie: the later cut; the next clip's dissolve goes); `fill {clip, take_id}` (New
+  at the V1 cut nearest frames(at), a tie: the later cut; the next clip's dissolve goes); `fill {clip, take_id}` (from 1.19 a take with `source_map` is placed by it: Take actions; New
   shot, above); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
   {track, gain_db?, mute?}`.
 - **Snapping** (`snap_point`): a dragged edge or audio clip start lands on the nearest **cut** (0 and every clip's start

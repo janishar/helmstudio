@@ -183,6 +183,105 @@
       }
     },
     {
+      "id": "echo-retake",
+      "title": "Echo retake",
+      "action": "Retake a section",
+      "family": "echo",
+      "env": "fake",
+      "media": "video",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "retake": {
+          "kind": "echo/retake",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "span": null,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "retake.video"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-a2v",
+      "title": "Echo audio to video",
+      "action": "Audio to video",
+      "family": "echo",
+      "env": "fake",
+      "media": "video",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "a2v": {
+          "kind": "echo/a2v",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "a2v.video"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-extend",
+      "title": "Echo extend",
+      "action": "Extend",
+      "family": "echo",
+      "env": "fake",
+      "media": "video",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "extend": {
+          "kind": "echo/extend",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "seconds": 2,
+            "direction": "after",
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "extend.video"
+          }
+        }
+      }
+    },
+    {
       "id": "echo-ask",
       "title": "Ask (fake)",
       "family": "echo",

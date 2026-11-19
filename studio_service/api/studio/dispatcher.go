@@ -538,6 +538,11 @@ func planOf(reg *registry.Registry, host string, run model.Run) plan {
 		return out
 	}
 	larger := len(models) > 1 || memory.PlannedAt != nil && beyond(graph, *memory.PlannedAt)
+	var media registry.PlannedAt // API 1.19: a media source larger than the plan's planned_at
+	if at := memory.PlannedAt; at != nil && json.Unmarshal(run.MediaAt, &media) == nil &&
+		(media.MP > at.MP+0.001 || media.Frames > at.Frames) {
+		larger = true
+	}
 	if at := memory.PlannedAt; at != nil && at.Images != nil && run.Thumbs != nil && *run.Thumbs > *at.Images {
 		larger = true // more thumbnails than the ask plan holds for
 	}
@@ -756,14 +761,20 @@ func lose(ctx context.Context, tx pgx.Tx, run model.Run, now time.Time) error {
 
 // release hands a waiting run to its host: host and released_at set, the command in the outbox with its Image values
 // resolved (resolveImages) and budget_gb from the admission. A run cancelled since the look (no longer waiting) is skipped; one whose reference was
-// deleted since it was created fails (input image <take_id> is gone) and is never sent.
+// deleted since it was created fails (input image <take_id> is gone; a video or audio take: input take <take_id> is
+// gone) and is never sent.
 func release(ctx context.Context, tx pgx.Tx, next placed, budget *float64) error {
 	nodes, gone, err := resolveImages(ctx, tx, next.run.OwnerID, next.run.Nodes)
 	if err != nil {
 		return fmt.Errorf("run %s: %w", next.run.ID, err)
 	}
 	if gone != "" {
-		reason := "input image " + gone + " is gone"
+		what := "image" // a video or audio take (Media inputs) is named media-neutrally; a swept row reads as an image
+		var kind string
+		if err := tx.QueryRow(ctx, `SELECT kind FROM takes WHERE id = $1`, gone).Scan(&kind); err == nil && kind != "image" {
+			what = "take"
+		}
+		reason := "input " + what + " " + gone + " is gone"
 		_, err := finish(ctx, tx, next.run, "failed", &reason)
 		return err
 	}
@@ -1037,6 +1048,21 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 	})
 	if len(hosts) == 0 {
 		return gone("no live host for env " + env + " has " + missing)
+	}
+	// API 1.19: a <family>/distill node fuses the family's distilled LoRA onto another variant: the host's models
+	// key must list it as pre-fused for variant distilled
+	for _, id := range slices.Sorted(maps.Keys(graph)) {
+		family, distill := strings.CutSuffix(graph[id].Kind, "/distill")
+		if !distill {
+			continue
+		}
+		hosts = slices.DeleteFunc(hosts, func(host string) bool {
+			found, _ := reg.Model(host+"."+env, family)
+			return found.Lora == nil || !slices.ContainsFunc(found.Lora.Prefused, func(p registry.Prefused) bool { return p.Variant == "distilled" })
+		})
+		if len(hosts) == 0 {
+			return gone("no live host for env " + env + " has the distilled LoRA")
+		}
 	}
 	has := func(host string, u lora.Used) bool { return u.Source != "shared" || reg.HasLora(host+"."+env, u.ID) }
 	withAll := slices.DeleteFunc(slices.Clone(hosts), func(host string) bool {

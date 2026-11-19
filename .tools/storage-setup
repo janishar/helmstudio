@@ -8,6 +8,9 @@ bucket="${S3_BUCKET:-helmstudio}"
 master="${WEED_MASTER:-seaweedfs:9333}"
 if echo "s3.bucket.list" | weed shell -master="$master" 2>/dev/null | grep -qw "$bucket"; then
   echo "bucket $bucket exists"
-else
-  echo "s3.bucket.create -name $bucket" | weed shell -master="$master"
+elif out=$(echo "s3.bucket.create -name $bucket" | weed shell -master="$master" 2>&1); then
+  echo "$out"
+else  # the list can fail while SeaweedFS starts: a bucket that already exists is done
+  echo "$out"
+  echo "$out" | grep -q "already exists"
 fi

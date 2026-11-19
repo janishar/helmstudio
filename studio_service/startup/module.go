@@ -63,10 +63,12 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetLookup(m.lookup)
 	service.SetModelOps(m.purge, m.putSettings)
 	m.settings = service
+	galleryService := gallery.NewService(m.db, m.signer, m.store, m.registry, service.FindWorkflow)
+	galleryService.SetOffers(service.Offerable)
 	return []micro.Controller{
 		m.health,
 		studio.NewController(service, m.recheck, m.shutdown),
-		gallery.NewController(gallery.NewService(m.db, m.signer, m.store, m.registry, service.FindWorkflow)),
+		gallery.NewController(galleryService),
 		lora.NewController(lora.NewService(m.db, m.signer, m.store, m.registry)),
 	}
 }

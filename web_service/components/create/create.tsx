@@ -9,6 +9,16 @@ import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
 import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/refs";
+import {
+  MediaTile,
+  SourceStage,
+  SpanTile,
+  extensionOf,
+  useFrameGrid,
+  videoSource,
+} from "@/components/create/source";
+import { offerLabel } from "@/lib/source";
+import { useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
 import { ElementsPicker } from "@/components/create/elements";
@@ -67,10 +77,8 @@ import {
   carriesImage,
   editLabel,
   imageInputs,
-  imageWorkflows,
   refCount,
   refIds,
-  targetLabel,
 } from "@/lib/refs";
 import type { GraphProps } from "@/components/graph/graph";
 import {
@@ -210,6 +218,8 @@ export function Create({
   // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
   const [reuseNote, setReuseNote] = useState("");
   const [view, setView] = useState<"studio" | "graph">("studio");
+  // a workflow with a range on a source shows the source on the stage until a take is picked in the strip
+  const [sourceView, setSourceView] = useState(true);
   // the graph's problems for the document it holds (its own check merged with studio's)
   const [lifted, setLifted] = useState<{ id: string; problems: Problem[] } | null>(null);
   const hosts = useHosts();
@@ -351,6 +361,15 @@ export function Create({
         .catch((e) => setError(message(e))),
     [workflows],
   );
+  /** A "Use in…" offer: its workflow, with the inputs it prefills merged over the form. */
+  const applyOffer = (o: S<"TakeOffer">) => {
+    const w = workflows?.find((x) => x.id === o.workflow_id);
+    if (!w) return setError(`The workflow ${o.workflow_id} is not available any more.`);
+    switchRef.current(w.id);
+    setRaws((old) => ({ ...old, ...rawsFrom(fieldsOf(w), o.inputs) }));
+    setErrors({});
+    setSourceView(true);
+  };
   const used = useRef(false);
   useEffect(() => {
     if (!use || !workflows || used.current) return;
@@ -456,6 +475,8 @@ export function Create({
       delete next[key];
       return next;
     });
+    const t = fields.find((x) => x.key === key)?.param.type;
+    if (t === "media" || t === "span") setSourceView(true);
   };
   const uploads = useRefUploads(change);
   /** Opens another workflow of the session (the picker, the Image / Video switch): what the form holds carries over
@@ -490,8 +511,10 @@ export function Create({
   const refs = refCount(fields, raws);
   // a workflow without image inputs whose family has a template with a first frame (text to video → image to
   // video): the composer's First frame tile opens that one with the image picked
+  // a workflow with a media source (retake, extend, audio to video) is not text to video: no first frame offer
+  const sourced = fields.some((f) => f.param.type === "media");
   const firstFrameIn =
-    !refField && workflow
+    !refField && workflow && !sourced
       ? workflows?.find(
           (w) =>
             w.source === "template" &&
@@ -509,7 +532,9 @@ export function Create({
           workflow.title,
           refs
             ? `${refs} frame${refs === 1 ? "" : "s"}`
-            : firstFrameIn && "add a first frame to animate it",
+            : fields.some((f) => f.param.type === "span")
+              ? "the rest of the clip is kept as context" // docs/mock/VideoSource.dc.html
+              : firstFrameIn && "add a first frame to animate it",
         ]
           .filter(Boolean)
           .join(" · ");
@@ -523,14 +548,23 @@ export function Create({
     const rest = fs.filter(
       (f) => !toggles.includes(f) && !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2),
     );
-    const own = rest.filter((f) => f.param.type === "rows" || f.param.type === "image");
+    const own = rest.filter((f) => ["rows", "image", "media", "span"].includes(f.param.type));
+    // an extension's seconds and direction: a section named by its node ("Extend")
+    const ext = extensionOf(rest);
+    const extFields = ext ? [ext.seconds, ext.direction] : [];
+    const left = rest.filter((f) => !own.includes(f) && !extFields.includes(f));
     return [
-      ...(rest.length > own.length
-        ? [{ title: g.title, fields: rest.filter((f) => !own.includes(f)) }]
-        : []),
+      ...(left.length ? [{ title: g.title, fields: left }] : []),
       ...own.map((f) => ({ title: f.param.label ?? f.param.name, fields: [f] })),
+      ...(ext ? [{ title: ext.seconds.nodeTitle, fields: extFields }] : []),
     ];
   });
+  // media inputs (API 1.19): composer tiles, the source on the stage, the family's frame grid for the readouts
+  const mediaFields = fields.filter((f) => f.param.type === "media");
+  const spanField = fields.find((f) => f.param.type === "span");
+  const grid = useFrameGrid(mediaFields.length ? workflow?.family : undefined);
+  const source = videoSource(fields);
+  const sourceSet = !!source && typeof (raws[source.key] ?? "") === "object";
   // the mentions: what they add for this workflow (the line under the prompt), checked as studio checks them
   const library = useLibrary();
   const looks = useLooks();
@@ -867,14 +901,18 @@ export function Create({
           <ErrorNote onRetry={load}>No workflows yet: no runner has published any.</ErrorNote>
         )}
 
-        <Stage
-          run={shown}
-          take={shownTake}
-          workflow={shownWorkflow}
-          onStar={shownTake && (() => void star(shownTake))}
-          onFull={() => setFull(true)}
-          onDrop={refField && intoRefs}
-        />
+        {spanField && sourceSet && sourceView ? (
+          <SourceStage span={spanField} fields={fields} raws={raws} onChange={change} grid={grid} />
+        ) : (
+          <Stage
+            run={shown}
+            take={shownTake}
+            workflow={shownWorkflow}
+            onStar={shownTake && (() => void star(shownTake))}
+            onFull={() => setFull(true)}
+            onDrop={refField && intoRefs}
+          />
+        )}
         {full && shownTake && (
           <FullScreen
             take={shownTake}
@@ -908,7 +946,10 @@ export function Create({
                   key={it.take.id}
                   take={it.take}
                   current={it === picked}
-                  onPick={() => setSelected(it.take.id)}
+                  onPick={() => {
+                    setSelected(it.take.id);
+                    setSourceView(false);
+                  }}
                 />
               ) : (
                 <RunTile
@@ -918,23 +959,21 @@ export function Create({
                   n={items.length - i}
                   seedKey={seedKeyOf(workflows?.find((w) => w.id === it.run.workflow_id))}
                   current={it === picked}
-                  onPick={() => setSelected(it.run.id)}
+                  onPick={() => {
+                    setSelected(it.run.id);
+                    setSourceView(false);
+                  }}
                 />
               ),
             )}
-            {shownTake && (
+            {shownTake && shownTake.kind !== "audio" && (
               <AddToTimeline
                 key={shownTake.id}
                 takeIds={[shownTake.id]}
                 className="chip bevel h-11 shrink-0 rounded-[10px]"
               />
             )}
-            {shownTake?.kind === "image" && workflows && (
-              <UseIn
-                workflows={imageWorkflows(workflows)}
-                onUse={(w) => void applyUse(shownTake.id, w.id)}
-              />
-            )}
+            {shownTake && <UseIn takeId={shownTake.id} onUse={applyOffer} />}
           </div>
         )}
 
@@ -958,8 +997,25 @@ export function Create({
             aria-label="Composer"
             className="panel flex min-w-0 flex-[1_1_520px] flex-col gap-3 bg-s2 px-4 py-3.5 [box-shadow:0_16px_40px_color-mix(in_srgb,var(--shd)_45%,transparent)]"
           >
-            {(refField || textFields.length > 0 || tiles.length > 0) && (
+            {(refField || textFields.length > 0 || tiles.length > 0 || mediaFields.length > 0) && (
               <div className="flex flex-wrap items-center gap-2">
+                {mediaFields.map((f) => (
+                  <MediaTile key={f.key} f={f} fields={fields} raws={raws} onChange={change} />
+                ))}
+                {spanField && (
+                  <SpanTile
+                    f={spanField}
+                    raws={raws}
+                    onOpen={() => {
+                      setSourceView(true);
+                      document
+                        .querySelector(
+                          `[aria-labelledby="sec-g${groups?.findIndex((g) => g.fields.includes(spanField)) ?? -1}"]`,
+                        )
+                        ?.scrollIntoView({ block: "nearest" });
+                    }}
+                  />
+                )}
                 {refField ? (
                   <RefChips
                     fields={fields}
@@ -1133,6 +1189,7 @@ export function Create({
           setOpen={setOpenKey}
           uploads={uploads}
           compact={video}
+          grid={grid}
           familyTitle={
             palette?.groups.find((g) => g.family === workflow?.family)?.title ??
             (workflow?.source === "mine" ? undefined : workflow?.title)
@@ -1623,15 +1680,11 @@ function MediaSwitch({
   );
 }
 
-/** The strip's "Use in…": a menu of the workflows that take an image; choosing one puts the shown take in it. */
-function UseIn({
-  workflows,
-  onUse,
-}: {
-  workflows: S<"Workflow">[];
-  onUse: (w: S<"Workflow">) => void;
-}) {
-  if (!workflows.length) return null;
+/** The strip's "Use in…": a menu of the take's offers (GET …/takes/{id}/uses); choosing one opens its workflow
+ * with the take in it. */
+function UseIn({ takeId, onUse }: { takeId: string; onUse: (o: S<"TakeOffer">) => void }) {
+  const offers = useUses(takeId);
+  if (!offers?.length) return null;
   return (
     <>
       <button
@@ -1658,18 +1711,18 @@ function UseIn({
         }
       >
         <div className="flex flex-col gap-1">
-          {workflows.map((w) => (
+          {offers.map((o) => (
             <button
-              key={w.id}
+              key={`${o.workflow_id} ${o.param}`}
               type="button"
               role="menuitem"
               className="rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3"
               onClick={() => {
                 document.getElementById("use-in")?.hidePopover();
-                onUse(w);
+                onUse(o);
               }}
             >
-              {targetLabel(w)}
+              {offerLabel(o)}
             </button>
           ))}
         </div>

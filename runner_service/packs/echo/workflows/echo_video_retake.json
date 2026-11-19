@@ -1,0 +1,33 @@
+{
+  "id": "echo-retake",
+  "title": "Echo retake",
+  "action": "Retake a section",
+  "family": "echo",
+  "env": "fake",
+  "media": "video",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "retake": {
+      "kind": "echo/retake",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "source": null,
+        "span": null,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "retake.video"
+      }
+    }
+  }
+}

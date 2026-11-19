@@ -1,7 +1,7 @@
 "use client";
 // Gallery: every take of the user (docs/mock/Gallery.dc.html, plan 9.1). Search and chips filter the list (the API
-// ANDs them), pages load as the grid scrolls, images upload from the picker or by dropping them on the grid, and the
-// side panel shows the selected take with the actions that exist so far.
+// ANDs them), pages load as the grid scrolls, images (and wav or mp3 audio) upload from the picker or by dropping them
+// on the grid, and the side panel shows the selected take with the actions that exist so far.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,13 +15,14 @@ import { AddToTimeline } from "@/components/timeline/add";
 import { SaveAsLook } from "@/components/create/looks";
 import { lookGroupLabel } from "@/lib/looks";
 import { useLooks } from "@/lib/library";
-import { imageWorkflows, targetLabel } from "@/lib/refs";
-import { remember, useTakes } from "@/lib/take-cache";
+import { offerLabel } from "@/lib/source";
+import { remember, useTakes, useUses } from "@/lib/take-cache";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { useLoras } from "@/lib/lora-library";
 import { madeWithLine } from "@/lib/loras";
 import {
+  AUDIO_TYPES,
   UPLOAD_TYPES,
   appendPage,
   fits,
@@ -145,12 +146,15 @@ export function TakeCard({
   selecting,
   disabled,
   onClick,
+  sub,
 }: {
   take: Take;
   on: boolean;
   selecting: boolean;
   disabled?: boolean;
   onClick: () => void;
+  /** the mono line, else subLine */
+  sub?: string;
 }) {
   return (
     <button
@@ -161,7 +165,7 @@ export function TakeCard({
       className="bevel flex w-full flex-col gap-1.5 rounded-[10px] bg-transparent text-left disabled:opacity-50"
     >
       <span className="relative block w-full">
-        {t.kind === "image" || t.kind === "video" ? (
+        {t.kind === "image" || t.kind === "video" || t.kind === "audio" ? (
           <Thumb
             take={t}
             imgClassName={`block aspect-[16/10] w-full rounded-[10px] bg-s1 object-cover ${on ? "outline-2 -outline-offset-2 outline-a1" : ""}`}
@@ -190,19 +194,13 @@ export function TakeCard({
         )}
       </span>
       <b className="truncate text-[12px] font-semibold">{t.title}</b>
-      <small className="mono truncate text-[10px] text-t2">{subLine(t)}</small>
+      <small className="mono truncate text-[10px] text-t2">{sub ?? subLine(t)}</small>
     </button>
   );
 }
 
-/** The Gallery screen; `initial` is the unfiltered first page, read on the server; `workflows` offer "Use in…". */
-export function Gallery({
-  initial,
-  workflows,
-}: {
-  initial?: S<"TakePage">;
-  workflows?: S<"Workflow">[];
-}) {
+/** The Gallery screen; `initial` is the unfiltered first page, read on the server. */
+export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
   const [filter, setFilter] = useState<Filter>({});
   const [q, setQ] = useState("");
   const { takes, setTakes, next, loading, error, query, fetchPage, sentinel } = useTakePages(
@@ -252,7 +250,7 @@ export function Gallery({
       const set = (u: Partial<Upload>) =>
         setUploads((list) => list.map((x) => (x.id === id ? { ...x, ...u } : x)));
       setUploads((list) => [...list, { id, name: f.name, progress: 0 }]);
-      uploadFile(f, (progress) => set({ progress }))
+      uploadFile(f, (progress) => set({ progress }), undefined, true)
         .then((t) => {
           setUploads((list) => list.filter((x) => x.id !== id));
           if (fits(t, filter) && !query.trim())
@@ -321,7 +319,7 @@ export function Gallery({
           <input
             ref={fileInput}
             type="file"
-            accept={UPLOAD_TYPES.join(",")}
+            accept={[...UPLOAD_TYPES, ...AUDIO_TYPES, ".wav", ".mp3"].join(",")}
             multiple
             hidden
             onChange={(e) => {
@@ -531,7 +529,6 @@ export function Gallery({
               if ("url" in t) remember([t]);
               setCurrentId(t.id);
             }}
-            workflows={workflows ? imageWorkflows(workflows) : []}
           />
         ) : (
           <p className="text-[13px] text-t2">
@@ -618,7 +615,6 @@ function TakePanel({
   onMakeElement,
   onSaveLook,
   onPick,
-  workflows,
 }: {
   take: Take;
   onStar: () => void;
@@ -631,8 +627,6 @@ function TakePanel({
   onSaveLook: () => void;
   /** selects a take of its lineage */
   onPick: (t: Take | S<"TakeRef">) => void;
-  /** the workflows that take an image ("Use in…") */
-  workflows: S<"Workflow">[];
 }) {
   const url = safeUrl(t.url);
   const m = t.made_with;
@@ -670,6 +664,7 @@ function TakePanel({
     }
   }
   const saveError = saving?.id === t.id ? saving.error : "";
+  const offers = useUses(t.id);
   return (
     <>
       <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
@@ -712,6 +707,12 @@ function TakePanel({
         {!m && <Row label="File" value={`${t.content_type} · ${mb(t.bytes)}`} />}
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
         {t.video && <Row label="Length" value={videoLine(t.video)} />}
+        {t.audio && (
+          <Row
+            label="Kind · length"
+            value={`Upload · ${t.content_type === "audio/mpeg" ? "mp3" : "wav"} · ${t.audio.duration_s.toFixed(1)} s`}
+          />
+        )}
       </div>
 
       {(t.parents.length > 0 || used.length > 0 || !!m?.elements?.length) && (
@@ -751,29 +752,31 @@ function TakePanel({
         </div>
       )}
 
-      {t.kind === "image" && workflows.length > 0 && (
+      {!!offers?.length && (
         <div className="flex flex-col gap-2">
           <h2 className="heading flex items-center">
             Use in…
             <Info>
-              Opens the workflow in Create with this take as its reference. Every image input in the
-              app is picked from the gallery.
+              The same actions appear on this take wherever it shows up: under a stage, in a
+              pipeline step, on a timeline clip. Every image, video or audio input in the app is
+              picked from here.
             </Info>
           </h2>
-          {workflows.map((w, i) => (
+          {offers.map((o, i) => (
             <Link
-              key={w.id}
-              href={`/?${session}use=${encodeURIComponent(t.id)}&w=${encodeURIComponent(w.id)}`}
-              className={`act ${i === 0 ? "bg-a1 font-semibold text-on1" : ""}`}
+              key={`${o.workflow_id} ${o.param}`}
+              href={`/?${session}use=${encodeURIComponent(t.id)}&w=${encodeURIComponent(o.workflow_id)}`}
+              className={`act ${i === 0 && t.kind === "image" ? "bg-a1 font-semibold text-on1" : ""}`}
             >
-              {targetLabel(w)}
+              {offerLabel(o)}
             </Link>
           ))}
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-2">
-        <AddToTimeline key={t.id} takeIds={[t.id]} />
+        {/* audio is not a timeline clip yet (contracts/README.md, Media inputs: audio uploads) */}
+        {t.kind !== "audio" && <AddToTimeline key={t.id} takeIds={[t.id]} />}
         {m && (
           <Link href={`/?${session}reuse=${encodeURIComponent(t.id)}`} className="act">
             Reuse settings

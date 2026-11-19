@@ -7,7 +7,9 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
-import { ErrorNote, Info } from "@/components/kit";
+import { ErrorNote, Info, Modal } from "@/components/kit";
+import { ActionsNote, ClipActions } from "@/components/timeline/actions";
+import { markRange, rangeInTake, removeTrack } from "@/lib/source";
 import { ElementsPicker } from "@/components/create/elements";
 import { LooksPicker } from "@/components/create/looks";
 import { GalleryPicker } from "@/components/gallery/picker";
@@ -95,6 +97,10 @@ export function TimelineEditor({ id }: { id?: string }) {
   const [runProgress, setRunProgress] = useState<Record<string, string>>({});
   const [plan, setPlan] = useState<S<"ExportPlan"> | null>(null);
   const [recent, setRecent] = useState<S<"Take">[]>([]);
+  // the range marked on the sequence (Mark in / Mark out, sequence seconds): what a take action works on
+  const [range, setRange] = useState<[number, number] | null>(null);
+  // the audio track whose removal waits for the confirm (it has clips)
+  const [removing, setRemoving] = useState<string | null>(null);
   const library = useLibrary();
   const looks = useLooks();
 
@@ -148,7 +154,7 @@ export function TimelineEditor({ id }: { id?: string }) {
       .then((r) => setWorkflows(r.workflows))
       .catch(() => undefined);
     ok(api.GET("/v1/studio/takes", { params: { query: { limit: 3 } } }))
-      .then((r) => setRecent(r.takes))
+      .then((r) => setRecent(r.takes.filter((x) => x.kind !== "audio")))
       .catch(() => undefined);
   }, []);
 
@@ -320,7 +326,10 @@ export function TimelineEditor({ id }: { id?: string }) {
     if (!session || !live) return;
     return followSession(session, (e) => {
       if (e.type === "progress")
-        setRunProgress((p) => ({ ...p, [e.run_id]: `${e.data.step} / ${e.data.of}` }));
+        setRunProgress((p) => ({
+          ...p,
+          [e.run_id]: `${e.data.phase ?? "Sample"} ${e.data.step} / ${e.data.of}`,
+        }));
       if (e.type === "status" && ["succeeded", "failed", "cancelled"].includes(e.data.status))
         void reload().catch(() => undefined);
     });
@@ -381,6 +390,16 @@ export function TimelineEditor({ id }: { id?: string }) {
     for (const x of selected) if (!shotBusy(x.c)) commit({ op: "remove", clip: x.c.id });
     setSel([]);
   }
+  /** Removes an audio track: an empty one at once, one with clips after the confirm. */
+  function askRemove(name: string) {
+    const r = doc && removeTrack(doc.tracks, name);
+    if (!r) return;
+    if (r.confirm) return setRemoving(name);
+    commit({ op: "remove_track", track: name });
+    setTrack(null);
+  }
+  const mark = (edge: "in" | "out") =>
+    doc && setRange((r) => markRange(r, edge, at, doc.duration_s));
 
   // keys (contracts/README.md, Timeline rules: interaction): never while typing or in a dialog
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -417,11 +436,15 @@ export function TimelineEditor({ id }: { id?: string }) {
     } else if (k === "s" || k === "S") {
       e.preventDefault();
       splitHere();
+    } else if (k === "i" || k === "I" || k === "o" || k === "O") {
+      e.preventDefault();
+      mark(k.toLowerCase() === "i" ? "in" : "out");
     } else if (k === "=" || k === "+" || k === "-") {
       setPps((p) => Math.min(400, Math.max(5, p * (k === "-" ? 0.8 : 1.25))));
     } else if (k === "Escape") {
       setSel([]);
       setTrack(null);
+      setRange(null);
     }
   };
   useEffect(() => {
@@ -481,6 +504,7 @@ export function TimelineEditor({ id }: { id?: string }) {
   const fa = frameAt(doc, Math.min(frame, Math.max(0, doc.frames - 1)), facts);
   const offlineHere = fa.pictures.some((p) => p.offline);
   const under = v1[clipAt(doc, frame, facts)];
+  const rangeClip = range ? v1[clipAt(doc, g.f(range[0]), facts)] : undefined;
   const stageNote = !v1.length
     ? "Sequence preview · plays across cuts without rendering"
     : offlineHere
@@ -659,7 +683,39 @@ export function TimelineEditor({ id }: { id?: string }) {
             >
               New shot
             </button>
+            <button
+              type="button"
+              className="chip bevel rounded-[10px]"
+              title="Mark in (I)"
+              aria-keyshortcuts="I"
+              onClick={() => mark("in")}
+            >
+              Mark in
+            </button>
+            <button
+              type="button"
+              className="chip bevel rounded-[10px]"
+              title="Mark out (O)"
+              aria-keyshortcuts="O"
+              onClick={() => mark("out")}
+            >
+              Mark out
+            </button>
+            <button
+              type="button"
+              className="chip bevel rounded-[10px]"
+              disabled={!range}
+              onClick={() => setRange(null)}
+            >
+              Clear range
+            </button>
           </div>
+          {range && (
+            <span className="mono text-[12px] text-t2" aria-live="polite">
+              Range {timecode(range[0])} – {timecode(range[1])} · {(range[1] - range[0]).toFixed(2)}{" "}
+              s{rangeClip ? ` · on ${clipText(rangeClip, false, tl.takes, facts, g).title}` : ""}
+            </span>
+          )}
         </div>
 
         {shot && (
@@ -705,6 +761,8 @@ export function TimelineEditor({ id }: { id?: string }) {
           onCommit={commit}
           onZoom={setPps}
           onAddTrack={() => commit({ op: "add_track" })}
+          onRemoveTrack={askRemove}
+          range={range}
         />
       </main>
 
@@ -722,6 +780,13 @@ export function TimelineEditor({ id }: { id?: string }) {
             progress={progress[one.c.id]}
             replacing={replacing}
             onReplacing={setReplacing}
+            range={range}
+            workflows={workflows}
+            onShotStarted={(nt) => {
+              tlRef.current = nt;
+              setTl(nt);
+              setDraft(null);
+            }}
             onCommit={commit}
             onShot={(s) => setShot(s)}
             onRerender={() => setDialog("rerender")}
@@ -746,7 +811,7 @@ export function TimelineEditor({ id }: { id?: string }) {
             track={doc.tracks.find((x) => x.name === track)!}
             onCommit={commit}
             onAdd={() => setPicker({ track })}
-            onRemoved={() => setTrack(null)}
+            onRemove={() => askRemove(track)}
           />
         ) : (
           <div className="flex flex-col gap-2">
@@ -802,6 +867,8 @@ export function TimelineEditor({ id }: { id?: string }) {
         onClose={() => setPicker(null)}
         max={50}
         kind={picker && picker.track !== "V1" ? "video" : null}
+        // audio is not a timeline clip yet (contracts/README.md, Media inputs: audio uploads)
+        only={(x) => x.kind !== "audio"}
         onPick={(ts) => {
           const to = picker?.track ?? "V1";
           setPicker(null);
@@ -832,6 +899,31 @@ export function TimelineEditor({ id }: { id?: string }) {
         }}
       />
       <Export open={dialog === "export"} onClose={() => setDialog(null)} tl={tl} />
+      <Modal
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        title={(removing && removeTrack(doc.tracks, removing)?.confirm) || "Remove the track?"}
+      >
+        <p className="mb-4 text-[13px] text-t2">
+          Later tracks move up and are renamed. Undo brings it back.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className="chip bevel" onClick={() => setRemoving(null)}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="chip bevel bg-a1 font-semibold text-on1"
+            onClick={() => {
+              if (removing) commit({ op: "remove_track", track: removing });
+              setRemoving(null);
+              setTrack(null);
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      </Modal>
       <Rerender
         open={dialog === "rerender"}
         onClose={() => setDialog(null)}
@@ -901,6 +993,9 @@ function ClipPanel({
   progress,
   replacing,
   onReplacing,
+  range,
+  workflows,
+  onShotStarted,
   onCommit,
   onShot,
   onRerender,
@@ -913,6 +1008,11 @@ function ClipPanel({
   progress?: string;
   replacing: boolean;
   onReplacing: (on: boolean) => void;
+  /** the sequence's marked range (sequence seconds) */
+  range: [number, number] | null;
+  workflows: S<"Workflow">[];
+  /** a take action's shot started: the sequence with its placeholder */
+  onShotStarted: (t: Timeline) => void;
   onCommit: (op: Op) => void;
   onShot: (s: ShotSlot) => void;
   onRerender: () => void;
@@ -932,6 +1032,13 @@ function ClipPanel({
   const sub = take
     ? `From take ${take.seed != null ? `seed ${take.seed}` : take.title}${take.workflow_title ? ` · ${take.workflow_title}` : ""}`
     : line;
+  // the marked range on this clip, in its take's time and frames (the take actions work on it)
+  const fps = take?.video?.fps ?? 0;
+  const inTake =
+    range && kind === "video" && fps
+      ? rangeInTake(range, { at: c.at ?? 0, in: c.in ?? 0, out: c.out ?? 0 }, fps)
+      : null;
+  const clipRange = inTake && range ? range : null;
   const setGainDb = () => {
     const v = Math.max(-60, Math.min(12, Number(gain)));
     if (Number.isFinite(v) && v !== (c.gain_db ?? 0))
@@ -1000,6 +1107,15 @@ function ClipPanel({
             </select>
           </Cell>
         )}
+        {inTake && (
+          <div className="col-span-2 flex justify-between gap-2 rounded-xl bg-s2 px-3 py-2.5">
+            <span className="text-[12px] text-t2">Range in the take</span>
+            <span className="mono text-[12px]">
+              {timecode(inTake[0])} – {timecode(inTake[1])} · frames {Math.round(inTake[0] * fps)} –{" "}
+              {Math.round(inTake[1] * fps)}
+            </span>
+          </div>
+        )}
         {(kind === "video" || ti > 0) && (
           <Cell label="Gain (dB)">
             <div className="flex items-center gap-2">
@@ -1034,6 +1150,17 @@ function ClipPanel({
               to this clip.
             </Info>
           </h3>
+          {c.take_id && !c.offline && (
+            <ClipActions
+              tl={tl}
+              doc={doc}
+              clip={c}
+              range={clipRange}
+              workflows={workflows}
+              disabled={busy}
+              onDone={onShotStarted}
+            />
+          )}
           {!c.take_id && (
             <button
               type="button"
@@ -1065,6 +1192,7 @@ function ClipPanel({
               Redo this shot
             </button>
           )}
+          {clipRange && <ActionsNote />}
         </div>
       )}
 
@@ -1137,12 +1265,13 @@ function TrackPanel({
   track: t,
   onCommit,
   onAdd,
-  onRemoved,
+  onRemove,
 }: {
   track: Track;
   onCommit: (op: Op) => void;
   onAdd: () => void;
-  onRemoved: () => void;
+  /** removes it (asking first when it has clips) */
+  onRemove: () => void;
 }) {
   const [gain, setGain] = useDraft(String(t.gain_db ?? 0));
   return (
@@ -1187,14 +1316,7 @@ function TrackPanel({
         <button type="button" className="act" onClick={onAdd}>
           Add clips to {t.name}
         </button>
-        <button
-          type="button"
-          className="act text-bad"
-          onClick={() => {
-            onCommit({ op: "remove_track", track: t.name! });
-            onRemoved();
-          }}
-        >
+        <button type="button" className="act text-bad" onClick={onRemove}>
           Remove track
         </button>
       </div>

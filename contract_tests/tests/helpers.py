@@ -174,13 +174,18 @@ def upload(
     data: bytes,
     filename: str = "ref.png",
     complete: bool = True,
+    content_type: str = "image/png",
+    duration_s: float | None = None,
 ) -> dict:
-    """An uploaded PNG: the completed take, or (complete=False) the pending upload's POST /uploads answer."""
-    body = {"filename": filename, "content_type": "image/png", "bytes": len(data)}
+    """An uploaded file (a PNG by default; audio/wav or audio/mpeg with its declared `duration_s`): the completed
+    take, or (complete=False) the pending upload's POST /uploads answer."""
+    body = {"filename": filename, "content_type": content_type, "bytes": len(data)}
+    if duration_s is not None:
+        body["duration_s"] = duration_s
     up = ok(client.post(f"{STUDIO}/uploads", json=body), 201)
     if not complete:
         return up
-    r = anon.put(up["upload_url"], content=data, headers={"Content-Type": "image/png"})
+    r = anon.put(up["upload_url"], content=data, headers={"Content-Type": content_type})
     assert r.status_code == 204, f"PUT upload: {r.status_code} {r.text}"
     return ok(client.post(f"{STUDIO}/uploads/{up['take_id']}/complete"))
 

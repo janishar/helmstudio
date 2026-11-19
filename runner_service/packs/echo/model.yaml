@@ -5,6 +5,8 @@
 # echo/video with stage-bound steps (workflow echo-image-to-video, the fake ltx-image-to-video). Image values are
 # read and checked by the core before the first step (contract tests, no GPU). Duration `auto` resolves to 2 s.
 # The kinds of API 1.11 equal the canonical contract fixtures; keyframes, sample and `auto` (1.12) have none yet.
+# echo/retake, echo/a2v and echo/extend (API 1.19, workflows echo-retake, echo-a2v, echo-extend) take a video or audio take as a media
+# input (the core reads and checks it) and report the output's source_map.
 # echo/ask (API 1.14, workflow echo-ask) is the fake llm: it answers what the prompt scripts (fake.py `ask`).
 id: echo
 family: echo
@@ -144,6 +146,38 @@ stages:
       steps: {type: int, label: Steps, default: 4, min: 2, max: 4, step: 1, values: [2, 4],
               values_by: {param: role, values: {stage1: [4], stage2: [2]}},
               help: "Fixed by the stage: stage1 runs 4 steps, stage2 runs 2."}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
+  # media inputs (API 1.19): the platform's retake and audio-to-video paths without a GPU (fake.py retake, a2v)
+  retake:
+    title: Echo retake
+    help: "Fake retake: reads the source, then a still MP4 of its text as long as the source (the source's size and fps), reporting source_map {source, 0, span}."
+    inputs: {text: Text}
+    outputs: {video: Video}
+    params:
+      source: {type: media, label: Source video, default: null, accepts: [video], grid: 32, max_frames: 321,
+               help: The video the fake reads (and checks) before it renders.}
+      span: {type: span, label: Retake, default: null, help: Reported back as the generated part.}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
+  a2v:
+    title: Echo audio to video
+    help: "Fake audio to video: reads the part in..out, then a still MP4 of its text as long as the part (24 fps, 256 x 128) with that part as its sound, reporting source_map {source, -in, 0, out - in}."
+    inputs: {text: Text}
+    outputs: {video: Video}
+    params:
+      source: {type: media, label: Audio, default: null, accepts: [audio], trim: true, max_s: 13.375,
+               help: "The audio (or a video's sound) the fake reads (and checks) before it renders; in and out pick the part."}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
+  extend:
+    title: Echo extend
+    help: "Fake extend: reads the source, then a still MP4 of its text at the source's size and fps, as long as ltx/extend's result, reporting its source_map (extend_map)."
+    inputs: {text: Text}
+    outputs: {video: Video}
+    params:
+      source: {type: media, label: Source video, default: null, accepts: [video], grid: 32, max_frames: 321,
+               help: The video the fake reads (and checks) before it renders.}
+      seconds: {type: float, label: Add, default: 2, min: 0.1, max: 10, step: 0.1,
+                help: "Seconds to add, rounded up to whole 8-frame steps."}
+      direction: {type: enum, label: Where, default: after, enum: [after, before]}
       delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
   ask:
     title: Ask (fake)

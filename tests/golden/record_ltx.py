@@ -18,6 +18,13 @@ image-to-video, later frames = keyframes; the PNGs are made by ltx_inputs.test_i
 never to the repo; its sha256 is in the JSON). Extra observations: each preprocessed image and its encoded latent per
 stage, the denoise / keyframe masks and appended tokens per stage, the relay token ranges and mask, the LoRA keys
 fused and three fused weights. `--cases auto-duration` runs only Gemma + the DurationHead (no DiT) on a few prompts.
+
+M7 cases (DEV_CASES, only when named in --cases): `ltx-2-mlx retake | extend | a2v` on the dev transformer, through
+the pipelines' own entry points (RetakePipeline.retake_from_video / extend_from_video + cli._decode_and_save;
+A2VidPipelineTwoStage.generate_and_save). Retake and extend read the t2v golden's MP4 in place; a2v's input WAV is
+made by ltx_inputs.test_tones and saved beside the golden. Extra observations: the source latents, the positive and
+negative embeddings, each loop's states (latent / clean / denoise mask / keyframes mask / positions), guider params
+and sigmas, the distilled-LoRA fuse phase. A memory guard exits the process if MLX active memory passes 46 GiB.
 """
 
 from __future__ import annotations
@@ -365,6 +372,223 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
     return meta
 
 
+# --- M7: the dev pipelines (dev transformer + CFG/STG/modality guidance), as `ltx-2-mlx retake|extend|a2v` run them.
+# Source of retake/extend: the t2v golden's MP4 (448x256, 49 f @24, AAC), read in place (its sha256 goes in the JSON).
+T2V_SOURCE = GOLDEN / "ltx-text-to-video" / "t2v-448x256-49f-s42.mp4"
+DEV_CASES = [
+    {"name": "retake-448x256-49f-s42", "out": "ltx-retake", "kind": "retake", "seed": 42, "start": 2, "end": 5,
+     "regenerate_audio": True,
+     "prompt": "A golden retriever puppy stops on a sunny park lawn, sits down and wags its tail, panting, "
+               "birds chirping in the trees behind it"},
+    {"name": "extend-448x256-49f+8-s42", "out": "ltx-extend", "kind": "extend", "seed": 42, "extend_frames": 1,
+     "direction": "after",
+     "prompt": "The golden retriever puppy keeps running toward the camera on the sunny park lawn and barks, "
+               "birds chirping in the trees behind it"},
+    {"name": "a2v-448x256-49f-s42", "out": "ltx-audio-to-video", "kind": "a2v", "seed": 42, "width": 448,
+     "height": 256, "frames": 49, "fps": 24.0, "audio_start": 0.0,
+     "prompt": "A musician plays a glowing synthesizer on a dark stage, lights pulsing in time with each note"},
+]  # fmt: skip
+MEMORY_GUARD_GIB = 46.0  # abort the case (os._exit) before MLX active memory reaches the 52 GB runner budget
+
+
+def memory_guard(limit_gib: float = MEMORY_GUARD_GIB) -> None:
+    """Background thread: exit the process at once if MLX active memory passes limit_gib (never swap the Mac)."""
+    import threading
+
+    def watch():
+        while True:
+            a = mx.get_active_memory() / 1024**3
+            if a > limit_gib:
+                print(f"MEMORY GUARD: MLX active {a:.1f} GiB > {limit_gib} GiB; aborting", file=sys.stderr, flush=True)
+                os._exit(3)
+            time.sleep(0.2)
+
+    threading.Thread(target=watch, daemon=True).start()
+
+
+def state_stats(st) -> dict:
+    return {"latent": stats(st.latent), "clean_latent": stats(st.clean_latent), "denoise_mask": stats(st.denoise_mask),
+            "keyframes_mask": mask_stats(st.keyframes_mask), "positions": stats(st.positions),
+            "tokens": st.latent.shape[1]}  # fmt: skip
+
+
+def record_dev(case: dict, out: Path) -> dict:
+    """retake / extend (RetakePipeline, one stage, dev + guidance) or a2v (A2VidPipelineTwoStage) as the CLI runs them."""
+    from ltx_pipelines_mlx import a2vid_two_stage as a2v_mod
+    from ltx_pipelines_mlx import cli
+    from ltx_pipelines_mlx import retake as retake_mod
+
+    model = MODELS / "ltx-2.5"
+    ph, seen = Phases(), {"loops": []}
+    kind = case["kind"]
+    memory_guard()
+    t0 = time.perf_counter()
+    inputs: dict = {}
+    if kind == "a2v":
+        wav_in = out / f"{case['name']}-audio.wav"
+        inputs["audio"] = {"file": wav_in.name, "sha256": ltx_inputs.test_tones(wav_in), "seconds": 3.0,
+                           "rate": 48000, "channels": 2, "what": "ltx_inputs.test_tones"}  # fmt: skip
+        pipe = a2v_mod.A2VidPipelineTwoStage(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False)
+        mod = a2v_mod
+    else:
+        inputs["video"] = {"file": str(T2V_SOURCE.relative_to(REPO)),
+                           "sha256": hashlib.sha256(T2V_SOURCE.read_bytes()).hexdigest()}  # fmt: skip
+        pipe = retake_mod.RetakePipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False)
+        mod = retake_mod
+    pipe.verbose = True
+    pipe.stepwise = None
+    t_init = time.perf_counter() - t0
+
+    # Observers (call through unchanged)
+    raw_text = pipe._encode_text_with_negative
+
+    def text(prompt):
+        r = raw_text(prompt)
+        seen["embeds"] = dict(zip(("video", "audio", "neg_video", "neg_audio"), (stats(x) for x in r)))
+        return r
+
+    pipe._encode_text_with_negative = ph.wrap("text_encoder_load_encode_pos_neg", text)
+    pipe._load_dev_transformer = ph.wrap("dev_transformer_load", pipe._load_dev_transformer)
+    if hasattr(pipe, "_encode_source_video"):
+        raw_src = pipe._encode_source_video
+
+        def src(path):
+            v, a, meta = raw_src(path)
+            mx.eval(v, a)
+            seen["source"] = {"meta": meta.__dict__, "video_latent": stats(v), "audio_latent": stats(a)}
+            return v, a, meta
+
+        pipe._encode_source_video = ph.wrap("source_encode_video_audio", src)
+    if kind == "a2v":
+        raw_enc = mod.encode_audio
+
+        def enc(*a, **kw):
+            r = raw_enc(*a, **kw)
+            mx.eval(r)
+            seen["audio_latent_encoded"] = stats(r)
+            return r
+
+        mod.encode_audio = ph.wrap("audio_encode", enc)
+        pipe._fuse_distilled_lora = ph.wrap("distilled_lora_fuse", pipe._fuse_distilled_lora)
+        pipe._load_upsampler = ph.wrap("upsampler_load", pipe._load_upsampler)
+        raw_save = pipe._save_waveform
+
+        def save(w, path, sample_rate=48000):
+            seen["output_waveform"] = stats(w)
+            save_waveform(w, str(out / f"{case['name']}.wav"), sample_rate=sample_rate)
+            return raw_save(w, path, sample_rate=sample_rate)
+
+        pipe._save_waveform = save
+        raw_dec = pipe.video_decoder_block.decode_and_stream
+
+        def dec(latent, *a, **kw):
+            seen["final_video_latent"] = stats(latent)
+            return raw_dec(latent, *a, **kw)
+
+        pipe.video_decoder_block.decode_and_stream = ph.wrap("decode_video_mux", dec)
+        pipe._load_decoders = ph.wrap("decoders_load", pipe._load_decoders)
+
+    def observe_loop(name, raw):
+        def loop(**kw):
+            n = len(seen["loops"]) + 1
+            row = {"loop": n, "sampler": name, "sigmas": [round(float(s), 6) for s in kw["sigmas"]],
+                   "video_in": state_stats(kw["video_state"]), "audio_in": state_stats(kw["audio_state"])}  # fmt: skip
+            for k in ("video_guider_factory", "audio_guider_factory"):
+                f = kw.get(k)
+                if f is not None:
+                    row[k.replace("_factory", "")] = {"params": f.params(1.0).__dict__,
+                                                       "negative_context": f.negative_context is not None}  # fmt: skip
+            res = ph.wrap(f"loop{n}_{name}", raw)(**kw)
+            mx.eval(res.video_latent, res.audio_latent)
+            row["video_out"], row["audio_out"] = stats(res.video_latent), stats(res.audio_latent)
+            seen["loops"].append(row)
+            return res
+
+        return loop
+
+    mod.guided_denoise_loop = observe_loop("guided_euler", mod.guided_denoise_loop)
+    if kind == "a2v":
+        mod.denoise_loop = observe_loop("euler", mod.denoise_loop)
+    raw_audio_call = blocks.AudioDecoder.__call__
+    wav = out / f"{case['name']}.wav"
+
+    def audio_call(self, latent):
+        seen["final_audio_latent"] = stats(latent)
+        w = raw_audio_call(self, latent)
+        mx.eval(w)
+        seen["waveform"] = stats(w)
+        save_waveform(w, str(wav), sample_rate=48000)
+        return w
+
+    blocks.AudioDecoder.__call__ = ph.wrap("audio_decode", audio_call)
+
+    mp4 = out / f"{case['name']}.mp4"
+    mx.reset_peak_memory()
+    if kind == "a2v":  # cli._cmd_a2v
+        pipe.generate_and_save(prompt=case["prompt"], output_path=str(mp4), audio_path=str(wav_in),
+                               height=case["height"], width=case["width"], num_frames=case["frames"],
+                               frame_rate=case["fps"], seed=case["seed"], images=None,
+                               audio_start_time=case["audio_start"])  # fmt: skip
+        argv = (f"ltx-2-mlx a2v --model {model} --quantize-on-load 8 --width {case['width']} --height {case['height']} "
+                f"--frames {case['frames']} --frame-rate {case['fps']:g} --seed {case['seed']} --audio {wav_in.name} "
+                f"--prompt '...' -o {mp4.name}")  # fmt: skip
+    else:  # cli._cmd_retake / _cmd_extend, then cli._decode_and_save
+        if kind == "retake":
+            v, a = pipe.retake_from_video(prompt=case["prompt"], video_path=str(T2V_SOURCE), start_frame=case["start"],
+                                          end_frame=case["end"], seed=case["seed"],
+                                          regenerate_audio=case["regenerate_audio"])  # fmt: skip
+            argv = f"ltx-2-mlx retake --video {T2V_SOURCE.name} --start {case['start']} --end {case['end']}"
+        else:
+            v, a = pipe.extend_from_video(prompt=case["prompt"], video_path=str(T2V_SOURCE),
+                                          extend_frames=case["extend_frames"], direction=case["direction"],
+                                          seed=case["seed"])  # fmt: skip
+            argv = (f"ltx-2-mlx extend --video {T2V_SOURCE.name} --extend-frames {case['extend_frames']} "
+                    f"--direction {case['direction']}")  # fmt: skip
+        argv = f"{argv} --model {model} --quantize-on-load 8 --seed {case['seed']} --prompt '...' -o {mp4.name}"
+        seen["final_video_latent"], seen["final_audio_latent_out"] = stats(v), stats(a)
+        pipe._load_decoders = ph.wrap("decoders_load", pipe._load_decoders)
+        pipe._decode_and_save_video = ph.wrap("decode_video_audio_mux", pipe._decode_and_save_video)
+        cli._decode_and_save(pipe, v, a, argparse.Namespace(output=str(mp4)))
+    total = time.perf_counter() - t0
+    probe = ffprobe(mp4)
+    vstream = next(s for s in probe["streams"] if s["codec_type"] == "video")
+    picks = frames(mp4, out, case["name"], int(vstream["nb_frames"]))
+    ru = resource.getrusage(resource.RUSAGE_SELF)
+    meta = {
+        **case,
+        "pipeline": {"retake": "RetakePipeline.retake_from_video", "extend": "RetakePipeline.extend_from_video",
+                     "a2v": "A2VidPipelineTwoStage.generate_and_save"}[kind],
+        "argv_equivalent": argv, "inputs": inputs, "quantize_on_load": 8, "quant_group_size": 64, "low_ram": False,
+        "noise_seeds": ({"stage1_video": case["seed"], "stage2_video_and_audio": case["seed"] + 2}
+                        if kind == "a2v" else {"video": case["seed"], "audio": case["seed"] + 1}),
+        "source": seen.get("source"), "audio_latent_encoded": seen.get("audio_latent_encoded"),
+        "prompt_embeds": seen.get("embeds"), "loops": seen["loops"],
+        "final_video_latent": seen.get("final_video_latent"),
+        "final_audio_latent": seen.get("final_audio_latent") or seen.get("final_audio_latent_out"),
+        "waveform": seen.get("waveform") or seen.get("output_waveform"),
+        "wav": {"sample_rate": 48000, "format": "PCM s16le", "file": wav.name,
+                "what": "the input audio trimmed to the video (a2v muxes the original, not a decode)" if kind == "a2v"
+                else "the decoded waveform before AAC"},
+        "frames_png": {k: {"index": v_, "file": f"{case['name']}-{k}.png"} for k, v_ in picks.items()},
+        "mp4": {"file": mp4.name, "bytes": mp4.stat().st_size, "ffprobe": probe,
+                "sha256": hashlib.sha256(mp4.read_bytes()).hexdigest()},
+        "timing_s": {"pipeline_init": round(t_init, 2), **{k: r["s"] for k, r in ph.rows.items()},
+                     "total_wall": round(total, 1)},
+        "memory": {"phases": ph.rows, "mlx_peak_gib_whole_run": max(r["peak_gib"] for r in ph.rows.values()),
+                   "process_max_rss_gib": gib(ru.ru_maxrss), "guard_gib": MEMORY_GUARD_GIB},
+        "env": {k: v_ for k, v_ in os.environ.items() if k.startswith(("LTX2_", "LTX_MLX_", "LTX_MODEL"))},
+        "versions": {"mlx": mx.__version__, "python": platform.python_version(), "numpy": np.__version__,
+                     "ffmpeg": subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True, text=True).stdout.split("\n")[0],
+                     "ltx_pipelines_mlx": "0.15.4 (ltx-2-studio lockfile)",
+                     "machine": f"{platform.system()} {platform.release()} {platform.machine()}"},
+    }  # fmt: skip
+    meta["env"]["LTX_MLX_CACHE_DIR"] = "<scratch>"
+    (out / f"{case['name']}.json").write_text(json.dumps(meta, indent=2, default=str) + "\n")
+    print(case["name"], json.dumps({"timing_s": meta["timing_s"], "peak_gib": meta["memory"]["mlx_peak_gib_whole_run"],
+                                    "rss_gib": meta["memory"]["process_max_rss_gib"]}), flush=True)  # fmt: skip
+    return meta
+
+
 def record_duration(out: Path) -> dict:
     """DurationHead predictions (cli: no --frames, --auto-duration MIN:MAX) for DURATION_PROMPTS; no DiT is loaded."""
     from ltx_pipelines_mlx.utils.types import AutoDuration
@@ -427,6 +651,10 @@ def main() -> None:
         out = args.out or GOLDEN / case.get("out", "ltx-text-to-video")
         out.mkdir(parents=True, exist_ok=True)
         record(case, out, args.scratch)
+    for case in [c for c in DEV_CASES if args.cases and c["name"] in args.cases]:
+        out = args.out or GOLDEN / case["out"]
+        out.mkdir(parents=True, exist_ok=True)
+        record_dev(case, out)
 
 
 if __name__ == "__main__":

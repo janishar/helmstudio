@@ -6,6 +6,7 @@
 import { useRef, useState } from "react";
 import type { S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import { actionShot } from "@/components/timeline/actions";
 import {
   Grid,
   cuts,
@@ -40,8 +41,11 @@ export function clipText(
   const t = c.take_id ? takes[c.take_id] : undefined;
   if (c.shot) {
     const st = c.shot.status ?? "queued";
+    // a take action's shot: "Retaking Shot 3", "Extending", "Retake failed" (docs/mock/TakeActions.dc.html)
+    const a = actionShot(c, t?.title);
+    if (a?.failed) return { title: a.title, line: c.shot.error ?? "the run failed" };
     return {
-      title: c.shot.batch_id ? "Re-rendering" : t ? `Redoing ${t.title}` : "New shot",
+      title: a?.title ?? (c.shot.batch_id ? "Re-rendering" : t ? `Redoing ${t.title}` : "New shot"),
       line: st === "failed" ? `failed: ${c.shot.error ?? "the run failed"}` : (progress ?? st),
     };
   }
@@ -87,6 +91,8 @@ export function Lanes({
   onCommit,
   onZoom,
   onAddTrack,
+  onRemoveTrack,
+  range,
 }: {
   doc: Norm;
   takes: Record<string, TTake>;
@@ -107,6 +113,10 @@ export function Lanes({
   onCommit: (op: Op) => void;
   onZoom: (pps: number) => void;
   onAddTrack?: () => void;
+  /** an audio lane's ×: remove that track */
+  onRemoveTrack?: (name: string) => void;
+  /** the marked range (sequence seconds), drawn as a band with its I / O flags */
+  range?: [number, number] | null;
 }) {
   const g = new Grid(doc.target);
   const drag = useRef<Drag | null>(null);
@@ -206,7 +216,7 @@ export function Lanes({
             : kind === "image"
               ? "border border-a1 bg-[color-mix(in_srgb,var(--a1)_14%,transparent)]"
               : "border border-a2 bg-[rgba(255,122,89,0.14)]";
-    const pct = c.shot && progress[c.id]?.match(/^(\d+) \/ (\d+)$/);
+    const pct = c.shot && progress[c.id]?.match(/(\d+) \/ (\d+)$/);
     const bg = !audio && t && !c.shot && !c.offline ? safeUrl(t.thumb_url) : undefined;
     return (
       <button
@@ -254,7 +264,7 @@ export function Lanes({
                 style={{ width: `${(100 * Number(pct[1])) / Number(pct[2])}%` }}
               />
             </span>
-            <small>Sample {line}</small>
+            <small>{line}</small>
           </span>
         ) : (
           <small>{height > 40 ? line : `${title === "Clip" ? "" : title} · ${line}`}</small>
@@ -343,15 +353,28 @@ export function Lanes({
 
         {doc.tracks.slice(1).map((t, i) => (
           <div key={t.name} className="flex h-9 items-stretch" data-lane={i + 1}>
-            <button
-              type="button"
-              aria-pressed={track === t.name}
-              onClick={() => onTrack(t.name!)}
-              className={`mono flex w-[72px] shrink-0 items-center text-left text-[11px] aria-pressed:text-a1 ${t.mute ? "text-t2 line-through" : "text-t2"}`}
-              aria-label={`Track ${t.name}${t.mute ? ", muted" : ""}: settings`}
-            >
-              {t.name}
-            </button>
+            <span className="flex w-[72px] shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                aria-pressed={track === t.name}
+                onClick={() => onTrack(t.name!)}
+                className={`mono text-left text-[11px] aria-pressed:text-a1 ${t.mute ? "text-t2 line-through" : "text-t2"}`}
+                aria-label={`Track ${t.name}${t.mute ? ", muted" : ""}: settings`}
+              >
+                {t.name}
+              </button>
+              {onRemoveTrack && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${t.name}`}
+                  title="Remove track"
+                  onClick={() => onRemoveTrack(t.name!)}
+                  className="grid size-[22px] place-items-center rounded-lg bg-s3 text-[12px] text-t2"
+                >
+                  ×
+                </button>
+              )}
+            </span>
             <div className="relative flex-1" role="group" aria-label={`${t.name}: sound`}>
               {t.clips.map((c) => clipButton(c, i + 1, 36))}
             </div>
@@ -367,6 +390,30 @@ export function Lanes({
           </button>
         )}
 
+        {range && (
+          <span
+            aria-label={`Range ${shortTime(range[0])} to ${shortTime(range[1])}`}
+            className="pointer-events-none absolute top-[18px] bottom-0 block border-x-2 border-a2"
+            style={{
+              left: HEAD + range[0] * pps,
+              width: (range[1] - range[0]) * pps,
+              background: "color-mix(in srgb, var(--a2) 12%, transparent)",
+            }}
+          >
+            <span
+              aria-hidden
+              className="mono absolute -top-[18px] -left-0.5 rounded bg-a2 px-1 text-[10px] text-[var(--on2)]"
+            >
+              I
+            </span>
+            <span
+              aria-hidden
+              className="mono absolute -top-[18px] -right-0.5 rounded bg-a2 px-1 text-[10px] text-[var(--on2)]"
+            >
+              O
+            </span>
+          </span>
+        )}
         <span
           aria-hidden
           className="pointer-events-none absolute top-3.5 bottom-0 block w-0.5 bg-t1"

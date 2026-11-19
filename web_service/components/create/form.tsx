@@ -7,6 +7,8 @@ import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
 import { FirstFrameTile, RowsEditor, type RefUploads } from "@/components/create/refs";
 import { LoraRows } from "@/components/create/loras";
+import { ExtendControl, MediaControl, SpanControl, extensionOf } from "@/components/create/source";
+import type { FrameGrid } from "@/lib/source";
 import { PlainRows } from "@/components/create/rows";
 import {
   allowedInts,
@@ -185,6 +187,7 @@ export function Inspector({
   compact,
   resolved,
   presets,
+  grid = null,
 }: FormProps &
   OpenProps & {
     uploads: RefUploads;
@@ -196,8 +199,11 @@ export function Inspector({
     resolved?: Record<string, number>;
     /** the workflow's presets (`studio.presets`): chips that set their values */
     presets?: Record<string, Record<string, S<"ParamValue">>>;
+    /** the family's frame grid: what a span, an extension or a part comes to */
+    grid?: FrameGrid | null;
   }) {
   const s = sections(fields);
+  const ext = extensionOf(fields);
   const clip = clipOf(fields, raws);
   const c = canvasOf(fields, raws, useLastRef(fields, raws));
   const extra = s.canvas.filter((f) => f !== c?.width && f !== c?.height && f !== c?.mode);
@@ -209,11 +215,31 @@ export function Inspector({
     !s.duration.length &&
     !s.tiles.length &&
     !s.switches.length &&
-    !s.more.length
+    !s.more.length &&
+    !s.media.length
   )
     return <p className="text-[13px] text-t2">Nothing to set.</p>;
   const control = (f: Field) => {
     const raw = rawOf(f, raws);
+    const shared = { fields, raws, error: errors[f.key], grid };
+    if (f.param.type === "media")
+      return <MediaControl key={f.key} f={f} {...shared} onChange={onChange} />;
+    if (f.param.type === "span")
+      return (
+        <SpanControl
+          key={f.key}
+          f={f}
+          {...shared}
+          switches={fields
+            .filter((x) => x.node === f.node && x.param.type === "bool")
+            .map((x) => (
+              <Switch key={x.key} f={x} raw={rawOf(x, raws)} onChange={onChange} />
+            ))}
+        />
+      );
+    if (ext && f === ext.direction) return null; // drawn with its seconds
+    if (ext && f === ext.seconds)
+      return <ExtendControl key={f.key} {...ext} {...shared} onChange={onChange} />;
     if (f.param.type === "bool") return <Switch key={f.key} f={f} raw={raw} onChange={onChange} />;
     if (f.param.type === "frames")
       return (
@@ -316,7 +342,10 @@ export function Inspector({
           ),
           loras[0]
             ? loraHelp(familyTitle ?? loras[0].family ?? "this model", loras[0])
-            : refs[0]?.param.help,
+            : (refs[0]?.param.help ??
+                (g.fields.length === 1 && s.media.includes(g.fields[0])
+                  ? g.fields[0].param.help
+                  : undefined)),
         );
       }),
     ];
@@ -325,6 +354,9 @@ export function Inspector({
       {presetChips}
       {[...s.refs, ...s.rows].map((f, i) =>
         section(`sec-refs-${i}`, f.param.label ?? f.param.name, [], rowsEditor(f), f.param.help),
+      )}
+      {s.media.map((f, i) =>
+        section(`sec-media-${i}`, f.param.label ?? f.param.name, [f], undefined, f.param.help),
       )}
       {section(
         "sec-canvas",

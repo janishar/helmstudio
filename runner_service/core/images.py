@@ -9,7 +9,11 @@ unchanged one is a cache hit and is not read again.
 
 A `Media` field of a rows item (an ask node's `media`, API 1.14) takes an image or a video take in the same form; it
 is read with the same checks and handed over as {"take_id", "image": PIL image} or, for content_type video/mp4,
-{"take_id", "mp4": bytes} (the ask stage takes its keyframes)."""
+{"take_id", "mp4": bytes} (the ask stage takes its keyframes).
+
+A `media` param (API 1.19, README Media inputs: a video or audio take, defs media) is read with the same checks (at
+most MEDIA_MAX_BYTES) and handed over as its resolved value plus `data` (the file's bytes, undecoded: the pack
+decodes it). Its cache key covers (owner, key, etag, in, out), all in the value."""
 
 import asyncio
 import io
@@ -22,6 +26,8 @@ from core import graph  # graph imports this module: RunError is looked up at ca
 MAX_BYTES = (
     64 * 2**20
 )  # ponytail: one cap for every input image; per-pack caps if a pack ever needs them
+# a media take is held in memory while its node runs; ponytail: a temp file if takes ever get larger
+MEDIA_MAX_BYTES = 1 << 30
 FORMATS = ("PNG", "JPEG", "WEBP")  # the decoders tried
 # studio accepts the same files: Go reads a multi-picture JPEG (Pillow's MPO, from the JPEG decoder) as JPEG; its
 # first frame is the picture
@@ -89,33 +95,41 @@ def decode(data: bytes, take_id: str) -> Image.Image:
         raise graph.RunError(f"input image {take_id} is not a readable image") from e
 
 
-async def read(value: dict, owner: str, fetch) -> Image.Image | bytes:
-    """Fetch one resolved Image value and decode it (a video take: its checked bytes, undecoded). `fetch(key, limit, etag)` → bytes (at most limit + 1), or None
-    when the object is missing or its ETag is no longer `etag` (re-PUT after studio checked it)."""
+async def read(value: dict, owner: str, fetch, media: bool = False) -> Image.Image | bytes:
+    """Fetch one resolved Image value and decode it (a video take or a `media` value: its checked bytes,
+    undecoded). `fetch(key, limit, etag)` → bytes (at most limit + 1), or None when the object is missing or its
+    ETag is no longer `etag` (re-PUT after studio checked it)."""
     take_id, key, size = value["take_id"], value["key"], value["bytes"]
+    what, cap = ("take", MEDIA_MAX_BYTES) if media else ("image", MAX_BYTES)
     if not key.startswith(
         f"u/{owner}/"
     ):  # also a dlq'd command (messaging.schemas.foreign_keys): never read
-        raise graph.RunError(f"input image {take_id} is not the run owner's")
-    if size > MAX_BYTES:
-        raise graph.RunError(
-            f"input image {take_id} is too large ({size} bytes, at most {MAX_BYTES})"
-        )
+        raise graph.RunError(f"input {what} {take_id} is not the run owner's")
+    if size > cap:
+        raise graph.RunError(f"input {what} {take_id} is too large ({size} bytes, at most {cap})")
     data = await fetch(key, size, value["etag"])
     if data is None or len(data) != size:
-        raise graph.RunError(f"input image {take_id} is gone")
-    if video(value):
+        raise graph.RunError(f"input {what} {take_id} is gone")
+    if media or video(value):
         return data
     return await asyncio.to_thread(decode, data, take_id)
 
 
+def media(specs: list[dict], params: dict) -> list[str]:
+    """The names of the `media` params of `params` that hold a take."""
+    return [
+        s["name"] for s in specs if s["type"] == "media" and isinstance(params.get(s["name"]), dict)
+    ]
+
+
 async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
-    """`params` with every Image value replaced by its PIL image and every Media value by {take_id, image | mp4}
-    (each key read once)."""
+    """`params` with every Image value replaced by its PIL image, every Media value by {take_id, image | mp4}
+    (each key read once) and every `media` value given its `data`."""
+    params = params | {n: params[n] | {"data": await read(params[n], owner, fetch, True)} for n in media(specs, params)}  # fmt: skip
     pics = {}
     for v in values(specs, params):
         if v["key"] not in pics:
             pics[v["key"]] = await read(v, owner, fetch)
     out = walk(specs, params, lambda v: pics[v["key"]], ("Image",))
-    media = lambda v: {"take_id": v["take_id"], "mp4" if video(v) else "image": pics[v["key"]]}
-    return walk(specs, out, media, ("Media",))
+    take = lambda v: {"take_id": v["take_id"], "mp4" if video(v) else "image": pics[v["key"]]}
+    return walk(specs, out, take, ("Media",))

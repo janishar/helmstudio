@@ -10,7 +10,10 @@ variant (its folder's manifest, components, presence), the hash index, the host'
   there (MARKER: written when a download starts, removed when it succeeds) and nothing mismatches; partial = some of
   its own files are there; missing = none; mismatch wins over both.
 - **Delete** removes a variant's own files inside `<root>/<dir>` (never through a symlink), keeping a shared
-  component another variant still loads."""
+  component another variant still loads.
+- **One folder, two variants** (LTX: the dev transformer beside the distilled files, read in place): a variant with
+  `shares` whose `dir` is the first variant's owns only its components' files there (`own_globs`); the first owns
+  the rest."""
 
 import hashlib
 import json
@@ -180,15 +183,36 @@ def own_files(folder: Path) -> list[Path]:
     )
 
 
-def globs(pack, component: str) -> list[str]:
-    g = pack.component(component)["files"]
-    return [g] if isinstance(g, str) else g
+def globs(pack, component: str, variant: str | None = None) -> list[str]:
+    return packs.component_globs(pack, variant or next(iter(pack.spec["variants"])), component)
 
 
-def component_of(pack, rel: str) -> str | None:
-    """The first component (model.yaml order) whose glob matches `rel`; None for configs."""
+def component_of(pack, rel: str, variant: str | None = None) -> str | None:
+    """The first component (model.yaml order) whose glob (the variant's) matches `rel`; None for configs."""
     return next((c for c in pack.spec.get("components", {})
-                 if any(fnmatchcase(rel, g) for g in globs(pack, c))), None)  # fmt: skip
+                 if any(fnmatchcase(rel, g) for g in globs(pack, c, variant))), None)  # fmt: skip
+
+
+def own_globs(pack, vid: str) -> list[str] | None:
+    """The globs of a variant's own files when its folder is another variant's too: its components it does not
+    share. None: the whole folder is its own (a folder of its own, or the first variant's)."""
+    v, root = pack.spec["variants"][vid], folder(pack, vid)
+    if not v.get("shares") or not any(
+        x != vid and folder(pack, x) == root for x in pack.spec["variants"]
+    ):
+        return None
+    return [g for c in pack.spec["components"] if c not in v["shares"] for g in globs(pack, c, vid)]
+
+
+def variant_files(pack, vid: str) -> list[Path]:
+    """own_files of the variant's folder that are its own: those of its `own_globs`, or, for a folder another
+    variant also uses, those none of the others' own globs match."""
+    files, root = own_files(folder(pack, vid)), folder(pack, vid)
+    match = lambda rel, gs: any(fnmatchcase(rel.as_posix(), g) for g in gs)
+    if (mine := own_globs(pack, vid)) is not None:
+        return [f for f in files if match(f, mine)]
+    theirs = [g for x in pack.spec["variants"] if x != vid and folder(pack, x) == root for g in own_globs(pack, x) or []]  # fmt: skip
+    return [f for f in files if not match(f, theirs)]
 
 
 def folder(pack, variant: str) -> Path:
@@ -198,7 +222,7 @@ def folder(pack, variant: str) -> Path:
 def manifest(pack, variant: str) -> tuple[list[dict], list[str]]:
     """(files [{path, bytes, sha256?, component?}], mismatch [path]) of the variant's own folder."""
     root, files, mismatch = folder(pack, variant), [], []
-    for rel in own_files(root)[:MAX_FILES]:
+    for rel in variant_files(pack, variant)[:MAX_FILES]:
         p, r = root / rel, rel.as_posix()
         st = p.stat()
         rec, fresh = recorded(root, r, st)
@@ -206,7 +230,7 @@ def manifest(pack, variant: str) -> tuple[list[dict], list[str]]:
         if rec and sha and sha != rec:
             mismatch.append(r)
         item = {"path": r, "bytes": st.st_size} | ({"sha256": sha} if sha else {})
-        if c := component_of(pack, r):
+        if c := component_of(pack, r, variant):
             item["component"] = c
         files.append(item)
     return files, mismatch
@@ -337,12 +361,16 @@ def kept_components(pack, deleted: set[str]) -> tuple[list[str], list[str] | Non
     kept: list[str] = []
     if first in deleted:
         for vid, v in pack.spec["variants"].items():
-            if vid not in deleted and own_files(folder(pack, vid)):
+            if vid not in deleted and variant_files(pack, vid):
                 kept += [c for c in v.get("shares", [])
                          if c not in kept and not packs.owns_copy(pack, vid, c)]  # fmt: skip
     if not kept:
         return [], None
-    only = [g.rsplit("/", 1)[0] + "/" if "/" in g else g
+    # a folder shared with a kept variant: only these files (its own ones stay); else their folders
+    same = any(
+        folder(pack, v) == folder(pack, first) for v in pack.spec["variants"] if v not in deleted
+    )
+    only = [g if same else (g.rsplit("/", 1)[0] + "/" if "/" in g else g)
             for c in pack.spec["components"] if c not in kept for g in globs(pack, c)]  # fmt: skip
     return kept, only
 

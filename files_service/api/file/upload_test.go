@@ -56,6 +56,8 @@ func TestUpload(t *testing.T) {
 	later := time.Now().Add(time.Hour).Unix()
 	key := "u/a/uploads/t.png"
 	good := link(key, 5, "image/png", later)
+	owner, take := "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13", "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
+	wav, mp3, wav2 := "u/"+owner+"/uploads/"+take+".wav", "u/"+owner+"/uploads/"+take+".mp3", "u/"+owner+"/uploads/x"+take[1:]+".wav"
 
 	for name, test := range map[string]struct {
 		target, contentType string
@@ -71,6 +73,11 @@ func TestUpload(t *testing.T) {
 		"other length":     {good, "image/png", 4, 411},
 		"other type":       {good, "image/jpeg", 5, 415},
 		"type not allowed": {link(key, 5, "text/html", later), "text/html", 5, 415},
+		// API 1.19: an audio upload's key takes its own type only
+		"wav":          {link(wav, 5, "audio/wav", later), "audio/wav", 5, 204},
+		"mp3 as wav":   {link(mp3, 5, "audio/wav", later), "audio/wav", 5, 415},
+		"audio as png": {link(key, 5, "audio/wav", later), "audio/wav", 5, 415},
+		"png as audio": {link(wav2, 5, "image/png", later), "image/png", 5, 415},
 	} {
 		if got := put(test.target, "hello", test.contentType, test.length); got != test.want {
 			t.Errorf("%s: %d, want %d", name, got, test.want)

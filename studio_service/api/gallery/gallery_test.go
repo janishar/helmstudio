@@ -165,12 +165,17 @@ func TestBodies(t *testing.T) {
 	if err := patch.UnmarshalJSON([]byte(`{"starred": true, "key": "u/x"}`)); err != nil || patch.Validate() != "key: not a field of TakePatch" {
 		t.Fatal(patch.Validate())
 	}
+	seconds := []float64{3, 600.5}
 	for _, test := range []struct {
 		body dto.UploadCreate
 		want string
 	}{
 		{dto.UploadCreate{Filename: "C:\\pics\\fox reference 1.JPG", ContentType: "image/jpeg", Bytes: 1}, ""},
-		{dto.UploadCreate{Filename: "a.svg", ContentType: "image/svg+xml", Bytes: 1}, "only png, jpeg and webp images can be uploaded"},
+		{dto.UploadCreate{Filename: "a.svg", ContentType: "image/svg+xml", Bytes: 1}, "only png, jpeg and webp images or wav and mp3 audio can be uploaded"},
+		{dto.UploadCreate{Filename: "a.wav", ContentType: "audio/wav", Bytes: 1, DurationS: &seconds[0]}, ""},
+		{dto.UploadCreate{Filename: "a.mp3", ContentType: "audio/mpeg", Bytes: 1}, "duration_s is required for audio"},
+		{dto.UploadCreate{Filename: "a.mp3", ContentType: "audio/mpeg", Bytes: 1, DurationS: &seconds[1]}, "audio is longer than 600 s"},
+		{dto.UploadCreate{Filename: "a.png", ContentType: "image/png", Bytes: 1, DurationS: &seconds[0]}, "duration_s is for audio only"},
 		{dto.UploadCreate{Filename: "a.png", ContentType: "image/png", Bytes: dto.MaxUploadBytes + 1}, "file is larger than 50 MB"},
 		{dto.UploadCreate{Filename: "a.png", ContentType: "image/png"}, "bytes must be at least 1"},
 		{dto.UploadCreate{ContentType: "image/png", Bytes: 1}, "filename must be 1-255 characters"},

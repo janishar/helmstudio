@@ -142,7 +142,7 @@ func TestVideoTake(t *testing.T) {
 	}
 
 	// image-only inputs refuse it: "Use in…" and a reference row
-	if got := e.call(userA, "POST", "/v1/studio/takes/"+takeID+"/use", map[string]any{"workflow_id": "echo"}, 422); got["detail"] != "take "+takeID+" is not an image" {
+	if got := e.call(userA, "POST", "/v1/studio/takes/"+takeID+"/use", map[string]any{"workflow_id": "echo"}, 422); got["detail"] != "workflow echo takes no video input" {
 		t.Fatal(got)
 	}
 	got := e.call(userA, "POST", "/v1/studio/sessions/"+sessionID+"/runs", map[string]any{"workflow_id": "echo",
@@ -180,7 +180,9 @@ func TestWorkflowMediaAndFrames(t *testing.T) {
 		slices.Sort(out)
 		return out
 	}
-	if got := ids("?media=video"); !slices.Equal(got, []string{"echo-image-to-video:video", "echo-video:video", "ltx-image-to-video:video", "ltx-text-to-video:video"}) {
+	if got := ids("?media=video"); !slices.Equal(got, []string{"echo-a2v:video", "echo-extend:video", "echo-image-to-video:video", "echo-retake:video",
+		"echo-video:video", "ltx-audio-to-video:video", "ltx-extend:video", "ltx-image-to-video:video", "ltx-retake:video",
+		"ltx-text-to-video:video"}) {
 		t.Fatal(got)
 	}
 	if got := ids("?media=image"); slices.Contains(got, "ltx-text-to-video:video") || !slices.Contains(got, "qwen-image:image") {

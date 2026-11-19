@@ -50,9 +50,7 @@ class Node:
     stall_s: float = STALL_S
     code: str = "core"
     pack: Pack | None = None
-    check: object = (
-        None  # the pack's check_<stage>(params, wired) -> problem text or None, run before anything
-    )
+    check: object = None  # the pack's check_<stage>(params, wired, models) -> problem text or None, run before anything
     unload_after: tuple[str, ...] = ()  # components unloaded once the stage has run
 
 
@@ -223,18 +221,31 @@ def owns_copy(pack: Pack, variant: str, component: str) -> bool:
     owner's folder, as a hand-made share) is not a copy."""
     from core.models import linked
 
+    first = next(iter(pack.spec["variants"]))
     root = models_root() / pack.spec["variants"][variant]["dir"]
-    globs = pack.component(component)["files"]
+    if variant != first and root == models_root() / pack.spec["variants"][first]["dir"]:
+        return (
+            False  # one folder for both (LTX dev beside distilled): one copy, the first variant's
+        )
+    globs = component_globs(pack, variant, component)
     return any(p.is_file() and not p.is_symlink() and not linked(root, p.relative_to(root).as_posix())
                for g in ([globs] if isinstance(globs, str) else globs) for p in root.glob(g))  # fmt: skip
 
 
+def component_globs(pack: Pack, variant: str, component: str) -> list[str]:
+    """model.yaml `files` of a component (a glob or a list of globs), or the variant's own `files` for it (a variant
+    whose file sits in another variant's folder under another name: LTX dev's transformer)."""
+    g = (
+        pack.spec["variants"][variant].get("files", {}).get(component)
+        or pack.component(component)["files"]
+    )
+    return [g] if isinstance(g, str) else g
+
+
 def component_files(pack: Pack, variant: str, component: str) -> list[Path]:
-    """The files of a component in a variant's folder (model.yaml `files`: a glob or a list of globs), sorted per
-    glob."""
+    """The files of a component in a variant's folder, sorted per glob."""
     root = models_root() / pack.spec["variants"][variant]["dir"]
-    globs = pack.component(component)["files"]
-    return [p for g in ([globs] if isinstance(globs, str) else globs) for p in sorted(root.glob(g))]
+    return [p for g in component_globs(pack, variant, component) for p in sorted(root.glob(g))]
 
 
 def header(path: Path) -> dict:
@@ -480,7 +491,7 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             raise ValueError(
                 f"{schema['kind']}: params and inputs share the names {sorted(shared)}"
             )
-        names = {"mp", "images", "frames", "mp_in"} | set(stage.get("params") or {})
+        names = {"mp", "images", "frames", "mp_in", "fps"} | set(stage.get("params") or {})
         peak = compile_formula(stage["peak_gb"], names) if "peak_gb" in stage else None
         fn = getattr(module, name, None)
         if fn is None:

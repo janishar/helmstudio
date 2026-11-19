@@ -2,14 +2,19 @@
 
 import importlib.util
 import json
+import math
 import re
+import subprocess
 import sys
+import tempfile
 import textwrap
 import time
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
 from core import ask as asks
+from core import media
 from core.graph import RunError, auto_frames
 from packs.echo import loader, mp4
 
@@ -133,6 +138,92 @@ def _render(ctx, params: dict, inputs: dict, fail: bool) -> dict:
     # a still clip: its last frame is its poster
     return {"video": {"mp4": clip, "poster": poster, "last": poster, "frames": d["frames"], "fps": d["fps"],
                       "has_audio": True, "stream": mp4.stream(*poster.size, d["fps"])}}  # fmt: skip
+
+
+MEDIA_STEPS = 3  # progress steps of the media fakes
+
+
+def _steps(ctx, params: dict) -> None:
+    for step in range(1, MEDIA_STEPS + 1):
+        ctx.check()
+        time.sleep(params["delay_ms"] / 1000)
+        ctx.progress(step, MEDIA_STEPS, "rendering")
+
+
+def _clip(poster, frames: int, fps: int, data: bytes | None = None, **source_map) -> dict:
+    """A still clip of `poster` (data: an MP4 with that sound instead of silence) reporting `source_map`."""
+    return {"video": {"mp4": data or mp4.mp4(poster, frames, fps), "poster": poster, "last": poster,
+                      "frames": frames, "fps": fps, "has_audio": True, "stream": mp4.stream(*poster.size, fps),
+                      "source_map": source_map}}  # fmt: skip
+
+
+def retake(ctx, params: dict, inputs: dict) -> dict:
+    """The core read and checked the source (its bytes are there); a still clip of `<text> [retake a-b s]` at the
+    source's size, frames and fps (ponytail: fps rounded to whole frames per second, as mp4.py writes them)."""
+    src, span = params["source"], params["span"]
+    _steps(ctx, params)
+    poster = draw(
+        f"{inputs['text']} [retake {span['start']:g}-{span['end']:g} s]",
+        src["width"],
+        src["height"],
+    )
+    return _clip(poster, src["frames"], round(src["fps"]), take_id=src["take_id"], offset_s=0,
+                 new_in_s=span["start"], new_out_s=span["end"])  # fmt: skip
+
+
+MAX_FRAMES = 321  # ltx/extend's longest clip (contracts check.py LTX_MAX_FRAMES)
+
+
+def extend(ctx, params: dict, inputs: dict) -> dict:
+    """ltx/extend's frames and source_map (check.py extend_map): the source floored to 8k + 1 frames plus 8N, N =
+    max(1, ceil(seconds * fps / 8)); after: the new part follows the source, before: it leads and the source moves."""
+    src, seconds, after = params["source"], params["seconds"], params["direction"] == "after"
+    fps, n = src["fps"], (src["frames"] - 1) // 8 * 8 + 1
+    k = max(1, math.ceil(seconds * fps / 8 - 1e-9))
+    total, add = n + 8 * k, 8 * k / fps
+    if total > MAX_FRAMES:
+        raise RunError(
+            f"{ctx.node}.seconds: the clip would be {total} frames; at most {MAX_FRAMES}"
+        )
+    _steps(ctx, params)
+    poster = draw(
+        f"{inputs['text']} [extend {params['direction']} {seconds:g} s]",
+        src["width"],
+        src["height"],
+    )
+    m = {"offset_s": 0, "new_in_s": n / fps, "new_out_s": total / fps} if after else \
+        {"offset_s": add, "new_in_s": 0, "new_out_s": add}  # fmt: skip
+    return _clip(poster, total, round(fps), take_id=src["take_id"], **m)
+
+
+A2V_SIZE, A2V_FPS = (256, 128), 24
+
+
+def a2v(ctx, params: dict, inputs: dict) -> dict:
+    """A still 256 x 128 clip at 24 fps as long as the part in..out, with that part as its sound (ffmpeg: the
+    still clip's picture copied, the part encoded as AAC)."""
+    src = params["source"]
+    start, end = src["in"], src["out"]
+    _steps(ctx, params)
+    frames = max(1, round((end - start) * A2V_FPS))
+    poster = draw(f"{inputs['text']} [a2v {start:g}-{end:g} s]", *A2V_SIZE)
+    with tempfile.TemporaryDirectory(prefix="echo-") as tmp:
+        tmp = Path(tmp)
+        (tmp / "still.mp4").write_bytes(mp4.mp4(poster, frames, A2V_FPS))
+        (tmp / "source").write_bytes(src["data"])
+        r = subprocess.run([media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file",
+                            "-i", str(tmp / "still.mp4"), "-ss", f"{start}", "-t", f"{end - start}",
+                            "-protocol_whitelist", "file", "-i", str(tmp / "source"), "-map", "0:v:0", "-map",
+                            "1:a:0", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2",
+                            "-movflags", "+faststart", str(tmp / "out.mp4")],
+                           capture_output=True, text=True, check=False, timeout=120)  # fmt: skip
+        if r.returncode:
+            raise RunError(
+                f"{ctx.node}.source: the sound could not be read ({media.last_line(r.stderr)})"
+            )
+        data = (tmp / "out.mp4").read_bytes()
+    return _clip(poster, frames, A2V_FPS, data, take_id=src["take_id"], offset_s=-start, new_in_s=0,
+                 new_out_s=end - start)  # fmt: skip
 
 
 def lora_stack(ctx, params: dict, inputs: dict) -> dict:

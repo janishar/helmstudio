@@ -1,0 +1,48 @@
+{
+  "uses": [
+    {
+      "workflow_id": "ltx-retake",
+      "title": "LTX-2.5 Retake",
+      "action": "Retake a section",
+      "family": "ltx",
+      "media": "video",
+      "inputs": {
+        "source.source": {
+          "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b"
+        },
+        "retake.span": {
+          "start": 0,
+          "end": 2.0416666666666665
+        }
+      }
+    },
+    {
+      "workflow_id": "ltx-extend",
+      "title": "LTX-2.5 Extend",
+      "action": "Extend",
+      "family": "ltx",
+      "media": "video",
+      "param": "source.source",
+      "inputs": {
+        "source.source": {
+          "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b"
+        }
+      }
+    },
+    {
+      "workflow_id": "ltx-audio-to-video",
+      "title": "LTX-2.5 Audio to video",
+      "action": "Audio to video",
+      "family": "ltx",
+      "media": "video",
+      "param": "audio.source",
+      "inputs": {
+        "audio.source": {
+          "take_id": "8a1f0c22-4b5d-4e6f-9a7b-1c2d3e4f5a6b",
+          "in": 0,
+          "out": 2.0416666666666665
+        }
+      }
+    }
+  ]
+}

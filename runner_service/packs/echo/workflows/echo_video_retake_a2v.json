@@ -1,0 +1,32 @@
+{
+  "id": "echo-a2v",
+  "title": "Echo audio to video",
+  "action": "Audio to video",
+  "family": "echo",
+  "env": "fake",
+  "media": "video",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "a2v": {
+      "kind": "echo/a2v",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "source": null,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "a2v.video"
+      }
+    }
+  }
+}

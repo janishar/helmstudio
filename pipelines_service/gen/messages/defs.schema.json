@@ -75,7 +75,7 @@
         "boolean",
         "null"
       ],
-      "description": "an int, float, bool, string, text, enum or seed value; null only for a seed (random) or an image param left empty"
+      "description": "an int, float, bool, string, text, enum or seed value; null only for a seed (random) or an image, media or span param left empty"
     },
     "imageRef": {
       "type": "object",
@@ -227,10 +227,16 @@
       }
     },
     "inputValue": {
-      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only)",
+      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only); from API 1.19 a Media value as mediaRef and a span as spanValue",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
+        },
+        {
+          "$ref": "#/$defs/mediaRef"
+        },
+        {
+          "$ref": "#/$defs/spanValue"
         },
         {
           "$ref": "#/$defs/imageRef"
@@ -267,10 +273,16 @@
       ]
     },
     "resolvedValue": {
-      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`",
+      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`; from API 1.19 every Media value resolved to `media`",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
+        },
+        {
+          "$ref": "#/$defs/media"
+        },
+        {
+          "$ref": "#/$defs/spanValue"
         },
         {
           "$ref": "#/$defs/image"
@@ -301,10 +313,19 @@
       ]
     },
     "paramValue": {
-      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types",
+      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types. From API 1.19 a `media` param: mediaRef (resolved: media); a `span` param: spanValue",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
+        },
+        {
+          "$ref": "#/$defs/mediaRef"
+        },
+        {
+          "$ref": "#/$defs/media"
+        },
+        {
+          "$ref": "#/$defs/spanValue"
         },
         {
           "$ref": "#/$defs/imageRef"
@@ -390,6 +411,21 @@
             },
             "y": {
               "type": "number"
+            }
+          }
+        },
+        "only": {
+          "type": "object",
+          "description": "API 1.19: enum param → the values this workflow allows (a subset of the schema's `enum`, holding the node's value): the form offers only those; another value is 422 `<node>.<param>: must be one of <values>`. LTX templates on the dev transformer pin `model.variant` to dev. Never in cmd.run.execute",
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -2795,6 +2831,167 @@
         "extradata_sha256": {
           "$ref": "#/$defs/sha256",
           "description": "SHA-256 of the codec header data (SPS/PPS): ffprobe -show_data_hash sha256"
+        }
+      }
+    },
+    "mediaRef": {
+      "type": "object",
+      "description": "a Media value as a client writes it (API 1.19; a `media` param, contracts/README.md, Media inputs): a video or audio take of the caller by id. `in` / `out` (seconds of the take's own time, studio snaps them: a video's frames, audio to the millisecond) only on a param with `trim`: the part it reads (absent: 0 / the take's end). Never an object key or a URL",
+      "required": [
+        "take_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "take_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "in": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "out": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 86400
+        }
+      }
+    },
+    "spanValue": {
+      "type": "object",
+      "description": "a `span` param's value (API 1.19): a time range on the workflow's one video source, in that take's own seconds; start < end, end at most the take's duration (contracts/README.md, Media inputs)",
+      "required": [
+        "start",
+        "end"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "end": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 86400
+        }
+      }
+    },
+    "media": {
+      "type": "object",
+      "description": "a Media value as studio resolves it for cmd.run.execute (API 1.19): the take's immutable object under the envelope owner's prefix and the facts studio checked. The runner reads `key` only; its cache key is (owner_id, key, etag) plus in/out. A video take in an audio input: its MP4, read for its sound",
+      "required": [
+        "take_id",
+        "kind",
+        "key",
+        "content_type",
+        "bytes",
+        "etag",
+        "duration_s",
+        "has_audio"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "take_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "kind": {
+          "enum": [
+            "video",
+            "audio"
+          ]
+        },
+        "key": {
+          "$ref": "#/$defs/objectKey",
+          "description": "u/<owner_id>/runs/…, …/uploads/…, …/imports/… or …/exports/…"
+        },
+        "content_type": {
+          "enum": [
+            "video/mp4",
+            "audio/wav",
+            "audio/mpeg"
+          ]
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "etag": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "video only"
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "video only"
+        },
+        "fps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "video only"
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "video only"
+        },
+        "duration_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "has_audio": {
+          "type": "boolean",
+          "description": "an audio take: true"
+        },
+        "in": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400,
+          "description": "a `trim` param only, always present there: the snapped start (default 0)"
+        },
+        "out": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 86400,
+          "description": "a `trim` param only, always present there: the snapped end (default duration_s)"
+        }
+      }
+    },
+    "sourceMap": {
+      "type": "object",
+      "description": "API 1.19: how an output's time lines up with the media take it was made from (retake, extend, audio to video): output time t = source time t + offset_s; the part the model generated is [new_in_s, new_out_s) of the output. The Timeline's fill uses it (contracts/README.md, Timeline: take actions)",
+      "required": [
+        "take_id",
+        "offset_s",
+        "new_in_s",
+        "new_out_s"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "take_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "offset_s": {
+          "type": "number",
+          "minimum": -86400,
+          "maximum": 86400
+        },
+        "new_in_s": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "new_out_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 86400
         }
       }
     }

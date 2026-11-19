@@ -94,7 +94,7 @@ func (s *Service) CreateBatch(ctx context.Context, caller common.Caller, body *d
 		if len(failed) > 0 {
 			return network.NewUnprocessableError(joinRows(failed), nil)
 		}
-		if detail, err := s.checkRowImages(ctx, tx, caller.ID, graphs); err != nil {
+		if detail, err := s.checkRowImages(ctx, tx, caller.ID, graphs, workflow.NodeSchemas); err != nil {
 			return err
 		} else if detail != "" {
 			return network.NewUnprocessableError(detail, nil)
@@ -771,7 +771,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 			}
 			detail := details[0]
 			if detail == "" {
-				if detail, err = checkImages(ctx, tx, s.store, req.OwnerID, graphs[0].Nodes); err != nil {
+				if detail, err = checkImages(ctx, tx, s.store, req.OwnerID, graphs[0].Nodes, workflow.NodeSchemas); err != nil {
 					return err
 				}
 			}
@@ -812,20 +812,24 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, workflow registry.Workflow, version *int,
 	built built, looks []string, batchStatus, control string, req *message.RunsCreate, thumbs *int, pin *string) (model.Run, error) {
 	graph, _ := json.Marshal(built.Nodes)
+	media, err := mediaAt(ctx, tx, req.OwnerID, built.Nodes, workflow.NodeSchemas)
+	if err != nil {
+		return model.Run{}, err
+	}
 	status, failure := "queued", (*string)(nil)
 	if control == "stop" || batchStatus == "stopped" {
 		status = "cancelled"
 	} else if _, _, reason := eligible(reg, reg.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph,
-		WorkflowVersion: version, Loras: lorasJSON(built.Loras), PinHost: pin}, time.Now()); reason != "" {
+		WorkflowVersion: version, Loras: lorasJSON(built.Loras), PinHost: pin, MediaAt: media}, time.Now()); reason != "" {
 		status, failure = "failed", &reason
 	}
 	inputs, _ := json.Marshal(req.Inputs)
 	run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
 		nodes, lane, batch_id, batch_row, idempotency_key, finished_at, workflow_version, workflow_title, mentions, loras, looks,
-		thumbs, pin_host) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
-		$13, $14, $15, $16, $17, $18, $19) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env,
+		thumbs, pin_host, media_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'batch', $10, $11, $12, CASE WHEN $7 <> 'queued' THEN clock_timestamp() END,
+		$13, $14, $15, $16, $17, $18, $19, $20) RETURNING `+model.RunCols, utility.NewID(), req.OwnerID, req.SessionID, workflow.ID, workflow.Env,
 		inputs, status, failure, graph, req.BatchID, req.Row, req.IdempotencyKey, version, workflow.Title, mentionsJSON(built.Expansion),
-		lorasJSON(built.Loras), looksJSON(looks), thumbs, pin)
+		lorasJSON(built.Loras), looksJSON(looks), thumbs, pin, media)
 	if err != nil {
 		return run, err
 	}
@@ -871,11 +875,14 @@ func thumbCount(ctx context.Context, tx pgx.Tx, ownerID string, nodes map[string
 
 // checkRowImages checks the Image values of every row's graph (element images included) as Create does, each distinct
 // take once: the detail of the first bad one ("row 3: encode.refs[1].image: take <id> not found"), "" when all are good.
-func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string, graphs []built) (string, error) {
+// From API 1.19 each row's media and span values too (checkMedia; one row at a time).
+func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string, graphs []built,
+	schemas map[string]registry.NodeSchema) (string, error) {
 	perRow := make([][]imageAt, len(graphs))
 	var all []imageAt
 	for i, graph := range graphs {
-		perRow[i] = images(graph.Nodes)
+		media := mediaParams(graph.Nodes, schemas)
+		perRow[i] = slices.DeleteFunc(images(graph.Nodes), func(at imageAt) bool { _, ok := media[at.Path]; return ok })
 		all = append(all, perRow[i]...)
 	}
 	problems, err := vetTakes(ctx, tx, s.store, ownerID, all, false)
@@ -885,6 +892,11 @@ func (s *Service) checkRowImages(ctx context.Context, tx pgx.Tx, ownerID string,
 	for i, refs := range perRow {
 		if detail := firstBad(refs, problems); detail != "" {
 			return fmt.Sprintf("row %d: %s", i+1, detail), nil
+		}
+	}
+	for i, graph := range graphs {
+		if detail, err := checkMedia(ctx, tx, s.store, ownerID, graph.Nodes, schemas); err != nil || detail != "" {
+			return fmt.Sprintf("row %d: %s", i+1, detail), err
 		}
 	}
 	return "", nil

@@ -52,11 +52,15 @@ type fixtureCase struct {
 	Expect json.RawMessage `json:"expect"`
 }
 
+// media is rerender.json's workflow id → media param paths (API 1.19).
+var media map[string][]string
+
 func load(t *testing.T, name string) (map[string]Take, map[string]*Keyframes, []fixtureCase) {
 	t.Helper()
 	var fx struct {
 		Takes     map[string]Take       `json:"takes"`
 		Keyframes map[string]*Keyframes `json:"keyframes"`
+		Media     map[string][]string   `json:"media"`
 		Cases     []fixtureCase         `json:"cases"`
 	}
 	data, err := os.ReadFile(filepath.Join(fixtures, name))
@@ -66,6 +70,7 @@ func load(t *testing.T, name string) (map[string]Take, map[string]*Keyframes, []
 	if err != nil || len(fx.Cases) == 0 {
 		t.Fatal(name, err)
 	}
+	media = fx.Media
 	return fx.Takes, fx.Keyframes, fx.Cases
 }
 
@@ -195,7 +200,7 @@ func TestShotKeyframeFixtures(t *testing.T) {
 func TestRerenderFixtures(t *testing.T) {
 	common, keyframes, cases := load(t, "rerender.json")
 	for _, c := range cases {
-		steps, err := RerenderSteps(c.Document, takesOf(common, c.Takes), c.Clips, keyframes)
+		steps, err := RerenderSteps(c.Document, takesOf(common, c.Takes), c.Clips, keyframes, media)
 		var got any = map[string]any{"steps": steps}
 		if err != nil {
 			clip := any(err.Clip)

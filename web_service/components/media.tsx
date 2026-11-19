@@ -70,6 +70,18 @@ export function Thumb({
   badge?: boolean;
 }) {
   const { src, length } = thumbOf(t);
+  // a sound tile with its length (docs/mock/VideoSource.dc.html: an uploaded audio take)
+  if (t.kind === "audio")
+    return (
+      <span className={`relative block ${className ?? ""}`}>
+        <span aria-hidden className={`wave block ${imgClassName}`} />
+        {badge && length && (
+          <span className="mono absolute top-1 left-1 rounded bg-s2/90 px-1 text-[10px] leading-4 text-t1">
+            {length}
+          </span>
+        )}
+      </span>
+    );
   if (!src) return <span className={className}>{t.kind}</span>;
   return (
     <span className={`relative block ${className ?? ""}`}>

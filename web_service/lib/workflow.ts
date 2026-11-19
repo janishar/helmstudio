@@ -26,8 +26,8 @@ export type Field = {
 };
 
 /** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's
- * take id ("" for none), or a rows param's items. */
-export type Raw = string | boolean | S<"RowItem">[];
+ * take id ("" for none), a rows param's items, or a media or span param's value ("" for none). */
+export type Raw = string | boolean | S<"RowItem">[] | S<"MediaRef"> | S<"SpanValue">;
 /** A new value for a control, or how to make it from what it holds (undefined: the field's initial value). Uploads
  * and picks finish late, so they add to the list as it is then. */
 export type Update = Raw | ((old: Raw | undefined) => Raw);
@@ -45,20 +45,24 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
     const siblings = Object.fromEntries(
       schema.params.map((p) => [p.name, n.params?.[p.name] ?? p.default]),
     );
-    return schema.params
-      .filter((param) => !(param.name in (n.in ?? {})))
-      .map((param) => ({
-        key: `${node}.${param.name}`,
-        node,
-        nodeTitle: schema.title,
-        nodeHelp: schema.help,
-        param: twin ? { ...param, label: `${param.label ?? param.name} (${node})` } : param,
-        initial: n.params?.[param.name] ?? param.default,
-        canvas: schema.outputs.some((o) => o.type === "Canvas"),
-        model: schema.outputs.some((o) => o.type === "Model"),
-        family: schema.family,
-        siblings,
-      }));
+    return (
+      schema.params
+        .filter((param) => !(param.name in (n.in ?? {})))
+        // `only`: the values this workflow allows of an enum param (API 1.19); the form offers just those
+        .map((p) => (n.only?.[p.name] ? { ...p, enum: n.only[p.name] } : p))
+        .map((param) => ({
+          key: `${node}.${param.name}`,
+          node,
+          nodeTitle: schema.title,
+          nodeHelp: schema.help,
+          param: twin ? { ...param, label: `${param.label ?? param.name} (${node})` } : param,
+          initial: n.params?.[param.name] ?? param.default,
+          canvas: schema.outputs.some((o) => o.type === "Canvas"),
+          model: schema.outputs.some((o) => o.type === "Model"),
+          family: schema.family,
+          siblings,
+        }))
+    );
   });
 }
 
@@ -166,6 +170,8 @@ export function visible(fs: Field[], raws: Record<string, Raw>): Field[] {
 export function toRaw(v: Value, p: Param): Raw {
   if (p.type === "rows") return Array.isArray(v) ? v : [];
   if (p.type === "image") return v && typeof v === "object" && "take_id" in v ? v.take_id : "";
+  if (p.type === "media") return isRef(v) ? v : "";
+  if (p.type === "span") return isSpan(v) ? v : "";
   if (typeof v === "boolean") return v;
   return v == null || typeof v === "object" || (p.type === "seed" && v === -1) ? "" : String(v);
 }
@@ -204,6 +210,13 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
     return typeof raw === "string" && raw
       ? { value: { take_id: raw } }
       : { error: "an image is required" };
+  if (p.type === "media") return isRef(raw) ? { value: raw } : { error: "a take is required" };
+  if (p.type === "span")
+    return !isSpan(raw)
+      ? { error: "a range is required" }
+      : raw.start < raw.end
+        ? { value: raw }
+        : { error: "start must be before end" };
   const text = String(raw);
   if (p.type === "seed") {
     const t = text.trim();
@@ -246,6 +259,13 @@ const isLoraRef = (v: unknown) =>
 /** Whether a value is an Image (`{take_id}`). */
 export const isRef = (v: unknown): v is S<"ImageRef"> =>
   !!v && typeof v === "object" && typeof (v as { take_id?: unknown }).take_id === "string";
+
+/** Whether a value is a span (`{start, end}`). */
+export const isSpan = (v: unknown): v is S<"SpanValue"> =>
+  !!v &&
+  typeof v === "object" &&
+  typeof (v as { start?: unknown }).start === "number" &&
+  typeof (v as { end?: unknown }).end === "number";
 
 /** "must be between 1 and 200", "must be at least 1", "must be at most 4000 characters". */
 function bounds(min: number | undefined, max: number | undefined, unit: string): string {
@@ -322,6 +342,8 @@ export function sections(fs: Field[]) {
     rows: other.filter((f) => f.param.type === "rows" && !isLoraRows(f) && !imageField(f.param)),
     loras: other.filter(isLoraRows),
     canvas: rest.filter((f) => f.canvas),
+    // a video or audio take and the range on it (API 1.19): each its own section, in graph order
+    media: other.filter((f) => f.param.type === "media" || f.param.type === "span"),
     // the model node's first, then graph order, the seed last (its home is the composer's chip), as in the mock
     tiles: other
       .filter((f) => ["enum", "int", "float", "seed"].includes(f.param.type))
