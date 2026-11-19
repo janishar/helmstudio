@@ -26,9 +26,18 @@ envs:             ## every missing .env / .test.env from its example
 build: secrets envs
 	$(DEV) build
 
-# a running nats keeps the nats.conf it started with: HUP reloads it (users and permissions) before every up
+# A running nats keeps the config it started with: before every up, when a file it reads (deploy/nats/, its secrets)
+# is newer than its start (/tmp/started, written by its entrypoint), nats restarts. Not a HUP: a reload leaves a new GPU
+# host account's imports unwired, and a HUP done earlier (by hand, or one that ended late) would hide the change from
+# a before/after digest check.
+# $(call nats_reload,<compose command>)
+define nats_reload
+-@[ -n "$$($(1) exec -T nats find /etc/nats/ /run/secrets/ -newer /tmp/started 2>/dev/null | head -1)" ] && \
+  echo "nats config changed: restarting nats" && $(1) restart nats; :
+endef
+
 up: secrets envs  ## build and start the stack (fake runner), wait until healthy
-	-@$(DEV) kill -s HUP nats >/dev/null 2>&1
+	$(call nats_reload,$(DEV))
 	$(DEV) up -d --build --wait
 
 dev: up
@@ -49,14 +58,14 @@ contracts-check: contract_tests/.venv   ## schemas, fixtures, openapi.yaml (no s
 	$(MAKE) -C contract_tests check-contracts
 
 test: secrets envs contract_tests/.venv  ## the contract suite on the helmstudio-test stack
-	-@$(TEST) kill -s HUP nats >/dev/null 2>&1
+	$(call nats_reload,$(TEST))
 	$(TEST) up -d --build --wait
 	$(TEST) --profile hosts create runner-b   # the second fake host: test_hosts.py starts and stops it
 	key=$$($(TEST) run --rm -T auth apikey contract) && \
 	  $(MAKE) -C contract_tests test BASE_URL=http://localhost:8390 API_KEY="$$key" CONTRACT_SCHEMAS=1 $(TEST_ADMIN)
 
 resilience: secrets envs  ## contract_tests/resilience.sh on the helmstudio-test stack (restarts its services); SCENARIOS="a b" runs only those
-	-@$(TEST) kill -s HUP nats >/dev/null 2>&1
+	$(call nats_reload,$(TEST))
 	$(TEST) up -d --build --wait
 	key=$$($(TEST) run --rm -T auth apikey contract) && API_KEY="$$key" $(TEST_ADMIN) contract_tests/resilience.sh $(SCENARIOS)
 
@@ -110,13 +119,14 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 
 # Remote GPU hosts (deploy/gpu-host/README.md; contracts/README.md, A remote GPU host). Each has its own NATS user
 # runner_<h>_torch and S3 identity runner-<h>, made by .tools/make-secrets; a running dev stack takes a new host
-# without a restart of the stack: NATS reloads its users on HUP, SeaweedFS (identities) restarts alone.
+# without a restart of the stack: NATS reloads (and restarts when its accounts changed), SeaweedFS (identities)
+# restarts alone.
 gpu-host-secrets: ## a GPU host's credentials (GPU_HOSTS="gcp"; default: those that exist, else gcp), then gpu-host-reload
 	GPU_HOSTS="$(GPU_HOSTS)" .tools/make-secrets
 	@$(MAKE) --no-print-directory gpu-host-reload
 
 gpu-host-reload:  ## the running dev stack picks up the GPU hosts' users and identities (only services already running)
-	-@$(DEV) kill -s HUP nats >/dev/null 2>&1 && echo "nats reloaded"
+	$(call nats_reload,$(DEV))
 	@if [ -n "$$($(DEV) ps -q seaweedfs 2>/dev/null)" ]; then $(DEV) restart seaweedfs; fi
 
 # The test rig: an SSH reverse tunnel from this machine puts the dev stack's NATS and S3 https (STACK_TLS=on) on the

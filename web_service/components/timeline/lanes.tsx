@@ -281,7 +281,7 @@ export function Lanes({
 
   return (
     <div
-      className="panel overflow-x-auto rounded-[28px_28px_28px_12px] px-3.5 pt-3 pb-3.5"
+      className="panel shrink-0 overflow-x-auto rounded-[28px_28px_28px_12px] px-3.5 pt-3 pb-3.5"
       onWheel={(e) => {
         if (!e.ctrlKey && !e.metaKey) return;
         e.preventDefault();

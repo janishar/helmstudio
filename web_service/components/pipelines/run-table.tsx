@@ -87,7 +87,7 @@ export function RunTable({
             return (
               <tr key={r.row} className="align-top">
                 <td className="m">{r.row}</td>
-                <td className="max-w-[320px]" title={inputs}>
+                <td className="max-w-[240px]" title={inputs}>
                   <span className="block truncate">{inputs || "—"}</span>
                   {marks[r.row] && (
                     <span className="st mt-1 text-[#c1a8f5] shadow-[inset_0_0_0_1px_#c1a8f5]">

@@ -230,7 +230,10 @@ Rules carried over from the reference:
   port 8093, NATS user `runner_mac_native`) sharing the host's one budget.
 - A runner connects only to NATS and the object store, never to Postgres. On
   the stack's own machine those two ports are published on `127.0.0.1`;
-  another GPU host connects over TLS with its own NATS and S3 credentials.
+  another GPU host connects over TLS with its own NATS and S3 credentials: a
+  NATS account of its own (connection, subscription and message-size caps;
+  HELM exports it exactly its subjects) and an S3 identity that reads under
+  `u/`, writes only under the runner prefixes and never deletes.
 - Per-service `.env`, secrets as files (`X_FILE`), a `health` subcommand for
   container health checks, one compose file per service for isolated
   development, and a separate compose project with fake providers for tests —

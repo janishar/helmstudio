@@ -28,6 +28,7 @@ export function GalleryPicker({
   only,
   sub,
   audioUpload,
+  help,
 }: {
   open: boolean;
   onClose: () => void;
@@ -42,6 +43,8 @@ export function GalleryPicker({
   sub?: (t: Take) => string;
   /** offers "Upload wav or mp3" (an audio input) */
   audioUpload?: boolean;
+  /** a line under the footer (docs/mock/GalleryPicker: what the picks join, the limit) */
+  help?: string;
 }) {
   return (
     <Modal open={open} onClose={onClose} title={title} width="w-[min(94vw,880px)]">
@@ -53,6 +56,7 @@ export function GalleryPicker({
         only={only}
         sub={sub}
         audioUpload={audioUpload}
+        help={help}
       />
     </Modal>
   );
@@ -109,6 +113,7 @@ function Picker({
   only,
   sub,
   audioUpload,
+  help,
 }: {
   max: number;
   onClose: () => void;
@@ -117,6 +122,7 @@ function Picker({
   only?: (t: Take) => boolean;
   sub?: (t: Take) => string;
   audioUpload?: boolean;
+  help?: string;
 }) {
   const [filter, setFilter] = useState<Filter>({ kind });
   const [q, setQ] = useState("");
@@ -232,6 +238,7 @@ function Picker({
           Add {picked.length || ""}
         </button>
       </div>
+      {help && <p className="m-0 text-[12px] text-t2">{help}</p>}
     </div>
   );
 }

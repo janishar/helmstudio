@@ -30,8 +30,8 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
 - MiniMax H3 video runs the vendored h3.c (`runner_service/vendor/h3c/`, built by `make h3`) as a child process in
   the **native** runner env (health on 8093). Cancel kills the child's process group. Pack facts and traps:
   `runner_service/packs/minimax_h3/GOTCHAS.md` and `docs/reference-notes/minimax-h3.md`.
-- M7 ran lean checks at the owner's request (one combined reviewer, the full suite once per pack). The robust pass
-  is a to-do in the backlog.
+- M7 ran lean checks at the owner's request; the robust check pass followed on 2026-11-19 (see the backlog for what
+  it covered and what is left).
 - Test runs on the GPU stay small and short (owner): at most 512×512, 22 frames, 2 steps, reference media 2–3 s.
 
 ## How each stage has been built
@@ -68,7 +68,7 @@ Lessons that cost time:
 ## Decisions waiting for the owner
 
 1. **MLX version**: stay on 0.32.4 (LTX output close to the old studio's, not identical) or pin 0.32.2 (bit-exact,
-   but the plan needs ≥ 0.32.4 for the vision library).
+   but the plan needs ≥ 0.32.4 for the vision library). The robust pass ran every LTX golden on both: all pass.
 2. **Default judge model**: Qwen Image's 8B text encoder (no extra load; it passed everything in the demonstration)
    or the 27B `llm` model (sensible verdicts; more model swaps).
 3. **LoRA strength slider**: −4…4 as built, or 0…2 as the Create board draws.
@@ -79,17 +79,24 @@ Lessons that cost time:
    say.
 6. **Import of the old gallery**: `helm import ~/.helmstudio --user <email>` is ready; a dry run found 90 items.
 7. **The GCP disk**: keep (small storage bill) or delete.
+8. **The empty Create screen**: build it to the Direct board (composer under the title, looks grid, Elements aside)
+   or change the board.
+9. **The MiniMax H3 video first + last frame golden** passes at 25 dB (two runs differ by 26-27 dB), the silent
+   video one at 27 dB, not 30.
 
 ## Known gaps
 
 - M5b: frame jobs share a queue lane with exports; in a Re-render, clips after a failed one are released but do not
   run in the same batch.
 - M6: four checklist items unproven on the GPU host (a local model server reserving memory; a returning runner's
-  late result being dropped; two smaller ones); a remote host can flood its own NATS subjects (no per-host quota);
-  its S3 identity can get, put and delete any object in the bucket but not list.
+  late result being dropped; two smaller ones); a remote host's NATS account caps its connections (8),
+  subscriptions (100 each) and message size (1 MB) but not its publish rate (NATS has none), so it can still flood
+  its own event subjects, and fill the KV_cancels consumer cap (1000) so other runners' runs fail until an admin
+  deletes those consumers; its S3 identity cannot delete or list and writes only under the runner prefixes, but for
+  every owner (per-owner keys need per-run credentials).
 - M7: the Generate ETA uses the last run's time, not the size and length; MiniMax H3 runs that take an image input
   are not bit-repeatable (two runs differ at 37–41 dB; text to video is exact); a 56-frame Ref2VA run with a sound
   video took 329 s against about 40 s at 22 frames, not looked into; the Create header wraps the memory chip to a
   second line when the session title is long.
-- Web: no component or end-to-end tests; gallery thumbnails are originals; several screens were checked against
+- Web: component tests and a few end-to-end tests (`make e2e`) exist, not full coverage; gallery thumbnails are originals; several screens were checked against
   their boards at the browser pane's size, not side by side at 1440×960.

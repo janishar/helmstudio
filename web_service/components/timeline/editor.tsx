@@ -526,7 +526,7 @@ export function TimelineEditor({ id }: { id?: string }) {
             type="button"
             aria-haspopup="dialog"
             onClick={() => setDialog("list")}
-            className="flex h-10 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em] uppercase"
+            className="flex h-10 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
           >
             {tl.name}
             <svg
@@ -582,23 +582,26 @@ export function TimelineEditor({ id }: { id?: string }) {
           >
             Redo
           </button>
-          <button
-            type="button"
-            className="chip bevel rounded-[10px]"
-            onClick={() => setDialog("new")}
-          >
-            New sequence
-          </button>
-          <button
-            type="button"
-            onClick={() => setDialog("export")}
-            className="key flex h-14 flex-col items-center justify-center gap-px rounded-[14px] px-6"
-          >
-            <span className="text-sm uppercase">Export</span>
-            <span className="mono text-[11px] font-medium tracking-normal">
-              {planLine(plan?.revision === tl.revision ? plan : null)}
-            </span>
-          </button>
+          {/* New sequence wraps with Export, left of it (docs/mock/Timeline, TakeActions) */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="chip bevel rounded-[10px]"
+              onClick={() => setDialog("new")}
+            >
+              New sequence
+            </button>
+            <button
+              type="button"
+              onClick={() => setDialog("export")}
+              className="key flex h-14 flex-col items-center justify-center gap-px rounded-[14px] px-6"
+            >
+              <span className="text-sm">Export</span>
+              <span className="mono text-[11px] font-medium tracking-normal">
+                {planLine(plan?.revision === tl.revision ? plan : null)}
+              </span>
+            </button>
+          </div>
         </div>
 
         {(notice || error) && (
@@ -794,7 +797,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           />
         ) : selected.length > 1 ? (
           <div className="flex flex-col gap-2">
-            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em] uppercase">
+            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">
               {selected.length} clips
             </h2>
             {selected.every((x) => x.ti === 0) && (
@@ -815,9 +818,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           />
         ) : (
           <div className="flex flex-col gap-2">
-            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em] uppercase">
-              {tl.name}
-            </h2>
+            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">{tl.name}</h2>
             <span className="text-[12px] text-t2">
               Select a clip to trim, dissolve, set its gain or replace it. Keys: Space plays, ← →
               step a frame, [ ] trim, Alt+← → move, S splits, Delete removes.
@@ -1048,9 +1049,7 @@ function ClipPanel({
   return (
     <>
       <div className="flex flex-col gap-1">
-        <h2 className="m-0 font-display text-base font-bold tracking-[0.03em] uppercase">
-          {title}
-        </h2>
+        <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">{title}</h2>
         <span className="text-[12px] text-t2">{sub}</span>
       </div>
 
@@ -1277,9 +1276,7 @@ function TrackPanel({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <h2 className="m-0 font-display text-base font-bold tracking-[0.03em] uppercase">
-          Track {t.name}
-        </h2>
+        <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">Track {t.name}</h2>
         <span className="text-[12px] text-t2">
           {t.clips.length === 1 ? "1 clip" : `${t.clips.length} clips`} · a video take&apos;s sound
         </span>

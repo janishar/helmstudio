@@ -404,6 +404,7 @@ export function RowsEditor({
         open={picking}
         onClose={() => setPicking(false)}
         max={Math.max(room, 0)}
+        help={`Images only. Picks join the references in the order picked; the limit is what is left of the workflow's maximum (${max} here, ${max - room} already added).`}
         onPick={(takes) => {
           remember(takes);
           addRefs(

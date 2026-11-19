@@ -248,7 +248,7 @@ export function Execution({
         )}
         {error && <ErrorNote>{error}</ErrorNote>}
         <div
-          className="panel relative h-[400px] overflow-hidden"
+          className="panel relative h-[400px] shrink-0 overflow-hidden"
           style={{ background: "var(--in)" }}
         >
           <PipelineCanvas
@@ -262,7 +262,7 @@ export function Execution({
             }}
           />
         </div>
-        <div className="panel overflow-x-auto px-2 py-1.5">
+        <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
           <table className="grid-table">
             <thead>
               <tr>
@@ -301,7 +301,7 @@ export function Execution({
                     >
                       {l.what}
                     </td>
-                    <td className="m max-w-[280px] truncate" title={l.changed}>
+                    <td className="m max-w-[280px] whitespace-normal [overflow-wrap:anywhere]">
                       {l.changed}
                     </td>
                     <td className={l.status === "now" ? "text-a2" : "m"}>{l.status}</td>

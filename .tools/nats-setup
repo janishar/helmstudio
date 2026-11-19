@@ -36,5 +36,16 @@ kv registry                   # <host>.<env>.{nodes,workflows,models}, written b
 kv hosts 1h                   # <host>.<env>, rewritten every 10 s; deleted on a clean exit. An offline key counts (fail
                               # closed) for an hour, far past any stall, before it expires: expiry writes no delete marker
 kv cancels 1h                 # <run_id>, written by studio on cancel
-kv host_settings               # <host>, written only by studio (Hosts admin, API 1.16); every runner of the host watches it
+kv host_settings               # <host>, written only by studio (Hosts admin, API 1.16); every runner of the host polls it
+
+# A remote host may create consumers on these two (its cancel watchers; contracts/README.md, Per-host limits), in
+# HELM, outside its own account's caps: each stream caps its consumers. The nats CLI will not edit a KV's stream
+# without a terminal, so the stream's own update request.
+max_consumers() { # stream n
+  out=$(nats req "\$JS.API.STREAM.UPDATE.$1" "$(nats stream info "$1" --json | jq -c ".config | .max_consumers = $2")" 2>/dev/null)
+  echo "$out" | jq -e '.error == null' >/dev/null || { echo "max_consumers $1: $out" >&2; exit 1; }
+}
+max_consumers KV_cancels 1000    # a runner watches at most 3 (run, model, media job); each lingers 5 min after
+                                 # (nats-py's inactive_threshold), so a fast fake runner holds about its last 5 min of runs
+max_consumers KV_host_settings 16  # none in use (runners read their key by direct get); admin tools
 nats stream ls

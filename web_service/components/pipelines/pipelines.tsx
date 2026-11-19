@@ -436,7 +436,7 @@ export function Pipelines({
             </button>
           )}
         </div>
-        <div className="panel overflow-x-auto px-2 py-1.5">
+        <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
           <table className="grid-table">
             <thead>
               <tr>
@@ -453,7 +453,7 @@ export function Pipelines({
             <tbody>
               {batches?.map((b) => (
                 <tr key={b.id}>
-                  <td className="m max-w-[280px] truncate" title={b.title}>
+                  <td className="m max-w-[200px] truncate" title={b.title}>
                     {b.title}
                   </td>
                   <td className="font-semibold">{b.pipeline_title ?? b.workflow_title}</td>

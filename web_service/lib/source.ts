@@ -217,9 +217,10 @@ export function trimmed(
   const b = v.out ?? Math.min(d, p.max_s ?? d);
   // snapped, never past the last grid point at or before the end (studio's and the runner's bound)
   const x = Math.min(rnd(Math.max(0, Math.min(d, to)) * u), Math.floor(d * u + 1e-9)) / u;
+  const m = p.max_s ?? Infinity; // the moved edge stops max_s from the other, on the grid
   return edge === "in"
-    ? { ...v, in: Math.min(x, b), out: b }
-    : { ...v, in: a, out: Math.max(x, a) };
+    ? { ...v, in: Math.max(Math.min(x, b), Math.ceil((b - m) * u - 1e-9) / u), out: b }
+    : { ...v, in: a, out: Math.min(Math.max(x, a), Math.floor((a + m) * u + 1e-9) / u) };
 }
 
 /** A span with one edge moved to `to` (take seconds), snapped to the take's frames and kept within it. */

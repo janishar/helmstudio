@@ -95,6 +95,11 @@ export type HostCard = {
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** The hosts list folded per host, by name. */
+/** How many runs wait across hosts (GET /v1/studio/queue): the caller's queued ones and everyone else's count. */
+export const queuedCount = (q: S<"Queue">) =>
+  q.runs.filter((r) => r.status === "queued").length +
+  q.hosts.reduce((n, h) => n + h.others_queued, 0);
+
 export function hostCards(hosts: Host[]): HostCard[] {
   const by = new Map<string, Host[]>();
   for (const h of hosts) by.set(h.host, [...(by.get(h.host) ?? []), h]);

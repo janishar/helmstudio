@@ -161,6 +161,19 @@ def test_enhance_sees_the_refs_of_the_encode_node_its_text_feeds():
     assert graph.stage_peak(nodes, schemas, "enhance", impl, p, {}) == pytest.approx(14)
 
 
+def test_reference_peaks_cover_the_measured_eight_reference_edit():
+    """The robust pass's edit with eight 384² references at a 512² canvas peaked 14.6 GB above the text encoder
+    (encode) and 14.4 GB above transformer + VAE (sample); the plan must not admit it below that."""
+    nodes, impls, schemas = workflow_graph()
+    ref = {"take_id": "00000000-0000-4000-8000-000000000001", "key": "u/o/a.png", "content_type": "image/png",
+           "width": 384, "height": 384, "bytes": 10, "etag": "e1"}  # fmt: skip
+    nodes["encode"]["params"]["refs"] = [{"image": ref}] * 8
+    nodes["canvas"]["params"] |= {"width": 512, "height": 512}
+    peak = {n: graph.stage_peak(nodes, schemas, n, impls[nodes[n]["kind"]], nodes[n].get("params", {}), {})
+            for n in ("encode", "sample")}  # fmt: skip
+    assert peak["encode"] >= 14.6 and peak["sample"] >= 14.4
+
+
 def test_a_family_canvas_on_auto_keeps_its_area():
     nodes, _impls, schemas = workflow_graph()
     nodes["encode"]["params"]["refs"] = [

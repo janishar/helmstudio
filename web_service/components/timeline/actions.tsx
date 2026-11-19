@@ -93,7 +93,9 @@ export function ClipActions({
     // the key holds every input of the request
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
-  const actions = got?.key === key ? got.actions : [];
+  // an extend first when it applies (docs/mock/TakeActions: Extend, Retake a section, Audio to video)
+  const extend = (o: Offer) => Object.keys(o.inputs).some((k) => k.endsWith(".direction"));
+  const actions = got?.key === key ? [...got.actions].sort((a, b) => +extend(b) - +extend(a)) : [];
   return actions.map((o) => {
     const id = `${o.workflow_id} ${o.param}`;
     const w = workflows.find((x) => x.id === o.workflow_id);
@@ -191,18 +193,19 @@ function ActionForm({
   );
   const length = estimateLength(all, v?.fps ?? 24, grid, trim?.param.max_s);
   const s1 = (x: number) => `${x.toFixed(1)} s`;
-  const note =
-    place === "insert"
-      ? before
-        ? `Insert before: a ${s1(length)} clip before ${name}.`
-        : `Insert after: a ${s1(length)} clip after ${name} holds only the new part.`
-      : ext
-        ? before
-          ? `Replace: ${name} starts at the new part and keeps its end.`
-          : `Replace: ${name} runs on to ${grown && "frames" in grown && v ? `${(grown.frames / v.fps).toFixed(2)} s` : "the extension's end"}; later clips move.`
-        : span
-          ? "Replace keeps the clip's in and out; nothing moves."
-          : `Replace: the result takes ${name}'s slot.`;
+  const inserted = before
+    ? `Insert before: a ${s1(length)} clip before ${name}.`
+    : `Insert after: a ${s1(length)} clip after ${name} holds only the new part.`;
+  const replaced = ext
+    ? before
+      ? `Replace: ${name} starts at the new part and keeps its end.`
+      : `Replace: ${name} runs on to ${grown && "frames" in grown && v ? `${(grown.frames / v.fps).toFixed(2)} s` : "the extension's end"}; later clips move.`
+    : span
+      ? "Replace keeps the clip's in and out; nothing moves."
+      : `Replace: the result takes ${name}'s slot.`;
+  // an extend shows both effects, the chosen one first (docs/mock/TakeActions); the rest the chosen one alone
+  const chosen = place === "insert" ? [inserted, replaced] : [replaced, inserted];
+  const note = ext ? chosen.join(" ") : chosen[0];
 
   async function generate() {
     setBusy(true);
@@ -347,7 +350,7 @@ function ActionForm({
         <div className="grow" />
         <button
           type="button"
-          className="key h-11 rounded-xl px-5 text-sm uppercase"
+          className="key h-11 rounded-xl px-5 text-sm"
           disabled={busy}
           onClick={() => void generate()}
         >

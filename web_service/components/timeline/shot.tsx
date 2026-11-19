@@ -242,7 +242,7 @@ export function ShotComposer({
       className="flex flex-col gap-2.5 rounded-[28px_28px_28px_12px] border border-s5 bg-s2 px-3.5 py-3 shadow-[0_16px_40px_color-mix(in_srgb,var(--shd)_50%,transparent)]"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="m-0 font-display text-sm font-bold tracking-[0.04em] uppercase">New shot</h2>
+        <h2 className="m-0 font-display text-sm font-bold tracking-[0.04em]">New shot</h2>
         <span className="mono text-[12px] text-t2">
           at {shortTime(at)} · {where}
           {uses.length ? ` · uses this sequence's ${uses.join(" and ")}` : ""}
@@ -340,7 +340,7 @@ export function ShotComposer({
         <div className="grow" />
         <button
           type="button"
-          className="key h-12 rounded-xl px-[22px] text-sm uppercase"
+          className="key h-12 rounded-xl px-[22px] text-sm"
           disabled={busy || !workflow}
           onClick={() => void generate()}
         >

@@ -318,7 +318,7 @@ export function BatchRun({
         )}
         {error && <ErrorNote>{error}</ErrorNote>}
 
-        <div className="panel overflow-x-auto px-2 py-1.5">
+        <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
           {isPipeline ? (
             <RunTable
               batch={b}

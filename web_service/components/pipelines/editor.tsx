@@ -416,7 +416,7 @@ export function PipelineEditor({
         )}
         {error && <ErrorNote>{error}</ErrorNote>}
         <div
-          className={`panel relative overflow-hidden ${last && run ? "h-[440px]" : "min-h-[440px] flex-1"}`}
+          className={`panel relative overflow-hidden ${last && run ? "h-[440px] shrink-0" : "min-h-[440px] flex-1"}`}
           style={{ background: "var(--in)" }}
         >
           <PipelineCanvas
@@ -440,7 +440,7 @@ export function PipelineEditor({
                 {run.batch.title}
               </Link>
             </div>
-            <div className="panel overflow-x-auto px-2 py-1.5">
+            <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
               <RunTable
                 batch={run.batch}
                 rows={run.rows}

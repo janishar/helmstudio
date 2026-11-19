@@ -148,6 +148,9 @@ export function ProvidersAdmin() {
                   </td>
                   <td className={cell}>
                     {p.enabled ? "Enabled" : <span className="text-t2">Disabled</span>}
+                    {p.kind === "remote" && !list.remote_enabled && (
+                      <div className="text-[12px] text-[#f2c14e]">off · remote models are off</div>
+                    )}
                     {tests[p.name] && (
                       <div
                         className="max-w-[220px] truncate text-[12px] text-t2"
@@ -352,6 +355,12 @@ function ProviderPanel({
             {field("max_in_flight", "In flight", "2", { inputMode: "numeric" })}
             {field("timeout_s", "Timeout, s", "120", { inputMode: "numeric" })}
           </div>
+        )}
+        {f.kind === "server" && (
+          <span className="text-[12px] text-t2">
+            Remote: the key&apos;s secret file name (in deploy/secrets) and calls in flight at once,
+            instead of host and memory.
+          </span>
         )}
         <label className="flex min-h-8 items-center gap-2.5 text-[13px]">
           <input

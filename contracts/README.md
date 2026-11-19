@@ -689,24 +689,44 @@ runner reads them through `X_FILE` as every service does.
   (`evt.run.<h>.<session_id>.<kind>`): the projector applies an event only when `<h>` is the host the run's current
   attempt was released to, and an output only under that attempt's `output_prefix`, so a host can neither take over a
   run retried elsewhere nor stamp another host on it. Limits: KV `cancels` is readable whole (run and job ids only).
-- **JetStream** (one account, `.tools/nats-setup`): every stream has a byte cap (CMD 1 GB, EVT 6 GB discard old, DLQ
+- **JetStream** (HELM's, `.tools/nats-setup`): every stream has a byte cap (CMD 1 GB, EVT 6 GB discard old, DLQ
   1 GB discard old; with the KV buckets under the server's 10 GB file store), so EVT or DLQ filling up never leaves
-  CMD without room. **Not enforced**: per-user publish rates or quotas (that needs a separate account per remote host
-  with its own JetStream limits and exported subjects: not in v1): a compromised remote host can flood
-  `evt.run.<h>.>`, `evt.model.<h>.>` and its DLQ subjects (1 MB per message), slowing the projector and pushing the
-  oldest EVT history out before its 7 days.
+  CMD without room.
+- **Per-host limits** (API 1.22 text; `.tools/make-secrets` writes them into `deploy/nats/nats.conf`): the user
+  `runner_<h>_<e>` lives in its own account `HOST_<H>` (`HOST_GCP`), not in HELM, with the permissions above and the
+  account limits `max_connections: 8`, `max_subscriptions: 100` (per connection: the 101st closes it) and
+  `max_payload: 1MB` (the server's own, which the runner's registry budget is sized for; a larger PUB is refused with
+  `Maximum Payload Violation` and the connection closed). The account has no JetStream of its own: HELM exports to it, and only to it, exactly the
+  subjects of its publish list as services (the consumers' `MSG.NEXT` with `response: stream`; the ones every host
+  uses, such as `$JS.API.INFO` and the cancels, to every host account) and its inbox `_INBOX_runner_<h>_<e>.>` and
+  its `MAX_DELIVERIES` advisory as streams (its KV watchers' push deliveries); HELM imports its
+  `runner.unload.<h>.<e>`. The runner needs no change for it. A changed account layout takes a NATS restart (a reload
+  leaves a new account's imports unwired; the root Makefile restarts NATS when a config file is newer than its start).
+  The consumers a host creates live in HELM, outside its account's caps, so the two streams it may create them on
+  cap them (`.tools/nats-setup`): `KV_cancels` `max_consumers: 1000` (a runner's cancel watchers: at most 3 at once,
+  each kept 5 min after it stops) and `KV_host_settings` 16 (none in use: runners read their key by direct get).
+  **Not enforced**: a publish rate (NATS has none): within those caps a compromised host can still flood
+  `evt.run.<h>.>`, `evt.model.<h>.>`, `evt.media.<h>.>` and its DLQ subjects, slowing the projector and pushing the
+  oldest EVT history out before its 7 days. Closing it needs the host's events in a stream of their own with
+  `discard: new` (sourced into EVT, or consumed by studio beside EVT) or a rate-limiting proxy: not in v1. It can also
+  fill the `KV_cancels` cap with durable consumers (the CREATE subject does not tell durable from ephemeral): other
+  runners cannot watch a cancel and their runs fail until an admin deletes them (`nats consumer rm KV_cancels <name>`).
 
-**Object store.** One S3 identity per remote host, actions `Read:<bucket>` and `Write:<bucket>` on the media bucket
-only (no `List` (ListBuckets answers an empty list), `Tagging`, `Admin`, no other bucket; SeaweedFS's `Write` also
-covers DeleteObject and multipart uploads, so the identity can delete keys of the bucket), revocable on its own
-(SeaweedFS `-s3.config` identities; the stack's own key stays the admin one). **Enforced by the store**: the bucket, the verbs, per-host
-revocation. **Not enforced by the store**: owner and run prefixes (keys are per owner and per run, made at dispatch):
-the identity can read and write any key of the bucket. **Enforced by the runner** (the claim-check rule): every key
-it reads must be one its command names, under `u/<owner_id>/` of the envelope's owner with no `..` segment, and it
-writes only under the command's `output_prefix` (exports, frames: their prefixes); a command breaking that is
-dead-lettered. **Enforced by nothing**: a compromised GPU host can read every object of the bucket and overwrite or
-delete keys; a remote GPU host is therefore trusted like the stack's machine (the operator's own VM). Per-run signed links in
-commands would close it but break the claim-check rule (never signed URLs in messages): not in v1.
+**Object store.** One S3 identity per remote host, `runner-<h>`, with no actions of its own and the policy `runner`
+(SeaweedFS `-s3.config` `policies` and `policyNames`, `.tools/make-secrets`; the stack's own key stays the admin one):
+`s3:GetObject` on `<bucket>/u/*` and `<bucket>/packs/*/looks/*` (a command's inputs, LoRAs, the HEAD after its own upload,
+the looks' thumbnails), `s3:PutObject` (with the multipart parts) only on `<bucket>/u/*/runs/*`, `u/*/exports/*`,
+`u/*/frames/*`, `u/*/llm/thumbs/*` and `packs/*/looks/*`. No delete, list (ListBuckets answers an empty list),
+tagging, admin or other bucket; revocable on its own (a SeaweedFS restart). **Enforced by the store**: the bucket,
+the verbs, the prefixes, per-host revocation. **Not enforced by the store**: the owner and the run (keys are per owner
+and per run, made at dispatch; a static identity cannot name them): the identity can read any object under `u/` and
+overwrite any run output, export, frame or ask thumbnail of any owner. **Enforced by the runner** (the claim-check
+rule): every key it reads must be one its command names, under `u/<owner_id>/` of the envelope's owner with no `..`
+segment, and it writes only under the command's `output_prefix` (exports, frames: their prefixes); a command breaking
+that is dead-lettered. **Enforced by nothing**: a compromised GPU host can read every owner's objects and overwrite
+their outputs (never delete them); a remote GPU host is therefore trusted like the stack's machine (the operator's own
+VM). Closing it needs per-command credentials: studio minting short-lived per-run keys (SeaweedFS STS, `-iam.config`)
+or presigned URLs, which the claim-check rule (never signed URLs in messages) rules out in messages: not in v1.
 
 **TLS.**
 - NATS server: a `tls {cert_file, key_file, ca_file?, verify?, timeout: 2, handshake_first: "1s"}` block on the
@@ -2305,10 +2325,11 @@ must_accept, gated, bytes?}` (absent: not downloadable); licence texts in the pa
 `media`, `runtimes [{runtime, env}]` (every runtime of the pack), per variant `title`, `dir`, `source`, `components
 [{component, from_variant, precisions, bytes?, separate?}]`, `files [{path, bytes, sha256?, component?}]` (the
 manifest of its own folder, paths relative to `dir`; left out, largest first, while the models value would pass 768
-KB: NATS max_payload is 1 MB; `bytes` stays), `presence` present | partial | missing | mismatch (with
-`mismatch [path]`). The hosts key gains `models_disk {root (home as ~), free_bytes, total_bytes}`, `machine {os, accel,
-packaging, ram_gb}`, `hub_token` (a token file exists), `policy` (Hosts admin) and `resident[].pinned_why`. The
-runner **rescans** its models root every 60 s and after each model job (presence by stat; a file is hashed once and
+KB: NATS max_payload is 1 MB, a remote host's account too; `bytes` stays), `presence` present | partial | missing |
+mismatch (with `mismatch [path]`). The hosts key gains `models_disk {root (home as ~), free_bytes, total_bytes}`,
+`machine {os, accel, packaging, ram_gb}`, `hub_token` (a token file exists), `policy` (Hosts admin) and
+`resident[].pinned_why`.
+The runner **rescans** its models root every 60 s and after each model job (presence by stat; a file is hashed once and
 the hash kept by path, size and mtime, as the LoRA index does) and rewrites `models` / `loras` only when they changed.
 This replaces "Rescans come with M5a": shared LoRAs copied in by hand appear within 60 s.
 

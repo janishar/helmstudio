@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import list from "../../contracts/fixtures/http/HostList.valid.json";
 import type { S } from "@/lib/api";
-import { hostMemory } from "@/lib/hosts";
+import queue from "../../contracts/fixtures/http/Queue.valid.json";
+import { hostMemory, queuedCount } from "@/lib/hosts";
 
 const hosts = list.hosts as S<"Host">[];
 
@@ -144,5 +145,11 @@ describe("two hosts, one with a discrete GPU", () => {
     const m = hostMemory(all, "torch", "gcp")!;
     expect([m.host, m.used_gb, m.budget_gb, m.envs.length]).toEqual(["gcp", 8.1, 93.6, 1]);
     expect(hostMemory(all, "torch", "gone")!.host).toBe("mac");
+  });
+});
+
+describe("queuedCount", () => {
+  it("adds the caller's queued runs and the others' counts (the Hosts summary's · N queued)", () => {
+    expect(queuedCount(queue as S<"Queue">)).toBe(3);
   });
 });

@@ -375,8 +375,9 @@ def test_remote_host_link_is_tls_verified_by_the_stack_ca(two):
         assert r["s3_with_ca"] and not r["s3_without_ca"], r
 
 
-# HOST_B's own S3 identity (runner-<HOST_B>: Read and Write on the bucket only; contracts/README.md, Object store):
-# objects in the bucket yes; listing, tagging, a new bucket or another bucket no.
+# HOST_B's own S3 identity (runner-<HOST_B>: the policy runner; contracts/README.md, Object store): get under u/ and
+# the looks' thumbnails, put only under the prefixes a runner writes; delete, a put elsewhere, listing, tagging, a new
+# bucket or another bucket no.
 S3 = r"""
 import json, os
 import boto3
@@ -387,25 +388,169 @@ s3 = boto3.client("s3", endpoint_url=os.environ["S3_ENDPOINT"], region_name="us-
                   aws_access_key_id=read("S3_ACCESS_KEY_ID_FILE"), aws_secret_access_key=read("S3_SECRET_ACCESS_KEY_FILE"),
                   verify=os.environ.get("S3_CA_FILE") or None,
                   config=Config(s3={"addressing_style": "path"}, retries={"max_attempts": 1}))
-b, key, out = os.environ.get("S3_BUCKET", "helmstudio"), "u/contract-hosts/probe.txt", {}
+b, out = os.environ.get("S3_BUCKET", "helmstudio"), {}
+u = "u/contract-hosts/"
 def t(name, f):
     try:
         f()
         out[name] = True
     except Exception:
         out[name] = False
-t("put", lambda: s3.put_object(Bucket=b, Key=key, Body=b"x"))
-t("get", lambda: s3.get_object(Bucket=b, Key=key)["Body"].read())
+for prefix in ("runs/r1/1/", "exports/j1/", "frames/j1/", "llm/thumbs/"):
+    t("put " + prefix, lambda: s3.put_object(Bucket=b, Key=u + prefix + "0.txt", Body=b"x"))
+t("put look", lambda: s3.put_object(Bucket=b, Key="packs/contract-hosts/looks/a.txt", Body=b"x"))
+t("get", lambda: s3.get_object(Bucket=b, Key=u + "runs/r1/1/0.txt")["Body"].read())
+t("head", lambda: s3.head_object(Bucket=b, Key=u + "runs/r1/1/0.txt"))
+t("get look", lambda: s3.get_object(Bucket=b, Key="packs/contract-hosts/looks/a.txt")["Body"].read())
+t("put uploads", lambda: s3.put_object(Bucket=b, Key=u + "uploads/x.png", Body=b"x"))
+t("put loras", lambda: s3.put_object(Bucket=b, Key=u + "loras/x.safetensors", Body=b"x"))
+t("put outside u/", lambda: s3.put_object(Bucket=b, Key="contract-hosts/x.txt", Body=b"x"))
+t("delete", lambda: s3.delete_object(Bucket=b, Key=u + "runs/r1/1/0.txt"))
 t("list", lambda: s3.list_objects_v2(Bucket=b, MaxKeys=1))
-t("tagging", lambda: s3.put_object_tagging(Bucket=b, Key=key, Tagging={"TagSet": [{"Key": "a", "Value": "b"}]}))
+t("tagging", lambda: s3.put_object_tagging(Bucket=b, Key=u + "runs/r1/1/0.txt", Tagging={"TagSet": [{"Key": "a", "Value": "b"}]}))
 t("create_bucket", lambda: s3.create_bucket(Bucket="contract-hosts-other"))
 out["buckets"] = [x["Name"] for x in s3.list_buckets()["Buckets"]]
-t("delete", lambda: s3.delete_object(Bucket=b, Key=key))
 print(json.dumps(out))
 """
 
 
-def test_remote_host_s3_identity_is_limited_to_objects_of_the_bucket(two):
+def test_remote_host_s3_identity_is_limited_to_the_runner_prefixes(two):
     r = json.loads(in_runner_b("python", "-c", S3))
-    assert r["put"] and r["get"] and r["delete"], r  # Write covers DeleteObject in SeaweedFS
-    assert not (r["list"] or r["tagging"] or r["create_bucket"]) and r["buckets"] == [], r
+    allowed = ["put runs/r1/1/", "put exports/j1/", "put frames/j1/", "put llm/thumbs/", "put look", "get", "head",
+               "get look"]  # fmt: skip
+    refused = [
+        "put uploads",
+        "put loras",
+        "put outside u/",
+        "delete",
+        "list",
+        "tagging",
+        "create_bucket",
+    ]
+    assert all(r[k] for k in allowed) and not any(r[k] for k in refused) and r["buckets"] == [], r
+
+
+# HOST_B's NATS account (HOST_<HOST_B>: contracts/README.md, A remote GPU host: per-host limits) as seen from inside
+# its runner with its own credentials: the server cuts off a message over 1 MB (a raw publish: the client would
+# refuse it first) but reads one of the runner's registry budget (768 KB), a 9th connection of the account and a 101st
+# subscription of one connection.
+HEAD = r"""
+import asyncio, contextlib, json, os, socket, ssl
+from urllib.parse import urlparse
+import nats
+
+url = open(os.environ["NATS_URL_FILE"]).read().strip()
+p = urlparse(url)
+ca = os.environ.get("NATS_CA_FILE")
+tls = url.startswith("tls://")
+kw = {"tls": ssl.create_default_context(cafile=ca), "tls_handshake_first": True} if tls else {}
+inbox = f"_INBOX_{p.username}"
+out = {}
+"""
+LIMITS = r"""
+
+
+def raw_publish(size, subject, body=False):
+    s = socket.create_connection((p.hostname, p.port or 4222), timeout=10)
+    if tls:
+        s = ssl.create_default_context(cafile=ca).wrap_socket(s, server_hostname=p.hostname)
+    f = s.makefile("rb")
+    info = json.loads(f.readline()[5:])
+    s.sendall(b"CONNECT " + json.dumps({"user": p.username, "pass": p.password, "verbose": False,
+                                         "pedantic": False, "tls_required": tls}).encode() + b"\r\nPING\r\n")
+    f.readline()  # PONG (or an -ERR)
+    # too big: the PUB line alone (the server answers its size at once and closes; the bytes would meet a closed
+    # socket); else the bytes too, then the server's first answer
+    s.sendall(b"PUB %s %d\r\n" % (subject.encode(), size) + (b"x" * size + b"\r\nPING\r\n" if body else b""))
+    try:
+        return info["max_payload"], f.readline().decode().strip()
+    finally:
+        s.close()
+
+
+async def main():
+    nc = await nats.connect(url, allow_reconnect=False, inbox_prefix=inbox, **kw)
+    for n in (99, 101):  # past the cap the server closes the connection (nats-py shows no -ERR text for it)
+        sub_nc = await nats.connect(url, allow_reconnect=False, inbox_prefix=inbox, **kw)
+        for i in range(n):
+            await sub_nc.subscribe(f"{inbox}.limits.{i}")
+        with contextlib.suppress(Exception):
+            await sub_nc.flush(timeout=3)
+        await asyncio.sleep(1)
+        out[f"connected_with_{n}_subs"] = sub_nc.is_connected
+        if sub_nc.is_connected:
+            await sub_nc.close()
+
+    extra, refused = [], ""
+    for _ in range(9):
+        try:
+            extra.append(await nats.connect(url, allow_reconnect=False, max_reconnect_attempts=0,
+                                            connect_timeout=5, inbox_prefix=inbox, **kw))
+        except Exception as e:
+            refused = str(e).lower()
+            break
+    out["connections_opened"], out["connections_refused"] = len(extra) + 1, refused
+    for c in extra:
+        await c.close()
+    await nc.close()
+
+
+asyncio.run(main())
+out["raw"] = raw_publish(1024 * 1024 + 1, f"evt.run.{os.environ['RUNNER_HOST']}.probe.status")
+# a subject outside its permissions, so nothing is stored: refused for the subject, not the size
+out["fits"] = raw_publish(768 * 1024, "probe.limits", body=True)[1]
+print(json.dumps(out))
+"""
+
+
+def test_remote_host_account_limits_cut_off_a_flood(two):
+    r = json.loads(in_runner_b("python", "-c", HEAD + LIMITS))
+    # one number: the account's max_payload is the server's 1 MB, which the runner's registry budget fits in
+    assert r["raw"] == [1024 * 1024, "-ERR 'Maximum Payload Violation'"], r
+    assert r["fits"].startswith("-ERR 'Permissions Violation"), r
+    assert r["connected_with_99_subs"] and not r["connected_with_101_subs"], r
+    # the runner holds one of the 8 connections (a probe or a reconnect may hold another for a moment)
+    assert (
+        r["connections_opened"] <= 8
+        and "maximum account active connections" in r["connections_refused"]
+    ), r
+
+
+# The consumers a host creates live in HELM, outside its account's caps: KV_cancels caps them (.tools/nats-setup). A
+# flood of durable consumers (no inactive threshold: they would stay) through the host's own CREATE export stops at
+# the cap; the probe deletes what it made through the DELETE export.
+CONSUMERS = r"""
+
+async def main():
+    nc = await nats.connect(url, allow_reconnect=False, inbox_prefix=inbox, **kw)
+    api = lambda s, body=b"": nc.request(s, body, timeout=5)
+    made, refused = [], ""
+    try:
+        for i in range(1100):
+            name = f"flood-probe-{i}"
+            cfg = {"stream_name": "KV_cancels", "config": {"durable_name": name, "name": name,
+                   "filter_subject": "$KV.cancels.flood-probe", "ack_policy": "explicit"}}
+            r = json.loads((await api(f"$JS.API.CONSUMER.CREATE.KV_cancels.{name}.$KV.cancels.flood-probe",
+                                      json.dumps(cfg).encode())).data)
+            if "error" in r:
+                refused = r["error"]["description"]
+                break
+            made.append(name)
+        info = json.loads((await api("$JS.API.STREAM.INFO.KV_cancels")).data)
+        out["count"], out["cap"] = info["state"]["consumer_count"], info["config"]["max_consumers"]
+    finally:
+        for name in made:
+            await api(f"$JS.API.CONSUMER.DELETE.KV_cancels.{name}")
+        await nc.close()
+    out["made"], out["refused"] = len(made), refused.lower()
+
+
+asyncio.run(main())
+print(json.dumps(out))
+"""
+
+
+def test_remote_host_consumer_flood_stops_at_the_cap(two):
+    r = json.loads(in_runner_b("python", "-c", HEAD + CONSUMERS))
+    assert r["cap"] == 1000 and r["count"] == 1000 and 0 < r["made"] <= 1000, r
+    assert "maximum consumers" in r["refused"], r

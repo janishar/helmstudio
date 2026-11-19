@@ -29,25 +29,21 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
 
 ## Checks and hardening
 
-- **A more robust check pass, later** (owner, 2026-11-19). To save time, the M7 packs run lean checks from pack 1's
-  review on: one combined correctness reviewer (no separate security reviewer), no contract critics, isolation tests
-  only on new endpoints, the full contract suite once per pack at commit (touched test files in between), resilience
-  only when messaging or the dispatcher changes, the GPU proof on one case per pipeline, the browser check on new
-  screens only. To pick up afterwards:
-  - a security review across M7 (media inputs, audio uploads, take uses, clip actions) and isolation tests on every
-    path that takes a take (run, batch row, saved workflow, pipeline bind, use, clip action);
-  - the M6 hardening left open: a per-host NATS quota (a remote host can flood its own subjects) and an S3 identity
-    per host scoped to its own keys (today it can get, put and delete any object);
-  - the full contract suite twice and make resilience on the final M7 code;
-  - every golden case of each pack on both MLX versions, plus the earlier packs' regression cases;
-  - MiniMax H3 Image paths not run on the GPU in pack 2: LCM, Think on, an edit with the enhancer on, several
-    references, more than 4 MP and the 20 MP refusal, and the `MINIMAX=1` contract tests. The enhancer's per-reference
-    memory term (`11 + images` GB) is an estimate: measure one enhanced edit with 8–16 references;
-  - MiniMax H3 video paths not run on the GPU in pack 3: a run that mixes a sound video with an audio row (checks
-    the `<Audio n>` order), several references of one kind and the 3-video / 15 s caps, peak_gb with references above
-    512×512, and parts right at the 56-frame edge from a 25 or 30 fps take. One 56-frame run with a sound video took
-    329 s against about 40 s at 22 frames: measure its peak and find why;
-  - web: component and end-to-end tests, and every screen side by side with its board at 1440×960.
+- **Robust check pass: done 2026-11-19** (after M7). Security review across M7, 79 take-isolation contract tests,
+  every golden on MLX 0.32.4 and 0.32.2, the MiniMax GPU paths, web component and end-to-end tests (`make e2e` in
+  web_service, test stack only), every screen against its board, and the M6 hardening (a NATS account per host with
+  connection, subscription, payload and consumer caps; an S3 policy per host with no delete or list). Left open:
+  - a host's S3 key can still read every owner's inputs and overwrite outputs: close with per-run credentials or
+    presigned URLs from studio;
+  - NATS has no publish rate limit, so a host can still flood its own event subjects within the caps; a hostile host
+    can fill the 1000-consumer cap on KV_cancels until an admin deletes its consumers;
+  - small runner notes: ffmpeg on user files runs with the runner's full environment (NATS and S3 secrets); the h3
+    prompt is visible to other local accounts through ps; a media take is held in memory (up to 1 GiB);
+  - GPU paths not run: MiniMax H3 Image with 16 references or large references; H3 video references at 1 MP or 15 s;
+  - screens left as built until the owner decides: the empty Create screen (Direct board: composer under the title,
+    looks grid, Elements aside); the Gallery "This project only" chip and search placeholder; the Pipelines list
+    extras (New pipeline / Rename / Delete; four batches with "All batches"); no landing page (Landing board, not in a
+    milestone).
 
 ## Product
 

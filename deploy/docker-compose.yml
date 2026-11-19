@@ -96,7 +96,8 @@ services:
     image: nats:2.15.3-alpine3.22
     # nats.conf reads the users' passwords from the environment; they come from the secrets here (the remote GPU
     # hosts' from the included secret nats_gpu_hosts). NATS_CONF=nats-tls.conf (compose/tls.yml) adds TLS.
-    entrypoint: [sh, -c, 'for u in admin auth studio runner runner_mac_torch runner_mac_mlx runner_mac_native pipelines; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/$${NATS_CONF:-nats.conf}']
+    # /tmp/started marks its start: the root Makefile's nats_reload restarts it when a config file is newer.
+    entrypoint: [sh, -c, 'touch /tmp/started; for u in admin auth studio runner runner_mac_torch runner_mac_mlx runner_mac_native pipelines; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/$${NATS_CONF:-nats.conf}']
     secrets: [nats_admin_password, nats_auth_password, nats_studio_password, nats_runner_password,
               nats_runner_mac_torch_password, nats_runner_mac_mlx_password, nats_runner_mac_native_password,
               nats_pipelines_password, nats_gpu_hosts]

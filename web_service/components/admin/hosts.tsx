@@ -20,6 +20,7 @@ import {
   isPinned,
   machineText,
   pinRef,
+  queuedCount,
   settingsOf,
   togglePin,
   type HostCard,
@@ -31,9 +32,14 @@ type Confirm = { host: string; title: string; text: string; body: S<"HostUnload"
 /** The hosts, polled every 3 s while visible; `reload` reads them at once (after a change). */
 function useAdminHosts() {
   const [hosts, setHosts] = useState<S<"Host">[] | null>(null);
+  const [queued, setQueued] = useState<number | null>(null);
   const [now, setNow] = useState(0);
   const [error, setError] = useState("");
   const reload = useCallback(() => {
+    // the summary's "· N queued"; not needed to work
+    ok(api.GET("/v1/studio/queue"))
+      .then((q) => setQueued(queuedCount(q)))
+      .catch(() => setQueued(null));
     ok(api.GET("/v1/studio/hosts"))
       .then((h) => {
         setHosts(h.hosts);
@@ -52,11 +58,11 @@ function useAdminHosts() {
       document.removeEventListener("visibilitychange", tick);
     };
   }, [reload]);
-  return { hosts, now, error, reload };
+  return { hosts, queued, now, error, reload };
 }
 
 export function HostsAdmin() {
-  const { hosts, now, error, reload } = useAdminHosts();
+  const { hosts, queued, now, error, reload } = useAdminHosts();
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [names, setNames] = useState<Record<string, string>>({});
   const [picked, setPicked] = useState("");
@@ -127,6 +133,7 @@ export function HostsAdmin() {
           <span className="mono text-[12px]">
             {cards.length} host{cards.length === 1 ? "" : "s"} ·{" "}
             {cards.filter((c) => c.state === "running").length} running
+            {queued !== null && ` · ${queued} queued`}
           </span>
           <Info>
             One run at a time per host, across its envs, because they share its memory. The

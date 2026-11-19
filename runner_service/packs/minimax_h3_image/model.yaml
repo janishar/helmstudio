@@ -80,8 +80,9 @@ stages:
       refs: {type: rows, label: References, default: [], min: 0, max: 16, item: {image: Image},
              mention: "<Picture {n}>",
              help: "Images to edit or combine, in order; the prompt names them <Picture 1>, <Picture 2>, … Alpha is dropped."}
-    # measured 4.33-4.84 GB above its 25.7 (T2I, the load transient included), 4.83 with one 768² reference
-    peak_gb: "4.9 + 0.5 * images"
+    # measured 4.33-4.84 GB above its 25.7 (T2I, the load transient included), 4.83 with one 768² reference, 14.6 with
+    # eight 384² references (robust pass: ~1.2 GB per reference). ponytail: 16 references unmeasured
+    peak_gb: "4.9 + 1.25 * images"
   sample:
     title: Sample
     help: "Denoises from the seed's noise in 6 fixed steps (guidance-distilled: no steps, CFG or negative prompt)."
@@ -92,8 +93,10 @@ stages:
       sampler: {type: enum, label: Sampler, default: euler, enum: [euler, lcm],
                 help: "Euler repeats exactly with the same seed. LCM re-noises every step from the device's RNG, so it does not repeat on another device."}
     # the canvas is at least 4 MP: measured 5.24-5.68 GB above transformer + VAE (33.2) T2I, 5.52 with one 768² reference
-    # (its VAE copy at 1024²), the loads included; the old README's 16 MP run held ~4 GB more than at 4 MP
-    peak_gb: "4.5 + 0.3 * max(mp, 4.2) + 0.5 * images * max(1, min(mp_in, 4.2))"
+    # (its VAE copy at 1024²), the loads included, 14.4 with eight 384² references at 512² (robust pass: ~1.1 GB per
+    # reference; so past ~10 small references the sample stage no longer fits the 52 GB budget and the run fails with
+    # "does not fit in memory"); the old README's 16 MP run held ~4 GB more than at 4 MP
+    peak_gb: "4.5 + 0.3 * max(mp, 4.2) + 1.25 * images * max(1, min(mp_in, 4.2))"
     stall_s: 600
   decode:
     title: Decode

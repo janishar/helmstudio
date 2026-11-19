@@ -329,3 +329,56 @@ def test_tiny_ref2va_with_an_audio_reference(hapi, anon, sid):
         22,
     )
     assert {img, sound} <= set(take["parents"]), take["parents"]
+
+
+def real_video(admin, anon, owner: str, fps: int) -> dict:
+    """An imported take with a real H.264 + AAC MP4 (ffmpeg testsrc2 + a sine, 640 x 360, 3 s at `fps`)."""
+    import subprocess
+    import tempfile
+
+    from helpers import ok
+    from test_video_source import IMPORTS
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = f"{tmp}/clip.mp4"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size=640x360:rate={fps}:duration=3",
+                        "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3", "-c:v", "libx264",
+                        "-pix_fmt", "yuv420p", "-c:a", "aac", "-ac", "2", "-shortest", "-movflags", "+faststart", path],
+                       check=True)  # fmt: skip
+        with open(path, "rb") as f:
+            mp4 = f.read()
+    poster = png_bytes(640, 360)
+    body = {"owner_id": owner, "key": f"contract:media:{uuid.uuid4().hex[:12]}", "kind": "video",
+            "filename": "clip.mp4", "content_type": "video/mp4", "bytes": len(mp4), "width": 640, "height": 360,
+            "created_at": "2024-03-01T10:00:00Z", "starred": False, "title": f"real {fps} fps", "legacy": {"studio": "contract"},
+            "parents": [], "video": {"duration_s": 3.0, "fps": fps, "frames": 3 * fps, "has_audio": True,
+                                     "poster": {"content_type": "image/png", "bytes": len(poster), "width": 640, "height": 360}}}  # fmt: skip
+    t = ok(admin.post(IMPORTS, json=body), 201)
+    for link, data, ct in (
+        (t["upload_url"], mp4, "video/mp4"),
+        (t["poster_upload_url"], poster, "image/png"),
+    ):
+        assert anon.put(link, content=data, headers={"Content-Type": ct}).status_code == 204
+    return ok(admin.post(f"{IMPORTS}/{t['take_id']}/complete"))
+
+
+@gpu
+@pytest.mark.parametrize("fps,frames", [(25, 58), (30, 70)])
+def test_sound_video_part_at_the_56_frame_edge(admin, hapi, anon, h3_user, sid, fps, frames):
+    """A sound video part that reads exactly 56 frames at 24 fps (the smallest h3 takes) from a 25 / 30 fps take runs
+    (512 x 512, 56 frames, 2 steps); one frame less is refused before the child."""
+    vid = real_video(admin, anon, h3_user["user"]["id"], fps)["id"]
+    row = lambda n: [
+        {"video": {"take_id": vid, "in": 0.4, "out": round(0.4 + n / fps, 6)}, "sound": "keep"}
+    ]
+    inputs = {"prompt.text": "The scene of <Video 1>, with its sound", "seed.seed": 42, "canvas.width": 512,
+              "canvas.height": 512, "duration.frames": 56, "generate.steps": 2}  # fmt: skip
+    short = finished(
+        hapi, start_run(hapi, sid, inputs | {"generate.videos": row(frames - 1)}, REFS)
+    )
+    assert short["status"] == "failed" and "reads 55" in json.dumps(short), short
+    done = finished(hapi, start_run(hapi, sid, inputs | {"generate.videos": row(frames)}, REFS))
+    assert done["status"] == "succeeded", done
+    take = get(hapi, f"{STUDIO}/takes/{done['outputs'][0]['take_id']}")
+    assert (take["video"]["frames"], take["video"]["has_audio"]) == (56, True), take["video"]
+    assert vid in take["parents"], take["parents"]

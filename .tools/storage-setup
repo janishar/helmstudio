@@ -3,14 +3,22 @@
 # Runs inside the seaweedfs image (compose service `storage-setup`, profile s3local), or from the host:
 #   docker compose -f deploy/docker-compose.yml run --rm storage-setup
 # On AWS S3 create the bucket with your own tooling instead.
+# Done only when the bucket list shows the bucket: while SeaweedFS starts, the list can come back empty or fail (weed
+# shell exits 0 when it cannot reach the master) and a create can fail ("already exists", filer not ready), so both
+# are retried until the list answers with the bucket.
 set -eu
 bucket="${S3_BUCKET:-helmstudio}"
 master="${WEED_MASTER:-seaweedfs:9333}"
-if echo "s3.bucket.list" | weed shell -master="$master" 2>/dev/null | grep -qw "$bucket"; then
-  echo "bucket $bucket exists"
-elif out=$(echo "s3.bucket.create -name $bucket" | weed shell -master="$master" 2>&1); then
-  echo "$out"
-else  # the list can fail while SeaweedFS starts: a bucket that already exists is done
-  echo "$out"
-  echo "$out" | grep -q "already exists"
-fi
+weed_cmd() { echo "$1" | weed shell -master="$master" 2>&1 || :; }
+i=0
+while [ "$i" -lt 30 ]; do
+  if weed_cmd "s3.bucket.list" | awk -v b="$bucket" '$1 == b { found = 1 } END { exit !found }'; then
+    echo "bucket $bucket exists"
+    exit 0
+  fi
+  weed_cmd "s3.bucket.create -name $bucket"
+  i=$((i + 1))
+  sleep 2
+done
+echo "bucket $bucket: not in the bucket list after 30 tries" >&2
+exit 1

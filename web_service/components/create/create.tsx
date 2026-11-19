@@ -1444,9 +1444,14 @@ function Stage({
         style={{ containerType: "size" }}
       >
         {!run && !take ? (
-          <h1 className="text-center font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
-            What will you <span className="text-a1">make?</span>
-          </h1>
+          <div className="flex flex-col items-center gap-2 text-center">
+            <h1 className="m-0 font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
+              What will you <span className="text-a1">make?</span>
+            </h1>
+            <p className="m-0 text-[15px] text-t2">
+              Describe an image or a clip. Pull in characters and places with @. Runs on this Mac.
+            </p>
+          </div>
         ) : out?.kind === "image" || out?.kind === "video" ? (
           <Media
             key={outKey}

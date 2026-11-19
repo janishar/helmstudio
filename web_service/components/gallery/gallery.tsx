@@ -667,7 +667,7 @@ function TakePanel({
   const offers = useUses(t.id);
   return (
     <>
-      <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
+      <div className="relative flex aspect-video shrink-0 items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
         <Media
           key={t.id}
           take={t}

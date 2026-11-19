@@ -423,7 +423,7 @@ function CanvasPicker({
   const tile = (k: "aspect" | "size", label: string, value: string) => (
     <button
       type="button"
-      className="set bevel"
+      className="set bevel flex flex-col gap-0.5 text-left"
       aria-expanded={opened === k}
       onClick={() => setOpened(opened === k ? null : k)}
     >

@@ -78,7 +78,8 @@ This section owns version numbers; other sections name libraries without them.
 | lucide-react | ^1.73.0 |
 | @xyflow/react, elkjs | ^12.12.1, ^0.12.1 |
 | openapi-typescript, openapi-fetch | 7.13.0, 0.17.0 (exact) |
-| vitest, Playwright, eslint | ^5.1.0, 1.65.1 (exact), ^10.15.0 |
+| vitest, Playwright (`@playwright/test`), eslint | ^5.1.0, 1.64.1 (exact: its Chromium build 1248 is the one cached in `~/Library/Caches/ms-playwright`; `make e2e` downloads no browser), ^10.15.0 |
+| @testing-library/react, @testing-library/dom, jsdom | 16.3.3, 10.4.2, 30.1.3 (exact; component tests in `tests/components/`) |
 | prettier | 3.10.1 (exact) |
 | next-themes, server-only | ^0.4.6, ^0.0.1 |
 

@@ -23,8 +23,10 @@ make up
 `nats_runner_<h>_torch_url` (`tls://runner_<h>_torch:…@127.0.0.1:4222`), `s3_runner_<h>_access_key_id`,
 `s3_runner_<h>_secret_access_key`, and once for the stack `tls_ca`, `stack_tls_cert`, `stack_tls_key` (a self-signed
 CA, whose key is not kept, and one server cert for NATS and S3: `localhost`, `127.0.0.1`, `nats`, `seaweedfs`). The
-user block for `runner_<h>_torch` goes into `deploy/nats/nats.conf` between the `gpu-hosts` markers, and the
-identity into `s3_config.json`. NATS takes a new host on HUP, SeaweedFS restarts alone (`make gpu-host-reload`).
+account `HOST_<H>` with the user `runner_<h>_torch` and its limits, and HELM's exports to it, go into
+`deploy/nats/nats.conf` between the `gpu-hosts` markers, and the identity (policy `runner`) into `s3_config.json`.
+`make gpu-host-reload` restarts NATS when a config file is newer than its start (a reload alone leaves a new account's
+imports unwired) and restarts SeaweedFS.
 
 ## 2. On the GPU host: driver and container toolkit
 
@@ -129,10 +131,15 @@ compose file): an edited URL stops it at start, it never falls back to plain.
 
 A GPU host's credentials limit it to its own subjects, keys and run events (contracts/README.md, A remote GPU host),
 but a compromised host is still trusted beyond its own runs in these ways:
-- **Object store**: its S3 identity can read, overwrite and delete any key of the media bucket (SeaweedFS cannot
-  scope an identity to a prefix); only the runner's own claim-check rule keeps it to its commands' keys.
-- **JetStream**: the streams have byte caps (CMD never starves), but there is no per-user quota: it can flood its
-  own event and DLQ subjects, slowing the projector and pushing the oldest event history out early.
+- **Object store**: its S3 identity reads only under `u/` and the looks, writes only under the runner prefixes (run
+  outputs, exports, frames, ask and look thumbnails) and never deletes, but that holds for every owner: it can read
+  any owner's objects and overwrite their outputs; only the runner's own claim-check rule keeps it to its commands'
+  keys.
+- **NATS**: its account caps it at 8 connections, 100 subscriptions per connection and 1 MB per message, but NATS
+  has no publish rate limit: within those caps it can still flood its own event and DLQ subjects, slowing the
+  projector and pushing the oldest event history out early (the streams' byte caps keep CMD from starving). The
+  consumers it creates in HELM's JetStream stop at the KV_cancels cap (1000), but a host that fills it makes other
+  runners' runs fail until an admin deletes those consumers.
 - **Shared definitions**: it cannot replace a template, look or node schema the stack's own hosts publish, but it can
   add new ids that every user then sees.
 Run a GPU host only on a machine you control, and revoke it (above) when in doubt.
