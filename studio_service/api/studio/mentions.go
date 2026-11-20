@@ -44,6 +44,9 @@ type expansion struct {
 	Typed    map[string]any               `json:"typed,omitempty"`
 	Elements []gallerydto.MadeWithElement `json:"elements,omitempty"`
 	Looks    []gallerydto.MadeWithLook    `json:"looks,omitempty"`
+	// API 1.30: the voices its voice params named (made_with.voices) and each path's resolved value (defs voice)
+	Voices      []gallerydto.MadeWithVoice `json:"voices,omitempty"`
+	VoiceValues map[string]voiceValue      `json:"voice_values,omitempty"`
 }
 
 // isWord is an ASCII word character (so bytes, runes and UTF-16 units agree).
@@ -184,6 +187,14 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 	}
 	all := prompts(nodes, schemas)
 	var errs, used []string
+	if workflowMedia(nodes, schemas) == "audio" { // API 1.30: spoken text is never expanded; a mention is refused
+		for _, p := range all {
+			if len(mentioned(p.Parts)) > 0 {
+				errs = append(errs, p.Node+"."+p.Param.Name+": mentions are not read aloud; use a dialogue script")
+			}
+		}
+		all = nil
+	}
 	for _, p := range all {
 		for _, handle := range mentioned(p.Parts) {
 			if _, ok := byHandle[handle]; !ok {
@@ -514,8 +525,16 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 		}
 		return chosen[i]
 	}
+	voices := make([]expansion, len(rows))
 	for i, inputs := range rows {
 		nodes, detail := resolve(workflow, inputs)
+		if detail == "" { // API 1.30: voices next, as the owner (before mentions and looks)
+			values, made, errs, err := runVoices(ctx, tx, s.registry, ownerID, nodes, workflow.NodeSchemas)
+			if err != nil {
+				return nil, nil, libraryCopy{}, err
+			}
+			detail, voices[i] = strings.Join(errs, "; "), expansion{Voices: made, VoiceValues: values}
+		}
 		out[i].Nodes, details[i] = nodes, detail
 		if detail == "" {
 			for _, handle := range mentionedHandles(nodes, workflow.NodeSchemas) {
@@ -590,6 +609,7 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 			details[i] = strings.Join(bad, "; ")
 			continue
 		}
+		exp.Voices, exp.VoiceValues = voices[i].Voices, voices[i].VoiceValues
 		out[i].Expansion = exp
 	}
 	if err := runLoras(ctx, tx, s.registry, ownerID, workflow.Env, out, workflow.NodeSchemas, details); err != nil {
@@ -650,9 +670,10 @@ func takeSizes(ctx context.Context, tx pgx.Tx, ownerID string, ids []string) (ma
 	return out, err
 }
 
-// mentionsJSON is runs.mentions: what the expansion did ({typed, elements, looks}), null when it changed nothing.
+// mentionsJSON is runs.mentions: what the expansion did ({typed, elements, looks}) and (API 1.30) the voices resolved
+// ({voices, voice_values}), null when there is nothing.
 func mentionsJSON(exp expansion) []byte {
-	if len(exp.Elements) == 0 && len(exp.Typed) == 0 && len(exp.Looks) == 0 {
+	if len(exp.Elements) == 0 && len(exp.Typed) == 0 && len(exp.Looks) == 0 && len(exp.Voices) == 0 {
 		return nil
 	}
 	data, _ := json.Marshal(exp)

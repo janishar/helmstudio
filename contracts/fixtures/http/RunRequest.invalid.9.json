@@ -1,0 +1,8 @@
+{
+  "workflow_id": "echo-voice-over",
+  "inputs": {
+    "speak.voice": {
+      "voice_id": "Ada"
+    }
+  }
+}

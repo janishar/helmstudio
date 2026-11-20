@@ -97,6 +97,8 @@ type Output struct {
 	Resolved *Resolved `json:"resolved"`
 	// API 1.19, a video made from a media take: how its time lines up with that take (Take.source_map)
 	SourceMap *dto.SourceMap `json:"source_map"`
+	// API 1.30, kind audio only (required then): the WAV's length and sample rate
+	Audio *dto.AudioInfo `json:"audio"`
 }
 
 // Resolved is an output's resolved: "<node>.<param>" → the value the runner chose for "auto" (a predicted length).

@@ -58,7 +58,7 @@ func madeWith(workflows *registry.Registry, run model.Run, seed *int64, resolved
 	}
 	var exp expansion // the prompt as typed, the elements it mentioned
 	_ = json.Unmarshal(run.Mentions, &exp)
-	out.Typed, out.Elements, out.Looks = exp.Typed, exp.Elements, exp.Looks
+	out.Typed, out.Elements, out.Looks, out.Voices = exp.Typed, exp.Elements, exp.Looks, exp.Voices
 	for _, u := range runUsed(run.Loras) {
 		out.Loras = append(out.Loras, gallerydto.MadeWithLora{Node: u.Node, ID: u.ID, Source: u.Source, Name: u.Name,
 			Strength: u.Strength, Mode: u.Mode, SHA256: u.SHA256})
@@ -177,7 +177,7 @@ func (p *Projector) Backfill(ctx context.Context) (int, error) {
 				model.Output
 				Bytes int64
 			}
-			err := row.Scan(&o.RunID, &o.Index, &o.Key, &o.Kind, &o.Width, &o.Height, &o.Seed, &o.TakeID, &o.Video, &o.Bytes)
+			err := row.Scan(&o.RunID, &o.Index, &o.Key, &o.Kind, &o.Width, &o.Height, &o.Seed, &o.TakeID, &o.Video, &o.Audio, &o.Bytes)
 			return o, err
 		})
 		if err != nil {

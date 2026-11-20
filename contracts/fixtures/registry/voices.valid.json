@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "voices": [
+    {
+      "id": "echo/ada",
+      "family": "echo",
+      "name": "Ada",
+      "speaker": "ada",
+      "language": "en",
+      "version": 1,
+      "preview": null
+    },
+    {
+      "id": "echo/bo",
+      "family": "echo",
+      "name": "Bo",
+      "speaker": "bo",
+      "language": "zh",
+      "style": "calm and slow",
+      "version": 1,
+      "preview": null
+    }
+  ]
+}

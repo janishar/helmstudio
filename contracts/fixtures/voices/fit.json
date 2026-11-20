@@ -1,0 +1,410 @@
+{
+  "description": "voice_fit (README, Voices: fit): GET /library?workflow= for voices, and looks and elements in a workflow whose media is audio (look_fit); items are LibraryItems",
+  "workflows": {
+    "echo-voice-over": {
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "Hello there, how are you, Ada?"
+          }
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    "echo": {
+      "title": "Echo",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "a fox"
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    },
+    "test-speak": {
+      "title": "Test speak",
+      "family": "test",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "A line of exactly thirty chars"
+          }
+        },
+        "speak": {
+          "kind": "test/speak",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    "speak-bypassed": {
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "Hello there, how are you, Ada?"
+          }
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          },
+          "bypass": true
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "description": "an echo starter voice fits echo/speak (accepts preset)",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "echo/ada",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Ada",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "echo",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "echo",
+          "speaker": "ada",
+          "language": "en"
+        }
+      },
+      "expect": null
+    },
+    {
+      "description": "a designed voice fits echo/speak (accepts design)",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+        "kind": "voice",
+        "group": "designed",
+        "name": "Nervous teen",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "designed",
+          "design": "male, 17, tenor, nervous",
+          "language": "en"
+        }
+      },
+      "expect": null
+    },
+    {
+      "description": "a preset of another family does not",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "qwen3-tts/ryan",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Ryan",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "qwen3-tts",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "qwen3-tts",
+          "speaker": "Ryan",
+          "language": "en",
+          "style": "lively"
+        }
+      },
+      "expect": "voice Ryan is for qwen3-tts"
+    },
+    {
+      "description": "echo/speak does not clone (accepts no clip)",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Mara (clip)",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "cloned"
+        }
+      },
+      "expect": "this workflow cannot clone a voice"
+    },
+    {
+      "description": "test/speak takes presets only",
+      "workflow": "test-speak",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+        "kind": "voice",
+        "group": "designed",
+        "name": "Nervous teen",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "designed",
+          "design": "male, 17, tenor, nervous",
+          "language": "en"
+        }
+      },
+      "expect": "this workflow cannot use a designed voice"
+    },
+    {
+      "description": "and only its own family's presets",
+      "workflow": "test-speak",
+      "item": {
+        "id": "echo/ada",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Ada",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "echo",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "echo",
+          "speaker": "ada",
+          "language": "en"
+        }
+      },
+      "expect": "voice Ada is for echo"
+    },
+    {
+      "description": "an image workflow has no voice param",
+      "workflow": "echo",
+      "item": {
+        "id": "echo/ada",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Ada",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "echo",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "echo",
+          "speaker": "ada",
+          "language": "en"
+        }
+      },
+      "expect": "this workflow takes no voice"
+    },
+    {
+      "description": "a bypassed speak node takes no voice",
+      "workflow": "speak-bypassed",
+      "item": {
+        "id": "echo/ada",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Ada",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "echo",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "echo",
+          "speaker": "ada",
+          "language": "en"
+        }
+      },
+      "expect": "this workflow takes no voice"
+    },
+    {
+      "description": "looks never fit an audio workflow",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "echo/soft-light",
+        "kind": "look",
+        "group": "lighting",
+        "name": "Soft light",
+        "handle": null,
+        "text": "soft diffuse light",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "echo",
+        "loras": [],
+        "needs": [
+          "text"
+        ]
+      },
+      "expect": "looks do not apply to speech"
+    },
+    {
+      "description": "elements are not read aloud",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "e1a2b3c4-5d6e-4f70-8a91-b2c3d4e5f601",
+        "kind": "element",
+        "group": "character",
+        "name": "Fox",
+        "handle": "fox",
+        "text": "a small red fox",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [
+          "text"
+        ]
+      },
+      "expect": "mentions are not read aloud; use a dialogue script"
+    },
+    {
+      "description": "the same look still fits an image workflow",
+      "workflow": "echo",
+      "item": {
+        "id": "echo/soft-light",
+        "kind": "look",
+        "group": "lighting",
+        "name": "Soft light",
+        "handle": null,
+        "text": "soft diffuse light",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "echo",
+        "loras": [],
+        "needs": [
+          "text"
+        ]
+      },
+      "expect": null
+    }
+  ]
+}

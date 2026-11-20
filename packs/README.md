@@ -9,6 +9,7 @@ Python identifier, e.g. `qwen_image`) holding:
 | `<runtime>.py` | one module per runtime named in `runtimes` (`torch.py`, `mlx.py`, `native.py`; the fake echo pack has `fake.py`): one function per stage, plus `build()` / `rename()` (and on MLX `convert()`) for weight components |
 | `workflows/*.json` | the workflows the runner publishes, one registry `workflow` object per file |
 | `looks/*.yaml` | (optional) starter looks, shown to every user read-only (below) |
+| `voices/*.yaml` | (optional, API 1.30) starter voices: preset speakers, shown to every user read-only (below) |
 | `GOTCHAS.md` | (optional) hard-won notes |
 
 The runner (`RUNNER_ENV`) loads every pack with a runtime whose `env` equals it: `fake` → `echo`, `torch` → the
@@ -16,8 +17,8 @@ torch packs (uv project `runner_service/`, extra `torch`), `mlx` → the mlx pac
 `runner_service/envs/mlx`, its own lockfile), `native` → the native packs (`minimax_h3`: a child process; uv project
 `runner_service/` with no extra, below). A runner process imports only its own runtime: the core imports neither
 torch nor mlx (`tests/test_mlx.py`). From each pack the core builds the registry values `<host>.<env>.{nodes,workflows,models}`
-(`core/pack.py`, `core/registry.py`), plus `.loras` (the host's shared LoRA index) and `.looks` (the packs' starter
-looks, `core/looks.py`); they are checked against `contracts/registry.schema.json` and every
+(`core/pack.py`, `core/registry.py`), plus `.loras` (the host's shared LoRA index), `.looks` (the packs' starter
+looks, `core/looks.py`) and `.voices` (the packs' starter voices, `core/voices.py`); they are checked against `contracts/registry.schema.json` and every
 workflow against the node schemas at start, so a broken pack stops the runner instead of reaching studio.
 `runner_service/tests/test_packs.py` fails when a pack's values drift from the canonical contract fixtures
 (`contracts/fixtures/registry/<family>.{nodes,workflows}.valid.json`).
@@ -208,10 +209,16 @@ Keys the core understands; anything else is ignored:
     README "Media inputs") `media` (one video or audio take: `accepts` [video] | [audio], optional `trim`, `grid`,
     `max_s`, `max_frames`) and `span` (`{start, end}` seconds on the workflow's one video source): null in a
     workflow, required in a run (`<node>.<param>: a take is required` / `a range is required`); the core re-checks
-    the caps on the facts studio sent, with studio's texts.
+    the caps on the facts studio sent, with studio's texts. From API 1.30 (contracts README "Voices") `voice` (one
+    saved voice: `accepts` 1-3 of `preset`, `clip`, `design`; no wire, never a rows field): null in a workflow, and in
+    a run the voice studio resolved (defs `voice`: `{item_id, version, source, family?, speaker?, text?, language?,
+    style?}`), which reaches the stage in `params` as that dict; the core refuses `<node>.<param>: a voice is
+    required` and re-checks the source and a preset's family (`this workflow cannot use a preset voice` | `cannot
+    clone a voice` | `cannot use a designed voice`; `voice <item_id> is for <family>`).
     **YAML 1.1 reads bare `on`, `off`, `yes`, `no` as booleans: quote them.**
   - `inputs` / `outputs`: port name → port type, in order. Types: `Text`, `Image`, `Int`, `Float`, `Seed`,
-    `Canvas`, `Duration`, `Video` (plain values; `Media` is an input that takes Image or Video) and the
+    `Canvas`, `Duration`, `Video`, (API 1.30) `Audio` (plain values; `Media` is an input that takes Image, Video or
+    Audio) and the
     family-scoped handles `Model`, `Conditioning`, `Latent`. An input that may be
     left unwired is `name: {type: Image, optional: true}`. Param and input names are disjoint, and no param is named
     `bypass` (the runner refuses to start otherwise).
@@ -222,8 +229,14 @@ Keys the core understands; anything else is ignored:
     attribute, such as a Latent after an auto length resolved; else the `frames` param of the nearest upstream node
     that has one, `"auto"` counting as its longest clip, 0 without; without a Canvas or a frames param a media value
     upstream gives `mp` and `frames`: a video take's size and frames, an audio part at 24 fps), `fps` (an input's
-    `fps`, else a video take's, else 24) and the
-    stage's own params: numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
+    `fps`, else a video take's, else 24), (API 1.30) `speech_seconds` (the planned speech length: the code points of the
+    text reaching the stage's first wired `Text` input, a prompt's text or, through other nodes, the nearest upstream
+    prompt's (fewest wires, then node id), else of the stage's nearest upstream prompt, / 15, capped at the stage's
+    optional key `max_seconds` (a number > 0, not published); 0 without text; memory plans evaluate it on the
+    workflow's default text, except that a stage with `max_seconds` is planned at `max_seconds`, so a speech stage
+    should declare it) and the
+    stage's own params (not named `mp`, `mp_in` or `speech_seconds`: the pack fails at load; a `frames`, `fps` or
+    `images` param feeds the size of its name): numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
     `max()`. Anything else fails at start. The value is GB the stage holds at its peak above the components resident
     after it, as the runner measures memory (the process footprint: device buffers and the allocators' caches
     included, not only the framework's active count); fit it from measured runs at two sizes or more.
@@ -278,7 +291,10 @@ def tensor_hook(component: str, model):                  # optional: None, or ho
   `Image`: a `PIL.Image` (the core `output` node stores it as PNG; RGBA is fine). `Video`: the encoded clip
   `{"mp4": bytes, "poster": PIL.Image (frame 0, the video's size), "frames", "fps", "has_audio"}`; the `output` node
   stores `<prefix><n>.poster.png`, then `<prefix><n>.mp4` (H.264 + AAC, `+faststart`), and reports
-  `video {duration_s, fps, frames, has_audio, poster}`; a clip made from a media take adds `"source_map":
+  `video {duration_s, fps, frames, has_audio, poster}`; (API 1.30) `Audio`: `{"wav": bytes, "sample_rate",
+  "duration_s"}`, `wav` the PCM 16-bit mono samples (or a mono 16-bit RIFF WAVE file of them), stored by the
+  `output` node as `<prefix><n>.wav` (`audio/wav`) and reported `kind: audio`, `audio {duration_s = samples /
+  sample_rate, sample_rate}`, no width or height; a clip made from a media take adds `"source_map":
   {take_id, offset_s, new_in_s, new_out_s}` (output time = source time + offset; the generated part), reported as
   `evt.run.output` `source_map`. `Model`: a `core.pack.ModelRef`
   (`variant`, `precision`, `loras` (the ordered LoRA rows of the stacks upstream), `pack.spec`, `folder(component=None)` → the variant's folder for configs, the
@@ -442,6 +458,30 @@ Starter looks (contracts/README.md "Looks"): each file is a list; files are read
   the stack rows of the graph it sends.
 - The echo pack's looks are `contracts/fixtures/registry/looks.valid.json` exactly (`tests/test_looks.py`).
 - Write short, concrete phrases: no brand or film-stock trademarks, no living persons.
+
+## voices/*.yaml
+
+Starter voices (contracts/README.md "Voices"): a pack's preset speakers, each file a list, read in name order,
+voices in file order.
+
+```yaml
+# an example of runner_service/packs/<pack>/voices/<any>.yaml, every key shown
+- id: ryan                    # ^[a-z0-9][a-z0-9-]{0,63}$, unique in the family and no look id of it; published as <family>/<id>
+  name: Ryan                  # 1-80 characters, no control characters
+  speaker: Ryan               # the model's own speaker id: ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ (sent as defs voice `speaker`)
+  language: en                # a BCP 47 tag the pack maps to its model's codes
+  style: bright and quick     # optional, 1-500 characters
+  version: 1                  # >= 1, default 1: bump it when the voice changes
+  preview: ryan.wav           # optional clip next to the YAML: PCM WAV, mono or stereo, at most 2 MB and 30 s
+```
+
+- At most 200 voices per pack; no other keys. A broken file (schema, a duplicate id, a missing or unreadable
+  preview) stops the runner like a broken pack (`core/voices.py`).
+- `preview` is PUT once at start to `packs/<family>/voices/<id>-<sha256[:16]>.wav`; an existing key is never
+  overwritten. It is only the voice's thumb_url, never an input.
+- The runner publishes `<host>.<env>.voices` (an empty list when no pack ships voices). It reads no library at run
+  time: a run's voice param arrives resolved (defs `voice`).
+- The echo pack's voices are `contracts/fixtures/registry/voices.valid.json` exactly (`tests/test_registry.py`).
 
 ## MLX packs (`mlx.py`)
 

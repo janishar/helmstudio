@@ -57,7 +57,7 @@ func TestLibraryItems(t *testing.T) {
 		"name must be 1-80 characters":                                          with(body("x", one), map[string]any{"name": "  "}),
 		"group film is not an element group":                                    with(body("x", one), map[string]any{"group": "film"}),
 		"group prop is not a look group":                                        with(body("x", one), map[string]any{"kind": "look"}),
-		"kind must be element or look":                                          with(body("x", one), map[string]any{"kind": "x"}),
+		"kind must be element, look or voice":                                   with(body("x", one), map[string]any{"kind": "x"}),
 		"loras: an element has no LoRAs":                                        with(body("x", one), map[string]any{"loras": []any{map[string]any{"lora": map[string]any{"lora_id": "x"}, "strength": 1}}}),
 		"unknown field lora":                                                    with(body("x", one), map[string]any{"lora": "x"}),
 		"text must be at most 2000 characters":                                  with(body("x", one), map[string]any{"text": strings.Repeat("é", 2001)}),

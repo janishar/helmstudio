@@ -75,7 +75,7 @@
         "boolean",
         "null"
       ],
-      "description": "an int, float, bool, string, text, enum or seed value; null only for a seed (random) or an image, media or span param left empty"
+      "description": "an int, float, bool, string, text, enum or seed value; null only for a seed (random) or an image, media, span or (API 1.30) voice param left empty"
     },
     "imageRef": {
       "type": "object",
@@ -227,7 +227,7 @@
       }
     },
     "inputValue": {
-      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only); from API 1.19 a Media value as mediaRef and a span as spanValue; from API 1.22 a rows item's media field as mediaRef",
+      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only); from API 1.19 a Media value as mediaRef and a span as spanValue; from API 1.22 a rows item's media field as mediaRef; from API 1.30 a voice param's value as voiceRef (never a rows item field)",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -243,6 +243,9 @@
         },
         {
           "$ref": "#/$defs/frameRef"
+        },
+        {
+          "$ref": "#/$defs/voiceRef"
         },
         {
           "type": "array",
@@ -276,7 +279,7 @@
       ]
     },
     "resolvedValue": {
-      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`; from API 1.19 every Media value resolved to `media` (from API 1.22 a rows item's media field too)",
+      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`; from API 1.19 every Media value resolved to `media` (from API 1.22 a rows item's media field too); from API 1.30 every voice value resolved to `voice`",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -289,6 +292,9 @@
         },
         {
           "$ref": "#/$defs/image"
+        },
+        {
+          "$ref": "#/$defs/voice"
         },
         {
           "type": "array",
@@ -319,7 +325,7 @@
       ]
     },
     "paramValue": {
-      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types. From API 1.19 a `media` param: mediaRef (resolved: media); a `span` param: spanValue; from API 1.22 a rows item's media field: mediaRef (resolved: media)",
+      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types. From API 1.19 a `media` param: mediaRef (resolved: media); a `span` param: spanValue; from API 1.22 a rows item's media field: mediaRef (resolved: media); from API 1.30 a `voice` param: voiceRef (resolved: voice)",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -338,6 +344,12 @@
         },
         {
           "$ref": "#/$defs/image"
+        },
+        {
+          "$ref": "#/$defs/voiceRef"
+        },
+        {
+          "$ref": "#/$defs/voice"
         },
         {
           "type": "array",
@@ -3009,6 +3021,132 @@
           "maximum": 86400
         }
       }
+    },
+    "voiceRef": {
+      "type": "object",
+      "description": "a voice value as a client writes it (API 1.30; a `voice` param, contracts/README.md, Voices): a saved voice by id, the caller's own (a UUID) or a starter voice (`<family>/<id>`). Never a key, a URL or the voice's fields",
+      "required": [
+        "voice_id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "voice_id": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$"
+        }
+      }
+    },
+    "voice": {
+      "type": "object",
+      "description": "a voice value as studio resolves it for cmd.run.execute (API 1.30): the library item's facts at run creation, so the runner reads no library. source preset: a pack's speaker (`family`, `speaker`); design: a voice described in words (`text`); clip (from API 1.31: a cloned voice; studio sends none in 1.30). The runner's cache key is (item_id, version) plus the fields",
+      "required": [
+        "item_id",
+        "version",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "item_id": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "enum": [
+            "preset",
+            "clip",
+            "design"
+          ]
+        },
+        "family": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "description": "preset only: the starter voice's family (= the node's)"
+        },
+        "speaker": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "description": "preset only: the model's speaker id"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "design only: the description of the voice (LibraryItem voice.design)"
+        },
+        "language": {
+          "type": "string",
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$",
+          "description": "the voice's BCP 47 tag; absent = none recorded (the node's own language param decides)"
+        },
+        "style": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "how it speaks, in words; absent = none"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "preset"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "family",
+              "speaker"
+            ],
+            "not": {
+              "required": [
+                "text"
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "family"
+                  ]
+                },
+                {
+                  "required": [
+                    "speaker"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "design"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
     }
   }
 }

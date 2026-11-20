@@ -89,16 +89,16 @@ def png_size(client, url: str) -> tuple[int, int]:
 
 def test_workflows_have_media_and_filter(api, echo_video):
     listed = {w["id"]: w for w in ok(api.get(f"{STUDIO}/workflows"))["workflows"]}
-    assert all(w["media"] in ("image", "video") for w in listed.values())
+    assert all(w["media"] in ("image", "video", "audio") for w in listed.values())
     assert (listed["echo"]["media"], listed[WF]["media"], echo_video["media"]) == (
         "image",
         "video",
         "video",
     )
-    for media in ("image", "video"):
+    for media in ("image", "video", "audio"):  # audio from API 1.30 (test_voices)
         got = ok(api.get(f"{STUDIO}/workflows", params={"media": media}))["workflows"]
         assert {w["id"] for w in got} == {i for i, w in listed.items() if w["media"] == media}
-    assert api.get(f"{STUDIO}/workflows", params={"media": "audio"}).status_code == 422
+    assert api.get(f"{STUDIO}/workflows", params={"media": "sound"}).status_code == 422
 
 
 def test_schemas_of_echo_video(echo_video):

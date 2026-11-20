@@ -10,7 +10,7 @@
       "title": "LTX-2.5 Text to video",
       "family": "ltx",
       "env": "mlx",
-      "media": "audio",
+      "media": "sound",
       "nodes": {
         "prompt": {
           "kind": "prompt",

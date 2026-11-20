@@ -13,7 +13,8 @@ import (
 	"github.com/helmstudio/helmgo/utility"
 )
 
-// LibraryItem is a library item: one of the caller's elements or looks, or a starter look, its images signed.
+// LibraryItem is a library item: one of the caller's elements, looks or (API 1.30) voices, or a starter look or voice,
+// its images signed.
 type LibraryItem struct {
 	ID         string          `json:"id"`
 	Kind       string          `json:"kind"`
@@ -33,6 +34,25 @@ type LibraryItem struct {
 	FromTakeID *string         `json:"from_take_id"`
 	Fits       *bool           `json:"fits,omitempty"`   // only with ?workflow=
 	Reason     json.RawMessage `json:"reason,omitempty"` // with fits: a string, or null when it fits
+	Voice      *VoiceInfo      `json:"voice,omitempty"`  // API 1.30, kind voice only
+}
+
+// VoiceInfo is a voice's own fields (API 1.30, contracts/README.md "Voices"): source preset (family, speaker,
+// language, style from the pack) or designed (design, language, style from the caller); cloned from 1.31.
+type VoiceInfo struct {
+	Source   string `json:"source"`
+	Family   string `json:"family,omitempty"`
+	Speaker  string `json:"speaker,omitempty"`
+	Design   string `json:"design,omitempty"`
+	Language string `json:"language,omitempty"`
+	Style    string `json:"style,omitempty"`
+}
+
+// VoiceDesign is a designed voice's fields as the caller writes them (POST and PUT of a voice); Check trims them.
+type VoiceDesign struct {
+	Design   *string `json:"design"`
+	Language *string `json:"language"`
+	Style    *string `json:"style"`
 }
 
 // HandleOr is the handle, "" for a look.
@@ -98,10 +118,20 @@ type LibraryFields struct {
 	Text   *string           `json:"text"`
 	Images []LibraryImageRef `json:"images"`
 	Loras  []LookLoraRef     `json:"loras"`
+	Voice  *VoiceDesign      `json:"voice"` // API 1.30, a voice only
 }
 
-// LibraryGroups are an element's groups.
-var LibraryGroups = []string{"character", "location", "prop"}
+// LibraryGroups are an element's groups; VoiceGroups a voice's (= its voice.source).
+var (
+	LibraryGroups = []string{"character", "location", "prop"}
+	VoiceGroups   = []string{"preset", "cloned", "designed"}
+)
+
+// AllGroups are every library group: an element's, a look's, a voice's.
+func AllGroups() []string { return slices.Concat(LibraryGroups, LookGroups, VoiceGroups) }
+
+// Language is a BCP 47 tag as the API takes it (en, en-US, zh, pt-BR).
+var Language = regexp.MustCompile(`^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$`)
 
 // Handle is an element's handle: what @ mentions.
 var Handle = regexp.MustCompile(`^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$`)
@@ -134,19 +164,26 @@ func (f *LibraryFields) Check(kind string) string {
 		f.Text = new(string)
 	}
 	*f.Text = strings.TrimSpace(*f.Text)
-	look := kind == "look"
+	look, elem := kind == "look", kind == "element"
+	if kind == "voice" { // first: a voice's bad group is "not a voice group", whatever it is
+		if detail := f.checkVoice(); detail != "" {
+			return detail
+		}
+	} else if !slices.Contains(AllGroups(), f.Group) {
+		return "group must be one of " + strings.Join(AllGroups(), ", ")
+	} else if f.Voice != nil {
+		return "voice: only a voice has voice fields"
+	}
 	switch n := utf8.RuneCountInString(f.Name); {
-	case !slices.Contains(LibraryGroups, f.Group) && !slices.Contains(LookGroups, f.Group):
-		return "group must be one of " + strings.Join(append(slices.Clone(LibraryGroups), LookGroups...), ", ")
 	case look && !slices.Contains(LookGroups, f.Group):
 		return "group " + f.Group + " is not a look group"
-	case !look && !slices.Contains(LibraryGroups, f.Group):
+	case elem && !slices.Contains(LibraryGroups, f.Group):
 		return "group " + f.Group + " is not an element group"
 	case n < 1 || n > 80:
 		return "name must be 1-80 characters"
 	case look && f.Handle != nil:
 		return "a look has no handle"
-	case !look && !Handle.MatchString(f.HandleOrEmpty()):
+	case elem && !Handle.MatchString(f.HandleOrEmpty()):
 		return "handle must be a slug: a-z, 0-9, - and _, starting with a letter, ending with a letter or digit, at most 40 characters"
 	case utf8.RuneCountInString(*f.Text) > 2000:
 		return "text must be at most 2000 characters"
@@ -154,11 +191,11 @@ func (f *LibraryFields) Check(kind string) string {
 		return "name must not contain control characters"
 	case strings.ContainsFunc(*f.Text, func(r rune) bool { return unicode.IsControl(r) && !strings.ContainsRune("\n\r\t", r) }):
 		return "text must not contain control characters other than newlines and tabs"
-	case !look && (len(f.Images) < 1 || len(f.Images) > MaxElementImages):
+	case elem && (len(f.Images) < 1 || len(f.Images) > MaxElementImages):
 		return "images: an element has 1 to 4 images"
 	case look && len(f.Images) > MaxElementImages:
 		return "images: a look has at most 4 images"
-	case !look && len(f.Loras) > 0:
+	case elem && len(f.Loras) > 0:
 		return "loras: an element has no LoRAs"
 	}
 	for i, image := range f.Images {
@@ -173,6 +210,61 @@ func (f *LibraryFields) Check(kind string) string {
 		}
 	}
 	return f.checkLoras()
+}
+
+// checkVoice checks a voice's fields in the contract's order (API 1.30): only a designed voice is made here, with no
+// handle, text, images or LoRAs, and its design (1-2000 characters, no control characters but newlines and tabs),
+// language (a BCP 47 tag) and style (at most 500 characters), trimmed.
+func (f *LibraryFields) checkVoice() string {
+	switch {
+	case !slices.Contains(VoiceGroups, f.Group):
+		return "group " + f.Group + " is not a voice group"
+	case f.Group == "preset":
+		return "preset voices come from packs"
+	case f.Group == "cloned":
+		return "cloned voices are not available yet"
+	case f.Handle != nil:
+		return "a voice has no handle"
+	case *f.Text != "":
+		return "a voice has no text; describe it in voice.design"
+	case len(f.Images) > 0:
+		return "images: a voice has no images"
+	case len(f.Loras) > 0:
+		return "loras: a voice has no LoRAs"
+	case f.Voice == nil || f.Voice.Design == nil:
+		return "voice: a designed voice needs voice.design"
+	}
+	v := f.Voice
+	*v.Design = strings.TrimSpace(*v.Design)
+	if v.Style != nil {
+		*v.Style = strings.TrimSpace(*v.Style)
+	}
+	if v.Language != nil {
+		*v.Language = strings.TrimSpace(*v.Language)
+	}
+	switch n := utf8.RuneCountInString(*v.Design); {
+	case n < 1 || n > 2000:
+		return "voice.design must be 1-2000 characters"
+	case strings.ContainsFunc(*v.Design, func(r rune) bool { return unicode.IsControl(r) && !strings.ContainsRune("\n\r\t", r) }):
+		return "voice.design must not contain control characters other than newlines and tabs"
+	case v.Language != nil && !Language.MatchString(*v.Language):
+		return "voice.language: " + *v.Language + " is not a BCP 47 language tag"
+	case v.Style != nil && utf8.RuneCountInString(*v.Style) > 500:
+		return "voice.style must be at most 500 characters"
+	}
+	return ""
+}
+
+// Designed is the stored VoiceInfo of a checked designed voice.
+func (v *VoiceDesign) Designed() VoiceInfo {
+	out := VoiceInfo{Source: "designed", Design: *v.Design}
+	if v.Language != nil {
+		out.Language = *v.Language
+	}
+	if v.Style != nil {
+		out.Style = *v.Style
+	}
+	return out
 }
 
 // checkLoras checks the LoRAs' shape: at most 4, each a {lora_id} and a strength 0..2.
@@ -201,8 +293,8 @@ type LibraryItemCreate struct {
 // Validate trims the body and returns the 422 detail, "" when valid.
 func (b *LibraryItemCreate) Validate() string {
 	switch {
-	case b.Kind != "element" && b.Kind != "look":
-		return "kind must be element or look"
+	case b.Kind != "element" && b.Kind != "look" && b.Kind != "voice":
+		return "kind must be element, look or voice"
 	case b.FromTake != nil && b.Kind != "look":
 		return "from_take makes looks only"
 	case b.FromTake != nil && !utility.IsUUID(b.FromTake.TakeID):

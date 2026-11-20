@@ -1,4 +1,4 @@
-"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows, .models, .loras and .looks, written once
+"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows, .models, .voices, .loras and .looks, written once
 at start (`loras`: the shared LoRAs core.lora.Library indexed, `looks`: the packs' starter looks with their LoRAs
 looked up in that index; main adds both with `scanned_value`).
 
@@ -11,7 +11,7 @@ import logging
 import math
 
 from config import ENV, HOST, PUBLISHED_BY
-from core import graph, models
+from core import graph, models, voices
 from core import pack as packs
 from messaging import schemas
 from messaging.publisher import now
@@ -19,7 +19,7 @@ from messaging.publisher import now
 log = logging.getLogger(__name__)
 
 MODELS_BUDGET = 768 * 1024  # bytes of the models value (NATS max_payload 1 MB)
-KINDS = ("nodes", "workflows", "models", "loras", "looks")
+KINDS = ("nodes", "workflows", "models", "voices", "loras", "looks")
 
 
 def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
@@ -47,15 +47,28 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     node_schemas = {k: s for k, (s, _) in every.items()}
     impls = {k: n for k, (_, n) in every.items()}
     values["models"] = models_value([p for p, _ in loaded], impls, node_schemas, env)
+    values["voices"] = (
+        {"schema_version": 1} | meta | {"voices": voices.entries([p for p, _ in loaded])}
+    )
     for kind, value in values.items():
         if errs := schemas.registry_errors(kind, value):
             raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
-    ids = [f"{p.family}/{x['id']}" for p, _ in loaded for x in p.looks]
-    if dup := {i for i in ids if ids.count(i) > 1}:
-        raise ValueError(f"looks: ids {sorted(dup)} are shipped by two packs")
+    for kind in ("looks", "voices"):
+        ids = [f"{p.family}/{x['id']}" for p, _ in loaded for x in getattr(p, kind)]
+        if dup := {i for i in ids if ids.count(i) > 1}:
+            raise ValueError(f"{kind}: ids {sorted(dup)} are shipped by two packs")
+    look_ids = {f"{p.family}/{x['id']}" for p, _ in loaded for x in p.looks}
+    if clash := look_ids & {f"{p.family}/{x['id']}" for p, _ in loaded for x in p.voices}:
+        raise ValueError(
+            f"voices: ids {sorted(clash)} are also look ids (one /library/<family>/<id> URL)"
+        )
     for w in workflows:
         if w["env"] != env:
             raise ValueError(f"workflow {w['id']}: env {w['env']}, this runner is {env}")
+        if (want := graph.workflow_media(w["nodes"], node_schemas)) != w.get("media", "image"):
+            raise ValueError(
+                f"workflow {w['id']}: media {w.get('media', 'image')}, its graph makes {want}"
+            )
         if errs := graph.validate(w["nodes"], node_schemas, run=False):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
     return values, impls, [p for p, _ in loaded]
@@ -204,7 +217,9 @@ def memory_plan(
             if not (impl.uses or impl.peak is not None):
                 continue
             keys = graph._components(nodes, impls, node_schemas, nid)
-            peak = graph.stage_peak(nodes, node_schemas, nid, impl, nodes[nid]["params"], {})
+            peak = graph.stage_peak(
+                nodes, node_schemas, nid, impl, nodes[nid]["params"], {}, plan=True
+            )
             stages.append((set(keys), peak, impl.alone))
             if impl.peak is not None:
                 sizes = graph.stage_sizes(nodes, node_schemas, nid, {})

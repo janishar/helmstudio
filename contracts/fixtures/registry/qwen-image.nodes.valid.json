@@ -399,7 +399,7 @@
       "kind": "output",
       "title": "Output",
       "family": null,
-      "help": "Stores its input as a run output: an image or a video take.",
+      "help": "Stores its input as a run output: an image, a video or (from API 1.30) an audio take.",
       "params": [],
       "inputs": [
         {

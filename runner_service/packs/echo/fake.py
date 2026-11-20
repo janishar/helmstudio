@@ -1,5 +1,6 @@
 """Stage functions of the echo pack (runtime fake): see model.yaml."""
 
+import array
 import importlib.util
 import json
 import math
@@ -9,6 +10,7 @@ import sys
 import tempfile
 import textwrap
 import time
+import zlib
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -224,6 +226,41 @@ def a2v(ctx, params: dict, inputs: dict) -> dict:
         data = (tmp / "out.mp4").read_bytes()
     return _clip(poster, frames, A2V_FPS, data, take_id=src["take_id"], offset_s=-start, new_in_s=0,
                  new_out_s=end - start)  # fmt: skip
+
+
+SPEECH_RATE, CHAR_SAMPLES, CHARS_PER_STEP = (
+    24000,
+    1600,
+    15,
+)  # 1/15 s per character (README, Voices: seconds)
+
+
+def _tone(hz: float, phase: float) -> bytes:
+    return array.array("h", (round(12000 * math.sin(phase + 2 * math.pi * hz * i / SPEECH_RATE))
+                             for i in range(CHAR_SAMPLES))).tobytes()  # fmt: skip
+
+
+def speak(ctx, params: dict, inputs: dict) -> dict:
+    """PCM 16-bit mono at 24 kHz: one 1/15 s sine per character, its pitch from the character and the voice (defs
+    voice, as studio resolved it), its phase from the seed; deterministic, one progress step per 15 characters."""
+    text = inputs["text"]
+    if not text:
+        raise RunError(f"{ctx.node}: nothing to say")
+    voice = zlib.crc32(json.dumps(params["voice"], sort_keys=True).encode())
+    phase = params["seed"] % 1000 / 1000 * 2 * math.pi
+    tones: dict[str, bytes] = {}
+    steps = math.ceil(len(text) / CHARS_PER_STEP)
+    for step in range(1, steps + 1):
+        ctx.check()
+        time.sleep(params["delay_ms"] / 1000)
+        for c in text[(step - 1) * CHARS_PER_STEP : step * CHARS_PER_STEP]:
+            if c not in tones:
+                tones[c] = _tone(110 + (ord(c) * 37 + voice) % 770, phase)
+        ctx.progress(step, steps, "speaking")
+    pcm = b"".join(tones[c] for c in text)
+    return {
+        "audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(text) / CHARS_PER_STEP}
+    }
 
 
 def lora_stack(ctx, params: dict, inputs: dict) -> dict:

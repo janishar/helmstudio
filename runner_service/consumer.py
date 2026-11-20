@@ -33,6 +33,7 @@ ACK_WAIT = 30  # seconds
 HEARTBEAT = 10  # seconds between in_progress() while a run executes
 SHUTDOWN = "the runner shut down during the run"
 STALLED = 70  # exit status after a stall
+CONTENT_TYPES = {"wav": "audio/wav"}  # the contract's type (mimetypes says audio/x-wav)
 
 
 class Consumer:
@@ -166,7 +167,9 @@ class Consumer:
                         await self.store.put(pkey, png, "image/png")
                         meta["video"] = meta["video"] | {name: {"key": pkey, "width": meta["width"],
                                                                 "height": meta["height"], "bytes": len(png)}}  # fmt: skip
-                await self.store.put(key, body, mimetypes.types_map[f".{ext}"])
+                await self.store.put(
+                    key, body, CONTENT_TYPES.get(ext) or mimetypes.types_map[f".{ext}"]
+                )
                 etag = hashlib.md5(body).hexdigest()  # the S3 ETag of this single-part PUT
                 await events.output(
                     index=index, key=key, bytes=len(body), etag=etag, seed=ctx.seed, **meta

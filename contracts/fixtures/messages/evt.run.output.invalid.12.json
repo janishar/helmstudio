@@ -1,0 +1,20 @@
+{
+  "type": "evt.run.output",
+  "version": 1,
+  "id": "0b1c2d3e-4f50-4a61-8b72-c3d4e5f6a701",
+  "job_id": "3c9d2b1a-4e5f-4a6b-8c7d-9e0f1a2b3c41",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-21T10:00:05Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 3,
+    "index": 0,
+    "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9d2b1a-4e5f-4a6b-8c7d-9e0f1a2b3c41/1/0.wav",
+    "kind": "audio",
+    "bytes": 96044,
+    "etag": "9e107d9d372bb6826bd81d3542a419d6",
+    "seed": 42
+  }
+}

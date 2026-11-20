@@ -71,10 +71,11 @@ type Output struct {
 	Seed   *int64
 	TakeID *string         // the take it became; nil only for outputs stored before the gallery
 	Video  json.RawMessage // a video's metadata and poster (gallery dto.Video); null for an image
+	Audio  json.RawMessage // API 1.30: an audio output's {duration_s, sample_rate}; null otherwise
 }
 
 // OutputCols are the columns Output scans, in order.
-const OutputCols = `run_id::text, idx, key, kind, width, height, seed, take_id::text, video`
+const OutputCols = `run_id::text, idx, key, kind, width, height, seed, take_id::text, video, audio`
 
 // Event is a run_events row.
 type Event struct {

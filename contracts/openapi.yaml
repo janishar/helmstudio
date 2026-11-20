@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.29.0
+  version: 1.30.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4")'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -108,7 +108,7 @@ paths:
         `updated_at` first. `problems` is never in a list (only `GET /v1/studio/workflows/{workflow_id}`).
       parameters:
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowSource'}, description: 'only templates or only the caller''s own; absent = both'}
-        - {name: media, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowMedia'}, description: 'only workflows whose takes are images, or videos (the Image / Video switch); absent = both. Another value is 422'}
+        - {name: media, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowMedia'}, description: 'only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); absent = all three. Another value is 422'}
       responses:
         '200': {description: workflows, content: {application/json: {schema: {$ref: '#/components/schemas/WorkflowList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -418,6 +418,14 @@ paths:
         `workflow` (a template slug or one of the caller's workflow UUIDs; 422 `unknown workflow <id>`) filters nothing:
         it adds `fits` and `reason` to every item, against that workflow's graph and the caller's LoRAs now
         (contracts/README.md, Looks: fit); the picker greys the items that do not fit with the reason.
+
+        From 1.30 the list also holds the caller's voices and every starter voice a live host publishes
+        (contracts/README.md, Voices: starter voices), ordered as the starter looks (by `name`, then `id`, after the own
+        items); `kind=voice` keeps only voices. With `workflow`, a voice's `fits` / `reason` is the voice fit
+        (`this workflow takes no voice`, `this workflow cannot use a designed voice`, `this workflow cannot use a preset
+        voice`, `this workflow cannot clone a voice`, `voice <name> is for <family>`), and in a workflow whose media is
+        audio every look answers `looks do not apply to speech` and every element `mentions are not read aloud; use a
+        dialogue script`.
       parameters:
         - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryKind'}}
         - {name: group, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryGroup'}}
@@ -454,6 +462,16 @@ paths:
         <id> not found` for a take that is unknown, another user's, deleted or a pending upload. 409 `handle @<handle>
         is already used` (unique per owner, over every kind), 409 `You have 200 library items; delete some first.`
         201 with `version` 1.
+
+        Voices (from 1.30, `kind: voice`, contracts/README.md, Voices): only `group: designed` can be made (`name`,
+        `voice {design, language?, style?}`); the item's `voice.source` is `designed`, `handle` null, `text` "",
+        no images or LoRAs; voices count in the same 200 items. 422 `group <g> is not a voice group`, `preset voices
+        come from packs`, `cloned voices are not available yet` (group cloned), `a voice has no handle`, `a voice has
+        no text; describe it in voice.design`, `images: a voice has no images`, `loras: a voice has no LoRAs`,
+        `voice: a designed voice needs voice.design`, `voice.design must be 1-2000 characters`, `voice.language: <tag>
+        is not a BCP 47 language tag`, `voice.style must be at most 500 characters`, `voice.design must not contain
+        control characters other than newlines and tabs`, `voice: only a voice has voice fields` (an element or look
+        with `voice`); `from_take makes looks only` holds for voices too.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemCreate'}}}
@@ -484,7 +502,9 @@ paths:
         since you opened it (now version <n>)` (a look: `look changed since you opened it (now version <n>)`), nothing
         changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). Checked like POST (the handle may stay its own). On
         success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
-        element `changed`. `kind` never changes.
+        element `changed`. `kind` never changes. From 1.30 a designed voice is checked like POST with `kind: voice` (its
+        `voice` required; stale = 409 `voice changed since you opened it (now version <n>)`); takes made before keep the
+        voice they ran with (`made_with.voices` records the version).
       parameters: [{$ref: '#/components/parameters/LibraryItemId'}]
       requestBody:
         required: true
@@ -515,8 +535,8 @@ paths:
     get:
       tags: [studio]
       operationId: studioGetStarterLook
-      summary: A starter look (id `<family>/<look_id>`, the same URL as `/library/` + the id)
-      description: 'A starter look some live host publishes now; anything else is 404.'
+      summary: A starter look or voice (id `<family>/<look_id>`, the same URL as `/library/` + the id)
+      description: 'A starter look or (from 1.30) starter voice some live host publishes now (a family''s look and voice ids never clash); anything else is 404.'
       parameters: [{$ref: '#/components/parameters/LookFamily'}, {$ref: '#/components/parameters/StarterLookId'}]
       responses:
         '200': {description: the look, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
@@ -527,7 +547,7 @@ paths:
       tags: [studio]
       operationId: studioReplaceStarterLook
       summary: 'Always refused: starter looks are read-only'
-      description: '409 `starter looks are read-only; save your own copy` for a starter look a live host publishes; 404 otherwise. Nothing is read from the body.'
+      description: '409 `starter looks are read-only; save your own copy` for a starter look a live host publishes, from 1.30 `starter voices are read-only` for a starter voice; 404 otherwise. Nothing is read from the body.'
       parameters: [{$ref: '#/components/parameters/LookFamily'}, {$ref: '#/components/parameters/StarterLookId'}]
       responses:
         '200': {description: never answered, content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItem'}}}}
@@ -539,7 +559,7 @@ paths:
       tags: [studio]
       operationId: studioDeleteStarterLook
       summary: 'Always refused: starter looks are read-only'
-      description: '409 `starter looks are read-only; save your own copy` for a starter look a live host publishes; 404 otherwise.'
+      description: '409 `starter looks are read-only; save your own copy` for a starter look a live host publishes, from 1.30 `starter voices are read-only` for a starter voice; 404 otherwise.'
       parameters: [{$ref: '#/components/parameters/LookFamily'}, {$ref: '#/components/parameters/StarterLookId'}]
       responses:
         '204': {description: never answered}
@@ -700,7 +720,11 @@ paths:
         left null (`image.image: an image is required`) is 422 too. From 1.19 media and span values have their own texts
         (`source.source: take <id> is not a video`, `audio.source: take <id> has no sound`, `retake.span: a range is
         required`, … contracts/README.md, Media inputs) and a value outside a node's `only` is `model.variant: must be one
-        of dev`. When no host is eligible (none live with the env and the workflow),
+        of dev`. From 1.30 voice values (`VoiceRef`) are resolved as the caller (contracts/README.md, Voices): 422
+        `speak.voice: a voice is required`, `speak.voice: voice <id> not found` (unknown, another user's, deleted, not a
+        voice, or a starter voice no live host publishes), `speak.voice: this workflow cannot use a designed voice` (the
+        voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; in a workflow whose media is
+        audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. When no host is eligible (none live with the env and the workflow),
         the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
         From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
         planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility.
@@ -2594,8 +2618,8 @@ components:
     ModelJobId: {name: job_id, in: path, required: true, schema: {type: string}, description: model job UUID (malformed = 404)}
     HostName: {name: host, in: path, required: true, schema: {type: string}, description: 'a host name of the KV hosts (`mac`; unknown or malformed = 404)'}
     LibraryItemId: {name: item_id, in: path, required: true, schema: {type: string}, description: library item UUID (malformed = 404)}
-    LookFamily: {name: family, in: path, required: true, schema: {type: string}, description: 'a starter look''s family (the part of its id before `/`; malformed = 404)'}
-    StarterLookId: {name: look_id, in: path, required: true, schema: {type: string}, description: 'the pack''s look id (the part after `/`; malformed = 404)'}
+    LookFamily: {name: family, in: path, required: true, schema: {type: string}, description: 'a starter look''s or (1.30) voice''s family (the part of its id before `/`; malformed = 404)'}
+    StarterLookId: {name: look_id, in: path, required: true, schema: {type: string}, description: 'the pack''s look or (1.30) voice id (the part after `/`; malformed = 404)'}
     BatchRowN: {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
     ProviderName: {name: name, in: path, required: true, schema: {type: string}, description: 'a provider''s name (unknown = 404 on DELETE and test; malformed = 404)'}
@@ -2671,11 +2695,12 @@ components:
     # The registry shapes (contracts/registry.schema.json nodeSchema, workflow), served as published.
     PortType:
       type: string
-      enum: [Text, Image, Int, Float, Seed, Canvas, Model, Conditioning, Latent, Video, Duration, Media]
+      enum: [Text, Image, Int, Float, Seed, Canvas, Model, Conditioning, Latent, Video, Duration, Media, Audio]
       description: |
         An input accepts an output of the same type; an input of type `Media` (the output node's `media`; never an
-        output) also accepts `Image` and `Video` (contracts/README.md, Graph rules: fits). `Video` is an MP4 that may
-        carry an audio track; `Duration` is `{frames, fps}`. Model, Conditioning and Latent are family-scoped handles:
+        output) also accepts `Image`, `Video` and, from 1.30, `Audio` (contracts/README.md, Graph rules: fits). `Video`
+        is an MP4 that may carry an audio track; `Audio` (1.30) is speech, a WAV (PCM 16-bit, mono, the model's own
+        rate); `Duration` is `{frames, fps}`. Model, Conditioning and Latent are family-scoped handles:
         they wire nodes of one family inside one workflow and never cross a process (`Latent` of ltx carries video and
         audio latents together).
     Port:
@@ -2685,7 +2710,7 @@ components:
         name: {type: string}
         type: {$ref: '#/components/schemas/PortType'}
         optional: {type: boolean, description: 'inputs only: true = may be left unwired (the feature is off); absent = required'}
-    ScalarValue: {type: [string, number, boolean, 'null'], description: 'null only for a seed (random) or an image param left empty'}
+    ScalarValue: {type: [string, number, boolean, 'null'], description: 'null only for a seed (random) or an image, media, span or (1.30) voice param left empty'}
     ImageRef:
       type: object
       description: |
@@ -2716,6 +2741,16 @@ components:
         take_id: {type: string, format: uuid}
         in: {type: number, minimum: 0, maximum: 86400}
         out: {type: number, exclusiveMinimum: 0, maximum: 86400}
+    VoiceRef:
+      type: object
+      description: |
+        A voice value (API 1.30; a `voice` param): a saved voice the caller can use, by id: one of the caller's own
+        (a UUID) or a starter voice (`<family>/<pack voice id>`). Never a key, a URL or the voice's fields; studio
+        resolves it when it creates the run (contracts/README.md, Voices).
+      required: [voice_id]
+      additionalProperties: false
+      properties:
+        voice_id: {type: string, pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$'}
     SpanValue:
       type: object
       description: 'A `span` param''s value (API 1.19): a time range on the workflow''s one video media source, in that take''s own seconds (Retake: the stretch to regenerate)'
@@ -2729,12 +2764,13 @@ components:
       description: 'one item of a rows value: field (the param''s `item`) → value; from 1.22 a media field''s value is a MediaRef'
       additionalProperties: {anyOf: [{$ref: '#/components/schemas/ScalarValue'}, {$ref: '#/components/schemas/ImageRef'}, {$ref: '#/components/schemas/MediaRef'}, {$ref: '#/components/schemas/LoraRef'}]}
     ParamValue:
-      description: 'a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null'
+      description: 'a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null; from 1.30 a `voice` param: VoiceRef or null'
       anyOf:
         - {$ref: '#/components/schemas/ScalarValue'}
         - {$ref: '#/components/schemas/ImageRef'}
         - {$ref: '#/components/schemas/MediaRef'}
         - {$ref: '#/components/schemas/SpanValue'}
+        - {$ref: '#/components/schemas/VoiceRef'}
         - {type: array, maxItems: 100, items: {$ref: '#/components/schemas/RowItem'}}
     ParamSchema:
       type: object
@@ -2766,11 +2802,15 @@ components:
         sound tile with its trim control); `min_s` (media) is the shortest it reads; `max_total_s` (rows with one media
         field) the most seconds the items read together; `not_with` (rows) names optional inputs of the node: while one
         is wired the rows stay empty (mentions add none, "Use in…" skips them).
+        From 1.30 (contracts/README.md, Voices): `voice`: one saved voice (`VoiceRef`, default null; a run needs one) of
+        the sources in `accepts` (`preset`: a starter voice of the node's family; `clip`: a cloned voice, from 1.31;
+        `design`: a voice described in words); the UI draws the voice picker. It takes no wire and is never a rows item
+        field.
       required: [name, type, default]
       properties:
         name: {type: string}
-        type: {type: string, enum: [int, float, bool, string, text, enum, seed, image, rows, frames, media, span]}
-        accepts: {type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: {type: string, enum: [video, audio]}, description: 'media only: the take kinds it takes; video: a video take; audio: an audio take, or a video take''s sound'}
+        type: {type: string, enum: [int, float, bool, string, text, enum, seed, image, rows, frames, media, span, voice]}
+        accepts: {type: array, minItems: 1, maxItems: 3, uniqueItems: true, items: {type: string, enum: [video, audio, preset, clip, design]}, description: 'media only: the take kinds it takes (video, audio); video: a video take; audio: an audio take, or a video take''s sound. From 1.30, voice only: the voice sources it takes (preset, clip, design)'}
         trim: {type: boolean, description: 'media only: true = the value may carry in / out (the part read); absent = the whole take'}
         grid: {type: integer, description: 'media only: a video take''s width and height must be multiples of it'}
         max_s: {type: number, description: 'media only: the longest it reads in seconds (the take, or out - in with trim)'}
@@ -2859,7 +2899,7 @@ components:
         action: {type: string, description: 'from 1.19, templates only (registry `action`): the take action''s label when it is offered for a take ("Use in…", a clip''s actions): Animate, Edit, Extend, Retake a section; absent = the title'}
         family: {type: string}
         env: {type: string, description: the runner env that executes it}
-        media: {type: string, enum: [image, video, text], description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed'}
+        media: {type: string, enum: [image, video, audio, text], description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed'}
         nodes: {type: object, additionalProperties: {$ref: '#/components/schemas/GraphNode'}, description: node id → node}
         node_schemas: {type: object, additionalProperties: {$ref: '#/components/schemas/NodeSchema'}, description: 'kind → schema, for every kind in nodes the registry has (a kind no runner publishes is left out)'}
         source: {$ref: '#/components/schemas/WorkflowSource'}
@@ -2872,8 +2912,8 @@ components:
         keyframes: {oneOf: [{$ref: '#/components/schemas/WorkflowKeyframes'}, {type: 'null'}], description: 'from 1.17, always sent (computed, contracts/README.md Timeline: New shot options): the rows New shot binds a first (and with `last`, a last) frame into; null = the workflow takes none, so neither option is offered'}
     WorkflowMedia:
       type: string
-      enum: [image, video]
-      description: 'what a workflow''s takes are; video when an `output` node''s `media` is wired from a `Video` output, else image'
+      enum: [image, video, audio]
+      description: 'what a workflow''s takes are; video when an `output` node''s `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image'
     WorkflowList:
       type: object
       required: [workflows]
@@ -3562,16 +3602,18 @@ components:
     RunOutput:
       type: object
       required: [index, key, kind, url, width, height]
-      if: {properties: {kind: {const: video}}, required: [kind]}
-      then: {required: [video]}
+      allOf:
+        - {if: {properties: {kind: {const: video}}, required: [kind]}, then: {required: [video]}}
+        - {if: {properties: {kind: {const: audio}}, required: [kind]}, then: {required: [audio], properties: {width: {type: 'null'}, height: {type: 'null'}}}}
       properties:
         index: {type: integer, minimum: 0}
         key: {type: string, description: 'object key, u/<owner_id>/runs/<run_id>/<attempt>/<index>.<ext>'}
-        kind: {type: string, enum: [image, video]}
+        kind: {type: string, enum: [image, video, audio], description: 'audio from 1.30 (a WAV; width and height null)'}
         url: {$ref: '#/components/schemas/SignedUrl', description: 'the image, or the MP4 of a video (served with Range)'}
         width: {type: [integer, 'null']}
         height: {type: [integer, 'null']}
         video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image)'}
+        audio: {$ref: '#/components/schemas/AudioInfo', description: 'from 1.30, kind audio only: its length and sample rate'}
         seed: {type: integer, minimum: 0, description: 'the seed it was made with; absent when the workflow has none'}
         take_id: {type: string, format: uuid, description: 'the take this output became (every output is a take); absent only on events stored before API 1.2'}
     RunLane:
@@ -3865,7 +3907,7 @@ components:
         source: {$ref: '#/components/schemas/TakeSource'}
         title: {type: string, maxLength: 200}
         url: {$ref: '#/components/schemas/SignedUrl', description: 'the file: an image, or a video''s MP4 (GET /files serves Range requests)'}
-        thumb_url: {$ref: '#/components/schemas/SignedUrl', description: 'a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0); from 1.19 an audio take: the file itself (the gallery draws a sound tile by `kind`)'}
+        thumb_url: {$ref: '#/components/schemas/SignedUrl', description: 'a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0); from 1.19 an audio take (an upload, from 1.30 a run''s WAV too): the file itself (the gallery draws a sound tile by `kind`)'}
         content_type: {type: string, examples: [image/png, video/mp4]}
         width: {type: [integer, 'null'], minimum: 1, description: null for audio}
         height: {type: [integer, 'null'], minimum: 1}
@@ -3886,7 +3928,7 @@ components:
           description: 'only in `GET /v1/studio/takes/{take_id}`: the takes made from this one ("Used in"), newest first, at most 50, deleted ones left out'
         batch_id: {type: [string, 'null'], format: uuid, description: 'with source pipeline: the batch that made it (its collection); absent or null otherwise'}
         video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image): length, frame rate, audio and the poster'}
-        audio: {$ref: '#/components/schemas/AudioInfo', description: 'from 1.19, kind audio only: its length'}
+        audio: {$ref: '#/components/schemas/AudioInfo', description: 'from 1.19, kind audio only: its length (from 1.30 a run''s audio take also its sample rate)'}
         source_map: {$ref: '#/components/schemas/SourceMap', description: 'from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take'}
         decisions:
           type: array
@@ -3920,7 +3962,8 @@ components:
       type: object
       required: [duration_s]
       properties:
-        duration_s: {type: number, exclusiveMinimum: 0, maximum: 600, description: 'as the client declared it at upload (contracts/README.md, Media inputs: audio uploads)'}
+        duration_s: {type: number, exclusiveMinimum: 0, maximum: 600, description: 'an upload: as the client declared it (contracts/README.md, Media inputs: audio uploads); from 1.30 a run''s audio take: from evt.run.output `audio` (samples / rate)'}
+        sample_rate: {type: integer, minimum: 8000, maximum: 96000, description: 'from 1.30: the WAV''s rate (Hz), from evt.run.output `audio`; absent for an upload (studio does not decode it)'}
     SourceMap:
       type: object
       description: 'from 1.19 (evt.run.output `source_map`): output time t = source time t + `offset_s`; the generated part is [`new_in_s`, `new_out_s`) of the output. A Timeline fill places the result by it (contracts/README.md, Timeline: take actions)'
@@ -3956,6 +3999,11 @@ components:
           maxItems: 8
           items: {$ref: '#/components/schemas/MadeWithLook'}
           description: 'the looks it was made with, in request order (repeats once), as they were when the run was made; absent or empty = none'
+        voices:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/MadeWithVoice'}
+          description: 'from 1.30: the voices its voice params named, node id then param order, each once, as they were when the run was made; absent or empty = none (contracts/README.md, Voices)'
         typed:
           $ref: '#/components/schemas/RunInputs'
           description: |
@@ -4067,6 +4115,15 @@ components:
         source: {$ref: '#/components/schemas/LibrarySource'}
         name: {type: string, description: 'as it was when the run was made'}
         version: {type: integer, minimum: 1, description: 'the version that was applied (a starter look: the pack''s `version`)'}
+    MadeWithVoice:
+      type: object
+      required: [id, name, version, source]
+      additionalProperties: false
+      properties:
+        id: {type: string, pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$', description: 'the library item (an own voice may be deleted since; a starter voice `<family>/<id>`)'}
+        name: {type: string, description: 'as it was when the run was made'}
+        version: {type: integer, minimum: 1, description: 'the version that ran (a starter voice: the pack''s `version`)'}
+        source: {$ref: '#/components/schemas/VoiceSource'}
     LookStatus:
       type: object
       required: [id, status]
@@ -4112,20 +4169,51 @@ components:
     # ---------------------------------------------------------- studio: the library (contracts/README.md, Elements)
     LibraryKind:
       type: string
-      enum: [element, look]
-      description: 'element (character, location, prop; used with `@handle`); look (film, camera, colour, lighting; chosen from the visual picker, sent as RunRequest.looks). Clients show an unknown kind as is'
+      enum: [element, look, voice]
+      description: 'element (character, location, prop; used with `@handle`); look (film, camera, colour, lighting; chosen from the visual picker, sent as RunRequest.looks); from 1.30 voice (preset, cloned, designed; chosen in the voice picker, sent as a voice param''s VoiceRef). Clients show an unknown kind as is'
     LibraryGroup:
       type: string
-      enum: [character, location, prop, film, camera, colour, lighting]
-      description: 'an element''s group (character, location, prop) or a look''s (film, camera, colour, lighting)'
+      enum: [character, location, prop, film, camera, colour, lighting, preset, cloned, designed]
+      description: 'an element''s group (character, location, prop), a look''s (film, camera, colour, lighting) or, from 1.30, a voice''s (preset: a pack''s starter voice; cloned: from a clip, from 1.31; designed: from a description)'
     LibrarySource:
       type: string
       enum: [mine, starter]
-      description: 'mine: the caller''s own (id a UUID, editable); starter: a look shipped by a pack and published by a runner (id `<family>/<pack look id>`, read-only, everyone sees it)'
+      description: 'mine: the caller''s own (id a UUID, editable); starter: a look or (1.30) a voice shipped by a pack and published by a runner (id `<family>/<pack id>`, read-only, everyone sees it)'
     LibraryNeed:
       type: string
       enum: [text, images, lora]
       description: 'what an item brings to a run: text (non-empty `text`: every family with a prompt), images (reference rows), lora (a LoRA stack)'
+    VoiceSource:
+      type: string
+      enum: [preset, cloned, designed]
+      description: 'from 1.30: where a saved voice comes from (= its group): preset (a pack''s speaker, a starter voice), cloned (a clip; from 1.31), designed (a description in words)'
+    VoiceInfo:
+      type: object
+      required: [source]
+      additionalProperties: false
+      description: 'from 1.30, a voice''s own fields (contracts/README.md, Voices). preset: `family`, `speaker`, `language` (and `style`) from the pack; designed: `design`, optional `language` and `style` from the caller'
+      properties:
+        source: {$ref: '#/components/schemas/VoiceSource'}
+        family: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'preset only: the family whose voice params take it'}
+        speaker: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', description: 'preset only: the model''s speaker id (Ryan, Uncle_Fu)'}
+        design: {type: string, minLength: 1, maxLength: 2000, description: 'designed only: the voice in words ("male, 17, tenor, nervous")'}
+        language: {type: string, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$', description: 'a BCP 47 tag (en, en-US, zh, pt-BR); absent = none (the node''s own language param decides)'}
+        style: {type: string, minLength: 1, maxLength: 500, description: 'how it speaks, in words; absent = none'}
+      allOf:
+        - if: {properties: {source: {const: preset}}, required: [source]}
+          then: {required: [family, speaker, language], not: {required: [design]}}
+          else: {not: {anyOf: [{required: [family]}, {required: [speaker]}]}}
+        - if: {properties: {source: {const: designed}}, required: [source]}
+          then: {required: [design]}
+    VoiceDesign:
+      type: object
+      required: [design]
+      additionalProperties: false
+      description: 'from 1.30: a designed voice''s fields as the caller writes them (POST and PUT of a `kind: voice`, group designed); trimmed'
+      properties:
+        design: {type: string, maxLength: 4000, description: 'trimmed; must then be 1-2000 characters'}
+        language: {type: [string, 'null'], maxLength: 35, description: 'a BCP 47 tag; null or absent = none'}
+        style: {type: string, maxLength: 1000, description: 'trimmed; must then be at most 500 characters; "" or absent = none'}
     LibraryImage:
       type: object
       required: [take_id, url, thumb_url, width, height]
@@ -4160,8 +4248,8 @@ components:
         handle: {type: [string, 'null'], pattern: '^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$', description: 'what `@` mentions; always set for an element, always null for a look'}
         text: {type: string, maxLength: 2000, description: 'an element: appended where it is mentioned; a look: appended to the prompt when chosen; empty = none'}
         images: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/LibraryImage'}, description: 'an element 1-4 when saved, a look 0-4; a starter look none (its picture is only `thumb_url`)'}
-        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first image''s thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look''s pack image; else null'}
-        version: {type: integer, minimum: 1, description: '1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look: the pack''s `version`'}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first image''s thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look''s pack image; from 1.30 a voice: a starter voice''s preview clip (a WAV: the picker draws a sound tile); else null'}
+        version: {type: integer, minimum: 1, description: '1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look or voice: the pack''s `version`'}
         created_at: {type: string, format: date-time, description: 'a starter look: the oldest `published_at` of the live hosts publishing it'}
         updated_at: {type: string, format: date-time, description: 'a starter look: = created_at'}
         source: {$ref: '#/components/schemas/LibrarySource'}
@@ -4170,12 +4258,16 @@ components:
         needs: {type: array, uniqueItems: true, maxItems: 3, items: {$ref: '#/components/schemas/LibraryNeed'}, description: 'computed, in the order text, images, lora: non-empty text, at least one image, at least one LoRA'}
         from_take_id: {type: [string, 'null'], format: uuid, description: 'a look made with "Save as look": the take (null once deleted, and for every other item)'}
         fits: {type: boolean, description: 'only with `GET /library?workflow=`: whether the item can be applied to that workflow now (contracts/README.md, Looks: fit)'}
-        reason: {type: [string, 'null'], description: 'with `fits`: why not (`this workflow has no LoRA stack`); null when it fits'}
+        reason: {type: [string, 'null'], description: 'with `fits`: why not (`this workflow has no LoRA stack`, a voice: `voice Ryan is for qwen3-tts`); null when it fits'}
+        voice: {$ref: '#/components/schemas/VoiceInfo', description: 'from 1.30, kind voice only (required then, absent otherwise)'}
       allOf:
         - if: {properties: {kind: {const: element}}, required: [kind]}
           then: {properties: {group: {enum: [character, location, prop]}, handle: {type: string}}}
         - if: {properties: {kind: {const: look}}, required: [kind]}
           then: {properties: {group: {enum: [film, camera, colour, lighting]}, handle: {type: 'null'}}}
+        - if: {properties: {kind: {const: voice}}, required: [kind]}
+          then: {required: [voice], properties: {group: {enum: [preset, cloned, designed]}, handle: {type: 'null'}, text: {const: ''}, images: {maxItems: 0}, loras: {maxItems: 0}, needs: {maxItems: 0}}}
+          else: {not: {required: [voice]}}
     LibraryItemList:
       type: object
       required: [items]
@@ -4206,7 +4298,7 @@ components:
       type: object
       required: [kind, group, name]
       additionalProperties: false
-      description: 'an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA'
+      description: 'an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA; from 1.30 a voice (group designed only) has no handle, text, images or LoRAs and needs `voice`'
       properties:
         kind: {$ref: '#/components/schemas/LibraryKind'}
         group: {$ref: '#/components/schemas/LibraryGroup'}
@@ -4216,6 +4308,7 @@ components:
         images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}, description: 'takes of the caller, images, distinct, in order (the first is the thumbnail): an element 1-4, a look 0-4; missing = []'}
         loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only: 0-4 LoRAs the caller can use now, distinct; missing = [] (with from_take: copied)'}
         from_take: {$ref: '#/components/schemas/LibraryFromTake'}
+        voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a voice only (required then): its description, language and style'}
       allOf:
         - if: {properties: {kind: {const: element}}, required: [kind]}
           then: {required: [handle, images], properties: {group: {enum: [character, location, prop]}, handle: {type: string}, loras: {maxItems: 0}}, not: {required: [from_take]}}
@@ -4233,6 +4326,7 @@ components:
         text: {type: string, maxLength: 4000}
         images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}}
         loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only; missing = []'}
+        voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a designed voice only (required then)'}
         version: {type: integer, minimum: 1, description: 'the version the edit started from (409 when stale)'}
     UploadCreate:
       type: object

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from core import looks
+from core import looks, voices
 
 PACKS = Path(__file__).resolve().parent.parent / "packs"
 PRECISIONS = ("bf16", "fp16", "int8", "int4")
@@ -61,6 +61,9 @@ class Node:
     reports: tuple[
         str, ...
     ] = ()  # Text outputs reported as the run's resolved.texts (`<node>.<output>`)
+    max_seconds: float | None = (
+        None  # model.yaml: caps peak_gb's `speech_seconds`; memory plans plan at it
+    )
 
 
 @dataclass(eq=False)
@@ -73,6 +76,7 @@ class Pack:
     code: str = ""  # hash of model.yaml and the runtime module
     workflows: list = field(default_factory=list)
     looks: list = field(default_factory=list)  # starter looks (core/looks.py), checked at load
+    voices: list = field(default_factory=list)  # starter voices (core/voices.py), checked at load
     cache: dict = field(default_factory=dict)  # values computed once (the lora block)
 
     @property
@@ -514,7 +518,17 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             raise ValueError(
                 f"{schema['kind']}: params and inputs share the names {sorted(shared)}"
             )
-        names = {"mp", "images", "frames", "mp_in", "fps"} | set(stage.get("params") or {})
+        # a param would be shadowed by the size of its name; frames, fps and images params feed those sizes
+        if taken := set(stage.get("params") or {}) & {"mp", "mp_in", "speech_seconds"}:
+            raise ValueError(f"{schema['kind']}: params {sorted(taken)} are peak_gb size names")
+        names = {"mp", "images", "frames", "mp_in", "fps", "speech_seconds"} | set(
+            stage.get("params") or {}
+        )
+        cap = stage.get("max_seconds")
+        if cap is not None and (
+            isinstance(cap, bool) or not isinstance(cap, int | float) or cap <= 0
+        ):
+            raise ValueError(f"{schema['kind']}: max_seconds must be a number > 0")
         peak = compile_formula(stage["peak_gb"], names) if "peak_gb" in stage else None
         fn = getattr(module, name, None)
         if fn is None:
@@ -529,7 +543,7 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             )
         check = getattr(module, f"check_{name}", None)
         node = Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack, check, unload,
-                    bool(stage.get("alone")), dict(stage.get("sees") or {}), tuple(stage.get("reports", ())))  # fmt: skip
+                    bool(stage.get("alone")), dict(stage.get("sees") or {}), tuple(stage.get("reports", ())), cap)  # fmt: skip
         outs = {o["name"]: o["type"] for o in schema["outputs"]}
         if bad := [o for o in (*node.sees.values(), *node.reports) if outs.get(o) != "Text"]:
             raise ValueError(
@@ -561,6 +575,7 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
         if studio.get("presets"):
             studio.setdefault("preset_order", list(studio["presets"]))
     pack.looks = looks.load(pack)
+    pack.voices = voices.load(pack)
     stages = _nodes(spec.get("stages", {}), pack.family, code, pack, module)
     if "variants" not in spec:
         return pack, stages

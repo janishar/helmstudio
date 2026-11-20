@@ -27,10 +27,10 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload the named components now, reply what was freed and what remains (Two envs on one host: the hand-over) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
-| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
+| `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks`, (API 1.30) `$defs/voices` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
-| `fixtures/registry/{nodes,workflows,models,looks}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` |
+| `fixtures/registry/{nodes,workflows,models,looks,voices}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` (API 1.30: `echo/speak`, workflow `echo-voice-over`, starter voices `echo/ada` and `echo/bo`; `qwen3-tts.voices.valid.json` is an example with a preview clip) |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/registry/minimax-h3-image.{nodes,workflows}.valid.json` | (API 1.20) **canonical** torch-runner values of the minimax-h3-image family (workflow `minimax-h3-image`), published with the qwen-image values (the core kinds they share are identical); `minimax-h3-image.models.valid.json` is an example (bytes and sizes measured) |
 | `fixtures/registry/minimax-h3.{nodes,workflows}.valid.json` | (API 1.21) **canonical** native-runner values (minimax-h3 family, host `mac`, env `native`, workflows `minimax-h3-text-to-video`, `minimax-h3-image-to-video`, `minimax-h3-references`): published verbatim; `minimax-h3.models.valid.json` is an example (bytes measured, `peak_gb` a placeholder until measured; `components: []` in its memory item: the native runtime) |
@@ -45,8 +45,9 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
+| `fixtures/voices/` | (API 1.30) the **shared voice fixtures** (Voices, below): `media.json` (a graph → `Workflow.media`, audio included), `fit.json` (a LibraryItem and a workflow → the voice fit's reason; looks and elements in an audio workflow), `seconds.json` (a graph and a stage → the `peak_gb` variable `speech_seconds`), each `{description, workflows: {name: WorkflowDoc}, cases: [{description, workflow, …, expect}]}` against `fixtures/graphs/palette.json`. studio_service, the web and the runner core run them |
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, (API 1.30) the voice fixtures through `workflow_media` / `voice_fit` (`voice_reason` per param) / `look_fit` / `speech_seconds`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -786,14 +787,16 @@ or presigned URLs, which the claim-check rule (never signed URLs in messages) ru
 
 ## Video (API 1.11, M4 stage A; 1.12, M4 stage B)
 
-Takes are `image` or `video` (`audio` is in `TakeKind` for later). A video take is one MP4 (H.264, may carry an AAC
+Takes are `image` or `video`; `audio` takes come from uploads (1.19) and, from 1.30, from runs (Voices). A video take is one MP4 (H.264, may carry an AAC
 audio track) plus a poster image; uploads stay images.
 
 - **A workflow's media.** `video` when some node of kind `output` has its `media` input wired from an output of type
-  `Video` (by the palette's schemas), else `image`. A registry workflow publishes it as `media` (absent = `image`;
+  `Video` (by the palette's schemas), else `image` when some output's is wired from an `Image`, else (API 1.30) `audio`
+  when some output's is wired from an `Audio`, else `image` (node order never matters: a workflow with an Image and
+  an Audio output is `image`; `check.py` `workflow_media`, `fixtures/voices/media.json`). A registry workflow publishes it as `media` (absent = `image`;
   `check.py` checks the canonical ones against the rule); studio serves `Workflow.media` on every workflow (a
   template's as published, a user workflow's computed on read) and filters `GET /v1/studio/workflows?media=`. Create's
-  Image / Video switch is that filter on the templates the model chip offers (and the caller's own workflows).
+  Image / Video (from 1.30 Image / Video / Audio) switch is that filter on the templates the model chip offers (and the caller's own workflows).
 - **Params.** `frames` (registry paramSchema): a frame count on the family's grid, `min + k × step` up to `max`, with
   `fps` = the name of the same node's int / float frame-rate param. Studio's run rules (and `param_invalid`): an integer
   on the grid, else 422 `<node>.<param>: <v> is not on the frame grid <min> + <step>k up to <max>`. It takes no wire.
@@ -1056,7 +1059,8 @@ unchanged; a video never fills them.
   (files_service accepts those types on such keys). Complete checks the size and the header (`RIFF….WAVE`; an ID3v2
   tag or an MPEG audio frame sync) and stores `kind: audio`, `width` / `height` null, `audio {duration_s}` as
   declared, `thumb_url` = the file. The runner reads the file itself (a declared length that lies fails the run, never
-  more). Audio takes are not timeline clips in this version (`wrong_track`; `POST …/clips`: 422 `take_ids[1]: an
+  more). From 1.30 an audio take made by a run (Voices: `<output_prefix><n>.wav`) goes everywhere an audio upload
+  does: media params and rows accepting audio, offers ("Use in…"), `media_fit`. Audio takes are not timeline clips in this version (`wrong_track`; `POST …/clips`: 422 `take_ids[1]: an
   audio take cannot go on the timeline yet`).
 - **Rows of media** (API 1.22, M7 pack 3 step 2; `media_rows`, `fixtures/video/media-rows.json`). A `rows` item field
   may be a `media` param (registry `itemParam`; required in every item, never a wire): each item holds one video or
@@ -1149,6 +1153,106 @@ unchanged; a video never fills them.
   `ltx/distill` needs a host whose models key lists the family's `lora.prefused` entry for variant distilled, else it
   fails `no live host for env <env> has the distilled LoRA`.
 
+## Voices (API 1.30, M8 step 2; plan 15-voices 19.3; normative)
+
+Speech as a made take, the `voice` param and saved voices (docs/plan/15-voices.md). Cloning (`clip` voices, Save as
+voice) is 1.31; scripts, dialogue, voices on elements, cues and audio takes on the Timeline are 1.32. studio_service,
+the web and the runner core implement these rules and test against `fixtures/voices/` (and `fixtures/mentions/
+resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice_reason`, `voice_fit`, `look_fit`,
+`resolve_mentions`, `speech_seconds`).
+
+- **Port `Audio`** (registry `portType`, openapi `PortType`): a plain value, speech as PCM samples with
+  `sample_rate` and `duration_s`, never a handle. The core `output` node's `media` input (type `Media`) also accepts
+  it (Graph rules: fits). The runner stores it as `<output_prefix><n>.wav` (RIFF WAVE, PCM 16-bit, mono, the model's
+  own rate; `Content-Type: audio/wav`) and sends one `evt.run.output`: `kind: audio`, `key` (`.wav`), `bytes`,
+  `etag`, `seed`, `audio {duration_s = samples / sample_rate, sample_rate}`, no `width` / `height`. The projector
+  stores the take `kind: audio`, `content_type` `audio/wav`, `width` / `height` null, `audio {duration_s,
+  sample_rate}`, `thumb_url` = the file (as for audio uploads; the gallery draws a sound tile), lineage and
+  `made_with` as for any run. `AudioInfo.sample_rate` is absent on uploads. **Workflow.media** is `audio` when an
+  output is wired from an `Audio` and none from a `Video` or an `Image` (Video: a workflow's media); `GET /v1/studio/workflows?media=audio`. A model's
+  `media` lists `audio` (Models and model jobs).
+- **Param `voice`** (registry `paramSchema`): one saved voice, default null, `accepts` (required, 1–3 distinct of
+  `preset` | `clip` | `design`: the voice sources it takes; `clip` from 1.31). It takes no wire, is never a rows item
+  field (1.32) and a workflow or preset holds null (`param_invalid` otherwise, as an image or media param). HTTP
+  value: `VoiceRef {voice_id}` (defs `voiceRef`): an own voice's UUID or a starter voice's `<family>/<id>`. A run
+  needs one: `<node>.<param>: a voice is required`. **Studio resolves it** as the caller after the values are merged
+  and checked (before mentions and looks): an own item of kind voice, or a starter voice a live host of the
+  workflow's family publishes, else `<node>.<param>: voice <id> not found` (unknown, another user's, deleted, an
+  element or look, or no live host publishes it; one text, nothing leaks); then the param's fit
+  (`voice_reason`, below): `<node>.<param>: <reason>` (`speak.voice: voice Ryan is for qwen3-tts`). In
+  `cmd.run.execute` the value is defs `voice` `{item_id, version, source: preset | clip | design, family?,
+  speaker?, text?, language?, style?}`: a preset sends `family`, `speaker`, its `language` and `style`; a designed
+  voice sends `text` (its `voice.design`), `language` and `style` when set. The runner never reads the library; its
+  cache key is the resolved value. **Takes**: `made_with.inputs` keep the `VoiceRef`; `made_with.voices` =
+  `[{id, name, version, source}]` (source preset | cloned | designed), node id then param order, each voice once;
+  `parents` are unchanged (a voice is not a take). Reuse returns the `VoiceRef`; a voice deleted since is 422 at the
+  next run.
+- **Saved voices are library items** (`LibraryItem`, the elements' table and endpoints): `kind: voice`, `group`
+  `preset` | `cloned` | `designed` (= `voice.source`), `handle` always null (`@` names elements only), `text` `""`,
+  no images, no LoRAs, `needs` `[]`, and `voice {source, family?, speaker?, design?, language?, style?}`
+  (`VoiceInfo`). `language` is a BCP 47 tag (`^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$`: `en`, `en-US`, `zh`, `pt-BR`);
+  each pack maps tags to its model's codes. Voices count in the 200 items per user.
+  - **designed** (own, `source: mine`, id a UUID): `POST /v1/studio/library` `{kind: voice, group: designed, name,
+    voice: {design, language?, style?}}` (`VoiceDesign`; trimmed). 422 texts, in this order: `group <g> is not a
+    voice group`; `preset voices come from packs` (group preset); `cloned voices are not available yet` (group
+    cloned, until 1.31); `a voice has no handle`; `a voice has no text; describe it in voice.design`; `images: a
+    voice has no images`; `loras: a voice has no LoRAs`; `voice: a designed voice needs voice.design` (absent);
+    `voice.design must be 1-2000 characters` (code points, after trimming); `voice.design must not contain control
+    characters other than newlines and tabs`; `voice.language: <tag> is not a BCP 47 language tag`; `voice.style
+    must be at most 500 characters`; the name rules of elements. `voice` on an element or a look is 422 `voice:
+    only a voice has voice fields`; `from_take` stays `from_take makes looks only`. PUT checks the same with
+    `version` (stale: 409 `voice changed since you opened it (now version <n>)`); DELETE is never refused (past
+    takes keep `made_with.voices`).
+  - **preset** (starter, read-only, `source: starter`, id `<family>/<id>`): published by packs, below. PUT and
+    DELETE on `/v1/studio/library/{family}/{id}` are 409 `starter voices are read-only`.
+  - `GET /v1/studio/library?kind=voice` lists them (own first, then starter voices by `name`, then `id`, with the
+    starter looks); `group` filters by source; `q` matches the name. `thumb_url`: a starter voice's preview clip
+    (signed), else null.
+- **Voice fit** (`voice_reason`, `voice_fit`; `GET /library?workflow=` for voices, the run's 422, the picker). The
+  voice params are those of known, not bypassed nodes, node id then schema order. One param refuses an item when
+  (first that holds): its source (preset → `preset`, cloned → `clip`, designed → `design`) is not in `accepts`:
+  `this workflow cannot use a preset voice` | `this workflow cannot clone a voice` | `this workflow cannot use a
+  designed voice`; a preset whose `voice.family` is not the node's family: `voice <name> is for <family>`. The
+  list's `fits` is true when some param takes it, else `reason` = the first param's; no voice param: `this
+  workflow takes no voice`. A designed voice's language decides nothing here.
+- **Speech and the library.** In a workflow whose media is `audio` the prompt is spoken: `prompt.text` is not
+  mention-expanded (an element's text would be read aloud) and reaches the runner as typed (`@@` too); any mention
+  in it is 422 `prompt.text: mentions are not read aloud; use a dialogue script` (one per param, step 1 of Mentions'
+  expansion: nothing else is checked then); literal `@` (`a@b.c`, `@ 3pm`) is fine. Looks never fit (`looks do not
+  apply to speech`; a chosen one is `looks[<i>]: look <name> does not fit this workflow (looks do not apply to
+  speech)`), elements never fit (`mentions are not read aloud; use a dialogue script`), and the composer shows
+  neither tile.
+- **Starter voices.** A pack may hold `runner_service/packs/<pack>/voices/*.yaml`, each file a list `{id, name,
+  speaker, language, style?, version?, preview?}`: `id` a slug `^[a-z0-9][a-z0-9-]{0,63}$` unique in the family and
+  not one of the family's look ids (they share `/library/<family>/<id>`); `name` 1–80; `speaker` the model's own
+  speaker id (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, Qwen3-TTS `Ryan`, `Uncle_Fu`); `language` a BCP 47 tag the pack
+  maps; `style` ≤ 500; `version` ≥ 1 (default 1; bump it when the voice changes); `preview` a WAV file next to the
+  YAML (mono or stereo PCM, ≤ 2 MB, ≤ 30 s). At most 200 voices per pack. A broken file stops the runner like a
+  broken look file. At start the runner publishes registry `<host>.<env>.voices` (`$defs/voices`): `id
+  <family>/<id>`, `family`, `name`, `speaker`, `language`, `style?`, `version`, `preview` (null, or `{key, bytes,
+  duration_s, sample_rate}` with the clip PUT once to `packs/<family>/voices/<id>-<sha256[:16]>.wav`, never
+  overwritten). Studio serves them exactly as starter looks (Looks: starter looks in the API: the id and family
+  checks, a `name` without control characters, a preview key of the entry's family, one id over several hosts, `created_at`;
+  also an entry off the schema's `speaker`, `language`, `name` or `style` is dropped, and one whose id is also a live
+  starter look's (the look keeps the URL; the runner refuses such packs at start), logged),
+  as `kind: voice`, `group: preset`, `voice {source: preset, family, speaker, language, style?}`. The fake runner
+  publishes `fixtures/registry/voices.valid.json` verbatim.
+- **Memory: the `peak_gb` variable `speech_seconds`** (runner_service packs, model.yaml `stages.<name>.peak_gb`, beside
+  `mp`, `frames`, `images`; check.py `speech_seconds`, `fixtures/voices/seconds.json`; a stage param may not be named `mp`, `mp_in` or `speech_seconds`: the runner refuses the pack at load): the planned speech length = the
+  characters (code points) of the text reaching the stage's first wired `Text` input (a `prompt` node's merged
+  `text`; through any other node, the nearest upstream `prompt`'s: fewest wires, then node id), else of the stage's
+  nearest upstream `prompt`, divided by 15, capped at the stage's optional key `max_seconds` (model.yaml; not
+  published); 0 without text. The runner evaluates it on the run's own text. The memory plan (`<host>.<env>.models`
+  memory items) evaluates it on the canonical workflow's default text, except that a stage with `max_seconds` is
+  planned at `max_seconds` (the default prompt is empty, and a plan at 0 s would understate every real run); so
+  speech stages should declare `max_seconds`. `planned_at` does not count `speech_seconds`.
+- **The echo family (fake)**: `echo/speak` (Text → Audio; params `voice` accepts `[preset, design]`, `seed`,
+  `delay_ms`) writes a WAV at 24 kHz, PCM 16-bit, mono: one sine tone per character, 1/15 s each (so the take lasts
+  exactly `speech_seconds`), its pitch from the character and the voice, its phase from the seed; one progress step per 15
+  characters; an empty text fails `<node>: nothing to say`. Template `echo-voice-over` (`prompt` → `speak` →
+  `output`, `media: audio`); starter voices `echo/ada` (en) and `echo/bo` (zh, a style), no previews. So the contract
+  suite covers audio takes, voice resolution, fit, the library and the mention rule without a GPU.
+
 ## User workflows (API 1.5)
 
 A user can open any workflow as a node graph (Create's Studio | Graph switch), edit it and save it as their own.
@@ -1217,8 +1321,8 @@ disjoint and no param is named `bypass` (registry.schema.json).
 **Types.** A wire `in[key] = "<src>.<out>"` carries the type of `src`'s output `out`. `key` is an input port (its
 type) or a **wireable value param** — values are both parameter and port: `int`→`Int`, `float`→`Float`,
 `seed`→`Seed`, `string`/`text`→`Text`, `image`→`Image` (`bool`, `enum`, `rows`, `frames` take no wire). The wire's
-type must **fit** the key's: `fits(got, want)` = `got == want`, or `want` is `Media` and `got` is `Image` or `Video`
-(`Media` is only ever an input type). Everywhere below "of type T" for a port that receives means "that T fits". The handles `Model`, `Conditioning`, `Latent` must also join two kinds of the same family (`Model[f]` is not
+type must **fit** the key's: `fits(got, want)` = `got == want`, or `want` is `Media` and `got` is `Image`, `Video` or
+(API 1.30) `Audio` (`Media` is only ever an input type). Everywhere below "of type T" for a port that receives means "that T fits". The handles `Model`, `Conditioning`, `Latent` must also join two kinds of the same family (`Model[f]` is not
 `Model[g]`). One wire per key (the `in` map has one value per key; connecting to a wired key replaces the wire); an
 output may feed any number of keys.
 
@@ -1986,7 +2090,7 @@ lower-cased (case-insensitive: `@Fox` = `@fox`); any other `@` is literal text (
 A mention is never a partial handle: `@fox-cub` mentions `fox-cub`, not `fox`. The scan answers parts
 `{text}` (raw, `@@` kept) and `{mention, raw}`; adjacent text is one part; the raw parts join to the input.
 
-**Where.** Every param of type `text` (not `string`) of a known, not bypassed node, not wired: today exactly
+**Where.** Every param of type `text` (not `string`) of a known, not bypassed node, not wired, in a workflow whose media is not `audio` (API 1.30: spoken text is never expanded; Voices): today exactly
 `prompt.text` (Create's composer, the graph view's prompt param, a batch row's or line's prompt, a pipeline input
 bound to it, a step's fixed `inputs`). Params are taken in node-id order (code points), then schema order.
 
@@ -2115,6 +2219,8 @@ with `fits: true` for it. With `studio`, exactly the tiles its `quick` lists.
 **Fit** (normative; `look_fit`; studio for the list's `fits` / `reason`, at run and in pipeline problems; the web for
 the picker's preview). Against a workflow's graph and `loras` = the caller's usable LoRAs now (own `ready`; shared
 listed by a live host of the workflow's env) with their detected families. The first that holds is the reason:
+0. (API 1.30) The workflow's media is `audio` (Voices): an element `mentions are not read aloud; use a dialogue
+   script`, a look `looks do not apply to speech`.
 1. `text` in needs, or an element, and the graph has no prompt param (Mentions, Where): `this workflow has no prompt`.
    An element fits otherwise (its images are dropped where there are no reference rows).
 2. `images` in needs and no reference rows (Mentions): `this workflow takes no reference images`.

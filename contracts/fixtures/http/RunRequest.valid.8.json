@@ -1,0 +1,9 @@
+{
+  "workflow_id": "echo-voice-over",
+  "inputs": {
+    "prompt.text": "Hello there",
+    "speak.voice": {
+      "voice_id": "echo/ada"
+    }
+  }
+}

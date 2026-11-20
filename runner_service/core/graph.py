@@ -179,17 +179,21 @@ class Ctx:
         *,
         ext: str,
         kind: str,
-        width: int,
-        height: int,
+        width: int | None = None,
+        height: int | None = None,
         video=None,
+        audio=None,
         poster=None,
         last=None,
         source_map=None,
     ) -> None:
         """A video also passes `video` ({duration_s, fps, frames, has_audio[, stream]}), `poster` and `last` (the
-        last frame; PNG bytes), and `source_map` when it was made from a media take (README, Media inputs)."""
+        last frame; PNG bytes), and `source_map` when it was made from a media take (README, Media inputs); an
+        audio output passes `audio` ({duration_s, sample_rate}) and no width or height (README, Voices)."""
         index, self.outputs = self.outputs, self.outputs + 1
         extra = {"video": video, "poster": poster, "last": last} if video is not None else {}
+        if audio is not None:
+            extra["audio"] = audio
         if source_map is not None:
             extra["source_map"] = source_map
         if video is not None and self.auto:  # auto length: the clip's real frames (README, Video)
@@ -258,6 +262,14 @@ def _check_param(spec: dict, value) -> str | None:
             return "must be a take"
         why = media_fit(spec, value)
         return f": {why}" if why else None
+    if (
+        t == "voice"
+    ):  # README, Voices: null in a workflow; in a run defs voice, as studio resolved it
+        return (
+            None
+            if value is None or (isinstance(value, dict) and "source" in value)
+            else "must be a voice"
+        )
     if t == "span":
         if value is None:
             return None
@@ -373,7 +385,7 @@ LORA_ID = re.compile(
     r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
 )
 HANDLES = {"Model", "Conditioning", "Latent"}  # family-scoped: Model[f] is not Model[g]
-MEDIA = {"Image", "Video"}  # what an input of type Media takes
+MEDIA = {"Image", "Video", "Audio"}  # what an input of type Media takes
 WIREABLE = {
     "int": "Int",
     "float": "Float",
@@ -385,7 +397,14 @@ WIREABLE = {
 REQUIRED = {
     "media": "a take",
     "span": "a range",
-}  # null in a workflow, set in a run (README, Media inputs)
+    "voice": "a voice",
+}  # null in a workflow, set in a run (README, Media inputs; Voices)
+VOICE_SOURCES = {
+    "preset": "this workflow cannot use a preset voice",
+    "clip": "this workflow cannot clone a voice",
+    "design": "this workflow cannot use a designed voice",
+}  # README, Voices: voice fit (voice_reason), the runner's backstop
+SPEECH_CPS = 15  # README, Voices: memory: planned speech is 15 characters a second
 MAX_NODES, MAX_BYTES, MAX_OUTPUTS = 64, 262144, 4
 SINKS = (
     "output",
@@ -590,10 +609,65 @@ def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[st
                 and spec.get("min")
             ):
                 errs.append(f"{nid}.{spec['name']}: at least {spec['min']} items")
-            if spec["type"] in REQUIRED and n.get("params", {}).get(spec["name"]) is None:
+            value = n.get("params", {}).get(spec["name"])
+            if spec["type"] in REQUIRED and value is None:
                 errs.append(f"{nid}.{spec['name']}: {REQUIRED[spec['type']]} is required")
+            elif spec["type"] == "voice" and isinstance(value, dict) and "source" in value and (why := voice_reason(spec, n["kind"], value)):  # fmt: skip
+                errs.append(f"{nid}.{spec['name']}: {why}")
     # a registry workflow may leave params at their defaults (the ask fixtures give only max_tokens); a run has all
     return errs + [p[4] for p in problems(nodes, schemas) if run or p[0] != "param_missing"]
+
+
+def workflow_media(nodes: dict, schemas: dict) -> str:
+    """What a workflow's runs make (contracts/README.md, Video: a workflow's media; Voices; check.py workflow_media):
+    text when an answer node's text is wired, else video when any output's media is wired from a Video output, else
+    image when any from an Image, else audio when any from an Audio, else image (node order never matters)."""
+    if any(n["kind"] == "answer" and "text" in n.get("in", {}) for n in nodes.values()):
+        return "text"
+    got = set()
+    for n in nodes.values():
+        src, _, out = (
+            n.get("in", {}).get("media", "").partition(".")
+            if n["kind"] == "output"
+            else ("", "", "")
+        )
+        s = schemas.get(nodes[src]["kind"]) if src in nodes else None
+        got |= {o["type"] for o in s["outputs"] if o["name"] == out} if s else set()
+    return next((t.lower() for t in ("Video", "Image", "Audio") if t in got), "image")
+
+
+def voice_reason(spec: dict, kind: str, v: dict) -> str | None:
+    """Why a resolved voice (defs voice) does not fit the `voice` param `spec` of a node of `kind` (check.py
+    voice_reason; studio has checked it with the voice's name, the runner knows only its id), else None."""
+    if v["source"] not in spec["accepts"]:
+        return VOICE_SOURCES[v["source"]]
+    if v["source"] == "preset" and v.get("family") != family(kind):
+        return f"voice {v['item_id']} is for {v.get('family')}"
+    return None
+
+
+def speech_seconds(nodes: dict, schemas: dict, nid: str, max_seconds: float | None = None) -> float:
+    """peak_gb's `speech_seconds` at `nid` (README, Voices: memory; check.py speech_seconds): the code points of the text
+    reaching its first wired Text input (a prompt's text; through any other node, the nearest upstream prompt's),
+    else of its nearest upstream prompt (fewest wires, then node id), / 15, capped at `max_seconds`; 0 without."""
+    s = schemas[nodes[nid]["kind"]]
+    wires = nodes[nid].get("in", {})
+    port = next(
+        (i["name"] for i in s["inputs"] if i["type"] == "Text" and i["name"] in wires), None
+    )
+    level, chars = [wires[port].partition(".")[0]] if port else [nid], 0
+    seen = set(level)
+    while level:
+        if hits := sorted(m for m in level if nodes[m]["kind"] == "prompt" and m != nid):
+            spec = next(p for p in schemas["prompt"]["params"] if p["name"] == "text")
+            chars = len(nodes[hits[0]].get("params", {}).get("text", spec["default"]))
+            break
+        level = sorted(
+            {r.partition(".")[0] for m in level for r in nodes[m].get("in", {}).values()} - seen
+        )
+        seen |= set(level)
+    sec = chars / SPEECH_CPS
+    return min(sec, max_seconds) if max_seconds is not None else sec
 
 
 def order(nodes: dict) -> list[str]:
@@ -827,14 +901,22 @@ def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
     return {"mp": mp, "images": n, "frames": frames, "mp_in": mp_in, "fps": fps}
 
 
-def stage_peak(nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict) -> float:
+def stage_peak(
+    nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict, plan: bool = False
+) -> float:
     """The stage's peak_gb formula at `nid` (0 without one), over its params and the graph's sizes; `images` also
-    counts the Image values of the params the stage `sees` (minimax/enhance: the encode node's refs)."""
+    counts the Image values of the params the stage `sees` (minimax/enhance: the encode node's refs). `speech_seconds` is
+    the run's speech length (speech_seconds); a memory plan (`plan`) takes a stage's max_seconds when it has one."""
     if impl.peak is None:
         return 0.0
     from core.pack import evaluate
 
     sizes = stage_sizes(nodes, schemas, nid, inputs)
+    sizes["speech_seconds"] = (
+        impl.max_seconds
+        if plan and impl.max_seconds is not None
+        else speech_seconds(nodes, schemas, nid, impl.max_seconds)
+    )
     if impl.sees:
         values, specs = seen(nodes, schemas, nid, impl.sees)
         sizes["images"] += len(images.values(specs, values))

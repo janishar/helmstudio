@@ -320,6 +320,14 @@ export interface paths {
          *     `workflow` (a template slug or one of the caller's workflow UUIDs; 422 `unknown workflow <id>`) filters nothing:
          *     it adds `fits` and `reason` to every item, against that workflow's graph and the caller's LoRAs now
          *     (contracts/README.md, Looks: fit); the picker greys the items that do not fit with the reason.
+         *
+         *     From 1.30 the list also holds the caller's voices and every starter voice a live host publishes
+         *     (contracts/README.md, Voices: starter voices), ordered as the starter looks (by `name`, then `id`, after the own
+         *     items); `kind=voice` keeps only voices. With `workflow`, a voice's `fits` / `reason` is the voice fit
+         *     (`this workflow takes no voice`, `this workflow cannot use a designed voice`, `this workflow cannot use a preset
+         *     voice`, `this workflow cannot clone a voice`, `voice <name> is for <family>`), and in a workflow whose media is
+         *     audio every look answers `looks do not apply to speech` and every element `mentions are not read aloud; use a
+         *     dialogue script`.
          */
         get: operations["studioListLibrary"];
         put?: never;
@@ -343,6 +351,16 @@ export interface paths {
          *     <id> not found` for a take that is unknown, another user's, deleted or a pending upload. 409 `handle @<handle>
          *     is already used` (unique per owner, over every kind), 409 `You have 200 library items; delete some first.`
          *     201 with `version` 1.
+         *
+         *     Voices (from 1.30, `kind: voice`, contracts/README.md, Voices): only `group: designed` can be made (`name`,
+         *     `voice {design, language?, style?}`); the item's `voice.source` is `designed`, `handle` null, `text` "",
+         *     no images or LoRAs; voices count in the same 200 items. 422 `group <g> is not a voice group`, `preset voices
+         *     come from packs`, `cloned voices are not available yet` (group cloned), `a voice has no handle`, `a voice has
+         *     no text; describe it in voice.design`, `images: a voice has no images`, `loras: a voice has no LoRAs`,
+         *     `voice: a designed voice needs voice.design`, `voice.design must be 1-2000 characters`, `voice.language: <tag>
+         *     is not a BCP 47 language tag`, `voice.style must be at most 500 characters`, `voice.design must not contain
+         *     control characters other than newlines and tabs`, `voice: only a voice has voice fields` (an element or look
+         *     with `voice`); `from_take makes looks only` holds for voices too.
          */
         post: operations["studioCreateLibraryItem"];
         delete?: never;
@@ -365,7 +383,9 @@ export interface paths {
          *     since you opened it (now version <n>)` (a look: `look changed since you opened it (now version <n>)`), nothing
          *     changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). Checked like POST (the handle may stay its own). On
          *     success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
-         *     element `changed`. `kind` never changes.
+         *     element `changed`. `kind` never changes. From 1.30 a designed voice is checked like POST with `kind: voice` (its
+         *     `voice` required; stale = 409 `voice changed since you opened it (now version <n>)`); takes made before keep the
+         *     voice they ran with (`made_with.voices` records the version).
          */
         put: operations["studioReplaceLibraryItem"];
         post?: never;
@@ -389,19 +409,19 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * A starter look (id `<family>/<look_id>`, the same URL as `/library/` + the id)
-         * @description A starter look some live host publishes now; anything else is 404.
+         * A starter look or voice (id `<family>/<look_id>`, the same URL as `/library/` + the id)
+         * @description A starter look or (from 1.30) starter voice some live host publishes now (a family's look and voice ids never clash); anything else is 404.
          */
         get: operations["studioGetStarterLook"];
         /**
          * Always refused: starter looks are read-only
-         * @description 409 `starter looks are read-only; save your own copy` for a starter look a live host publishes; 404 otherwise. Nothing is read from the body.
+         * @description 409 `starter looks are read-only; save your own copy` for a starter look a live host publishes, from 1.30 `starter voices are read-only` for a starter voice; 404 otherwise. Nothing is read from the body.
          */
         put: operations["studioReplaceStarterLook"];
         post?: never;
         /**
          * Always refused: starter looks are read-only
-         * @description 409 `starter looks are read-only; save your own copy` for a starter look a live host publishes; 404 otherwise.
+         * @description 409 `starter looks are read-only; save your own copy` for a starter look a live host publishes, from 1.30 `starter voices are read-only` for a starter voice; 404 otherwise.
          */
         delete: operations["studioDeleteStarterLook"];
         options?: never;
@@ -534,7 +554,11 @@ export interface paths {
          *     left null (`image.image: an image is required`) is 422 too. From 1.19 media and span values have their own texts
          *     (`source.source: take <id> is not a video`, `audio.source: take <id> has no sound`, `retake.span: a range is
          *     required`, … contracts/README.md, Media inputs) and a value outside a node's `only` is `model.variant: must be one
-         *     of dev`. When no host is eligible (none live with the env and the workflow),
+         *     of dev`. From 1.30 voice values (`VoiceRef`) are resolved as the caller (contracts/README.md, Voices): 422
+         *     `speak.voice: a voice is required`, `speak.voice: voice <id> not found` (unknown, another user's, deleted, not a
+         *     voice, or a starter voice no live host publishes), `speak.voice: this workflow cannot use a designed voice` (the
+         *     voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; in a workflow whose media is
+         *     audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. When no host is eligible (none live with the env and the workflow),
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
          *     From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
          *     planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility.
@@ -2454,20 +2478,21 @@ export interface components {
         };
         /**
          * @description An input accepts an output of the same type; an input of type `Media` (the output node's `media`; never an
-         *     output) also accepts `Image` and `Video` (contracts/README.md, Graph rules: fits). `Video` is an MP4 that may
-         *     carry an audio track; `Duration` is `{frames, fps}`. Model, Conditioning and Latent are family-scoped handles:
+         *     output) also accepts `Image`, `Video` and, from 1.30, `Audio` (contracts/README.md, Graph rules: fits). `Video`
+         *     is an MP4 that may carry an audio track; `Audio` (1.30) is speech, a WAV (PCM 16-bit, mono, the model's own
+         *     rate); `Duration` is `{frames, fps}`. Model, Conditioning and Latent are family-scoped handles:
          *     they wire nodes of one family inside one workflow and never cross a process (`Latent` of ltx carries video and
          *     audio latents together).
          * @enum {string}
          */
-        PortType: "Text" | "Image" | "Int" | "Float" | "Seed" | "Canvas" | "Model" | "Conditioning" | "Latent" | "Video" | "Duration" | "Media";
+        PortType: "Text" | "Image" | "Int" | "Float" | "Seed" | "Canvas" | "Model" | "Conditioning" | "Latent" | "Video" | "Duration" | "Media" | "Audio";
         Port: {
             name: string;
             type: components["schemas"]["PortType"];
             /** @description inputs only: true = may be left unwired (the feature is off); absent = required */
             optional?: boolean;
         };
-        /** @description null only for a seed (random) or an image param left empty */
+        /** @description null only for a seed (random) or an image, media, span or (1.30) voice param left empty */
         ScalarValue: string | number | boolean | null;
         /**
          * @description An Image value: a take of the caller, by id. The only way a client names an image; never an object key or URL.
@@ -2495,6 +2520,14 @@ export interface components {
             in?: number;
             out?: number;
         };
+        /**
+         * @description A voice value (API 1.30; a `voice` param): a saved voice the caller can use, by id: one of the caller's own
+         *     (a UUID) or a starter voice (`<family>/<pack voice id>`). Never a key, a URL or the voice's fields; studio
+         *     resolves it when it creates the run (contracts/README.md, Voices).
+         */
+        VoiceRef: {
+            voice_id: string;
+        };
         /** @description A `span` param's value (API 1.19): a time range on the workflow's one video media source, in that take's own seconds (Retake: the stretch to regenerate) */
         SpanValue: {
             start: number;
@@ -2504,8 +2537,8 @@ export interface components {
         RowItem: {
             [key: string]: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["MediaRef"] | components["schemas"]["LoraRef"];
         };
-        /** @description a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null */
-        ParamValue: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["MediaRef"] | components["schemas"]["SpanValue"] | components["schemas"]["RowItem"][];
+        /** @description a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null; from 1.30 a `voice` param: VoiceRef or null */
+        ParamValue: components["schemas"]["ScalarValue"] | components["schemas"]["ImageRef"] | components["schemas"]["MediaRef"] | components["schemas"]["SpanValue"] | components["schemas"]["VoiceRef"] | components["schemas"]["RowItem"][];
         /**
          * @description One form field. `int`/`float`/`seed`: `min`/`max` bound the value, `step` is the increment; `string`/`text`
          *     (multi-line): `min`/`max` bound the length; `enum`: one of `enum`; `bool`: a switch. `seed`: an int where null
@@ -2534,13 +2567,17 @@ export interface components {
          *     sound tile with its trim control); `min_s` (media) is the shortest it reads; `max_total_s` (rows with one media
          *     field) the most seconds the items read together; `not_with` (rows) names optional inputs of the node: while one
          *     is wired the rows stay empty (mentions add none, "Use in…" skips them).
+         *     From 1.30 (contracts/README.md, Voices): `voice`: one saved voice (`VoiceRef`, default null; a run needs one) of
+         *     the sources in `accepts` (`preset`: a starter voice of the node's family; `clip`: a cloned voice, from 1.31;
+         *     `design`: a voice described in words); the UI draws the voice picker. It takes no wire and is never a rows item
+         *     field.
          */
         ParamSchema: {
             name: string;
             /** @enum {string} */
-            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows" | "frames" | "media" | "span";
-            /** @description media only: the take kinds it takes; video: a video take; audio: an audio take, or a video take's sound */
-            accepts?: ("video" | "audio")[];
+            type: "int" | "float" | "bool" | "string" | "text" | "enum" | "seed" | "image" | "rows" | "frames" | "media" | "span" | "voice";
+            /** @description media only: the take kinds it takes (video, audio); video: a video take; audio: an audio take, or a video take's sound. From 1.30, voice only: the voice sources it takes (preset, clip, design) */
+            accepts?: ("video" | "audio" | "preset" | "clip" | "design")[];
             /** @description media only: true = the value may carry in / out (the part read); absent = the whole take */
             trim?: boolean;
             /** @description media only: a video take's width and height must be multiples of it */
@@ -2655,10 +2692,10 @@ export interface components {
             /** @description the runner env that executes it */
             env: string;
             /**
-             * @description always sent from API 1.11: a template's as published (registry `media`, absent = image), a user workflow's computed from its graph (contracts/README.md, Video); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed
+             * @description always sent from API 1.11: a template's as published (registry `media`, absent = image), a user workflow's computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed
              * @enum {string}
              */
-            media?: "image" | "video" | "text";
+            media?: "image" | "video" | "audio" | "text";
             /** @description node id → node */
             nodes: {
                 [key: string]: components["schemas"]["GraphNode"];
@@ -2689,10 +2726,10 @@ export interface components {
             keyframes?: components["schemas"]["WorkflowKeyframes"] | null;
         };
         /**
-         * @description what a workflow's takes are; video when an `output` node's `media` is wired from a `Video` output, else image
+         * @description what a workflow's takes are; video when an `output` node's `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image
          * @enum {string}
          */
-        WorkflowMedia: "image" | "video";
+        WorkflowMedia: "image" | "video" | "audio";
         WorkflowList: {
             workflows: components["schemas"]["Workflow"][];
         };
@@ -3435,14 +3472,19 @@ export interface components {
             index: number;
             /** @description object key, u/<owner_id>/runs/<run_id>/<attempt>/<index>.<ext> */
             key: string;
-            /** @enum {string} */
-            kind: "image" | "video";
+            /**
+             * @description audio from 1.30 (a WAV; width and height null)
+             * @enum {string}
+             */
+            kind: "image" | "video" | "audio";
             /** @description the image, or the MP4 of a video (served with Range) */
             url: components["schemas"]["SignedUrl"];
             width: number | null;
             height: number | null;
             /** @description kind video only (absent for an image) */
             video?: components["schemas"]["VideoInfo"];
+            /** @description from 1.30, kind audio only: its length and sample rate */
+            audio?: components["schemas"]["AudioInfo"];
             /** @description the seed it was made with; absent when the workflow has none */
             seed?: number;
             /**
@@ -3450,7 +3492,7 @@ export interface components {
              * @description the take this output became (every output is a take); absent only on events stored before API 1.2
              */
             take_id?: string;
-        };
+        } & (unknown & unknown);
         /**
          * @description interactive (Create, POST …/runs) is dispatched before batch (runs pipelines_service asks for, one per batch row and step)
          * @enum {string}
@@ -3778,7 +3820,7 @@ export interface components {
             title: string;
             /** @description the file: an image, or a video's MP4 (GET /files serves Range requests) */
             url: components["schemas"]["SignedUrl"];
-            /** @description a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0); from 1.19 an audio take: the file itself (the gallery draws a sound tile by `kind`) */
+            /** @description a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0); from 1.19 an audio take (an upload, from 1.30 a run's WAV too): the file itself (the gallery draws a sound tile by `kind`) */
             thumb_url: components["schemas"]["SignedUrl"];
             /**
              * @example image/png
@@ -3821,7 +3863,7 @@ export interface components {
             batch_id?: string | null;
             /** @description kind video only (absent for an image): length, frame rate, audio and the poster */
             video?: components["schemas"]["VideoInfo"];
-            /** @description from 1.19, kind audio only: its length */
+            /** @description from 1.19, kind audio only: its length (from 1.30 a run's audio take also its sample rate) */
             audio?: components["schemas"]["AudioInfo"];
             /** @description from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take */
             source_map?: components["schemas"]["SourceMap"];
@@ -3863,8 +3905,10 @@ export interface components {
             poster_url: components["schemas"]["SignedUrl"];
         };
         AudioInfo: {
-            /** @description as the client declared it at upload (contracts/README.md, Media inputs: audio uploads) */
+            /** @description an upload: as the client declared it (contracts/README.md, Media inputs: audio uploads); from 1.30 a run's audio take: from evt.run.output `audio` (samples / rate) */
             duration_s: number;
+            /** @description from 1.30: the WAV's rate (Hz), from evt.run.output `audio`; absent for an upload (studio does not decode it) */
+            sample_rate?: number;
         };
         /** @description from 1.19 (evt.run.output `source_map`): output time t = source time t + `offset_s`; the generated part is [`new_in_s`, `new_out_s`) of the output. A Timeline fill places the result by it (contracts/README.md, Timeline: take actions) */
         SourceMap: {
@@ -3896,6 +3940,8 @@ export interface components {
             loras?: components["schemas"]["MadeWithLora"][];
             /** @description the looks it was made with, in request order (repeats once), as they were when the run was made; absent or empty = none */
             looks?: components["schemas"]["MadeWithLook"][];
+            /** @description from 1.30: the voices its voice params named, node id then param order, each once, as they were when the run was made; absent or empty = none (contracts/README.md, Voices) */
+            voices?: components["schemas"]["MadeWithVoice"][];
             /**
              * @description for each param the mention and look expansion changed (prompt params, the reference rows, the look stack's
              *     rows, a pinned canvas) or the runner resolved (a frames param set to `"auto"`, from 1.12), its value
@@ -4007,6 +4053,15 @@ export interface components {
             /** @description the version that was applied (a starter look: the pack's `version`) */
             version: number;
         };
+        MadeWithVoice: {
+            /** @description the library item (an own voice may be deleted since; a starter voice `<family>/<id>`) */
+            id: string;
+            /** @description as it was when the run was made */
+            name: string;
+            /** @description the version that ran (a starter voice: the pack's `version`) */
+            version: number;
+            source: components["schemas"]["VoiceSource"];
+        };
         LookStatus: {
             id: components["schemas"]["LookId"];
             /**
@@ -4063,17 +4118,17 @@ export interface components {
             current_handle: string | null;
         };
         /**
-         * @description element (character, location, prop; used with `@handle`); look (film, camera, colour, lighting; chosen from the visual picker, sent as RunRequest.looks). Clients show an unknown kind as is
+         * @description element (character, location, prop; used with `@handle`); look (film, camera, colour, lighting; chosen from the visual picker, sent as RunRequest.looks); from 1.30 voice (preset, cloned, designed; chosen in the voice picker, sent as a voice param's VoiceRef). Clients show an unknown kind as is
          * @enum {string}
          */
-        LibraryKind: "element" | "look";
+        LibraryKind: "element" | "look" | "voice";
         /**
-         * @description an element's group (character, location, prop) or a look's (film, camera, colour, lighting)
+         * @description an element's group (character, location, prop), a look's (film, camera, colour, lighting) or, from 1.30, a voice's (preset: a pack's starter voice; cloned: from a clip, from 1.31; designed: from a description)
          * @enum {string}
          */
-        LibraryGroup: "character" | "location" | "prop" | "film" | "camera" | "colour" | "lighting";
+        LibraryGroup: "character" | "location" | "prop" | "film" | "camera" | "colour" | "lighting" | "preset" | "cloned" | "designed";
         /**
-         * @description mine: the caller's own (id a UUID, editable); starter: a look shipped by a pack and published by a runner (id `<family>/<pack look id>`, read-only, everyone sees it)
+         * @description mine: the caller's own (id a UUID, editable); starter: a look or (1.30) a voice shipped by a pack and published by a runner (id `<family>/<pack id>`, read-only, everyone sees it)
          * @enum {string}
          */
         LibrarySource: "mine" | "starter";
@@ -4082,6 +4137,34 @@ export interface components {
          * @enum {string}
          */
         LibraryNeed: "text" | "images" | "lora";
+        /**
+         * @description from 1.30: where a saved voice comes from (= its group): preset (a pack's speaker, a starter voice), cloned (a clip; from 1.31), designed (a description in words)
+         * @enum {string}
+         */
+        VoiceSource: "preset" | "cloned" | "designed";
+        /** @description from 1.30, a voice's own fields (contracts/README.md, Voices). preset: `family`, `speaker`, `language` (and `style`) from the pack; designed: `design`, optional `language` and `style` from the caller */
+        VoiceInfo: {
+            source: components["schemas"]["VoiceSource"];
+            /** @description preset only: the family whose voice params take it */
+            family?: string;
+            /** @description preset only: the model's speaker id (Ryan, Uncle_Fu) */
+            speaker?: string;
+            /** @description designed only: the voice in words ("male, 17, tenor, nervous") */
+            design?: string;
+            /** @description a BCP 47 tag (en, en-US, zh, pt-BR); absent = none (the node's own language param decides) */
+            language?: string;
+            /** @description how it speaks, in words; absent = none */
+            style?: string;
+        } & (unknown & unknown);
+        /** @description from 1.30: a designed voice's fields as the caller writes them (POST and PUT of a `kind: voice`, group designed); trimmed */
+        VoiceDesign: {
+            /** @description trimmed; must then be 1-2000 characters */
+            design: string;
+            /** @description a BCP 47 tag; null or absent = none */
+            language?: string | null;
+            /** @description trimmed; must then be at most 500 characters; "" or absent = none */
+            style?: string;
+        };
         LibraryImage: {
             /** Format: uuid */
             take_id: string;
@@ -4116,9 +4199,9 @@ export interface components {
             text: string;
             /** @description an element 1-4 when saved, a look 0-4; a starter look none (its picture is only `thumb_url`) */
             images: components["schemas"]["LibraryImage"][];
-            /** @description the first image's thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look's pack image; else null */
+            /** @description the first image's thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look's pack image; from 1.30 a voice: a starter voice's preview clip (a WAV: the picker draws a sound tile); else null */
             thumb_url: components["schemas"]["SignedUrl"] | null;
-            /** @description 1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look: the pack's `version` */
+            /** @description 1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look or voice: the pack's `version` */
             version: number;
             /**
              * Format: date-time
@@ -4144,9 +4227,11 @@ export interface components {
             from_take_id?: string | null;
             /** @description only with `GET /library?workflow=`: whether the item can be applied to that workflow now (contracts/README.md, Looks: fit) */
             fits?: boolean;
-            /** @description with `fits`: why not (`this workflow has no LoRA stack`); null when it fits */
+            /** @description with `fits`: why not (`this workflow has no LoRA stack`, a voice: `voice Ryan is for qwen3-tts`); null when it fits */
             reason?: string | null;
-        } & (unknown & unknown);
+            /** @description from 1.30, kind voice only (required then, absent otherwise) */
+            voice?: components["schemas"]["VoiceInfo"];
+        } & (unknown & unknown & unknown);
         LibraryItemList: {
             items: components["schemas"]["LibraryItem"][];
         };
@@ -4174,7 +4259,7 @@ export interface components {
              */
             loras?: boolean;
         };
-        /** @description an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA */
+        /** @description an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA; from 1.30 a voice (group designed only) has no handle, text, images or LoRAs and needs `voice` */
         LibraryItemCreate: {
             kind: components["schemas"]["LibraryKind"];
             group: components["schemas"]["LibraryGroup"];
@@ -4189,6 +4274,8 @@ export interface components {
             /** @description a look only: 0-4 LoRAs the caller can use now, distinct; missing = [] (with from_take: copied) */
             loras?: components["schemas"]["LookLoraRef"][];
             from_take?: components["schemas"]["LibraryFromTake"];
+            /** @description from 1.30, a voice only (required then): its description, language and style */
+            voice?: components["schemas"]["VoiceDesign"];
         } & (unknown & unknown);
         /** @description every field (checked like LibraryItemCreate for the item's kind); an element also needs `handle` */
         LibraryItemUpdate: {
@@ -4199,6 +4286,8 @@ export interface components {
             images: components["schemas"]["LibraryImageRef"][];
             /** @description a look only; missing = [] */
             loras?: components["schemas"]["LookLoraRef"][];
+            /** @description from 1.30, a designed voice only (required then) */
+            voice?: components["schemas"]["VoiceDesign"];
             /** @description the version the edit started from (409 when stale) */
             version: number;
         };
@@ -6296,9 +6385,9 @@ export interface components {
         HostName: string;
         /** @description library item UUID (malformed = 404) */
         LibraryItemId: string;
-        /** @description a starter look's family (the part of its id before `/`; malformed = 404) */
+        /** @description a starter look's or (1.30) voice's family (the part of its id before `/`; malformed = 404) */
         LookFamily: string;
-        /** @description the pack's look id (the part after `/`; malformed = 404) */
+        /** @description the pack's look or (1.30) voice id (the part after `/`; malformed = 404) */
         StarterLookId: string;
         /** @description row number, from 1 (unknown or malformed = 404) */
         BatchRowN: string;
@@ -6454,7 +6543,7 @@ export interface operations {
             query?: {
                 /** @description only templates or only the caller's own; absent = both */
                 source?: components["schemas"]["WorkflowSource"];
-                /** @description only workflows whose takes are images, or videos (the Image / Video switch); absent = both. Another value is 422 */
+                /** @description only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); absent = all three. Another value is 422 */
                 media?: components["schemas"]["WorkflowMedia"];
             };
             header?: never;
@@ -7074,9 +7163,9 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description a starter look's family (the part of its id before `/`; malformed = 404) */
+                /** @description a starter look's or (1.30) voice's family (the part of its id before `/`; malformed = 404) */
                 family: components["parameters"]["LookFamily"];
-                /** @description the pack's look id (the part after `/`; malformed = 404) */
+                /** @description the pack's look or (1.30) voice id (the part after `/`; malformed = 404) */
                 look_id: components["parameters"]["StarterLookId"];
             };
             cookie?: never;
@@ -7102,9 +7191,9 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description a starter look's family (the part of its id before `/`; malformed = 404) */
+                /** @description a starter look's or (1.30) voice's family (the part of its id before `/`; malformed = 404) */
                 family: components["parameters"]["LookFamily"];
-                /** @description the pack's look id (the part after `/`; malformed = 404) */
+                /** @description the pack's look or (1.30) voice id (the part after `/`; malformed = 404) */
                 look_id: components["parameters"]["StarterLookId"];
             };
             cookie?: never;
@@ -7131,9 +7220,9 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description a starter look's family (the part of its id before `/`; malformed = 404) */
+                /** @description a starter look's or (1.30) voice's family (the part of its id before `/`; malformed = 404) */
                 family: components["parameters"]["LookFamily"];
-                /** @description the pack's look id (the part after `/`; malformed = 404) */
+                /** @description the pack's look or (1.30) voice id (the part after `/`; malformed = 404) */
                 look_id: components["parameters"]["StarterLookId"];
             };
             cookie?: never;

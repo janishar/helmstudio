@@ -356,7 +356,14 @@ func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 	for _, output := range outputs {
 		out.Outputs = append(out.Outputs, dto.RunOutput{Index: output.Index, Key: output.Key, Kind: output.Kind,
 			URL: s.signer.Sign(output.Key), Width: output.Width, Height: output.Height, Seed: output.Seed, TakeID: output.TakeID,
-			Video: gallerydto.Info(output.Video, s.signer.Sign)})
+			Video: gallerydto.Info(output.Video, s.signer.Sign), Audio: audioInfo(output.Audio)})
 	}
+	return out
+}
+
+// audioInfo is a run_outputs.audio value, nil for null.
+func audioInfo(raw []byte) *gallerydto.AudioInfo {
+	var out *gallerydto.AudioInfo
+	_ = json.Unmarshal(raw, &out)
 	return out
 }

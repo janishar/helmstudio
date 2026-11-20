@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "nodes": [
+    {
+      "kind": "echo/speak",
+      "title": "Echo speak",
+      "family": "echo",
+      "params": [
+        {
+          "name": "voice",
+          "type": "voice",
+          "label": "Voice",
+          "default": {
+            "voice_id": "echo/ada"
+          },
+          "accepts": [
+            "preset",
+            "design"
+          ],
+          "help": "The saved voice it speaks in: an echo starter voice or a designed voice."
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "help": "Fake speech: a WAV (24 kHz, PCM 16-bit, mono) of one sine tone per character, 1/15 s each (so it lasts exactly the planned seconds), its pitch from the character and the voice, its phase from the seed; one progress step per 15 characters. An empty text fails `<node>: nothing to say`."
+    }
+  ]
+}

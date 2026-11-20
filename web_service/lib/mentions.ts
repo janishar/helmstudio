@@ -138,7 +138,33 @@ type Node = {
   in?: Record<string, string>;
   bypass?: boolean;
 };
-type Schemas = Record<string, { params: Param[] } | undefined>;
+type Schemas = Record<
+  string,
+  { params: Param[]; outputs?: { name: string; type: string }[] } | undefined
+>;
+
+/** Workflow.media (README, Video: a workflow's media; Voices; check.py workflow_media): text when an answer node's
+ * text is wired, else video when any output's media is wired from a Video output, else image when any from an Image,
+ * else audio when any from an Audio, else image; node order never matters. */
+export function workflowMedia(nodes: Record<string, Node>, schemas: Schemas) {
+  if (Object.values(nodes).some((n) => n.kind === "answer" && "text" in (n.in ?? {})))
+    return "text";
+  const got = new Set<string>();
+  for (const n of Object.values(nodes)) {
+    const ref = n.kind === "output" ? n.in?.media : undefined;
+    if (!ref) continue;
+    const [src, out] = ref.split(".");
+    const s = nodes[src] && schemas[nodes[src].kind];
+    for (const o of s?.outputs ?? []) if (o.name === out) got.add(o.type);
+  }
+  return (["Video", "Image", "Audio"].find((t) => got.has(t)) ?? "image").toLowerCase();
+}
+
+/** API 1.30 (README, Voices): an audio workflow's prompt is spoken, so nothing is expanded. */
+const spoken = (nodes: Record<string, Node>, schemas: Schemas) =>
+  workflowMedia(nodes, schemas) === "audio";
+
+const SPOKEN = "mentions are not read aloud; use a dialogue script";
 
 /** A rows param's one Image field, else undefined. */
 const imageField = (p: Param) => {
@@ -281,6 +307,7 @@ export function lookFit(
 ): string | null {
   const needs = needsOf(item);
   const element = item.kind === "element";
+  if (spoken(nodes, schemas)) return element ? SPOKEN : "looks do not apply to speech";
   if ((needs.includes("text") || element) && !promptParams(nodes, schemas).length)
     return "this workflow has no prompt";
   if (element) return null; // its images are dropped where there are no reference rows
@@ -341,10 +368,16 @@ export function resolveMentions(
   const lib = new Map(library.map((e) => [e.handle, e]));
   const found = new Map(looks.map((x) => [x.id, x]));
   const val = (n: Node, p: Param) => n.params?.[p.name] ?? p.default;
-  const prompts = promptParams(nodes, schemas).map(({ id, n, p }) => {
+  let prompts = promptParams(nodes, schemas).map(({ id, n, p }) => {
     const text = String(val(n, p) ?? "");
     return { n, p, path: `${id}.${p.name}`, text, parts: scan(text), used: mentioned(text) };
   });
+  // an audio workflow: a mention is refused once per param and nothing is expanded (the text reaches the runner as typed)
+  const audio = spoken(nodes, schemas);
+  const refusedMentions = audio
+    ? prompts.filter((x) => x.used.length).map((x) => `${x.path}: ${SPOKEN}`)
+    : [];
+  if (audio) prompts = [];
   const none = {
     inputs: {},
     typed: {},
@@ -357,6 +390,7 @@ export function resolveMentions(
   const first = new Map<string, number>(); // look id → its first place in the request, from 1
   chosen.forEach((id, i) => first.has(id) || first.set(id, i + 1));
   const unknown = [
+    ...refusedMentions,
     ...prompts.flatMap((x) =>
       x.used.filter((h) => !lib.has(h)).map((h) => `${x.path}: unknown element @${h}`),
     ),

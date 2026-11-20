@@ -1,0 +1,62 @@
+{
+  "description": "(API 1.30) an audio workflow's prompt is spoken: a mention, known or not, is refused once per param (step 1: nothing else is checked)",
+  "workflow": {
+    "title": "Echo voice-over",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": "Say hi to @mara and @nobody."
+        }
+      },
+      "speak": {
+        "kind": "echo/speak",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "voice": null,
+          "seed": -1,
+          "delay_ms": 300
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "speak.audio"
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "e1a2b3c4-5d6e-4f70-8a91-b2c3d4e5f601",
+      "handle": "mara",
+      "name": "Mara",
+      "version": 1,
+      "text": "a tired courier",
+      "images": []
+    }
+  ],
+  "looks": [
+    {
+      "id": "echo/soft-light",
+      "source": "starter",
+      "name": "Soft light",
+      "version": 1,
+      "text": "soft diffuse light",
+      "images": [],
+      "loras": []
+    }
+  ],
+  "chosen": [
+    "echo/soft-light"
+  ],
+  "expect": {
+    "errors": [
+      "prompt.text: mentions are not read aloud; use a dialogue script"
+    ]
+  }
+}

@@ -251,39 +251,20 @@ def test_seeds_need_a_seed_param(api):
 
 
 def test_seeds_repeat_rows(api):
-    """Needs a live workflow with one seed param (echo has none; qwen-image would load a model, so only an env
-    `fake` workflow is used)."""
-    live = {h["env"] for h in ok(api.get(f"{STUDIO}/hosts"))["hosts"] if h["state"] != "offline"}
-    found = None
-    for w in ok(api.get(f"{STUDIO}/workflows"))["workflows"]:
-        if w["env"] != "fake" or w["env"] not in live:
-            continue
-        full = ok(api.get(f"{STUDIO}/workflows/{w['id']}"))
-        keys = [
-            f"{node}.{p['name']}"
-            for node, n in full["nodes"].items()
-            for p in full["node_schemas"].get(n["kind"], {}).get("params", [])
-            if p["type"] == "seed"
-        ]
-        if len(keys) == 1 and any(
-            p["type"] in ("string", "text")
-            for n in full["nodes"].values()
-            for p in full["node_schemas"].get(n["kind"], {}).get("params", [])
-        ):
-            found = (full, keys[0])
-            break
-    if not found:
-        pytest.skip("no live fake workflow with a seed param on this stack")
-    w, seed_key = found
-    text_key = next(
+    """echo-voice-over (env fake) has the one seed param (echo has none; qwen-image would load a model); its voice
+    param has no default, so every row sends the starter voice echo/ada."""
+    w = ok(api.get(f"{STUDIO}/workflows/echo-voice-over"))
+    seed_key = next(
         f"{node}.{p['name']}"
         for node, n in w["nodes"].items()
         for p in w["node_schemas"].get(n["kind"], {}).get("params", [])
-        if p["type"] in ("string", "text")
+        if p["type"] == "seed"
     )
+    text_key = "prompt.text"
     body = {
         "workflow_id": w["id"],
         "rows": lines(["one", "two"], text_key),
+        "inputs": {"speak.voice": {"voice_id": "echo/ada"}, "speak.delay_ms": 0},
         "seeds": {"count": 3, "start": 100},
     }
     batch = ok(api.post(BATCHES, json=body), 202)

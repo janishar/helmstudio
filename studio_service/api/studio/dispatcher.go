@@ -781,6 +781,7 @@ func release(ctx context.Context, tx pgx.Tx, next placed, budget *float64) error
 		return err
 	}
 	resolveLoras(nodes, runUsed(next.run.Loras), next.run.OwnerID)
+	sendVoices(nodes, next.run.Mentions) // API 1.30: the voices as resolved when the run was made
 	run, err := one[model.Run](ctx, tx, `UPDATE runs SET host = $2, released_at = clock_timestamp(), updated_at = clock_timestamp()
 		WHERE id = $1 AND status = 'queued' AND released_at IS NULL RETURNING `+model.RunCols, next.run.ID, next.host)
 	if errors.Is(err, errNotFound) {

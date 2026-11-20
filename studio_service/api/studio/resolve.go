@@ -13,6 +13,7 @@ import (
 	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/api/lora"
+	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -121,6 +122,8 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 				return nil, id + "." + param.Name + ": a take is required"
 			case param.Type == "span" && value == nil:
 				return nil, id + "." + param.Name + ": a range is required"
+			case param.Type == "voice" && value == nil:
+				return nil, id + "." + param.Name + ": a voice is required"
 			case param.Type == "rows" && param.Min != nil:
 				if items, _ := value.([]any); float64(len(items)) < *param.Min {
 					return nil, fmt.Sprintf("%s.%s: at least %s items", id, param.Name, format(*param.Min))
@@ -222,6 +225,11 @@ func check(param registry.Param, value any) (any, string) {
 			return nil, "" // resolve says it is required
 		}
 		return spanValue(value)
+	case "voice":
+		if value == nil {
+			return nil, "" // resolve says it is required
+		}
+		return voiceRef(value)
 	case "rows":
 		return checkRows(param, value)
 	case "frames":
@@ -259,6 +267,20 @@ func imageRef(value any) (any, string) {
 		return nil, `must be {"take_id": <uuid>}`
 	}
 	return map[string]any{"take_id": id}, ""
+}
+
+// voiceRef returns a voice value as {"voice_id": id} (API 1.30: an own voice's UUID or a starter voice's
+// <family>/<id>), or why it is not one.
+func voiceRef(value any) (any, string) {
+	ref, ok := value.(map[string]any)
+	id, isText := ref["voice_id"].(string)
+	if utility.IsUUID(id) {
+		id = strings.ToLower(id) // an own voice's UUID, in any case
+	}
+	if !ok || len(ref) != 1 || !isText || !dto.LookID.MatchString(id) {
+		return nil, `must be {"voice_id": <id>}`
+	}
+	return map[string]any{"voice_id": id}, ""
 }
 
 // mediaRef returns a Media value as {"take_id": id[, "in": s, "out": s]} (in/out only on a trim param), or why it is

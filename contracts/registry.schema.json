@@ -49,9 +49,10 @@
         "Latent",
         "Video",
         "Duration",
-        "Media"
+        "Media",
+        "Audio"
       ],
-      "description": "a port's value type; an input accepts an output of the same type, and an input of type Media also accepts Image and Video (contracts/README.md, Graph rules: fits). Text, Image, Video (an MP4, may carry audio), Int, Float, Seed, Canvas, Duration ({frames, fps}) are plain values; Media is an input type only (the output node's `media`), never an output or a param; Model, Conditioning, Latent are family-scoped handles: they only wire nodes of one family inside one workflow and never cross a process (Latent[ltx] carries the video and audio latents together)"
+      "description": "a port's value type; an input accepts an output of the same type, and an input of type Media also accepts Image, Video and (API 1.30) Audio (contracts/README.md, Graph rules: fits). Text, Image, Video (an MP4, may carry audio), Audio (API 1.30: speech, a WAV {wav, sample_rate, duration_s}: PCM 16-bit, mono, the model's own rate), Int, Float, Seed, Canvas, Duration ({frames, fps}) are plain values; Media is an input type only (the output node's `media`), never an output or a param; Model, Conditioning, Latent are family-scoped handles: they only wire nodes of one family inside one workflow and never cross a process (Latent[ltx] carries the video and audio latents together)"
     },
     "port": {
       "type": "object",
@@ -76,7 +77,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role). From API 1.19: media: one video or audio take (`accepts`), written {take_id[, in, out]} by clients (default null; a run needs one); `trim`: it reads the part in..out (the UI's trim control over the take); `grid`: a video's sides must be multiples of it; `max_s`: the longest take (or part) it reads; `max_frames`: the most frames of a video take it reads. span: a time range {start, end} on the workflow's one video media source (default null; a run needs one; the UI's range control over that take). contracts/README.md, Media inputs",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role). From API 1.19: media: one video or audio take (`accepts`), written {take_id[, in, out]} by clients (default null; a run needs one); `trim`: it reads the part in..out (the UI's trim control over the take); `grid`: a video's sides must be multiples of it; `max_s`: the longest take (or part) it reads; `max_frames`: the most frames of a video take it reads. span: a time range {start, end} on the workflow's one video media source (default null; a run needs one; the UI's range control over that take). contracts/README.md, Media inputs. From API 1.30: voice: one saved voice (a library item of kind voice), written {voice_id} by clients (default null; a run needs one); `accepts` names the voice sources it takes: preset (a pack's starter voice of the node's family), clip (a cloned voice, from API 1.31), design (a voice from a description). It takes no wire and is not a rows item field. contracts/README.md, Voices",
       "required": [
         "name",
         "type",
@@ -105,7 +106,8 @@
             "rows",
             "frames",
             "media",
-            "span"
+            "span",
+            "voice"
           ]
         },
         "fps": {
@@ -240,15 +242,18 @@
         "accepts": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 2,
+          "maxItems": 3,
           "uniqueItems": true,
           "items": {
             "enum": [
               "video",
-              "audio"
+              "audio",
+              "preset",
+              "clip",
+              "design"
             ]
           },
-          "description": "media only (required): the take kinds it takes. video: a video take (its picture and sound); audio: an audio take, or a video take's sound (one without sound is refused)"
+          "description": "media only (required): the take kinds it takes. video: a video take (its picture and sound); audio: an audio take, or a video take's sound (one without sound is refused). From API 1.30, voice only (required): the voice sources it takes, 1-3 of preset, clip, design"
         },
         "trim": {
           "type": "boolean",
@@ -664,6 +669,15 @@
             "properties": {
               "default": {
                 "type": "null"
+              },
+              "accepts": {
+                "maxItems": 2,
+                "items": {
+                  "enum": [
+                    "video",
+                    "audio"
+                  ]
+                }
               }
             },
             "not": {
@@ -684,11 +698,6 @@
           "else": {
             "not": {
               "anyOf": [
-                {
-                  "required": [
-                    "accepts"
-                  ]
-                },
                 {
                   "required": [
                     "trim"
@@ -730,6 +739,67 @@
             "properties": {
               "default": {
                 "type": "null"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "min"
+                  ]
+                },
+                {
+                  "required": [
+                    "max"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "media",
+                  "voice"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "accepts"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "voice"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "accepts"
+            ],
+            "properties": {
+              "default": {
+                "type": "null"
+              },
+              "accepts": {
+                "items": {
+                  "enum": [
+                    "preset",
+                    "clip",
+                    "design"
+                  ]
+                }
               }
             },
             "not": {
@@ -1205,9 +1275,10 @@
           "enum": [
             "image",
             "video",
+            "audio",
             "text"
           ],
-          "description": "what its runs make: image / video takes (the Image / Video switch filters templates by it), or from API 1.14 `text`: an answer stored on the run, no take (an ask workflow: its `answer` node; contracts/README.md, The llm pack). Absent = image. Must equal what studio computes from the graph (contracts/README.md, Video: a workflow's media). A text workflow is internal: never listed for Create, never run from Create or a workflow batch; only a pipeline's judge, write and decide nodes run it"
+          "description": "what its runs make: image / video / (API 1.30) audio takes (the Image / Video / Audio switch filters templates by it), or from API 1.14 `text`: an answer stored on the run, no take (an ask workflow: its `answer` node; contracts/README.md, The llm pack). Absent = image. Must equal what studio computes from the graph (contracts/README.md, Video: a workflow's media). A text workflow is internal: never listed for Create, never run from Create or a workflow batch; only a pipeline's judge, write and decide nodes run it"
         },
         "nodes": {
           "$ref": "messages/defs.schema.json#/$defs/graph",
@@ -2843,6 +2914,117 @@
           "format": "date-time"
         }
       }
+    },
+    "voices": {
+      "description": "registry key <host>.<env>.voices (API 1.30): the starter voices of this runner's packs (runner_service/packs/<pack>/voices/*.yaml, contracts/README.md Voices: starter voices), written at start (an empty list when its packs ship none). Studio lists the union over live hosts to every user as read-only library items of kind voice, group preset; a voice's id is the same on every host",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "voices"
+          ],
+          "properties": {
+            "voices": {
+              "type": "array",
+              "maxItems": 1000,
+              "description": "every voice of every pack of this env, by pack, then file name, then file order; ids unique, and none is also a look id of the env",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "family",
+                  "name",
+                  "speaker",
+                  "language",
+                  "version",
+                  "preview"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63}$",
+                    "description": "<family>/<the YAML id>: the voice's id everywhere (LibraryItem.id, a voice param's {voice_id}), stable across hosts"
+                  },
+                  "family": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "description": "the pack's family (= the id's first part): the only family whose voice params take it"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "speaker": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+                    "description": "the model's own speaker id (Qwen3-TTS: Ryan, Uncle_Fu); sent as defs voice `speaker`"
+                  },
+                  "language": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$",
+                    "description": "the BCP 47 tag of the voice's own language (en, en-US, zh, pt-BR); the pack maps it to its model's codes"
+                  },
+                  "style": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "how it speaks, in words (calm, bright); absent = none"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "the YAML version (default 1); a pack bumps it when it changes the voice"
+                  },
+                  "preview": {
+                    "oneOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "object",
+                        "required": [
+                          "key",
+                          "bytes",
+                          "duration_s",
+                          "sample_rate"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "pattern": "^packs/[a-z0-9][a-z0-9_-]{0,63}/voices/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\\.wav$",
+                            "description": "packs/<family>/voices/<id>-<first 16 hex of the file's SHA-256>.wav: the YAML preview clip, which the runner PUTs to the object store at start unless that key exists (content-addressed, never overwritten). Shown only as the voice's thumb_url (a sound tile); never an input"
+                          },
+                          "bytes": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 2097152
+                          },
+                          "duration_s": {
+                            "type": "number",
+                            "exclusiveMinimum": 0,
+                            "maximum": 30
+                          },
+                          "sample_rate": {
+                            "type": "integer",
+                            "minimum": 8000,
+                            "maximum": 96000
+                          }
+                        }
+                      }
+                    ],
+                    "description": "null without a preview clip"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

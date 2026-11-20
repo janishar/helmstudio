@@ -1,0 +1,200 @@
+{
+  "description": "Workflow.media (README, Video: a workflow's media; Voices): audio when an output's media is wired from an Audio output; video before image before audio, whatever the node order",
+  "workflows": {
+    "echo": {
+      "title": "Echo",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "a fox"
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    },
+    "echo-a2v": {
+      "title": "Echo audio to video",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "a fox"
+          }
+        },
+        "a2v": {
+          "kind": "echo/a2v",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "a2v.video"
+          }
+        }
+      }
+    },
+    "echo-voice-over": {
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "Hello there, how are you, Ada?"
+          }
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    "echo-ask": {
+      "title": "Ask (fake)",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "ask": {
+          "kind": "echo/ask"
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "ask.answer"
+          }
+        }
+      }
+    },
+    "test-speak": {
+      "title": "Test speak",
+      "family": "test",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "A line of exactly thirty chars"
+          }
+        },
+        "speak": {
+          "kind": "test/speak",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    "mixed": {
+      "title": "Echo mixed",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "a fox"
+          }
+        },
+        "a_speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "a_output": {
+          "kind": "output",
+          "in": {
+            "media": "a_speak.audio"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "description": "an Image output makes image takes",
+      "workflow": "echo",
+      "expect": "image"
+    },
+    {
+      "description": "a Video output makes video takes",
+      "workflow": "echo-a2v",
+      "expect": "video"
+    },
+    {
+      "description": "echo/speak's Audio output makes audio takes",
+      "workflow": "echo-voice-over",
+      "expect": "audio"
+    },
+    {
+      "description": "another family's Audio output too",
+      "workflow": "test-speak",
+      "expect": "audio"
+    },
+    {
+      "description": "an ask workflow is text",
+      "workflow": "echo-ask",
+      "expect": "text"
+    },
+    {
+      "description": "an Audio and an Image output make image takes (the Audio output's node id sorts first)",
+      "workflow": "mixed",
+      "expect": "image"
+    }
+  ]
+}

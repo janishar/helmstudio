@@ -73,7 +73,7 @@ func TestWorkflows(t *testing.T) {
 		ids = append(ids, w.ID)
 	}
 	if list := r.Workflows(); !slices.Equal(ids, []string{"echo", "echo-a2v", "echo-ask", "echo-extend", "echo-image-to-video",
-		"echo-retake", "echo-tiny", "echo-video"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
+		"echo-retake", "echo-tiny", "echo-video", "echo-voice-over"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
 		list[5].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" {
 		t.Fatalf("the echo workflows (echo-ask text), no lost: %v", ids)
 	}
@@ -364,5 +364,31 @@ func TestRemoteHostsNeverShadowOwnHosts(t *testing.T) {
 	stale := []byte(`{"host": "gcp", "env": "torch", "state": "idle", "run_id": null, "updated_at": "2001-01-01T00:00:00Z"}`)
 	if err := r.SetHostAt("gcp.torch", stale, time.Now()); err != nil || !r.Hosts()[0].Live(time.Now()) {
 		t.Fatal("the server's time decides, not the runner's clock", err)
+	}
+}
+
+// Starter voices off registry.schema.json are dropped, and so is one whose id is also a starter look's.
+func TestStarterVoiceChecks(t *testing.T) {
+	var r Registry
+	now := time.Now()
+	_ = r.SetHost("pc.torch", []byte(`{"host": "pc", "env": "torch", "state": "idle", "run_id": null, "updated_at": "`+
+		now.UTC().Format(time.RFC3339Nano)+`"}`))
+	_ = r.SetRegistry("pc.torch.models", []byte(`{"models": [{"id": "echo", "family": "echo", "title": "Echo"}]}`))
+	_ = r.SetRegistry("pc.torch.looks", []byte(`{"published_at": "2026-11-14T10:00:00Z", "looks": [{"id": "echo/same",
+		"family": "echo", "group": "film", "name": "N", "text": "x", "version": 1, "loras": [], "thumb": null}]}`))
+	voice := func(id, name, speaker, language string) string {
+		return `{"id": "` + id + `", "family": "echo", "name": "` + name + `", "speaker": "` + speaker +
+			`", "language": "` + language + `", "version": 1, "preview": null}`
+	}
+	_ = r.SetRegistry("pc.torch.voices", []byte(`{"published_at": "2026-11-14T10:00:00Z", "voices": [`+strings.Join([]string{
+		voice("echo/ok", "Ada", "Ryan", "en-US"),
+		voice("echo/same", "Ada", "Ryan", "en"),          // a starter look's id
+		voice("echo/speaker", "Ada", "Ry an", "en"),      // speaker off its pattern
+		voice("echo/language", "Ada", "Ryan", "English"), // not BCP 47
+		voice("echo/noname", "", "Ryan", "en"),           // name 1-80
+		voice("echo/long", strings.Repeat("a", 81), "Ryan", "en"),
+	}, ",")+`]}`))
+	if got := r.Voices(now); len(got) != 1 || got["echo/ok"].Name != "Ada" {
+		t.Fatalf("%+v", got)
 	}
 }

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.run.output.schema.json",
   "title": "runner → studio: one output object written",
-  "description": "Subject evt.run.<host>.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event.",
+  "description": "Subject evt.run.<host>.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event; from API 1.30 an audio output <output_prefix><index>.wav (RIFF WAVE, PCM 16-bit, mono, the model's own sample rate).",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -43,7 +43,8 @@
         "kind": {
           "enum": [
             "image",
-            "video"
+            "video",
+            "audio"
           ]
         },
         "width": {
@@ -203,6 +204,29 @@
         "source_map": {
           "$ref": "defs.schema.json#/$defs/sourceMap",
           "description": "API 1.19, a video made from a media take (ltx retake, extend, audio to video): how its time lines up with that take; studio stores it as Take.source_map. Absent otherwise"
+        },
+        "audio": {
+          "type": "object",
+          "description": "API 1.30, kind audio only (required then, absent otherwise): the WAV's facts, from the file the runner wrote",
+          "required": [
+            "duration_s",
+            "sample_rate"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "duration_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 600,
+              "description": "samples / sample_rate"
+            },
+            "sample_rate": {
+              "type": "integer",
+              "minimum": 8000,
+              "maximum": 96000,
+              "description": "the model's own rate (Qwen3-TTS, echo: 24000; ZONOS3: 44100)"
+            }
+          }
         }
       },
       "allOf": [
@@ -233,6 +257,49 @@
             "not": {
               "required": [
                 "video"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "audio"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "audio"
+            ],
+            "properties": {
+              "key": {
+                "pattern": "\\.wav$"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "width"
+                  ]
+                },
+                {
+                  "required": [
+                    "height"
+                  ]
+                }
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "audio"
               ]
             }
           }

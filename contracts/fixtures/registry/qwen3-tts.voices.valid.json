@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner torch 0.1.0",
+  "voices": [
+    {
+      "id": "qwen3-tts/ryan",
+      "family": "qwen3-tts",
+      "name": "Ryan",
+      "speaker": "Ryan",
+      "language": "en",
+      "style": "lively",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/ryan-0123456789abcdef.wav",
+        "bytes": 144044,
+        "duration_s": 3.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/uncle-fu",
+      "family": "qwen3-tts",
+      "name": "Uncle Fu",
+      "speaker": "Uncle_Fu",
+      "language": "zh",
+      "version": 1,
+      "preview": null
+    }
+  ]
+}

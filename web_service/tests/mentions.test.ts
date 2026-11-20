@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import scanFixture from "../../contracts/fixtures/mentions/scan.json";
 import fitFixture from "../../contracts/fixtures/mentions/fit.json";
+import mediaFixture from "../../contracts/fixtures/voices/media.json";
 import palette from "../../contracts/fixtures/graphs/palette.json";
 import type { S } from "@/lib/api";
 import { paletteOf } from "@/lib/graph";
@@ -20,6 +21,7 @@ import {
   autoSize,
   scan,
   withInputs,
+  workflowMedia,
   type Resolvable,
 } from "@/lib/mentions";
 
@@ -211,5 +213,14 @@ describe("chips and handles", () => {
       fieldErrors("encode.refs[2].seconds: frame 50 is past the clip's last frame 48", keys),
     ).toEqual({ "encode.refs": "row 2: frame 50 is past the clip's last frame 48" });
     expect(fieldErrors("workflow not found", keys)).toBeNull();
+  });
+});
+
+describe("workflowMedia (fixtures/voices/media.json)", () => {
+  it.each(mediaFixture.cases)("$description", (c) => {
+    const wf = (
+      mediaFixture.workflows as Record<string, { nodes: Parameters<typeof workflowMedia>[0] }>
+    )[c.workflow];
+    expect(workflowMedia(wf.nodes, schemas)).toBe(c.expect);
   });
 });

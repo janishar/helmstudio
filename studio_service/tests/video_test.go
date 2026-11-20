@@ -188,7 +188,9 @@ func TestWorkflowMediaAndFrames(t *testing.T) {
 	if got := ids("?media=image"); slices.Contains(got, "ltx-text-to-video:video") || !slices.Contains(got, "qwen-image:image") {
 		t.Fatal(got)
 	}
-	e.call(userA, "GET", "/v1/studio/workflows?media=audio", nil, 422)
+	if got := e.call(userA, "GET", "/v1/studio/workflows?media=sound", nil, 422); got["detail"] != "media must be image, video or audio" {
+		t.Fatal(got)
+	}
 
 	// a template's studio block is sent as published and copied with it; a user workflow's media is computed
 	template := e.call(userA, "GET", "/v1/studio/workflows/ltx-text-to-video", nil, 200)

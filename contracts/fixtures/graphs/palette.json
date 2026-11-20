@@ -37,7 +37,7 @@
           "kind": "output",
           "title": "Output",
           "family": null,
-          "help": "Stores its input as a run output: an image or a video take.",
+          "help": "Stores its input as a run output: an image, a video or (from API 1.30) an audio take.",
           "params": [],
           "inputs": [
             {
@@ -867,6 +867,57 @@
           "envs": [
             "fake"
           ]
+        },
+        {
+          "kind": "echo/speak",
+          "title": "Echo speak",
+          "family": "echo",
+          "params": [
+            {
+              "name": "voice",
+              "type": "voice",
+              "label": "Voice",
+              "default": null,
+              "accepts": [
+                "preset",
+                "design"
+              ],
+              "help": "The saved voice it speaks in: an echo starter voice or a designed voice."
+            },
+            {
+              "name": "seed",
+              "type": "seed",
+              "label": "Seed",
+              "default": -1,
+              "min": -1,
+              "max": 9007199254740991,
+              "step": 1
+            },
+            {
+              "name": "delay_ms",
+              "type": "int",
+              "label": "Delay per step (ms)",
+              "default": 300,
+              "min": 0,
+              "max": 10000
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "help": "Fake speech: a WAV (24 kHz, PCM 16-bit, mono) of one sine tone per character, 1/15 s each (so it lasts exactly the planned seconds), its pitch from the character and the voice, its phase from the seed; one progress step per 15 characters. An empty text fails `<node>: nothing to say`.",
+          "envs": [
+            "fake"
+          ]
         }
       ]
     },
@@ -1373,6 +1424,38 @@
               "type": "Duration"
             }
           ],
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "test/speak",
+          "title": "Speak",
+          "family": "test",
+          "params": [
+            {
+              "name": "voice",
+              "type": "voice",
+              "label": "Voice",
+              "default": null,
+              "accepts": [
+                "preset"
+              ]
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "help": "A preset-only speech stage.",
           "envs": [
             "fake"
           ]

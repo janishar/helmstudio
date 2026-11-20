@@ -7,6 +7,7 @@
 # The kinds of API 1.11 equal the canonical contract fixtures; keyframes, sample and `auto` (1.12) have none yet.
 # echo/retake, echo/a2v and echo/extend (API 1.19, workflows echo-retake, echo-a2v, echo-extend) take a video or audio take as a media
 # input (the core reads and checks it) and report the output's source_map.
+# echo/speak (API 1.30, workflow echo-voice-over) is the fake speech model; starter voices in voices/.
 # echo/ask (API 1.14, workflow echo-ask) is the fake llm: it answers what the prompt scripts (fake.py `ask`).
 id: echo
 family: echo
@@ -179,6 +180,17 @@ stages:
       seconds: {type: float, label: Add, default: 2, min: 0.1, max: 10, step: 0.1,
                 help: "Seconds to add, rounded up to whole 8-frame steps."}
       direction: {type: enum, label: Where, default: after, enum: [after, before]}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
+  # speech (API 1.30, workflow echo-voice-over): an Audio output and a voice param without a GPU (fake.py speak)
+  speak:
+    title: Echo speak
+    help: "Fake speech: a WAV (24 kHz, PCM 16-bit, mono) of one sine tone per character, 1/15 s each (so it lasts exactly the planned seconds), its pitch from the character and the voice, its phase from the seed; one progress step per 15 characters. An empty text fails `<node>: nothing to say`."
+    inputs: {text: Text}
+    outputs: {audio: Audio}
+    params:
+      voice: {type: voice, label: Voice, default: null, accepts: [preset, design],
+              help: "The saved voice it speaks in: an echo starter voice or a designed voice."}
+      seed: {type: seed, label: Seed, default: -1, min: -1, max: 9007199254740991, step: 1}
       delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
   ask:
     title: Ask (fake)

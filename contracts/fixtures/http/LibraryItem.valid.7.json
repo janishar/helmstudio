@@ -1,0 +1,24 @@
+{
+  "id": "qwen3-tts/ryan",
+  "kind": "voice",
+  "group": "preset",
+  "name": "Ryan",
+  "handle": null,
+  "text": "",
+  "images": [],
+  "thumb_url": "/files/packs/qwen3-tts/voices/ryan-0123456789abcdef.wav?exp=1767225600&sig=ab12",
+  "version": 1,
+  "created_at": "2026-11-21T10:00:00Z",
+  "updated_at": "2026-11-21T10:00:00Z",
+  "source": "starter",
+  "family": "qwen3-tts",
+  "loras": [],
+  "needs": [],
+  "voice": {
+    "source": "preset",
+    "family": "qwen3-tts",
+    "speaker": "Ryan",
+    "language": "en",
+    "style": "lively"
+  }
+}

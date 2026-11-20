@@ -1,0 +1,9 @@
+{
+  "kind": "voice",
+  "group": "designed",
+  "name": "Nervous teen",
+  "voice": {
+    "design": "male",
+    "speaker": "Ryan"
+  }
+}

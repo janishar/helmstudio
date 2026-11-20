@@ -32,17 +32,20 @@ var runOnly = map[string]bool{"unknown_kind": true, "env_mismatch": true, "requi
 // handles are the family-scoped port types.
 var handles = map[string]bool{"Model": true, "Conditioning": true, "Latent": true}
 
-// fits reports whether a wire of type got may feed a port of type want: the same type, or Media taking Image or Video.
+// fits reports whether a wire of type got may feed a port of type want: the same type, or Media taking Image, Video or
+// (API 1.30) Audio.
 func fits(got, want string) bool {
-	return got == want || want == "Media" && (got == "Image" || got == "Video")
+	return got == want || want == "Media" && (got == "Image" || got == "Video" || got == "Audio")
 }
 
-// workflowMedia is what a graph's takes are: text when it answers text, video when an output node's media is wired from a Video output, else
-// image (contracts/README.md, Video).
+// workflowMedia is what a graph's takes are: text when it answers text, else video when any output node's media is
+// wired from a Video output, else image when any from an Image, else (API 1.30) audio when any from an Audio, else
+// image; node order never matters (contracts/README.md, Video; Voices; check.py workflow_media).
 func workflowMedia(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) string {
 	if registry.IsText(nodes) {
 		return "text" // an ask workflow (API 1.14): its answer is stored on the run
 	}
+	got := map[string]bool{}
 	for _, node := range nodes {
 		ref, ok := node.In["media"]
 		if node.Kind != "output" || !ok {
@@ -50,9 +53,14 @@ func workflowMedia(nodes map[string]registry.Node, schemas map[string]registry.N
 		}
 		srcID, out, _ := strings.Cut(ref, ".")
 		for _, port := range schemas[nodes[srcID].Kind].Outputs {
-			if port.Name == out && port.Type == "Video" {
-				return "video"
+			if port.Name == out {
+				got[port.Type] = true
 			}
+		}
+	}
+	for _, t := range []string{"Video", "Image", "Audio"} {
+		if got[t] {
+			return strings.ToLower(t)
 		}
 	}
 	return "image"
@@ -85,7 +93,7 @@ func paramOf(schema registry.NodeSchema, name string) (registry.Param, bool) {
 // stays null, a rows param whose item has an Image field holds no items).
 func valueBad(param registry.Param, value any) bool {
 	switch param.Type {
-	case "image", "media": // a workflow holds no takes
+	case "image", "media", "voice": // a workflow holds no takes, nor (API 1.30) a voice
 		return value != nil
 	case "rows":
 		if items, ok := value.([]any); ok && len(items) > 0 {

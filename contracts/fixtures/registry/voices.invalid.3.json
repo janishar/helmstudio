@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "voices": [
+    {
+      "id": "echo/ada",
+      "family": "echo",
+      "name": "Ada",
+      "speaker": "ada",
+      "language": "en",
+      "version": 1,
+      "preview": {
+        "key": "packs/echo/voices/ada-0123456789abcdef.mp3",
+        "bytes": 10,
+        "duration_s": 1,
+        "sample_rate": 24000
+      }
+    }
+  ]
+}

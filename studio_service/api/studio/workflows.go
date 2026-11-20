@@ -188,14 +188,14 @@ func kinds(nodes map[string]registry.Node) []string {
 // ------------------------------------------------------------------ the endpoints
 
 // ListWorkflows returns the templates by title, then the caller's own newest first; source keeps one kind, media
-// those whose takes are images or videos.
+// those whose takes are images, videos or (API 1.30) audio.
 func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, source, media string) (dto.WorkflowList, error) {
 	out := dto.WorkflowList{Workflows: []dto.Workflow{}}
 	if source != "" && source != "template" && source != "mine" {
 		return out, network.NewUnprocessableError("source must be template or mine", nil)
 	}
-	if media != "" && media != "image" && media != "video" {
-		return out, network.NewUnprocessableError("media must be image or video", nil)
+	if media != "" && media != "image" && media != "video" && media != "audio" {
+		return out, network.NewUnprocessableError("media must be image, video or audio", nil)
 	}
 	keep := func(workflow dto.Workflow) {
 		if workflow.Media != "text" && (media == "" || workflow.Media == media) { // text workflows are internal

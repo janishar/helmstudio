@@ -45,6 +45,7 @@ type libraryRow struct {
 	Loras                 json.RawMessage // [{lora_id, name, strength}]
 	FromTakeID            *string
 	FromTakeKey           *string
+	Voice                 json.RawMessage // API 1.30, kind voice: its VoiceInfo
 }
 
 // libraryCols are the columns libraryRow scans from library_items l, in order.
@@ -53,7 +54,7 @@ const libraryCols = `l.id::text, l.kind, l.item_group, l.name, l.handle, l.text,
 		ORDER BY u.o) FROM unnest(l.images) WITH ORDINALITY AS u(i, o) JOIN takes t ON t.id = u.i AND t.owner_id = l.owner_id
 		AND t.deleted_at IS NULL AND t.ready AND t.width IS NOT NULL AND t.height IS NOT NULL), '[]'), l.loras,
 	(SELECT t.id::text FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready),
-	(SELECT coalesce(t.video->'poster'->>'key', t.key) FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready)`
+	(SELECT coalesce(t.video->'poster'->>'key', t.key) FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready), l.voice`
 
 // itemDTO maps a row, signing its images' keys (the original is its own thumbnail, as in the gallery); names are the
 // LoRA names now (a LoRA gone keeps the name it was saved with).
@@ -83,6 +84,9 @@ func (s *Service) itemDTO(row libraryRow, names map[string]string) dto.LibraryIt
 		out.ThumbURL = s.signer.SignPtr(row.FromTakeKey)
 	}
 	out.Needs = needs(row.Text, len(out.Images), len(out.Loras))
+	if row.Kind == "voice" {
+		_ = json.Unmarshal(row.Voice, &out.Voice)
+	}
 	return out
 }
 
@@ -171,18 +175,32 @@ func (s *Service) ListLibrary(ctx context.Context, caller common.Caller, query L
 				return err
 			}
 		}
-		var starters []registry.LiveLook
-		if query.Source != "mine" && query.Kind != "element" {
+		type starter struct {
+			item dto.LibraryItem
+			look lookItem
+		}
+		var starters []starter
+		keep := func(group, family, name string) bool {
+			return (query.Group == "" || group == query.Group) && (query.Family == "" || family == query.Family) &&
+				(query.Q == "" || strings.HasPrefix(strings.ToLower(name), query.Q))
+		}
+		if query.Source != "mine" && (query.Kind == "" || query.Kind == "look") {
 			for _, l := range s.registry.Looks(time.Now()) {
-				if (query.Group == "" || l.Group == query.Group) && (query.Family == "" || l.Family == query.Family) &&
-					(query.Q == "" || strings.HasPrefix(strings.ToLower(l.Name), query.Q)) {
-					starters = append(starters, l)
+				if keep(l.Group, l.Family, l.Name) {
+					starters = append(starters, starter{s.starterDTO(l), starterItem(l)})
 				}
 			}
-			slices.SortFunc(starters, func(a, b registry.LiveLook) int {
-				return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.ID, b.ID))
-			})
 		}
+		if query.Source != "mine" && (query.Kind == "" || query.Kind == "voice") { // API 1.30
+			for _, v := range s.registry.Voices(time.Now()) {
+				if keep("preset", v.Family, v.Name) {
+					starters = append(starters, starter{item: s.starterVoiceDTO(v)})
+				}
+			}
+		}
+		slices.SortFunc(starters, func(a, b starter) int {
+			return cmp.Or(strings.Compare(a.item.Name, b.item.Name), strings.Compare(a.item.ID, b.item.ID))
+		})
 		var ids []string
 		for _, row := range rows {
 			for _, l := range rowLoras(row) {
@@ -199,8 +217,8 @@ func (s *Service) ListLibrary(ctx context.Context, caller common.Caller, query L
 			items = append(items, rowItem(row))
 		}
 		for _, l := range starters {
-			out.Items = append(out.Items, s.starterDTO(l))
-			items = append(items, starterItem(l))
+			out.Items = append(out.Items, l.item)
+			items = append(items, l.look)
 		}
 		if query.Workflow != "" {
 			if err := s.annotateFit(ctx, tx, caller, query.Workflow, out.Items, items); err != nil {
@@ -243,7 +261,12 @@ func (s *Service) annotateFit(ctx context.Context, tx pgx.Tx, caller common.Call
 		return err
 	}
 	for i := range out {
-		reason := lookFit(nodes, schemas, out[i].Kind, items[i], families)
+		var reason string
+		if out[i].Kind == "voice" {
+			reason = voiceFit(nodes, schemas, voiceOf(out[i]))
+		} else {
+			reason = lookFit(nodes, schemas, out[i].Kind, items[i], families)
+		}
 		fits := reason == ""
 		out[i].Fits, out[i].Reason = &fits, json.RawMessage(`null`)
 		if !fits {
@@ -329,22 +352,28 @@ func (s *Service) readItem(ctx context.Context, tx pgx.Tx, ownerID, id string) (
 	return s.itemDTO(row, names), err
 }
 
-// GetStarterLook returns a starter look a live host publishes (id <family>/<look id>).
+// GetStarterLook returns a starter look or (API 1.30) starter voice a live host publishes (id <family>/<id>).
 func (s *Service) GetStarterLook(ctx context.Context, id string) (dto.LibraryItem, error) {
 	if err := s.ready(); err != nil {
 		return dto.LibraryItem{}, err
 	}
-	l, ok := s.registry.Looks(time.Now())[id]
-	if !ok {
-		return dto.LibraryItem{}, errNotFound
+	if l, ok := s.registry.Looks(time.Now())[id]; ok {
+		return s.starterDTO(l), nil
 	}
-	return s.starterDTO(l), nil
+	if v, ok := s.registry.Voices(time.Now())[id]; ok {
+		return s.starterVoiceDTO(v), nil
+	}
+	return dto.LibraryItem{}, errNotFound
 }
 
-// WriteStarterLook answers a PUT or DELETE of a starter look: 409 when a live host publishes it, else 404.
+// WriteStarterLook answers a PUT or DELETE of a starter look or voice: 409 when a live host publishes it, else 404.
 func (s *Service) WriteStarterLook(ctx context.Context, id string) error {
-	if _, err := s.GetStarterLook(ctx, id); err != nil {
+	item, err := s.GetStarterLook(ctx, id)
+	switch {
+	case err != nil:
 		return err
+	case item.Kind == "voice":
+		return errVoiceReadOnly
 	}
 	return errReadOnly
 }
@@ -381,8 +410,8 @@ func (s *Service) CreateLibraryItem(ctx context.Context, caller common.Caller, b
 		}
 		id := utility.NewID()
 		if _, err := tx.Exec(ctx, `INSERT INTO library_items (id, owner_id, kind, item_group, name, handle, text, images,
-			loras, from_take_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10)`, id, caller.ID, body.Kind, body.Group,
-			body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, fromTake); err != nil {
+			loras, from_take_id, voice) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10, $11)`, id, caller.ID, body.Kind,
+			body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, fromTake, voiceJSON(body.Voice)); err != nil {
 			return err
 		}
 		out, err = s.readItem(ctx, tx, caller.ID, id)
@@ -490,8 +519,8 @@ func (s *Service) ReplaceLibraryItem(ctx context.Context, caller common.Caller, 
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE library_items l SET item_group = $2, name = $3, handle = $4, text = $5,
-			images = $6::uuid[], loras = $7, version = version + 1, updated_at = clock_timestamp() WHERE l.id = $1`,
-			id, body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras); err != nil {
+			images = $6::uuid[], loras = $7, voice = $8, version = version + 1, updated_at = clock_timestamp() WHERE l.id = $1`,
+			id, body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, voiceJSON(body.Voice)); err != nil {
 			return err
 		}
 		out, err = s.readItem(ctx, tx, caller.ID, id)
@@ -569,6 +598,15 @@ func (s *Service) checkItem(ctx context.Context, tx pgx.Tx, ownerID, id, kind st
 		return network.NewConflictError("handle @"+*fields.Handle+" is already used", nil)
 	}
 	return nil
+}
+
+// voiceJSON is library_items.voice for a checked designed voice, null for any other item.
+func voiceJSON(v *dto.VoiceDesign) []byte {
+	if v == nil {
+		return nil
+	}
+	data, _ := json.Marshal(v.Designed())
+	return data
 }
 
 // takeIDs are the refs' take ids.

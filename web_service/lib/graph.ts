@@ -62,8 +62,8 @@ export const paletteFrom = (w: S<"Workflow">): Palette =>
   Object.fromEntries(Object.values(w.node_schemas).map((s) => [s.kind, { ...s, envs: [w.env] }]));
 
 /** What an input of type Media accepts (README, Graph rules: fits). */
-const MEDIA = new Set(["Image", "Video"]);
-/** Whether a wire of type `got` fits a key of type `want`: equal, or `want` is Media and `got` an Image or Video. */
+const MEDIA = new Set(["Image", "Video", "Audio"]);
+/** Whether a wire of type `got` fits a key of type `want`: equal, or `want` is Media and `got` an Image, Video or (API 1.30) Audio. */
 export const fits = (got: string | null | undefined, want: string | null | undefined) =>
   !!got && !!want && (got === want || (want === "Media" && MEDIA.has(got)));
 

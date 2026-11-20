@@ -28,6 +28,8 @@ type MadeWith struct {
 	Loras []MadeWithLora `json:"loras,omitempty"`
 	// the looks it was made with, in request order (repeats once), as they were when the run was made
 	Looks []MadeWithLook `json:"looks,omitempty"`
+	// API 1.30: the voices its voice params named, node id then param order, each once, as they were when the run was made
+	Voices []MadeWithVoice `json:"voices,omitempty"`
 	// a take made by a step of a pipeline batch
 	Pipeline *MadeWithPipeline `json:"pipeline,omitempty"`
 	// API 1.18: the host that ran it (the run's host at the attempt that stored it); absent before 1.18
@@ -48,6 +50,14 @@ type MadeWithLook struct {
 	Source  string `json:"source"` // mine | starter
 	Name    string `json:"name"`
 	Version int    `json:"version"`
+}
+
+// MadeWithVoice is a voice a take was made with (API 1.30); source preset | cloned | designed.
+type MadeWithVoice struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version int    `json:"version"`
+	Source  string `json:"source"`
 }
 
 // LookStatus is how a look of made_with.looks compares now: current, changed, deleted (own) or missing (starter).
@@ -132,9 +142,11 @@ type Take struct {
 	SourceMap *SourceMap `json:"source_map,omitempty"`
 }
 
-// AudioInfo is an audio take's length as the client declared it at upload (takes.audio).
+// AudioInfo is an audio take's length as the client declared it at upload, or (API 1.30) a run's WAV's length and
+// sample rate from evt.run.output (takes.audio, run_outputs.audio).
 type AudioInfo struct {
-	DurationS float64 `json:"duration_s"`
+	DurationS  float64 `json:"duration_s"`
+	SampleRate *int    `json:"sample_rate,omitempty"`
 }
 
 // SourceMap is evt.run.output's source_map, stored as takes.source_map: output time = source time + OffsetS; the

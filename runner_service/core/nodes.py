@@ -1,9 +1,10 @@
 """The core nodes (schemas in core/nodes.yaml): `prompt` (Text), `seed` (Seed: an int, already resolved by
 graph.resolve), `canvas` (Canvas: {"width", "height", "mode"}), `image` (Image: its param, already fetched and
-decoded by core.images), `output` (stores an Image or a Video as a run output) and `answer` (a text workflow's
+decoded by core.images), `output` (stores an Image, a Video or an Audio as a run output) and `answer` (a text workflow's
 sink: its text becomes the run's answer, sent on the terminal status)."""
 
 import io
+import wave
 
 from PIL import Image
 
@@ -36,13 +37,43 @@ def _png(image: Image.Image) -> bytes:
     return buf.getvalue()
 
 
+def _wav(ctx, audio: dict) -> tuple[bytes, dict]:
+    """An Audio value ({wav: PCM 16-bit mono samples, or a RIFF WAVE file of them, sample_rate, duration_s}) as a
+    RIFF WAVE file and its facts {duration_s = samples / sample_rate, sample_rate} (contracts/README.md, Voices)."""
+    pcm, rate = audio["wav"], audio["sample_rate"]
+    if pcm[:4] == b"RIFF":
+        with wave.open(io.BytesIO(pcm)) as w:
+            if (w.getnchannels(), w.getsampwidth()) != (1, 2):
+                raise RunError(f"{ctx.node}: audio must be PCM 16-bit mono")
+            rate, pcm = w.getframerate(), w.readframes(w.getnframes())
+    if isinstance(rate, bool) or not isinstance(rate, int) or not 8000 <= rate <= 96000:
+        raise RunError(f"{ctx.node}: audio at {rate!r} Hz is outside 8-96 kHz, up to 600 s")
+    duration = len(pcm) // 2 / rate
+    if not 0 < duration <= 600:
+        raise RunError(
+            f"{ctx.node}: audio of {duration:.2f} s at {rate} Hz is outside 8-96 kHz, up to 600 s"
+        )
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm[: len(pcm) // 2 * 2])
+    return buf.getvalue(), {"duration_s": duration, "sample_rate": rate}
+
+
 def output(ctx, params: dict, inputs: dict) -> dict:
     """Store the input as an output of the run: an Image as a PNG; a Video value ({mp4: bytes, poster: PIL image,
     frames, fps, has_audio[, last: PIL image, stream: defs videoStream, source_map: defs sourceMap]}) as its MP4
-    with the poster (frame 0) and the last frame as PNGs beside it."""
+    with the poster (frame 0) and the last frame as PNGs beside it; an Audio value ({wav, sample_rate,
+    duration_s}) as a WAV (PCM 16-bit, mono, its own rate)."""
     media = inputs["media"]
     if isinstance(media, Image.Image):
         ctx.output(_png(media), ext="png", kind="image", width=media.width, height=media.height)
+        return {}
+    if "wav" in media:
+        data, audio = _wav(ctx, media)
+        ctx.output(data, ext="wav", kind="audio", audio=audio)
         return {}
     poster: Image.Image = media["poster"]
     video = {"duration_s": media["frames"] / media["fps"], "fps": media["fps"], "frames": media["frames"],

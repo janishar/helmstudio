@@ -33,6 +33,25 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   (2026-11-21, Q11) that ZONOS3 includes them as starter presets.
 - Qwen3-TTS: CustomVoice and VoiceDesign on disk; the Base 1.7B (cloning) stays undownloaded.
 - GPU test runs for voices: at most 4 s of audio, clips 3 s.
+- The owner went to sleep on 2026-11-21 saying to carry on and make the needed decisions. Decisions taken
+  while building, for the owner to review (each: the choice, then why):
+  - API split: 1.30 (step 2: audio takes, the voice param, saved voices), 1.31 (step 4: cloning, Save as
+    voice), 1.32 (step 5: scripts, dialogue, Timeline audio), not one 1.30. Why: each step passes its own gates,
+    as M7 bumped the API per pack.
+  - Memory plans plan a speech stage at its `max_seconds`. Why: the default prompt is empty, so planning on it
+    would plan 0 s and under-reserve every real run.
+  - The size variable is `speech_seconds`, not the plan's `seconds`. Why: ltx/extend already has a `seconds`
+    param, and the two collided in `peak_gb` (found in review).
+  - A workflow's media with mixed outputs: video, else image, else audio. Why: one deterministic rule in Go,
+    Python and TS (the Go map order made it random).
+  - Elements (not only looks) do not fit audio workflows. Why: an `@` in spoken text would be read aloud;
+    dialogue scripts (1.32) are the way characters speak.
+  - ZONOS3 is built offline with its text normaliser trimmed to the library crate. Why: the full workspace
+    wants pyo3 and other crates from crates.io; no downloads.
+  - ZONOS3 runs `zonos3-server` as the run's child, not `zonos3-cli`. Why: only the server normalises text and
+    speaks several lines per load (scout, reference-notes/voices.md part 4).
+  - Keep-awake for the overnight run: denied once by the app's auto-mode check, then granted when the owner asked
+    (until the session is idle for about 5 minutes).
 
 ## M7 notes
 

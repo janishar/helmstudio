@@ -1,0 +1,10 @@
+# The echo family's starter voices (contracts/fixtures/registry/voices.valid.json exactly; no previews).
+- id: ada
+  name: Ada
+  speaker: ada
+  language: en
+- id: bo
+  name: Bo
+  speaker: bo
+  language: zh
+  style: calm and slow

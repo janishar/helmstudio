@@ -282,6 +282,38 @@
       }
     },
     {
+      "id": "echo-voice-over",
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    {
       "id": "echo-ask",
       "title": "Ask (fake)",
       "family": "echo",

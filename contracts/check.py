@@ -54,6 +54,7 @@ REGISTRY_KEYS = [
     "models",
     "loras",
     "looks",
+    "voices",
     "host",
     "custom",
     "settings",
@@ -176,6 +177,8 @@ def value_error(param: dict, v) -> str | None:
         return None
     if t in ("image", "media"):  # a registry workflow holds no takes: an image or media param stays empty
         return None if v is None else f"{v!r}: a workflow cannot fill an {t} param"
+    if t == "voice":  # API 1.30: a workflow holds no voice either; a run names one (README, Voices)
+        return None if v is None else f"{v!r}: a workflow cannot fill a voice param"
     if t == "span":  # {start, end} seconds, start < end (README, Media inputs); null = none yet
         ok = v is None or (isinstance(v, dict) and set(v) == {"start", "end"} and all(
             isinstance(x, (int, float)) and not isinstance(x, bool) for x in v.values()) and 0 <= v["start"] < v["end"])
@@ -315,7 +318,7 @@ def check_canonical_registries() -> None:
 
 # ---------------------------------------------------------------- graph rules (README, "Graph rules")
 HANDLES = {"Model", "Conditioning", "Latent"}
-MEDIA = {"Image", "Video"}  # what an input of type Media accepts (Audio later)
+MEDIA = {"Image", "Video", "Audio"}  # what an input of type Media accepts (Audio from API 1.30)
 
 
 def fits(got: str | None, want: str) -> bool:
@@ -324,17 +327,18 @@ def fits(got: str | None, want: str) -> bool:
 
 
 def workflow_media(nodes: dict, kinds: dict) -> str:
-    """video when an output node's media is wired from a Video output, text when an answer node's text is wired
-    (README, The llm pack), else image (README, Video)."""
+    """text when an answer node's text is wired (README, The llm pack); else video when any output node's media is
+    wired from a Video output, else image when any from an Image, else (API 1.30) audio when any from an Audio; else
+    image (README, Video; Voices). Not node order: the first type of that list that any output has."""
     if any(n["kind"] == "answer" and "text" in n.get("in", {}) for n in nodes.values()):
         return "text"
+    got = set()
     for n in nodes.values():
         ref = n.get("in", {}).get("media") if n["kind"] == "output" else None
         src = nodes.get(ref.split(".")[0]) if ref else None
         ks = kinds.get(src["kind"]) if src else None
-        if ks and any(o["name"] == ref.split(".")[1] and o["type"] == "Video" for o in ks["outputs"]):
-            return "video"
-    return "image"
+        got |= {o["type"] for o in ks["outputs"] if o["name"] == ref.split(".")[1]} if ks else set()
+    return next((t.lower() for t in ("Video", "Image", "Audio") if t in got), "image")
 LORA_ID = re.compile(r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
 WIREABLE = {"int": "Int", "float": "Float", "seed": "Seed", "string": "Text", "text": "Text", "image": "Image"}
 RUN_ONLY = {"unknown_kind", "env_mismatch", "required_input", "no_output", "too_many_outputs", "too_many_seeds",
@@ -1284,6 +1288,9 @@ def look_fit(nodes: dict, palette: dict, item: dict, loras: dict[str, str]) -> s
     """Why the item cannot be applied to this graph (README, Looks: fit), None when it can. `loras`: LoRA id → detected
     family of every LoRA the caller can use now in the workflow's env."""
     needs = look_needs(item)
+    if workflow_media(nodes, palette) == "audio":  # API 1.30: spoken text is never expanded (README, Voices)
+        return "mentions are not read aloud; use a dialogue script" if item.get("kind") == "element" \
+            else "looks do not apply to speech"
     if ("text" in needs or item.get("kind") == "element") and not prompt_params(nodes, palette):
         return "this workflow has no prompt"
     if item.get("kind") == "element":
@@ -1320,7 +1327,13 @@ def resolve_mentions(nodes: dict, palette: dict, library: list[dict], sizes: dic
     first = {}  # look id → its first place in the request, from 1
     for i, lid in enumerate(chosen, 1):
         first.setdefault(lid, i)
-    errors = [f"{path}: unknown element @{h}" for _, path, _, parts in prompts for h in mentioned(parts) if h not in lib]
+    if workflow_media(nodes, palette) == "audio":  # API 1.30: nothing is expanded; a mention is refused (README, Voices)
+        errors = [f"{path}: mentions are not read aloud; use a dialogue script" for _, path, _, parts in prompts
+                  if mentioned(parts)]
+        prompts = []
+    else:
+        errors = [f"{path}: unknown element @{h}" for _, path, _, parts in prompts for h in mentioned(parts)
+                  if h not in lib]
     errors += [f"looks[{i}]: unknown look {lid}" for lid, i in first.items() if lid not in found]
     if errors:
         return {"errors": errors}
@@ -1950,6 +1963,97 @@ def check_video(registry: Registry, palette: dict) -> None:
         elif (got := position_errors(c["workflow"]["nodes"], palette)) != c["errors"]:
             fail(f"fixtures/video/keyframes.json {c['description']!r}: got {got}, want {c['errors']}")
     print("ok   fixtures/video/keyframes.json")
+
+
+# ---------------------------------------------------------------- voices (README, "Voices")
+VOICE_SOURCE = {"preset": "preset", "cloned": "clip", "designed": "design"}  # a voice's group → what `accepts` names
+VOICE_REFUSED = {"preset": "this workflow cannot use a preset voice", "clip": "this workflow cannot clone a voice",
+                 "design": "this workflow cannot use a designed voice"}
+SPEECH_CPS = 15  # characters per second of planned speech (the peak_gb variable `speech_seconds`)
+
+
+def voice_params(nodes: dict, palette: dict) -> list[tuple[str, dict]]:
+    """Every voice param of a known, not bypassed node, node id order then schema order (it takes no wire)."""
+    return [(nid, p) for nid in sorted(nodes) if (s := palette.get(nodes[nid]["kind"])) and not nodes[nid].get("bypass")
+            for p in s["params"] if p["type"] == "voice"]
+
+
+def voice_reason(kind: str, param: dict, item: dict) -> str | None:
+    """Why one voice param cannot take this saved voice (item: a LibraryItem of kind voice), None when it can. Studio's
+    run 422 is `<node>.<param>: <reason>`."""
+    src = VOICE_SOURCE[item["group"]]
+    if src not in param["accepts"]:
+        return VOICE_REFUSED[src]
+    if src == "preset" and item["voice"]["family"] != family(kind):
+        return f"voice {item['name']} is for {item['voice']['family']}"
+    return None
+
+
+def voice_fit(nodes: dict, palette: dict, item: dict) -> str | None:
+    """GET /library?workflow= for a voice: None when some voice param takes it, else the first param's reason."""
+    params = voice_params(nodes, palette)
+    if not params:
+        return "this workflow takes no voice"
+    reasons = [voice_reason(nodes[nid]["kind"], p, item) for nid, p in params]
+    return None if None in reasons else reasons[0]
+
+
+def speech_seconds(nodes: dict, palette: dict, stage: str, max_seconds: float | None = None) -> float:
+    """The peak_gb variable `speech_seconds` of node `stage` (README, Voices: memory): code points of the text reaching its
+    first Text input (a prompt node's merged text; through any other node, the nearest upstream prompt's), else of
+    its nearest upstream prompt, ÷ 15, capped at max_seconds; 0 without text. Nearest = fewest wires, then node id."""
+    val = lambda nid: nodes[nid].get("params", {}).get("text", next(
+        p["default"] for p in palette[nodes[nid]["kind"]]["params"] if p["name"] == "text"))
+    s = palette[nodes[stage]["kind"]]
+    port = next((i["name"] for i in s["inputs"] if i["type"] == "Text" and i["name"] in nodes[stage].get("in", {})), None)
+    level = [nodes[stage]["in"][port].split(".")[0]] if port else [stage]
+    seen = set(level)
+    while level:
+        if hits := sorted(n for n in level if nodes[n]["kind"] == "prompt" and n != stage):
+            chars = len(val(hits[0]))
+            break
+        level = sorted({ref.split(".")[0] for n in level for ref in nodes[n].get("in", {}).values()} - seen)
+        seen |= set(level)
+    else:
+        chars = 0
+    sec = chars / SPEECH_CPS
+    return min(sec, max_seconds) if max_seconds is not None else sec
+
+
+def check_voices(registry: Registry, palette: dict) -> None:
+    g = HERE / "fixtures" / "voices"
+    doc_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/WorkflowDoc"}, registry=registry)
+    item_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/LibraryItem"}, registry=registry,
+                                  format_checker=FormatChecker())
+    for name in ("media.json", "fit.json", "seconds.json"):
+        fx = json.loads((g / name).read_text())
+        for wid, wf in fx["workflows"].items():
+            if errs := list(doc_v.iter_errors(wf)):
+                fail(f"fixtures/voices/{name} {wid}: not a WorkflowDoc: {errs[0].json_path}: {errs[0].message}")
+        for case in fx["cases"]:
+            nodes = fx["workflows"][case["workflow"]]["nodes"]
+            if name == "media.json":
+                got = workflow_media(nodes, palette)
+            elif name == "fit.json":
+                if errs := list(item_v.iter_errors(case["item"])):
+                    fail(f"fixtures/voices/fit.json {case['description']!r}: item: {errs[0].message}")
+                    continue
+                item = case["item"]
+                got = voice_fit(nodes, palette, item) if item["kind"] == "voice" else look_fit(nodes, palette, item, {})
+            else:
+                got = speech_seconds(nodes, palette, case["stage"], case.get("max_seconds"))
+            if got != case["expect"]:
+                fail(f"fixtures/voices/{name} {case['description']!r}: got {got!r}, want {case['expect']!r}")
+        print(f"ok   fixtures/voices/{name}")
+    # starter voices: a family's voice ids are not its look ids (they share the /library/<family>/<id> URL)
+    reg = HERE / "fixtures" / "registry"
+    looks = {x["id"] for x in json.loads((reg / "looks.valid.json").read_text())["looks"]}
+    voices = json.loads((reg / "voices.valid.json").read_text())["voices"]
+    if clash := sorted({v["id"] for v in voices} & looks) or [v["id"] for v in voices
+                                                               if v["id"].split("/")[0] != v["family"]]:
+        fail(f"fixtures/registry/voices.valid.json: ids clash with looks or name another family: {clash}")
+    else:
+        print("ok   fixtures/registry/voices.valid.json ids")
 
 
 # ---------------------------------------------------------------- timeline rules (README, "Timeline rules")
@@ -2978,6 +3082,7 @@ def main() -> int:
     check_loras()
     check_lora_detection()
     check_video(registry, palette)
+    check_voices(registry, palette)
     check_timelines(registry, palette)
     check_dispatch(registry)
     check_openapi()

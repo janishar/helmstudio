@@ -788,10 +788,10 @@ const MaxLibraryList = 1000
 func ParseLibraryQuery(kind, group, q, limit string) (LibraryQuery, string) {
 	out := LibraryQuery{Kind: kind, Group: group, Q: strings.ToLower(strings.TrimPrefix(strings.TrimSpace(q), "@")), Limit: MaxLibraryList}
 	switch {
-	case kind != "" && kind != "element" && kind != "look":
-		return out, "kind must be element or look"
-	case group != "" && !slices.Contains(dto.LibraryGroups, group) && !slices.Contains(dto.LookGroups, group):
-		return out, "group must be one of " + strings.Join(append(slices.Clone(dto.LibraryGroups), dto.LookGroups...), ", ")
+	case kind != "" && kind != "element" && kind != "look" && kind != "voice":
+		return out, "kind must be element, look or voice"
+	case group != "" && !slices.Contains(dto.AllGroups(), group):
+		return out, "group must be one of " + strings.Join(dto.AllGroups(), ", ")
 	case utf8.RuneCountInString(q) > 80:
 		return out, "q must be at most 80 characters"
 	}
@@ -815,7 +815,7 @@ func (c *controller) createLibraryItemHandler(ctx *gin.Context) {
 	reply(ctx, http.StatusCreated, out, err)
 }
 
-// starterLookHandler: GET, PUT and DELETE /library/{family}/{look_id} — a starter look (writes are 409).
+// starterLookHandler: GET, PUT and DELETE /library/{family}/{look_id} — a starter look or voice (writes are 409).
 func (c *controller) starterLookHandler(ctx *gin.Context) {
 	id := ctx.Param("id") + "/" + ctx.Param("look_id")
 	if !dto.LookID.MatchString(id) {

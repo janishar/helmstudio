@@ -1,0 +1,196 @@
+{
+  "description": "the peak_gb variable `speech_seconds` (README, Voices: memory; speech_seconds): code points of the text reaching the stage's Text input (else its nearest upstream prompt) / 15, capped at the stage's max_seconds; 0 without text",
+  "workflows": {
+    "voice-over": {
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "Hello there, how are you, Ada?"
+          }
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    "through-a-node": {
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "ababababababababababababababab"
+          }
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "lift.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        },
+        "lift": {
+          "kind": "echo/lora-stack",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "rows": []
+          }
+        }
+      }
+    },
+    "default-text": {
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {}
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    "long": {
+      "title": "Echo voice-over",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        },
+        "speak": {
+          "kind": "echo/speak",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "voice": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      }
+    },
+    "image": {
+      "title": "Echo",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": "a fox"
+          }
+        },
+        "echo": {
+          "kind": "echo/echo",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "echo.image"
+          }
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "description": "30 characters straight from the prompt: 2 s",
+      "workflow": "voice-over",
+      "stage": "speak",
+      "expect": 2.0
+    },
+    {
+      "description": "through another Text node: the nearest upstream prompt",
+      "workflow": "through-a-node",
+      "stage": "speak",
+      "expect": 2.0
+    },
+    {
+      "description": "the default text (empty): 0",
+      "workflow": "default-text",
+      "stage": "speak",
+      "expect": 0.0
+    },
+    {
+      "description": "900 characters: 60 s",
+      "workflow": "long",
+      "stage": "speak",
+      "expect": 60.0
+    },
+    {
+      "description": "capped at max_seconds",
+      "workflow": "long",
+      "stage": "speak",
+      "max_seconds": 40,
+      "expect": 40
+    },
+    {
+      "description": "the prompt node itself has no upstream text: 0",
+      "workflow": "image",
+      "stage": "prompt",
+      "expect": 0.0
+    }
+  ]
+}

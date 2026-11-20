@@ -2,7 +2,7 @@
 runner, the echo pack), mac/torch, mac/mlx or mac/native (`make runners`: the torch packs, the mlx packs, the native
 packs: a stage runs a child process, core.child; core deps only, no torch or MLX).
 
-Loads the packs of its env, indexes the host's shared LoRAs, stores the starter looks' thumbnails, checks and publishes its registry values, keeps its hosts key fresh (with memory and
+Loads the packs of its env, indexes the host's shared LoRAs, stores the starter looks' thumbnails and voices' previews, checks and publishes its registry values, keeps its hosts key fresh (with memory and
 resident components when it has a residency manager), then pulls cmd.run.<host>.<env> from CMD (durable
 runner-<host>-<env>) and runs one command at a time (consumer.Consumer). SIGINT/SIGTERM stop pulling, stop the
 current run at its next cancel point (reported failed), unload every component, delete the hosts key and exit.
@@ -35,7 +35,7 @@ import config
 import health
 from config import ENV, HOST, INBOX_PREFIX, NATS_URL
 from consumer import ACK_WAIT, Consumer
-from core import child, download, looks, lora, media, models, registry
+from core import child, download, looks, lora, media, models, registry, voices
 from core.graph import GPU
 from core.residency import POLICIES, Residency, host_device, ram_gb
 from messaging import media as media_jobs
@@ -173,6 +173,7 @@ async def main() -> None:
     registry.fill_prefused(values, packs, library.files)
     values["looks"] = registry.scanned_value("looks", looks.entries(packs, library, config.MODELS))
     await looks.put_thumbs(packs, store)
+    await voices.put_previews(packs, store)
     connected = False
 
     async def nats_error(e: Exception) -> None:

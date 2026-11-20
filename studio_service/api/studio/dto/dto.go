@@ -133,6 +133,8 @@ type RunOutput struct {
 	TakeID *string `json:"take_id,omitempty"`
 	// kind video only: its metadata and signed poster
 	Video *gallery.VideoInfo `json:"video,omitempty"`
+	// API 1.30, kind audio only: its length and sample rate
+	Audio *gallery.AudioInfo `json:"audio,omitempty"`
 }
 
 // PinnedUnload is one pinned entry a queued run's admission would unload (Run.unloads_pinned).
