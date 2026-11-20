@@ -4,7 +4,7 @@
 // a thumbnail grid (arrow keys move between items), greyed items with the reason, and a footer. Each picker is a thin
 // configuration of it; `Tile` is the thumbnail card the LoRA and look grids share.
 import type { ReactNode } from "react";
-import { ImageOff } from "lucide-react";
+import { ImageOff, Plus } from "lucide-react";
 import { ErrorNote, Info } from "@/components/kit";
 import { safeUrl } from "@/lib/format";
 
@@ -171,8 +171,15 @@ export function Pic({ thumb, empty, n = -1 }: { thumb: string | null; empty: str
         <i
           className={`flex aspect-[16/10] flex-col items-center justify-center gap-1 rounded-[10px] bg-s1 text-[11px] text-t2 not-italic ${n >= 0 ? "border-2 border-a1" : "border border-dashed border-dash"}`}
         >
-          <ImageOff size={16} aria-hidden />
-          {empty}
+          {/* "+" is the New tile: a plus, not a missing picture */}
+          {empty === "+" ? (
+            <Plus size={18} aria-hidden />
+          ) : (
+            <>
+              <ImageOff size={16} aria-hidden />
+              {empty}
+            </>
+          )}
         </i>
       )}
       {n >= 0 && (

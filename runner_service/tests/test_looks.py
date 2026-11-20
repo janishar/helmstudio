@@ -59,7 +59,7 @@ def test_echo_pack_publishes_the_canonical_looks_fixture(tmp_path):
     }
 
 
-def test_qwen_pack_looks_are_text_only_and_on_contract(tmp_path):
+def test_qwen_pack_looks_have_text_a_thumb_and_are_on_contract(tmp_path):
     (q,) = [p for p in pack.PACKS.iterdir() if p.name == "qwen_image"]
     p = types.SimpleNamespace(name="qwen_image", dir=q, family="qwen-image", spec={})
     p.looks = looks.load(p)
@@ -68,7 +68,14 @@ def test_qwen_pack_looks_are_text_only_and_on_contract(tmp_path):
         "published_at": "2026-11-14T10:00:00Z", "published_by": "t", "looks": entries}) == []  # fmt: skip
     groups = [e["group"] for e in entries]
     assert all(3 <= groups.count(g) <= 4 for g in looks.GROUPS)
-    assert all(e["text"] and not e["loras"] and e["thumb"] is None for e in entries)
+    assert all(e["text"] and not e["loras"] for e in entries)
+    # each starter look ships a 16:10 WebP thumbnail beside its YAML (well under the 2 MB cap)
+    assert all(
+        e["thumb"]["content_type"] == "image/webp"
+        and (e["thumb"]["width"], e["thumb"]["height"]) == (640, 400)
+        and e["thumb"]["bytes"] < 100_000
+        for e in entries
+    )
 
 
 def test_a_look_lora_is_looked_up_in_the_index_by_file(tmp_path):

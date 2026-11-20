@@ -2,15 +2,19 @@
   group: film
   name: 35mm grain
   text: "shot on 35mm film, fine grain, slight halation"
+  image: grainy-35mm.webp
 - id: large-format
   group: film
   name: Large format
   text: "large format photograph, very fine detail, shallow depth of field"
+  image: large-format.webp
 - id: instant-photo
   group: film
   name: Instant photo
   text: "instant photo, soft focus, faded edges, slight colour shift"
+  image: instant-photo.webp
 - id: black-and-white
   group: film
   name: Black and white
   text: "black and white photograph, rich blacks, silver tones"
+  image: black-and-white.webp

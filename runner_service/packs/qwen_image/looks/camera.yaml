@@ -2,15 +2,19 @@
   group: camera
   name: Wide, low angle
   text: "wide angle lens, low camera angle looking up"
+  image: wide-low.webp
 - id: telephoto
   group: camera
   name: Telephoto
   text: "long telephoto lens, compressed background, subject isolated"
+  image: telephoto.webp
 - id: overhead
   group: camera
   name: Overhead
   text: "top-down overhead shot, flat composition"
+  image: overhead.webp
 - id: close-up
   group: camera
   name: Close-up
   text: "tight close-up, 85mm portrait lens, background softly blurred"
+  image: close-up.webp
