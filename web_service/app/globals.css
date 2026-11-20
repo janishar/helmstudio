@@ -35,7 +35,16 @@
     min-height: 100dvh;
     background-color: var(--g);
     color: var(--t1);
-    /* a faint warm light from the top left */
+    -webkit-font-smoothing: antialiased;
+  }
+  /* a faint warm light from the top left, on a fixed layer behind the page: Safari paints a fixed body background
+     separately behind scrolling areas (a visible box), Chrome does not */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
     background-image:
       radial-gradient(1100px 620px at 14% -12%, rgba(255, 196, 120, 0.11), transparent 62%),
       radial-gradient(
@@ -44,8 +53,6 @@
         transparent 60%
       ),
       repeating-linear-gradient(118deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 4px);
-    background-attachment: fixed;
-    -webkit-font-smoothing: antialiased;
   }
   :focus-visible {
     outline: 2px solid var(--a1);
