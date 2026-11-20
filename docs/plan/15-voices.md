@@ -60,7 +60,7 @@ Lessons from the old code:
 | Pack | Env | Why | Resident | Peak (to measure) |
 |---|---|---|---|---|
 | `qwen3_tts` | **torch** (MPS; CUDA later) | a port on the env's own pins (torch 2.15, transformers 5.23), as AI-EXP did; no new env | talker 3.8 GB + speech tokenizer 0.7 GB per variant; the tokenizer is one shared entry | ≈ 6 GB (placeholder: fit `peak_gb` from runs at 2 lengths) |
-| `zonos3` | **native** | a vendored, pinned `zonos3-cli` as a child process (core.child), like `minimax_h3` | nothing after a run | the child's whole footprint, measured (unknown; the files it loads are small: backbone-ptq 0.66 GB plus decoder, speaker encoder and steer, so likely 2–4 GB) |
+| `zonos3` | **native** | the vendored, pinned ggml build as a child process (core.child), like `minimax_h3`: `zonos3-server` on 127.0.0.1 for the run (it normalizes text and speaks many lines in one load; the CLI does neither), killed after | nothing after a run | the child's whole footprint, measured (unknown; the files it loads are small: backbone-ptq 0.66 GB plus decoder, speaker encoder and steer, so likely 2–4 GB) |
 
 - Not MLX: mlx-audio 0.6.5 (voiceflow) runs Qwen3-TTS, but it brings mlx-lm and its own pins into the mlx env that
   LTX and the llm pack share, and the torch port is already proven. Revisit only if MPS is too slow.
@@ -173,8 +173,10 @@ runner_service/vendor/zonos3/   # servers/ggml at commit 96d9e0e + ggml + textno
                                 # third_party licences; built by `make zonos3`
 ```
 
-Building `zonos3-cli` needs CMake, Apple clang, the ggml sources and a Rust toolchain (cargo builds the textnorm
-library); `--clone` from a file needs ffmpeg (already a runner dependency). These go in 14-dependencies.md as build
+Building it needs CMake, Apple clang, the ggml sources and a Rust toolchain (cargo builds the textnorm library,
+offline: the vendored copy trims textnorm's workspace to the library, whose crates need nothing from crates.io; a
+static build so no dylib path points into a build folder); `--clone` from a file needs ffmpeg (already a runner
+dependency). Measured facts: [reference-notes/voices.md](../reference-notes/voices.md). These go in 14-dependencies.md as build
 tools of the native env when the pack is built.
 
 `qwen3_tts/model.yaml` in short (`peak_gb` are placeholders):
