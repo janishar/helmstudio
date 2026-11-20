@@ -59,31 +59,25 @@ Lessons that cost time:
   Test admin: the fake-mode admin in `deploy/compose/fake.yml`.
 - **Native runners** on the Mac (`make runners`, health on 8091 torch, 8092 mlx, 8093 native): running and idle.
 - **Test stack** (`helmstudio-test`): up; it has two fake hosts and NATS TLS.
-- **GCP**: one spot VM `helm-gpu` in us-central1-b, STOPPED, disk kept (Qwen weights, the built CUDA image, that
-  host's credentials). It bills for storage only. Rules are in the project memory `gcp-for-cuda.md`: spot only; say
-  before starting it; never stop or delete it without the owner's explicit yes each time.
+- **GCP**: no VM or disk (helm-gpu was deleted 2026-11-19). Rules are in the project memory `gcp-for-cuda.md`: spot
+  only; say before starting one; never stop or delete one without the owner's explicit yes each time.
 - Old-studio folders (`~/GenAI/ltx-2-studio`, `~/GenAI/helmstudio`, `~/.helmstudio`, …) and
   `~/ORALAB` are read-only references.
 
-## Decisions waiting for the owner
+## Owner decisions (answered 2026-11-20)
 
-1. **MLX version**: stay on 0.32.4 (LTX output close to the old studio's, not identical) or pin 0.32.2 (bit-exact,
-   but the plan needs ≥ 0.32.4 for the vision library). The robust pass ran every LTX golden on both: all pass.
-2. **Default judge model**: Qwen Image's 8B text encoder (no extra load; it passed everything in the demonstration)
-   or the 27B `llm` model (sensible verdicts; more model swaps).
-3. **LoRA strength slider**: −4…4 as built, or 0…2 as the Create board draws.
-4. **LTX first-frame quirk**: the old studio gives no keyframe marker for an image at frame 0; copied to stay
-   bit-exact.
-5. **Mock differences left as built** (Graph, Pipelines review, video Create, Timeline): listed in the stage reports;
-   the rule is that the mock leads, so each is either built to the board or the board is changed with the owner's
-   say.
-6. **Import of the old gallery**: `helm import ~/.helmstudio --user <email>` is ready; a dry run found 90 items.
-7. **The GCP disk**: keep (small storage bill) or delete.
-8. **The empty Create screen**: decided 2026-11-20, built to the Direct board (title, composer under it, looks grid
-   of the open tile's group, Elements aside). Inspector-only settings show when a composer setting is clicked; after the
-   first run the screen is as before.
-9. **The MiniMax H3 video first + last frame golden** passes at 25 dB (two runs differ by 26-27 dB), the silent
-   video one at 27 dB, not 30.
+1. **MLX version**: stay on 0.32.4 (0.32.2 is bit-exact for LTX, but the vision library needs 0.32.4 or newer).
+2. **Default judge model**: Qwen Image's 8B text encoder.
+3. **LoRA strength slider**: 0 to 2, as the Create board draws (to build).
+4. **LTX first-frame quirk**: fix it (add the keyframe marker at frame 0) and remake the LTX goldens (to build).
+5. **Mock differences** (Graph, Pipelines review, video Create, Timeline, the Gallery "This project only" chip, the
+   Pipelines list extras): build each to its board (to build).
+6. **Import of the old gallery**: not now; `helm import ~/.helmstudio --user <email>` stays ready (90 items).
+7. **The GCP VM and disk**: gone (deleted 2026-11-19; the project lists no VM or disk). A new spot VM may be created
+   when a task needs NVIDIA.
+8. **The empty Create screen**: built to the Direct board (12caab1).
+9. **The MiniMax H3 video goldens**: 25 dB (first + last frame) and 27 dB (silent video) accepted.
+10. **Next**: the screens to their boards (with 3 and 4), then the Landing page.
 
 ## Known gaps
 
