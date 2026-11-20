@@ -19,8 +19,20 @@ has one or more commits per stage.
 | M5b | Timeline: sequences, editing with revisions, preview, New shot, Replace, Re-render, export jobs |
 | M6 | CUDA runner in an NVIDIA container, a second GPU host joining the stack, Qwen Image validated on a GCP spot VM |
 | M7 | Three packs: LTX-2.5 retake / extend / audio to video; MiniMax H3 Image (torch); MiniMax H3 video through the native `h3` binary (text, first/last frame, image / video / audio references) |
+| M8 (in progress) | Voices: Qwen3-TTS and ZONOS3 packs, saved voices, dialogue, audio takes on the Timeline ([plan](plan/15-voices.md)) |
 
 Last full contract suite on the final M7 code: see the last M7 commit message (pack 3 step 2, API 1.22).
+
+## M8 notes
+
+- The owner said "build it" on 2026-11-21 after reviewing [15-voices.md](plan/15-voices.md) and the voice boards
+  (CreateAudio, VoicePicker, TimelineAudio and their ZONOS3 boards). The plan's recommended answers (19.9) are
+  decided; it is built in the five steps of 19.7, one commit or more per step.
+- ZONOS3 weights: `~/GenAI/models/ZONOS3-Mini/gguf` (the whole 9.2 GB folder, copied from the SSD; the owner keeps
+  it). Weights Apache-2.0, not gated. The 27 default voices have no stated licence or consent, so ZONOS3 ships no
+  presets; tests clone clips made by Qwen3-TTS.
+- Qwen3-TTS: CustomVoice and VoiceDesign on disk; the Base 1.7B (cloning) stays undownloaded.
+- GPU test runs for voices: at most 4 s of audio, clips 3 s.
 
 ## M7 notes
 

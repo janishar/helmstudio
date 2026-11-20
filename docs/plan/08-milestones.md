@@ -17,7 +17,8 @@ Each ends with something usable. Order matters more than dates.
 | M5a | Models and admin | Model and LoRA management per host, downloads as jobs, the admin's Hosts screen (pins, the after-run setting), import from `~/.helmstudio`. |
 | M5b | Timeline | Editor, export, sequence defaults and New shot (section 15). Needs M3 and M4. |
 | M6 | CUDA | Runners in NVIDIA containers on Linux, a second GPU host joining one stack, validated for Qwen Image. Verified on the owner's existing spot GPU VM in GCP (spot only; decided 2026-11-14), which joins the Mac's stack over TLS. |
-| M7 | More packs | In the owner's order (2026-11-16): LTX retake / extend / audio-to-video (which also light up as take actions on timeline clips), MiniMax H3 Image, then MiniMax H3 video. FLUX.3 Klein, Wan 2.2 (MLX) and ZONOS3 voices are not in a milestone: they are in [the backlog](../backlog.md) (owner, 2026-11-19). |
+| M7 | More packs | In the owner's order (2026-11-16): LTX retake / extend / audio-to-video (which also light up as take actions on timeline clips), MiniMax H3 Image, then MiniMax H3 video. FLUX.3 Klein and Wan 2.2 (MLX) are in [the backlog](../backlog.md) (owner, 2026-11-19); ZONOS3 and Qwen3-TTS voices became M8. |
+| M8 | Voices | Qwen3-TTS (torch) and ZONOS3 (native, the vendored `zonos3-cli`) as packs, in the five steps of [15-voices.md](15-voices.md) 19.7: scout; contracts (API 1.30: Audio takes, the `voice` param, saved voices, scripts, audio takes on Timeline audio tracks); the Qwen3-TTS pack with Create's Audio mode and the voice picker; the ZONOS3 pack with cloning and Save as voice; dialogue and Timeline audio. Built to the boards CreateAudio, VoicePicker, TimelineAudio and their ZONOS3 boards. The owner said "build it" on 2026-11-21 after reviewing the plan and the boards; 19.9's recommended answers stand as decided. |
 
 This table is the only place milestones are assigned.
 

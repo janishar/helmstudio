@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: draft 1 · 2026-11-21 · a plan, not built, not in a milestone yet. Scouted from the weights on disk, the
+Status: draft 2 · 2026-11-21 · M8, being built (owner: "build it", 2026-11-21); the answers in 19.9 are decided. Scouted from the weights on disk, the
 Qwen3-TTS model card, the old AI-EXP port (`~/GenAI/AI-EXP/src/qwen3_tts/`) and the ZONOS3 checkout
 (`~/GenAI/duplex/zonos3`, commit 96d9e0e). Nothing was downloaded or built.
 
@@ -164,7 +164,7 @@ packs/zonos3/
                         # presence, and `source {repo: Zyphra/ZONOS3-Mini, allow_patterns: those four files}`: not the
                         # whole 9.3 GB folder (edit, f16 and qat files are left out)
   native.py             # speak(), dialogue(): core.child.run of the vendored zonos3-cli
-  voices/defaults.yaml  # the 27 default voices: names and ids; clip + embedding read from the weights' gguf/voices/
+  (no voices/)          # no presets: the 27 default voices' licence is unknown (19.9); users clone their own
   licences/zonos3.md
   workflows/1-zonos3-voice-over.json
   workflows/2-zonos3-dialogue.json
@@ -342,9 +342,14 @@ for the owner's approval before the screens are built:
 - Downloading Qwen3-TTS Base or 0.6B variants: declared as `source` so an admin can fetch them from the Models
   screen later, never fetched by the build.
 
-### 19.9 Open questions for the owner
+### 19.9 Decisions
 
-Each with the recommended answer first.
+Asked as open questions; on 2026-11-21 the owner said "build it" after reviewing this plan and the boards, so each
+recommended answer below is decided. Q8 and Q11 were settled from the Hub card the same day: the ZONOS3 weights are
+Apache-2.0 and the repo is not gated; the card and `gguf/voices/README.md` say nothing on the 27 recordings' licence,
+source or consent, so **ZONOS3 ships with no preset voices** (users clone their own clips) until Zyphra says
+otherwise. Goldens and tests that need a clip to clone use a clip made by Qwen3-TTS (Apache-2.0), never a ZONOS3
+default voice.
 
 1. **The unused 8 GB of ZONOS3 files.** Answered (owner, 2026-11-21): leave them. The whole folder stays in
    `~/GenAI/models`; nothing is deleted.

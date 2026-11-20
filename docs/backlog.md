@@ -4,22 +4,7 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
 
 ## Model packs
 
-- **ZONOS3 sound design: dialog and voices for the studio** (asked 2026-11-18). A pack for speech: lines of dialog
-  in chosen voices (preset voices, a cloned voice from a reference clip, voice edits), landing in the Gallery as audio
-  takes and on Timeline audio tracks under a shot. Weights already on the host: `~/GenAI/models/ZONOS3-Mini/gguf`
-  (9.2 GB of GGUF: backbone, speaker encoder, codec encoder/decoder, steer, `edit/`, `voices/`); no model card in the
-  folder, so the runtime (llama.cpp-style GGUF, which env, MPS or CPU) is the first thing to scout. Builds on M7
-  pack 1's audio takes, audio uploads and media inputs (contracts 1.19). Not in a milestone (owner, 2026-11-19); if
-  taken up, after the three M7 packs. To decide when picking it up: whether dialog is written per clip in the Timeline, per
-  line in Create, or by the director agent; lip-sync to video (e.g. through LTX audio-to-video) in or out of scope;
-  how it shares voice nodes and screens with the Qwen3-TTS entry below.
-- **Voice generation with the Qwen3-TTS models** (asked 2026-11-19; not in a milestone). Text to speech as audio
-  takes for dialog and narration, usable on Timeline audio tracks and as audio-to-video input. Weights on the Mac:
-  `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-CustomVoice` (preset and cloned voices) and
-  `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign` (a voice described in words), 4.2 GB each with their speech
-  tokenizer; each folder has a README to scout first. Small enough to sit beside other models in the host budget.
-  Builds on M7 pack 1's audio takes and media inputs. Overlaps the ZONOS3 entry above: decide when picking either up
-  whether they are two voice families behind the same voice nodes and screens.
+- **ZONOS3 and Qwen3-TTS voices**: became M8 "Voices" (owner, 2026-11-21); see [plan 15](plan/15-voices.md).
 - **FLUX.3 Klein** (moved out of M7 by the owner, 2026-11-19). An image family on torch; plan §13 risk 6 notes it
   needs torch 2.15 and diffusers git-main, which moves with the torch env's pins (docs/plan/14-dependencies.md).
   Alternative source: the old iris studio (`~/GenAI/iris-studio`) runs FLUX.2 Klein, FLUX.3 Image Klein and Z-Image
