@@ -17,9 +17,9 @@ packs differ. The backlog's two entries (ZONOS3 2026-11-18, Qwen3-TTS 2026-11-19
 
 | | Qwen3-TTS 1.7B CustomVoice | Qwen3-TTS 1.7B VoiceDesign | ZONOS3-Mini |
 |---|---|---|---|
-| Folder | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-CustomVoice` | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign` | **not on disk** (below) |
+| Folder | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-CustomVoice` | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign` | `/Volumes/ALI T9/models/ZONOS3-Mini/gguf` (the SSD; below) |
 | Files | `model.safetensors` 3.8 GB bf16 (talker + code predictor), `speech_tokenizer/` 0.68 GB fp32 | the same layout; the speech tokenizer is byte-identical (same SHA-256) | GGUF: backbone (`backbone-ptq`), decoder (`zac-keep2`), speaker encoder, codec encoder + SSL teacher (raw-code cloning), `steer.gguf`, `accents.gguf`, `edit/` |
-| Preset voices | 9: Vivian, Serena, Uncle_Fu, Dylan (Beijing), Eric (Sichuan), Ryan, Aiden, Ono_Anna, Sohee | none | 30 default voices (13 English, 1 fr, 2 each of de, hi, it, ko, zh, pt, es, te), each a clip (mp3, wav or ogg) + codes + 192-d embedding in the repo's `assets/default_voices/`; their licence and the speakers' consent are not stated |
+| Preset voices | 9: Vivian, Serena, Uncle_Fu, Dylan (Beijing), Eric (Sichuan), Ryan, Aiden, Ono_Anna, Sohee | none | 27 default voices in the weights' `gguf/voices/` (10 English with styles such as British, Irish, announcer, ASMR; 1 fr; 2 each of de, hi, it, ko, zh, pt, es, te), each a clip (mp3, wav or ogg) + codes + 192-d embedding, with ids in its README; their licence and the speakers' consent are not stated |
 | Voice from a description | no | yes: `instruct` describes the voice ("male, 17, tenor, nervous") | no free text; "design" = steering sliders (gender, age, pitch, timbre…) |
 | Clone from a clip | **no** (no speaker encoder in these weights; needs the 1.7B or 0.6B **Base** model, not on disk) | no | yes: a 3–60 s clip → speaker embedding (or raw reference codes) |
 | Emotion and style | `instruct` in words ("very angry", "whisper") on a preset | inside the description | numeric controls: valence, arousal, dominance, loudness, tempo, clarity, whisper, moods, accents, disfluency, emphasis; per-span controls; speaking rate |
@@ -32,11 +32,14 @@ Language codes differ (Qwen `english`, ZONOS3 `en_us`). Voices and params use BC
 | Licence | Apache-2.0 (model card) | Apache-2.0 | code MIT (repo `LICENSE`); the weights' licence is unknown (no model card on disk) |
 
 Other speech weights on disk, not packs here: `Qwen3-ASR-1.7B` (speech to text; useful later to transcribe a clone
-clip), `Qwen2.5-Omni-3B`, `silero-vad`. The external drive (`/Volumes/ALI T9`) is not mounted.
+clip), `Qwen2.5-Omni-3B`, `silero-vad`.
 
-**ZONOS3 weights are missing.** The backlog put them at `~/GenAI/models/ZONOS3-Mini/gguf` (9.2 GB); that folder is
-gone, and `~/.cache/huggingface/hub/models--Zyphra--ZONOS3-Mini` holds only a ref, no files. The ZONOS3 half of this
-plan needs them back (open question 1) before any scout run.
+**ZONOS3 weights are on the SSD only**: `/Volumes/ALI T9/models/ZONOS3-Mini/gguf`, 9.2 GB, Hub revision
+`d2d142a8…`. Not in `~/GenAI/models`. The pack needs four files, about 1.1 GB: `backbone-ptq.gguf` 632 MB,
+`zac-keep2.gguf` 431 MB, `spk-encoder.gguf` 43 MB, `steer.gguf` 0.2 MB, plus `voices/` (about 25 MB). The rest is
+for later or never: `zac.gguf` (2 GB, full decoder), `zac-encoder.gguf` + `ssl-teacher.gguf` (5.2 GB, raw-code
+cloning), `backbone-ptq-edit.gguf` + `edit/` (speech editing). There is no top-level `accents.gguf`, so accent
+adapters are not available. Open question 1 says how they get to the runner.
 
 Lessons from the old code:
 
@@ -93,8 +96,8 @@ deterministic) so the contract suite covers everything without a GPU.
 - Packs may ship **starter voices**, `voices/*.yaml` (id, name, speaker, language, a preview clip as WAV beside it),
   published as `<host>.<env>.voices`, a new registry key with its own schema, following the starter looks' rules
   (`core/looks.py`: checked at start, a broken file stops the runner, the clip PUT once under
-  `packs/<family>/voices/`). Every preview is made when the pack is written (ZONOS3's clips converted to WAV; the 9
-  Qwen presets spoken once by the pack author at a fixed seed and committed), never by a run.
+  `packs/<family>/voices/`). Every preview exists before any run (ZONOS3's clips from the weights' `gguf/voices/`, converted to WAV
+  by ffmpeg at start; the 9 Qwen presets spoken once by the pack author at a fixed seed and committed).
 
 **Messages**
 
@@ -161,7 +164,7 @@ packs/zonos3/
                         # presence, and `source {repo: Zyphra/ZONOS3-Mini, allow_patterns: those four files}`: not the
                         # whole 9.3 GB folder (edit, f16 and qat files are left out)
   native.py             # speak(), dialogue(): core.child.run of the vendored zonos3-cli
-  voices/defaults.yaml  # the 30 default voices: each clip converted to WAV + embedding.npy beside it
+  voices/defaults.yaml  # the 27 default voices: names and ids; clip + embedding read from the weights' gguf/voices/
   licences/zonos3.md
   workflows/1-zonos3-voice-over.json
   workflows/2-zonos3-dialogue.json
@@ -322,8 +325,8 @@ before the screens are built:
 1. **Scout** (no product code): build `zonos3-cli` in scratch from the pinned commit; check its progress output on
    stderr (core.child needs `<phase> n/total` lines, else a small vendored patch), whether one process can speak
    several lines (else the dialogue stage runs `zonos3-server` as the child for the run), its memory and time on a
-   3 s line; run the AI-EXP port on the torch env's pins with the core loader; record peaks at two lengths. Needs
-   the ZONOS3 weights back.
+   3 s line; run the AI-EXP port on the torch env's pins with the core loader; record peaks at two lengths. Reads
+   the ZONOS3 files from where open question 1 puts them.
 2. **Contracts** (1.30): everything in 19.3, the echo voice stages, fixtures, `check.py` references (script
    expansion, voice fit, audio takes on audio tracks).
 3. **Qwen3-TTS pack + Create Audio + voice picker** (presets and designed voices), goldens.
@@ -344,9 +347,9 @@ before the screens are built:
 
 Each with the recommended answer first.
 
-1. **ZONOS3 weights are gone from `~/GenAI/models`.** Recommended: restore `ZONOS3-Mini/gguf` from the external
-   drive; otherwise the Models screen downloads only the four files the pack needs (the backbone is 0.66 GB) once
-   the pack declares its `source`. Until then build Qwen3-TTS only.
+1. **ZONOS3 weights are on the SSD, not in `~/GenAI/models`.** The runner reads one models root, and the SSD can
+   be ejected. Recommended: when the ZONOS3 step starts, copy only the four files the pack needs and `voices/`
+   (about 1.1 GB) to `~/GenAI/models/ZONOS3-Mini/gguf`, and leave the other 8 GB on the SSD.
 2. **Voice cloning on Qwen too?** Recommended: not now. ZONOS3 clones; Qwen's Base 1.7B (about 4.5 GB) is declared
    in the pack as a downloadable variant and added when you choose to fetch it.
 3. **Where dialogue is written.** Recommended: a script in the dialogue composer (`@handle: text`), which Write
@@ -359,11 +362,11 @@ Each with the recommended answer first.
    picture.
 7. **Default temperature for Qwen3-TTS.** Recommended: 0.3 (steady voice, from AI-EXP), not the checkpoint's 0.9;
    the Lively preset gives 0.9.
-8. **ZONOS3 weights licence.** No model card on disk. Recommended: check the Hub card when the weights are restored
+8. **ZONOS3 weights licence.** No model card in the SSD folder. Recommended: check the Hub card when the pack is written
    and ship its text in `licences/` before any download is offered.
 9. **New line on the Timeline.** Recommended: yes, as a fifth generating action (15.3 lists four "and only four").
 10. **Milestone.** Recommended: take it up as M8 after the screens-to-boards work, in the five steps of 19.7.
-11. **ZONOS3's 30 default voice recordings.** The repo's licence covers its code; the voices' licence and the
+11. **ZONOS3's 27 default voice recordings.** The repo's licence covers its code; the voices' licence and the
     speakers' consent are not written down. Recommended: ship them as starter voices only once the Hub card or
     Zyphra's docs allow it; until then ZONOS3 starts with no presets and you clone your own clips.
 12. **Cloning someone's voice.** Recommended: Clone from a clip asks the user to tick "I have the right to use this
