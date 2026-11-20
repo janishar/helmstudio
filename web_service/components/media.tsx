@@ -3,7 +3,7 @@
 // through the list it was opened from, video plays with the native controls.
 
 import { useEffect, useRef } from "react";
-import { Play, X } from "lucide-react";
+import { ImageOff, Play, X } from "lucide-react";
 import { safeUrl } from "@/lib/format";
 import { thumbOf } from "@/lib/media";
 import type { S } from "@/lib/api";
@@ -82,7 +82,15 @@ export function Thumb({
         )}
       </span>
     );
-  if (!src) return <span className={className}>{t.kind}</span>;
+  if (!src)
+    return (
+      <span
+        className={`flex flex-col items-center justify-center gap-1 text-t2 ${className ?? ""}`}
+      >
+        <ImageOff size={16} aria-hidden />
+        {t.kind}
+      </span>
+    );
   return (
     <span className={`relative block ${className ?? ""}`}>
       <img src={safeUrl(src)} alt="" loading="lazy" decoding="async" className={imgClassName} />

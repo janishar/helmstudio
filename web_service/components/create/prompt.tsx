@@ -10,6 +10,7 @@ import {
   useState,
   type TextareaHTMLAttributes,
 } from "react";
+import { MapPin, Package, UserRound } from "lucide-react";
 import { api, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { groupLabel, reloadLibrary, useLibrary } from "@/lib/library";
@@ -234,8 +235,16 @@ export function PromptArea({
             ) : (
               <span
                 aria-hidden
-                className="size-8 shrink-0 rounded-md border border-dashed border-dash bg-s1"
-              />
+                className="grid size-8 shrink-0 place-items-center rounded-md border border-dashed border-dash bg-s1 text-t2"
+              >
+                {it.group === "location" ? (
+                  <MapPin size={14} />
+                ) : it.group === "prop" ? (
+                  <Package size={14} />
+                ) : (
+                  <UserRound size={14} />
+                )}
+              </span>
             )}
             <span className="flex min-w-0 flex-col">
               <b className="mono truncate text-[13px] font-medium">@{it.handle}</b>

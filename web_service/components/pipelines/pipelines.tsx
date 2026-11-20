@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { ArrowRight, MoreHorizontal } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
@@ -133,11 +133,7 @@ function Chain({ p }: { p: Pipeline }) {
     <div className="chain" aria-label={ids.map(label).join(", ")}>
       {ids.map((id, i) => (
         <span key={id} className="contents">
-          {i > 0 && (
-            <i className="text-[11px] text-t2 not-italic" aria-hidden>
-              →
-            </i>
-          )}
+          {i > 0 && <ArrowRight size={12} className="shrink-0 text-t2" aria-hidden />}
           <NodePill kind={p.nodes[id].kind}>{label(id)}</NodePill>
         </span>
       ))}

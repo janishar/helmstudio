@@ -6,7 +6,7 @@
 // says so and re-applies the edit to the new revision once.
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ActionsNote, ClipActions } from "@/components/timeline/actions";
 import { markRange, rangeInTake, removeTrack } from "@/lib/source";
@@ -641,7 +641,7 @@ export function TimelineEditor({ id }: { id?: string }) {
               aria-label="Previous frame"
               onClick={() => pv.current?.seek(frame - 1)}
             >
-              ‹
+              <ChevronLeft size={14} aria-hidden />
             </button>
             <button
               type="button"
@@ -662,7 +662,7 @@ export function TimelineEditor({ id }: { id?: string }) {
               aria-label="Next frame"
               onClick={() => pv.current?.seek(frame + 1)}
             >
-              ›
+              <ChevronRight size={14} aria-hidden />
             </button>
             <span className="mono px-2 text-[13px]" aria-live="off">
               {timecode(at)} <span className="text-t2">/ {timecode(doc.duration_s)}</span>

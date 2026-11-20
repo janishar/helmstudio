@@ -5,7 +5,7 @@
 // the In / Out readouts, keyboard nudges by frame, the stretch the family's frame grid snaps it to). An extension
 // (a node's `seconds` and `direction`) shows what it adds. The numbers come from lib/source (check.py's maps).
 import { useEffect, useRef, useState } from "react";
-import { Pause, Play, X } from "lucide-react";
+import { ImageOff, Pause, Play, Video, X } from "lucide-react";
 import { Info } from "@/components/kit";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { ItemFields } from "@/components/create/rows";
@@ -175,8 +175,10 @@ export function MediaTile({
         ) : (
           <span
             aria-hidden
-            className={`h-7 w-11 shrink-0 rounded-md ${t?.kind === "audio" || (v && !thumb) ? "wave" : "border border-dashed border-dash"}`}
-          />
+            className={`grid h-7 w-11 shrink-0 place-items-center rounded-md ${t?.kind === "audio" || (v && !thumb) ? "wave" : "border border-dashed border-dash text-t2"}`}
+          >
+            {!(t?.kind === "audio" || (v && !thumb)) && <Video size={14} />}
+          </span>
         )}
         <span className="flex min-w-0 flex-col">
           <small className="mono text-[10px] text-t2">{label}</small>
@@ -838,11 +840,15 @@ export function MediaRows({
     const src = t?.kind === "video" && !audio ? safeUrl(t.thumb_url) : undefined;
     return src ? (
       <img src={src} alt="" draggable={false} className={`${cls} object-cover`} />
+    ) : audio ? (
+      <span aria-hidden className={`${cls} wave`} />
     ) : (
       <span
         aria-hidden
-        className={`${cls} ${t || audio ? "wave" : "border border-dashed border-dash"}`}
-      />
+        className={`${cls} grid place-items-center border border-dashed border-dash text-t2`}
+      >
+        {t?.kind === "image" ? <ImageOff size={12} /> : <Video size={12} />}
+      </span>
     );
   };
 

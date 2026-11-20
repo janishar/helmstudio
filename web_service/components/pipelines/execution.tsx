@@ -13,7 +13,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ChevronRight } from "lucide-react";
+import { Activity, ChevronRight, ImageOff } from "lucide-react";
 import { Thumb } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { FullScreen } from "@/components/media";
@@ -423,7 +423,14 @@ export function Execution({
                             className={`grid aspect-square place-items-center overflow-hidden rounded-lg p-0 text-[10px] text-t2 ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
                             onClick={() => setFull({ ids: takeIds, i })}
                           >
-                            {tk ? <Thumb take={tk} className="size-full" /> : `take ${i + 1}`}
+                            {tk ? (
+                              <Thumb take={tk} className="size-full" />
+                            ) : (
+                              <span className="flex flex-col items-center gap-1">
+                                <ImageOff size={14} aria-hidden />
+                                take {i + 1}
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -722,8 +729,9 @@ function DecisionDetail({ d, name }: { d: S<"Decision">; name: (id: string) => s
                 d.judge.takes.map((t, i) => (
                   <div
                     key={t.take_id}
-                    className="grid aspect-square place-items-center rounded-lg border border-dashed border-dash text-[10px] text-t2"
+                    className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-dash text-[10px] text-t2"
                   >
+                    <ImageOff size={14} aria-hidden />
                     take {i + 1}
                   </div>
                 ))}

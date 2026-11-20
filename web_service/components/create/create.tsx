@@ -4,7 +4,7 @@
 // can't be held).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Check, ChevronDown, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
+import { AtSign, Check, ChevronDown, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { ErrorNote, Info } from "@/components/kit";
 import {
@@ -1288,7 +1288,7 @@ export function Create({
                       aria-label="Add image, video or audio"
                       onClick={() => firstPicker.current?.()}
                     >
-                      +
+                      <Plus size={14} aria-hidden />
                     </button>
                   )}
                   {textFields[0] && (
@@ -1298,7 +1298,7 @@ export function Create({
                       aria-label="Insert element"
                       onClick={() => setElementsOpen(true)}
                     >
-                      @
+                      <AtSign size={14} aria-hidden />
                     </button>
                   )}
                 </>

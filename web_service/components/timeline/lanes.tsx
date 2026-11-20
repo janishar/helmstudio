@@ -4,6 +4,7 @@
 // lane); drag an edge (7 px) to trim, snapping to frames and cuts within 6 px; click the ruler to seek; Ctrl/⌘ +
 // wheel zooms. Every drag is an Op handed to the editor, which applies and saves it.
 import { useRef, useState } from "react";
+import { X } from "lucide-react";
 import type { S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { actionShot } from "@/components/timeline/actions";
@@ -382,9 +383,9 @@ export function Lanes({
                   aria-label={`Remove ${t.name}`}
                   title="Remove track"
                   onClick={() => onRemoveTrack(t.name!)}
-                  className="grid size-[22px] place-items-center rounded-lg bg-s3 text-[12px] text-t2"
+                  className="grid size-[22px] place-items-center rounded-lg bg-s3 text-t2"
                 >
-                  ×
+                  <X size={12} aria-hidden />
                 </button>
               )}
             </span>

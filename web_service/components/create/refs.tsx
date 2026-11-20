@@ -3,7 +3,16 @@
 // uploading (picker, drop, paste: the file becomes a gallery take first), removed, and reordered by drag or
 // Alt + arrow keys. Each item shows how the prompt names it (the param's `mention`, "<image1>").
 import { useEffect, useRef, useState } from "react";
-import { ImagePlus, Upload, X } from "lucide-react";
+import {
+  AudioLines,
+  Film,
+  Image as ImageIcon,
+  ImageOff,
+  ImagePlus,
+  Loader2,
+  Upload,
+  X,
+} from "lucide-react";
 import { Info } from "@/components/kit";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { message, type S } from "@/lib/api";
@@ -231,8 +240,18 @@ export function RowsEditor({
           ) : (
             <span
               aria-hidden
-              className="h-7 w-11 shrink-0 rounded-md border border-dashed border-dash bg-s3"
-            />
+              className="grid h-7 w-11 shrink-0 place-items-center rounded-md border border-dashed border-dash bg-s3 text-t2"
+            >
+              {t?.kind === "image" ? (
+                <ImageIcon size={14} />
+              ) : t?.kind === "video" ? (
+                <Film size={14} />
+              ) : t?.kind === "audio" ? (
+                <AudioLines size={14} />
+              ) : (
+                <ImageOff size={14} />
+              )}
+            </span>
           )}
           <span className="min-w-0 grow truncate" title={title}>
             {title}
@@ -437,7 +456,13 @@ export function RefThumbs({ ids, onPick }: { ids: string[]; onPick: (t: S<"Take"
             <img src={safeUrl(t.thumb_url)} alt="" className="size-full object-cover" />
           </button>
         ) : (
-          <span key={id} className="size-10 rounded-md bg-s1" aria-hidden />
+          <span
+            key={id}
+            className="grid size-10 place-items-center rounded-md bg-s1 text-t2"
+            aria-hidden
+          >
+            {t === null ? <ImageOff size={16} /> : <Loader2 size={16} className="animate-spin" />}
+          </span>
         );
       })}
     </span>
@@ -499,17 +524,19 @@ export function FirstFrameTile({
             }
           />
         ) : card ? (
-          id && (
-            <span
-              aria-hidden
-              className="h-7 w-11 shrink-0 rounded-md border border-dashed border-dash"
-            />
-          )
+          <span
+            aria-hidden
+            className="grid h-7 w-11 shrink-0 place-items-center rounded-md border border-dashed border-dash text-t2"
+          >
+            {id ? <ImageOff size={14} /> : <ImagePlus size={14} />}
+          </span>
         ) : (
           <span
             aria-hidden
-            className="size-6 shrink-0 rounded-md border border-dashed border-dash"
-          />
+            className="grid size-6 shrink-0 place-items-center rounded-md border border-dashed border-dash text-t2"
+          >
+            {id ? <ImageOff size={12} /> : <ImagePlus size={12} />}
+          </span>
         )}
         {card ? (
           <span className="flex min-w-0 flex-col">

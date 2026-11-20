@@ -4,7 +4,7 @@
 // loaded after a run, the idle timeout, the memory reserve), applied by its runners live, and Evict all. Refreshed
 // every 3 s while the tab is visible.
 import { useCallback, useEffect, useState } from "react";
-import { Monitor, Server } from "lucide-react";
+import { Monitor, Server, X } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { api, message, ok, type S } from "@/lib/api";
@@ -420,7 +420,7 @@ function HostSection({
                 type="button"
                 aria-label={`Unload ${name}`}
                 disabled={!ref}
-                className="size-[30px] shrink-0 rounded-[10px] border-0 bg-s4 p-0 text-base leading-none text-t2"
+                className="grid size-[30px] shrink-0 place-items-center rounded-[10px] border-0 bg-s4 p-0 text-t2"
                 onClick={() =>
                   ref &&
                   onConfirm({
@@ -431,7 +431,7 @@ function HostSection({
                   })
                 }
               >
-                ×
+                <X size={14} aria-hidden />
               </button>
             </div>
           );
@@ -452,7 +452,7 @@ function HostSection({
             <button
               type="button"
               aria-label={`Unload cached handles of ${e.env}`}
-              className="size-[30px] shrink-0 rounded-[10px] border-0 bg-s4 p-0 text-base leading-none text-t2"
+              className="grid size-[30px] shrink-0 place-items-center rounded-[10px] border-0 bg-s4 p-0 text-t2"
               onClick={() =>
                 onConfirm({
                   host: c.host,
@@ -462,7 +462,7 @@ function HostSection({
                 })
               }
             >
-              ×
+              <X size={14} aria-hidden />
             </button>
           </div>
         ))}

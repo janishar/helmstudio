@@ -135,9 +135,9 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="flex-grow: 1; min-height: 230px; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
 <div style="width: 100%; max-width: 420px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px">Sequence preview · plays the range on a loop</div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px">
-<button class="chip" aria-label="Previous frame">‹</button>
+<button class="chip" aria-label="Previous frame"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="m15 18-6-6 6-6"></path></svg></button>
 <button aria-label="Play" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: var(--t1); color: var(--g); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button>
-<button class="chip" aria-label="Next frame">›</button>
+<button class="chip" aria-label="Next frame"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="m9 18 6-6-6-6"></path></svg></button>
 <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 0 8px">0:12.50 <span style="color: var(--t2)">/ 0:21.00</span></span>
 <button class="chip">Split at playhead</button>
 <button class="chip" title="Mark in (I)">Mark in</button>
@@ -169,11 +169,11 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div class="clip" style="width: 200px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>clip audio · 0 dB</small></div>
 </div>
 
-<div class="lane" style="height: 36px"><span style="gap: 4px">A2<button class="x" aria-label="Remove A2" title="Remove track">×</button></span>
+<div class="lane" style="height: 36px"><span style="gap: 4px">A2<button class="x" aria-label="Remove A2" title="Remove track"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span>
 <button class="clip" style="width: 840px; height: 36px; border: 1px solid #86cdea; background: rgba(62,224,255,0.12); justify-content: center"><small>[YOUR MUSIC] · −6 dB</small></button>
 </div>
 
-<div class="lane" style="height: 36px"><span style="gap: 4px">A3<button class="x" aria-label="Remove A3" title="Remove track">×</button></span>
+<div class="lane" style="height: 36px"><span style="gap: 4px">A3<button class="x" aria-label="Remove A3" title="Remove track"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span>
 <span style="flex: 0 0 160px"></span>
 <div class="clip" style="width: 120px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>Shot 2 sound · −3 dB</small></div>
 <span style="flex: 0 0 240px"></span>
@@ -297,7 +297,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <section aria-label="Remove an audio track" class="card">
 <p class="note">A lane's × (or Remove track when its name is selected) removes the track. An empty one goes at once; with clips it asks:</p>
 <div role="dialog" aria-label="Remove A3" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px; background: var(--s3); border: 1px solid var(--s5)">
-<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Remove A3 and its 2 clips?</h2>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Remove A3 and its 2 clips?</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 <p class="note">Later tracks move up and are renamed. Undo brings it back.</p>
 <div style="display: flex; justify-content: flex-end; gap: 8px"><button class="chip">Cancel</button><button style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: #ff8a80; color: #2b0c02; font-weight: 600; font-size: 13px">Remove</button></div>
 </div>

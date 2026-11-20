@@ -159,7 +159,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 <div style="flex: 1 1 520px; min-width: 0; border-radius: 18px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 10px; display: flex; flex-direction: column; gap: 8px">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile" aria-haspopup="dialog" style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>First frame</small><b>[YOUR TAKE] +1</b></span></button>
+<button class="tile" aria-haspopup="dialog" style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true" style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="2" x2="22" y1="2" y2="22"></line><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"></path><line x1="13.5" x2="6" y1="13.5" y2="21"></line><line x1="18" x2="21" y1="12" y2="15"></line><path d="M3.59 3.59A1.99 1.99 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.052-.22 1.41-.59"></path><path d="M21 15V5a2 2 0 0 0-2-2H9"></path></svg></span><span><small>First frame</small><b>[YOUR TAKE] +1</b></span></button>
 <button class="tile"><small>Elements</small><b>None</b></button>
 <button class="tile"><small>Film</small><b>Auto</b></button>
 <button class="tile"><small>Camera</small><b>Slow push in</b></button>
@@ -168,8 +168,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <label for="t2v" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Scene prompt</label>
 <textarea id="t2v" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 2px 6px">A red fox trots across a snowy field at dusk, breath misting, snow crunching under its paws, wind in the dry grass</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<button class="chip" aria-label="Add image, video or audio">+</button>
-<button class="chip" aria-label="Insert element">@</button>
+<button class="chip" aria-label="Add image, video or audio"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button>
+<button class="chip" aria-label="Insert element"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button>
 <button class="chip">LTX-2.5 · Distilled</button>
 <button class="chip">704 × 448</button>
 <button class="chip">2.0 s · 24 fps</button>
@@ -200,14 +200,14 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div class="track" role="img" aria-label="Frames on the clip: 0.0 s and 3.7 s"><i style="left: 26px"></i><i style="left: calc(100% - 26px)"></i></div>
 <ol aria-label="Frames, in order" style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
 <li class="row">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 1">×</button></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true" style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 1">×</button></div>
 <label for="kf1" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--t2)"><span>At</span><span class="mono">frame 0 · 0.0 s</span></label>
 <input id="kf1" type="range" min="0" max="88" value="0" style="width: 100%; accent-color: var(--a2)">
 <label for="kf1s" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--t2)"><span>Strength</span><span class="mono">1.00</span></label>
 <input id="kf1s" type="range" min="0" max="1" step="0.05" value="1" style="width: 100%; accent-color: var(--a1)">
 </li>
 <li class="row">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 2">×</button></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true" style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 2">×</button></div>
 <label for="kf2" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--t2)"><span>At</span><span class="mono">frame 88 · 3.7 s</span></label>
 <input id="kf2" type="range" min="0" max="88" value="88" style="width: 100%; accent-color: var(--a2)">
 <label for="kf2s" style="display: flex; justify-content: space-between; font-size: 12px; color: var(--t2)"><span>Strength</span><span class="mono">0.80</span></label>

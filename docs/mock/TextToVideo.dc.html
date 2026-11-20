@@ -153,7 +153,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 <div style="flex: 1 1 520px; min-width: 0; border-radius: 18px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 10px; display: flex; flex-direction: column; gap: 8px">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile"><small>First frame</small><b>None · text only</b></button>
+<button class="tile" style="display: flex; align-items: center; gap: 8px"><span aria-hidden="true" style="width: 44px; height: 28px; flex: 0 0 auto; border-radius: 6px; border: 1px dashed var(--dash); display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5h6"></path><path d="M19 2v6"></path><path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"></path><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path><circle cx="9" cy="9" r="2"></circle></svg></span><span><small>First frame</small><b>None · text only</b></span></button>
 <button class="tile"><small>Elements</small><b>None</b></button>
 <button class="tile"><small>Film</small><b>Auto</b></button>
 <button class="tile"><small>Camera</small><b>Slow push in</b></button>
@@ -162,8 +162,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <label for="t2v" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Scene prompt</label>
 <textarea id="t2v" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 2px 6px">A red fox trots across a snowy field at dusk, breath misting, snow crunching under its paws, wind in the dry grass</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<button class="chip" aria-label="Add image, video or audio">+</button>
-<button class="chip" aria-label="Insert element">@</button>
+<button class="chip" aria-label="Add image, video or audio"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg></button>
+<button class="chip" aria-label="Insert element"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button>
 <button class="chip">LTX-2.5 · Distilled</button>
 <button class="chip">704 × 448</button>
 <button class="chip">2.0 s · 24 fps</button>

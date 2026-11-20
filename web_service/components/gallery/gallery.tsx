@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Check, Maximize, Star, X } from "lucide-react";
+import { Check, FileText, Maximize, Star, X } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { videoLine } from "@/lib/media";
 import { ErrorNote, Info, Modal } from "@/components/kit";
@@ -179,8 +179,9 @@ export function TakeCard({
           />
         ) : (
           <i
-            className={`flex aspect-[16/10] items-center justify-center rounded-[10px] bg-s1 text-[11px] text-t2 not-italic ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
+            className={`flex aspect-[16/10] flex-col items-center justify-center gap-1 rounded-[10px] bg-s1 text-[11px] text-t2 not-italic ${on ? "border-2 border-a1" : "border border-dashed border-dash"}`}
           >
+            <FileText size={16} aria-hidden />
             {t.kind}
           </i>
         )}

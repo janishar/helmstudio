@@ -31,7 +31,7 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { Check, Plus } from "lucide-react";
+import { Check, Eye, Plus, TriangleAlert } from "lucide-react";
 import { Thumb } from "@/components/media";
 import { Head, Panel, Problems, envText, nodeName, valueText } from "@/components/graph/panel";
 import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
@@ -726,8 +726,18 @@ function Graph({
                   className="rounded-lg bg-inset"
                 />
               ) : (
-                <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-dash text-[12px] text-t2">
-                  {shown?.status === "failed" ? "Failed" : "Live preview"}
+                <div className="flex aspect-video flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-dash text-[12px] text-t2">
+                  {shown?.status === "failed" ? (
+                    <>
+                      <TriangleAlert size={16} aria-hidden />
+                      Failed
+                    </>
+                  ) : (
+                    <>
+                      <Eye size={16} aria-hidden />
+                      Live preview
+                    </>
+                  )}
                 </div>
               )}
               <div className="mono flex justify-between px-1 pt-2 pb-0.5 text-[11px] text-t2">
