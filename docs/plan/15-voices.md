@@ -296,8 +296,8 @@ makes one voice-over per shot. The director can do the same through `rows.add`. 
 
 ### 19.6 Screens and boards
 
-No board shows voices today. New boards, as new files (existing boards are never edited), drawn and approved
-before the screens are built:
+Three new boards (new files; existing boards are never edited), drawn 2026-11-21 and on the UI canvas, waiting
+for the owner's approval before the screens are built:
 
 | Board | Shows |
 |---|---|

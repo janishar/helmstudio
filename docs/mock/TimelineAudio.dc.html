@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Timeline: voices and lines</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:10px;border:0;background:var(--s4);font-size:13px;font-weight:500}
+.lane{display:flex;align-items:stretch;height:56px}
+.lane>span:first-child{flex:0 0 72px;display:flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.clip{outline:3px solid var(--s1);outline-offset:-1px;flex:0 0 auto;box-sizing:border-box;height:56px;border-radius:8px;padding:6px 8px;text-align:left;font-size:11px;line-height:14px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.clip b{font-weight:600;font-size:12px;white-space:nowrap}
+.clip small{font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+.tile{flex:1 1 130px;min-height:48px;text-align:left;padding:6px 12px;border-radius:12px;border:0;background:var(--s3)}
+.tile small{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.tile b{display:block;font-size:13px;font-weight:600}
+.set{text-align:left;padding:10px 12px;border-radius:12px;border:0;background:var(--s2);display:flex;flex-direction:column;gap:2px}
+.set small{font-size:12px;color:var(--t2)}
+.set b{font-weight:600}
+.h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.step{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;background:var(--s1);font-size:13px}
+.mono{font-family:'JetBrains Mono',monospace;color:var(--t2)}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+.thumb{width:44px;height:28px;flex:0 0 auto;border-radius:6px;border:1px dashed var(--dash);background:var(--s3)}
+.x{width:22px;height:22px;padding:0;border:0;border-radius:8px;background:var(--s3);color:var(--t2);font-size:12px}
+.pk{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px;box-shadow:none!important}
+.pk i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.pk b{font-size:12px;font-weight:600}
+.pk small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.err{margin:0;font-size:12px;line-height:17px;color:#ff8a80;font-family:'JetBrains Mono',monospace}
+/* media inputs: the trim bar on the source's frame grid, the waveform */
+.bar{position:relative;height:44px;border-radius:10px;background:repeating-linear-gradient(90deg,var(--s3) 0 calc(100% / 49 - 1px),var(--s1) calc(100% / 49 - 1px) calc(100% / 49));border:1px solid var(--s5)}
+.bar .sel{position:absolute;top:-3px;bottom:-3px;border:2px solid var(--a2);border-radius:8px;background:color-mix(in srgb, var(--a2) 14%, transparent);box-sizing:border-box}
+.bar .sel::before,.bar .sel::after{content:"";position:absolute;top:8px;bottom:8px;width:6px;border-radius:3px;background:var(--a2)}
+.bar .sel::before{left:-4px}.bar .sel::after{right:-4px}
+.bar .snap{position:absolute;bottom:-12px;height:6px;border-radius:3px;background:var(--a1)}
+.wave{height:44px;border-radius:10px;border:1px solid var(--s5);background:repeating-linear-gradient(90deg,transparent 0 3px,var(--s1) 3px 5px),linear-gradient(180deg,var(--s1) 22%,var(--s4) 22% 78%,var(--s1) 78%)}
+.seg{display:flex;padding:3px;border-radius:10px;background:var(--s1);border:1px solid var(--s3)}
+.seg button{height:30px;padding:0 12px;border-radius:8px;border:0;background:transparent;color:var(--t2);font-size:13px;font-weight:500;box-shadow:none!important}
+.seg button[aria-pressed="true"]{background:var(--s5);color:var(--t1)}
+.card{position:relative;box-sizing:border-box;padding:18px 20px;border-radius:16px;background:var(--s2);border:1px solid var(--s5);display:flex;flex-direction:column;gap:12px}
+.note{font-size:12px;color:var(--t2);margin:0}
+/* organic layer */
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 0.02em">[YOUR SEQUENCE]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">1280 × 704 · 24 fps · 0:21</span>
+<button class="chip">Cast · @mara @jon @harbour</button>
+<button class="chip">Look · Harbour dusk</button>
+<div style="flex-grow: 1"></div>
+<button class="chip">Undo</button>
+<button class="chip">Redo</button>
+<button class="chip">New sequence</button>
+<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Export</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">re-encode · 3 tracks of sound</span></button>
+</div>
+
+<div style="flex-grow: 1; min-height: 230px; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
+<div style="width: 100%; max-width: 420px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px">Sequence preview · plays across cuts without rendering</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px">
+<button class="chip" aria-label="Previous frame"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="m15 18-6-6 6-6"></path></svg></button>
+<button aria-label="Play" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: var(--t1); color: var(--g); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button>
+<button class="chip" aria-label="Next frame"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="m9 18 6-6-6-6"></path></svg></button>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 0 8px">0:15.00 <span style="color: var(--t2)">/ 0:21.00</span></span>
+<button class="chip">Split at playhead</button>
+<button class="chip">New shot</button>
+<button class="chip" aria-expanded="{{openStr}}" onClick="{{toggleLine}}">New line</button>
+</div>
+</div>
+
+<sc-if value="{{open}}" hint-placeholder-val="{{ true }}">
+<section aria-label="New line" style="border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.04em">New line</h2>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">at 0:15.00 on A3 · Narration · uses this sequence's cast</span>
+<div style="flex-grow: 1"></div>
+<div class="seg" role="group" aria-label="Kind of line"><button aria-pressed="{{voStr}}" onClick="{{setVo}}">Voice-over</button><button aria-pressed="{{dlgStr}}" onClick="{{setDlg}}">Dialogue</button></div>
+<button aria-label="Close New line" onClick="{{toggleLine}}" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button>
+</div>
+
+<sc-if value="{{modeDlg}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span style="font-size: 12px; color: var(--t2)">Cast</span>
+<button class="chip" title="Adds @mara to the script" style="height: 30px; display: flex; align-items: center; gap: 8px">@mara<span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 999px; background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>{{maraVoice}}</span></button>
+<button class="chip" title="Adds @jon to the script" style="height: 30px; display: flex; align-items: center; gap: 8px">@jon<span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 999px; background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>{{jonVoice}}</span></button>
+<span style="font-size: 12px; color: var(--t2)">@harbour is a place: it has no voice</span>
+</div>
+<label for="script" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Script</label>
+<textarea id="script" rows="4" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-family: 'JetBrains Mono', monospace; font-size: 14px; line-height: 22px">@mara (quiet): You said you'd be back by noon.
+@jon: I know. The road was closed.
+
+@mara: Then you should have called.</textarea>
+<span style="font-size: 12px; color: var(--t2)">3 lines · an empty line is a pause · each @name speaks in its element's voice</span>
+</sc-if>
+
+<sc-if value="{{modeVo}}" hint-placeholder-val="{{ false }}">
+<label for="vo" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Text to speak</label>
+<textarea id="vo" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px">Night came early to the harbour, and the lights went out one by one.</textarea>
+<span style="font-size: 12px; color: var(--t2)">Mentions are not read aloud: the voice comes from the Voice tile.</span>
+</sc-if>
+
+<sc-if value="{{isZonos}}" hint-placeholder-val="{{ false }}">
+<span style="font-size: 12px; color: var(--t2)">ZONOS3 has no starter voices yet: these are your own clones (Mine).</span>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button class="tile"><small>{{voiceTileLabel}}</small><b>{{voiceTile}}</b></button>
+<button class="tile"><small>Language</small><b>Auto</b></button>
+<button class="tile"><small>Seed</small><b>Random</b></button>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button class="chip" onClick="{{toggleModel}}" style="display: flex; align-items: center; gap: 6px">{{modelLabel}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button class="chip">Open in Create</button>
+<div style="flex-grow: 1"></div>
+<button onClick="{{generate}}" style="height: 52px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Generate line</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">{{genCost}}</span></button>
+</div>
+</section>
+</sc-if>
+
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 12px 14px 14px; overflow-x: auto">
+<div style="position: relative; width: 912px; display: flex; flex-direction: column; gap: 6px">
+<div aria-hidden="true" style="display: flex; padding-left: 72px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--t2); height: 18px">
+<span style="flex: 0 0 200px">0:00</span><span style="flex: 0 0 200px">0:05</span><span style="flex: 0 0 200px">0:10</span><span style="flex: 0 0 200px">0:15</span><span style="flex: 0 0 40px">0:20</span>
+</div>
+
+<div class="lane"><span>V1</span>
+<sc-if value="{{madeVo}}" hint-placeholder-val="{{ false }}">
+<div class="clip" style="width: 200px; border: 1px solid var(--a2); background: var(--s2)"><b>Making shot · opening</b><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 25%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><small>Sample 2 / 8</small></span></div>
+</sc-if>
+<sc-if value="{{notMadeVo}}" hint-placeholder-val="{{ true }}">
+<button class="clip" style="width: 200px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 1 · harbour</b><small>LTX · 5.0 s</small></button>
+</sc-if>
+<sc-if value="{{madeDlg}}" hint-placeholder-val="{{ false }}">
+<div class="clip" style="width: 360px; border: 1px solid var(--a2); background: var(--s2)"><b>Making shot · from Dialogue · harbour scene</b><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 25%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><small>Audio to video · Sample 2 / 8</small></span></div>
+</sc-if>
+<sc-if value="{{notMadeDlg}}" hint-placeholder-val="{{ true }}">
+<div class="clip" style="width: 360px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); align-items: center; justify-content: center; text-align: center"><small>Gap · 9.0 s</small></div>
+</sc-if>
+<button class="clip" style="width: 280px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 3 · lighthouse</b><small>LTX · 7.0 s</small></button>
+</div>
+
+<div class="lane" style="height: 36px"><span>A1</span>
+<div class="clip" style="width: 200px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center"><small>clip audio · 0 dB</small></div>
+<span style="flex: 0 0 360px"></span>
+<div class="clip" style="width: 280px; height: 36px; border: 1px solid var(--ln); background: var(--s2); justify-content: center; color: var(--t2)"><small style="display: flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="m16 9 5 6M21 9l-5 6"></path></svg>clip audio · muted</small></div>
+</div>
+
+<div class="lane" style="height: 64px"><span style="flex-direction: column; align-items: flex-start; justify-content: center; line-height: 14px">A2<span style="font-family: Inter, sans-serif; font-size: 11px">Dialogue</span></span>
+<span style="flex: 0 0 200px"></span>
+<div style="position: relative; flex: 0 0 360px; height: 64px">
+<button class="clip" aria-pressed="{{dlgSelStr}}" onClick="{{selDlg}}" style="position: relative; width: 100%; height: 64px; border: {{dlgBorder}}; background: {{dlgBg}}"><b style="padding-right: 24px">Dialogue · harbour scene · 0:09</b>
+<svg aria-hidden="true" viewBox="0 0 360 24" preserveAspectRatio="none" style="position: absolute; left: 0; top: 22px; width: 100%; height: 22px"><path d="M0 11.6 2 11.6 4 11.6 6 11.6 8 11.6 10 11.0 12 9.1 14 10.6 16 8.8 18 9.4 20 10.6 22 9.3 24 10.5 26 8.2 28 9.7 30 9.3 32 6.8 34 3.9 36 8.8 38 8.3 40 6.1 42 5.0 44 7.7 46 7.9 48 3.4 50 9.2 52 2.6 54 6.9 56 8.1 58 8.4 60 7.2 62 4.3 64 9.0 66 7.5 68 6.4 70 7.4 72 5.8 74 9.0 76 9.0 78 8.0 80 4.9 82 7.2 84 8.4 86 7.7 88 9.0 90 9.3 92 6.7 94 7.0 96 9.2 98 7.9 100 8.5 102 7.8 104 9.2 106 11.0 108 11.6 110 11.6 112 11.6 114 11.6 116 11.6 118 11.6 120 11.6 122 11.6 124 10.5 126 9.0 128 10.5 130 9.5 132 10.9 134 8.3 136 7.0 138 7.2 140 4.8 142 7.8 144 5.1 146 5.8 148 6.1 150 7.2 152 5.7 154 6.0 156 7.5 158 5.5 160 9.1 162 3.9 164 4.0 166 1.1 168 2.8 170 7.4 172 7.2 174 6.2 176 10.3 178 7.4 180 8.7 182 8.8 184 9.1 186 3.7 188 8.6 190 8.0 192 7.4 194 5.4 196 10.1 198 9.1 200 8.3 202 6.5 204 6.6 206 6.5 208 9.4 210 9.3 212 10.0 214 9.7 216 11.6 218 11.6 220 11.6 222 11.6 224 11.6 226 11.6 228 11.6 230 11.6 232 11.1 234 10.6 236 10.4 238 9.5 240 9.3 242 10.4 244 10.8 246 8.8 248 8.5 250 7.0 252 4.3 254 5.6 256 6.7 258 6.3 260 6.4 262 10.1 264 6.6 266 6.1 268 4.5 270 4.2 272 6.6 274 6.3 276 8.5 278 4.5 280 9.1 282 9.4 284 8.9 286 9.5 288 8.0 290 9.4 292 9.5 294 8.1 296 8.4 298 6.3 300 9.2 302 3.2 304 5.8 306 9.3 308 9.2 310 8.2 312 7.6 314 8.9 316 3.6 318 2.4 320 6.4 322 6.6 324 9.5 326 9.7 328 9.0 330 9.8 332 7.2 334 9.8 336 10.3 338 5.9 340 8.1 342 10.0 344 8.9 346 11.0 348 10.2 350 10.3 352 11.6 354 11.6 356 11.6 358 11.6 360 11.6 L360 12.4 358 12.4 356 12.4 354 12.4 352 12.4 350 13.7 348 13.8 346 13.0 344 15.1 342 14.0 340 15.9 338 18.1 336 13.7 334 14.2 332 16.8 330 14.2 328 15.0 326 14.3 324 14.5 322 17.4 320 17.6 318 21.6 316 20.4 314 15.1 312 16.4 310 15.8 308 14.8 306 14.7 304 18.2 302 20.8 300 14.8 298 17.7 296 15.6 294 15.9 292 14.5 290 14.6 288 16.0 286 14.5 284 15.1 282 14.6 280 14.9 278 19.5 276 15.5 274 17.7 272 17.4 270 19.8 268 19.5 266 17.9 264 17.4 262 13.9 260 17.6 258 17.7 256 17.3 254 18.4 252 19.7 250 17.0 248 15.5 246 15.2 244 13.2 242 13.6 240 14.7 238 14.5 236 13.6 234 13.4 232 12.9 230 12.4 228 12.4 226 12.4 224 12.4 222 12.4 220 12.4 218 12.4 216 12.4 214 14.3 212 14.0 210 14.7 208 14.6 206 17.5 204 17.4 202 17.5 200 15.7 198 14.9 196 13.9 194 18.6 192 16.6 190 16.0 188 15.4 186 20.3 184 14.9 182 15.2 180 15.3 178 16.6 176 13.7 174 17.8 172 16.8 170 16.6 168 21.2 166 22.9 164 20.0 162 20.1 160 14.9 158 18.5 156 16.5 154 18.0 152 18.3 150 16.8 148 17.9 146 18.2 144 18.9 142 16.2 140 19.2 138 16.8 136 17.0 134 15.7 132 13.1 130 14.5 128 13.5 126 15.0 124 13.5 122 12.4 120 12.4 118 12.4 116 12.4 114 12.4 112 12.4 110 12.4 108 12.4 106 13.0 104 14.8 102 16.2 100 15.5 98 16.1 96 14.8 94 17.0 92 17.3 90 14.7 88 15.0 86 16.3 84 15.6 82 16.8 80 19.1 78 16.0 76 15.0 74 15.0 72 18.2 70 16.6 68 17.6 66 16.5 64 15.0 62 19.7 60 16.8 58 15.6 56 15.9 54 17.1 52 21.4 50 14.8 48 20.6 46 16.1 44 16.3 42 19.0 40 17.9 38 15.7 36 15.2 34 20.1 32 17.2 30 14.7 28 14.3 26 15.8 24 13.5 22 14.7 20 13.4 18 14.6 16 15.2 14 13.4 12 14.9 10 13.0 8 12.4 6 12.4 4 12.4 2 12.4 0 12.4Z" fill="#86cdea" fill-opacity="0.6"></path></svg>
+<span aria-hidden="true" style="position: absolute; left: 8px; top: 20px; bottom: 4px; width: 1px; background: var(--t1); display: block"></span>
+<span aria-hidden="true" style="position: absolute; left: 122px; top: 20px; bottom: 4px; width: 1px; background: var(--t1); display: block"></span>
+<span aria-hidden="true" style="position: absolute; left: 230px; top: 20px; bottom: 4px; width: 1px; background: var(--t1); display: block"></span>
+<small style="position: absolute; left: 11px; bottom: 3px; padding: 0 4px; border-radius: 4px; background: var(--s1)">1 Mara</small>
+<small style="position: absolute; left: 125px; bottom: 3px; padding: 0 4px; border-radius: 4px; background: var(--s1)">2 Jon</small>
+<small style="position: absolute; left: 233px; bottom: 3px; padding: 0 4px; border-radius: 4px; background: var(--s1)">3 Mara</small>
+<small style="position: absolute; right: 8px; bottom: 3px">{{dlgGainText}}</small>
+</button>
+<button class="x" aria-label="Clip menu" aria-expanded="{{menuStr}}" onClick="{{toggleMenu}}" style="position: absolute; top: 5px; right: 5px; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h.01M12 12h.01M19 12h.01"></path></svg></button>
+</div>
+<span style="flex: 0 0 280px"></span>
+</div>
+
+<div class="lane" style="height: 64px"><span style="flex-direction: column; align-items: flex-start; justify-content: center; line-height: 14px">A3<span style="font-family: Inter, sans-serif; font-size: 11px">Narration</span></span>
+<button class="clip" aria-pressed="{{voSelStr}}" onClick="{{selVo}}" style="position: relative; width: 200px; height: 64px; border: {{voBorder}}; background: {{voBg}}"><b>Opening line · 0:05</b>
+<svg aria-hidden="true" viewBox="0 0 200 24" preserveAspectRatio="none" style="position: absolute; left: 0; top: 22px; width: 100%; height: 22px"><path d="M0 11.6 2 11.6 4 11.6 6 11.6 8 9.7 10 8.5 12 7.1 14 7.4 16 6.4 18 10.4 20 8.7 22 7.3 24 7.5 26 5.2 28 9.2 30 6.4 32 7.7 34 5.3 36 5.2 38 9.5 40 8.4 42 8.5 44 5.9 46 5.5 48 8.7 50 3.6 52 8.3 54 4.3 56 8.3 58 9.4 60 3.4 62 8.6 64 9.0 66 6.1 68 5.8 70 8.4 72 4.1 74 6.6 76 5.8 78 8.9 80 5.4 82 7.5 84 7.3 86 8.6 88 10.8 90 10.9 92 11.6 94 11.6 96 11.6 98 11.6 100 11.6 102 11.6 104 11.6 106 11.3 108 10.6 110 9.9 112 11.0 114 8.0 116 8.8 118 8.5 120 5.1 122 6.9 124 7.9 126 7.0 128 6.0 130 10.0 132 6.1 134 10.0 136 5.1 138 3.5 140 9.3 142 2.9 144 6.3 146 4.8 148 9.5 150 9.5 152 9.0 154 5.6 156 8.9 158 4.8 160 2.9 162 2.4 164 6.8 166 6.9 168 6.0 170 4.9 172 9.5 174 6.9 176 7.7 178 6.9 180 10.3 182 5.9 184 10.0 186 9.1 188 8.5 190 8.3 192 10.7 194 11.6 196 11.6 198 11.6 200 11.6 L200 12.4 198 12.4 196 12.4 194 12.4 192 13.3 190 15.7 188 15.5 186 14.9 184 14.0 182 18.1 180 13.7 178 17.1 176 16.3 174 17.1 172 14.5 170 19.1 168 18.0 166 17.1 164 17.2 162 21.6 160 21.1 158 19.2 156 15.1 154 18.4 152 15.0 150 14.5 148 14.5 146 19.2 144 17.7 142 21.1 140 14.7 138 20.5 136 18.9 134 14.0 132 17.9 130 14.0 128 18.0 126 17.0 124 16.1 122 17.1 120 18.9 118 15.5 116 15.2 114 16.0 112 13.0 110 14.1 108 13.4 106 12.7 104 12.4 102 12.4 100 12.4 98 12.4 96 12.4 94 12.4 92 12.4 90 13.1 88 13.2 86 15.4 84 16.7 82 16.5 80 18.6 78 15.1 76 18.2 74 17.4 72 19.9 70 15.6 68 18.2 66 17.9 64 15.0 62 15.4 60 20.6 58 14.6 56 15.7 54 19.7 52 15.7 50 20.4 48 15.3 46 18.5 44 18.1 42 15.5 40 15.6 38 14.5 36 18.8 34 18.7 32 16.3 30 17.6 28 14.8 26 18.8 24 16.5 22 16.7 20 15.3 18 13.6 16 17.6 14 16.6 12 16.9 10 15.5 8 14.3 6 12.4 4 12.4 2 12.4 0 12.4Z" fill="#86cdea" fill-opacity="0.6"></path></svg>
+<small style="position: absolute; left: 8px; bottom: 3px">ZONOS3 · voice-over</small>
+<small style="position: absolute; right: 8px; bottom: 3px">{{voGainText}}</small>
+</button>
+<span style="flex: 0 0 400px"></span>
+<sc-if value="{{slotIdle}}" hint-placeholder-val="{{ false }}">
+<button class="clip" onClick="{{toggleLine}}" aria-expanded="false" style="width: 240px; height: 64px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); align-items: center; justify-content: center; text-align: center"><b>+ New line</b><small>at the playhead</small></button>
+</sc-if>
+<sc-if value="{{slotOpen}}" hint-placeholder-val="{{ true }}">
+<button class="clip" onClick="{{toggleLine}}" aria-expanded="true" style="width: 240px; height: 64px; border: 2px dashed var(--a1); background: transparent; color: var(--t2); align-items: center; justify-content: center; text-align: center"><b style="color: var(--t1)">New line</b><small>at the playhead · composing</small></button>
+</sc-if>
+<sc-if value="{{running}}" hint-placeholder-val="{{ false }}">
+<div class="clip" style="width: 240px; height: 64px; border: 1px solid #86cdea; background: var(--s2)"><b>Speaking {{runWhat}}</b><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 40%; height: 4px; border-radius: 2px; background: #86cdea"></span></span><small>talker 48 / 120</small></span></div>
+</sc-if>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding-left: 72px"><button class="chip" style="height: 30px">+ Audio track</button></div>
+
+<sc-if value="{{menu}}" hint-placeholder-val="{{ false }}">
+<div role="menu" aria-label="Dialogue · harbour scene" style="position: absolute; left: 640px; top: 14px; z-index: 3; width: 210px; box-sizing: border-box; padding: 6px; border-radius: 14px; background: var(--s3); border: 1px solid var(--s5); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 2px">
+<button role="menuitem" class="act" onClick="{{makeShot}}" style="height: 32px; background: transparent">Make shot</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent">Replace with another take</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent">Use in…</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent">Save as voice…</button>
+<button role="menuitem" class="act" onClick="{{toggleMenu}}" style="height: 32px; background: transparent; color: #ff8a80">Remove clip</button>
+</div>
+</sc-if>
+
+<span aria-hidden="true" style="position: absolute; left: 671px; top: 14px; bottom: 0; width: 2px; background: var(--t1); display: block"></span>
+</div>
+</div>
+</main>
+
+<aside aria-label="Clip inspector" style="flex: 1 1 320px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.03em">{{selName}}</h2>
+<span style="font-size: 12px; color: var(--t2)">{{selFrom}}</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div style="padding: 10px 12px; border-radius: 12px; background: var(--s2)"><span style="display: block; font-size: 12px; color: var(--t2)">In</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">0:00.000</span><span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t2)">sample 0</span></div>
+<div style="padding: 10px 12px; border-radius: 12px; background: var(--s2)"><span style="display: block; font-size: 12px; color: var(--t2)">Out</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">{{selOut}}</span><span style="display: block; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t2)">{{selOutS}}</span></div>
+<div style="padding: 10px 12px; border-radius: 12px; background: var(--s2)"><span style="display: block; font-size: 12px; color: var(--t2)">At</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">{{selAt}}</span></div>
+<div style="padding: 10px 12px; border-radius: 12px; background: var(--s2)"><span style="display: block; font-size: 12px; color: var(--t2)">Track</span><span style="font-weight: 600">{{selTrack}}</span></div>
+</div>
+<span style="font-size: 12px; color: var(--t2); margin-top: -10px">Trim snaps to the 48 kHz sample grid of the take.</span>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<label for="gain" style="display: flex; justify-content: space-between; gap: 8px"><span>Gain</span><span class="mono" style="font-size: 12px">{{selGainText}}</span></label>
+<input id="gain" type="range" min="-24" max="6" step="1" value="{{selGain}}" onChange="{{setGain}}" style="width: 100%; accent-color: var(--a2)">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><span>Mute</span><button role="switch" aria-checked="{{selMutedStr}}" aria-label="Mute" onClick="{{toggleMute}}" style="flex: 0 0 auto; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--ln); background: {{muteBg}}; padding: 2px; display: flex; justify-content: {{muteJust}}"><span style="width: 20px; height: 20px; border-radius: 999px; background: {{muteKnob}}; display: block"></span></button></div>
+</div>
+
+<sc-if value="{{isDlg}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 class="h">Lines</h3>
+<div class="step" style="flex-direction: column; align-items: stretch; gap: 2px"><div class="row"><span><b>1</b> · @mara · Serena</span><span>0:05.20 – 0:07.70</span></div><span style="font-size: 12px; color: var(--t2)">(quiet) You said you'd be back by noon.</span></div>
+<div class="step" style="flex-direction: column; align-items: stretch; gap: 2px"><div class="row"><span><b>2</b> · @jon · Aiden</span><span>0:08.05 – 0:10.40</span></div><span style="font-size: 12px; color: var(--t2)">I know. The road was closed.</span></div>
+<div class="step" style="flex-direction: column; align-items: stretch; gap: 2px"><div class="row"><span><b>3</b> · @mara · Serena</span><span>0:10.75 – 0:13.80</span></div><span style="font-size: 12px; color: var(--t2)">Then you should have called.</span></div>
+<span style="font-size: 12px; color: var(--t2)">Times on the sequence. The cues move with the clip.</span>
+</div>
+</sc-if>
+<sc-if value="{{isVo}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 class="h">Lines</h3>
+<span style="font-size: 12px; color: var(--t2)">A voice-over is one line: no cues.</span>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Generate from this clip<button class="i" aria-label="More information" title="Each one queues a normal run. The result drops into the sequence and keeps its lineage to this clip.">i</button></h3>
+<button class="act" aria-expanded="{{makeOpenStr}}" onClick="{{toggleMake}}" style="background: {{makeBg}}">Make shot</button>
+<sc-if value="{{makeOpen}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 12px; background: var(--s2)">
+<span class="mono" style="font-size: 12px">Audio to video · LTX-2.5 · {{makeWhere}}</span>
+<sc-if value="{{isDlg}}" hint-placeholder-val="{{ true }}">
+<textarea aria-label="Shot prompt" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 8px; background: var(--s3); color: var(--t1); font: inherit; font-size: 13px; padding: 8px 10px">@mara and @jon argue at the @harbour rail at dusk</textarea>
+</sc-if>
+<sc-if value="{{isVo}}" hint-placeholder-val="{{ false }}">
+<textarea aria-label="Shot prompt" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 8px; background: var(--s3); color: var(--t1); font: inherit; font-size: 13px; padding: 8px 10px">The @harbour lights go out one by one</textarea>
+</sc-if>
+<span style="font-size: 12px; color: var(--t2)">The clip's sound goes in as the shot's audio, up to 13.4 s. The picture follows the sound; it is not lip sync.</span>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><button class="chip">LTX-2.5 · Distilled</button><button class="chip">Open in Create</button><div style="flex-grow: 1"></div><button onClick="{{makeShot}}" style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Generate</button></div>
+</div>
+</sc-if>
+<button class="act" title="The other takes made for this slot">Replace with another take</button>
+<button class="act" title="Audio to video · LTX-2.5, or an H3 audio reference, opened in Create">Use in…</button>
+<button class="act" title="Opens Clone from a clip with this clip's part (3 – 30 s)">Save as voice…</button>
+<button class="act" style="color: #ff8a80">Remove clip</button>
+</div>
+</aside>
+
+<div style="flex: 1 0 100%; box-sizing: border-box; padding: 4px 20px 24px 96px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; gap: 20px">
+<p class="note" style="grid-column: 1 / -1; font-size: 13px">Voices on the Timeline: the placeholders a New line leaves on its track, the menu on an audio clip, and Make shot while it runs. Same rules as New shot and the take actions in TakeActions.dc.html.</p>
+
+<section aria-label="New line placeholders" class="card" style="background: var(--s1)">
+<p class="note">While it runs, the slot at the playhead holds the line's placeholder. A slot with a line running cannot take another.</p>
+<div class="lane"><span>Running</span>
+<div class="clip" style="width: 240px; border: 1px solid #86cdea; background: var(--s2)"><b>Speaking line 2 / 3</b><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 55%; height: 4px; border-radius: 2px; background: #86cdea"></span></span><small>talker 66 / 120</small></span></div>
+</div>
+<div class="lane"><span>Failed</span>
+<div class="clip" style="width: 240px; border: 1px solid #ff8a80; background: var(--s2)"><b>New line failed</b><small style="color: #ff8a80; white-space: normal">speak.voice: a voice is required</small></div>
+</div>
+<div style="display: flex; gap: 8px"><button class="chip">Retry</button><button class="chip">Remove</button></div>
+<p class="note">Done, the take fills the slot at 0:15.00 with its own length, and joins the slot's alternatives; one undo takes it back.</p>
+</section>
+
+<section aria-label="Audio clip menu" class="card" style="background: var(--p0)">
+<p class="note">The ⋯ on an audio clip opens the same actions as the inspector. A1 is V1's own sound: it has no Make shot.</p>
+<div role="menu" aria-label="Opening line" style="box-sizing: border-box; padding: 6px; border-radius: 14px; background: var(--s3); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 2px">
+<button role="menuitem" class="act" style="height: 32px; background: var(--s5)">Make shot <span class="mono" style="font-size: 11px">· Audio to video · LTX-2.5</span></button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent">Replace with another take</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent">Use in…</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent">Save as voice…</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent; color: #ff8a80">Remove clip</button>
+</div>
+<p class="note">Save as voice opens Clone from a clip with this clip's part; a dialogue asks which speaker's lines to use.</p>
+</section>
+
+<section aria-label="Make shot running" class="card" style="background: var(--s1)">
+<p class="note">Make shot lands on V1 at the clip's time and length, like a New shot in that slot.</p>
+<div class="lane"><span>V1</span>
+<div class="clip" style="width: 260px; border: 1px solid var(--a2); background: var(--s2)"><b>Making shot · 9.0 s</b><span style="display: flex; align-items: center; gap: 6px"><span style="flex-grow: 1; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 25%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><small>Sample 2 / 8</small></span></div>
+</div>
+<div class="lane" style="height: 40px"><span>A2</span>
+<div class="clip" style="position: relative; width: 260px; height: 40px; border: 1px solid #86cdea; background: rgba(62,224,255,0.12)"><b>Dialogue · harbour scene</b>
+<svg aria-hidden="true" viewBox="0 0 360 24" preserveAspectRatio="none" style="position: absolute; left: 0; bottom: 4px; width: 100%; height: 14px"><path d="M0 11.6 2 11.6 4 11.6 6 11.6 8 11.6 10 11.0 12 9.1 14 10.6 16 8.8 18 9.4 20 10.6 22 9.3 24 10.5 26 8.2 28 9.7 30 9.3 32 6.8 34 3.9 36 8.8 38 8.3 40 6.1 42 5.0 44 7.7 46 7.9 48 3.4 50 9.2 52 2.6 54 6.9 56 8.1 58 8.4 60 7.2 62 4.3 64 9.0 66 7.5 68 6.4 70 7.4 72 5.8 74 9.0 76 9.0 78 8.0 80 4.9 82 7.2 84 8.4 86 7.7 88 9.0 90 9.3 92 6.7 94 7.0 96 9.2 98 7.9 100 8.5 102 7.8 104 9.2 106 11.0 108 11.6 110 11.6 112 11.6 114 11.6 116 11.6 118 11.6 120 11.6 122 11.6 124 10.5 126 9.0 128 10.5 130 9.5 132 10.9 134 8.3 136 7.0 138 7.2 140 4.8 142 7.8 144 5.1 146 5.8 148 6.1 150 7.2 152 5.7 154 6.0 156 7.5 158 5.5 160 9.1 162 3.9 164 4.0 166 1.1 168 2.8 170 7.4 172 7.2 174 6.2 176 10.3 178 7.4 180 8.7 182 8.8 184 9.1 186 3.7 188 8.6 190 8.0 192 7.4 194 5.4 196 10.1 198 9.1 200 8.3 202 6.5 204 6.6 206 6.5 208 9.4 210 9.3 212 10.0 214 9.7 216 11.6 218 11.6 220 11.6 222 11.6 224 11.6 226 11.6 228 11.6 230 11.6 232 11.1 234 10.6 236 10.4 238 9.5 240 9.3 242 10.4 244 10.8 246 8.8 248 8.5 250 7.0 252 4.3 254 5.6 256 6.7 258 6.3 260 6.4 262 10.1 264 6.6 266 6.1 268 4.5 270 4.2 272 6.6 274 6.3 276 8.5 278 4.5 280 9.1 282 9.4 284 8.9 286 9.5 288 8.0 290 9.4 292 9.5 294 8.1 296 8.4 298 6.3 300 9.2 302 3.2 304 5.8 306 9.3 308 9.2 310 8.2 312 7.6 314 8.9 316 3.6 318 2.4 320 6.4 322 6.6 324 9.5 326 9.7 328 9.0 330 9.8 332 7.2 334 9.8 336 10.3 338 5.9 340 8.1 342 10.0 344 8.9 346 11.0 348 10.2 350 10.3 352 11.6 354 11.6 356 11.6 358 11.6 360 11.6 L360 12.4 358 12.4 356 12.4 354 12.4 352 12.4 350 13.7 348 13.8 346 13.0 344 15.1 342 14.0 340 15.9 338 18.1 336 13.7 334 14.2 332 16.8 330 14.2 328 15.0 326 14.3 324 14.5 322 17.4 320 17.6 318 21.6 316 20.4 314 15.1 312 16.4 310 15.8 308 14.8 306 14.7 304 18.2 302 20.8 300 14.8 298 17.7 296 15.6 294 15.9 292 14.5 290 14.6 288 16.0 286 14.5 284 15.1 282 14.6 280 14.9 278 19.5 276 15.5 274 17.7 272 17.4 270 19.8 268 19.5 266 17.9 264 17.4 262 13.9 260 17.6 258 17.7 256 17.3 254 18.4 252 19.7 250 17.0 248 15.5 246 15.2 244 13.2 242 13.6 240 14.7 238 14.5 236 13.6 234 13.4 232 12.9 230 12.4 228 12.4 226 12.4 224 12.4 222 12.4 220 12.4 218 12.4 216 12.4 214 14.3 212 14.0 210 14.7 208 14.6 206 17.5 204 17.4 202 17.5 200 15.7 198 14.9 196 13.9 194 18.6 192 16.6 190 16.0 188 15.4 186 20.3 184 14.9 182 15.2 180 15.3 178 16.6 176 13.7 174 17.8 172 16.8 170 16.6 168 21.2 166 22.9 164 20.0 162 20.1 160 14.9 158 18.5 156 16.5 154 18.0 152 18.3 150 16.8 148 17.9 146 18.2 144 18.9 142 16.2 140 19.2 138 16.8 136 17.0 134 15.7 132 13.1 130 14.5 128 13.5 126 15.0 124 13.5 122 12.4 120 12.4 118 12.4 116 12.4 114 12.4 112 12.4 110 12.4 108 12.4 106 13.0 104 14.8 102 16.2 100 15.5 98 16.1 96 14.8 94 17.0 92 17.3 90 14.7 88 15.0 86 16.3 84 15.6 82 16.8 80 19.1 78 16.0 76 15.0 74 15.0 72 18.2 70 16.6 68 17.6 66 16.5 64 15.0 62 19.7 60 16.8 58 15.6 56 15.9 54 17.1 52 21.4 50 14.8 48 20.6 46 16.1 44 16.3 42 19.0 40 17.9 38 15.7 36 15.2 34 20.1 32 17.2 30 14.7 28 14.3 26 15.8 24 13.5 22 14.7 20 13.4 18 14.6 16 15.2 14 13.4 12 14.9 10 13.0 8 12.4 6 12.4 4 12.4 2 12.4 0 12.4Z" fill="#86cdea" fill-opacity="0.6"></path></svg>
+</div>
+</div>
+<p class="note">A clip over 13.4 s gives its first 13.4 s; trim the clip to pick another part. Done, the shot fills the slot and keeps its lineage to the line.</p>
+</section>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1440}}'>
+class Component extends DCLogic {
+state = { theme: null, sel: 'dlg', open: true, running: false, mode: 'dlg', model: 'qwen', menu: false, makeOpen: true, made: null, gains: { dlg: -2, vo: 0 }, mutes: { dlg: false, vo: false } };
+renderVals() {
+const s = this.state;
+const dlg = s.sel === 'dlg';
+const qwen = s.model === 'qwen';
+const db = (k) => s.mutes[k] ? 'muted' : (s.gains[k] < 0 ? '−' + Math.abs(s.gains[k]) : (s.gains[k] > 0 ? '+' + s.gains[k] : '0')) + ' dB';
+const on = '2px solid var(--t1)', off = '1px solid #86cdea';
+const muted = s.mutes[s.sel];
+return {
+theme: s.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value }),
+open: s.open, openStr: String(s.open),
+toggleLine: () => this.setState({ open: !s.open }),
+modeDlg: s.mode === 'dlg', modeVo: s.mode === 'vo',
+dlgStr: String(s.mode === 'dlg'), voStr: String(s.mode === 'vo'),
+setDlg: () => this.setState({ mode: 'dlg' }), setVo: () => this.setState({ mode: 'vo' }),
+isZonos: !qwen,
+toggleModel: () => this.setState({ model: qwen ? 'zonos' : 'qwen' }),
+modelLabel: qwen ? 'Qwen3-TTS · CustomVoice' : 'ZONOS3 · Mini',
+maraVoice: qwen ? 'Serena' : 'Mara · mine',
+jonVoice: qwen ? 'Aiden' : 'Jon · mine',
+voiceTileLabel: s.mode === 'dlg' ? 'Voices' : 'Voice',
+voiceTile: s.mode === 'dlg' ? 'From the cast · 2' : (qwen ? 'Vivian' : 'Narrator · mine'),
+genCost: qwen ? '≈ 0:08 · 6 GB' : '≈ 0:12 · 3 GB',
+generate: () => this.setState({ running: true, open: false }),
+running: s.running, runWhat: s.mode === 'dlg' ? 'line 1 / 3' : 'the line',
+slotOpen: s.open && !s.running, slotIdle: !s.open && !s.running,
+madeVo: s.made === 'vo', notMadeVo: s.made !== 'vo',
+madeDlg: s.made === 'dlg', notMadeDlg: s.made !== 'dlg',
+dlgSelStr: String(dlg), voSelStr: String(!dlg),
+dlgBorder: dlg ? on : off, dlgBg: dlg ? 'rgba(62,224,255,0.22)' : 'rgba(62,224,255,0.12)',
+voBorder: dlg ? off : on, voBg: dlg ? 'rgba(62,224,255,0.12)' : 'rgba(62,224,255,0.22)',
+selDlg: () => this.setState({ sel: 'dlg' }), selVo: () => this.setState({ sel: 'vo', menu: false }),
+dlgGainText: db('dlg'), voGainText: db('vo'),
+menu: s.menu, menuStr: String(s.menu),
+toggleMenu: () => this.setState({ menu: !s.menu, sel: 'dlg' }),
+makeShot: () => this.setState({ made: s.sel, menu: false }),
+isDlg: dlg, isVo: !dlg,
+selName: dlg ? 'Dialogue · harbour scene' : 'Opening line',
+selFrom: dlg ? 'From take seed 7 · Qwen3-TTS Dialogue · 3 lines' : 'From take seed 3 · ZONOS3 Voice-over · 1 line',
+selOut: dlg ? '0:09.000' : '0:05.000', selOutS: dlg ? 'sample 432 000' : 'sample 240 000',
+selAt: dlg ? '0:05.00' : '0:00.00', selTrack: dlg ? 'A2 · Dialogue' : 'A3 · Narration',
+selGain: s.gains[s.sel], selGainText: db(s.sel),
+setGain: (e) => this.setState({ gains: { ...s.gains, [s.sel]: Number(e.target.value) } }),
+selMutedStr: String(muted),
+toggleMute: () => this.setState({ mutes: { ...s.mutes, [s.sel]: !muted } }),
+muteBg: muted ? 'var(--a1)' : 'var(--s4)', muteJust: muted ? 'flex-end' : 'flex-start', muteKnob: muted ? 'var(--on1)' : 'var(--t2)',
+makeOpen: s.makeOpen, makeOpenStr: String(s.makeOpen), makeBg: s.makeOpen ? 'var(--s5)' : 'var(--s3)',
+toggleMake: () => this.setState({ makeOpen: !s.makeOpen }),
+makeWhere: dlg ? 'at 0:05.00 · 9.00 s, into the V1 gap' : 'at 0:00.00 · 5.00 s, into V1 in place of Shot 1 · harbour'
+};
+}
+}
+</script>
+</body>
+</html>

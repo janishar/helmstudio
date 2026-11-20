@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Studio view, audio: voice-over and dialogue</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:10px;border:0;background:var(--s4);font-size:13px;font-weight:500}
+.tile{flex:1 1 130px;min-height:48px;text-align:left;padding:6px 12px;border-radius:12px;border:0;background:var(--s3)}
+.tile small{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.tile b{display:block;font-size:13px;font-weight:600}
+.set{text-align:left;padding:10px 12px;border-radius:12px;border:0;background:var(--s2);display:flex;flex-direction:column;gap:2px}
+.set small{font-size:12px;color:var(--t2)}
+.set b{font-weight:600}
+.h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.step{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;background:var(--s1);font-size:13px}
+.mono{font-family:'JetBrains Mono',monospace;color:var(--t2)}
+/* organic layer */
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+/* audio: the waveform stage, sound tiles, voice chips in the script */
+.wave{height:44px;border-radius:10px;border:1px solid var(--s5);background:repeating-linear-gradient(90deg,transparent 0 3px,var(--s1) 3px 5px),linear-gradient(180deg,var(--s1) 22%,var(--s4) 22% 78%,var(--s1) 78%)}
+.err{margin:0;font-size:12px;line-height:17px;color:#ff8a80;font-family:'JetBrains Mono',monospace}
+.note{font-size:12px;color:var(--t2);margin:0}
+.x{width:22px;height:22px;padding:0;border:0;border-radius:8px;background:var(--s3);color:var(--t2);font-size:12px}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.kv span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+[role="tab"][aria-selected="true"]{background:var(--s5)!important;color:var(--t1)!important}
+.seg{display:flex;padding:3px;border-radius:10px;background:var(--s1);border:1px solid var(--s3)}
+.seg button{height:34px;padding:0 14px;border-radius:8px;border:0;background:transparent;color:var(--t2);font-weight:500;box-shadow:none!important}
+.seg button[aria-pressed="true"]{background:var(--s5);color:var(--t1)}
+.pill{height:36px;padding:0 14px;border-radius:999px;border:1px solid transparent;background:var(--s3);font-size:13px}
+.pill[aria-pressed="true"]{border-color:var(--a2);background:var(--s1)}
+.mi{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mi[aria-checked="true"]{outline:1px solid var(--a2)}
+summary{list-style:none}summary::-webkit-details-marker{display:none}
+.vc{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 4px 0 3px;border-radius:8px;border:1px solid transparent;background:var(--s5);font-family:'JetBrains Mono',monospace;font-size:12px;box-shadow:none!important}
+.vc i{width:24px;height:24px;box-sizing:border-box;border-radius:6px;border:1px dashed var(--dash);background:var(--s1);font:600 10px/22px Inter,sans-serif;font-style:normal;text-align:center;color:var(--t2)}
+.vb{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 7px;border-radius:6px;background:var(--s2);color:var(--t1b);font:500 11px/22px Inter,sans-serif}
+.vc.bad{border:1px dashed #ff8a80;background:var(--s3)}
+.vc.bad .vb{color:#ff8a80}
+.cue{position:absolute;top:0;height:28px;box-sizing:border-box;padding:0 6px;border:0;border-top:3px solid;border-radius:4px;background:color-mix(in srgb, var(--s2) 85%, transparent);font-family:'JetBrains Mono',monospace;font-size:11px;text-align:left;color:var(--t1);box-shadow:none!important}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">{{template}}</span>
+<div class="seg" role="group" aria-label="Template">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="2">
+<button aria-pressed="{{m.sel}}" onClick="{{m.pick}}">{{m.label}}</button>
+</sc-for>
+</div>
+<div style="flex-grow: 1"></div>
+<div role="group" aria-label="View" style="display: flex; padding: 3px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
+<button aria-pressed="true" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--s5); font-weight: 500">Studio</button>
+<button aria-pressed="false" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Graph</button>
+</div>
+<button aria-label="{{memLabel}}" style="height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--s3); background: var(--s1); font-family: 'JetBrains Mono', monospace; font-size: 12px">{{mem}}</button>
+</div>
+
+<div style="flex-grow: 1; min-height: 330px; position: relative; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 68px 24px 24px; box-sizing: border-box">
+<div role="group" aria-label="Waveform of the take" style="width: 100%; max-width: 860px; display: flex; flex-direction: column; gap: 8px">
+<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
+<div aria-label="Line cues" style="position: relative; height: 28px">
+<sc-for list="{{cues}}" as="c" hint-placeholder-count="3">
+<button class="cue" aria-label="{{c.aria}}" title="Jump to this line" onClick="{{c.seek}}" style="left: {{c.left}}%; width: {{c.width}}%; border-top-color: {{c.color}}">{{c.label}}</button>
+</sc-for>
+</div>
+</sc-if>
+<div aria-hidden="true" style="position: relative; height: 168px; display: flex; align-items: center; gap: 2px; padding: 0 2px; border-radius: 12px; background: var(--s1)">
+<sc-for list="{{bars}}" as="b" hint-placeholder-count="100">
+<span style="flex: 1 1 0; min-width: 2px; border-radius: 2px; height: {{b.h}}%; background: {{b.c}}; opacity: {{b.o}}"></span>
+</sc-for>
+<span style="position: absolute; top: 6px; bottom: 6px; left: {{head}}%; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--t1)"></span>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 860px">
+<button aria-label="{{playLabel}}" onClick="{{togglePlay}}" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: var(--t1); color: var(--g); display: flex; align-items: center; justify-content: center">
+<sc-if value="{{playing}}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1"></rect><rect x="14" y="4" width="5" height="16" rx="1"></rect></svg></sc-if>
+<sc-if value="{{paused}}" hint-placeholder-val="{{ true }}"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></sc-if>
+</button>
+<span class="mono" style="font-size: 13px; color: var(--t1); min-width: 92px">{{timeLabel}}</span>
+<label for="scrub" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Scrub the take</label>
+<input id="scrub" type="range" min="0" max="{{posMax}}" value="{{pos}}" onChange="{{scrub}}" style="flex: 1 1 240px; accent-color: var(--a2)">
+<button class="chip">Loop</button>
+<button class="chip" aria-label="Volume" style="width: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4Z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"></path></svg></button>
+</div>
+<span style="position: absolute; left: 16px; top: 16px; padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 12px">{{stageBadge}}</span>
+<div style="position: absolute; right: 16px; top: 16px; display: flex; gap: 8px">
+<button class="chip">Compare</button>
+<button class="chip">Explain run</button>
+</div>
+</div>
+
+<sc-if value="{{voice}}" hint-placeholder-val="{{ true }}">
+<div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Prompt</span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Model</span>
+<span class="step" style="background: var(--s2); border: 1px solid var(--s5); font-weight: 500; gap: 10px">Speak<span style="width: 90px; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 43%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><span class="mono" style="font-weight: 400">41 / 96 frames</span></span>
+<span class="step" style="color: var(--t2)">Output</span>
+<div style="flex-grow: 1"></div>
+<span class="mono" style="font-size: 13px">seed 14 · 0:04 left</span>
+<button class="chip">Stop</button>
+</div>
+</sc-if>
+<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
+<div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Script</span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Model</span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Dialogue <span class="mono">3 lines</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Output</span>
+<div style="flex-grow: 1"></div>
+<span class="mono" style="font-size: 13px">Done · seed 7 · the script changed since: line 4 is new</span>
+</div>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+<sc-for list="{{takes}}" as="t" hint-placeholder-count="3">
+<div style="position: relative; flex: 0 0 auto">
+<button aria-label="{{t.aria}}" aria-pressed="{{t.sel}}" onClick="{{t.pick}}" style="width: 112px; height: 72px; box-sizing: border-box; padding: 8px 8px 6px; border-radius: 8px; border: {{t.border}}; background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: flex; flex-direction: column; justify-content: space-between; text-align: left"><span class="wave" aria-hidden="true" style="display: block; width: 100%; height: 30px; box-sizing: border-box"></span><span>seed {{t.seed}} · {{t.len}}</span></button>
+<button class="x" aria-label="{{t.menuLabel}}" title="Take actions" style="position: absolute; top: 4px; right: 4px; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button>
+</div>
+</sc-for>
+<sc-if value="{{voice}}" hint-placeholder-val="{{ true }}">
+<span aria-label="Take, seed 14, speaking" style="flex: 0 0 auto; width: 112px; height: 72px; box-sizing: border-box; border-radius: 8px; border: 1px dashed var(--dash); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: flex; align-items: center; justify-content: center">seed 14 · 43%</span>
+</sc-if>
+<div style="flex-grow: 1"></div>
+<details open="open" style="position: relative; flex: 0 0 auto">
+<summary style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px dashed var(--dash); background: transparent; color: var(--t1); display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Use in…</summary>
+<div role="group" aria-label="Use this take in" style="position: absolute; right: 0; bottom: 52px; z-index: 4; width: 300px; box-sizing: border-box; padding: 12px; border-radius: 18px 18px 8px 18px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<h2 class="h">Use {{selSeed}} in…</h2>
+<button class="mi">Audio to video<span class="mono" style="font-size: 11px">LTX-2.5</span></button>
+<button class="mi">References<span class="mono" style="font-size: 11px">MiniMax H3</span></button>
+<p class="note">LTX takes up to 13.4 s of sound; H3 takes 2 to 15 s beside an image or video reference.</p>
+</div>
+</details>
+<button class="chip" style="flex: 0 0 auto; height: 44px">Add to timeline</button>
+<button class="chip" style="flex: 0 0 auto; height: 44px">Save as voice</button>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px">
+<div role="tablist" aria-label="Output kind" style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 16px; background: var(--s1)">
+<sc-for list="{{medias}}" as="k" hint-placeholder-count="3">
+<button role="tab" aria-selected="{{k.sel}}" onClick="{{k.pick}}" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">{{k.label}}</button>
+</sc-for>
+</div>
+<div style="flex: 1 1 520px; min-width: 0; border-radius: 18px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 10px; display: flex; flex-direction: column; gap: 8px">
+
+<sc-if value="{{voice}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button class="tile" aria-haspopup="dialog" style="display: flex; align-items: center; gap: 8px"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg><span><small>Voice</small><b>Ryan · preset</b></span></button>
+<button class="tile"><small>Language</small><b>Auto</b></button>
+<button class="tile"><small>Seed</small><b>12</b></button>
+</div>
+<label for="say" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Text to speak</label>
+<textarea id="say" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 2px 6px">The last train left at midnight. By morning the station was empty, and snow had covered every track.</textarea>
+</sc-if>
+
+<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button class="tile" aria-haspopup="dialog"><small>Cast</small><b>Mara, Jon, Kai · 1 without a voice</b></button>
+<button class="tile"><small>Language</small><b>Auto</b></button>
+<button class="tile"><small>Seed</small><b>7</b></button>
+</div>
+<ol aria-label="Script" style="margin: 0; padding: 4px 6px; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 22px">
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 1" style="width: 16px; font-size: 11px; text-align: right">1</span><button class="vc" aria-label="@mara, voice Savannah"><i aria-hidden="true">M</i>@mara<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Mara · Savannah</span></button><span style="color: var(--t2); font-style: italic">(quiet):</span><span>You said you'd be back by noon.</span></li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 2" style="width: 16px; font-size: 11px; text-align: right">2</span><button class="vc" aria-label="@jon, voice Harbor"><i aria-hidden="true">J</i>@jon<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Jon · Harbor</span></button><span style="color: var(--t2)">:</span><span>I know. The road was closed.</span></li>
+<li aria-label="Blank line" style="height: 10px"></li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 3" style="width: 16px; font-size: 11px; text-align: right">3</span><button class="vc" aria-label="@mara, voice Savannah"><i aria-hidden="true">M</i>@mara<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Mara · Savannah</span></button><span style="color: var(--t2)">:</span><span>Then you should have called.</span></li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 4" style="width: 16px; font-size: 11px; text-align: right; color: #ff8a80">4</span><button class="vc bad" aria-label="@kai, no voice" aria-describedby="kai-err"><i aria-hidden="true">K</i>@kai<span class="vb">no voice</span></button><span style="color: var(--t2)">:</span><span>Both of you, inside. Now.</span></li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 8px 6px 30px; border-radius: 10px; background: color-mix(in srgb, #ff8a80 10%, transparent)"><p id="kai-err" class="err" style="flex: 1 1 260px">Line 4: @kai has no voice. Give Kai a voice, or change the line to someone in the cast.</p><button class="chip" style="height: 32px; background: var(--s5)">Give Kai a voice</button></li>
+</ol>
+</sc-if>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}"><button class="chip" aria-label="Insert element">@</button></sc-if>
+<details style="position: relative">
+<summary class="chip" style="display: flex; align-items: center; gap: 6px; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent), 0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)">{{model}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"></path></svg></summary>
+<div role="menu" aria-label="Model" style="position: absolute; left: 0; bottom: 44px; z-index: 4; width: 280px; box-sizing: border-box; padding: 12px; border-radius: 18px 18px 18px 8px; background: var(--s3); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<sc-for list="{{models}}" as="o" hint-placeholder-count="3">
+<button class="mi" role="menuitemradio" aria-checked="{{o.cur}}" style="background: var(--s2)">{{o.label}}<span class="mono" style="font-size: 11px">{{o.note}}</span></button>
+</sc-for>
+</div>
+</details>
+<button class="chip">{{rate}}</button>
+<div role="group" aria-label="Seeds to queue" style="display: flex; align-items: center; height: 36px; border-radius: 10px; background: var(--s4); font-size: 13px; font-weight: 500">
+<button aria-label="Fewer seeds" onClick="{{lessSeeds}}" style="width: 36px; height: 36px; border: 0; background: transparent; color: var(--t2)">−</button><span style="font-family: 'JetBrains Mono', monospace">{{seeds}} / 4</span><button aria-label="More seeds" onClick="{{moreSeeds}}" style="width: 36px; height: 36px; border: 0; background: transparent">+</button>
+</div>
+<div style="flex-grow: 1"></div>
+<sc-if value="{{voice}}" hint-placeholder-val="{{ true }}">
+<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a2); color: var(--on2); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Generate</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">≈ 0:08 · 6 GB</span></button>
+</sc-if>
+<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
+<button disabled="disabled" aria-describedby="kai-err" title="Fix line 4 first" style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a2); color: var(--on2); opacity: 0.55; cursor: not-allowed; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Generate</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">Fix line 4 first</span></button>
+</sc-if>
+</div>
+</div>
+</div>
+</main>
+
+<aside aria-label="Inspector" style="flex: 1 1 320px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 20px">
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h2 class="h">Preset</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<sc-for list="{{presets}}" as="p" hint-placeholder-count="2">
+<button class="pill" aria-pressed="{{p.sel}}" onClick="{{p.pick}}">{{p.label}}</button>
+</sc-for>
+</div>
+</div>
+
+<sc-if value="{{voice}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 class="h">Voice<button class="i" aria-label="More information" title="Custom voice: a preset speaker with a style in words.">i</button></h2>
+<button class="set" aria-haspopup="dialog"><small>Voice</small><b>Ryan · preset · English</b></button>
+<label for="vstyle" style="display: flex; justify-content: space-between; gap: 8px"><span>Style</span><span class="mono" style="font-size: 12px">{{styleLen}} / 500</span></label>
+<input id="vstyle" type="text" value="{{styleText}}" onChange="{{setStyle}}" style="height: 40px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; border: 1px solid var(--s5); background: var(--s1); color: var(--t1); font: inherit; font-size: 14px">
+<span style="font-size: 12px; color: var(--t2)">How to say it, in words: calm, angry, whispering.</span>
+<label for="vary" style="display: flex; justify-content: space-between; gap: 8px; margin-top: 4px"><span>Variation</span><span class="mono" style="font-size: 12px">{{variation}}</span></label>
+<input id="vary" type="range" min="0.1" max="1.2" step="0.05" value="{{variation}}" onChange="{{setVariation}}" style="width: 100%; accent-color: var(--a2)">
+<span style="font-size: 12px; color: var(--t2)">Low keeps the voice steady; high is livelier and drifts.</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h2 class="h">Output</h2>
+<div class="kv"><span>Sound</span><span>24 kHz · mono · wav</span></div>
+<div class="kv"><span>Length</span><span>≈ 0:08 from 18 words</span></div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--s2)">
+<span style="font-size: 13px; font-weight: 600">On ZONOS3</span>
+<p class="note">The model has no Style or Variation. This section is Delivery instead: Emotion, Energy, Whisper and Speaking rate, with presets Neutral, Warm, Tense and Whisper. Dialogue shows it.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<h2 class="h">Delivery<button class="i" aria-label="More information" title="ZONOS3 controls, for every line. A line's (style) adds to them.">i</button></h2>
+<sc-for list="{{delivery}}" as="d" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<label for="{{d.id}}" style="display: flex; justify-content: space-between; gap: 8px"><span>{{d.label}}</span><span class="mono" style="font-size: 12px">{{d.shown}}</span></label>
+<input id="{{d.id}}" type="range" min="{{d.min}}" max="{{d.max}}" step="0.05" value="{{d.val}}" onChange="{{d.set}}" style="width: 100%; accent-color: var(--a2)">
+<span class="mono" style="display: flex; justify-content: space-between; font-size: 11px"><span>{{d.lo}}</span><span>{{d.hi}}</span></span>
+</div>
+</sc-for>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h2 class="h">Cast<button class="i" aria-label="More information" title="One family per run: on ZONOS3, presets and any saved voice with a clip.">i</button></h2>
+<div class="kv"><span>@mara</span><span>Savannah · preset</span></div>
+<div class="kv"><span>@jon</span><span>Harbor · mine, from a clip</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px"><span>@kai</span><button class="chip" style="height: 32px; color: #ff8a80; border: 1px dashed #ff8a80; background: transparent">No voice · give one</button></div>
+<label for="gap" style="display: flex; justify-content: space-between; gap: 8px; margin-top: 4px"><span>Pause between lines</span><span class="mono" style="font-size: 12px">0.35 s</span></label>
+<input id="gap" type="range" min="0" max="5" step="0.05" value="0.35" style="width: 100%; accent-color: var(--a2)">
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h2 class="h">Output</h2>
+<div class="kv"><span>Sound</span><span>44.1 kHz · mono · wav</span></div>
+<div class="kv"><span>Cues</span><span>one per line, on the stage and the timeline</span></div>
+</div>
+</sc-if>
+</aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"mode":{"editor":"enum","default":"voice","options":["voice","dialogue"]},"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+state = { theme: null, mode: null, media: 'audio', playing: false, pos: 0, seeds: 1, takeV: 12, takeD: 7, presetV: 'Steady', variation: null, styleText: 'calm, a little tired', presetZ: 'Warm', dz: {} };
+renderVals() {
+const mode = this.state.mode ?? this.props.mode ?? 'voice';
+const dlg = mode === 'dialogue';
+const dur = dlg ? 9 : 7;
+const posMax = dur * 10;
+const pos = Math.min(this.state.pos, posMax);
+const regions = dlg
+? [{ s: 0.1, e: 3.0, c: 'var(--a2)', n: 1, who: 'Mara' }, { s: 3.35, e: 6.0, c: 'var(--a1)', n: 2, who: 'Jon' }, { s: 6.35, e: 8.8, c: 'var(--a2)', n: 3, who: 'Mara' }]
+: [{ s: 0.15, e: 3.2, c: 'var(--a2)' }, { s: 3.55, e: 6.85, c: 'var(--a2)' }];
+const N = 100;
+const bars = Array.from({ length: N }, (_, i) => {
+const t = (i + 0.5) / N * dur;
+const r = regions.find((x) => t >= x.s && t <= x.e);
+const h = r ? (i % 11 === 10 ? 8 : 14 + 80 * Math.abs(Math.sin(i * 0.53) * Math.sin(i * 0.17 + 0.6))) : 3;
+const played = t * 10 <= pos;
+const c = dlg ? (r ? r.c : 'var(--dash)') : (played && pos > 0 ? 'var(--a2)' : 'var(--dash)');
+const o = dlg && !(played && pos > 0) ? 0.55 : 1;
+return { h: h.toFixed(0), c, o };
+});
+const fmt = (s) => '0:' + String(Math.floor(s)).padStart(2, '0');
+const cues = dlg ? regions.map((r) => ({
+label: r.n + ' ' + r.who,
+left: (r.s / dur * 100).toFixed(2),
+width: ((r.e - r.s) / dur * 100 - 0.6).toFixed(2),
+color: r.c,
+aria: 'Line ' + r.n + ', ' + r.who + ', from ' + r.s.toFixed(1) + ' s to ' + r.e.toFixed(1) + ' s',
+seek: () => this.setState({ pos: Math.round(r.s * 10) })
+})) : [];
+const takeList = dlg ? [{ seed: 7, len: '0:09' }, { seed: 8, len: '0:09' }] : [{ seed: 11, len: '0:07' }, { seed: 12, len: '0:07' }, { seed: 13, len: '0:08' }];
+const selTake = dlg ? this.state.takeD : this.state.takeV;
+const takes = takeList.map((t) => ({
+...t,
+sel: t.seed === selTake,
+border: t.seed === selTake ? '2px solid var(--a2)' : '1px solid var(--s5)',
+aria: 'Take, seed ' + t.seed + ', ' + t.len,
+menuLabel: 'Actions for take seed ' + t.seed,
+pick: () => this.setState(dlg ? { takeD: t.seed, pos: 0 } : { takeV: t.seed, pos: 0 })
+}));
+const medias = ['Image', 'Video', 'Audio'].map((label) => ({
+label, sel: this.state.media === label.toLowerCase(), pick: () => this.setState({ media: label.toLowerCase() })
+}));
+const modes = [{ id: 'voice', label: 'Voice-over' }, { id: 'dialogue', label: 'Dialogue' }].map((m) => ({
+...m, sel: m.id === mode, pick: () => this.setState({ mode: m.id, pos: 0, playing: false })
+}));
+const pv = { Steady: 0.3, Lively: 0.9 };
+const variation = this.state.variation ?? pv[this.state.presetV];
+const zp = {
+Neutral: { emotion: 0.5, energy: 0.5, whisper: 0, rate: 1 },
+Warm: { emotion: 0.7, energy: 0.45, whisper: 0, rate: 0.95 },
+Tense: { emotion: 0.3, energy: 0.75, whisper: 0, rate: 1.1 },
+Whisper: { emotion: 0.5, energy: 0.25, whisper: 0.9, rate: 0.9 }
+};
+const presets = dlg
+? Object.keys(zp).map((label) => ({ label, sel: label === this.state.presetZ, pick: () => this.setState({ presetZ: label, dz: {} }) }))
+: Object.keys(pv).map((label) => ({ label, sel: label === this.state.presetV, pick: () => this.setState({ presetV: label, variation: null }) }));
+const dv = { ...zp[this.state.presetZ], ...this.state.dz };
+const num = (v) => String(Math.round(v * 100) / 100);
+const delivery = [
+{ key: 'emotion', label: 'Emotion', min: 0, max: 1, lo: 'sad', hi: 'happy' },
+{ key: 'energy', label: 'Energy', min: 0, max: 1, lo: 'soft, slow', hi: 'loud, quick' },
+{ key: 'whisper', label: 'Whisper', min: 0, max: 1, lo: 'off', hi: 'full' },
+{ key: 'rate', label: 'Speaking rate', min: 0.5, max: 1.5, lo: '0.5×', hi: '1.5×' }
+].map((d) => ({
+...d,
+id: 'z-' + d.key,
+val: dv[d.key],
+shown: d.key === 'rate' ? num(dv[d.key]) + '×' : num(dv[d.key]),
+set: (e) => this.setState({ dz: { ...this.state.dz, [d.key]: Number(e.target.value) } })
+}));
+const model = dlg ? 'ZONOS3 · Mini' : 'Qwen3-TTS · Custom voice';
+const models = [
+{ label: 'Qwen3-TTS · Custom voice', note: '9 presets' },
+{ label: 'Qwen3-TTS · Voice design', note: 'a voice from words' },
+{ label: 'ZONOS3 · Mini', note: 'clones a clip' }
+].map((o) => ({ ...o, cur: o.label === model }));
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value }),
+voice: !dlg,
+dialogue: dlg,
+modes,
+medias,
+template: dlg ? 'ZONOS3 · Dialogue · 3 speakers' : 'Qwen3-TTS · Voice-over',
+mem: dlg ? '15 / 64 GB' : '19 / 64 GB',
+memLabel: dlg ? 'Memory: 15 of 64 gigabytes used' : 'Memory: 19 of 64 gigabytes used',
+stageBadge: dlg ? 'seed 7 · 0:09 · 3 lines · 44.1 kHz mono' : 'seed ' + this.state.takeV + ' · 24 kHz mono',
+bars,
+cues,
+head: (pos / posMax * 100).toFixed(2),
+pos,
+posMax,
+timeLabel: fmt(pos / 10) + ' / ' + fmt(dur),
+scrub: (e) => this.setState({ pos: Number(e.target.value) }),
+playing: this.state.playing,
+paused: !this.state.playing,
+playLabel: this.state.playing ? 'Pause' : 'Play',
+togglePlay: () => this.setState({ playing: !this.state.playing }),
+takes,
+selSeed: 'seed ' + selTake,
+model,
+models,
+rate: dlg ? '44.1 kHz' : '24 kHz',
+seeds: this.state.seeds,
+lessSeeds: () => this.setState({ seeds: Math.max(1, this.state.seeds - 1) }),
+moreSeeds: () => this.setState({ seeds: Math.min(4, this.state.seeds + 1) }),
+presets,
+variation: num(variation),
+setVariation: (e) => this.setState({ variation: Number(e.target.value) }),
+styleText: this.state.styleText,
+styleLen: this.state.styleText.length,
+setStyle: (e) => this.setState({ styleText: e.target.value }),
+delivery
+};
+}
+}
+</script>
+</body>
+</html>
