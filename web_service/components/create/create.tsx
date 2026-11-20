@@ -1187,7 +1187,14 @@ export function Create({
               tiles.length > 0 ||
               mediaFields.length > 0 ||
               mediaRowFields.length > 0) && (
-              <div className="flex flex-wrap items-center gap-2">
+              // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width
+              <div
+                className={
+                  empty
+                    ? "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2"
+                    : "flex flex-wrap items-center gap-2"
+                }
+              >
                 {mediaFields.map((f, i) => (
                   <MediaTile
                     key={f.key}
