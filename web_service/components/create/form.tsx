@@ -577,24 +577,27 @@ function CanvasPicker({
           </button>
         ))}
       </div>
-      <div
-        role="group"
-        aria-label="Size"
-        className="grid auto-cols-auto grid-flow-col gap-1.5"
-        hidden={compact && opened !== "size"}
-      >
-        {/* as the board: 12px labels, each column as wide as its label (seven equal ones wrap "0.25 MP") */}
-        {choices.map((m) => (
-          <button
-            key={m}
-            type="button"
-            className="opt bevel min-w-0 px-0 text-[12px] whitespace-nowrap"
-            aria-pressed={mp === m}
-            onClick={() => set(fit(ratio, m))}
-          >
-            {m} MP
-          </button>
-        ))}
+      {/* the size: a stepped slider, one stop per choice (seven chips did not fit the aside's width) */}
+      <div className="flex flex-col gap-1.5" hidden={compact && opened !== "size"}>
+        <label htmlFor="canvas-size" className="flex justify-between gap-2">
+          <span>Size</span>
+          <span className="mono text-[12px] text-t2">{mp} MP</span>
+        </label>
+        <input
+          id="canvas-size"
+          type="range"
+          min={0}
+          max={choices.length - 1}
+          step={1}
+          value={choices.indexOf(mp)}
+          aria-valuetext={`${mp} MP`}
+          onChange={(e) => set(fit(ratio, choices[Number(e.target.value)]))}
+          className="w-full accent-a1"
+        />
+        <span className="mono flex justify-between text-[12px] text-t2" aria-hidden>
+          <span>{choices[0]} MP</span>
+          <span>{choices.at(-1)} MP</span>
+        </span>
       </div>
       <span className="mono text-[12px] text-t2">
         {/* a video's line has no megapixels (the Size tile says them); a two-stage one adds stage 1's size
