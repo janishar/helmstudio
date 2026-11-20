@@ -903,7 +903,7 @@ export function Create({
           } as React.CSSProperties
         }
       >
-        <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
+        <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto [&>*]:shrink-0">
           <button
             type="button"
             className="chip bevel mb-1 justify-center rounded-[10px] bg-s4"
