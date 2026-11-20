@@ -77,7 +77,49 @@ Lessons that cost time:
    when a task needs NVIDIA.
 8. **The empty Create screen**: built to the Direct board (12caab1).
 9. **The MiniMax H3 video goldens**: 25 dB (first + last frame) and 27 dB (silent video) accepted.
-10. **Next**: the screens to their boards (with 3 and 4), then the Landing page.
+10. **Next**: the screens to their boards (with 3 and 4), then the Landing page. First pass committed as c09031f.
+
+### Second round (2026-11-20, after c09031f), to build
+
+- Q1 capitals: none anywhere (as built now).
+- Q2 pipeline Studio view: build now; steps are ordinary runs, picked take passed to the next step; no API change.
+  Studio|Graph toggle wired.
+- Q3 memory controls in that aside: admins only; others read-only.
+- Q4 title menu (editor + execution): Rename + All pipelines; drop back arrow and always-editable title.
+- Q5 judge panel: canvas wires set takes/pass/memory; Backspace removes node; title edited on the card; emptying a check
+  removes it; drop those panel controls.
+- Q6 judge tiles: On retry = retry target node (rerun step or a Write node that rewrites the prompt); Then Ask me = park
+  for pick.
+- Q7 Test on takes: build now (contract, studio, web).
+- Q8 judge lines in execution: one line per decision, expand on click to inner checkpoints (retry still possible).
+- Q9 wording: 'attempt 1' everywhere.
+- Q10 execution layout: saved positions; auto layout only when overlapping/off-screen.
+- Q11 Pipelines list New pipeline button: keep.
+- Q12 Rename/Delete: move into a ⋯ menu next to the title; panel shows Run, Open graph, Duplicate.
+- Q13 'Open collection': build a batch filter for takes (contract first); Gallery shows a clearable 'Batch · <title>'
+  chip.
+- Q14 'This project only': the session last opened in Create (remembered in the browser).
+- Q15 Gallery search: widen q to element handles and model/family names (contract first); placeholder 'Search prompts,
+  elements, models'.
+- Q16 Elements tile empty word: 'Add' everywhere.
+- Q17 LTX 'Recipe · One-stage/Two-stage' tile: build (skip upscale + stage 2).
+- Q18 optional help text on settings sections: add (contract change); packs write it; web shows (i).
+- Q19 presets: keep pack order (ordered list in the contract).
+- Q20 Generate shows planned peak memory: add an API field; button shows '≈ time · N GB'.
+- Q21 Extend: combined 'CFG · STG' tile.
+- Q22 Audio to video composer: Audio + 'Frames · No keyframes' tiles; picking a frame turns keyframes on, clearing all
+  turns them off; Elements via @ button.
+- Q23 Compare (A/B, seed grid) and Explain run drawer: build both.
+- Q24 live preview clip while running: backlog.
+- Q25 Timeline shot names: fixed shot number given when a clip is added, stays when moved: 'Shot 4 · birches' (clip
+  field, API change).
+- Q26 clip Mute: keep, in the Gain tile.
+- Q27 New shot extra seeds: as built (extra takes in the session).
+- Q28 Qwen 'Enhance (bypassed)' on the Graph board: board-only, not built.
+- Q29 Graph inspector '… uses the <component>': add (contract change).
+- Q30 'Encode prompt (guided)' -> 'Encode (guided)'.
+- Q31 Regenerate audio pressed look: keep.
+- Q32 Landing: signed-in users at /welcome go to Create; phone layout as built.
 
 ## Known gaps
 

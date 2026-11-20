@@ -46,6 +46,10 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
 
 ## Product
 
+- **Live preview clip while a video runs** (owner, 2026-11-20: backlog): 8 frames from the middle, refreshed each
+  step, with sound and a scrubber, as the TextToVideo board draws. Needs the runner to send preview clips (contract and
+  runner change) and costs a little GPU time per step.
+
 - **Generate ETA from size and length** (M7). The estimate under Generate is the last run's time, so after a long
   run it overstates a small one and the other way round. Scale it by megapixels × frames × steps.
 - **MiniMax H3 image-input runs are not bit-repeatable** (M7 pack 3). With the same seed, first/last frame and
