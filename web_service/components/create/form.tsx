@@ -580,14 +580,15 @@ function CanvasPicker({
       <div
         role="group"
         aria-label="Size"
-        className="grid auto-cols-fr grid-flow-col gap-1.5"
+        className="grid auto-cols-auto grid-flow-col gap-1.5"
         hidden={compact && opened !== "size"}
       >
+        {/* as the board: 12px labels, each column as wide as its label (seven equal ones wrap "0.25 MP") */}
         {choices.map((m) => (
           <button
             key={m}
             type="button"
-            className="opt bevel min-w-0 px-0"
+            className="opt bevel min-w-0 px-0 text-[12px] whitespace-nowrap"
             aria-pressed={mp === m}
             onClick={() => set(fit(ratio, m))}
           >
