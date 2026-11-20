@@ -29,8 +29,8 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   (CreateAudio, VoicePicker, TimelineAudio and their ZONOS3 boards). The plan's recommended answers (19.9) are
   decided; it is built in the five steps of 19.7, one commit or more per step.
 - ZONOS3 weights: `~/GenAI/models/ZONOS3-Mini/gguf` (the whole 9.2 GB folder, copied from the SSD; the owner keeps
-  it). Weights Apache-2.0, not gated. The 27 default voices have no stated licence or consent, so ZONOS3 ships no
-  presets; tests clone clips made by Qwen3-TTS.
+  it). Weights Apache-2.0, not gated. The 27 default voices have no stated licence or consent; the owner decided
+  (2026-11-21, Q11) that ZONOS3 includes them as starter presets.
 - Qwen3-TTS: CustomVoice and VoiceDesign on disk; the Base 1.7B (cloning) stays undownloaded.
 - GPU test runs for voices: at most 4 s of audio, clips 3 s.
 

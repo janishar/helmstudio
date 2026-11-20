@@ -164,7 +164,7 @@ packs/zonos3/
                         # presence, and `source {repo: Zyphra/ZONOS3-Mini, allow_patterns: those four files}`: not the
                         # whole 9.3 GB folder (edit, f16 and qat files are left out)
   native.py             # speak(), dialogue(): core.child.run of the vendored zonos3-cli
-  (no voices/)          # no presets: the 27 default voices' licence is unknown (19.9); users clone their own
+  voices/defaults.yaml  # the 27 default voices (owner, Q11): names and ids; clip + embedding read from the weights' gguf/voices/
   licences/zonos3.md
   workflows/1-zonos3-voice-over.json
   workflows/2-zonos3-dialogue.json
@@ -346,10 +346,9 @@ for the owner's approval before the screens are built:
 
 Asked as open questions; on 2026-11-21 the owner said "build it" after reviewing this plan and the boards, so each
 recommended answer below is decided. Q8 and Q11 were settled from the Hub card the same day: the ZONOS3 weights are
-Apache-2.0 and the repo is not gated; the card and `gguf/voices/README.md` say nothing on the 27 recordings' licence,
-source or consent, so **ZONOS3 ships with no preset voices** (users clone their own clips) until Zyphra says
-otherwise. Goldens and tests that need a clip to clone use a clip made by Qwen3-TTS (Apache-2.0), never a ZONOS3
-default voice.
+Apache-2.0 and the repo is not gated. The card and `gguf/voices/README.md` say nothing on the 27 recordings'
+licence, source or consent; the owner decided Q11 anyway (2026-11-21): **ZONOS3 ships its 27 default voices as
+starter presets**.
 
 1. **The unused 8 GB of ZONOS3 files.** Answered (owner, 2026-11-21): leave them. The whole folder stays in
    `~/GenAI/models`; nothing is deleted.
@@ -369,8 +368,7 @@ default voice.
    and ship its text in `licences/` before any download is offered.
 9. **New line on the Timeline.** Recommended: yes, as a fifth generating action (15.3 lists four "and only four").
 10. **Milestone.** Recommended: take it up as M8 after the screens-to-boards work, in the five steps of 19.7.
-11. **ZONOS3's 27 default voice recordings.** The repo's licence covers its code; the voices' licence and the
-    speakers' consent are not written down. Recommended: ship them as starter voices only once the Hub card or
-    Zyphra's docs allow it; until then ZONOS3 starts with no presets and you clone your own clips.
+11. **ZONOS3's 27 default voice recordings.** Their licence and the speakers' consent are not written down.
+    Decided by the owner (2026-11-21): ZONOS3 includes the 27 voices as starter presets.
 12. **Cloning someone's voice.** Recommended: Clone from a clip asks the user to tick "I have the right to use this
     voice" (stored on the voice, like voiceflow's `consent` field); no other check.
