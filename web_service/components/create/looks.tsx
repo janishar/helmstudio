@@ -3,7 +3,7 @@
 // default), the Looks picker (the shared visual picker: groups, starter vs mine, greyed with the reason, Auto clears a
 // group, edit and delete one's own), the look editor (New look, ✎) and the gallery's Save as look.
 import { useEffect, useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Camera, Film, Lightbulb, Palette, Pencil, X, type LucideIcon } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import {
   ElementsButton,
@@ -70,12 +70,27 @@ function LookTile({
       ) : (
         <span
           aria-hidden
-          className={`${picClass(big)} ${st.count ? "bg-line" : "border border-dashed border-dash"}`}
-        />
+          className={`${picClass(big)} grid place-items-center text-t2 ${st.count ? "bg-line" : "border border-dashed border-dash"}`}
+        >
+          <GroupIcon group={group} big={big} />
+        </span>
       )}
       <TileWords big={big} label={label} value={st.name} />
     </button>
   );
+}
+
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  film: Film,
+  camera: Camera,
+  colour: Palette,
+  lighting: Lightbulb,
+};
+
+/** The look group's icon inside a tile's picture slot while it has no picture. */
+function GroupIcon({ group, big }: { group: string; big: TileSize }) {
+  const Icon = GROUP_ICONS[group];
+  return Icon ? <Icon size={big ? 16 : 13} strokeWidth={1.75} /> : null;
 }
 
 /** The composer's quick tiles in order: Elements (`elements`) and the look groups. */

@@ -3,7 +3,7 @@
 // insert at the caret, New element, edit, delete with confirm) and the editor (name, handle, group, text, 1-4
 // images from the gallery picker). Saved through /v1/studio/library.
 import { useEffect, useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil, UsersRound, X } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { VisualPicker } from "@/components/create/visual-picker";
 import { GalleryPicker } from "@/components/gallery/picker";
@@ -63,7 +63,11 @@ export function ElementsButton({
 }) {
   return (
     <button type="button" aria-haspopup="dialog" onClick={onClick} className={tileClass(big)}>
-      {big !== "card" && <span aria-hidden className={`${picClass(big)} bg-line`} />}
+      {big !== "card" && (
+        <span aria-hidden className={`${picClass(big)} grid place-items-center bg-line text-t2`}>
+          <UsersRound size={big ? 16 : 13} strokeWidth={1.75} />
+        </span>
+      )}
       <TileWords big={big} label="Elements" value={count ? `${count} in prompt` : "Add"} />
     </button>
   );
