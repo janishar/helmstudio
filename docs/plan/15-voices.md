@@ -17,7 +17,7 @@ packs differ. The backlog's two entries (ZONOS3 2026-11-18, Qwen3-TTS 2026-11-19
 
 | | Qwen3-TTS 1.7B CustomVoice | Qwen3-TTS 1.7B VoiceDesign | ZONOS3-Mini |
 |---|---|---|---|
-| Folder | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-CustomVoice` | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign` | `/Volumes/ALI T9/models/ZONOS3-Mini/gguf` (the SSD; below) |
+| Folder | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-CustomVoice` | `~/GenAI/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign` | `~/GenAI/models/ZONOS3-Mini/gguf` (below) |
 | Files | `model.safetensors` 3.8 GB bf16 (talker + code predictor), `speech_tokenizer/` 0.68 GB fp32 | the same layout; the speech tokenizer is byte-identical (same SHA-256) | GGUF: backbone (`backbone-ptq`), decoder (`zac-keep2`), speaker encoder, codec encoder + SSL teacher (raw-code cloning), `steer.gguf`, `accents.gguf`, `edit/` |
 | Preset voices | 9: Vivian, Serena, Uncle_Fu, Dylan (Beijing), Eric (Sichuan), Ryan, Aiden, Ono_Anna, Sohee | none | 27 default voices in the weights' `gguf/voices/` (10 English with styles such as British, Irish, announcer, ASMR; 1 fr; 2 each of de, hi, it, ko, zh, pt, es, te), each a clip (mp3, wav or ogg) + codes + 192-d embedding, with ids in its README; their licence and the speakers' consent are not stated |
 | Voice from a description | no | yes: `instruct` describes the voice ("male, 17, tenor, nervous") | no free text; "design" = steering sliders (gender, age, pitch, timbre…) |
@@ -34,12 +34,12 @@ Language codes differ (Qwen `english`, ZONOS3 `en_us`). Voices and params use BC
 Other speech weights on disk, not packs here: `Qwen3-ASR-1.7B` (speech to text; useful later to transcribe a clone
 clip), `Qwen2.5-Omni-3B`, `silero-vad`.
 
-**ZONOS3 weights are on the SSD only**: `/Volumes/ALI T9/models/ZONOS3-Mini/gguf`, 9.2 GB, Hub revision
-`d2d142a8…`. Not in `~/GenAI/models`. The pack needs four files, about 1.1 GB: `backbone-ptq.gguf` 632 MB,
+**ZONOS3 weights**: `~/GenAI/models/ZONOS3-Mini/gguf`, 9.2 GB, Hub revision `d2d142a8…` (copied from the SSD by
+the owner on 2026-11-21; the four files below match the Hub's SHA-256 in the `.cache` sidecars). The pack needs four files, about 1.1 GB: `backbone-ptq.gguf` 632 MB,
 `zac-keep2.gguf` 431 MB, `spk-encoder.gguf` 43 MB, `steer.gguf` 0.2 MB, plus `voices/` (about 25 MB). The rest is
 for later or never: `zac.gguf` (2 GB, full decoder), `zac-encoder.gguf` + `ssl-teacher.gguf` (5.2 GB, raw-code
 cloning), `backbone-ptq-edit.gguf` + `edit/` (speech editing). There is no top-level `accents.gguf`, so accent
-adapters are not available. Open question 1 says how they get to the runner.
+adapters are not available.
 
 Lessons from the old code:
 
@@ -325,8 +325,7 @@ before the screens are built:
 1. **Scout** (no product code): build `zonos3-cli` in scratch from the pinned commit; check its progress output on
    stderr (core.child needs `<phase> n/total` lines, else a small vendored patch), whether one process can speak
    several lines (else the dialogue stage runs `zonos3-server` as the child for the run), its memory and time on a
-   3 s line; run the AI-EXP port on the torch env's pins with the core loader; record peaks at two lengths. Reads
-   the ZONOS3 files from where open question 1 puts them.
+   3 s line; run the AI-EXP port on the torch env's pins with the core loader; record peaks at two lengths.
 2. **Contracts** (1.30): everything in 19.3, the echo voice stages, fixtures, `check.py` references (script
    expansion, voice fit, audio takes on audio tracks).
 3. **Qwen3-TTS pack + Create Audio + voice picker** (presets and designed voices), goldens.
@@ -347,9 +346,9 @@ before the screens are built:
 
 Each with the recommended answer first.
 
-1. **ZONOS3 weights are on the SSD, not in `~/GenAI/models`.** The runner reads one models root, and the SSD can
-   be ejected. Recommended: when the ZONOS3 step starts, copy only the four files the pack needs and `voices/`
-   (about 1.1 GB) to `~/GenAI/models/ZONOS3-Mini/gguf`, and leave the other 8 GB on the SSD.
+1. **The unused 8 GB of ZONOS3 files.** The whole folder is now in `~/GenAI/models` (the disk is 94% full).
+   Recommended: keep it until the scout step, then delete what the pack does not use (`zac.gguf`,
+   `zac-encoder.gguf`, `ssl-teacher.gguf`, the edit files); the SSD keeps a copy.
 2. **Voice cloning on Qwen too?** Recommended: not now. ZONOS3 clones; Qwen's Base 1.7B (about 4.5 GB) is declared
    in the pack as a downloadable variant and added when you choose to fetch it.
 3. **Where dialogue is written.** Recommended: a script in the dialogue composer (`@handle: text`), which Write
