@@ -246,6 +246,7 @@
       "kind": "echo/tiny",
       "title": "Echo tiny",
       "family": "echo",
+      "component": "transformer",
       "params": [
         {
           "name": "steps",

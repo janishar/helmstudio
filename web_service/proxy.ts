@@ -43,7 +43,7 @@ function refreshOnce(token: string, ip?: string): Promise<RefreshResult> {
 
 /** Next.js proxy, run before every matched request: public pages and valid tokens pass, an expiring token is
  * refreshed, and a signed-out visitor sees the landing page at / and goes to /signin from anywhere else (a 401 for
- * /api), with both cookies cleared. When auth_service
+ * /api), with both cookies cleared; a signed-in user at /welcome goes to Create (/). When auth_service
  * can't answer, the request passes with its cookies kept, so an outage doesn't sign anyone out. */
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -54,21 +54,25 @@ export async function proxy(req: NextRequest) {
   req.headers.set(PATH_HEADER, pathname + search); // set, never passed through: the browser can't choose it
   // Carries on with the rewritten headers.
   const next = () => NextResponse.next({ request: { headers: req.headers } });
-  if (PUBLIC.has(pathname)) return next();
+  const welcome = pathname === "/welcome"; // signed in: Create; signed out: the landing page, cookies as they are
+  if (PUBLIC.has(pathname) && !welcome) return next();
   const access = req.cookies.get(ACCESS_COOKIE)?.value;
   const refresh = req.cookies.get(REFRESH_COOKIE)?.value;
-  if (access && !needsRefresh(access)) return next();
+  const pass = () => (welcome ? NextResponse.redirect(new URL("/", publicOrigin(req))) : next());
+  if (access && !needsRefresh(access)) return pass();
+  if (welcome && !refresh) return next();
 
   const result = refresh ? await refreshOnce(refresh, clientIp(req.headers)) : "refused";
   if (result === "unavailable") return next();
   if (result !== "refused") {
     req.cookies.set(ACCESS_COOKIE, result.access_token); // this request's handlers see the new token
     req.cookies.set(REFRESH_COOKIE, result.refresh_token);
-    const res = next();
+    const res = pass();
     for (const [name, value, options] of sessionCookies(result))
       res.cookies.set(name, value, options);
     return res;
   }
+  if (welcome) return next();
 
   const res = pathname.startsWith("/api/")
     ? NextResponse.json({ detail: "signed out" }, { status: 401 })

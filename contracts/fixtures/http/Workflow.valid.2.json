@@ -54,6 +54,27 @@
         "items": [
           "echo.delay_ms",
           "echo.fail"
+        ],
+        "help": "Delay and failure switches of the fake runner.",
+        "choices": [
+          {
+            "label": "Speed",
+            "help": "How long the fake run takes.",
+            "options": [
+              {
+                "name": "Quick",
+                "set": {
+                  "echo.steps": 2
+                }
+              },
+              {
+                "name": "Slow",
+                "set": {
+                  "echo.steps": 20
+                }
+              }
+            ]
+          }
         ]
       }
     ],
@@ -64,8 +85,15 @@
       "Fast": {
         "echo.steps": 2,
         "echo.delay_ms": 0
+      },
+      "Slow": {
+        "echo.steps": 20
       }
-    }
+    },
+    "preset_order": [
+      "Slow",
+      "Fast"
+    ]
   },
   "node_schemas": {
     "prompt": {

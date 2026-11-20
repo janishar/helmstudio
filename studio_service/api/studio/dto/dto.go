@@ -77,6 +77,7 @@ type RunRequest struct {
 	WorkflowID string         `json:"workflow_id"`
 	Inputs     map[string]any `json:"inputs"`
 	Looks      []string       `json:"looks"` // the chosen looks, every group together; a repeat counts once
+	Ask        bool           `json:"-"`     // a judge test's run (API 1.28): it may run a text workflow
 }
 
 // Validate wants a workflow id and at most 8 look ids.
@@ -85,6 +86,14 @@ func (b *RunRequest) Validate() string {
 		return "workflow_id is required"
 	}
 	return CheckLookIDs("looks", b.Looks)
+}
+
+// RunPlan is POST /runs/plan (API 1.25): the first eligible host by name and the run's planned peak there; null
+// peak = no plan (the whole budget); reason = why no host is eligible.
+type RunPlan struct {
+	Host   *string  `json:"host"`
+	PeakGB *float64 `json:"peak_gb"`
+	Reason *string  `json:"reason"`
 }
 
 // MaxRunLooks is the most look ids a run (a batch row, a step) asks for.

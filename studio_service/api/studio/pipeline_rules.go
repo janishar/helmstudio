@@ -257,6 +257,10 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("decide_routes", from, "", "", "%s: its one edge maps each of its routes to a node, and then names one", from)
 			continue
 		}
+		if edge.Branch != nil && edge.Branch.Then == "" && kind != "judge" { // API 1.28: only a judge's may Ask me
+			add("edge_invalid", from, "", "", "%s: a gate's branch needs then; only a judge can ask you at the cap", from)
+			continue
+		}
 		outdeg[from]++
 		if outdeg[from] > 1 || nodes[from].Kind == "output" ||
 			slices.ContainsFunc(targets, func(t string) bool { return nodes[t].Kind == "inputs" }) {
@@ -266,7 +270,10 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 		switch {
 		case edge.Branch != nil:
 			b := edge.Branch
-			graph.succ[from] = append(graph.succ[from], pipelineHop{b.Pass, false}, pipelineHop{b.Fail, true}, pipelineHop{b.Then, false})
+			graph.succ[from] = append(graph.succ[from], pipelineHop{b.Pass, false}, pipelineHop{b.Fail, true})
+			if b.Then != "" {
+				graph.succ[from] = append(graph.succ[from], pipelineHop{b.Then, false})
+			}
 			graph.capped = append(graph.capped, cappedEdge{from, b.Fail, b.Max})
 		case edge.Routes != nil: // every route but then counts against the node's max
 			routed[from] = true

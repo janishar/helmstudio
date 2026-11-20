@@ -7,6 +7,9 @@ import type { S } from "@/lib/api";
 import { paletteOf, type Doc } from "@/lib/graph";
 import {
   addPipelineNode,
+  addRewrite,
+  forgetMemory,
+  renameNode,
   stepTakes,
   bindCandidates,
   blankPipeline,
@@ -185,11 +188,60 @@ describe("agent nodes", () => {
         clip: { ...clip, bind: { ...clip.bind, "keyframes.images": "judge.picked" } },
       },
     };
+    // API 1.28: a judge's new branch asks at the cap (no then); a gate's still goes on to the output
     expect(d.edges.find((e) => e[0] === "judge")).toEqual([
       "judge",
-      { pass: "clip", fail: "still", max: 2, then: "out" },
+      { pass: "clip", fail: "still", max: 2 },
     ]);
     expect(pipelineProblems(d, workflows, palette).map((p) => p.code)).toEqual([]);
+    d = connectNodes(d, "judge", "then", "out");
+    expect(d.edges.find((e) => e[0] === "judge")?.[1]).toMatchObject({ then: "out" });
+    d = disconnectNodes(d, "judge", "then"); // back to Ask me, the branch kept
+    expect(d.edges.find((e) => e[0] === "judge")?.[1]).toEqual({
+      pass: "clip",
+      fail: "still",
+      max: 2,
+    });
+  });
+  it("wires set what a judge judges and learns from; a gate's branch needs then (Q5, API 1.28)", () => {
+    let d = removePipelineNodes(best, ["judge", "rewrite", "review"]);
+    d = addPipelineNode(d, "judge", { x: 0, y: 400 }, { selected: null }).doc;
+    d = {
+      ...d,
+      nodes: { ...d.nodes, judge: { ...(d.nodes.judge as S<"PipelineJudgeNode">), takes: "" } },
+    };
+    d = connectNodes(d, "still", "next", "judge"); // the step's takes wired into the judge
+    expect((d.nodes.judge as S<"PipelineJudgeNode">).takes).toBe("still");
+    d = connectNodes(d, "mem", "examples", "judge"); // the memory node's examples port
+    expect((d.nodes.judge as S<"PipelineJudgeNode">).memory).toBe("mem");
+    expect(d.edges.some((e) => e[0] === "mem" && e[1] === "judge")).toBe(false);
+    expect((forgetMemory(d, "judge").nodes.judge as S<"PipelineJudgeNode">).memory).toBeUndefined();
+    const named = renameNode(d, "judge", "  Clean image  ");
+    expect(named.nodes.judge.title).toBe("Clean image");
+    expect(renameNode(named, "judge", " ").nodes.judge.title).toBeUndefined();
+    const gate: PDoc = {
+      ...d,
+      nodes: { ...d.nodes, g: { kind: "gate", takes: "still" } },
+      edges: [...d.edges, ["g", { pass: "clip", fail: "still", max: 1 }]],
+    };
+    expect(pipelineProblems(gate, workflows, palette).map((p) => [p.code, p.node])).toContainEqual([
+      "edge_invalid",
+      "g",
+    ]);
+  });
+  it("On retry: Rewrite prompt adds a write that rewrites the step's prompt (Q6)", () => {
+    let d = removePipelineNodes(best, ["rewrite", "review"]);
+    d = connectNodes(d, "judge", "next", "clip");
+    const r = addRewrite(d, "judge");
+    const w = r.doc.nodes[r.id] as S<"PipelineWriteNode">;
+    expect(w).toMatchObject({ kind: "write", title: "Rewrite prompt", to: "$prompt" });
+    expect(w.from).toEqual(["$prompt", "judge.reasons"]);
+    expect(r.doc.edges).toContainEqual([r.id, "still"]);
+    expect(r.doc.edges.find((e) => e[0] === "judge")?.[1]).toEqual({
+      pass: "clip",
+      fail: r.id,
+      max: 2,
+    });
   });
   it("a decide's routes edge follows its labels", () => {
     let d = connectNodes(decide, "check", "r:retry", "clip");

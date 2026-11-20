@@ -1,0 +1,78 @@
+{
+  "description": "choice tiles (API 1.26): an option set is checked as a preset (an invalid value, an unknown node)",
+  "workflow": {
+    "title": "Bad choices",
+    "family": "echo",
+    "env": "fake",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "echo": {
+        "kind": "echo/echo",
+        "in": {
+          "text": "prompt.text"
+        },
+        "params": {
+          "steps": 10,
+          "delay_ms": 300,
+          "fail": false,
+          "refs": []
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "echo.image"
+        }
+      }
+    },
+    "studio": {
+      "composer": [
+        "prompt.text"
+      ],
+      "inspector": [
+        {
+          "title": "More",
+          "items": [
+            "echo.steps"
+          ],
+          "choices": [
+            {
+              "label": "Speed",
+              "options": [
+                {
+                  "name": "Slow",
+                  "set": {
+                    "echo.steps": 0
+                  }
+                },
+                {
+                  "name": "Ghost",
+                  "set": {
+                    "ghost.x": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "problems": [
+    {
+      "code": "preset_invalid",
+      "node": "echo",
+      "param": "steps"
+    },
+    {
+      "code": "preset_invalid",
+      "node": "ghost",
+      "param": "x"
+    }
+  ]
+}

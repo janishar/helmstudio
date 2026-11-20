@@ -64,11 +64,7 @@ export function ElementsButton({
   return (
     <button type="button" aria-haspopup="dialog" onClick={onClick} className={tileClass(big)}>
       {big !== "card" && <span aria-hidden className={`${picClass(big)} bg-line`} />}
-      <TileWords
-        big={big}
-        label="Elements"
-        value={count ? `${count} in prompt` : big === "card" ? "None" : "Add"}
-      />
+      <TileWords big={big} label="Elements" value={count ? `${count} in prompt` : "Add"} />
     </button>
   );
 }

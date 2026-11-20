@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.pipelines.judge.test.schema.json",
+  "title": "NATS request/reply pipelines.judge.test (studio → pipelines)",
+  "description": "From API 1.28. Core NATS request/reply on subject `pipelines.judge.test` (queue group `pipelines`), bare JSON, for the Judge panel's Test on takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests). Pipelines owns the judge template and its checks, so studio asks it twice and makes the run itself. `prompt`: the filled `judge` template (`ask.system`, `ask.prompt`, `ask.schema`, `ask.max_tokens` values) for n takes, with the judge's memory as a batch would read it now (the judge examples keyed by the judge id and the notes of its memory read node, each newest `limit`, `key` filtering the notes), read only inside the owner's namespace. `verdict`: the answer's text checked and the verdict derived as a batch's judge does (`judge_verdict`); an answer that fails is `{error, code: answer}`. Studio waits 5 s (no answer: 503).",
+  "$defs": {
+    "request": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/prompt"
+        },
+        {
+          "$ref": "#/$defs/verdict"
+        }
+      ]
+    },
+    "prompt": {
+      "type": "object",
+      "required": [
+        "op",
+        "owner_id",
+        "pipeline_id",
+        "node",
+        "criteria",
+        "n",
+        "brief"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "prompt"
+        },
+        "owner_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "pipeline_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "node": {
+          "$ref": "defs.schema.json#/$defs/nodeId",
+          "description": "the judge: its examples' key"
+        },
+        "criteria": {
+          "$ref": "defs.schema.json#/$defs/judgeCriteria"
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "how many takes it sees"
+        },
+        "brief": {
+          "type": "string",
+          "maxLength": 32768,
+          "description": "the first take's prompt (empty without one)"
+        },
+        "memory": {
+          "type": "object",
+          "required": [
+            "limit"
+          ],
+          "additionalProperties": false,
+          "description": "the judge's memory read node (absent: Memory Off)",
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            }
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "required": [
+        "op",
+        "criteria",
+        "keep",
+        "take_ids",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "verdict"
+        },
+        "criteria": {
+          "$ref": "defs.schema.json#/$defs/judgeCriteria"
+        },
+        "keep": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "take_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "$ref": "defs.schema.json#/$defs/uuid"
+          },
+          "description": "the candidates, in the order the prompt named them"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 32768,
+          "description": "the ask run's answer (its last try's text)"
+        }
+      }
+    },
+    "reply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/prompted"
+        },
+        {
+          "$ref": "#/$defs/judged"
+        },
+        {
+          "$ref": "#/$defs/error"
+        }
+      ]
+    },
+    "prompted": {
+      "type": "object",
+      "required": [
+        "system",
+        "prompt",
+        "schema",
+        "max_tokens",
+        "template"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "system": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "schema": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 16384,
+          "description": "the answer's JSON schema, compact"
+        },
+        "max_tokens": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 4096
+        },
+        "template": {
+          "type": "string",
+          "pattern": "^judge/v[0-9]+$"
+        }
+      }
+    },
+    "judged": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "first_failed",
+        "picked",
+        "takes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "enum": [
+            "pass",
+            "fail"
+          ]
+        },
+        "first_failed": {
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/criterion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "picked": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "defs.schema.json#/$defs/uuid"
+          }
+        },
+        "takes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "description": "every candidate, in candidate order",
+          "items": {
+            "type": "object",
+            "required": [
+              "take_id",
+              "checks",
+              "reason",
+              "passes",
+              "rank"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "$ref": "defs.schema.json#/$defs/uuid"
+              },
+              "checks": {
+                "type": "array",
+                "maxItems": 24,
+                "items": {
+                  "type": "boolean"
+                },
+                "description": "must lines then nice lines"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "passes": {
+                "type": "boolean"
+              },
+              "rank": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              }
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "error",
+        "code"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "`answer did not match the schema: …` or `takes must be 1..4 in order` (answer)"
+        },
+        "code": {
+          "enum": [
+            "answer",
+            "invalid",
+            "internal"
+          ]
+        }
+      }
+    }
+  }
+}

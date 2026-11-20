@@ -38,17 +38,21 @@ import {
 type Timeline = S<"Timeline">;
 type Offer = S<"TakeOffer">;
 
-/** The action whose shot a slot holds (clip id → its action), for the placeholder's title; this tab's only. */
-const shots = new Map<string, { action: string; replace: boolean }>();
+/** The action whose shot a slot holds (clip id → its action and the source clip's shot number), for the
+ * placeholder's title; this tab's only. */
+const shots = new Map<string, { action: string; replace: boolean; source?: number }>();
 
-/** The placeholder of an action's shot: "Retaking Shot 3", "Extending", "Retake failed"; null for another shot. */
-export function actionShot(c: Clip, takeTitle?: string): { title: string; failed: boolean } | null {
+/** The placeholder of an action's shot: "Retaking Shot 3", "Extending Shot 3" (an inserted clip names its source),
+ * "Retake failed"; null for another shot. */
+export function actionShot(c: Clip, name?: string): { title: string; failed: boolean } | null {
   const a = c.shot && shots.get(c.id);
   if (!a || !c.shot) return null;
   if (c.shot.status === "failed")
     return { title: `${a.action.split(" ")[0]} failed`, failed: true };
   return {
-    title: [progressive(a.action), a.replace ? takeTitle : ""].filter(Boolean).join(" "),
+    title: [progressive(a.action), a.replace ? name : a.source && `Shot ${a.source}`]
+      .filter(Boolean)
+      .join(" "),
     failed: false,
   };
 }
@@ -232,6 +236,7 @@ function ActionForm({
       shots.set("clip" in slot ? slot.clip : id, {
         action: offer.action ?? offer.title,
         replace: place === "replace",
+        source: clip.number,
       });
       onDone(res.timeline);
     } catch (e) {

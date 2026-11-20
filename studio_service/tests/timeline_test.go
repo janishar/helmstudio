@@ -505,3 +505,48 @@ func TestRerender(t *testing.T) {
 		t.Fatal("a step that never ran keeps its slot locked", clip)
 	}
 }
+
+// TestShotNumbers: a V1 clip's number (API 1.29) is given when it is added and kept when it moves, whatever a write
+// says; a removed clip brought back by undo keeps its own; a split's right part gets the next.
+func TestShotNumbers(t *testing.T) {
+	e := setup(t)
+	a, b, c := e.clipTake(userA, 2, true, nil), e.clipTake(userA, 2, true, nil), e.clipTake(userA, 2, true, nil)
+	nums := func(tl map[string]any) (out []any) {
+		for _, clip := range v1(tl) {
+			out = append(out, clip.(map[string]any)["number"])
+		}
+		return out
+	}
+	want := func(tl map[string]any, n ...float64) {
+		t.Helper()
+		if got := nums(tl); fmt.Sprint(got) != fmt.Sprint(n) {
+			t.Fatal("numbers", got, "want", n)
+		}
+	}
+	tl := e.call(userA, "POST", "/v1/studio/timelines", map[string]any{"take_ids": []string{a, b}}, 201)
+	want(tl, 1, 2)
+	base := "/v1/studio/timelines/" + tl["id"].(string)
+	tl = e.call(userA, "POST", base+"/clips", map[string]any{"take_ids": []string{c}}, 200)
+	want(tl, 1, 2, 3)
+
+	// move the third clip first and try to renumber it: it keeps 3
+	clips := v1(tl)
+	clips[2].(map[string]any)["number"] = 1
+	put := func(clips []any) map[string]any {
+		return e.call(userA, "PUT", base, map[string]any{"revision": tl["revision"], "target": tl["target"],
+			"tracks": []any{map[string]any{"kind": "video", "clips": clips}}}, 200)
+	}
+	tl = put([]any{clips[2], clips[0], clips[1]})
+	want(tl, 3, 1, 2)
+
+	// remove shot 2, then undo: it comes back as 2; a new clip carrying 2 meanwhile gets the next
+	clips = v1(tl)
+	tl = put([]any{clips[0], clips[1]})
+	want(tl, 3, 1)
+	tl = e.call(userA, "POST", base+"/undo", map[string]any{"revision": tl["revision"]}, 200)
+	want(tl, 3, 1, 2)
+	clips = v1(tl)
+	split := map[string]any{"id": "s1", "take_id": a, "number": 2}
+	tl = put([]any{clips[0], clips[1], clips[2], split})
+	want(tl, 3, 1, 2, 4)
+}

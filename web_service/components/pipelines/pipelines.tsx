@@ -1,16 +1,18 @@
 "use client";
 // Pipelines (docs/mock/Pipelines.dc.html, plan 7.2): the saved pipelines (search, filter chips, a card each with its
 // chain of nodes and its last batch), the selected pipeline's panel (its steps, its Memory box with Open memory, Run,
-// Open graph, Duplicate, Rename, Delete), New pipeline and New batch, and the Recent batches table (the 4 newest; All
+// Open graph, Duplicate; Rename and Delete in the ⋯ menu by its title: owner's Q12), New pipeline and New batch, and the Recent batches table (the 4 newest; All
 // batches shows the rest). The "Models it
 // will load" box lists each step's workflow and each model a node names, and whether remote calls are on (a listed
 // pipeline carries no resolved models: auto stays "auto"); the cards' tags mark a director ("chat") and remote calls.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
+import { MENU_ITEM } from "@/components/pipelines/title-menu";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
 import {
@@ -522,9 +524,19 @@ export function Pipelines({
                           Retry failed
                         </button>
                       )}
-                      <Link href={`/pipelines/batches/${b.id}`} className="chip bevel h-[30px]">
-                        Open
-                      </Link>
+                      {b.status === "done" ? (
+                        // the board's done row: its takes in the Gallery, filtered to the batch
+                        <Link
+                          href={`/gallery?batch=${encodeURIComponent(b.id)}`}
+                          className="chip bevel h-[30px]"
+                        >
+                          Open collection
+                        </Link>
+                      ) : (
+                        <Link href={`/pipelines/batches/${b.id}`} className="chip bevel h-[30px]">
+                          Open
+                        </Link>
+                      )}
                       {canPause(b) && (
                         <button
                           type="button"
@@ -569,9 +581,9 @@ export function Pipelines({
           aria-label="Selected pipeline"
           className="aside m-3.5 flex flex-[1_1_340px] flex-col gap-3.5 px-[18px] pt-4 pb-6 md:ml-0"
         >
-          <div className="flex flex-col gap-1">
+          <div className="relative flex flex-col gap-1 pr-9">
             <h2 className="m-0 flex items-center gap-2 font-display text-[18px] font-bold">
-              {selected.title}
+              <span className="min-w-0 truncate">{selected.title}</span>
               <Info>
                 Edits change only new batches.{" "}
                 {selected.last_batch && !ended(selected.last_batch)
@@ -580,6 +592,53 @@ export function Pipelines({
                 the version it was submitted with.
               </Info>
             </h2>
+            <button
+              type="button"
+              popoverTarget="pipeline-more"
+              aria-label={`More for ${selected.title}`}
+              title="More"
+              className="absolute top-0 right-0 grid size-8 place-items-center rounded-[10px] text-t2 hover:bg-s2"
+              style={{ anchorName: "--pipeline-more" } as React.CSSProperties}
+            >
+              <MoreHorizontal size={18} aria-hidden />
+            </button>
+            <div
+              id="pipeline-more"
+              popover="auto"
+              role="menu"
+              aria-label={`More for ${selected.title}`}
+              className="pop w-44 flex-col p-1.5 open:flex"
+              style={
+                {
+                  positionAnchor: "--pipeline-more",
+                  positionArea: "bottom span-left",
+                  marginTop: 6,
+                } as React.CSSProperties
+              }
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className={MENU_ITEM}
+                onClick={() => {
+                  document.getElementById("pipeline-more")?.hidePopover?.();
+                  setRenaming({ p: selected, title: selected.title });
+                }}
+              >
+                Rename
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={`${MENU_ITEM} text-bad`}
+                onClick={() => {
+                  document.getElementById("pipeline-more")?.hidePopover?.();
+                  setDeleting(selected);
+                }}
+              >
+                Delete
+              </button>
+            </div>
             <span className="mono text-[11px] text-t2">
               {[
                 collectionOf(selected),
@@ -614,20 +673,6 @@ export function Pipelines({
               onClick={() => void create({ based_on: selected.id })}
             >
               Duplicate
-            </button>
-            <button
-              type="button"
-              className="act justify-center"
-              onClick={() => setRenaming({ p: selected, title: selected.title })}
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              className="act justify-center text-bad"
-              onClick={() => setDeleting(selected)}
-            >
-              Delete
             </button>
           </div>
         </aside>

@@ -12,7 +12,7 @@ import json
 
 import pytest
 from conftest import headers, make_client
-from helpers import NO_SUCH_ID, STUDIO, all_takes, ok, wait_for
+from helpers import NO_SUCH_ID, STUDIO, all_takes, ok, wait_for, wait_run
 from test_batches import BATCHES, FINAL, finish, fresh, lines, rows_of, wait_batch, wait_rows
 from test_pipelines import (
     PIPELINE_FIXTURES,
@@ -31,6 +31,7 @@ from test_pipelines import (
 from test_user_workflows import WF, check, copy_echo, doc, keys, put
 
 ASK = "echo-ask"
+FINAL_RUN = {"succeeded", "failed", "cancelled"}
 I2V = "echo-image-to-video"
 MEMORY = f"{STUDIO}/memory"
 CRITERIA = {"must": ["Shows the subject"], "nice": ["Sharp"]}
@@ -845,3 +846,130 @@ def test_memory_cap(new_user):
             and r.json()["detail"] == "memory is full (500 items); delete some first"
         )
         assert c.delete(f"{PIPES}/{pid}").status_code == 204
+
+
+# ---------------------------------------------------------------- API 1.28: Then: Ask me, Test on takes
+
+
+def test_ask_me_parks_at_the_cap_and_a_reject_fails_the_row(api):
+    """A judge branch without `then` (the board's "Then: Ask me"): Auto too parks at the cap with nothing suggested,
+    and a reject there fails the row; a gate's branch still needs then (edge_invalid)."""
+    doc_ = rewrite_loop("Contract ask me")
+    doc_["edges"][2] = ["judge", {"pass": "out", "fail": "rewrite", "max": 1}]
+    p = create(api, doc_)
+    assert p["problems"] == [] and p["edges"][2][1] == {"pass": "out", "fail": "rewrite", "max": 1}
+    tag = fresh(["v"])[0]
+    p2 = scripted(f"a fox, second try {tag}", answer(FAILS))
+    p1 = scripted(f"a fox {tag}", answer(FAILS, reasons={1: scripted("no subject", {"text": p2})}))
+    bid = submit(api, p["id"], [p1])["id"]
+    try:
+        (r,) = parked(api, bid, [1], visit=2)
+        assert r["parked"]["kind"] == "judge" and r["parked"].get("suggested", []) == []
+        assert cell(r, "judge")["loop"] == {"turns": 1, "max": 1, "then": None, "gave_up": False}
+        review = ok(api.get(f"{BATCHES}/{bid}/review"))["items"]
+        assert [(i["row"], i["on_reject"]) for i in review] == [(1, "fail")]
+        body = {"gate": "judge", "reject": True}
+        ok(api.post(f"{BATCHES}/{bid}/rows/1/pick", json=body), 202)
+        r = ended(api, bid, 1)
+        assert (r["status"], r["error"]) == ("failed", "rejected at judge")
+    finally:
+        finish(api, bid)
+    gate = {
+        "title": "Contract gate ask me",
+        "nodes": {
+            "inputs": inputs_node("prompt"),
+            "still": echo_step({"prompt.text": "$prompt"}),
+            "g": {"kind": "gate", "takes": "still"},
+            "out": {"kind": "output", "from": "g.picked", "collection": "x"},
+        },
+        "edges": [
+            ["inputs", "still"],
+            ["still", "g"],
+            ["g", {"pass": "out", "fail": "still", "max": 1}],
+        ],
+    }
+    v = ok(api.post(f"{PIPES}/validate", json=gate))
+    assert {"code": "edge_invalid", "node": "g"}.items() <= next(
+        x for x in v["problems"] if x["code"] == "edge_invalid"
+    ).items()
+
+
+def four_takes(client, sid: str, run_id: str) -> list[str]:
+    """The four takes of a run of `four`, oldest first."""
+    assert wait_run(client, run_id)["status"] == "succeeded"
+    takes = [
+        t for t in all_takes(client, f"{STUDIO}/sessions/{sid}/takes") if t["run_id"] == run_id
+    ]
+    assert len(takes) == 4, takes
+    return [t["id"] for t in reversed(takes)]
+
+
+def judge_test(client, pid: str, take_ids: list[str], node: str = "judge"):
+    return client.post(f"{PIPES}/{pid}/judge-tests", json={"node": node, "take_ids": take_ids})
+
+
+def test_judge_test_on_picked_takes(api, api_b, four):
+    """Test on takes (POST /pipelines/{id}/judge-tests, GET /judge-tests/{id}): the saved judge's one ask run on
+    the caller's takes (the first take's prompt is the brief, so the fake's answer is scripted there), each take's
+    verdict and reason as check.judge_verdict derives them; isolation and the refusals."""
+    p = create(api, judged_clip(four, "Contract judge test"))
+    script = answer(FAILS, PASS, NICE_FAILS, FAILS, reasons={1: "no fox here"})
+    sid = ok(api.post(f"{STUDIO}/sessions", json={"title": "Contract judge test"}), 201)["id"]
+    run = ok(api.post(f"{STUDIO}/sessions/{sid}/runs", json={"workflow_id": four,
+              "inputs": {"prompt.text": scripted(fresh(["a fox"])[0], script)}}), 202)  # fmt: skip
+    ids = four_takes(api, sid, run["id"])
+
+    t = ok(judge_test(api, p["id"], ids), 202)
+    assert (t["pipeline_id"], t["node"], t["take_ids"], t["takes"], t["verdict"]) == (
+        p["id"], "judge", ids, [], None,
+    )  # fmt: skip
+    assert t["status"] in ("queued", "running") and t["run_id"]
+    path = f"{STUDIO}/judge-tests/{t['id']}"
+    done = wait_for(
+        lambda: (x := ok(api.get(path)))["status"] in FINAL_RUN and x, what="judge test"
+    )
+    want = check.judge_verdict(script, CRITERIA, 1, ids)
+    assert (done["status"], done["verdict"], done["first_failed"]) == (
+        "succeeded", want["verdict"], want["first_failed"],
+    )  # fmt: skip
+    assert [x["take_id"] for x in done["takes"]] == ids
+    assert [x["passes"] for x in done["takes"]] == want["passes"]
+    assert [x["rank"] for x in done["takes"]] == want["ranks"]
+    assert [x["take_id"] for x in done["takes"] if x["picked"]] == want["picked"]
+    assert done["takes"][0]["reason"] == "no fox here"
+    assert done["takes"][0]["checks"] == [
+        {"criterion": "Shows the subject", "level": "must", "pass": False},
+        {"criterion": "Sharp", "level": "nice", "pass": True},
+    ]
+    assert ok(api.get(path)) == done  # kept, not asked again
+    ask = ok(api.get(f"{STUDIO}/runs/{done['run_id']}"))
+    assert ask["workflow_id"] == ASK and ask["session_id"] == sid and ask["outputs"] == []
+    assert len(ask["inputs"]["ask.media"]) == 4
+
+    # isolation and refusals: another user's pipeline, test or take is 404; not a judge, a repeat: 422
+    assert judge_test(api_b, p["id"], ids).status_code == 404
+    assert api_b.get(path).status_code == 404
+    assert api.get(f"{STUDIO}/judge-tests/{NO_SUCH_ID}").status_code == 404
+    assert api.get(f"{STUDIO}/judge-tests/nope").status_code == 404
+    assert judge_test(api, NO_SUCH_ID, ids).status_code == 404
+    assert judge_test(api, p["id"], [NO_SUCH_ID]).status_code == 404
+    assert judge_test(api, p["id"], ids, node="still").status_code == 422
+    assert judge_test(api, p["id"], [ids[0], ids[0]]).status_code == 422
+    assert judge_test(api, p["id"], []).status_code == 422
+    r = api.post(f"{PIPES}/{p['id']}/judge-tests", json={"node": "judge", "take_ids": ids, "x": 1})
+    assert r.status_code == 422 and r.json()["detail"] == "unknown field x"
+
+
+def test_judge_test_answer_failing_the_checks_is_a_failed_test(api, four):
+    p = create(api, judged_clip(four, "Contract judge test bad"))
+    sid = ok(api.post(f"{STUDIO}/sessions", json={"title": "Contract judge test bad"}), 201)["id"]
+    bad = answer(PASS)  # one take's answer for four takes: judge_verdict refuses it
+    run = ok(api.post(f"{STUDIO}/sessions/{sid}/runs", json={"workflow_id": four,
+              "inputs": {"prompt.text": scripted(fresh(["a fox"])[0], bad)}}), 202)  # fmt: skip
+    t = ok(judge_test(api, p["id"], four_takes(api, sid, run["id"])), 202)
+    path = f"{STUDIO}/judge-tests/{t['id']}"
+    done = wait_for(
+        lambda: (x := ok(api.get(path)))["status"] in FINAL_RUN and x, what="judge test"
+    )
+    assert done["status"] == "failed" and done["verdict"] is None and done["takes"] == []
+    assert done["error"]

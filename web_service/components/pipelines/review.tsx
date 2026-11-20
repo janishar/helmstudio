@@ -253,7 +253,7 @@ function ReviewRow({
           {inputs}
           {inputs && " · "}
           {item.keep === 1 ? "pick 1" : `pick 1 to ${item.keep}`} of {n}
-          {item.visit > 1 && ` · try ${item.visit}`}
+          {item.visit > 1 && ` · attempt ${item.visit}`}
           {judge && item.verdict === "fail" && item.visit > 1 && ` · ${gaveUp(item.visit - 1)}`}
           {item.model && ` · ${item.model}`}
         </span>

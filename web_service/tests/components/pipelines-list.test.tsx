@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The Pipelines list (components/pipelines/pipelines.tsx; docs/mock/Pipelines.dc.html): card tags led by the agent
 // nodes ("No agent nodes"), the aside's slug · version · author · date line and its (i) naming the running batch, the
-// 4 newest batches until All batches, and Retry failed on a batch with failed rows.
+// 4 newest batches until All batches, Retry failed on a batch with failed rows, and Open collection on a done one.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import pipelineFixture from "../../../contracts/fixtures/http/Pipeline.valid.1.json";
@@ -106,5 +106,17 @@ describe("Pipelines list", () => {
     expect(get).toHaveBeenCalledWith("/v1/studio/batches/{batch_id}/rows", expect.anything());
     // a done batch with no failed rows has no Retry failed
     expect(screen.getAllByRole("button", { name: "Retry failed" })).toHaveLength(1);
+  });
+
+  it("opens a done batch's collection in the Gallery; an unfinished one opens its run view", () => {
+    answer("GET", {});
+    show([batch(1), batch(2, { status: "running" })]);
+    const [done, running] = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    const link = within(done).getByRole("link", { name: "Open collection" });
+    expect(link.getAttribute("href")).toBe(`/gallery?batch=${batch(1).id}`);
+    expect(within(done).queryByRole("link", { name: "Open" })).toBeNull();
+    expect(within(running).getByRole("link", { name: "Open" }).getAttribute("href")).toBe(
+      `/pipelines/batches/${batch(2).id}`,
+    );
   });
 });

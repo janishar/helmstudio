@@ -216,9 +216,11 @@ func (s *Service) timelineTake(row gallerymodel.Take) dto.TimelineTake {
 
 // ------------------------------------------------------------------ the answer
 
-// clean is a document as stored: no answer fields (offline, a shot's status).
-func clean(d timeline.Doc) timeline.Doc {
+// clean is a document as stored over stored (nil: a new sequence): no answer fields (offline, a shot's status), V1
+// numbered (API 1.29).
+func clean(d timeline.Doc, stored *timeline.Doc) timeline.Doc {
 	d = d.Clone()
+	timeline.Number(&d, stored)
 	for ti := range d.Tracks {
 		for ci := range d.Tracks[ti].Clips {
 			c := &d.Tracks[ti].Clips[ci]
@@ -389,7 +391,8 @@ func (s *Service) liveDefaults(ctx context.Context, tx pgx.Tx, row timelineRow) 
 
 // store writes doc as the next revision with its undo and redo pointers and prunes the revisions past the last 100.
 func store(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc, by string, undo, redo *int) error {
-	data, err := json.Marshal(clean(doc))
+	stored := row.doc()
+	data, err := json.Marshal(clean(doc, &stored))
 	if err != nil {
 		return err
 	}
@@ -537,7 +540,7 @@ func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body
 		if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, caller.ID, name); err != nil {
 			return err
 		}
-		data, _ := json.Marshal(clean(doc))
+		data, _ := json.Marshal(clean(doc, nil))
 		row, err := one[timelineRow](ctx, tx, `INSERT INTO timelines (id, owner_id, name, doc, defaults, session_id)
 			VALUES ($1, $2, $3, $4, $5, $6) RETURNING `+timelineCols, utility.NewID(), caller.ID, name, data,
 			body.Defaults.Filled(), sessionID)

@@ -668,7 +668,7 @@ def _route_node(plan, gid):
             changed = [f"loops.{gid} = {turns + 1}"]
         else:
             nxt, edge = _go(plan, gid, br["then"], "then")
-            what = f"Rejected all {n}; {br['max']} of {br['max']} tries used, on to {br['then']}"
+            what = f"Rejected all {n}; {br['max']} of {br['max']} attempts used, on to {br['then']}"
             changed = []
         return (
             up
@@ -1111,7 +1111,7 @@ def _not_passed(plan, state, nid, spec, call, err, failed, part) -> Row | None:
 
 
 def _judge_loop(br, turns: int, gave_up: bool) -> dict | None:
-    return br and {"turns": turns, "max": br["max"], "then": br["then"], "gave_up": gave_up}
+    return br and {"turns": turns, "max": br["max"], "then": br.get("then"), "gave_up": gave_up}
 
 
 def _verdict_node(plan, nid, spec):
@@ -1152,7 +1152,12 @@ def _verdict_node(plan, nid, spec):
                                                                 "first_failed": v["first_failed"]})  # fmt: skip
         br, turns = plan["branch"].get(nid), (state.get("loops") or {}).get(nid, 0)
         retry = bool(br) and turns < br["max"]
-        park = mode == "suggest" and (v["verdict"] == "pass" or not retry)
+        ask = (
+            bool(br) and not retry and "then" not in br
+        )  # API 1.28 "Then: Ask me": park at the cap, Auto too
+        park = (mode == "suggest" and (v["verdict"] == "pass" or not retry)) or (
+            ask and v["verdict"] == "fail"
+        )
         firsts = [
             next((crit["must"][j] for j in range(m) if not a["checks"][j]), None) for a in answers
         ]
@@ -1181,7 +1186,7 @@ def _verdict_node(plan, nid, spec):
         cell = {"visit": visit, "status": status, "run_ids": call["run_ids"], "candidates": cands}
         cell |= {"take_ids": v["picked"] if status == "picked" else [], "decision_id": dec["id"]}
         cell["judged"] = judged
-        on_reject = "retry" if retry else "then" if br else "fail"
+        on_reject = "retry" if retry else "then" if br and "then" in br else "fail"
         info = {"gate": nid, "kind": "judge", "visit": visit, "keep": keep, "candidates": cands}
         info |= {"suggested": v["picked"], "decision_id": dec["id"], "on_reject": on_reject}
         reasons = "\n".join(f"take {i}: {a['reason']}" for i, a in enumerate(answers, 1))
@@ -1247,11 +1252,11 @@ def _judge_route_node(plan, nid, spec):
             nxt, edge = _go(plan, nid, br["fail"], "fail")
             what = f"No take kept; back to {br['fail']} ({turns + 1} of {br['max']})"
             changed = [f"loops.{nid} = {turns + 1}"]
-        elif br:
+        elif br and "then" in br:
             nxt, edge = _go(plan, nid, br["then"], "then")
             gave_up = True
-            what = f"No take kept; {br['max']} of {br['max']} tries used, on to {br['then']}"
-        else:
+            what = f"No take kept; {br['max']} of {br['max']} attempts used, on to {br['then']}"
+        else:  # a plain edge, or a branch that asks at the cap (1.28): a reject there ends the row
             error = f"rejected at {nid}" if pick else f"no take passed {nid}"
             return (
                 _end("failed", error)

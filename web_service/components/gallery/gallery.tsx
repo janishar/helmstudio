@@ -4,7 +4,7 @@
 // on the grid, and the side panel shows the selected take with the actions that exist so far.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Check, Maximize, Star, X } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { videoLine } from "@/lib/media";
@@ -26,6 +26,7 @@ import {
   UPLOAD_TYPES,
   appendPage,
   fits,
+  lastProject,
   sizeSeed,
   subLine,
   takeQuery,
@@ -57,15 +58,21 @@ export function Chip({
   pressed,
   onClick,
   children,
+  disabled,
+  title,
 }: {
   pressed: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       aria-pressed={pressed}
+      disabled={disabled}
+      title={title}
       onClick={onClick}
       className="chip bevel aria-pressed:bg-t1 aria-pressed:font-semibold aria-pressed:text-panel"
     >
@@ -199,9 +206,25 @@ export function TakeCard({
   );
 }
 
-/** The Gallery screen; `initial` is the unfiltered first page, read on the server. */
-export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
-  const [filter, setFilter] = useState<Filter>({});
+const noSubscribe = () => () => {};
+
+/** The Gallery screen; `initial` is the first page (of `batch` when given), read on the server. `batch`: the
+ * Pipelines list's Open collection, shown as a clearable "Batch · <title>" chip. */
+export function Gallery({
+  initial,
+  batch,
+}: {
+  initial?: S<"TakePage">;
+  batch?: { id: string; title: string };
+}) {
+  const [filter, setFilter] = useState<Filter>(batch ? { batch_id: batch.id } : {});
+  // "This project only": the session last opened in Create in this browser (none on the server)
+  const project = useSyncExternalStore(noSubscribe, lastProject, () => null);
+  // a cleared batch leaves the URL too, so a reload shows the whole gallery
+  useEffect(() => {
+    if (!filter.batch_id && new URLSearchParams(location.search).has("batch"))
+      history.replaceState(null, "", "/gallery");
+  }, [filter.batch_id]);
   const [q, setQ] = useState("");
   const { takes, setTakes, next, loading, error, query, fetchPage, sentinel } = useTakePages(
     filter,
@@ -280,7 +303,14 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
       if (!n.delete(id)) n.add(id);
       return n;
     });
-  const filtered = !!(filter.kind || filter.starred || filter.source || query.trim());
+  const filtered = !!(
+    filter.kind ||
+    filter.starred ||
+    filter.source ||
+    filter.session_id ||
+    filter.batch_id ||
+    query.trim()
+  );
 
   return (
     <>
@@ -310,7 +340,7 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
           <input
             id="q"
             type="search"
-            placeholder="Search prompts and titles"
+            placeholder="Search prompts, elements, models"
             value={q}
             maxLength={200}
             onChange={(e) => setQ(e.target.value)}
@@ -349,7 +379,13 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
 
         <div role="group" aria-label="Filters" className="flex flex-wrap gap-2">
           <Chip
-            pressed={!filter.kind && !filter.starred && !filter.source}
+            pressed={
+              !filter.kind &&
+              !filter.starred &&
+              !filter.source &&
+              !filter.session_id &&
+              !filter.batch_id
+            }
             onClick={() => setFilter({})}
           >
             All
@@ -379,6 +415,30 @@ export function Gallery({ initial }: { initial?: S<"TakePage"> }) {
               {label}
             </Chip>
           ))}
+          <Chip
+            pressed={!!filter.session_id}
+            disabled={!project && !filter.session_id}
+            title={project ? undefined : "Open a project in Create first"}
+            onClick={() =>
+              setFilter((f) => ({
+                ...f,
+                session_id: f.session_id ? undefined : (project ?? undefined),
+              }))
+            }
+          >
+            This project only
+          </Chip>
+          {filter.batch_id && (
+            <button
+              type="button"
+              aria-label={`Clear batch ${batch?.title || ""}`.trim()}
+              onClick={() => setFilter((f) => ({ ...f, batch_id: undefined }))}
+              className="chip bevel bg-t1 font-semibold text-panel"
+            >
+              Batch · {batch?.title || filter.batch_id.slice(0, 8)}
+              <X size={12} aria-hidden />
+            </button>
+          )}
         </div>
 
         {selecting && (

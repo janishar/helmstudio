@@ -34,10 +34,12 @@ import {
   analyse,
   connectNodes,
   disconnectNodes,
+  forgetMemory,
   isAgent,
   movePipelineNodes,
   nodeLabel,
   removePipelineNodes,
+  renameNode,
   stepNumbers,
   stepTakes,
   type PDoc,
@@ -71,6 +73,8 @@ type Ctx = {
   selected: string | null;
   /** node id → the model it resolves to (an agent's "runs on") */
   models?: Record<string, string>;
+  /** the card's title edited in place (absent: read-only) */
+  rename?: (id: string, title: string) => void;
 };
 const CanvasCtx = createContext<Ctx | null>(null);
 
@@ -197,7 +201,21 @@ function Canvas({
   };
 
   const steps = useMemo(() => stepTakes(doc), [doc]);
-  const ctx: Ctx = { doc, titles, problems, marks, progress, readOnly, steps, selected, models };
+  const rename = readOnly
+    ? undefined
+    : (id: string, t: string) => change((d) => renameNode(d, id, t));
+  const ctx: Ctx = {
+    doc,
+    titles,
+    problems,
+    marks,
+    progress,
+    readOnly,
+    steps,
+    selected,
+    models,
+    rename,
+  };
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -261,22 +279,31 @@ function Canvas({
                 movePipelineNodes(d, Object.fromEntries(moved.map((n) => [n.id, n.position]))),
               )
             }
-            onDelete={({ nodes: ns, edges: es }) =>
+            onDelete={({ nodes: ns, edges: es }) => {
+              // Backspace or Delete on the selected card (or wire); the panel closes with its node
+              if (selected && ns.some((n) => n.id === selected)) onSelect(null);
               change((d) =>
                 es.reduce(
-                  (x, e) => disconnectNodes(x, e.source, e.data?.via as Via),
+                  (x, e) =>
+                    e.data?.via === "examples"
+                      ? forgetMemory(x, e.target)
+                      : disconnectNodes(x, e.source, e.data?.via as Via),
                   removePipelineNodes(
                     d,
                     ns.map((n) => n.id),
                   ),
                 ),
-              )
-            }
+              );
+            }}
             onConnect={(c) =>
               change((d) => connectNodes(d, c.source, c.sourceHandle!.slice(2) as Via, c.target))
             }
             isValidConnection={(c) =>
-              c.source !== c.target && doc.nodes[c.target]?.kind !== "inputs"
+              c.source !== c.target &&
+              doc.nodes[c.target]?.kind !== "inputs" &&
+              // a memory's examples go only into a judge's examples port, and only they do
+              (c.sourceHandle === "o:examples") === (c.targetHandle === "i:memory") &&
+              (c.targetHandle !== "i:memory" || doc.nodes[c.target]?.kind === "judge")
             }
             onConnectEnd={(e, s: FinalConnectionState) => {
               if (s.isValid || s.toNode || !s.fromNode || !s.fromHandle?.id) return;
@@ -383,7 +410,8 @@ function edgesOf(doc: PDoc, marks?: Marks): Edge[] {
         : `retry, at most ${to.max} time${to.max === 1 ? "" : "s"}`,
       style: { stroke: LOOP, strokeDasharray: "5 5" },
     });
-    add(from, to.then, "then", { style: { stroke: "var(--t2)", strokeDasharray: "2 4" } });
+    if (to.then)
+      add(from, to.then, "then", { style: { stroke: "var(--t2)", strokeDasharray: "2 4" } });
   }
   // a judge's memory: the examples it reads, from the memory node (a field of the judge, not an edge of the row)
   for (const [id, n] of Object.entries(doc.nodes))
@@ -394,8 +422,7 @@ function edgesOf(doc: PDoc, marks?: Marks): Edge[] {
         sourceHandle: "o:examples",
         target: id,
         targetHandle: "i:memory",
-        deletable: false,
-        selectable: false,
+        data: { via: "examples" },
         ariaLabel: `Memory from ${nodeLabel(doc, n.memory)} to ${nodeLabel(doc, id)}`,
         style: { stroke: AGENT, strokeWidth: 2, opacity: marks && !marks.nodes[id] ? 0.25 : 1 },
       });
@@ -437,6 +464,42 @@ function LoopEdge({ id, sourceX, sourceY, targetX, targetY, style, label, marker
         </EdgeLabelRenderer>
       )}
     </>
+  );
+}
+
+/** The card's title: double-click (or Enter on the focused title) edits it in place; Enter or leaving saves,
+ * Escape cancels, a blank title goes back to the derived one. */
+function CardTitle({ id, head, label }: { id: string; head: string; label: string }) {
+  const g = use(CanvasCtx)!;
+  const [draft, setDraft] = useState<string | null>(null);
+  const done = (save: boolean) => {
+    if (save && draft !== null && draft.trim() !== label) g.rename?.(id, draft);
+    setDraft(null);
+  };
+  if (draft !== null)
+    return (
+      <input
+        autoFocus
+        aria-label="Title on the card"
+        className="nodrag min-w-0 flex-1 rounded bg-s1 px-1 text-t1 outline-none"
+        maxLength={60}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => done(true)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") done(true);
+          if (e.key === "Escape") done(false);
+        }}
+      />
+    );
+  return (
+    <span
+      title={g.rename ? `${head} (double-click to rename)` : head}
+      onDoubleClick={g.rename ? () => setDraft(label) : undefined}
+    >
+      {head}
+    </span>
   );
 }
 
@@ -521,7 +584,7 @@ function Card({ id }: NodeProps) {
       data-bad={mine.length ? true : undefined}
     >
       <div className="gn-h">
-        <span title={head}>{head}</span>
+        <CardTitle id={id} head={head} label={label} />
         {tag && (
           <span>
             {m && !m.current && m.status !== "failed" && (
@@ -586,10 +649,11 @@ function Card({ id }: NodeProps) {
           </div>
           {n.kind === "judge" && (
             <>
-              {n.memory && (
+              {(n.memory || !g.readOnly) && (
                 <div className="gn-r">
                   {port("target", "memory", AGENT, "examples in")}
                   <span>examples</span>
+                  {!n.memory && <b>off</b>}
                 </div>
               )}
               {row(
@@ -619,6 +683,7 @@ function Card({ id }: NodeProps) {
               {typeof out === "object" && (
                 <div className="gn-r">
                   <span>then</span>
+                  {"pass" in out && !out.then && <b>ask me</b>}
                   {port("source", "then", "var(--t2)")}
                 </div>
               )}
@@ -876,7 +941,7 @@ async function layout(doc: PDoc): Promise<Record<string, Pos>> {
         ? [to.routes[to.then]].filter(Boolean)
         : [to.pass, to.then]
     )
-      .filter((t) => t in doc.nodes && from in doc.nodes)
+      .filter((t): t is string => !!t && t in doc.nodes && from in doc.nodes)
       .map((t, j) => ({ id: `e${i}-${j}`, sources: [from], targets: [t] })),
   );
   const r = await new ELK().layout({

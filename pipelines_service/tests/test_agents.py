@@ -549,3 +549,87 @@ async def test_a_kept_take_is_all_checks_pass_only_with_its_nice_ones(pool, nice
     await finish(e, studio, "judge")
     v = next(x for x in steps(js) if x["part"] == "verdict")
     assert v["what"] == f"Kept take 1 of 4: {'all checks pass' if nice else 'every must passes'}"
+
+
+async def test_ask_me_at_the_cap_parks_in_auto_and_a_reject_fails_the_row(pool):
+    """API 1.28 "Then: Ask me": a judge branch without `then` parks at the cap (Auto too); a reject ends the row."""
+    studio, js, b = FakeStudio(), FakeJS(), str(uuid.uuid4())
+    studio.answer_for = Script(judge=[FAIL], rewrite=['{"text": "a fox with @rex", "note": "n"}'])
+    edges = [["inputs", "mem"], ["mem", "still"], ["still", "judge"],
+             ["judge", {"pass": "clip", "fail": "rewrite", "max": 1}],
+             ["rewrite", "still"], ["clip", "out"]]  # fmt: skip
+    p = doc("auto", edges)
+    del p["nodes"]["review"]
+    e = engine(pool, studio, js)
+    await run_to_judge(e, studio, js, b, p)
+    await finish(e, studio, "judge")  # a retry is left: rewrite, no parking
+    await finish(e, studio, "rewrite")
+    await finish(e, studio, "still")
+    await finish(e, studio, "judge")  # the cap: Ask me
+    r = js.rows()[1]
+    assert r["status"] == "waiting" and r["parked"]["kind"] == "judge"
+    assert r["parked"]["suggested"] == [] and r["parked"]["on_reject"] == "fail"
+    assert cell(js, "judge")["loop"] == {"turns": 1, "max": 1, "then": None, "gave_up": False}
+    base = {"batch_id": b, "attempt": 1, "gate": "judge", "visit": 2, "row": 1}
+    assert await e.pick(base | {"take_ids": [], "agreed": True})
+    await idle(e)
+    r = js.rows()[1]
+    assert r["status"] == "failed" and r["error"] == "rejected at judge"
+
+
+async def test_a_pick_at_ask_me_goes_on(pool):
+    studio, js, b = FakeStudio(), FakeJS(), str(uuid.uuid4())
+    studio.answer_for = Script(judge=[FAIL])
+    edges = [["inputs", "mem"], ["mem", "still"], ["still", "judge"],
+             ["judge", {"pass": "clip", "fail": "still", "max": 1}], ["clip", "out"]]  # fmt: skip
+    p = doc("auto", edges)
+    del p["nodes"]["review"], p["nodes"]["rewrite"]
+    e = engine(pool, studio, js)
+    await run_to_judge(e, studio, js, b, p)
+    await finish(e, studio, "judge")
+    await finish(e, studio, "still")
+    await finish(e, studio, "judge")
+    parked = js.rows()[1]["parked"]
+    pick = parked["candidates"][:1]
+    base = {"batch_id": b, "attempt": 1, "gate": "judge", "visit": 2, "row": 1}
+    assert await e.pick(base | {"take_ids": pick, "agreed": False})
+    await idle(e)
+    req = next(r["req"] for k, r in studio.runs.items() if k.startswith(f"{b}:1:1:clip"))
+    assert req["inputs"]["keyframes.images"] == [{"image": {"take_id": pick[0]}}]
+
+
+async def test_judge_test_fills_the_template_with_memory_and_derives_the_verdict(pool):
+    """pipelines.judge.test (API 1.28): the prompt as a batch's judge would ask, and the verdict from the answer."""
+    import judge_test
+
+    e = engine(pool, FakeStudio(), FakeJS())
+    for text, key in (("faces left", "briefs"), ("ignore me", "other")):
+        seed = {
+            "owner_id": OWNER,
+            "op": "create",
+            "pipeline_id": PIPELINE,
+            "text": text,
+            "key": key,
+        }
+        assert "item" in await memory.answer(e.store, json.dumps(seed).encode())
+    crit = {"must": MUST, "nice": NICE}
+    req = {"op": "prompt", "owner_id": OWNER, "pipeline_id": PIPELINE, "node": "judge", "criteria": crit,
+           "n": 4, "brief": "a fox", "memory": {"limit": 8, "key": "briefs"}}  # fmt: skip
+    got = await judge_test.answer(e.store, json.dumps(req).encode())
+    assert got["prompt"] == agents.judge_prompt("a fox", 4, crit, [], "faces left")
+    assert got["template"] == agents.JUDGE and got["max_tokens"] == agents.judge_tokens(4, 3)
+    assert json.loads(got["schema"]) == agents.judge_schema(4, 3)
+    other = req | {"owner_id": str(uuid.uuid4())}  # another owner's namespace is empty
+    assert (
+        "faces left" not in (await judge_test.answer(e.store, json.dumps(other).encode()))["prompt"]
+    )
+    ids = [str(uuid.uuid4()) for _ in range(4)]
+    v = {"op": "verdict", "criteria": crit, "keep": 1, "take_ids": ids, "text": PASS3}
+    got = await judge_test.answer(e.store, json.dumps(v).encode())
+    assert got["verdict"] == "pass" and got["picked"] == [ids[2]]
+    assert [t["passes"] for t in got["takes"]] == [False, True, True, False]
+    assert got["takes"][0]["reason"] == "reason 1"
+    bad = await judge_test.answer(e.store, json.dumps(v | {"text": "not json"}).encode())
+    assert bad["code"] == "answer" and bad["error"].startswith("answer did not match")
+    nope = await judge_test.answer(e.store, json.dumps(v | {"keep": 0}).encode())
+    assert nope["code"] == "invalid"

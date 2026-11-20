@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // Graph view (components/graph; docs/mock/Graph.dc.html): the cards' short titles ("Model" with its family, "Encode"),
-// a canvas's size as one row, and the inspector's "<family> · runs on <runtime>" line without the node's help.
+// a canvas's size as one row, and the inspector's "<family> · runs on <runtime> · uses the <component>" line without
+// the node's help.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import template from "../../../runner_service/packs/qwen_image/workflows/qwen-image.json";
@@ -82,14 +83,13 @@ describe("Graph cards", () => {
 });
 
 describe("Graph inspector", () => {
-  it("says the family and the runtime as the board names it, without the node's help", () => {
-    const doc = { ...workflow } as unknown as Doc;
+  const inspect = (id: string) =>
     render(
       <Panel
-        doc={doc}
+        doc={{ ...workflow } as unknown as Doc}
         schemas={workflow.node_schemas}
         palette={palette}
-        id="sample"
+        id={id}
         problems={[]}
         overrides={{}}
         groupTitle="Qwen Image"
@@ -97,8 +97,18 @@ describe("Graph inspector", () => {
         onParamSet={() => {}}
       />,
     );
-    expect(screen.getByText("Qwen Image · runs on PyTorch MPS")).toBeTruthy();
+
+  it("says the family, the runtime and the component as the board names them, without the node's help", () => {
+    inspect("sample");
+    expect(
+      screen.getByText("Qwen Image · runs on PyTorch MPS · uses the transformer"),
+    ).toBeTruthy();
     expect(screen.queryByText(/Denoises from the seed/)).toBeNull();
+  });
+
+  it("names no component for a node that loads none", () => {
+    inspect("model");
+    expect(screen.getByText("Qwen Image · runs on PyTorch MPS")).toBeTruthy();
   });
 
   it("names torch by its hosts' device: CUDA, CPU, else MPS", () => {

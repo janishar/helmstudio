@@ -134,6 +134,7 @@
       "kind": "minimax-h3-image/enhance",
       "title": "Enhance prompt",
       "family": "minimax-h3-image",
+      "component": "prompt enhancer",
       "help": "Rewrites the prompt with MiniMax's prompt enhancer (27B, thinking on) and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through.",
       "params": [
         {
@@ -173,6 +174,7 @@
       "kind": "minimax-h3-image/encode",
       "title": "Encode",
       "family": "minimax-h3-image",
+      "component": "text encoder",
       "help": "Encodes the prompt and up to 16 reference images; with references the run is an edit.",
       "params": [
         {
@@ -210,6 +212,7 @@
       "kind": "minimax-h3-image/sample",
       "title": "Sample",
       "family": "minimax-h3-image",
+      "component": "transformer",
       "help": "Denoises from the seed's noise in 6 fixed steps (guidance-distilled: no steps, CFG or negative prompt).",
       "params": [
         {
@@ -253,6 +256,7 @@
       "kind": "minimax-h3-image/decode",
       "title": "Decode",
       "family": "minimax-h3-image",
+      "component": "vae",
       "help": "Turns the latent into an RGB image with the VAE, always tiled (256 px tiles, as released); under 4 MP resized to the canvas.",
       "params": [],
       "inputs": [

@@ -1144,6 +1144,12 @@
           "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
           "description": "the model family (the kind's prefix); null for a core node"
         },
+        "component": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "from API 1.24: the model component the node loads, in words (model.yaml `stages.<name>.component`: transformer, text encoder, vae); the Graph inspector reads `<family> \u00b7 runs on <runtime> \u00b7 uses the <component>`. Absent = it loads none (core nodes, canvas, duration, the model and LoRA stack nodes)"
+        },
         "help": {
           "type": "string",
           "maxLength": 300
@@ -2508,12 +2514,75 @@
                 "minLength": 1,
                 "maxLength": 40
               },
+              "help": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300,
+                "description": "from API 1.25: the section's (i) text in Create; absent = no (i)"
+              },
               "items": {
                 "type": "array",
                 "maxItems": 32,
                 "items": {
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+                }
+              },
+              "choices": {
+                "type": "array",
+                "maxItems": 4,
+                "description": "from API 1.26: tiles that lead the section, each a named pick among sets of values (checked as presets); Create shows the option whose set holds",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "label",
+                    "options"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "help": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    },
+                    "options": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 8,
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "set"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          },
+                          "set": {
+                            "type": "object",
+                            "minProperties": 1,
+                            "maxProperties": 32,
+                            "propertyNames": {
+                              "type": "string",
+                              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+                            },
+                            "additionalProperties": {
+                              "$ref": "messages/defs.schema.json#/$defs/paramValue"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -2551,6 +2620,17 @@
               "$ref": "messages/defs.schema.json#/$defs/paramValue"
             }
           }
+        },
+        "preset_order": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "description": "from API 1.25: every name of presets once, in the order Create shows them (an object's key order is not kept); absent = by name. The runner fills it from the workflow file's key order when the pack leaves it out"
         }
       }
     },

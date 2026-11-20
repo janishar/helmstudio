@@ -1,0 +1,7 @@
+{
+  "system": "You are a careful reviewer.",
+  "prompt": "Check every take.",
+  "schema": "{\"type\":\"object\"}",
+  "max_tokens": 800,
+  "template": "judge/v2"
+}

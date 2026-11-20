@@ -330,6 +330,40 @@ describe("a signed-out visitor", () => {
   });
 });
 
+describe("a signed-in user at /welcome", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("goes to Create, also after a refresh; a refused or unreachable session sees the landing page", async () => {
+    const live = `${ACCESS_COOKIE}=${jwt(Math.floor(Date.now() / 1000) + 3600)}`;
+    const res = await proxy(new NextRequest("http://web/welcome", { headers: { cookie: live } }));
+    expect(res.headers.get("location")).toBe("http://web/");
+    const answer = (status: number, body = "{}") =>
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response(body, { status })),
+      );
+    const expiring = (token: string) =>
+      proxy(
+        new NextRequest("http://web/welcome", {
+          headers: { cookie: `${REFRESH_COOKIE}=${token}` },
+        }),
+      );
+    answer(200, JSON.stringify({ access_token: "a3", refresh_token: "r3", user: {} }));
+    const refreshed = await expiring("welcome-good");
+    expect(refreshed.headers.get("location")).toBe("http://web/");
+    expect(refreshed.cookies.get(ACCESS_COOKIE)?.value).toBe("a3");
+    for (const [token, status] of [
+      ["welcome-refused", 401],
+      ["welcome-down", 503],
+    ] as const) {
+      answer(status);
+      const landing = await expiring(token);
+      expect(landing.headers.get("location")).toBeNull();
+      expect(landing.headers.get("x-middleware-next")).toBe("1");
+    }
+  });
+});
+
 describe("a session the API refused", () => {
   it("clears both cookies and keeps a safe next", () => {
     const res = expiredGET(new NextRequest("http://web/signin/expired?next=%2Fadmin%3Fx%3D1"));

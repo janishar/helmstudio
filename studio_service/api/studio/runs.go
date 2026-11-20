@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +20,7 @@ import (
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
 	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // MaxOpenRuns is how many queued or running interactive runs one user may have: it bounds what one account adds to
@@ -82,34 +85,11 @@ func (s *Service) createRun(ctx context.Context, tx pgx.Tx, caller common.Caller
 		} else if open >= MaxOpenRuns {
 			return network.NewConflictError(fmt.Sprintf("You have %d runs queued or running; wait for some to finish.", MaxOpenRuns), nil)
 		}
-		workflow, version, err := s.runnable(ctx, tx, body.WorkflowID)
-		if err == nil {
-			err = refuseText(workflow)
-		}
-		if err != nil {
-			return err
-		}
-		graphs, details, _, err := s.runGraphs(ctx, tx, caller.ID, workflow, []map[string]any{body.Inputs},
-			[][]string{body.Looks}, nil)
-		if err != nil {
-			return err
-		} else if details[0] != "" {
-			return network.NewUnprocessableError(details[0], nil)
-		}
-		nodes := graphs[0].Nodes
-		if detail, err := checkImages(ctx, tx, s.store, caller.ID, nodes, workflow.NodeSchemas); err != nil {
-			return err
-		} else if detail != "" {
-			return network.NewUnprocessableError(detail, nil)
-		}
-		graph, _ := json.Marshal(nodes)
-		media, err := mediaAt(ctx, tx, caller.ID, nodes, workflow.NodeSchemas)
+		workflow, probe, expansion, err := s.probeRun(ctx, tx, caller, body)
 		if err != nil {
 			return err
 		}
 		status, failure := "queued", (*string)(nil)
-		probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version,
-			Loras: lorasJSON(graphs[0].Loras), MediaAt: media}
 		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
 			status, failure = "failed", &reason
 		}
@@ -118,7 +98,7 @@ func (s *Service) createRun(ctx context.Context, tx pgx.Tx, caller common.Caller
 			nodes, finished_at, workflow_version, workflow_title, mentions, loras, looks, media_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
 			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13, $14, $15)
 			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure,
-			graph, version, workflow.Title, mentionsJSON(graphs[0].Expansion), lorasJSON(graphs[0].Loras), looksJSON(body.Looks), media)
+			probe.Nodes, probe.WorkflowVersion, workflow.Title, expansion, probe.Loras, looksJSON(body.Looks), probe.MediaAt)
 		if err != nil {
 			return err
 		}
@@ -128,6 +108,70 @@ func (s *Service) createRun(ctx context.Context, tx pgx.Tx, caller common.Caller
 		out = s.runDTO(run, nil)
 		return nil
 	}()
+	return out, err
+}
+
+// probeRun resolves a run request as a run would be made (its 422s) without storing it: the workflow, the run's
+// host-check fields (graph, version, LoRAs, media sizes) and its mentions JSON.
+func (s *Service) probeRun(ctx context.Context, tx pgx.Tx, caller common.Caller, body *dto.RunRequest) (registry.Workflow, model.Run, []byte, error) {
+	workflow, version, err := s.runnable(ctx, tx, body.WorkflowID)
+	if err == nil && !body.Ask {
+		err = refuseText(workflow)
+	}
+	if err != nil {
+		return workflow, model.Run{}, nil, err
+	}
+	graphs, details, _, err := s.runGraphs(ctx, tx, caller.ID, workflow, []map[string]any{body.Inputs},
+		[][]string{body.Looks}, nil)
+	if err != nil {
+		return workflow, model.Run{}, nil, err
+	} else if details[0] != "" {
+		return workflow, model.Run{}, nil, network.NewUnprocessableError(details[0], nil)
+	}
+	nodes := graphs[0].Nodes
+	if detail, err := checkImages(ctx, tx, s.store, caller.ID, nodes, workflow.NodeSchemas); err != nil {
+		return workflow, model.Run{}, nil, err
+	} else if detail != "" {
+		return workflow, model.Run{}, nil, network.NewUnprocessableError(detail, nil)
+	}
+	graph, _ := json.Marshal(nodes)
+	media, err := mediaAt(ctx, tx, caller.ID, nodes, workflow.NodeSchemas)
+	if err != nil {
+		return workflow, model.Run{}, nil, err
+	}
+	probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version,
+		Loras: lorasJSON(graphs[0].Loras), MediaAt: media}
+	return workflow, probe, mentionsJSON(graphs[0].Expansion), nil
+}
+
+// PlanRun is POST /runs/plan (API 1.25): the run CreateRun would make from body, not stored, and its planned peak
+// on the first eligible host by name (contracts RunPlan).
+func (s *Service) PlanRun(ctx context.Context, caller common.Caller, body *dto.RunRequest) (dto.RunPlan, error) {
+	if !s.registry.Ready() {
+		return dto.RunPlan{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	if body.Inputs == nil {
+		body.Inputs = map[string]any{}
+	}
+	var out dto.RunPlan
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		_, probe, _, err := s.probeRun(ctx, tx, caller, body)
+		if err != nil {
+			return err
+		}
+		slots, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now())
+		if reason != "" {
+			out.Reason = &reason
+			return nil
+		}
+		host := slices.Sorted(maps.Keys(slots))[0]
+		out.Host = &host
+		if p := planOf(s.registry, host, probe); p.peak >= 0 {
+			gb := float64(p.peak) / 100
+			out.PeakGB = &gb
+		}
+		return nil
+	})
 	return out, err
 }
 

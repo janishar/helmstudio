@@ -142,6 +142,28 @@
             "model.precision",
             "sample1.steps",
             "sample2.steps"
+          ],
+          "choices": [
+            {
+              "label": "Recipe",
+              "help": "Two-stage renders at half size, upscales and refines at full size. One-stage stops after stage 1: faster, and the clip is half the canvas.",
+              "options": [
+                {
+                  "name": "Two-stage",
+                  "set": {
+                    "upscale.bypass": false,
+                    "sample2.bypass": false
+                  }
+                },
+                {
+                  "name": "One-stage",
+                  "set": {
+                    "upscale.bypass": true,
+                    "sample2.bypass": true
+                  }
+                }
+              ]
+            }
           ]
         },
         {

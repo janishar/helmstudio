@@ -414,7 +414,19 @@ export function graphProblems(
       const [id, param] = tile(path) ? [undefined, path] : splitRef(path);
       add("studio_duplicate", `${path}: placed more than once`, id, undefined, param);
     }
-  for (const [name, values] of Object.entries(studio.presets ?? {}))
+  // a choice option's set is checked as a preset (API 1.26)
+  const sets: [string, Record<string, S<"ParamValue">>][] = [
+    ...Object.entries(studio.presets ?? {}),
+    ...(studio.inspector ?? []).flatMap((sec) =>
+      (sec.choices ?? []).flatMap((c) =>
+        c.options.map((o): [string, Record<string, S<"ParamValue">>] => [
+          `${c.label}: ${o.name}`,
+          o.set,
+        ]),
+      ),
+    ),
+  ];
+  for (const [name, values] of sets)
     for (const [path, v] of Object.entries(values)) {
       const [id, param] = splitRef(path);
       const msg = `preset ${name}: ${path} is not valid`;

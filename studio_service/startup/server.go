@@ -114,6 +114,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// a judge test's template or verdict: the same 5 s (API 1.28)
+		judgeTest: func(ctx context.Context, req message.JudgeTestRequest) (message.JudgeTestReply, error) {
+			var reply message.JudgeTestReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectJudgeTest, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 		remoteModels: env.RemoteModels,
 		// a provider test makes one or two HTTP calls in pipelines: 30 s (API 1.15)
 		providerTest: func(ctx context.Context, req message.ProviderTestRequest) (message.ProviderTestReply, error) {

@@ -125,6 +125,8 @@ def test_search(api, gallery):
     assert search(f"heron {TOKEN}") == [t[3]["id"]]  # words in any order
     assert search(f"{TOKEN} giraffe") == []
     assert set(search(TOKEN)) == {x["id"] for x in t}
+    # API 1.27: the workflow title and id are searched too (echo has no model node: no model id)
+    assert set(search(f"{TOKEN} ECHO")) == {x["id"] for x in t}
     renamed = ok(api.patch(f"{STUDIO}/takes/{t[4]['id']}", json={"title": f"moon {TOKEN}x"}))
     assert search(f"{TOKEN}x moon") == [renamed["id"]]  # the title is searched too
 
@@ -150,6 +152,7 @@ def test_bad_list_params(api):
         {"source": "batch"},
         {"starred": "maybe"},
         {"session_id": "not-a-uuid"},
+        {"batch_id": "not-a-uuid"},
         {"q": "x" * 201},
         {"cursor": "not a cursor"},
         {"limit": 0},

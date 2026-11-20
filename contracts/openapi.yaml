@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.23.0
+  version: 1.29.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4")'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -357,6 +357,48 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/pipelines/{pipeline_id}/judge-tests:
+    post:
+      tags: [studio]
+      operationId: studioCreateJudgeTest
+      summary: Test a judge of the saved pipeline on takes the caller picks (the Judge panel's Test on takes)
+      description: |
+        From 1.28. One ask run of the judge as saved (criteria, keep, model, memory: the pipeline's memory now), on
+        1 to 8 of the caller's image or video takes in the order given; nothing is stored in memory and no batch is
+        made. The brief is the first take's prompt. Studio resolves the model as at Submit (a `server:` or `remote:`
+        model, or none: 422), asks pipelines_service for the filled `judge` template (`pipelines.judge.test`
+        `prompt`, 5 s: else 503) and makes an interactive run of the ask workflow in the first take's session (else
+        the caller's newest session; none: 422). 202 with the test `queued` (or `failed` at once with no live
+        host); follow it with GET /v1/studio/judge-tests/{test_id}. Another user's pipeline or take: 404; a node that
+        is not a judge, a take that is not an image or video: 422; too many open runs: 409.
+      parameters: [{$ref: '#/components/parameters/PipelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/JudgeTestCreate'}}}
+      responses:
+        '202': {description: the test, content: {application/json: {schema: {$ref: '#/components/schemas/JudgeTest'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/judge-tests/{test_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetJudgeTest
+      summary: A judge test, with each take's verdict and reason once its run has answered
+      description: |
+        From 1.28. `status` follows the ask run. Once it succeeded, pipelines derives the verdict from the answer
+        (`pipelines.judge.test` `verdict`, as a batch's judge: contracts/README.md, Judge verdict; 5 s: else 503) and
+        studio keeps it; an answer that fails the checks is `failed` with that error (a test never re-asks).
+      parameters:
+        - {name: test_id, in: path, required: true, schema: {type: string}, description: 'judge test UUID (unknown, another user''s or malformed = 404)'}
+      responses:
+        '200': {description: the test, content: {application/json: {schema: {$ref: '#/components/schemas/JudgeTest'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
   # ------------------------------------------------------------------ studio: the library (elements; looks later)
@@ -728,6 +770,27 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/runs/plan:
+    post:
+      tags: [studio]
+      operationId: studioPlanRun
+      summary: 'From 1.25: the planned peak of a run before it is sent (the Generate button''s "≈ 40 s · 21 GB")'
+      description: |
+        Resolves the body as POST /v1/studio/sessions/{session_id}/runs would (the same 422 texts, the same caller's
+        elements, looks, LoRAs and takes), stores nothing and sends nothing, and answers the host the run would be
+        eligible on (the first by name) and its planned peak there: the plan of its model variant at its precision
+        and workflow (registry `models[].variants[].memory`, contracts/README.md "The hand-over") plus its LoRA
+        files. `peak_gb` is null when the run has no plan (larger than the plan's `planned_at`: it is admitted at the
+        whole host budget); both are null when no host is eligible (`reason` says why, as the run would fail).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RunRequest'}}}
+      responses:
+        '200': {description: the plan, content: {application/json: {schema: {$ref: '#/components/schemas/RunPlan'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   /v1/studio/runs/{run_id}:
     get:
       tags: [studio]
@@ -830,14 +893,17 @@ paths:
       description: |
         Every take of the caller that is not deleted and (for an upload or an import) completed, newest first (`created_at`, then
         `id`). Filters combine with AND. `q`: every whitespace-separated word must occur, case-insensitively, in the
-        title or the prompt (`made_with.prompt`). A `session_id` that is unknown or another user's just matches
-        nothing. A malformed filter value or cursor is 422.
+        title or the prompt (`made_with.prompt`), or from 1.27 in an element handle (`made_with.elements[].handle`; a
+        leading `@` of the word is ignored there), the workflow title or id (`made_with.workflow_title`,
+        `workflow_id`) or the model id (`made_with.model.id`, which names its family). A `session_id` or (from 1.27)
+        `batch_id` that is unknown or another user's just matches nothing. A malformed filter value or cursor is 422.
       parameters:
         - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/TakeKind'}}
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/TakeSource'}}
         - {name: starred, in: query, required: false, schema: {type: boolean}, description: 'true = only starred, false = only unstarred'}
         - {name: session_id, in: query, required: false, schema: {type: string, format: uuid}, description: only takes of this session}
-        - {name: q, in: query, required: false, schema: {type: string, maxLength: 200}, description: text search over title and prompt; blank = no filter}
+        - {name: batch_id, in: query, required: false, schema: {type: string, format: uuid}, description: 'from 1.27: only takes of this batch (`Take.batch_id`, its collection)'}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 200}, description: 'text search over title, prompt and (from 1.27) element handles, workflow and model; blank = no filter'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses:
@@ -2746,6 +2812,7 @@ components:
         kind: {type: string, examples: [echo/echo]}
         title: {type: string}
         family: {type: [string, 'null'], description: null for a core node (prompt, output)}
+        component: {type: string, minLength: 1, maxLength: 40, description: 'from 1.24: the model component the node loads, in words (transformer, text encoder, vae); the Graph inspector reads "<family> · runs on <runtime> · uses the <component>". Absent = it loads none'}
         help: {type: string}
         params: {type: array, items: {$ref: '#/components/schemas/ParamSchema'}, description: in form order}
         inputs: {type: array, items: {$ref: '#/components/schemas/Port'}}
@@ -2845,6 +2912,35 @@ components:
             properties:
               title: {type: string, minLength: 1, maxLength: 40, examples: [Quality]}
               items: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/StudioPath'}}
+              help: {type: string, minLength: 1, maxLength: 300, description: 'from 1.25: the section''s (i) text in Create; absent = no (i)'}
+              choices:
+                type: array
+                maxItems: 4
+                description: 'from 1.26: tiles that lead the section, each a named pick among sets of values (contracts/README.md, User workflows: Studio block). A set is checked as a preset (`preset_invalid`); the tile shows the option whose set holds'
+                items:
+                  type: object
+                  required: [label, options]
+                  additionalProperties: false
+                  properties:
+                    label: {type: string, minLength: 1, maxLength: 40, examples: [Recipe]}
+                    help: {type: string, minLength: 1, maxLength: 300, description: 'the tile''s hover text'}
+                    options:
+                      type: array
+                      minItems: 2
+                      maxItems: 8
+                      items:
+                        type: object
+                        required: [name, set]
+                        additionalProperties: false
+                        properties:
+                          name: {type: string, minLength: 1, maxLength: 40, examples: [One-stage]}
+                          set:
+                            type: object
+                            minProperties: 1
+                            maxProperties: 32
+                            propertyNames: {$ref: '#/components/schemas/StudioPath'}
+                            additionalProperties: {$ref: '#/components/schemas/ParamValue'}
+                  examples: [{label: Recipe, options: [{name: Two-stage, set: {upscale.bypass: false, sample2.bypass: false}}, {name: One-stage, set: {upscale.bypass: true, sample2.bypass: true}}]}]
         labels:
           type: object
           maxProperties: 64
@@ -2863,6 +2959,13 @@ components:
             additionalProperties: {$ref: '#/components/schemas/ParamValue'}
           description: 'named sets of values over this workflow''s paths (Draft, Final); choosing one sets them in the form'
           examples: [{Draft: {model.variant: turbo, model.precision: int8}}]
+        preset_order:
+          type: array
+          maxItems: 8
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 40}
+          description: 'from 1.25: every name of `presets` once, in the order Create shows them (an object''s key order is not kept); absent = by name. Else 422 `studio.preset_order: every preset once`'
+          examples: [[Fast, Quality, Low memory]]
     WorkflowDoc:
       type: object
       required: [title, family, env, nodes]
@@ -3251,14 +3354,14 @@ components:
           custom: '#/components/schemas/PipelineCustomNode'
     PipelineBranch:
       type: object
-      required: [pass, fail, max, then]
+      required: [pass, fail, max]
       additionalProperties: false
-      description: 'a gate''s or (1.14) a judge''s branch: pass = a pick was made (a judge: its verdict pass, or the user''s pick); fail = every candidate rejected (a judge: verdict fail), taken at most `max` times per row; on the next reject the row goes to `then`'
+      description: 'a gate''s or (1.14) a judge''s branch: pass = a pick was made (a judge: its verdict pass, or the user''s pick); fail = every candidate rejected (a judge: verdict fail), taken at most `max` times per row (a judge''s retry target: its step again, or a write that rewrites the prompt); on the next reject the row goes to `then`'
       properties:
         pass: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
         fail: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
         max: {type: integer, minimum: 1, maximum: 10, description: 'the loop cap'}
-        then: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+        then: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'required for a gate (edge_invalid). From 1.28 a judge may leave it out: "Then: Ask me": at the cap the row parks for a pick with nothing suggested (Auto too); a reject there fails the row'}
     PipelineEdge:
       type: array
       minItems: 2
@@ -3428,6 +3531,15 @@ components:
         workflow_id: {type: string}
         inputs: {$ref: '#/components/schemas/RunInputs', description: 'missing = {}'}
         looks: {$ref: '#/components/schemas/LookIds', description: 'the chosen looks, every group together, in the order the composer''s tiles list them (tile order, then pick order); missing = []. Resolved with the mentions (contracts/README.md, Looks)'}
+    RunPlan:
+      type: object
+      required: [host, peak_gb, reason]
+      additionalProperties: false
+      description: 'from 1.25: POST /v1/studio/runs/plan'
+      properties:
+        host: {type: [string, 'null'], description: 'the host the run would be eligible on, the first by name; null = none'}
+        peak_gb: {type: [number, 'null'], minimum: 0, description: 'its planned peak there in GB (the plan''s peak_gb + its LoRA files); null = no plan (the whole host budget) or no host'}
+        reason: {type: [string, 'null'], description: 'why no host is eligible (the text the run would fail with, `no live host for env mlx`); null when one is'}
     LookId:
       type: string
       pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$'
@@ -4845,6 +4957,41 @@ components:
         items: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/MemoryItem'}}
         truncated: {type: boolean, description: 'From 1.14: older items were left out to keep pipelines'' reply under NATS max_payload (delete some to see them)'}
         counts: {type: object, required: [judge_example, note], properties: {judge_example: {type: integer, minimum: 0}, note: {type: integer, minimum: 0}}}
+    JudgeTestCreate:
+      type: object
+      required: [node, take_ids]
+      additionalProperties: false
+      properties:
+        node: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'a judge node of the saved pipeline'}
+        take_ids: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string, format: uuid}, description: 'the caller''s image or video takes, in the order the judge sees them'}
+    JudgeTest:
+      type: object
+      required: [id, pipeline_id, node, take_ids, status, run_id, verdict, first_failed, takes, error, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        pipeline_id: {type: string, format: uuid}
+        node: {type: string}
+        take_ids: {type: array, items: {type: string, format: uuid}}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled], description: 'the ask run''s; `failed` too when its answer fails the checks'}
+        run_id: {type: [string, 'null'], format: uuid, description: 'the ask run (null once it is gone)'}
+        verdict: {type: [string, 'null'], enum: [pass, fail, null], description: 'pass when at least `keep` takes pass every must; null until it succeeded'}
+        first_failed: {type: [string, 'null'], description: 'the first must the best take fails'}
+        takes:
+          type: array
+          maxItems: 8
+          description: 'each take''s verdict, in the order given; [] until it succeeded'
+          items:
+            type: object
+            required: [take_id, passes, rank, picked, reason, checks]
+            properties:
+              take_id: {type: string, format: uuid}
+              passes: {type: boolean, description: every must holds}
+              rank: {type: integer, minimum: 1, maximum: 8, description: '1 = best'}
+              picked: {type: boolean, description: 'among the best `keep` that pass (what a batch would keep)'}
+              reason: {type: string, maxLength: 300}
+              checks: {type: array, items: {$ref: '#/components/schemas/JudgeCheck'}}
+        error: {type: [string, 'null'], maxLength: 2000}
+        created_at: {type: string, format: date-time}
     MemoryCreate:
       type: object
       required: [pipeline_id, text]
@@ -5328,6 +5475,7 @@ components:
         transition_in: {$ref: '#/components/schemas/TimelineDissolve'}
         alternatives: {type: array, maxItems: 32, uniqueItems: true, items: {type: string, format: uuid}, description: 'the takes made for this slot, oldest first; the current `take_id` is among them (studio adds it). Replace picks one'}
         shot: {$ref: '#/components/schemas/TimelineShotRef'}
+        number: {type: integer, minimum: 1, description: 'From 1.29, V1 only: the shot number ("Shot 4"), given by studio when the clip is added (the highest so far + 1) and kept when it moves; a write cannot change a stored clip''s. contracts/README.md, Timeline rules: shot numbers'}
         offline: {type: boolean, description: 'answers only, true when the take is deleted or gone: the clip keeps its place and length, plays as offline and blocks an export'}
     TimelineTrackKind: {type: string, enum: [video, audio]}
     TimelineTrack:

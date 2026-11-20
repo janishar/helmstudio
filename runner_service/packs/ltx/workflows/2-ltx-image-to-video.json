@@ -148,20 +148,45 @@
       },
       {
         "title": "Quality",
+        "help": "Distilled models run without guidance. Switch the model to Dev for guidance and a negative prompt.",
         "items": [
           "model.precision",
           "sample1.steps",
           "sample2.steps"
+        ],
+        "choices": [
+          {
+            "label": "Recipe",
+            "help": "Two-stage renders at half size, upscales and refines at full size. One-stage stops after stage 1: faster, and the clip is half the canvas.",
+            "options": [
+              {
+                "name": "Two-stage",
+                "set": {
+                  "upscale.bypass": false,
+                  "sample2.bypass": false
+                }
+              },
+              {
+                "name": "One-stage",
+                "set": {
+                  "upscale.bypass": true,
+                  "sample2.bypass": true
+                }
+              }
+            ]
+          }
         ]
       },
       {
         "title": "Prompt beats",
+        "help": "A beat steers one part of the clip. The main prompt covers the rest.",
         "items": [
           "encode.beats"
         ]
       },
       {
         "title": "LoRA",
+        "help": "Only LoRAs made for LTX-2.5 can be added. Each is baked into the transformer at load: a strength change reloads it.",
         "items": [
           "lora.rows"
         ]

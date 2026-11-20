@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ErrorNote, Modal } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { api, message, ok, type S } from "@/lib/api";
+import { presetNames } from "@/lib/studio";
 import { RATES, shortTime, timecode } from "@/lib/timeline";
 
 type Timeline = S<"Timeline">;
@@ -345,7 +346,7 @@ export function Rerender({
   const chosen = clips.length ? v1.filter((c) => clips.includes(c.id)) : v1;
   const wf = chosen.map((c) => workflows.find((w) => w.id === tl.takes[c.take_id!]?.workflow_id));
   const presets = wf.length
-    ? Object.keys(wf[0]?.studio?.presets ?? {}).filter((p) =>
+    ? presetNames(wf[0]?.studio).filter((p) =>
         wf.every((w) => w?.studio?.presets && p in w.studio.presets),
       )
     : [];

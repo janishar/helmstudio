@@ -34,6 +34,7 @@ type Module struct {
 	dispatcher     *studio.Dispatcher                                         // positions use its skip counts; nil in tests
 	remoteModels   bool                                                       // the deployment's remote switch (API 1.15)
 	providerTest   studio.ProviderTestAsk                                     // pipelines.providers.test
+	judgeTest      studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
 	lookup         studio.Lookup                                              // a server provider's host name (nil: the system resolver)
 	purge          func(ctx context.Context, subject string) error            // a CMD subject's messages (API 1.16)
 	putSettings    func(ctx context.Context, host string, value []byte) error // KV host_settings (API 1.16)
@@ -60,6 +61,7 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetDispatcher(m.dispatcher)
 	service.SetRemote(m.remoteModels)
 	service.SetProviderTest(m.providerTest)
+	service.SetJudgeTest(m.judgeTest)
 	service.SetLookup(m.lookup)
 	service.SetModelOps(m.purge, m.putSettings)
 	m.settings = service

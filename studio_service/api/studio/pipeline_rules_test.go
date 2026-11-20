@@ -124,7 +124,7 @@ func TestPipelineFixtures(t *testing.T) {
 // TestPipelineDocRoundTrip: a document decodes and encodes to the same JSON (stored documents are never reshaped), and
 // a field of another kind is refused.
 func TestPipelineDocRoundTrip(t *testing.T) {
-	for _, name := range []string{"valid.text-to-edit.json", "valid.judge-best-of-4.json", "valid.decide.json",
+	for _, name := range []string{"valid.text-to-edit.json", "valid.judge-best-of-4.json", "valid.judge-ask-me.json", "valid.decide.json",
 		"valid.director-shots.json", "valid.server-remote.json", "valid.custom.json"} {
 		data, _ := os.ReadFile(filepath.Join(pipelineFixtures, name))
 		var fixture struct {
@@ -151,8 +151,11 @@ func TestPipelineDocRoundTrip(t *testing.T) {
 		}
 	}
 	var edge dto.PipelineEdge
-	if err := json.Unmarshal([]byte(`["g", {"pass": "a", "fail": "b", "max": 2}]`), &edge); err == nil {
-		t.Error("a branch without then decoded")
+	// API 1.28: a branch may leave then out (a judge's Ask me; a gate's is edge_invalid), but never send it empty
+	if err := json.Unmarshal([]byte(`["g", {"pass": "a", "fail": "b", "max": 2}]`), &edge); err != nil || edge.Branch.Then != "" {
+		t.Error("a branch without then refused", err)
+	} else if err := json.Unmarshal([]byte(`["g", {"pass": "a", "fail": "b", "max": 2, "then": ""}]`), &edge); err == nil {
+		t.Error("a branch with an empty then decoded")
 	}
 }
 

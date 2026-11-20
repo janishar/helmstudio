@@ -51,6 +51,7 @@ components:
 stages:
   tiny:
     title: Echo tiny
+    component: transformer
     help: "Fake model stage: loads the tiny model's transformer and vae, then draws its text and the variant."
     uses: [transformer, vae]
     inputs: {model: Model, text: Text}

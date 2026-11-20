@@ -13,7 +13,7 @@ import { markRange, rangeInTake, removeTrack } from "@/lib/source";
 import { ElementsPicker } from "@/components/create/elements";
 import { LooksPicker } from "@/components/create/looks";
 import { GalleryPicker } from "@/components/gallery/picker";
-import { Lanes, clipText } from "@/components/timeline/lanes";
+import { Lanes, clipText, shotName } from "@/components/timeline/lanes";
 import { ShotComposer, type ShotSlot } from "@/components/timeline/shot";
 import { lastTimeline, rememberTimeline } from "@/components/timeline/add";
 import {
@@ -716,7 +716,10 @@ export function TimelineEditor({ id }: { id?: string }) {
           {range && (
             <span className="mono text-[12px] text-t2" aria-live="polite">
               Range {timecode(range[0])} – {timecode(range[1])} · {(range[1] - range[0]).toFixed(2)}{" "}
-              s{rangeClip ? ` · on ${clipText(rangeClip, false, tl.takes, facts, g).title}` : ""}
+              s
+              {rangeClip
+                ? ` · on ${rangeClip.number ? shotName(rangeClip) : clipText(rangeClip, false, tl.takes, facts, g).title}`
+                : ""}
             </span>
           )}
         </div>

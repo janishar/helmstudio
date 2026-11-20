@@ -1,0 +1,17 @@
+{
+  "op": "verdict",
+  "criteria": {
+    "must": [
+      "No extra or missing limbs"
+    ],
+    "nice": [
+      "Subject is sharp"
+    ]
+  },
+  "keep": 1,
+  "take_ids": [
+    "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+    "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61"
+  ],
+  "text": "{\"takes\":[{\"take\":1,\"checks\":[true,true],\"reason\":\"fine\"},{\"take\":2,\"checks\":[false,true],\"reason\":\"extra limb\"}],\"ranking\":[1,2]}"
+}

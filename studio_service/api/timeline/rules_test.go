@@ -212,3 +212,27 @@ func TestRerenderFixtures(t *testing.T) {
 		check(t, "rerender", c, got)
 	}
 }
+
+// TestNumber: stored ids keep their number whatever the write says, a free carried number stays (undo), the rest
+// get the highest + 1 in order; a new sequence is 1…n (contracts/README.md, Timeline rules: shot numbers).
+func TestNumber(t *testing.T) {
+	doc := func(clips ...Clip) Doc { return Doc{Tracks: []Track{{Kind: "video", Clips: clips}}} }
+	nums := func(d Doc) (out []int) {
+		for _, c := range d.Tracks[0].Clips {
+			out = append(out, c.Number)
+		}
+		return out
+	}
+	d := doc(Clip{ID: "a"}, Clip{ID: "b"})
+	Number(&d, nil)
+	if !reflect.DeepEqual(nums(d), []int{1, 2}) {
+		t.Fatal("new", nums(d))
+	}
+	stored := doc(Clip{ID: "a", Number: 1}, Clip{ID: "b", Number: 2}, Clip{ID: "c", Number: 3})
+	// moved, b's number written wrong, a split's right part carrying a's number, a removed clip brought back with 7
+	d = doc(Clip{ID: "b", Number: 9}, Clip{ID: "a", Number: 1}, Clip{ID: "a2", Number: 1}, Clip{ID: "z", Number: 7}, Clip{ID: "n"})
+	Number(&d, &stored)
+	if !reflect.DeepEqual(nums(d), []int{2, 1, 8, 7, 9}) {
+		t.Fatal("stored", nums(d))
+	}
+}

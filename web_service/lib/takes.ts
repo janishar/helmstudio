@@ -7,8 +7,34 @@ import { pretty } from "@/lib/workflow";
 type Take = S<"Take">;
 type Run = S<"Run">;
 
-/** The gallery's chips: a kind, starred and a source combine (the API ANDs them); none set is "All". */
-export type Filter = { kind?: S<"TakeKind">; starred?: boolean; source?: S<"TakeSource"> };
+/** The gallery's chips: a kind, starred, a source, the project (a session) and a batch combine (the API ANDs them);
+ * none set is "All". */
+export type Filter = {
+  kind?: S<"TakeKind">;
+  starred?: boolean;
+  source?: S<"TakeSource">;
+  session_id?: string;
+  batch_id?: string;
+};
+
+const PROJECT = "helm.project";
+
+/** The session last opened in Create in this browser: the Gallery's "This project only" (a convenience: gone when
+ * the store is cleared). */
+export function lastProject(): string | null {
+  try {
+    return localStorage.getItem(PROJECT);
+  } catch {
+    return null;
+  }
+}
+export function rememberProject(id: string) {
+  try {
+    localStorage.setItem(PROJECT, id);
+  } catch {
+    /* private window */
+  }
+}
 
 /** The list query for a filter, a search text and a page cursor: only what is set (a blank search is none). */
 export function takeQuery(f: Filter, q: string, cursor?: string | null) {
@@ -17,6 +43,8 @@ export function takeQuery(f: Filter, q: string, cursor?: string | null) {
     ...(f.kind && { kind: f.kind }),
     ...(f.starred && { starred: true }),
     ...(f.source && { source: f.source }),
+    ...(f.session_id && { session_id: f.session_id }),
+    ...(f.batch_id && { batch_id: f.batch_id }),
     ...(text && { q: text }),
     ...(cursor && { cursor }),
   };
@@ -26,7 +54,9 @@ export function takeQuery(f: Filter, q: string, cursor?: string | null) {
 export const fits = (t: Take, f: Filter) =>
   (!f.kind || t.kind === f.kind) &&
   (!f.starred || t.starred) &&
-  (!f.source || t.source === f.source);
+  (!f.source || t.source === f.source) &&
+  (!f.session_id || t.session_id === f.session_id) &&
+  (!f.batch_id || t.batch_id === f.batch_id);
 
 /** A page appended to the list; a take already there (it moved while paging) is not repeated. */
 export function appendPage(list: Take[], page: Take[]): Take[] {

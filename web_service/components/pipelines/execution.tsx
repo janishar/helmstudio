@@ -4,33 +4,39 @@
 // the chosen step's details: a step's runs and takes, a gate's candidates and pick, the state after it (read on
 // demand; gone once the batch has finished) and Retry row from here. Live from the batch's events. A judge, write or
 // decide step shows its decision: a judge's verdict per check, the thumbnails it saw, the model and what it read from
-// memory (Execution.dc.html); a write's text before and after as a diff, a decide's route (AgentSteps.dc.html). The
-// graph is laid out by elkjs left to right (saved positions ignored); the header's title opens a menu (the batch, all
-// pipelines) and the memory chip is Create's. The board's Studio | Graph switch is left out: no Studio view yet.
+// memory (Execution.dc.html); a write's text before and after as a diff, a decide's route (AgentSteps.dc.html). A
+// judge's checkpoints fold under one line per decision that opens on click (owner's Q8). The graph keeps its saved
+// positions; elkjs lays it out left to right only when they overlap or sit off-screen (Q10). The header's title opens
+// a menu (Rename, all pipelines: Q4); the batch is a link in the row's line; its Studio | Graph switch opens the
+// pipeline's Studio view (Q2); the memory chip is Create's.
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ChevronDown } from "lucide-react";
+import { Activity, ChevronRight } from "lucide-react";
 import { Thumb } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { followBatch } from "@/components/pipelines/pipelines";
 import { Memory, useHosts } from "@/components/create/memory-chip";
 import type { CanvasProps } from "@/components/pipelines/canvas";
+import { TitleMenu } from "@/components/pipelines/title-menu";
+import { ViewSwitch } from "@/components/pipelines/studio";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
 import { nodeLabel, stepNumbers, type PDoc } from "@/lib/pipeline";
 import { hostMemory } from "@/lib/hosts";
 import {
   agentEnd,
   asRun,
-  attemptWords,
   canRetryFrom,
   criterionLines,
   decisionModel,
+  needsLayout,
   stepDetail,
+  stepGroups,
   stepLines,
   wordDiff,
+  type StepLine,
 } from "@/lib/pipeline-run";
 import { callLine } from "@/lib/chat";
 import { safeUrl } from "@/lib/format";
@@ -50,7 +56,7 @@ const PipelineCanvas = dynamic<CanvasProps>(
 
 const TONE = { warn: "text-[#f2c14e]", ok: "text-a1", now: "font-medium text-a2", "": "" };
 
-/** The pipeline without its saved positions: the canvas lays it out with elkjs. */
+/** The pipeline without its saved positions: the canvas lays it out with elkjs (when needsLayout says so). */
 const unplaced = (doc: PDoc): PDoc => ({
   ...doc,
   nodes: Object.fromEntries(
@@ -94,6 +100,8 @@ export function Execution({
   const [busy, setBusy] = useState(false);
   const [state, setState] = useState<{ key: string; text: string; gone?: boolean } | null>(null);
   const [full, setFull] = useState<{ ids: string[]; i: number } | null>(null);
+  // the pipeline's title once renamed here (the row ran the version it was submitted with)
+  const [title, setTitle] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -125,6 +133,9 @@ export function Execution({
   );
 
   const lines = stepLines(x, titles);
+  const groups = stepGroups(x, titles);
+  // the judge lines opened to their checkpoints (by the line's step); the chosen step's line opens by itself
+  const [opened, setOpened] = useState<Set<number>>(() => new Set());
   const marks = useMemo(() => asRun(x), [x]);
   const detail = stepDetail(x, step);
   const s = detail?.step;
@@ -195,8 +206,8 @@ export function Execution({
   const where = x.current
     ? `${STATUS[x.status] ?? x.status} on ${doc.nodes[x.current]?.kind === "step" ? `step ${nums[x.current]}` : nodeLabel(doc, x.current, titles)}`
     : (STATUS[x.status] ?? x.status);
-  // drawn left to right by elkjs, as the board: an edited pipeline's saved positions can be anywhere
-  const laid = useMemo(() => unplaced(doc), [doc]);
+  // the saved positions, unless they overlap or sit off-screen: then elkjs lays it out left to right
+  const laid = useMemo(() => (needsLayout(doc) ? unplaced(doc) : doc), [doc]);
   // the memory chip: the host of the step the row is at, else of the first step
   const hosts = useHosts();
   const stepAt = [x.current, ...Object.keys(nums)].find(
@@ -211,40 +222,28 @@ export function Execution({
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="m-0">
-            <button
-              type="button"
-              popoverTarget="ex-menu"
-              className="flex h-10 items-center gap-2 rounded-[10px] px-3 font-display text-[18px] font-bold tracking-[0.01em] hover:bg-s2"
-              style={{ anchorName: "--ex-menu" } as React.CSSProperties}
-            >
-              {doc.title}
-              <ChevronDown size={16} strokeWidth={2} aria-hidden />
-            </button>
-          </h1>
-          <div
-            id="ex-menu"
-            popover="auto"
-            role="menu"
-            aria-label={doc.title}
-            className="pop flex w-60 flex-col gap-1 text-[13px]"
-            style={
-              {
-                positionAnchor: "--ex-menu",
-                positionArea: "bottom span-right",
-                marginTop: 6,
-              } as React.CSSProperties
+          <TitleMenu
+            title={title ?? doc.title}
+            onRename={
+              batch.pipeline_id
+                ? async (t) => {
+                    const p = await ok(
+                      api.PATCH("/v1/studio/pipelines/{pipeline_id}", {
+                        params: { path: { pipeline_id: batch.pipeline_id! } },
+                        body: { title: t },
+                      }),
+                    );
+                    setTitle(p.title);
+                  }
+                : undefined
             }
-          >
-            <Link role="menuitem" href={`/pipelines/batches/${x.batch_id}`} className="truncate">
-              The batch · {batch.title}
-            </Link>
-            <Link role="menuitem" href="/pipelines">
-              All pipelines
-            </Link>
-          </div>
+          />
+          {/* the menu is Rename and All pipelines (Q4): the batch's link sits in the row's line */}
           <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
-            Row {x.row} of {rowsTotal} · {where}
+            Row {x.row} of {rowsTotal} · {where} ·{" "}
+            <Link href={`/pipelines/batches/${x.batch_id}`} className="text-t1 underline">
+              {batch.title}
+            </Link>
           </span>
           <label className="sr-only" htmlFor="ex-row">
             Row
@@ -290,6 +289,12 @@ export function Execution({
             </Link>
           )}
           <div className="grow" />
+          <ViewSwitch
+            view="graph"
+            hrefs={
+              batch.pipeline_id ? { studio: `/pipelines/${batch.pipeline_id}?view=studio` } : {}
+            }
+          />
           {host && <Memory memory={host} />}
         </div>
         {x.retried_from && (
@@ -326,39 +331,44 @@ export function Execution({
               </tr>
             </thead>
             <tbody>
-              {lines.map((l) => {
-                const on = l.step === step;
-                return (
-                  <tr
-                    key={l.step}
-                    className="cursor-pointer"
-                    style={on ? { background: "var(--s3)" } : undefined}
-                    onClick={() => setStep(l.step)}
-                  >
-                    <td className="m">
-                      <button
-                        type="button"
-                        className="p-0 font-mono"
-                        aria-pressed={on}
-                        aria-label={`Step ${l.step}: ${l.label}`}
-                        onClick={() => setStep(l.step)}
-                      >
-                        {l.step}
-                      </button>
-                    </td>
-                    <td className={on ? "font-semibold" : undefined}>{l.label}</td>
-                    <td
-                      className={`max-w-[360px] truncate ${TONE[l.tone]}`}
-                      title={l.error ?? l.what}
-                    >
-                      {l.what}
-                    </td>
-                    <td className="m max-w-[280px] whitespace-normal [overflow-wrap:anywhere]">
-                      {l.changed}
-                    </td>
-                    <td className={l.status === "now" ? "text-a2" : "m"}>{l.status}</td>
-                  </tr>
+              {groups.flatMap(({ line, inner }) => {
+                const open =
+                  inner.length > 1 &&
+                  (opened.has(line.step) ||
+                    inner.some((l) => l.step === step && l.step !== line.step));
+                const head = (
+                  <StepRow
+                    key={line.step}
+                    l={line}
+                    on={line.step === step && !open}
+                    range={inner.length > 1 ? [inner[0].step, inner.at(-1)!.step] : undefined}
+                    open={inner.length > 1 ? open : undefined}
+                    onPick={() => {
+                      setStep(line.step);
+                      if (inner.length > 1)
+                        setOpened((o) => {
+                          const n = new Set(o);
+                          if (open) n.delete(line.step);
+                          else n.add(line.step);
+                          return n;
+                        });
+                    }}
+                  />
                 );
+                return open
+                  ? [
+                      head,
+                      ...inner.map((l) => (
+                        <StepRow
+                          key={`${line.step}:${l.step}`}
+                          l={l}
+                          on={l.step === step}
+                          inner
+                          onPick={() => setStep(l.step)}
+                        />
+                      )),
+                    ]
+                  : [head];
               })}
             </tbody>
           </table>
@@ -376,7 +386,7 @@ export function Execution({
                 {lines.find((l) => l.step === s.step)?.label} · step {s.step}
               </h2>
               <span className="text-[12px] text-t2">
-                Row {x.row} · {attemptWords(x.attempt)} · checkpoint {s.step} of {x.steps.length}
+                Row {x.row} · attempt {x.attempt} · checkpoint {s.step} of {x.steps.length}
               </span>
             </div>
             {s.error && <p className="m-0 text-[13px] text-[#f2c14e]">{s.error}</p>}
@@ -532,6 +542,65 @@ export function Execution({
           ) : null;
         })()}
     </>
+  );
+}
+
+/** A line of the step list: a step, a judge's decision (`open`: its checkpoints shown; `range`: their steps), or
+ * one of those checkpoints (`inner`). */
+function StepRow({
+  l,
+  on,
+  open,
+  range,
+  inner,
+  onPick,
+}: {
+  l: StepLine;
+  on: boolean;
+  open?: boolean;
+  range?: [number, number];
+  inner?: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <tr
+      className="cursor-pointer"
+      style={on ? { background: "var(--s3)" } : undefined}
+      onClick={onPick}
+    >
+      <td className="m">
+        <button
+          type="button"
+          className="flex items-center gap-1 p-0 font-mono"
+          aria-pressed={on}
+          aria-expanded={open}
+          aria-label={
+            range
+              ? `${l.label}, steps ${range[0]} to ${range[1]}${open ? "" : ": show its checkpoints"}`
+              : `Step ${l.step}: ${l.label}`
+          }
+          onClick={(e) => {
+            e.stopPropagation();
+            onPick();
+          }}
+        >
+          {range ? `${range[0]}–${range[1]}` : l.step}
+          {open !== undefined && (
+            <ChevronRight
+              size={12}
+              aria-hidden
+              className={`transition-transform ${open ? "rotate-90" : ""}`}
+            />
+          )}
+        </button>
+      </td>
+      <td className={`${inner ? "pl-6 text-t2" : ""} ${on ? "font-semibold" : ""}`}>{l.label}</td>
+      <td className={`max-w-[360px] truncate ${TONE[l.tone]}`} title={l.error ?? l.what}>
+        {l.what}
+      </td>
+      <td className="m max-w-[280px] whitespace-normal [overflow-wrap:anywhere]">{l.changed}</td>
+      <td className={l.status === "now" ? "text-a2" : "m"}>{l.status}</td>
+    </tr>
   );
 }
 

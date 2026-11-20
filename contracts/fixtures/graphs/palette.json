@@ -671,6 +671,7 @@
           "kind": "echo/tiny",
           "title": "Echo tiny",
           "family": "echo",
+          "component": "transformer",
           "params": [
             {
               "name": "steps",
@@ -970,6 +971,7 @@
           "kind": "qwen-image/encode",
           "title": "Encode",
           "family": "qwen-image",
+          "component": "text encoder",
           "help": "Encodes the prompt and up to 10 reference images; with references the run is an edit.",
           "params": [
             {
@@ -1017,6 +1019,7 @@
           "kind": "qwen-image/sample",
           "title": "Sample",
           "family": "qwen-image",
+          "component": "transformer",
           "help": "Denoises from the seed's noise.",
           "params": [
             {
@@ -1063,6 +1066,7 @@
           "kind": "qwen-image/decode",
           "title": "Decode",
           "family": "qwen-image",
+          "component": "vae",
           "help": "Turns the latent into an RGBA image with the VAE.",
           "params": [
             {
@@ -1102,6 +1106,7 @@
           "kind": "qwen-image/ask",
           "title": "Ask",
           "family": "qwen-image",
+          "component": "text encoder",
           "help": "Asks Qwen Image's own text encoder (Qwen3-VL 8B) one question about its takes: no extra load when it is resident. Temperature 0, thinking off, one more try in the same run when the answer does not match the schema.",
           "params": [
             {
@@ -1554,6 +1559,7 @@
           "kind": "ltx/encode",
           "title": "Encode",
           "family": "ltx",
+          "component": "text encoder",
           "help": "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling.",
           "params": [
             {
@@ -1662,6 +1668,7 @@
           "kind": "ltx/sample",
           "title": "Sample",
           "family": "ltx",
+          "component": "transformer",
           "help": "Denoises video and audio together. Stage 1 starts from the seed's noise at half size (canvas and duration); stage 2 refines an upscaled latent at full size (latent).",
           "params": [
             {
@@ -1744,6 +1751,7 @@
           "kind": "ltx/upscale",
           "title": "Upscale latent",
           "family": "ltx",
+          "component": "upscaler",
           "help": "Doubles the video latent's width and height with the spatial upsampler; the audio latent passes through.",
           "params": [],
           "inputs": [
@@ -1770,6 +1778,7 @@
           "kind": "ltx/decode",
           "title": "Decode",
           "family": "ltx",
+          "component": "vae",
           "help": "Decodes video and audio and writes an MP4 (H.264 + AAC 48 kHz stereo) with a poster frame; a clip made from source audio carries that audio, trimmed to the clip.",
           "params": [
             {
@@ -1802,8 +1811,9 @@
         },
         {
           "kind": "ltx/encode-guided",
-          "title": "Encode prompt (guided)",
+          "title": "Encode (guided)",
           "family": "ltx",
+          "component": "text encoder",
           "help": "Encodes the prompt and the fixed negative prompt for video and audio with Gemma 4 and the connector, for the guided (dev) samplers; the text encoder is unloaded before sampling.",
           "params": [],
           "inputs": [
@@ -1830,6 +1840,7 @@
           "kind": "ltx/encode-video",
           "title": "Source video",
           "family": "ltx",
+          "component": "vae encoder",
           "help": "Encodes a gallery video and its sound with the video and audio VAEs, at its own size and frame rate; its length is floored to 8k + 1 frames.",
           "params": [
             {
@@ -1865,6 +1876,7 @@
           "kind": "ltx/encode-audio",
           "title": "Source audio",
           "family": "ltx",
+          "component": "audio encoder",
           "help": "Encodes a stretch of a gallery audio take (or a video's sound) at 16 kHz stereo; the clip lasts as long as that stretch, floored to 8k + 1 frames (at most 321).",
           "params": [
             {
@@ -1917,6 +1929,7 @@
           "kind": "ltx/retake",
           "title": "Retake",
           "family": "ltx",
+          "component": "transformer",
           "help": "Regenerates a stretch of the source clip (and, unless kept, its sound) with guidance; the rest of the clip is kept as context. The result is the whole clip.",
           "params": [
             {
@@ -1996,6 +2009,7 @@
           "kind": "ltx/extend",
           "title": "Extend",
           "family": "ltx",
+          "component": "transformer",
           "help": "Generates new frames (and sound) after or before the source clip, with the whole clip as context. The result is the whole extended clip.",
           "params": [
             {
@@ -2081,6 +2095,7 @@
           "kind": "ltx/sample-guided",
           "title": "Sample (guided)",
           "family": "ltx",
+          "component": "transformer",
           "help": "Stage 1 of audio to video: denoises the video at half size with guidance while the source audio stays fixed and steers it.",
           "params": [
             {
@@ -2219,6 +2234,7 @@
           "kind": "llm/ask",
           "title": "Ask",
           "family": "llm",
+          "component": "language model",
           "help": "Asks the model one question about its takes: temperature 0, thinking off, one more try in the same run when the answer does not match the schema.",
           "params": [
             {
@@ -2376,6 +2392,7 @@
           "kind": "minimax-h3-image/enhance",
           "title": "Enhance prompt",
           "family": "minimax-h3-image",
+          "component": "prompt enhancer",
           "help": "Rewrites the prompt with MiniMax's prompt enhancer (27B, thinking on) and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through.",
           "params": [
             {
@@ -2418,6 +2435,7 @@
           "kind": "minimax-h3-image/encode",
           "title": "Encode",
           "family": "minimax-h3-image",
+          "component": "text encoder",
           "help": "Encodes the prompt and up to 16 reference images; with references the run is an edit.",
           "params": [
             {
@@ -2458,6 +2476,7 @@
           "kind": "minimax-h3-image/sample",
           "title": "Sample",
           "family": "minimax-h3-image",
+          "component": "transformer",
           "help": "Denoises from the seed's noise in 6 fixed steps (guidance-distilled: no steps, CFG or negative prompt).",
           "params": [
             {
@@ -2504,6 +2523,7 @@
           "kind": "minimax-h3-image/decode",
           "title": "Decode",
           "family": "minimax-h3-image",
+          "component": "vae",
           "help": "Turns the latent into an RGB image with the VAE, always tiled (256 px tiles, as released); under 4 MP resized to the canvas.",
           "params": [],
           "inputs": [
@@ -2650,6 +2670,7 @@
           "kind": "minimax-h3/generate",
           "title": "Generate",
           "family": "minimax-h3",
+          "component": "whole model",
           "help": "Runs MiniMax H3 end to end in its own process (the native h3 binary): encodes the prompt and any frames or references, denoises, decodes picture and sound, and writes an MP4 (H.264 + AAC 32 kHz, 24 fps). References use the Ref2VA model, everything else FL2VA.",
           "params": [
             {

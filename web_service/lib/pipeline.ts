@@ -78,13 +78,14 @@ export function settable(wf: Doc, palette: Palette): Record<string, Param> {
   return out;
 }
 
-/** The node ids an edge leads to: one for a plain edge, pass / fail / then for a branch, each route of a decide. */
+/** The node ids an edge leads to: one for a plain edge, pass / fail / then for a branch (a judge's may have no
+ * then: Ask me, API 1.28), each route of a decide. */
 export const targets = (to: PEdge[1]) =>
   typeof to === "string"
     ? [to]
     : "routes" in to
       ? Object.values(to.routes)
-      : [to.pass, to.fail, to.then];
+      : [to.pass, to.fail, ...(to.then ? [to.then] : [])];
 
 /** The kinds that ask a model once per visit (README, The llm pack and agent nodes); an agent asks up to max_turns. */
 export const LLM_KINDS: Kind[] = ["judge", "write", "decide"];
@@ -147,6 +148,16 @@ export function analyse(doc: PDoc) {
       refused.push(["branch_not_gate", from]);
       continue;
     }
+    if (
+      kind === "branch" &&
+      typeof to === "object" &&
+      !("routes" in to) &&
+      !to.then &&
+      fk !== "judge"
+    ) {
+      refused.push(["edge_invalid", from]); // API 1.28: only a judge's branch may Ask me
+      continue;
+    }
     const r = routes(nodes[from]);
     if (
       (r &&
@@ -172,7 +183,8 @@ export function analyse(doc: PDoc) {
         if (label !== to.then) capped.push([from, t, to.max]);
       }
     } else {
-      succ[from].push([to.pass, false], [to.fail, true], [to.then, false]);
+      succ[from].push([to.pass, false], [to.fail, true]);
+      if (to.then) succ[from].push([to.then, false]);
       capped.push([from, to.fail, to.max]);
     }
   }
@@ -1196,13 +1208,24 @@ export const setNode = (doc: PDoc, id: string, n: PNode): PDoc => ({
 export const edgeOut = (doc: PDoc, id: string) => doc.edges.find((e) => e[0] === id);
 
 /** How a node's out-edge is connected: `next` (a plain edge or a branch's pass), `fail`, `then`, or a decide's
- * route `r:<label>`. */
-export type Via = "next" | "fail" | "then" | `r:${string}`;
+ * route `r:<label>`; `examples` is a memory read node's wire into a judge (its `memory`, not an edge). */
+export type Via = "next" | "fail" | "then" | "examples" | `r:${string}`;
 
 /** A connection from node `from` (its port `via`) to `to`: `next` replaces the node's out-edge (keeping a branch's
- * fail and then); `fail` turns the gate's plain edge into a branch (cap 2, then: the first output, else the pass
- * node); `then` sets a branch's then. A fail or then needs a pass edge first (the editor offers it only then). */
+ * fail and then; a step wired into a judge or gate is also what it judges: its `takes`); `fail` turns the plain edge
+ * into a branch (cap 2; a gate's then: the first output, else the pass node; a judge's none: Ask me); `then` sets a
+ * branch's then; `examples` from a memory read node sets the judge's memory. A fail or then needs a pass edge first
+ * (the editor offers it only then). */
 export function connectNodes(doc: PDoc, from: string, via: Via, to: string): PDoc {
+  const target = doc.nodes[to];
+  if (via === "examples")
+    return target?.kind === "judge" ? setNode(doc, to, { ...target, memory: from }) : doc;
+  if (
+    via === "next" &&
+    doc.nodes[from]?.kind === "step" &&
+    (target?.kind === "judge" || target?.kind === "gate")
+  )
+    doc = setNode(doc, to, { ...target, takes: from });
   const i = doc.edges.findIndex((e) => e[0] === from);
   const cur = i >= 0 ? doc.edges[i][1] : undefined;
   const n = doc.nodes[from];
@@ -1227,9 +1250,11 @@ export function connectNodes(doc: PDoc, from: string, via: Via, to: string): PDo
     const pass = typeof cur === "string" ? cur : cur.pass;
     const out = order(doc).find((x) => doc.nodes[x].kind === "output");
     next =
-      typeof cur === "string"
-        ? { pass, fail: to, max: 2, then: out ?? pass }
-        : { ...cur, fail: to };
+      typeof cur === "object"
+        ? { ...cur, fail: to }
+        : n.kind === "judge"
+          ? { pass, fail: to, max: 2 }
+          : { pass, fail: to, max: 2, then: out ?? pass };
   } else next = typeof cur === "string" ? cur : { ...cur, then: to };
   const edges = doc.edges.slice();
   if (i >= 0) edges[i] = [from, next];
@@ -1237,15 +1262,64 @@ export function connectNodes(doc: PDoc, from: string, via: Via, to: string): PDo
   return { ...doc, edges };
 }
 
-/** A connection removed: `next` drops the whole out-edge; `fail` or `then` collapses a branch to its pass edge. */
+/** A connection removed: `next` drops the whole out-edge; `fail` or `then` collapses a branch to its pass edge,
+ * except a judge's `then`, which goes back to Ask me. */
 export function disconnectNodes(doc: PDoc, from: string, via: Via): PDoc {
   const i = doc.edges.findIndex((e) => e[0] === from);
   if (i < 0) return doc;
   const cur = doc.edges[i][1];
   const edges = doc.edges.slice();
   if (via === "next" || typeof cur === "string" || "routes" in cur) edges.splice(i, 1);
-  else edges[i] = [from, cur.pass];
+  else if (via === "then" && doc.nodes[from]?.kind === "judge") {
+    const { then: _drop, ...rest } = cur; // eslint-disable-line @typescript-eslint/no-unused-vars
+    edges[i] = [from, rest];
+  } else edges[i] = [from, cur.pass];
   return { ...doc, edges };
+}
+
+/** A judge's "On retry: Rewrite prompt" (owner's Q6): a Write node titled so, reading the prompt its step binds
+ * and the judge's reasons, writing that prompt back, wired into the step; the judge's fail edge goes to it. */
+export function addRewrite(doc: PDoc, judge: string): { doc: PDoc; id: string } {
+  const j = doc.nodes[judge] as S<"PipelineJudgeNode">;
+  const step = doc.nodes[j.takes];
+  const text = new Set(
+    Object.values(doc.nodes).flatMap((n) =>
+      n.kind === "inputs" ? n.inputs.filter((i) => i.type === "Text").map((i) => "$" + i.name) : [],
+    ),
+  );
+  const bound =
+    step?.kind === "step" ? Object.values(step.bind ?? {}).find((v) => text.has(v)) : undefined;
+  const to = bound ?? [...text][0] ?? "$prompt";
+  const id = newNodeId(doc, "rewrite");
+  const at = j.position ?? { x: 0, y: 0 };
+  const node: PNode = {
+    kind: "write",
+    title: "Rewrite prompt",
+    from: [to, judge + ".reasons"],
+    to,
+    instruction: WRITE_INSTRUCTION,
+    position: { x: at.x, y: at.y + 220 },
+  };
+  let d: PDoc = { ...doc, nodes: { ...doc.nodes, [id]: node } };
+  if (step) d = connectNodes(d, id, "next", j.takes);
+  return { doc: connectNodes(d, judge, "fail", id), id };
+}
+
+/** A judge's memory wire removed: it learns from nothing ("Memory: Off"). */
+export function forgetMemory(doc: PDoc, judge: string): PDoc {
+  const n = doc.nodes[judge];
+  if (n?.kind !== "judge" || !n.memory) return doc;
+  const { memory: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+  return setNode(doc, judge, rest);
+}
+
+/** A node's title on its card set (blank: the derived one). */
+export function renameNode(doc: PDoc, id: string, title: string): PDoc {
+  const n = doc.nodes[id];
+  if (!n) return doc;
+  const { title: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+  const t = title.trim().slice(0, 60);
+  return setNode(doc, id, (t ? { ...rest, title: t } : rest) as PNode);
 }
 
 /** A decide's routes changed (labels → meanings): its edge keeps the routes still there; a new label goes where the
@@ -1317,7 +1391,9 @@ export function removePipelineNodes(doc: PDoc, ids: string[]): PDoc {
     } else if ("routes" in to) {
       if (!Object.values(to.routes).some((t) => gone.has(t))) edges.push([from, to]);
     } else if (!gone.has(to.pass))
-      edges.push(gone.has(to.fail) || gone.has(to.then) ? [from, to.pass] : [from, to]);
+      edges.push(
+        gone.has(to.fail) || (to.then && gone.has(to.then)) ? [from, to.pass] : [from, to],
+      );
   }
   return { ...doc, nodes, edges };
 }

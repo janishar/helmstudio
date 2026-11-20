@@ -51,6 +51,7 @@ stages:
     outputs: {canvas: Canvas}
   enhance:
     title: Enhance prompt
+    component: prompt enhancer
     help: "Rewrites the prompt with MiniMax's prompt enhancer (27B, thinking on) and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through."
     uses: [enhancer]
     unload_after: [enhancer]
@@ -70,6 +71,7 @@ stages:
     stall_s: 900                  # an edit's ~8.5k-token prefill is one forward
   encode:
     title: Encode
+    component: text encoder
     help: Encodes the prompt and up to 16 reference images; with references the run is an edit.
     uses: [text_encoder]
     unload_after: [text_encoder]
@@ -85,6 +87,7 @@ stages:
     peak_gb: "4.9 + 1.25 * images"
   sample:
     title: Sample
+    component: transformer
     help: "Denoises from the seed's noise in 6 fixed steps (guidance-distilled: no steps, CFG or negative prompt)."
     uses: [transformer, vae]      # the vae encodes the references from the run's generator, before the noise
     inputs: {model: Model, cond: Conditioning, canvas: Canvas, seed: Seed}
@@ -100,6 +103,7 @@ stages:
     stall_s: 600
   decode:
     title: Decode
+    component: vae
     help: "Turns the latent into an RGB image with the VAE, always tiled (256 px tiles, as released); under 4 MP resized to the canvas."
     uses: [vae]
     inputs: {model: Model, latent: Latent}

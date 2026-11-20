@@ -75,6 +75,10 @@ describe("takeQuery", () => {
     });
     expect(takeQuery({ starred: false }, "", null)).toEqual({});
     expect(takeQuery({}, "x".repeat(300)).q).toHaveLength(200);
+    expect(takeQuery({ session_id: "s1", batch_id: "b1" }, "")).toEqual({
+      session_id: "s1",
+      batch_id: "b1",
+    });
   });
 });
 
@@ -86,6 +90,9 @@ describe("fits", () => {
     expect(fits(up, { source: "create" })).toBe(false);
     expect(fits(up, { starred: true })).toBe(false);
     expect(fits(up, { kind: "video" })).toBe(false);
+    // another project, or a batch it is not of
+    expect(fits(up, { session_id: "s2" })).toBe(false);
+    expect(fits(up, { batch_id: "b1" })).toBe(false);
   });
 });
 

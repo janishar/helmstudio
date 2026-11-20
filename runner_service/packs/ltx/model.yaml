@@ -140,6 +140,7 @@ stages:
     outputs: {duration: Duration}
   encode:
     title: Encode
+    component: text encoder
     help: "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling."
     uses: [text_encoder, connector]
     unload_after: [text_encoder, connector]   # Gemma never sits beside the DiT (GOTCHAS: watchdog, jetsam)
@@ -181,6 +182,7 @@ stages:
     peak_gb: "0.5 + 0.03 * mp_in"
   sample:
     title: Sample
+    component: transformer
     help: "Denoises video and audio together. Stage 1 starts from the seed's noise at half size (canvas and duration); stage 2 refines an upscaled latent at full size (latent)."
     uses: [transformer, vae_encoder]   # the VAE encoder turns the keyframe images into latents at this stage's grid
     inputs:
@@ -206,6 +208,7 @@ stages:
     peak_gb: "images * (0.7 + 1.5 * mp) + (3.15 + 0.26 * (frames / 8 + 1 + images) * mp if role == 'stage2' else 2.4 + 0.28 * (frames / 8 + 1 + images) * mp)"
   upscale:
     title: Upscale latent
+    component: upscaler
     help: "Doubles the video latent's width and height with the spatial upsampler; the audio latent passes through."
     uses: [upscaler, vae]
     inputs: {model: Model, latent: Latent}
@@ -213,6 +216,7 @@ stages:
     peak_gb: "2.2 + 0.5 * mp * frames / 49"   # measured 2.12 / 1.45 / 2.13 (MLX alone 0.7 / 0.9: the rest is stage 1's freed cache the OS takes back late)
   decode:
     title: Decode
+    component: vae
     help: "Decodes video and audio and writes an MP4 (H.264 + AAC 48 kHz stereo) with a poster frame; a clip made from source audio carries that audio, trimmed to the clip."
     uses: [vae, audio_vae, vocoder]
     inputs: {model: Model, latent: Latent}
@@ -228,7 +232,8 @@ stages:
   # The dev transformer with guidance: 4 sequential passes per step (cond, negative prompt, STG, modality), so memory is
   # one pass's; time grows with the WHOLE clip's tokens. Measured: GOTCHAS.md, M7 pack 1.
   encode-guided:
-    title: Encode prompt (guided)
+    title: Encode (guided)
+    component: text encoder
     help: "Encodes the prompt and the fixed negative prompt for video and audio with Gemma 4 and the connector, for the guided (dev) samplers; the text encoder is unloaded before sampling."
     uses: [text_encoder, connector]
     unload_after: [text_encoder, connector]
@@ -237,6 +242,7 @@ stages:
     peak_gb: "5.3"
   encode-video:
     title: Source video
+    component: vae encoder
     help: "Encodes a gallery video and its sound with the video and audio VAEs, at its own size and frame rate; its length is floored to 8k + 1 frames."
     uses: [vae_encoder, audio_encoder]
     inputs: {model: Model}
@@ -249,6 +255,7 @@ stages:
     peak_gb: "1.0 + 68 * mp * frames / 49"
   encode-audio:
     title: Source audio
+    component: audio encoder
     help: "Encodes a stretch of a gallery audio take (or a video's sound) at 16 kHz stereo; the clip lasts as long as that stretch, floored to 8k + 1 frames (at most 321)."
     uses: [audio_encoder]
     inputs: {model: Model}
@@ -261,6 +268,7 @@ stages:
     peak_gb: "0.5 + 0.1 * frames / 49"
   retake:
     title: Retake
+    component: transformer
     help: "Regenerates a stretch of the source clip (and, unless kept, its sound) with guidance; the rest of the clip is kept as context. The result is the whole clip."
     uses: [transformer]
     inputs: {model: Model, cond: Conditioning, seed: Seed, latent: Latent}
@@ -279,6 +287,7 @@ stages:
     peak_gb: "1.2 + 0.7 * (frames / 8 + 1) * mp"
   extend:
     title: Extend
+    component: transformer
     help: "Generates new frames (and sound) after or before the source clip, with the whole clip as context. The result is the whole extended clip."
     uses: [transformer]
     inputs: {model: Model, cond: Conditioning, seed: Seed, latent: Latent}
@@ -293,6 +302,7 @@ stages:
     peak_gb: "1.2 + 0.7 * ((frames + seconds * fps) / 8 + 2) * mp"
   sample-guided:
     title: Sample (guided)
+    component: transformer
     help: "Stage 1 of audio to video: denoises the video at half size with guidance while the source audio stays fixed and steers it."
     uses: [transformer, vae_encoder]   # the VAE encoder turns optional keyframe images into latents
     # stage 2 runs a baked copy (ltx/distill: its own residency entry): one transformer at a time, as the old code

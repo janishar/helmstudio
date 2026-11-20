@@ -25,6 +25,8 @@ export type Clip = {
   transition_in?: Dissolve;
   alternatives?: string[];
   shot?: ShotRef;
+  /** V1: the shot number (API 1.29), given by studio */
+  number?: number;
   offline?: boolean;
 };
 export type Track = {
@@ -225,6 +227,7 @@ export function normalize(
         );
       n.alternatives = alts;
       if (c.shot) n.shot = shotRef(c.shot);
+      if (video && c.number !== undefined) n.number = c.number; // 1.29: studio gives it when it stores
       if (tid && !take) n.offline = true;
       clips.push([n, kind]);
     }

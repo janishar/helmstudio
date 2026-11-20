@@ -86,6 +86,7 @@ lora:                             # LoRAs: the generated qwen-image/lora-stack n
 stages:                           # one node kind each: <family>/<stage>; the function <stage>() in torch.py
   encode:
     title: Encode
+    component: text encoder
     help: Encodes the prompt and up to 10 reference images; with references the run is an edit.
     uses: [text_encoder, vae]     # the vae encodes the references          # the components it may ask for (admission, cache keys)
     inputs: {model: Model, prompt: Text}
@@ -99,6 +100,7 @@ stages:                           # one node kind each: <family>/<stage>; the fu
     peak_gb: "2.5 + 1.5 * images"   # images: how many Image values reach the stage
   sample:
     title: Sample
+    component: transformer
     help: Denoises from the seed's noise.
     uses: [transformer]
     inputs: {model: Model, cond: Conditioning, canvas: Canvas, seed: Seed}
@@ -111,6 +113,7 @@ stages:                           # one node kind each: <family>/<stage>; the fu
     stall_s: 600                  # optional: seconds without a cancel point before the run is failed
   decode:
     title: Decode
+    component: vae
     help: Turns the latent into an RGBA image with the VAE.
     uses: [vae]
     inputs: {model: Model, latent: Latent}
@@ -121,6 +124,7 @@ stages:                           # one node kind each: <family>/<stage>; the fu
     peak_gb: "6 if tiled == 'on' else 8.5 * mp"
   ask:                            # an ask stage (API 1.14): the text encoder is a vision-language model
     title: Ask
+    component: text encoder
     help: "Asks Qwen Image's own text encoder (Qwen3-VL 8B) one question about its takes: no extra load when it is resident. Temperature 0, thinking off, one more try in the same run when the answer does not match the schema."
     uses: [text_encoder]          # the same residency entry as encode: after a still it loads nothing
     inputs: {model: Model}
@@ -182,7 +186,8 @@ Keys the core understands; anything else is ignored:
   The generated node is `<family>/model` with param `variant` (enum: the variant ids, default the first) and
   `precision` (enum: every precision a component offers, in the order bf16, fp16, int8, int4; `model.precision.enum`
   may reorder it), output `model: Model`. A model pack's source stages (no inputs: `ltx/canvas`) come before it.
-- **`stages.<name>`**: `title`, `help`, `params`, `inputs`, `outputs`, `uses`, `unload_after` (components of `uses`
+- **`stages.<name>`**: `title`, `help`, `component` (API 1.24: the model component it loads, in words, as the Graph
+  inspector shows it: `uses the text encoder`; absent = none), `params`, `inputs`, `outputs`, `uses`, `unload_after` (components of `uses`
   unloaded as soon as the stage has run: ltx's Gemma never sits beside its DiT), `peak_gb`, `stall_s`, and (API 1.20,
   minimax) `alone` (true: before the stage the model's other resident components are unloaded, and the memory plan
   counts it without the kept ones: MiniMax's enhancer, text encoder and transformer never fit two at a time),

@@ -1,0 +1,78 @@
+{
+  "description": "API 1.28: a gate's branch needs `then` (only a judge's may leave it out: Ask me); the refused edge counts for nothing, so nothing reaches the output",
+  "pipeline": {
+    "title": "Gate ask me",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "prompt",
+            "type": "Text"
+          }
+        ]
+      },
+      "a": {
+        "kind": "step",
+        "workflow": "echo",
+        "bind": {
+          "prompt.text": "$prompt"
+        }
+      },
+      "g": {
+        "kind": "gate",
+        "takes": "a"
+      },
+      "out": {
+        "kind": "output",
+        "from": "g.picked",
+        "collection": "x"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "a"
+      ],
+      [
+        "a",
+        "g"
+      ],
+      [
+        "g",
+        {
+          "pass": "out",
+          "fail": "a",
+          "max": 1
+        }
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "edge_invalid",
+      "node": "g"
+    },
+    {
+      "code": "dead_end",
+      "node": "inputs"
+    },
+    {
+      "code": "dead_end",
+      "node": "a"
+    },
+    {
+      "code": "dead_end",
+      "node": "g"
+    },
+    {
+      "code": "unreachable",
+      "node": "out"
+    },
+    {
+      "code": "bind_source",
+      "node": "out",
+      "port": "from"
+    }
+  ]
+}

@@ -8,9 +8,17 @@ export const metadata: Metadata = { title: "Pipeline" };
 
 /** Route /pipelines/[id]: one of the caller's pipelines in the editor, with the workflows a step may run and the
  * node palette (its rules need both), the ask workflows its agent nodes may run, the
- * local servers and remote providers they may name and the custom nodes pipelines_service registered. An unknown (or another user's) pipeline is a 404. */
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+ * local servers and remote providers they may name and the custom nodes pipelines_service registered. An unknown (or another user's) pipeline is a 404.
+ * `?view=studio` opens its Studio view (docs/mock/Pipeline.dc.html). */
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ view?: string }>;
+}) {
   const { id } = await params;
+  const { view } = await searchParams;
   const api = await serverApi();
   const [p, w, n, sources, custom] = await Promise.all([
     api.GET("/v1/studio/pipelines/{pipeline_id}", { params: { path: { pipeline_id: id } } }),
@@ -43,6 +51,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       nodes={n}
       sources={sources}
       custom={custom?.nodes ?? []}
+      view={view === "studio" ? "studio" : "graph"}
     />
   );
 }

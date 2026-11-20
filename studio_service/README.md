@@ -225,6 +225,9 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
   deployment switch `STUDIO_REMOTE_MODELS` (off by default) and `pipelines.engine.custom` (registry `Custom`).
 - Providers (`providers.go`, migration 00016, admin only, 403 otherwise): `/admin/providers` (PUT 201/200, kind never
   changes in place, DELETE 409 while an unfinished batch names it, `test` asks `pipelines.providers.test`, 30 s).
+- Judge tests (API 1.28, `api/studio/judge_tests.go`, table `judge_tests`): `POST /pipelines/{id}/judge-tests` asks
+  `pipelines.judge.test` for the template and makes an interactive ask run on the picked takes; `GET /judge-tests/{id}`
+  asks it for the verdict once the run succeeded and keeps it.
   The host rule at PUT: a server's base_url is a loopback or private address or a name resolving only to such
   (link-local, IPv4-mapped public, any non-canonical numeric host such as `2130706433`, `0x7f000001`, `127.1` refused);
   a remote one is https and not a loopback or link-local literal, and only while the switch is on. Keys are only a
@@ -297,6 +300,9 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 - Timeline: `GET …/clips/{clip}/actions` (`ClipActions`), `POST …/shots` with `slot {after, length}`, the `fill` edit
   placing a take by its `source_map` (its source loaded by `loadTakes`), re-render binding media params
   (`RerenderSteps` media), audio takes refused as clips (`wrong_track`, `take_ids[n]: …`).
+- Shot numbers (API 1.29): `timeline.Number`, run by `clean` on every stored revision against the stored one (a
+  stored clip id keeps its number, a free carried one stays, the rest get the highest + 1); migration 00023 numbered
+  live sequences by position.
 - Eligibility: a run with `<family>/distill` needs a host whose models key lists the pre-fused distilled LoRA.
 
 ## Layout

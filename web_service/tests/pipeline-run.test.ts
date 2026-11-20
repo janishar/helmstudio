@@ -33,7 +33,6 @@ import {
   settledCell,
   stepDetail,
   stepLines,
-  attemptWords,
   stepProgress,
   unreached,
 } from "@/lib/pipeline-run";
@@ -171,8 +170,6 @@ describe("execution view", () => {
     ]);
     expect(stepLines(exec)[2].changed).toBe("takes.still = 4");
     expect(stepLines(exec).map((s) => s.tone)).toEqual(["", "", "", "now"]);
-    expect(attemptWords(1)).toBe("first attempt");
-    expect(attemptWords(7)).toBe("attempt 7");
   });
   it("marks the graph as run", () => {
     const g = asRun(exec);

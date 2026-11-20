@@ -376,7 +376,10 @@ export function memorySource(
 ): string {
   const s = m.source;
   if (s.kind === "user") return "added by you";
-  const at = [s.row != null && `row ${s.row}`, s.visit != null && s.visit > 1 && `try ${s.visit}`]
+  const at = [
+    s.row != null && `row ${s.row}`,
+    s.visit != null && s.visit > 1 && `attempt ${s.visit}`,
+  ]
     .filter(Boolean)
     .join(", ");
   const node = s.node ? name(s.node) : "";
@@ -491,9 +494,65 @@ export function stepLines(x: Exec, titles: Record<string, string> = {}): StepLin
   }));
 }
 
-/** "first attempt" … "fifth attempt", then "attempt 6" (docs/mock/Execution: "Row 6 · first attempt"). */
-export const attemptWords = (n: number) =>
-  ["first", "second", "third", "fourth", "fifth"][n - 1]?.concat(" attempt") ?? `attempt ${n}`;
+/** A line of the step list and, for a judge's decision, the checkpoints folded under it. */
+export type StepGroup = { line: StepLine; inner: StepLine[] };
+
+/** The step list with one line per judge decision (owner's Q8): a judge visit's checkpoints (submit, wait, verdict
+ * with the memory it read, gate, route) fold under one "Judge" line, named by the verdict, that opens on click; each
+ * stays selectable, so Retry row from here still works from any of them. */
+export function stepGroups(x: Exec, titles: Record<string, string> = {}): StepGroup[] {
+  const lines = stepLines(x, titles);
+  const groups: (StepGroup & { key: string })[] = [];
+  x.steps.forEach((s, i) => {
+    const l = lines[i];
+    const judge = x.pipeline.nodes[s.node]?.kind === "judge";
+    const key = judge ? `${s.node}:${s.visit}:${s.branch ?? ""}` : "";
+    const read = s.memory?.read.length ?? 0;
+    const inner = { ...l, label: s.part + (read ? ` · memory read ${read}` : "") };
+    const last = groups.at(-1);
+    if (key && last?.key === key) last.inner.push(inner);
+    else groups.push({ key, line: l, inner: key ? [inner] : [] });
+  });
+  return groups.map(({ line, inner }) => {
+    if (!inner.length) return { line, inner };
+    const verdict = inner.find((l) => x.steps.find((s) => s.step === l.step)?.decision);
+    const end = inner.at(-1)!;
+    const changed = [
+      ...new Set(inner.flatMap((l) => (l.changed === "—" ? [] : l.changed.split(", ")))),
+    ];
+    return {
+      line: {
+        ...line,
+        step: (verdict ?? end).step,
+        label: line.label.replace(/ · (submit|wait|route)(?= ·|$)/, ""),
+        what: (verdict ?? end).what,
+        changed: changed.join(", ") || "—",
+        status: end.status,
+        error: inner.find((l) => l.error)?.error ?? null,
+        tone: end.status === "now" ? "now" : (verdict ?? end).tone,
+      },
+      inner,
+    };
+  });
+}
+
+/** Whether the execution view lays the graph out itself (owner's Q10): it draws the saved positions unless a node
+ * has none, two cards overlap, or they spread wider or taller than the view shows at its smallest zoom. */
+export function needsLayout(doc: PDoc, maxW = 3000, maxH = 900): boolean {
+  const ps = Object.values(doc.nodes).map((n) => n.position);
+  if (ps.some((p) => !p)) return true;
+  const at = ps as { x: number; y: number }[];
+  // ponytail: a card's nominal size (176 × 100); measured sizes would need the canvas mounted first
+  if (
+    at.some((a, i) =>
+      at.slice(i + 1).some((b) => Math.abs(a.x - b.x) < 176 && Math.abs(a.y - b.y) < 100),
+    )
+  )
+    return true;
+  const xs = at.map((p) => p.x);
+  const ys = at.map((p) => p.y);
+  return Math.max(...xs) - Math.min(...xs) > maxW || Math.max(...ys) - Math.min(...ys) > maxH;
+}
 
 /** The graph as run: per node whether the row passed it, its visits and last status, and whether it is the node
  * the row is at now; per edge how many times it was taken. */

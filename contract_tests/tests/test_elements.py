@@ -12,7 +12,18 @@ from datetime import datetime
 
 import pytest
 from conftest import headers, make_client
-from helpers import NO_SUCH_ID, QUICK, STUDIO, new_session, ok, png_bytes, ref, upload, wait_run
+from helpers import (
+    NO_SUCH_ID,
+    QUICK,
+    STUDIO,
+    all_takes,
+    new_session,
+    ok,
+    png_bytes,
+    ref,
+    upload,
+    wait_run,
+)
 from test_batches import BATCHES, FAST, finish, lines, rows_of, submit, wait_batch
 from test_image_inputs import refused, run_take
 from test_pipelines import batch_takes, create, echo_step, inputs_node
@@ -228,6 +239,9 @@ def test_run_with_a_mention(ue, sid, pics):
     assert mw["elements"] == [{"id": fox["id"], "handle": "fox", "name": "Fox", "version": 2}]
     assert take["parents"] == []  # lineage reads the typed view: element images are not parents
     assert ok(ue.get(f"{STUDIO}/runs/{take['run_id']}"))["inputs"]["prompt.text"] == prompt
+    # API 1.27: the gallery search finds it by the element's handle, with or without its @
+    for q in ("@FOX snow", "fox snow"):
+        assert take["id"] in [t["id"] for t in all_takes(ue, q=q)], q
 
 
 def test_unknown_handle_is_422(ue, sid, pics):

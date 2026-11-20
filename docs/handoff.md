@@ -121,6 +121,17 @@ Lessons that cost time:
 - Q31 Regenerate audio pressed look: keep.
 - Q32 Landing: signed-in users at /welcome go to Create; phone layout as built.
 
+Built 2026-11-21 (API 1.29.0), all but Q24 (backlog) and Q28 (board-only). Left open, for the owner to say:
+- Component words chosen by the builder: 'whole model' (H3 generate), 'language model' (llm ask), 'prompt enhancer'
+  (H3 Image enhance), 'vae encoder' / 'audio encoder' (LTX encode-video / encode-audio).
+- LTX One-stage decodes stage 1's half-size latent (clip is half the canvas each way); a full-size one-stage clip
+  needs a new sample role and goldens. The 'Stage 2 steps' tile still shows in One-stage.
+- Done batches show only 'Open collection' (no link to the run view); the execution title menu keeps a third item,
+  'The batch · <title>'.
+- Only the Judge panel lost its title field and Remove button; other node panels keep both.
+- Pipeline Studio view: step form edits live in memory only; write/decide/memory/agent binds stay plain fields.
+- Shot numbers are highest + 1 (a removed top number is reused); migration 00023 numbered dev sequences by position.
+
 ## Known gaps
 
 - M5b: frame jobs share a queue lane with exports; in a Re-render, clips after a failed one are released but do not
@@ -135,5 +146,9 @@ Lessons that cost time:
   are not bit-repeatable (two runs differ at 37–41 dB; text to video is exact); a 56-frame Ref2VA run with a sound
   video took 329 s against about 40 s at 22 frames, not looked into; the Create header wraps the memory chip to a
   second line when the session title is long.
+- Q23 / Q17 memory per stage: the Explain run drawer shows the whole run's planned peak, not the planned memory per
+  stage that plan 05-ui.md 8.2 asks for, and LTX One-stage's Generate estimate reads "up to N GB" (the two-stage
+  figure as a ceiling). The registry has no measured figure per stage; either measure one per stage and add it to
+  the contract (variant memory per stage, RunPlan.stages[] {node, peak_gb}), or the owner accepts the total. Open.
 - Web: component tests and a few end-to-end tests (`make e2e`) exist, not full coverage; gallery thumbnails are originals; several screens were checked against
   their boards at the browser pane's size, not side by side at 1440×960.

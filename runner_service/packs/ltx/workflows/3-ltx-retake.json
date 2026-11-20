@@ -98,6 +98,7 @@
     "inspector": [
       {
         "title": "Quality",
+        "help": "Euler steps of the guided loop; each runs the model four times over the whole clip.",
         "items": [
           "model.precision",
           "retake.steps",

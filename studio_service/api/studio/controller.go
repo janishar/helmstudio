@@ -62,6 +62,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PATCH("/workflows/:id", c.renameWorkflowHandler)
 	group.DELETE("/workflows/:id", c.deleteWorkflowHandler)
 	group.GET("/nodes", c.nodesHandler)
+	group.POST("/runs/plan", c.planRunHandler)
 	group.GET("/runs/:id", c.getRunHandler)
 	group.POST("/runs/:id/cancel", c.cancelRunHandler)
 	group.GET("/hosts", c.listHostsHandler)
@@ -92,6 +93,8 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/pipelines/:id", c.replacePipelineHandler)
 	group.PATCH("/pipelines/:id", c.renamePipelineHandler)
 	group.DELETE("/pipelines/:id", c.deletePipelineHandler)
+	group.POST("/pipelines/:id/judge-tests", c.createJudgeTestHandler)
+	group.GET("/judge-tests/:id", c.getJudgeTestHandler)
 	group.POST("/takes/:id/pipeline", c.saveTakeAsPipelineHandler)
 	group.GET("/batches/:id/chat", c.getChatHandler)
 	group.POST("/batches/:id/chat", c.postChatHandler)
@@ -388,6 +391,13 @@ func (c *controller) createRunHandler(ctx *gin.Context) {
 	})
 }
 
+// planRunHandler: POST /runs/plan — the run's planned peak, nothing stored (API 1.25).
+func (c *controller) planRunHandler(ctx *gin.Context) {
+	withBody(ctx, http.StatusOK, func(caller common.Caller, _ string, body *dto.RunRequest) (dto.RunPlan, error) {
+		return c.service.PlanRun(ctx.Request.Context(), caller, body)
+	})
+}
+
 // getRunHandler: GET /runs/{id}.
 func (c *controller) getRunHandler(ctx *gin.Context) {
 	out, err := c.service.GetRun(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
@@ -639,6 +649,22 @@ func (c *controller) deleteMemoryHandler(ctx *gin.Context) {
 		return
 	}
 	ctx.Status(http.StatusNoContent)
+}
+
+// createJudgeTestHandler: POST /pipelines/{id}/judge-tests — 202 with the test (API 1.28).
+func (c *controller) createJudgeTestHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.JudgeTestCreate](ctx, false)
+	var out dto.JudgeTest
+	if err == nil {
+		out, err = c.service.CreateJudgeTest(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusAccepted, out, err)
+}
+
+// getJudgeTestHandler: GET /judge-tests/{id}.
+func (c *controller) getJudgeTestHandler(ctx *gin.Context) {
+	out, err := c.service.GetJudgeTest(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
 }
 
 // ------------------------------------------------------------------ pipelines

@@ -2,6 +2,7 @@ package dto
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -41,12 +42,44 @@ type StudioLayout struct {
 	Inspector []StudioSection           `json:"inspector,omitempty"`
 	Labels    map[string]string         `json:"labels,omitempty"`
 	Presets   map[string]map[string]any `json:"presets,omitempty"`
+	// API 1.25: every preset name once, in the order Create shows them (a map's order is not kept)
+	PresetOrder []string `json:"preset_order,omitempty"`
 }
 
 // StudioSection is one inspector section.
 type StudioSection struct {
 	Title string   `json:"title"`
 	Items []string `json:"items"`
+	Help  *string  `json:"help,omitempty"` // API 1.25: the section's (i) text
+	// API 1.26: tiles that lead the section, each a pick among named sets of values (checked as presets)
+	Choices []StudioChoice `json:"choices,omitempty"`
+}
+
+// StudioChoice is one choice tile: its options in order, each a set of values (LTX's Recipe).
+type StudioChoice struct {
+	Label   string  `json:"label"`
+	Help    *string `json:"help,omitempty"`
+	Options []struct {
+		Name string         `json:"name"`
+		Set  map[string]any `json:"set"`
+	} `json:"options"`
+}
+
+// Sets are the layout's named sets of values that must be valid as presets: the presets, then every choice option
+// ("<label>: <option>").
+func (l *StudioLayout) Sets() map[string]map[string]any {
+	out := maps.Clone(l.Presets)
+	if out == nil {
+		out = map[string]map[string]any{}
+	}
+	for _, section := range l.Inspector {
+		for _, choice := range section.Choices {
+			for _, option := range choice.Options {
+				out[choice.Label+": "+option.Name] = option.Set
+			}
+		}
+	}
+	return out
 }
 
 // LookGroups are a look's groups, in the order the composer's default tiles show them.
@@ -241,6 +274,31 @@ func (l *StudioLayout) validate() string {
 		if detail := paths(fmt.Sprintf("inspector[%d].items", i), section.Items, 32); detail != "" {
 			return detail
 		}
+		if section.Help != nil && (*section.Help == "" || utf8.RuneCountInString(*section.Help) > 300) {
+			return fmt.Sprintf("studio.inspector[%d].help: 1-300 characters", i)
+		}
+		if len(section.Choices) > 4 {
+			return fmt.Sprintf("studio.inspector[%d].choices: at most 4", i)
+		}
+		for j, choice := range section.Choices {
+			where := fmt.Sprintf("studio.inspector[%d].choices[%d]", i, j)
+			if n := utf8.RuneCountInString(choice.Label); n == 0 || n > 40 || len(choice.Options) < 2 || len(choice.Options) > 8 {
+				return where + ": a label of 1-40 characters and 2-8 options"
+			}
+			if choice.Help != nil && (*choice.Help == "" || utf8.RuneCountInString(*choice.Help) > 300) {
+				return where + ".help: 1-300 characters"
+			}
+			for _, option := range choice.Options {
+				if n := utf8.RuneCountInString(option.Name); n == 0 || n > 40 || len(option.Set) == 0 || len(option.Set) > 32 {
+					return where + ".options: a name of 1-40 characters and 1-32 values each"
+				}
+				for path := range option.Set {
+					if !reference.MatchString(path) {
+						return fmt.Sprintf("%s.options: %q is not <node>.<param>", where, path)
+					}
+				}
+			}
+		}
 	}
 	if len(l.Labels) > 64 {
 		return "studio.labels: at most 64 labels"
@@ -261,6 +319,18 @@ func (l *StudioLayout) validate() string {
 			if !reference.MatchString(path) {
 				return fmt.Sprintf("studio.presets.%s: %q is not <node>.<param>", name, path)
 			}
+		}
+	}
+	if l.PresetOrder != nil {
+		seen := map[string]bool{}
+		for _, name := range l.PresetOrder {
+			if _, ok := l.Presets[name]; !ok || seen[name] {
+				return "studio.preset_order: every preset once"
+			}
+			seen[name] = true
+		}
+		if len(seen) != len(l.Presets) {
+			return "studio.preset_order: every preset once"
 		}
 	}
 	return ""

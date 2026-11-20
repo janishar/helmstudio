@@ -7,21 +7,24 @@
 // (docs/mock/AgentNodes.dc.html), Memory (read or write) and the Memory dialog. Stage B (docs/mock/AgentSettings.dc.html,
 // DirectorChat.dc.html): the Agent panel (instruction, reads, tools, how it ends, caps, model source, director), a
 // step's fan-out, a custom node's fields, the pipeline's Remote calls, and Chat with director for the last batch. The
-// memory chip is Create's, for the host of the first step's env; steps show the last batch's progress. The mock's
-// Studio | Graph switch (no Studio view yet) and "Test on takes" (no backend yet) are left out.
+// memory chip is Create's, for the host of the first step's env; steps show the last batch's progress. The
+// Studio | Graph switch (⌘\) opens the pipeline's Studio view (components/pipelines/studio, docs/mock/Pipeline.dc.html).
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { Activity, ChevronLeft, Plus, X } from "lucide-react";
+import { Activity, Plus, X } from "lucide-react";
 import { ErrorNote, Info } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { Head, Problems } from "@/components/graph/panel";
 import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
+import { JudgeTest } from "@/components/pipelines/judge-test";
 import { followBatch } from "@/components/pipelines/pipelines";
 import { ChatPanel, useChat } from "@/components/pipelines/chat";
 import { rowMarks } from "@/lib/chat";
 import { RunTable } from "@/components/pipelines/run-table";
+import { TitleMenu } from "@/components/pipelines/title-menu";
+import { PipelineStudio, ViewSwitch } from "@/components/pipelines/studio";
 import { Memory, useHosts } from "@/components/create/memory-chip";
 import { hostMemory } from "@/lib/hosts";
 import { MEDIA_WORDS, stepProgress } from "@/lib/pipeline-run";
@@ -30,7 +33,9 @@ import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
 import { applyBatchEvent, type BatchView } from "@/lib/batches";
 import { docOf, mergeProblems, paletteOf, type Doc, type Palette, type Problem } from "@/lib/graph";
 import { history, historyOf } from "@/lib/graph-edit";
+import { presetNames } from "@/lib/studio";
 import {
+  addRewrite,
   AGENT_TOOLS,
   agentCaps,
   bindCandidates,
@@ -44,7 +49,6 @@ import {
   edgeOut,
   gateCandidates,
   KIND_NAMES,
-  memoryCandidates,
   nodeLabel,
   order,
   outputCandidates,
@@ -67,6 +71,7 @@ import {
 
 type Pipeline = S<"Pipeline">;
 type Workflow = S<"Workflow">;
+type View = "studio" | "graph";
 type Edit = (f: (d: PDoc) => PDoc) => void;
 
 const PipelineCanvas = dynamic<CanvasProps>(
@@ -118,6 +123,7 @@ export function PipelineEditor({
   nodes,
   sources = null,
   custom = [],
+  view: initialView = "graph",
 }: {
   pipeline: Pipeline;
   workflows: Workflow[];
@@ -128,7 +134,28 @@ export function PipelineEditor({
   sources?: S<"ModelSourceList"> | null;
   /** the custom nodes pipelines_service registered (GET /custom-nodes) */
   custom?: S<"CustomNode">[];
+  /** the view it opens in (`?view=studio`) */
+  view?: View;
 }) {
+  const [view, setViewState] = useState<View>(initialView);
+  const setView = useCallback((v: View) => {
+    setViewState(v);
+    // in the URL without a server round trip, so a reload stays in the view
+    window.history.replaceState(null, "", v === "studio" ? `?view=studio` : location.pathname);
+  }, []);
+  // ⌘\ (Ctrl+\) switches Studio and Graph, as in Create (plan 05-ui.md 8.2)
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
+        e.preventDefault();
+        setView(viewRef.current === "graph" ? "studio" : "graph");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, setView]);
   const [h, dispatch] = useReducer(history<PDoc>, pipeline, (p) => historyOf(docOfPipeline(p)));
   const doc = h.present;
   const palette = useMemo(
@@ -390,44 +417,56 @@ export function PipelineEditor({
   const sel = selected && doc.nodes[selected] ? selected : null;
   const blocked = problems.length > 0;
 
+  const studioBadge = `Pipeline · ${plural(count("step"), "step")}`;
+  const head = (
+    <div className="flex flex-wrap items-center gap-3">
+      <TitleMenu title={doc.title} onRename={(t) => edit((d) => ({ ...d, title: t }))} />
+      <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
+        {view === "studio" ? studioBadge : badge}
+      </span>
+      {director && run?.batch.director && (
+        <button
+          type="button"
+          className={`chip bevel ${chatOpen ? "bg-t1 font-semibold text-panel" : ""}`}
+          aria-pressed={chatOpen}
+          onClick={() => setChatOpen((o) => !o)}
+        >
+          Chat with director
+        </button>
+      )}
+      {last && (
+        <Link
+          href={`/pipelines/batches/${last.id}/rows/1`}
+          aria-label="Execution view"
+          title="Execution view (row 1 of the last batch)"
+          className="grid h-9 w-10 place-items-center rounded-[10px] bg-s4 text-t1"
+        >
+          <Activity size={18} aria-hidden />
+        </Link>
+      )}
+      <div className="grow" />
+      <ViewSwitch view={view} onView={setView} />
+      {host && <Memory memory={host} />}
+    </div>
+  );
+
+  if (view === "studio")
+    return (
+      <PipelineStudio
+        pipelineId={pipeline.id}
+        doc={doc}
+        workflows={workflows}
+        titles={titles}
+        hosts={hosts}
+        head={head}
+        onAddStep={() => setView("graph")}
+      />
+    );
+
   return (
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/pipelines"
-            aria-label="Pipelines"
-            className="grid size-9 place-items-center rounded-[10px] text-t2 hover:bg-s2"
-          >
-            <ChevronLeft size={18} aria-hidden />
-          </Link>
-          <TitleField title={doc.title} onCommit={(t) => edit((d) => ({ ...d, title: t }))} />
-          <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
-            {badge}
-          </span>
-          {director && run?.batch.director && (
-            <button
-              type="button"
-              className={`chip bevel ${chatOpen ? "bg-t1 font-semibold text-panel" : ""}`}
-              aria-pressed={chatOpen}
-              onClick={() => setChatOpen((o) => !o)}
-            >
-              Chat with director
-            </button>
-          )}
-          {last && (
-            <Link
-              href={`/pipelines/batches/${last.id}/rows/1`}
-              aria-label="Execution view"
-              title="Execution view (row 1 of the last batch)"
-              className="grid h-9 w-10 place-items-center rounded-[10px] bg-s4 text-t1"
-            >
-              <Activity size={18} aria-hidden />
-            </Link>
-          )}
-          <div className="grow" />
-          {host && <Memory memory={host} />}
-        </div>
+        {head}
         {notice && (
           <p role="status" className="rounded-xl bg-s2 px-3 py-2 text-[13px]">
             {notice}
@@ -501,6 +540,8 @@ export function PipelineEditor({
             onOpenMemory={() => setMemoryOpen(true)}
             sources={sources}
             custom={custom}
+            pipelineId={pipeline.id}
+            save={flush}
           />
         ) : (
           <>
@@ -561,32 +602,6 @@ export function PipelineEditor({
 }
 
 /** The title in the top bar: edited in place, saved on Enter or when it loses focus (blank goes back). */
-function TitleField({ title, onCommit }: { title: string; onCommit: (t: string) => void }) {
-  const [v, setV] = useState(title);
-  const [was, setWas] = useState(title);
-  if (title !== was) {
-    setWas(title);
-    setV(title);
-  }
-  const commit = () => {
-    const t = v.trim();
-    if (t && t !== title) onCommit(t.slice(0, 80));
-    else setV(title);
-  };
-  return (
-    <input
-      aria-label="Pipeline title"
-      className="h-10 min-w-0 rounded-[10px] border-0 bg-transparent px-3 font-display text-[18px] font-bold tracking-[0.01em] text-t1 hover:bg-s2 focus:bg-s2"
-      style={{ width: `${Math.max(8, Math.min(40, v.length + 2))}ch` }}
-      maxLength={80}
-      value={v}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
-    />
-  );
-}
-
 // ---------------------------------------------------------------- the side panel
 
 type PanelProps = {
@@ -606,6 +621,9 @@ type PanelProps = {
   onOpenMemory: () => void;
   sources: S<"ModelSourceList"> | null;
   custom: S<"CustomNode">[];
+  /** the pipeline, and its save (a judge test reads the saved judge) */
+  pipelineId: string;
+  save: () => Promise<void>;
 };
 
 /** A labelled select, the panel's one control for a choice. */
@@ -674,7 +692,7 @@ function NodePanel(props: PanelProps) {
         />
       )}
       <Problems list={asProblems(general)} />
-      {n.kind !== "inputs" && (
+      {n.kind !== "inputs" && n.kind !== "judge" && (
         <label className="flex flex-col gap-1.5">
           <span className="label">Title on the card</span>
           <input
@@ -720,16 +738,18 @@ function NodePanel(props: PanelProps) {
           }
         />
       )}
-      <button
-        type="button"
-        className="h-10 rounded-[10px] border border-dashed border-dash bg-transparent text-[13px]"
-        onClick={() => {
-          edit((d) => removePipelineNodes(d, [id]));
-          onRemoved();
-        }}
-      >
-        Remove this node
-      </button>
+      {n.kind !== "judge" && (
+        <button
+          type="button"
+          className="h-10 rounded-[10px] border border-dashed border-dash bg-transparent text-[13px]"
+          onClick={() => {
+            edit((d) => removePipelineNodes(d, [id]));
+            onRemoved();
+          }}
+        >
+          Remove this node
+        </button>
+      )}
     </>
   );
 }
@@ -840,7 +860,7 @@ function StepPanel({
   const wf = workflows.find((w) => w.id === n.workflow);
   const wd = wfDocs[n.workflow];
   const params = wd ? settable(wd, palette) : {};
-  const presets = Object.keys(wf?.studio?.presets ?? {});
+  const presets = presetNames(wf?.studio);
   const bind = n.bind ?? {};
   const rows = Object.entries(params)
     .map(([k, p]) => ({ k, p, c: bindCandidates(doc, id, p, custom) }))
@@ -1047,8 +1067,7 @@ function GatePanel({
   edit,
   targets,
 }: PanelProps & { targets: [string, string][] }) {
-  const n = doc.nodes[id] as S<"PipelineGateNode"> | S<"PipelineJudgeNode">;
-  const judge = n.kind === "judge";
+  const n = doc.nodes[id] as S<"PipelineGateNode">;
   const steps = gateCandidates(doc, id);
   const opts = n.takes && !steps.includes(n.takes) ? [n.takes, ...steps] : steps;
   const made = doc.nodes[n.takes]?.kind === "step" ? stepTakes(doc)[n.takes] : 8; // seeds × fan-out
@@ -1059,7 +1078,7 @@ function GatePanel({
     <>
       <Choice
         id="pp-takes"
-        label={judge ? "Judges the takes of" : "Pick from"}
+        label="Pick from"
         value={n.takes}
         options={[
           ...(n.takes ? [] : ([["", "Choose a step"]] as [string, string][])),
@@ -1077,13 +1096,13 @@ function GatePanel({
           >
             {range(Math.max(made, n.keep ?? 1)).map((i) => (
               <option key={i} value={i}>
-                {judge || i === 1 ? `best ${i} of ${made}` : `up to ${i} of ${made}`}
+                {i === 1 ? `best ${i} of ${made}` : `up to ${i} of ${made}`}
               </option>
             ))}
           </select>
         </label>
         <label className="set flex flex-col gap-1">
-          <small className="text-[12px] text-t2">{judge ? "If it passes" : "If picked"}</small>
+          <small className="text-[12px] text-t2">If picked</small>
           <select
             className="bg-transparent font-semibold text-t1"
             value={pass}
@@ -1117,10 +1136,10 @@ function GatePanel({
               )
             }
           >
-            <option value="">{judge ? "Ask me / fail the row" : "Fail the row"}</option>
+            <option value="">Fail the row</option>
             {targets.map(([v, l]) => (
               <option key={v} value={v}>
-                {judge ? `Retry: ${l}` : `Retry at ${l}`}
+                {`Retry at ${l}`}
               </option>
             ))}
           </select>
@@ -1158,12 +1177,9 @@ function GatePanel({
           </>
         )}
       </div>
-      {!judge && (
-        <p className="m-0 text-[12px] text-t2">
-          The row parks here until you pick from the review grid; parked rows never hold up the
-          queue.
-        </p>
-      )}
+      <p className="m-0 text-[12px] text-t2">
+        The row parks here until you pick from the review grid; parked rows never hold up the queue.
+      </p>
     </>
   );
 }
@@ -1326,10 +1342,12 @@ function JudgeHead({ doc, id, titles, models, workflows }: PanelProps) {
   );
 }
 
-/** The Judge panel (docs/mock/PipelineGraph.dc.html's aside): checklist, keep and the retry branch (GatePanel),
- * Trust (Suggest | Auto), the model, and memory. */
+/** The Judge panel (docs/mock/PipelineGraph.dc.html's aside; owner's Q5-Q7): the checklist (emptying a check removes
+ * it), the four tiles Keep / If none pass / On retry / Then, Trust, the model, and memory with Open memory and Test on
+ * takes. What it judges, where a pick goes and the memory it learns from are wires on the canvas; its title is
+ * edited on the card and Backspace removes it. */
 function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
-  const { doc, id, problems, edit, titles, memory, onOpenMemory } = props;
+  const { doc, id, problems, edit, titles, memory, onOpenMemory, targets } = props;
   const n = doc.nodes[id] as S<"PipelineJudgeNode">;
   const set = (v: Partial<S<"PipelineJudgeNode">>) => edit((d) => setNode(d, id, { ...n, ...v }));
   const lines = [
@@ -1343,7 +1361,23 @@ function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
         nice: ls.filter((l) => !l.must).map((l) => l.t),
       },
     });
-  const mems = memoryCandidates(doc, id);
+  const made = doc.nodes[n.takes]?.kind === "step" ? stepTakes(doc)[n.takes] : 8;
+  const out = edgeOut(doc, id)?.[1];
+  const branch = typeof out === "object" && "pass" in out ? out : null;
+  const suggest = (n.mode ?? "suggest") === "suggest";
+  const label = (x: string) => nodeLabel(doc, x, titles);
+  // On retry: run the judged step again, or a write that rewrites the prompt (a new one when there is none)
+  const steps = gateCandidates(doc, id);
+  const writes = order(doc).filter((x) => doc.nodes[x].kind === "write");
+  const retry: [string, string][] = [
+    ...steps.map((x) => [x, `Rerun ${label(x)}`] as [string, string]),
+    ...writes.map((x) => [x, label(x)] as [string, string]),
+    ...(writes.length ? [] : ([["new:rewrite", "Rewrite prompt"]] as [string, string][])),
+    ...(branch && ![...steps, ...writes].includes(branch.fail)
+      ? ([[branch.fail, label(branch.fail)]] as [string, string][])
+      : []),
+  ];
+  const memoryProblem = problems.find((p) => p.port === "memory")?.message;
   return (
     <>
       <section aria-labelledby="pp-checks" className="flex flex-col gap-1.5">
@@ -1360,6 +1394,7 @@ function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
               onChange={(e) =>
                 setLines(lines.map((x, j) => (j === i ? { ...x, t: e.target.value } : x)))
               }
+              onBlur={(e) => !e.target.value.trim() && setLines(lines.filter((_, j) => j !== i))}
             />
             <button
               type="button"
@@ -1368,14 +1403,6 @@ function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
               onClick={() => setLines(lines.map((x, j) => (j === i ? { ...x, must: !x.must } : x)))}
             >
               {l.must ? "must" : "nice to have"}
-            </button>
-            <button
-              type="button"
-              aria-label={`Remove check ${i + 1}`}
-              className="grid size-6 shrink-0 place-items-center rounded-md text-t2 hover:bg-s3"
-              onClick={() => setLines(lines.filter((_, j) => j !== i))}
-            >
-              <X size={12} aria-hidden />
             </button>
           </div>
         ))}
@@ -1396,7 +1423,96 @@ function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
           </button>
         )}
       </section>
-      <GatePanel {...props} />
+      <div className="grid grid-cols-2 gap-2">
+        <label className="set flex flex-col gap-1">
+          <small className="text-[12px] text-t2">Keep</small>
+          <select
+            className="bg-transparent font-semibold text-t1"
+            value={n.keep ?? 1}
+            onChange={(e) => set({ keep: Number(e.target.value) })}
+          >
+            {range(Math.max(made, n.keep ?? 1)).map((i) => (
+              <option key={i} value={i}>
+                Best {i} of {made}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label
+          className="set flex flex-col gap-1"
+          title={out ? undefined : "Wire its picked port to the next node first"}
+        >
+          <small className="text-[12px] text-t2">If none pass</small>
+          <select
+            className="bg-transparent font-semibold text-t1"
+            value={branch ? String(branch.max) : ""}
+            disabled={!out}
+            onChange={(e) => {
+              const max = Number(e.target.value);
+              edit((d) => {
+                if (!max) return disconnectNodes(d, id, "fail");
+                if (branch) return setCap(d, id, max);
+                const first = retry[0]?.[0];
+                const wired =
+                  first === "new:rewrite" || !first
+                    ? addRewrite(d, id).doc
+                    : connectNodes(d, id, "fail", first);
+                return setCap(wired, id, max);
+              });
+            }}
+          >
+            <option value="">{suggest ? "Ask me" : "Fail the row"}</option>
+            {range(10).map((i) => (
+              <option key={i} value={i}>
+                Retry, max {i}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="set flex flex-col gap-1">
+          <small className="text-[12px] text-t2">On retry</small>
+          <select
+            className="bg-transparent font-semibold text-t1"
+            value={branch?.fail ?? ""}
+            disabled={!branch}
+            onChange={(e) => {
+              const v = e.target.value;
+              edit((d) =>
+                v === "new:rewrite" ? addRewrite(d, id).doc : connectNodes(d, id, "fail", v),
+              );
+            }}
+          >
+            {!branch && <option value="">—</option>}
+            {retry.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="set flex flex-col gap-1">
+          <small className="text-[12px] text-t2">Then</small>
+          <select
+            className="bg-transparent font-semibold text-t1"
+            value={branch?.then ?? ""}
+            disabled={!branch}
+            onChange={(e) =>
+              edit((d) =>
+                e.target.value
+                  ? connectNodes(d, id, "then", e.target.value)
+                  : disconnectNodes(d, id, "then"),
+              )
+            }
+          >
+            <option value="">{branch ? "Ask me" : "—"}</option>
+            {targets.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <section aria-labelledby="pp-trust" className="flex flex-col gap-2">
         <h3 id="pp-trust" className="heading flex items-center">
           Trust
@@ -1447,39 +1563,27 @@ function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
           Memory
           <Info>
             Read once when the batch starts, so every row is judged the same way. What it learns
-            tonight is used next time.
+            tonight is used next time. Wire a Memory node&apos;s examples into the judge to use it.
           </Info>
         </h3>
-        <Choice
-          id="pp-mem"
-          label="Learns from"
-          value={n.memory ?? ""}
-          error={problems.find((p) => p.port === "memory")?.message}
-          options={[
-            ["", mems.length ? "Off" : "Off (add a Memory node before it)"],
-            ...mems.map((m) => [m, nodeLabel(doc, m, titles)] as [string, string]),
-            ...(n.memory && !mems.includes(n.memory)
-              ? [[n.memory, n.memory] as [string, string]]
-              : []),
-          ]}
-          onChange={(v) => {
-            const { memory: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
-            edit((d) => setNode(d, id, v ? { ...rest, memory: v } : rest));
-          }}
-        />
+        {memoryProblem && <span className="text-[12px] text-bad">{memoryProblem}</span>}
         <div className="set flex items-center justify-between text-[13px]">
           Examples from your picks
           <span className="text-[11px] text-t2">
-            {memory ? `${memory.judge_example} takes` : "—"}
+            {n.memory ? (memory ? `${memory.judge_example} takes` : "—") : "off"}
           </span>
         </div>
         <div className="set flex items-center justify-between text-[13px]">
           Notes
-          <span className="text-[11px] text-t2">{memory ? `${memory.note} notes` : "—"}</span>
+          <span className="text-[11px] text-t2">
+            {n.memory ? (memory ? `${memory.note} notes` : "—") : "off"}
+          </span>
         </div>
-        <button type="button" className="chip bevel self-start" onClick={onOpenMemory}>
-          Open memory
-        </button>
+        <JudgeTest pipelineId={props.pipelineId} node={id} save={props.save}>
+          <button type="button" className="chip bevel" onClick={onOpenMemory}>
+            Open memory
+          </button>
+        </JudgeTest>
       </section>
     </>
   );

@@ -151,13 +151,15 @@ type Port struct {
 
 // NodeSchema is one node kind a runner can execute.
 type NodeSchema struct {
-	Kind    string  `json:"kind"`
-	Title   string  `json:"title"`
-	Family  *string `json:"family"`
-	Help    string  `json:"help,omitempty"`
-	Params  []Param `json:"params"`
-	Inputs  []Port  `json:"inputs"`
-	Outputs []Port  `json:"outputs"`
+	Kind   string  `json:"kind"`
+	Title  string  `json:"title"`
+	Family *string `json:"family"`
+	// API 1.24: the model component it loads, in words (the Graph inspector's "uses the <component>")
+	Component string  `json:"component,omitempty"`
+	Help      string  `json:"help,omitempty"`
+	Params    []Param `json:"params"`
+	Inputs    []Port  `json:"inputs"`
+	Outputs   []Port  `json:"outputs"`
 }
 
 // Node is one node of a workflow graph. Bypass and Position belong to an edited workflow: a command never carries them.

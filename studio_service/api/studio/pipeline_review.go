@@ -68,6 +68,8 @@ func onReject(p storedPipeline, gate string, cells json.RawMessage) (string, int
 		left := edge.Branch.Max - min(rejected(cells, gate), edge.Branch.Max)
 		if left > 0 {
 			return "retry", left
+		} else if edge.Branch.Then == "" { // API 1.28 Ask me: a reject at the cap ends the row
+			return "fail", 0
 		}
 		return "then", 0
 	}

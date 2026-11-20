@@ -150,6 +150,27 @@ const mpText = (w: number, h: number) => {
   return `${+(mp < 0.1 ? mp.toPrecision(2) : mp.toFixed(1))} MP`;
 };
 
+/** The `<node>.bypass` paths a choice option sets (LTX's Recipe), each with its value in the form: true = the
+ * choice switched that node off (One-stage). */
+export function choiceBypass(
+  groups: { choices?: Choice[] }[] | undefined,
+  fields: Field[],
+  raws: Record<string, Raw>,
+): Record<string, boolean> {
+  const keys = new Set(
+    (groups ?? [])
+      .flatMap((g) => g.choices ?? [])
+      .flatMap((c) => c.options.flatMap((o) => Object.keys(o.set)))
+      .filter((k) => k.endsWith(".bypass")),
+  );
+  return Object.fromEntries(
+    [...keys].map((k) => {
+      const f = fields.find((x) => x.key === k);
+      return [k, (f ? rawOf(f, raws) : raws[k]) === true];
+    }),
+  );
+}
+
 /** Which inspector editor is open (a field key), and how to open or close one. */
 type OpenProps = { open: string | null; setOpen: (key: string | null) => void };
 
@@ -192,12 +213,14 @@ export function Inspector({
   compact,
   resolved,
   presets,
+  presetOrder,
   grid = null,
   stage1,
 }: FormProps &
   OpenProps & {
     uploads: RefUploads;
-    groups?: { title: string; fields: Field[] }[];
+    /** the Studio block's sections; `help` is the section's (i) text (API 1.25) */
+    groups?: { title: string; help?: string; fields: Field[]; choices?: Choice[] }[];
     familyTitle?: string;
     /** the canvas as Aspect and Size tiles (a video workflow, docs/mock/TextToVideo.dc.html) */
     compact?: boolean;
@@ -205,10 +228,13 @@ export function Inspector({
     resolved?: Record<string, number>;
     /** the workflow's presets (`studio.presets`): chips that set their values */
     presets?: Record<string, Record<string, S<"ParamValue">>>;
+    /** the presets' names in the pack's order (`presetNames`); absent = as the object lists them */
+    presetOrder?: string[];
     /** the family's frame grid: what a span, an extension or a part comes to */
     grid?: FrameGrid | null;
-    /** a two-stage workflow: stage 1 runs at the canvas divided by this (LTX: 2) */
-    stage1?: number;
+    /** a two-stage workflow: stage 1 runs at the canvas divided by `by` (LTX: 2); `clip`: the clip comes out at
+     * that size (one-stage) */
+    stage1?: Stage1;
   }) {
   const s = sections(fields);
   const ext = extensionOf(fields);
@@ -246,6 +272,12 @@ export function Inspector({
         />
       );
     if (ext && f === ext.direction) return null; // drawn with its seconds
+    // the extension's cfg and stg: one "CFG · STG" tile that edits both (docs/mock/VideoSource.dc.html)
+    const guide = (name: string) =>
+      ext && fields.find((x) => x.node === ext.seconds.node && x.param.name === name);
+    const cfg = guide("cfg");
+    const stg = guide("stg");
+    if (cfg && stg && f === stg) return null;
     if (ext && f === ext.seconds)
       return <ExtendControl key={f.key} {...ext} {...shared} onChange={onChange} />;
     if (f.param.type === "bool") return <Switch key={f.key} f={f} raw={raw} onChange={onChange} />;
@@ -274,6 +306,7 @@ export function Inspector({
         setOpen={setOpen}
         onChange={onChange}
         choices={allowedInts(f, raws)?.map(String)}
+        pair={cfg && stg && f === cfg ? { f: stg, raw: rawOf(stg, raws) } : undefined}
       />
     );
   };
@@ -301,8 +334,40 @@ export function Inspector({
       />
     );
   const presetChips = presets && Object.keys(presets).length > 0 && (
-    <Presets presets={presets} fields={fields} raws={raws} onChange={onChange} />
+    <Presets
+      key="presets"
+      presets={presets}
+      order={presetOrder ?? Object.keys(presets)}
+      fields={fields}
+      raws={raws}
+      onChange={onChange}
+    />
   );
+  // a choice tile (API 1.26): an enum of its options' names, showing the first whose values hold; picking one sets
+  // its values
+  const choiceTile = (c: Choice) => {
+    const f = choiceField(c);
+    const holds = (set: Record<string, S<"ParamValue">>) =>
+      Object.entries(set).every(([k, v]) => {
+        const x = fields.find((y) => y.key === k);
+        return x && JSON.stringify(rawOf(x, raws)) === JSON.stringify(toRaw(v, x.param));
+      });
+    return (
+      <Tile
+        key={f.key}
+        f={f}
+        raw={c.options.find((o) => holds(o.set))?.name ?? "custom"}
+        open={open === f.key}
+        setOpen={setOpen}
+        onChange={(_, name) =>
+          Object.entries(c.options.find((o) => o.name === name)?.set ?? {}).forEach(([k, v]) => {
+            const x = fields.find((y) => y.key === k);
+            if (x) onChange(k, toRaw(v, x.param));
+          })
+        }
+      />
+    );
+  };
   const section = (
     id: string,
     title: string,
@@ -310,23 +375,33 @@ export function Inspector({
     head?: React.ReactNode,
     help?: string,
     gap = "gap-2.5",
+    choices: Choice[] = [],
   ) =>
-    (fs.length > 0 || head) && (
+    (fs.length > 0 || head || choices.length > 0) && (
       <section key={id} aria-labelledby={id} className={`flex flex-col ${gap}`}>
         <h2 id={id} className="heading flex items-center">
           {title}
           {help && <Info>{help}</Info>}
         </h2>
         {head}
-        {fs.length > 0 && (
-          <div className="grid grid-flow-row-dense grid-cols-2 gap-2">{fs.map(control)}</div>
+        {(fs.length > 0 || choices.length > 0) && (
+          <div className="grid grid-flow-row-dense grid-cols-2 gap-2">
+            {choices.map(choiceTile)}
+            {fs.map(control)}
+          </div>
         )}
       </section>
     );
-  if (groups)
+  if (groups) {
+    // a node a choice switched off (One-stage's sample2) hides its tiles; a bypass the form sets itself (Audio to
+    // video's keyframes) is not a choice's, so its tile stays
+    const off = Object.entries(choiceBypass(groups, fields, raws))
+      .filter(([, on]) => on)
+      .map(([k]) => k.slice(0, -".bypass".length));
     return [
       presetChips,
-      ...groups.map((g, i) => {
+      ...groups.map((all, i) => {
+        const g = { ...all, fields: all.fields.filter((f) => !off.includes(f.node)) };
         const refs = g.fields.filter((f) => s.refs.includes(f) || s.rows.includes(f));
         const loras = g.fields.filter((f) => s.loras.includes(f));
         const canvas = c && g.fields.includes(c.width) && g.fields.includes(c.height);
@@ -357,17 +432,21 @@ export function Inspector({
               )}
             </>
           ),
-          loras[0]
-            ? loraHelp(familyTitle ?? loras[0].family ?? "this model", loras[0])
-            : (refs[0]?.param.help ??
+          g.help ??
+            (loras[0]
+              ? loraHelp(familyTitle ?? loras[0].family ?? "this model", loras[0])
+              : (refs[0]?.param.help ??
                 (g.fields.length === 1 &&
                 s.media.includes(g.fields[0]) &&
                 g.fields[0].param.type === "media"
                   ? g.fields[0].param.help
-                  : undefined)),
+                  : undefined))),
+          undefined,
+          g.choices,
         );
       }),
     ];
+  }
   return (
     <>
       {presetChips}
@@ -421,7 +500,7 @@ function CanvasPicker({
   errors: Record<string, string>;
   onChange: (key: string, raw: Raw) => void;
   compact?: boolean;
-  stage1?: number;
+  stage1?: Stage1;
 }) {
   const { width, height, mode, w, h } = c;
   // compact: which tile's choices are open
@@ -524,7 +603,8 @@ function CanvasPicker({
         {c.fromRef
           ? ` · from the ${c.first ? "first" : "last"} reference`
           : grid > 1 && ` · on the ${grid} px grid`}
-        {stage1 && ` · stage 1 runs at ${Math.round(w / stage1)} × ${Math.round(h / stage1)}`}
+        {stage1 &&
+          ` · ${stage1.clip ? "one-stage: the clip is" : "stage 1 runs at"} ${Math.round(w / stage1.by)} × ${Math.round(h / stage1.by)}`}
       </span>
       <FieldError k={width.key} errors={errors} />
       <FieldError k={height.key} errors={errors} />
@@ -625,14 +705,18 @@ function Duration({
   );
 }
 
-/** The workflow's presets (`studio.presets`) as chips: one sets its values; it reads pressed while the form holds
- * them all. */
+/** The workflow's presets (`studio.presets`) as chips in `order` (the pack's): one sets its values; it reads pressed
+ * while the form holds them all. */
 function Presets({
   presets,
+  order,
   fields,
   raws,
   onChange,
-}: Omit<FormProps, "errors"> & { presets: Record<string, Record<string, S<"ParamValue">>> }) {
+}: Omit<FormProps, "errors"> & {
+  presets: Record<string, Record<string, S<"ParamValue">>>;
+  order: string[];
+}) {
   const holds = (values: Record<string, S<"ParamValue">>) =>
     Object.entries(values).every(([k, v]) => {
       const f = fields.find((x) => x.key === k);
@@ -644,11 +728,8 @@ function Presets({
         Preset
       </h2>
       <div className="flex flex-wrap gap-2">
-        {/* the fewest values first, then by name (a JSON object's order is not kept): Plain, Enhanced… / Draft, Final */}
-        {Object.entries(presets)
-          .sort(
-            ([a, x], [b, y]) => Object.keys(x).length - Object.keys(y).length || a.localeCompare(b),
-          )
+        {order
+          .flatMap((name) => (presets[name] ? [[name, presets[name]] as const] : []))
           .map(([name, values]) => (
             <button
               key={name}
@@ -670,6 +751,31 @@ function Presets({
   );
 }
 
+type Stage1 = { by: number; clip: boolean };
+
+type Choice = NonNullable<S<"StudioLayout">["inspector"]>[number]["choices"] extends
+  (infer C)[] | undefined
+  ? C
+  : never;
+
+/** A choice tile as an enum field of its options' names (never sent: its options set the real paths). */
+const choiceField = (c: Choice): Field => ({
+  key: `choice:${c.label}`,
+  node: "",
+  nodeTitle: "",
+  param: {
+    name: c.label,
+    label: c.label,
+    type: "enum",
+    enum: c.options.map((o) => o.name),
+    default: c.options[0].name,
+    help: c.help,
+  },
+  initial: c.options[0].name,
+  canvas: false,
+  model: false,
+});
+
 /** A label-over-value tile; it opens its editor below its row. */
 function Tile({
   f,
@@ -679,6 +785,7 @@ function Tile({
   setOpen,
   onChange,
   choices,
+  pair,
 }: {
   f: Field;
   raw: Raw;
@@ -688,10 +795,15 @@ function Tile({
   onChange: (key: string, raw: Raw) => void;
   /** the only values it takes (an int's `values`): one is a readout, several a choice */
   choices?: string[];
+  /** a second field shown and edited with this one ("CFG · STG 3.0 · 1.0") */
+  pair?: { f: Field; raw: Raw };
 }) {
   const id = idOf(f.key);
   const d = display(f, raw);
-  const shown = f.param.type === "seed" && raw === "" ? "Random" : d.value || "—";
+  const p2 = pair && display(pair.f, pair.raw);
+  const value = f.param.type === "seed" && raw === "" ? "Random" : d.value || "—";
+  const shown = p2 ? `${value} · ${p2.value || "—"}` : value;
+  const label = p2 ? `${d.label} · ${p2.label}` : d.label;
   if (choices?.length === 1)
     return (
       <div id={id + "-ed"} className="set flex flex-col gap-0.5" title={f.param.help}>
@@ -717,7 +829,7 @@ function Tile({
           className={`set bevel flex items-center justify-between gap-2 ${error ? "outline-2 outline-bad" : ""}`}
         >
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-[12px] text-t2">{d.label}</span>
+            <span className="text-[12px] text-t2">{label}</span>
             <span className="truncate font-semibold">{shown}</span>
           </span>
           <ChevronRight
@@ -732,18 +844,21 @@ function Tile({
           </span>
         )}
       </div>
-      {open && (
-        <Editor
-          f={f}
-          raw={raw}
-          choices={choices}
-          onChange={onChange}
-          close={() => {
-            setOpen(null);
-            document.getElementById(id + "-tile")?.focus();
-          }}
-        />
-      )}
+      {open &&
+        [{ f, raw }, ...(pair ? [pair] : [])].map((e, i) => (
+          <Editor
+            key={e.f.key}
+            f={e.f}
+            raw={e.raw}
+            choices={i ? undefined : choices}
+            onChange={onChange}
+            focus={!i}
+            close={() => {
+              setOpen(null);
+              document.getElementById(id + "-tile")?.focus();
+            }}
+          />
+        ))}
     </>
   );
 }
@@ -758,20 +873,23 @@ function Editor({
   onChange,
   close,
   choices,
+  focus = true,
 }: {
   f: Field;
   raw: Raw;
   onChange: (key: string, raw: Raw) => void;
   close: () => void;
   choices?: string[];
+  /** move focus into it when it opens (the first of a pair's editors) */
+  focus?: boolean;
 }) {
   const p = f.param;
   const id = idOf(f.key);
   const label = p.label ?? p.name;
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    ref.current?.querySelector<HTMLElement>("input, .opt")?.focus();
-  }, []);
+    if (focus) ref.current?.querySelector<HTMLElement>("input, .opt")?.focus();
+  }, [focus]);
   const num = (
     <input
       id={id}
@@ -1180,12 +1298,19 @@ export function RefChips({
     // inspector's rows editor
     const rows = rawOf(f, raws) as S<"RowItem">[];
     const first = firstFrameRow(f.param, rows, clip);
+    // its node's bypass placed too (LTX Audio to video): one "Frames · No keyframes" tile; picking a frame switches
+    // the node on (Create's change), so a switched-off node reads as no keyframes
+    const bypass = fields.find((x) => x.key === `${f.node}.bypass`);
+    const off = bypass && rawOf(bypass, raws) === true;
+    // with its bypass the tile shows any frame (the first on the clip, else the first row)
+    const pic = off ? undefined : bypass ? (first ?? rows[0]) : first;
     return (
       <Fragment key={f.key}>
         {i === 0 && extra}
         <FirstFrameTile
-          id={first ? refIds(f, [first])[0] : undefined}
-          more={rows.length - (first ? 1 : 0)}
+          {...(bypass && { label: f.param.label ?? f.param.name, empty: "No keyframes" })}
+          id={pic ? refIds(f, [pic])[0] : undefined}
+          more={pic ? rows.length - 1 : off ? 0 : rows.length}
           card={card}
           openerRef={i === 0 ? openerRef : undefined}
           onPick={(id) =>

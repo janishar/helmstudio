@@ -117,6 +117,7 @@ type Clip struct {
 	TransitionIn *Dissolve `json:"transition_in,omitempty"`
 	Alternatives []string  `json:"alternatives"`
 	Shot         *ShotRef  `json:"shot,omitempty"`
+	Number       int       `json:"number,omitempty"` // V1: the shot number (API 1.29; Number gives it)
 	Offline      bool      `json:"offline,omitempty"`
 }
 
@@ -416,6 +417,9 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				ref := c.Shot.Ref()
 				n.Shot = &ref
 			}
+			if video {
+				n.Number = c.Number
+			}
 			if tid != "" && !has {
 				n.Offline = true
 			}
@@ -493,4 +497,45 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 		return nil, probs
 	}
 	return &Doc{Target: doc.Target, Tracks: out, DurationS: g.S(frames), Frames: frames}, nil
+}
+
+// Number gives V1's shot numbers as studio stores doc over stored (nil: a new sequence; contracts/README.md,
+// Timeline rules: shot numbers): a clip id stored V1 has keeps its number, a clip carrying a number no other has keeps
+// it (undo bringing a removed clip back), any other gets the highest so far + 1, in order.
+func Number(doc *Doc, stored *Doc) {
+	if len(doc.Tracks) == 0 {
+		return
+	}
+	was, top := map[string]int{}, 0
+	if stored != nil && len(stored.Tracks) > 0 {
+		for _, c := range stored.Tracks[0].Clips {
+			was[c.ID], top = c.Number, max(top, c.Number)
+		}
+	}
+	clips, used := doc.Tracks[0].Clips, map[int]bool{}
+	for i := range clips {
+		if n := was[clips[i].ID]; n > 0 {
+			clips[i].Number, used[n] = n, true
+		}
+	}
+	for i := range clips {
+		c := &clips[i]
+		if was[c.ID] > 0 {
+			continue
+		}
+		if c.Number > 0 && !used[c.Number] {
+			used[c.Number] = true
+		} else {
+			c.Number = 0
+		}
+	}
+	for n := range used {
+		top = max(top, n)
+	}
+	for i := range clips {
+		if clips[i].Number == 0 {
+			top++
+			clips[i].Number = top
+		}
+	}
 }

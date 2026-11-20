@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/helmstudio/helmgo/utility"
+
 	gallery "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -310,12 +312,12 @@ func (n PipelineNode) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// PipelineBranch is a gate's {pass, fail, max, then}.
+// PipelineBranch is a gate's {pass, fail, max, then}. From API 1.28 a judge's may leave then out (""): Ask me.
 type PipelineBranch struct {
 	Pass string `json:"pass"`
 	Fail string `json:"fail"`
 	Max  int    `json:"max"`
-	Then string `json:"then"`
+	Then string `json:"then,omitempty"`
 }
 
 // PipelineRoutes is a decide's {routes: {label: node}, max, then: label} (API 1.14).
@@ -336,6 +338,8 @@ type PipelineEdge struct {
 // Targets are the nodes the edge leads to: to, or pass, fail, then, or every route's node (by label).
 func (e PipelineEdge) Targets() []string {
 	switch {
+	case e.Branch != nil && e.Branch.Then == "":
+		return []string{e.Branch.Pass, e.Branch.Fail}
 	case e.Branch != nil:
 		return []string{e.Branch.Pass, e.Branch.Fail, e.Branch.Then}
 	case e.Routes != nil:
@@ -381,11 +385,14 @@ func (e *PipelineEdge) UnmarshalJSON(data []byte) error {
 		Pass, Fail, Then *string
 		Max              *int
 	}
-	if err := decoder.Decode(&branch); err != nil || branch.Pass == nil || branch.Fail == nil || branch.Then == nil ||
-		branch.Max == nil {
-		return fmt.Errorf("a branch is {pass, fail, max, then}")
+	if err := decoder.Decode(&branch); err != nil || branch.Pass == nil || branch.Fail == nil || branch.Max == nil ||
+		(branch.Then != nil && *branch.Then == "") {
+		return fmt.Errorf("a branch is {pass, fail, max, then?}")
 	}
-	e.Branch = &PipelineBranch{Pass: *branch.Pass, Fail: *branch.Fail, Max: *branch.Max, Then: *branch.Then}
+	e.Branch = &PipelineBranch{Pass: *branch.Pass, Fail: *branch.Fail, Max: *branch.Max}
+	if branch.Then != nil {
+		e.Branch.Then = *branch.Then
+	}
 	return nil
 }
 
@@ -1206,4 +1213,51 @@ type MemoryList struct {
 	Items      []MemoryItem   `json:"items"`
 	Truncated  bool           `json:"truncated,omitempty"` // older items left out (pipelines' reply size cap)
 	Counts     map[string]int `json:"counts"`
+}
+
+// JudgeTestCreate is POST /pipelines/{id}/judge-tests (API 1.28): a judge of the saved pipeline on 1 to 8 takes.
+type JudgeTestCreate struct {
+	Node    string   `json:"node"`
+	TakeIDs []string `json:"take_ids"`
+}
+
+// Validate wants a node id and 1 to 8 distinct take UUIDs.
+func (b *JudgeTestCreate) Validate() string {
+	if !slug.MatchString(b.Node) {
+		return "node must be a node id"
+	}
+	if len(b.TakeIDs) < 1 || len(b.TakeIDs) > 8 {
+		return "take_ids must hold 1 to 8 takes"
+	}
+	for i, id := range b.TakeIDs {
+		if !utility.IsUUID(id) || slices.Index(b.TakeIDs, id) != i {
+			return "take_ids must be distinct take UUIDs"
+		}
+	}
+	return ""
+}
+
+// JudgeTestTake is one take's verdict in a judge test.
+type JudgeTestTake struct {
+	TakeID string       `json:"take_id"`
+	Passes bool         `json:"passes"`
+	Rank   int          `json:"rank"`
+	Picked bool         `json:"picked"`
+	Reason string       `json:"reason"`
+	Checks []JudgeCheck `json:"checks"`
+}
+
+// JudgeTest is a judge test (API 1.28): its run's status and, once that succeeded, each take's verdict.
+type JudgeTest struct {
+	ID          string          `json:"id"`
+	PipelineID  string          `json:"pipeline_id"`
+	Node        string          `json:"node"`
+	TakeIDs     []string        `json:"take_ids"`
+	Status      string          `json:"status"`
+	RunID       *string         `json:"run_id"`
+	Verdict     *string         `json:"verdict"`
+	FirstFailed *string         `json:"first_failed"`
+	Takes       []JudgeTestTake `json:"takes"`
+	Error       *string         `json:"error"`
+	CreatedAt   time.Time       `json:"created_at"`
 }

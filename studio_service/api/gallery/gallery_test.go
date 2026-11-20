@@ -128,15 +128,16 @@ func TestCheckImage(t *testing.T) {
 // ParseFilter reads every query value; a malformed one is a 422 detail; cursors round-trip.
 func TestParseFilter(t *testing.T) {
 	filter, detail := ParseFilter(url.Values{"kind": {"image"}, "source": {"upload"}, "starred": {"false"},
-		"session_id": {userA}, "q": {"  red   fox "}, "limit": {"2"}}, true)
+		"session_id": {userA}, "batch_id": {userB}, "q": {"  red   fox "}, "limit": {"2"}}, true)
 	if detail != "" || filter.Kind != "image" || filter.Source != "upload" || filter.Starred == nil || *filter.Starred ||
-		filter.SessionID != userA || strings.Join(filter.Words, ",") != "red,fox" || filter.Limit != 2 {
+		filter.SessionID != userA || filter.BatchID != userB || strings.Join(filter.Words, ",") != "red,fox" || filter.Limit != 2 {
 		t.Fatal(filter, detail)
 	}
-	if filter, _ := ParseFilter(url.Values{"session_id": {"x"}}, false); filter.SessionID != "" || filter.Limit != 60 {
+	if filter, _ := ParseFilter(url.Values{"session_id": {"x"}, "batch_id": {"x"}}, false); filter.SessionID != "" ||
+		filter.BatchID != "" || filter.Limit != 60 {
 		t.Fatal("session_id read where it is not a filter", filter)
 	}
-	for _, bad := range []url.Values{{"kind": {"gif"}}, {"source": {"timeline"}}, {"starred": {"1"}}, {"session_id": {"x"}},
+	for _, bad := range []url.Values{{"kind": {"gif"}}, {"source": {"timeline"}}, {"starred": {"1"}}, {"session_id": {"x"}}, {"batch_id": {"x"}},
 		{"q": {strings.Repeat("a", 201)}}, {"limit": {"0"}}, {"limit": {"201"}}, {"limit": {"x"}}, {"cursor": {"nope"}},
 		{"cursor": {cursor{time.Now(), "x"}.encode()}}} {
 		if _, detail := ParseFilter(bad, true); detail == "" {
@@ -390,6 +391,16 @@ func TestListFiltersAndPages(t *testing.T) {
 	if _, err := f.service.Update(ctx, callerA, fox, &dto.TakePatch{Title: &renamed, Starred: &starred}); err != nil {
 		t.Fatal(err)
 	}
+	// the fox: an element and a model (API 1.27 search), and a batch
+	batch := utility.NewID()
+	if err := common.System(ctx, f.pool, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE takes SET batch_id = $2, made_with = made_with ||
+			'{"elements": [{"id": "e1", "handle": "rufus", "name": "Rufus", "version": 1}], "model": {"id": "qwen-image-2.1"}}'
+			WHERE id = $1`, fox, batch)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 	search := func(filter Filter) int {
 		filter.Limit = 60
 		page, err := f.service.List(ctx, callerA, filter)
@@ -416,6 +427,12 @@ func TestListFiltersAndPages(t *testing.T) {
 		"session":            {Filter{SessionID: f.sessionID}, 3},
 		"unknown session":    {Filter{SessionID: utility.NewID()}, 0},
 		"source and starred": {Filter{Source: "create", Starred: &yes}, 1},
+		"element handle":     {Filter{Words: []string{"RUF"}}, 1},
+		"@ handle":           {Filter{Words: []string{"@rufus", "owl"}}, 1},
+		"model id":           {Filter{Words: []string{"qwen", "2.1"}}, 1},
+		"workflow":           {Filter{Words: []string{"echo"}}, 3},
+		"batch":              {Filter{BatchID: batch}, 1},
+		"unknown batch":      {Filter{BatchID: utility.NewID()}, 0},
 	} {
 		if got := search(test.filter); got != test.want {
 			t.Errorf("%s: %d takes, want %d", name, got, test.want)

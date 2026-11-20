@@ -1,0 +1,29 @@
+{
+  "verdict": "pass",
+  "first_failed": null,
+  "picked": [
+    "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60"
+  ],
+  "takes": [
+    {
+      "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b60",
+      "checks": [
+        true,
+        true
+      ],
+      "reason": "fine",
+      "passes": true,
+      "rank": 1
+    },
+    {
+      "take_id": "9b2f4c1a-6e3d-4a8b-b7c2-1d5e8f0a3b61",
+      "checks": [
+        false,
+        true
+      ],
+      "reason": "extra limb",
+      "passes": false,
+      "rank": 2
+    }
+  ]
+}

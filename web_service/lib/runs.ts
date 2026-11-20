@@ -93,10 +93,19 @@ export const etaText = (r: Run) =>
   r.progress?.eta_s != null && isActive(r.status) ? `${clock(r.progress.eta_s)} left` : "";
 
 /** How long the newest finished run of the workflow took (s), from the runs newest first; null when none did. */
-export function lastDuration(runs: Run[], workflowId: string): number | null {
+export function lastDuration(
+  runs: Run[],
+  workflowId: string,
+  bypass: Record<string, boolean> = {},
+): number | null {
+  // with `bypass` (a choice's switches, LTX One-stage): only a run that switched the same nodes off
   const r = runs.find(
     (x) =>
-      x.workflow_id === workflowId && x.status === "succeeded" && x.started_at && x.finished_at,
+      x.workflow_id === workflowId &&
+      x.status === "succeeded" &&
+      x.started_at &&
+      x.finished_at &&
+      Object.entries(bypass).every(([k, on]) => (x.inputs?.[k] === true) === on),
   );
   return r ? (Date.parse(r.finished_at!) - Date.parse(r.started_at!)) / 1000 : null;
 }

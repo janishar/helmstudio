@@ -397,12 +397,13 @@ func studioProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode
 			add("studio_duplicate", id, "", name, "studio: %s is placed more than once", path)
 		}
 	}
-	for _, preset := range slices.Sorted(maps.Keys(studio.Presets)) {
-		for path, value := range studio.Presets[preset] {
+	sets := studio.Sets() // the presets and, from API 1.26, every choice option's set
+	for _, preset := range slices.Sorted(maps.Keys(sets)) {
+		for path, value := range sets[preset] {
 			id, name, _ := strings.Cut(path, ".")
 			// the node's values with this preset's on top: a preset's steps are checked against the node's role
 			values := maps.Clone(doc.Nodes[id].Params)
-			for other, v := range studio.Presets[preset] {
+			for other, v := range sets[preset] {
 				if otherID, otherName, _ := strings.Cut(other, "."); otherID == id && otherName != "bypass" {
 					values = setKey(values, otherName, v)
 				}

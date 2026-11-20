@@ -71,6 +71,11 @@ def providers_test_errors(part: str, value) -> list[str]:
     return errors(f"{BASE}req.pipelines.providers.test.schema.json#/$defs/{part}", value)
 
 
+def judge_test_errors(part: str, value) -> list[str]:
+    """Errors of a pipelines.judge.test `request` or `reply` (API 1.28)."""
+    return errors(f"{BASE}req.pipelines.judge.test.schema.json#/$defs/{part}", value)
+
+
 def tool_errors(name: str, value) -> list[str]:
     """Errors of a value against tools.schema.json#/$defs/<name> (an agent tool's args or result)."""
     return errors(f"{BASE}tools.schema.json#/$defs/{name}", value)

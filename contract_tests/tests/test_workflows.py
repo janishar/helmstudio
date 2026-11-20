@@ -42,6 +42,18 @@ def test_echo_with_node_schemas(api):
     ]  # Image or Video (API 1.11)
 
 
+def test_node_schemas_name_the_component_they_load(api):
+    """API 1.24: a node that loads a model component names it (the Graph inspector's "uses the <component>"), in the
+    palette and in a workflow's node_schemas; one that loads none carries no component."""
+    groups = ok(api.get(f"{STUDIO}/nodes", params={"env": "fake"}))["groups"]
+    palette = {n["kind"]: n for g in groups for n in g["nodes"]}
+    assert palette["echo/tiny"]["component"] == "transformer"
+    assert "component" not in palette["echo/echo"] and "component" not in palette["prompt"]
+    schemas = ok(api.get(f"{STUDIO}/workflows/echo-tiny"))["node_schemas"]
+    assert schemas["echo/tiny"]["component"] == "transformer"
+    assert "component" not in schemas["echo/model"]
+
+
 def test_unknown_workflow(api):
     for wid in ("no-such-workflow", "Not An Id!"):
         assert api.get(f"{STUDIO}/workflows/{wid}").status_code == 404

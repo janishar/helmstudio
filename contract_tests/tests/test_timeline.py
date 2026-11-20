@@ -60,8 +60,12 @@ def facts(take: dict) -> dict:
 
 
 def doc(tl: dict) -> dict:
-    """The normalized document of a Timeline answer."""
-    return {k: tl[k] for k in ("target", "tracks", "duration_s", "frames")}
+    """The normalized document of a Timeline answer, without V1's shot numbers (1.29: studio's, not the rules'; a
+    write without them keeps them, test_shot_numbers)."""
+    d = {k: tl[k] for k in ("target", "tracks", "duration_s", "frames")}
+    v1 = d["tracks"][0]
+    return d | {"tracks": [v1 | {"clips": [{k: v for k, v in c.items() if k != "number"} for c in v1["clips"]]}]
+                + d["tracks"][1:]}  # fmt: skip
 
 
 def clips(tl: dict, track: int = 0) -> list[dict]:
@@ -407,7 +411,7 @@ def test_normalize_fixture(api, scratch, fixture_ids, case):
         )
         return
     scratch["tl"] = ok(r)
-    assert mapped(doc(scratch["tl"]), back) == case["expect"]["document"]
+    assert mapped(doc(scratch["tl"]), back) == doc(case["expect"]["document"])  # numbers: studio's
 
 
 @pytest.mark.parametrize("case", cases("edits.json"))
@@ -443,6 +447,37 @@ def test_edit_fixture(api, scratch, fixture_ids, takes, case):
         assert len(new) == len(op["ids"])
         back |= {f'"id": "{n}"': f'"id": "{i}"' for n, i in zip(new, op["ids"])}
     assert mapped(doc(got), back) == expect["document"]
+
+
+def test_shot_numbers(api, live, takes):
+    """1.29 (README, Timeline rules: shot numbers): a V1 clip's number is given when it is added and kept when it
+    moves, whatever a write says; undo brings a removed clip back with its own; a split's right part gets the next;
+    an audio-track clip has none."""
+    a, b = live["v24a"]["id"], live["v24b"]["id"]
+    nums = lambda t: [c.get("number") for c in clips(t)]
+    tl = create(api, take_ids=[a, b])
+    assert nums(tl) == [1, 2]
+    tl = ok(api.post(f"{TL}/{tl['id']}/clips", json={"take_ids": [a]}))
+    assert nums(tl) == [1, 2, 3]
+    first, second, third = (dict(c) for c in clips(tl))
+    third["number"] = 1  # a write cannot renumber a stored clip
+    tl = put(
+        api,
+        tl,
+        {"target": tl["target"], "tracks": [{"kind": "video", "clips": [third, first, second]}]},
+    )
+    assert nums(tl) == [3, 1, 2]
+    tl = put(
+        api, tl, {"target": tl["target"], "tracks": [{"kind": "video", "clips": clips(tl)[:2]}]}
+    )
+    assert nums(tl) == [3, 1]
+    tl = ok(api.post(f"{TL}/{tl['id']}/undo", json={"revision": tl["revision"]}))
+    assert nums(tl) == [3, 1, 2]
+    tl = edit(api, tl, {"op": "split", "track": "V1", "at": 0.5, "id": "right"}, takes)
+    assert nums(tl) == [3, 4, 1, 2] and clips(tl)[1]["id"] == "right"
+    tl = edit(api, tl, {"op": "add_track"}, takes)
+    tl = ok(api.post(f"{TL}/{tl['id']}/clips", json={"take_ids": [a], "track": "A2"}))
+    assert "number" not in clips(tl, 1)[0] and nums(tl) == [3, 4, 1, 2]
 
 
 # ---------------------------------------------------------------- revisions

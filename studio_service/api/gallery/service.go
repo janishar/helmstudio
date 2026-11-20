@@ -94,11 +94,11 @@ func take(ctx context.Context, tx pgx.Tx, query string, args ...any) (model.Take
 
 // Filter is GET /takes's query, parsed.
 type Filter struct {
-	Kind, Source, SessionID string
-	Starred                 *bool
-	Words                   []string // q split on whitespace
-	After                   *cursor
-	Limit                   int
+	Kind, Source, SessionID, BatchID string
+	Starred                          *bool
+	Words                            []string // q split on whitespace
+	After                            *cursor
+	Limit                            int
 }
 
 // cursor is the last take of a page: the next page starts after it.
@@ -126,8 +126,8 @@ func decodeCursor(text string) (*cursor, bool) {
 // takeSources are TakeSource's values (contracts/openapi.yaml): import from 1.16, export and frame from 1.17.
 var takeSources = []string{"create", "upload", "pipeline", "import", "export", "frame"}
 
-// ParseFilter reads kind, source, starred, session_id, q, cursor and limit; the second result is the 422 detail.
-// sessionParam false ignores a session_id (GET /sessions/{id}/takes sets it from the path).
+// ParseFilter reads kind, source, starred, session_id, batch_id, q, cursor and limit; the second result is the 422
+// detail. sessionParam false ignores session_id and batch_id (GET /sessions/{id}/takes sets the session from the path).
 func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 	filter := Filter{Limit: 60, Kind: query.Get("kind"), Source: query.Get("source")}
 	if filter.Kind != "" && filter.Kind != "image" && filter.Kind != "video" && filter.Kind != "audio" {
@@ -146,6 +146,11 @@ func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 	if sessionParam && query.Has("session_id") {
 		if filter.SessionID = query.Get("session_id"); !utility.IsUUID(filter.SessionID) {
 			return filter, "session_id must be a uuid"
+		}
+	}
+	if sessionParam && query.Has("batch_id") {
+		if filter.BatchID = query.Get("batch_id"); !utility.IsUUID(filter.BatchID) {
+			return filter, "batch_id must be a uuid"
 		}
 	}
 	q := query.Get("q")
@@ -172,9 +177,10 @@ func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 // likeEscaper makes a word match itself in ILIKE (\ is ILIKE's default escape).
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// List returns a page of the caller's visible takes matching filter, newest first. q: every word must occur in the
-// title or the prompt, case-insensitively. ponytail: ILIKE scans the caller's takes; a pg_trgm index if galleries
-// grow to tens of thousands.
+// List returns a page of the caller's visible takes matching filter, newest first. q: every word must occur,
+// case-insensitively, in the title, the prompt, an element handle (a leading @ ignored), the workflow title or id, or
+// the model id (which names its family). ponytail: ILIKE scans the caller's takes; a pg_trgm index if galleries grow
+// to tens of thousands.
 func (s *Service) List(ctx context.Context, caller common.Caller, filter Filter) (dto.TakePage, error) {
 	conds, args := []string{visible}, []any{}
 	where := func(cond string, values ...any) {
@@ -196,9 +202,16 @@ func (s *Service) List(ctx context.Context, caller common.Caller, filter Filter)
 	if filter.SessionID != "" {
 		where(`t.session_id = $?`, filter.SessionID)
 	}
+	if filter.BatchID != "" {
+		where(`t.batch_id = $?`, filter.BatchID)
+	}
 	for _, word := range filter.Words {
 		pattern := "%" + likeEscaper.Replace(word) + "%"
-		where(`(t.title ILIKE $? OR t.made_with->>'prompt' ILIKE $?)`, pattern, pattern)
+		handle := "%" + likeEscaper.Replace(strings.TrimPrefix(word, "@")) + "%"
+		where(`(t.title ILIKE $? OR t.made_with->>'prompt' ILIKE $? OR t.made_with->>'workflow_title' ILIKE $?
+			OR t.made_with->>'workflow_id' ILIKE $? OR t.made_with->'model'->>'id' ILIKE $?
+			OR EXISTS (SELECT 1 FROM jsonb_array_elements(t.made_with->'elements') e WHERE e->>'handle' ILIKE $?))`,
+			pattern, pattern, pattern, pattern, pattern, handle)
 	}
 	if filter.After != nil {
 		where(`(t.created_at, t.id) < ($?, $?::uuid)`, filter.After.CreatedAt, filter.After.ID)

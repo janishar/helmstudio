@@ -531,3 +531,54 @@ type ModelProgress struct {
 	File       *string  `json:"file"`
 	EtaS       *float64 `json:"eta_s"`
 }
+
+// ------------------------------------------------------------------ API 1.28: a judge test
+
+// SubjectJudgeTest is pipelines' request/reply subject for a judge test's template and verdict.
+const SubjectJudgeTest = "pipelines.judge.test"
+
+// JudgeTestMemory is the judge's memory read node as the prompt reads it.
+type JudgeTestMemory struct {
+	Key   *string `json:"key,omitempty"`
+	Limit int     `json:"limit"`
+}
+
+// JudgeTestRequest is the pipelines.judge.test request: op prompt {owner_id, pipeline_id, node, criteria, n, brief,
+// memory?} or op verdict {criteria, keep, take_ids, text}.
+type JudgeTestRequest struct {
+	Op         string           `json:"op"`
+	OwnerID    string           `json:"owner_id,omitempty"`
+	PipelineID string           `json:"pipeline_id,omitempty"`
+	Node       string           `json:"node,omitempty"`
+	Criteria   json.RawMessage  `json:"criteria"`
+	N          int              `json:"n,omitempty"`
+	Brief      *string          `json:"brief,omitempty"`
+	Memory     *JudgeTestMemory `json:"memory,omitempty"`
+	Keep       int              `json:"keep,omitempty"`
+	TakeIDs    []string         `json:"take_ids,omitempty"`
+	Text       *string          `json:"text,omitempty"`
+}
+
+// JudgeTestTake is one candidate's verdict in a verdict reply.
+type JudgeTestTake struct {
+	TakeID string `json:"take_id"`
+	Checks []bool `json:"checks"`
+	Reason string `json:"reason"`
+	Passes bool   `json:"passes"`
+	Rank   int    `json:"rank"`
+}
+
+// JudgeTestReply is its reply: {system, prompt, schema, max_tokens, template} (prompt), {verdict, first_failed,
+// picked, takes} (verdict) or {error, code: answer | invalid | internal}.
+type JudgeTestReply struct {
+	System      string          `json:"system"`
+	Prompt      string          `json:"prompt"`
+	Schema      string          `json:"schema"`
+	MaxTokens   int             `json:"max_tokens"`
+	Verdict     string          `json:"verdict"`
+	FirstFailed *string         `json:"first_failed"`
+	Picked      []string        `json:"picked"`
+	Takes       []JudgeTestTake `json:"takes"`
+	Error       string          `json:"error"`
+	Code        string          `json:"code"`
+}

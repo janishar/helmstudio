@@ -308,7 +308,7 @@ export function buildInputs(fs: Field[], raws: Record<string, Raw>) {
 }
 
 /** Equal values; a list or an image compares by content. */
-const same = (a: Value, b: Value) =>
+export const same = (a: Value, b: Value) =>
   a === b || (typeof a === "object" && JSON.stringify(a) === JSON.stringify(b));
 
 /** A node id's title from its schema ("sample" → "Sample"), else the id. */

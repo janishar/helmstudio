@@ -3,7 +3,7 @@
 // …/clips/{clip}/actions for the range, each a form whose Generate posts a shot (Replace, Insert after / before).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ClipActions } from "@/components/timeline/actions";
+import { ClipActions, actionShot } from "@/components/timeline/actions";
 import { estimateLength, extendMap, floorGrid, retakeMap } from "@/lib/source";
 import type { S } from "@/lib/api";
 import type { Clip, Norm } from "@/lib/timeline";
@@ -205,13 +205,14 @@ function mount(
   range: [number, number] | null,
   disabled = false,
   workflows = [retakeWf, extendWf, a2vWf],
+  c: Clip = clip,
 ) {
   const done = vi.fn();
   render(
     <ClipActions
       tl={tl}
       doc={doc}
-      clip={clip}
+      clip={c}
       range={range}
       workflows={workflows}
       disabled={disabled}
@@ -302,6 +303,17 @@ describe("ClipActions", () => {
     await waitFor(() => expect(posted).toHaveLength(1));
     const length = estimateLength({ "extend.seconds": 2 }, 24, GRID);
     expect(posted[0].slot).toMatchObject({ after: "c2", length });
+  });
+
+  it("Extend inserted after: the new slot's placeholder names the source shot (Q25)", async () => {
+    const { posted } = serve([extend("after")]);
+    mount(null, false, undefined, { ...clip, number: 3 });
+    fireEvent.click(await screen.findByRole("button", { name: "Extend" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    const id = (posted[0].slot as { id: string }).id;
+    const placeholder: Clip = { id, take_id: null, shot: { status: "queued" } as Clip["shot"] };
+    expect(actionShot(placeholder)?.title).toBe("Extending Shot 3");
   });
 
   it("Extend before: Replace by default, Insert before puts the slot at the clip's start", async () => {

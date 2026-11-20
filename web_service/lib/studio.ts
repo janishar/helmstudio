@@ -36,6 +36,10 @@ export function deriveStudio(doc: Pick<Doc, "nodes">, schemas: Schemas): Layout 
   return { composer: keys(fs.filter((f) => f.param.type === "text")), inspector };
 }
 
+/** The presets' names in the order Create shows them (`preset_order`, API 1.25), else as the object lists them. */
+export const presetNames = (studio?: Layout | null): string[] =>
+  studio?.preset_order ?? Object.keys(studio?.presets ?? {});
+
 /** Where a path is placed: "Composer", "Quick", "Inspector › <section>", or null. */
 export function placement(studio: Layout, path: string): string | null {
   if (studio.composer?.includes(path)) return "Composer";
@@ -63,15 +67,26 @@ export function showInStudio(doc: Doc, schemas: Schemas, path: string, title: st
   };
 }
 
-/** The block without the paths `drop` says (and their labels); the presets lose those keys too (an emptied
- * preset goes). */
+/** The block without the paths `drop` says (and their labels); the presets and the choices' options lose those keys
+ * too (an emptied preset or option goes, and a choice left with one option). */
 export function unplace(studio: Layout, drop: (path: string) => boolean): Layout {
   const out: Layout = { ...studio };
   const keep = (l?: string[]) => l?.filter((p) => !drop(p));
   if (studio.composer) out.composer = keep(studio.composer);
   if (studio.quick) out.quick = keep(studio.quick);
   if (studio.inspector)
-    out.inspector = studio.inspector.map((s) => ({ ...s, items: keep(s.items)! }));
+    out.inspector = studio.inspector.map(({ choices, ...s }) => {
+      const kept = choices
+        ?.map((c) => ({
+          ...c,
+          options: c.options.flatMap((o) => {
+            const set = Object.fromEntries(Object.entries(o.set).filter(([p]) => !drop(p)));
+            return Object.keys(set).length ? [{ ...o, set }] : [];
+          }),
+        }))
+        .filter((c) => c.options.length > 1);
+      return { ...s, items: keep(s.items)!, ...(kept?.length && { choices: kept }) };
+    });
   if (studio.labels)
     out.labels = Object.fromEntries(Object.entries(studio.labels).filter(([p]) => !drop(p)));
   if (studio.presets)
@@ -81,6 +96,7 @@ export function unplace(studio: Layout, drop: (path: string) => boolean): Layout
         return Object.keys(v).length ? [[name, v]] : [];
       }),
     );
+  if (studio.preset_order) out.preset_order = studio.preset_order.filter((n) => n in out.presets!);
   return out;
 }
 
@@ -126,9 +142,27 @@ export function studioView(w: S<"Workflow">, all: Field[]) {
     ...composer.filter((f) => f.param.type !== "text"),
     ...(st.quick ?? []).flatMap(resolve),
   ];
+  type Choices = NonNullable<Layout["inspector"]>[number]["choices"];
+  type Group = { title: string; help?: string; fields: Field[]; choices?: Choices };
   const groups = [
-    { title: "Quick", fields: quick },
-    ...(st.inspector ?? []).map((s) => ({ title: s.title, fields: s.items.flatMap(resolve) })),
-  ].filter((g) => g.fields.length);
-  return { text, groups, shown: [...text, ...groups.flatMap((g) => g.fields)] };
+    { title: "Quick", fields: quick } as Group,
+    ...(st.inspector ?? []).map((s): Group => ({
+      title: s.title,
+      help: s.help,
+      fields: s.items.flatMap(resolve),
+      choices: s.choices,
+    })),
+  ].filter((g) => g.fields.length || g.choices?.length);
+  const shown = [...text, ...groups.flatMap((g) => g.fields)];
+  // a choice's paths are set and sent like placed ones, though not drawn (API 1.26)
+  const keys = new Set(shown.map((f) => f.key));
+  const choicePaths = groups.flatMap((g) =>
+    (g.choices ?? []).flatMap((c) => c.options.flatMap((o) => Object.keys(o.set))),
+  );
+  for (const path of choicePaths)
+    if (!keys.has(path)) {
+      keys.add(path);
+      shown.push(...resolve(path));
+    }
+  return { text, groups, shown };
 }

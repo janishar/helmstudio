@@ -83,7 +83,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
         targets = (
             [to] if kind == "plain"
             else list(to["routes"].values()) if kind == "routes"
-            else [to["pass"], to["fail"], to["then"]]
+            else [to["pass"], to["fail"]] + ([to["then"]] if "then" in to else [])
         )  # fmt: skip
         if frm not in nodes or any(t not in nodes for t in targets):
             add("unknown_node", frm)
@@ -93,6 +93,11 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
             kind == "routes" and fk not in ("decide", "agent")
         ):
             add("branch_not_gate", frm)
+            continue
+        if (
+            kind == "branch" and "then" not in to and fk != "judge"
+        ):  # API 1.28: only a judge's may Ask me
+            add("edge_invalid", frm)
             continue
         if (routers(frm) and (kind != "routes" or set(to["routes"]) != set(nodes[frm]["routes"])
                               or to["then"] not in to["routes"])) or (
@@ -106,7 +111,8 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
         if kind == "plain":
             succ[frm].append((to, False))
         elif kind == "branch":
-            succ[frm] += [(to["pass"], False), (to["fail"], True), (to["then"], False)]
+            succ[frm] += [(to["pass"], False), (to["fail"], True)]
+            succ[frm] += [(to["then"], False)] if "then" in to else []
             capped.append((frm, to["fail"], to["max"]))
         else:  # every route but then counts against the decide's (or agent's) max
             routed.add(frm)

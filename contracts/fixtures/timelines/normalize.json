@@ -1578,6 +1578,133 @@
           ]
         ]
       }
+    },
+    {
+      "description": "1.29: a V1 clip's shot number is kept as written; an audio-track clip's is dropped (README, Timeline rules: shot numbers)",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "number": 4
+              },
+              {
+                "id": "b",
+                "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+                "hold": 1.0
+              },
+              {
+                "id": "c",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.51,
+                "out": 1.7,
+                "number": 1
+              }
+            ]
+          },
+          {
+            "kind": "audio",
+            "clips": [
+              {
+                "id": "m",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "at": 0.5,
+                "in": 0,
+                "out": 1.00001,
+                "number": 2
+              }
+            ]
+          }
+        ]
+      },
+      "expect": {
+        "document": {
+          "target": {
+            "width": 256,
+            "height": 128,
+            "fps": 24,
+            "sample_rate": 48000
+          },
+          "tracks": [
+            {
+              "name": "V1",
+              "kind": "video",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "a",
+                  "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 2.0416666666666665,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "aaaaaaaa-0000-4000-8000-000000000001"
+                  ],
+                  "at": 0.0,
+                  "number": 4
+                },
+                {
+                  "id": "b",
+                  "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+                  "hold": 1.0,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "bbbbbbbb-0000-4000-8000-000000000001"
+                  ],
+                  "at": 2.0416666666666665
+                },
+                {
+                  "id": "c",
+                  "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                  "in": 0.5,
+                  "out": 1.7083333333333333,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "aaaaaaaa-0000-4000-8000-000000000002"
+                  ],
+                  "at": 3.0416666666666665,
+                  "number": 1
+                }
+              ]
+            },
+            {
+              "name": "A2",
+              "kind": "audio",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "m",
+                  "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 1.0,
+                  "at": 0.5,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "aaaaaaaa-0000-4000-8000-000000000001"
+                  ]
+                }
+              ]
+            }
+          ],
+          "duration_s": 4.25,
+          "frames": 102
+        }
+      }
     }
   ]
 }

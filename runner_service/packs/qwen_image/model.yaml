@@ -55,6 +55,7 @@ lora:                             # LoRAs: the generated qwen-image/lora-stack n
 stages:
   encode:
     title: Encode
+    component: text encoder
     help: Encodes the prompt and up to 10 reference images; with references the run is an edit.
     uses: [text_encoder, vae]
     inputs: {model: Model, prompt: Text}
@@ -70,6 +71,7 @@ stages:
     peak_gb: "2.5 + 1.5 * images"
   sample:
     title: Sample
+    component: transformer
     help: Denoises from the seed's noise.
     uses: [transformer]
     inputs: {model: Model, cond: Conditioning, canvas: Canvas, seed: Seed}
@@ -84,6 +86,7 @@ stages:
     stall_s: 600
   decode:
     title: Decode
+    component: vae
     help: Turns the latent into an RGBA image with the VAE.
     uses: [vae]
     inputs: {model: Model, latent: Latent}
@@ -95,6 +98,7 @@ stages:
     peak_gb: "6 if tiled == 'on' or (tiled == 'auto' and mp > 2.5) else 12 * mp"  # measured 6.1 GB at 0.59 MP, 11.9 at 1 MP
   ask:
     title: Ask
+    component: text encoder
     help: "Asks Qwen Image's own text encoder (Qwen3-VL 8B) one question about its takes: no extra load when it is resident. Temperature 0, thinking off, one more try in the same run when the answer does not match the schema."
     uses: [text_encoder]   # the encode stage's residency entry: after a still it loads nothing
     inputs: {model: Model}

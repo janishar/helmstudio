@@ -60,7 +60,7 @@ REGISTRY_KEYS = [
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
 # openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
 HTTP_SCHEMAS = [
-    "Run", "RunRequest", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "TakeUse", "UploadCreate", "Upload",
+    "Run", "RunRequest", "RunPlan", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "TakeUse", "UploadCreate", "Upload",
     "Batch", "BatchCreate", "BatchRow", "BatchEvent",
     "Workflow", "WorkflowCreate", "WorkflowUpdate", "WorkflowPatch", "WorkflowValidation", "WorkflowError", "NodePalette",
     "Pipeline", "PipelineCreate", "PipelineUpdate", "PipelinePatch", "PipelineValidation", "PipelineError", "TakePipeline",
@@ -487,7 +487,9 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
     for path in {p for p in placed if placed.count(p) > 1}:  # a tile twice: no node, param = the tile
         nid, param = (None, path) if path in TILES else path.split(".")
         add("studio_duplicate", nid, param=param)
-    for values in studio.get("presets", {}).values():
+    sets = list(studio.get("presets", {}).values())  # a choice's option sets are checked as presets (API 1.26)
+    sets += [o["set"] for sec in studio.get("inspector", []) for c in sec.get("choices", []) for o in c["options"]]
+    for values in sets:
         for path, v in values.items():
             nid, param = path.split(".")
             if bad_path(path):
@@ -681,13 +683,16 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
     for frm, to in doc["edges"]:
         kind = "plain" if isinstance(to, str) else "routes" if "routes" in to else "branch"
         targets = [to] if kind == "plain" else list(to["routes"].values()) if kind == "routes" else [
-            to["pass"], to["fail"], to["then"]]
+            to["pass"], to["fail"]] + ([to["then"]] if "then" in to else [])
         if frm not in nodes or any(t not in nodes for t in targets):
             add("unknown_node", frm)
             continue
         fk = nodes[frm]["kind"]
         if (kind == "branch" and fk not in ("gate", "judge")) or (kind == "routes" and fk not in ("decide", "agent")):
             add("branch_not_gate", frm)
+            continue
+        if kind == "branch" and "then" not in to and fk != "judge":  # API 1.28: only a judge's may Ask me
+            add("edge_invalid", frm)
             continue
         if (routers(frm) and (kind != "routes" or set(to["routes"]) != set(nodes[frm]["routes"])
                               or to["then"] not in to["routes"])) or (fk == "agent" and kind == "routes" and not routers(frm)):
@@ -700,7 +705,7 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
         if kind == "plain":
             succ[frm].append((to, False))
         elif kind == "branch":
-            succ[frm] += [(to["pass"], False), (to["fail"], True), (to["then"], False)]
+            succ[frm] += [(to["pass"], False), (to["fail"], True)] + ([(to["then"], False)] if "then" in to else [])
             capped.append((frm, to["fail"], to["max"]))
         else:  # every route but then counts against the decide's (or agent's) max
             routed.add(frm)
@@ -2085,6 +2090,8 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
             n["alternatives"] = alts
             if "shot" in c:
                 n["shot"] = shot_ref(c["shot"])
+            if video and "number" in c:  # 1.29: studio gives it when it stores (README, Timeline rules: shot numbers)
+                n["number"] = c["number"]
             if tid and not tk:
                 n["offline"] = True
             clips.append((n, kind))

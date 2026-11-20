@@ -134,7 +134,12 @@
             "enhance.bypass": false,
             "enhance.think": true
           }
-        }
+        },
+        "preset_order": [
+          "Plain",
+          "Enhanced",
+          "Enhanced, think"
+        ]
       }
     }
   ]

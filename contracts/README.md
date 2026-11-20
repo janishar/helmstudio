@@ -20,6 +20,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/cmd.pipeline.chat.schema.json`, `evt.pipeline.chat.schema.json` | (API 1.15) studio → pipelines: a user's message to the batch's director; pipelines → studio's projector: the director's reply or a notice (Agents: the director) |
 | `messages/req.studio.tools.schema.json` | (API 1.15) NATS request/reply pipelines → studio (not enveloped): one Agent tool call that needs studio's data (gallery.search, library.read, rows.add, rows.edit), as the batch's owner |
 | `messages/req.pipelines.providers.test.schema.json` | (API 1.15) NATS request/reply studio → pipelines (not enveloped): test a model provider (only pipelines ever calls one) |
+| `messages/req.pipelines.judge.test.schema.json` | (API 1.28) NATS request/reply studio → pipelines (not enveloped): a judge test's filled template, and its verdict from the answer |
 | `messages/tools.schema.json` | (API 1.15) not a message: every Agent tool's arguments and result, one turn, one executed tool call (Agents: tools) |
 | `messages/cmd.model.job.schema.json`, `evt.model.{status,progress}.schema.json` | (API 1.16) studio → a runner: one model job (download, delete, lora_delete); runner → studio's projector: its lifecycle and download progress (Models and model jobs) |
 | `messages/cmd.media.job.schema.json`, `evt.media.{status,progress}.schema.json` | (API 1.17) studio → a runner: one media job (a sequence's export, a video take's frame) run with ffmpeg outside the GPU loop; runner → studio's projector: its lifecycle and export progress (Timeline: media jobs) |
@@ -72,6 +73,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `evt.pipeline.<batch_id>.chat` | stream `EVT` | `evt.pipeline.chat`, `Nats-Msg-Id <batch_id>:<seq>` | pipelines → studio projector (durable `studio-pipelines`; API 1.15) |
 | `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s; API 1.15) |
 | `pipelines.providers.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.test`) | studio → pipelines (30 s; API 1.15) |
+| `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
 | `cmd.run.<host>.server` | stream `CMD` (work queue) | `cmd.run.execute` of a `server-ask` run | studio outbox relay → pipelines' server executor (durable `runner-<host>-server`; API 1.15) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
 | `runner.unload.<host>.<env>` | core request/reply, no queue group | bare JSON (`req.runner.unload`) | studio's dispatcher → the runner of that host and env (60 s) |
@@ -1168,10 +1170,17 @@ graph is saved first: "Save" for one's own, "Save as my workflow" for a template
   are saved and returned in `problems`. PUT, PATCH and DELETE on a template id are 409.
 - **Studio block** (`StudioLayout`, plan 04-workflows.md section 7): `composer`, `quick` (lists of paths; `quick` also
   holds the library tiles `elements`, `look:<group>`: Looks, composer tiles),
-  `inspector` (`[{title, items}]`), `labels` (path → field title), `presets` (name → `{path: value}`, at most 8).
-  A path is `<node>.<param>` or `<node>.bypass`. Present = Create shows exactly the placed paths, each at most once;
-  every other param keeps its graph value (the composer's model chip still names an unplaced model node's choices,
-  read-only). Create lists `presets` with the fewest values first, then by name (object order is not kept). Absent = the derived form (every param, as today). Graph view "Show in
+  `inspector` (`[{title, items, help?}]`: from API 1.25 `help` is the section's (i) text), `labels` (path → field
+  title), `presets` (name → `{path: value}`, at most 8) and from API 1.25 `preset_order` (every preset name once, in
+  the order Create shows them; an object's key order is not kept, so the list carries it; absent = by name; else 422
+  `studio.preset_order: every preset once`). From API 1.26 a section may lead with `choices` (at most 4: `{label,
+  help?, options}`, 2–8 options `{name, set}`, `set` a preset's `{path: value}`): a tile that picks one option and sets
+  its values, showing the first option whose set holds (none: `custom`); its paths need not be placed and are sent with
+  the run like placed ones. LTX text and image to video: Quality's `Recipe` (`Two-stage`: `upscale.bypass` and
+  `sample2.bypass` false; `One-stage`: both true, so stage 1's half-size latent is decoded: the clip is half the
+  canvas). A path is `<node>.<param>` or `<node>.bypass`. Present = Create shows
+  exactly the placed paths, each at most once; every other param keeps its graph value (the composer's model chip
+  still names an unplaced model node's choices, read-only). Absent = the derived form (every param, as today). Graph view "Show in
   Studio" on a param: if `studio` is absent the editor first writes the derived form out as a block (the web's own
   derivation, kept stable), then appends the path to the inspector section titled like the node's schema title
   (created last when missing); "Hide" removes the path from wherever it is placed (and its label). Deleting a node
@@ -1248,7 +1257,7 @@ checked, so the work stays bounded).
 | `no_output` | run | — | no node of kind `output` |
 | `studio_unknown_path` | save | node, param | a path in `composer`, `quick`, `inspector` or `labels` whose node is missing, whose param the kind lacks, which is wired, or `<node>.bypass` of a node that cannot be bypassed |
 | `studio_duplicate` | save | node, param | a path placed more than once over composer, quick and inspector; a tile (`elements`, `look:<group>`) twice in `quick`: no node, `param` = the tile (a tile is never `studio_unknown_path`) |
-| `preset_invalid` | save | node, param | a preset key that would be `studio_unknown_path`, or a value that is `param_invalid` (`bypass`: not a bool) |
+| `preset_invalid` | save | node, param | a preset key (or, from 1.26, a choice option's `set` key) that would be `studio_unknown_path`, or a value that is `param_invalid` (`bypass`: not a bool) |
 | `lora_duplicate` | save | node, param | a valid rows value with a `Lora` field names one LoRA id in two items |
 | `lora_unknown` | run | node, param | a node that is not bypassed has a LoRA id the caller cannot use now (unknown, another user's, deleted, pending, rejected, or shared and listed by no live host of the env) |
 | `not_optional` | save | node | (1.22) `optional: true` on a node that is not of kind `image`, or that feeds a required input |
@@ -1349,7 +1358,7 @@ without exactly one inputs node. A **capped edge** is a branch's fail edge.
 | `unknown_node` | save | node (the edge's from) | an edge names a node not in the document (from, to, pass, fail or then); the edge is refused |
 | `branch_not_gate` | save | node | a `{pass, fail, max, then}` edge out of a node that is not a gate or (1.14) a judge, or a `{routes, max, then}` edge out of a node that is not a decide or (1.15) an agent; refused |
 | `decide_routes` | save | node | (1.14) a decide edge that is not `{routes, max, then}`, whose labels are not the node's `routes`, or whose `then` is not a label (refused); or a decide with no such edge. (1.15) The same for an agent with `routes`; a routes edge out of an agent without `routes` (refused) |
-| `edge_invalid` | save | node | a second outgoing edge of a node, an edge out of an output, or an edge into the inputs node; refused (edges are taken in document order) |
+| `edge_invalid` | save | node | a second outgoing edge of a node, an edge out of an output, an edge into the inputs node, or (1.28) a gate's branch without `then`; refused (edges are taken in document order) |
 | `uncapped_cycle` | save | node | the node reaches itself along edges that are not capped (every cycle must pass through a capped edge; one problem per node on such a cycle) |
 | `too_many_runs` | save | — | Σ over steps of `seeds × branches × visits` > 64 (1.15: branches = a fanned-out step's list max, else 1), where `visits(s) = 1 + Σ max(e)` over the capped edges e = g→f with s on a cycle through e (s = f or s ∈ reach(f), and g ∈ reach(s)) |
 | `too_many_calls` | save | — | (1.14) Σ over judge, write and decide nodes of `visits` (1.15: plus Σ over agents of `visits × max_turns`) > 32 (LLM calls per row) |
@@ -1502,7 +1511,10 @@ project memory, saved checklists, thumbnails for server or remote models.
 `PipelineMemoryNode`; snapshot defs `pipelineNode`, where studio fills every default and adds `workflow`):
 - `judge`: `takes` (a step), `criteria {must, nice}` (inline, 1–12 lines in all), `keep` 1–8 (default 1, ≤ the
   step's seeds), `mode` suggest | auto (default suggest), `model` (default auto), `memory` (a memory read node).
-  Edges: a plain edge (= pass) or a branch `{pass, fail, max, then}` exactly like a gate's.
+  Edges: a plain edge (= pass) or a branch `{pass, fail, max, then}` like a gate's; from 1.28 its `then` may be left
+  out ("Then: Ask me", below). The editor's tiles: Keep = `keep`; If none pass = the branch's `max` (no branch: Ask me
+  in Suggest, fail the row in Auto); On retry = `fail` (the step again, or a write that rewrites the prompt); Then =
+  `then` (absent: Ask me).
 - `write`: `from` 1–4 text sources, `to` a `$<Text input>`, `instruction` (default `Fix what the reviewer found;
   keep everything else.`), `model`. It sets that input's value for the rest of the row attempt (later `$<input>`
   binds read the new text); the answer's `@` mentions must be among the handles the `from` texts mention (`scan`),
@@ -1569,13 +1581,25 @@ resident entry. Submit checks a live host for every resolved ask workflow (`no l
   the best take (null when it passes).
 - **Routing**: `pass` → the pass edge (Auto) or, in Suggest, park with `suggested` = picked. `fail` with fail-edge
   turns left → the fail edge, no parking (Suggest too). `fail` at the cap → Suggest: park with `suggested` `[]`
-  (`on_reject` then); Auto: `then`. A plain edge out of a judge: a fail in Auto ends the row failed `no take passed
+  (`on_reject` then); Auto: `then`. A branch without `then` (1.28, Ask me): at the cap the row parks with `suggested`
+  `[]` in Auto too (`on_reject` fail), and a reject there fails the row `rejected at <judge>`. A plain edge out of a judge: a fail in Auto ends the row failed `no take passed
   <judge>`; in Suggest it parks (`on_reject` fail). The parked row (`evt.pipeline.row` `parked {gate: <judge>, kind:
   judge, visit, keep, candidates, suggested, decision_id, on_reject}`) holds nothing, as a gate's.
 - **Pick at a judge** (`POST …/rows/{n}/pick {gate: <judge>, take_ids | reject, note?}`): checks as a gate's;
   `agreed` = set(take_ids) = set(suggested) (reject with `suggested` `[]`: true); `cmd.pipeline.pick` carries
   `agreed` and `note`; take_ids → pass with that pick, reject → fail edge / then / fail. A pick with `note` becomes
   a judge example. Picks are human answers, never replayed.
+
+**Judge test** (API 1.28; openapi `JudgeTest`, `req.pipelines.judge.test`): the Judge panel's Test on takes runs the
+saved judge once on 1–8 takes the user picks, outside any batch. `POST /v1/studio/pipelines/{id}/judge-tests {node,
+take_ids}`: studio checks the pipeline and the takes are the caller's (404) and image or video (422), resolves the
+model as at Submit (only a local ask workflow: a `server:`/`remote:` one or none is 422), asks pipelines `prompt`
+(the `judge` template for n takes, brief = the first take's prompt, the judge's examples and its memory node's notes
+read now), and makes an interactive run of the ask workflow (`ask.*` from the reply, `ask.media` the takes, a family
+ask at the judged step's variant and precision) in the first take's session (else the caller's newest), with its
+thumbnails counted as a batch's. 202 `JudgeTest`. `GET /v1/studio/judge-tests/{id}` follows the run; once it
+succeeded studio asks pipelines `verdict` (`judge_verdict` on the last try's text; a failed check is the test's
+`error`, never re-asked) and keeps the result. Nothing is written to memory and no decision is recorded.
 
 **Decisions** (plan 16.7; defs `decision`, openapi `Decision`):
 - Pipelines records each judge, write and decide visit in its own database (the replay source) and publishes it as
@@ -2752,6 +2776,13 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
 | `dissolve_handles` | the outgoing video's `frames(out) + d/2` is past its take's length, or the incoming video's `frames(in) − d/2 < 0` (an image has handles without end; an offline clip is not checked) |
 | `dissolve_length` | a clip's in-dissolve d/2 + out-dissolve d/2 is more than its length |
 
+- **Shot numbers** (from 1.29): a V1 clip's `number` (the board's "Shot 4 · birches"). Normalize keeps it as
+  written on V1 and drops it on an audio track; studio alone gives numbers, when it stores a revision (every write,
+  add, fill, undo and redo) against the stored one: a clip id the stored V1 has keeps its number whatever the write
+  says; a clip carrying a number no other clip has keeps it (undo bringing back a removed clip); any other V1 clip,
+  in order, gets the highest number in the stored or new V1 + 1. So a moved clip keeps its number, a split's right
+  part gets a new one, and a removed highest number can be given again. A sequence made with clips numbers them 1…n;
+  sequences from before 1.29 were numbered by position once (migration 00023).
 - **Dissolve**: `transition_in {type: dissolve, frames: d}`, d even, 2–240 (schema), centred on the cut: it moves no
   clip and plays from `cut − d/2` to `cut + d/2`, using d/2 frames of handle past the outgoing clip's `out` and before
   the incoming clip's `in`.

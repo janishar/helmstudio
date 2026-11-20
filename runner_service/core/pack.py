@@ -373,8 +373,9 @@ def stage_schema(name: str, stage: dict, family: str | None) -> dict:
         ],
         "outputs": [{"name": p, "type": t} for p, t in (stage.get("outputs") or {}).items()],
     }
-    if "help" in stage:
-        schema["help"] = stage["help"]
+    for key in ("component", "help"):  # component: API 1.24, the inspector's "uses the <component>"
+        if key in stage:
+            schema[key] = stage[key]
     return schema
 
 
@@ -554,6 +555,11 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     module = importlib.import_module(f"packs.{dir.name}.{runtime}")
     pack = Pack(dir.name, dir, spec, runtime, module, code)
     pack.workflows = [json.loads(p.read_text()) for p in sorted(dir.glob("workflows/*.json"))]
+    # API 1.25: the presets in the file's order (studio keeps a list, not the keys)
+    for workflow in pack.workflows:
+        studio = workflow.get("studio") or {}
+        if studio.get("presets"):
+            studio.setdefault("preset_order", list(studio["presets"]))
     pack.looks = looks.load(pack)
     stages = _nodes(spec.get("stages", {}), pack.family, code, pack, module)
     if "variants" not in spec:

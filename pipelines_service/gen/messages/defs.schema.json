@@ -1260,8 +1260,7 @@
               "required": [
                 "pass",
                 "fail",
-                "max",
-                "then"
+                "max"
               ],
               "additionalProperties": false,
               "properties": {
@@ -1315,7 +1314,7 @@
           ]
         }
       ],
-      "description": "[from, to], [gate or judge, {pass, fail, max, then}] or (API 1.14) [decide, {routes: {label: to}, max, then: label}]"
+      "description": "[from, to], [gate or judge, {pass, fail, max, then}] (API 1.28: a judge may leave then out: Ask me) or (API 1.14) [decide, {routes: {label: to}, max, then: label}]"
     },
     "pipelineSnapshot": {
       "type": "object",

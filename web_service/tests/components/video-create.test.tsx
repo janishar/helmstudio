@@ -109,9 +109,9 @@ describe("Create on LTX video", () => {
     ).toBeTruthy();
     expect(within(composer).getByRole("button", { name: "Insert element" })).toBeTruthy();
     expect(within(composer).getByRole("group", { name: "Seeds to queue" })).toBeTruthy();
-    // the tiles: label over value, Elements None
+    // the tiles: label over value, Elements Add (the owner's Q16: "Add" everywhere)
     const elements = within(composer).getByRole("button", { name: /^Elements/ });
-    expect(elements.textContent).toBe("ElementsNone");
+    expect(elements.textContent).toBe("ElementsAdd");
     expect(elements.className).toContain("flex-[1_1_130px]");
     expect(
       within(composer).getByRole("button", { name: "First frame: None · text only" }).textContent,

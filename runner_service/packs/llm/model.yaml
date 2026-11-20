@@ -33,6 +33,7 @@ components:
 stages:
   ask:
     title: Ask
+    component: language model
     help: "Asks the model one question about its takes: temperature 0, thinking off, one more try in the same run when the answer does not match the schema."
     uses: [model]
     inputs: {model: Model}

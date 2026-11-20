@@ -50,9 +50,11 @@ describe("Execution", () => {
     // the title is a menu button; no back chevron
     expect(screen.queryByLabelText("Back to the batch")).toBeNull();
     expect(screen.getByRole("button", { name: exec.pipeline.title }).tagName).toBe("BUTTON");
-    expect(
-      screen.getByRole("menuitem", { name: /The batch/, hidden: true }).getAttribute("href"),
-    ).toBe(`/pipelines/batches/${exec.batch_id}`);
+    // the menu is Rename and All pipelines (Q4); the batch is a link in the row's line
+    expect(screen.queryByRole("menuitem", { name: /batch/i, hidden: true })).toBeNull();
+    expect(screen.getByRole("link", { name: batch.title }).getAttribute("href")).toBe(
+      `/pipelines/batches/${exec.batch_id}`,
+    );
     // step lines without the workflow title; a passing judge in green
     const node = [...container.querySelectorAll("tbody tr td:nth-child(2)")].map(
       (t) => t.textContent,
@@ -61,11 +63,11 @@ describe("Execution", () => {
     const what = container.querySelector("tbody tr:nth-child(4) td:nth-child(3)")!;
     expect(what.className).toContain("text-a1");
     // the judge (the current step) in words, and only Model and Memory read
-    expect(screen.getByText(/Row 6 · first attempt · checkpoint 4 of 4/)).toBeTruthy();
+    expect(screen.getByText(/Row 6 · attempt 1 · checkpoint 4 of 4/)).toBeTruthy();
     const tiles = [...container.querySelectorAll("aside .set small")].map((t) => t.textContent);
     expect(tiles).toEqual(["Model", "Memory read"]);
     expect(screen.getByText(/^\d+ examples?$/)).toBeTruthy();
-    // the graph is laid out afresh (elkjs): no saved positions reach the canvas
+    // no saved positions in the fixture: the canvas lays it out (elkjs)
     const doc = canvas.at(-1)!.doc;
     expect(Object.values(doc.nodes).every((n) => !n.position)).toBe(true);
   });
@@ -101,7 +103,7 @@ describe("Review", () => {
     expect(screen.getByText("2 rows waiting for a pick")).toBeTruthy();
     const note = screen.getAllByLabelText(/Why this one\?/)[0] as HTMLInputElement;
     expect(note.placeholder).toBe("The softer one keeps the fox's face; sharpness matters less");
-    expect(screen.getByText(/· try 3 · gave up after 2 retries/)).toBeTruthy();
+    expect(screen.getByText(/· attempt 3 · gave up after 2 retries/)).toBeTruthy();
     fireEvent.change(note, { target: { value: "x" } });
   });
 });

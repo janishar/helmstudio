@@ -141,6 +141,7 @@ export function Panel({
           live?.envs.length
             ? `runs on ${live.envs.map((e) => envText(e, hosts)).join(", ")}`
             : "no runner offers it now",
+          s.component && `uses the ${s.component}`,
         ]
           .filter(Boolean)
           .join(" · ")}

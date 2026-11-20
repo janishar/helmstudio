@@ -252,6 +252,55 @@ export interface paths {
         patch: operations["studioRenamePipeline"];
         trace?: never;
     };
+    "/v1/studio/pipelines/{pipeline_id}/judge-tests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test a judge of the saved pipeline on takes the caller picks (the Judge panel's Test on takes)
+         * @description From 1.28. One ask run of the judge as saved (criteria, keep, model, memory: the pipeline's memory now), on
+         *     1 to 8 of the caller's image or video takes in the order given; nothing is stored in memory and no batch is
+         *     made. The brief is the first take's prompt. Studio resolves the model as at Submit (a `server:` or `remote:`
+         *     model, or none: 422), asks pipelines_service for the filled `judge` template (`pipelines.judge.test`
+         *     `prompt`, 5 s: else 503) and makes an interactive run of the ask workflow in the first take's session (else
+         *     the caller's newest session; none: 422). 202 with the test `queued` (or `failed` at once with no live
+         *     host); follow it with GET /v1/studio/judge-tests/{test_id}. Another user's pipeline or take: 404; a node that
+         *     is not a judge, a take that is not an image or video: 422; too many open runs: 409.
+         */
+        post: operations["studioCreateJudgeTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/judge-tests/{test_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A judge test, with each take's verdict and reason once its run has answered
+         * @description From 1.28. `status` follows the ask run. Once it succeeded, pipelines derives the verdict from the answer
+         *     (`pipelines.judge.test` `verdict`, as a batch's judge: contracts/README.md, Judge verdict; 5 s: else 503) and
+         *     studio keeps it; an answer that fails the checks is `failed` with that error (a test never re-asks).
+         */
+        get: operations["studioGetJudgeTest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/library": {
         parameters: {
             query?: never;
@@ -551,6 +600,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/runs/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.25: the planned peak of a run before it is sent (the Generate button's "≈ 40 s · 21 GB")
+         * @description Resolves the body as POST /v1/studio/sessions/{session_id}/runs would (the same 422 texts, the same caller's
+         *     elements, looks, LoRAs and takes), stores nothing and sends nothing, and answers the host the run would be
+         *     eligible on (the first by name) and its planned peak there: the plan of its model variant at its precision
+         *     and workflow (registry `models[].variants[].memory`, contracts/README.md "The hand-over") plus its LoRA
+         *     files. `peak_gb` is null when the run has no plan (larger than the plan's `planned_at`: it is admitted at the
+         *     whole host budget); both are null when no host is eligible (`reason` says why, as the run would fail).
+         */
+        post: operations["studioPlanRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/runs/{run_id}": {
         parameters: {
             query?: never;
@@ -676,8 +750,10 @@ export interface paths {
          * The caller's gallery, newest first, filtered and paginated
          * @description Every take of the caller that is not deleted and (for an upload or an import) completed, newest first (`created_at`, then
          *     `id`). Filters combine with AND. `q`: every whitespace-separated word must occur, case-insensitively, in the
-         *     title or the prompt (`made_with.prompt`). A `session_id` that is unknown or another user's just matches
-         *     nothing. A malformed filter value or cursor is 422.
+         *     title or the prompt (`made_with.prompt`), or from 1.27 in an element handle (`made_with.elements[].handle`; a
+         *     leading `@` of the word is ignored there), the workflow title or id (`made_with.workflow_title`,
+         *     `workflow_id`) or the model id (`made_with.model.id`, which names its family). A `session_id` or (from 1.27)
+         *     `batch_id` that is unknown or another user's just matches nothing. A malformed filter value or cursor is 422.
          */
         get: operations["studioListTakes"];
         put?: never;
@@ -2521,6 +2597,8 @@ export interface components {
             title: string;
             /** @description null for a core node (prompt */
             family: string | null;
+            /** @description from 1.24: the model component the node loads, in words (transformer, text encoder, vae); the Graph inspector reads "<family> · runs on <runtime> · uses the <component>". Absent = it loads none */
+            component?: string;
             help?: string;
             /** @description in form order */
             params: components["schemas"]["ParamSchema"][];
@@ -2644,6 +2722,22 @@ export interface components {
                 /** @example Quality */
                 title: string;
                 items: components["schemas"]["StudioPath"][];
+                /** @description from 1.25: the section's (i) text in Create; absent = no (i) */
+                help?: string;
+                /** @description from 1.26: tiles that lead the section, each a named pick among sets of values (contracts/README.md, User workflows: Studio block). A set is checked as a preset (`preset_invalid`); the tile shows the option whose set holds */
+                choices?: {
+                    /** @example Recipe */
+                    label: string;
+                    /** @description the tile's hover text */
+                    help?: string;
+                    options: {
+                        /** @example One-stage */
+                        name: string;
+                        set: {
+                            [key: string]: components["schemas"]["ParamValue"];
+                        };
+                    }[];
+                }[];
             }[];
             /** @description a field's title in the Studio when it should differ from the param's label */
             labels?: {
@@ -2663,6 +2757,15 @@ export interface components {
                     [key: string]: components["schemas"]["ParamValue"];
                 };
             };
+            /**
+             * @description from 1.25: every name of `presets` once, in the order Create shows them (an object's key order is not kept); absent = by name. Else 422 `studio.preset_order: every preset once`
+             * @example [
+             *       "Fast",
+             *       "Quality",
+             *       "Low memory"
+             *     ]
+             */
+            preset_order?: string[];
         };
         /**
          * @description A workflow as the editor saves or validates it. Node ids are stable slugs: once made they never change (README,
@@ -3108,13 +3211,14 @@ export interface components {
         /** @description the card's title; absent = derived by the client */
         PipelineNodeTitle: string;
         PipelineNode: components["schemas"]["PipelineInputsNode"] | components["schemas"]["PipelineStepNode"] | components["schemas"]["PipelineGateNode"] | components["schemas"]["PipelineOutputNode"] | components["schemas"]["PipelineJudgeNode"] | components["schemas"]["PipelineWriteNode"] | components["schemas"]["PipelineDecideNode"] | components["schemas"]["PipelineMemoryNode"] | components["schemas"]["PipelineAgentNode"] | components["schemas"]["PipelineCustomNode"];
-        /** @description a gate's or (1.14) a judge's branch: pass = a pick was made (a judge: its verdict pass, or the user's pick); fail = every candidate rejected (a judge: verdict fail), taken at most `max` times per row; on the next reject the row goes to `then` */
+        /** @description a gate's or (1.14) a judge's branch: pass = a pick was made (a judge: its verdict pass, or the user's pick); fail = every candidate rejected (a judge: verdict fail), taken at most `max` times per row (a judge's retry target: its step again, or a write that rewrites the prompt); on the next reject the row goes to `then` */
         PipelineBranch: {
             pass: string;
             fail: string;
             /** @description the loop cap */
             max: number;
-            then: string;
+            /** @description required for a gate (edge_invalid). From 1.28 a judge may leave it out: "Then: Ask me": at the cap the row parks for a pick with nothing suggested (Auto too); a reject there fails the row */
+            then?: string;
         };
         /**
          * @example [
@@ -3300,6 +3404,15 @@ export interface components {
             inputs?: components["schemas"]["RunInputs"];
             /** @description the chosen looks, every group together, in the order the composer's tiles list them (tile order, then pick order); missing = []. Resolved with the mentions (contracts/README.md, Looks) */
             looks?: components["schemas"]["LookIds"];
+        };
+        /** @description from 1.25: POST /v1/studio/runs/plan */
+        RunPlan: {
+            /** @description the host the run would be eligible on, the first by name; null = none */
+            host: string | null;
+            /** @description its planned peak there in GB (the plan's peak_gb + its LoRA files); null = no plan (the whole host budget) or no host */
+            peak_gb: number | null;
+            /** @description why no host is eligible (the text the run would fail with, `no live host for env mlx`); null when one is */
+            reason: string | null;
         };
         /**
          * @description a look: one of the caller's own (a UUID) or a starter look `<family>/<pack look id>` (stable across hosts)
@@ -4936,6 +5049,53 @@ export interface components {
                 note: number;
             };
         };
+        JudgeTestCreate: {
+            /** @description a judge node of the saved pipeline */
+            node: string;
+            /** @description the caller's image or video takes, in the order the judge sees them */
+            take_ids: string[];
+        };
+        JudgeTest: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            pipeline_id: string;
+            node: string;
+            take_ids: string[];
+            /**
+             * @description the ask run's; `failed` too when its answer fails the checks
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            /**
+             * Format: uuid
+             * @description the ask run (null once it is gone)
+             */
+            run_id: string | null;
+            /**
+             * @description pass when at least `keep` takes pass every must; null until it succeeded
+             * @enum {string|null}
+             */
+            verdict: "pass" | "fail" | null;
+            /** @description the first must the best take fails */
+            first_failed: string | null;
+            /** @description each take's verdict, in the order given; [] until it succeeded */
+            takes: {
+                /** Format: uuid */
+                take_id: string;
+                /** @description every must holds */
+                passes: boolean;
+                /** @description 1 = best */
+                rank: number;
+                /** @description among the best `keep` that pass (what a batch would keep) */
+                picked: boolean;
+                reason: string;
+                checks: components["schemas"]["JudgeCheck"][];
+            }[];
+            error: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         MemoryCreate: {
             /** Format: uuid */
             pipeline_id: string;
@@ -5472,6 +5632,8 @@ export interface components {
             /** @description the takes made for this slot, oldest first; the current `take_id` is among them (studio adds it). Replace picks one */
             alternatives?: string[];
             shot?: components["schemas"]["TimelineShotRef"];
+            /** @description From 1.29, V1 only: the shot number ("Shot 4"), given by studio when the clip is added (the highest so far + 1) and kept when it moves; a write cannot change a stored clip's. contracts/README.md, Timeline rules: shot numbers */
+            number?: number;
             /** @description answers only, true when the take is deleted or gone: the clip keeps its place and length, plays as offline and blocks an export */
             offline?: boolean;
         };
@@ -6704,6 +6866,64 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioCreateJudgeTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description pipeline UUID (malformed = 404) */
+                pipeline_id: components["parameters"]["PipelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JudgeTestCreate"];
+            };
+        };
+        responses: {
+            /** @description the test */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeTest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetJudgeTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description judge test UUID (unknown, another user's or malformed = 404) */
+                test_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the test */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JudgeTest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     studioListLibrary: {
         parameters: {
             query?: {
@@ -7159,6 +7379,33 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioPlanRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunRequest"];
+            };
+        };
+        responses: {
+            /** @description the plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunPlan"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     studioGetRun: {
         parameters: {
             query?: never;
@@ -7299,7 +7546,9 @@ export interface operations {
                 starred?: boolean;
                 /** @description only takes of this session */
                 session_id?: string;
-                /** @description text search over title and prompt; blank = no filter */
+                /** @description from 1.27: only takes of this batch (`Take.batch_id`, its collection) */
+                batch_id?: string;
+                /** @description text search over title, prompt and (from 1.27) element handles, workflow and model; blank = no filter */
                 q?: string;
                 /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
                 cursor?: components["parameters"]["Cursor"];

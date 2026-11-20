@@ -28,6 +28,11 @@ const HEAD = 72; // the lane name column (px)
 const EDGE_PX = 7;
 const DRAG_PX = 3;
 
+/** A V1 clip's shot number as a name ("Shot 4", API 1.29), else its take's title. */
+export function shotName(c: Clip, title?: string): string {
+  return c.number ? `Shot ${c.number}` : (title ?? "Clip");
+}
+
 /** A clip's title and its mono line (the board's "Shot 2 · fox trots in" / "LTX · 5.0 s · dissolve in 12 f"). */
 export function clipText(
   c: Clip,
@@ -42,10 +47,12 @@ export function clipText(
   if (c.shot) {
     const st = c.shot.status ?? "queued";
     // a take action's shot: "Retaking Shot 3", "Extending", "Retake failed" (docs/mock/TakeActions.dc.html)
-    const a = actionShot(c, t?.title);
+    const a = actionShot(c, shotName(c, t?.title));
     if (a?.failed) return { title: a.title, line: c.shot.error ?? "the run failed" };
     return {
-      title: a?.title ?? (c.shot.batch_id ? "Re-rendering" : t ? `Redoing ${t.title}` : "New shot"),
+      title:
+        a?.title ??
+        (c.shot.batch_id ? "Re-rendering" : t ? `Redoing ${shotName(c, t.title)}` : "New shot"),
       line: st === "failed" ? `failed: ${c.shot.error ?? "the run failed"}` : (progress ?? st),
     };
   }
@@ -61,7 +68,12 @@ export function clipText(
   const maker = (t?.workflow_title ?? (t?.kind === "image" ? "Image" : "Video")).split(" ")[0];
   const fade = c.transition_in ? ` · dissolve in ${c.transition_in.frames} f` : "";
   return {
-    title: t?.kind === "image" ? `Still · ${t.title}` : (t?.title ?? "Clip"),
+    title:
+      t?.kind === "image"
+        ? `Still · ${t.title}`
+        : c.number && !audio
+          ? `Shot ${c.number} · ${t?.title ?? "clip"}`
+          : (t?.title ?? "Clip"),
     line: `${maker} · ${len}${fade}`,
   };
 }
@@ -343,7 +355,8 @@ export function Lanes({
                   style={{ left: c.at! * pps, width: Math.max(w, 6) }}
                 >
                   <small>
-                    clip audio · {c.mute ? "muted" : `${gain > 0 ? "+" : ""}${gain} dB`}
+                    {c.number ? `Shot ${c.number} sound` : "clip audio"} ·{" "}
+                    {c.mute ? "muted" : `${gain > 0 ? "+" : ""}${gain} dB`}
                   </small>
                 </button>
               );

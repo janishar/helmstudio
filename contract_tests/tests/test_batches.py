@@ -151,6 +151,17 @@ def test_batch_takes_in_gallery(api, lines_batch):
         assert ok(api.get(f"{STUDIO}/takes/{tid}"))["batch_id"] == bid
 
 
+def test_batch_collection(api, api_b, lines_batch):
+    """API 1.27: batch_id lists the batch's takes (Open collection); another user's or an unknown batch matches
+    nothing; it ANDs with the other filters."""
+    bid = lines_batch["batch"]["id"]
+    ids = {t for r in lines_batch["rows"] for t in r["take_ids"]}
+    assert {t["id"] for t in all_takes(api, batch_id=bid)} == ids
+    assert all_takes(api, batch_id=bid, kind="video") == []
+    assert all_takes(api_b, batch_id=bid) == []
+    assert all_takes(api, batch_id=NO_SUCH_ID) == []
+
+
 def test_batch_events_ordered(api, lines_batch):
     bid = lines_batch["batch"]["id"]
     path = f"{BATCHES}/{bid}/events"

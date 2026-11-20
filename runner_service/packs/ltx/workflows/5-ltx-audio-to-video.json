@@ -138,7 +138,6 @@
     "quick": [
       "keyframes.bypass",
       "keyframes.images",
-      "elements",
       "decode.audio"
     ],
     "inspector": [
@@ -151,6 +150,7 @@
       },
       {
         "title": "Quality",
+        "help": "Euler steps of the guided loop; each runs the model four times over the whole clip.",
         "items": [
           "model.precision",
           "sample1.steps",

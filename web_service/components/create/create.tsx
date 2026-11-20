@@ -7,7 +7,15 @@ import dynamic from "next/dynamic";
 import { Check, ChevronDown, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { ErrorNote, Info } from "@/components/kit";
-import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
+import {
+  Chips,
+  Inspector,
+  RefChips,
+  TextFields,
+  canvasOf,
+  choiceBypass,
+  idOf,
+} from "@/components/create/form";
 import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/refs";
 import {
   MediaRows,
@@ -22,6 +30,7 @@ import { mediaItem, offerLabel } from "@/lib/source";
 import { useTakes, useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
+import { Compare, ExplainDrawer } from "@/components/create/compare";
 import { ElementsPanel, ElementsPicker } from "@/components/create/elements";
 import { AddToTimeline } from "@/components/timeline/add";
 import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
@@ -51,7 +60,7 @@ import {
   withInputs,
 } from "@/lib/mentions";
 import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/lib/graph";
-import { studioView } from "@/lib/studio";
+import { presetNames, studioView } from "@/lib/studio";
 import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { mediaKinds, mediaOf, secondsText, workflowFor, type MediaKind } from "@/lib/media";
@@ -71,9 +80,9 @@ import {
   track,
   type RunTrack,
 } from "@/lib/runs";
-import { stripItems } from "@/lib/takes";
+import { rememberProject, stripItems } from "@/lib/takes";
 import { hostMemory } from "@/lib/hosts";
-import { Memory, useHosts } from "@/components/create/memory-chip";
+import { estimateText, Memory, useHosts, usePlannedPeak } from "@/components/create/memory-chip";
 import {
   TAKE_MIME,
   capacity,
@@ -185,6 +194,8 @@ export function Create({
   const [selected, setSelected] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<string | null>(null); // the newest run Generate queued here
   const [full, setFull] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [explaining, setExplaining] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(1);
@@ -226,6 +237,7 @@ export function Create({
     setSelected(null);
     setTracks({});
     setTakes([]);
+    setComparing(false);
     setInspect(false);
     setInlineGroup(null);
     if (!keep) setChosen("");
@@ -263,7 +275,9 @@ export function Create({
 
   // the open session is in the URL, without a server round trip
   useEffect(() => {
-    if (sessionId) history.replaceState(null, "", `/?s=${encodeURIComponent(sessionId)}`);
+    if (!sessionId) return;
+    history.replaceState(null, "", `/?s=${encodeURIComponent(sessionId)}`);
+    rememberProject(sessionId); // the Gallery's "This project only"
   }, [sessionId]);
 
   const loadRuns = useCallback(
@@ -444,6 +458,10 @@ export function Create({
     );
     if (open) setChosen(w.id);
   }, []);
+  // the upscale node of a two-stage workflow (its own bypass in the graph means it never runs)
+  const upscale = Object.entries(workflow?.nodes ?? {}).find(
+    ([, n]) => n.kind.endsWith("/upscale") && !n.bypass,
+  )?.[0];
   // the Seeds stepper whenever the workflow has a seed, placed or not (docs/mock/TextToVideo.dc.html)
   const seedField = all.find((f) => f.param.type === "seed");
   const change = (key: string, u: Update) => {
@@ -455,7 +473,10 @@ export function Create({
         f && Array.isArray(v) && positionOf(f.param)
           ? placeRows(f.param, v, r[key] ?? f.initial ?? [], clipOf(fields, r))
           : v;
-      return { ...r, [key]: placed };
+      // rows whose node's bypass is placed too (LTX Audio to video's Frames · No keyframes): a frame picked
+      // switches the node on, the last one cleared switches it off
+      const off = f && Array.isArray(v) && fields.find((x) => x.key === `${f.node}.bypass`);
+      return { ...r, [key]: placed, ...(off && { [off.key]: v.length === 0 }) };
     });
     setErrors((errs) => {
       const next = { ...errs };
@@ -552,14 +573,22 @@ export function Create({
   // the composer holds the quick switches and one-value choices; a quick rows editor is its own inspector section
   const quick =
     layout?.groups.find((g) => g.title === "Quick")?.fields.filter((f) => fields.includes(f)) ?? [];
-  const toggles = quick.filter((f) => f.param.type === "bool");
+  // a node's bypass placed with its rows is the rows tile's "No keyframes", not a switch of its own
+  const toggles = quick.filter(
+    (f) =>
+      f.param.type === "bool" &&
+      !(
+        f.param.name === "bypass" &&
+        fields.some((x) => x.node === f.node && x.param.type === "rows")
+      ),
+  );
   const groups = layout?.groups.flatMap((g) => {
     const fs = g.fields.filter((f) => fields.includes(f));
-    if (g.title !== "Quick") return [{ title: g.title, fields: fs }];
+    if (g.title !== "Quick") return [{ ...g, fields: fs }];
     // a quick model choice is picked from the model chip's menu (docs/mock/TextToVideo.dc.html has no Model tile)
     const rest = fs.filter(
       (f) =>
-        !toggles.includes(f) &&
+        f.param.type !== "bool" &&
         !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2) &&
         !(f.model && f.param.type === "enum"),
     );
@@ -767,6 +796,8 @@ export function Create({
           .sort((a, b) => +(b.family === takeFamily) - +(a.family === takeFamily))[0]
       : undefined;
   const shown = picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id);
+  // the session's pictures Compare offers: image and video takes, newest first
+  const pictures = takes.filter((t) => t.kind === "image" || t.kind === "video");
   // no run and no take yet: the title, the composer under it with the open look group's looks, and the Elements
   // panel in the aside (docs/mock/Direct.dc.html); the first run brings the Stage and the Inspector
   const empty = !runs?.length && !takes.length;
@@ -825,7 +856,18 @@ export function Create({
     workflows?.find((w) => w.id === (shown?.workflow_id ?? shownTake?.made_with?.workflow_id)) ??
     workflow;
   const anyActive = !!runs?.some((r) => isActive(r.status));
-  const took = workflow && runs ? lastDuration(runs, workflow.id) : null;
+  const bypass = choiceBypass(groups, fields, raws);
+  const took = workflow && runs ? lastDuration(runs, workflow.id, bypass) : null;
+  const peak = usePlannedPeak(
+    workflow && !blocked
+      ? { workflow_id: workflow.id, inputs: formInputs, ...(lookIds.length && { looks: lookIds }) }
+      : null,
+  );
+  const estimate = estimateText(
+    took != null ? clock(took) : null,
+    peak,
+    Object.values(bypass).some(Boolean),
+  );
   const pinned = pinnedNote(runs?.find((r) => r.id === lastRun));
   // with several hosts of the env: the host an active run is lined up on, else the shown run's (contracts "Several hosts")
   const host = hostMemory(
@@ -1009,6 +1051,38 @@ export function Create({
             onStar={shownTake && (() => void star(shownTake))}
             onFull={() => setFull(true)}
             onDrop={refField && intoRefs}
+            compare={
+              comparing &&
+              shownTake &&
+              pictures.length > 1 && (
+                <Compare
+                  a={shownTake}
+                  takes={pictures}
+                  onPick={(id) => {
+                    setSelected(id);
+                    setComparing(false);
+                  }}
+                />
+              )
+            }
+            onCompare={
+              shownTake && pictures.length > 1 && pictures.includes(shownTake)
+                ? () => setComparing((c) => !c)
+                : undefined
+            }
+            onExplain={
+              shownWorkflow && (shownTake?.made_with || shown)
+                ? () => setExplaining(true)
+                : undefined
+            }
+          />
+        )}
+        {explaining && shownWorkflow && (
+          <ExplainDrawer
+            workflow={shownWorkflow}
+            take={shownTake}
+            run={shown}
+            onClose={() => setExplaining(false)}
           />
         )}
         {full && shownTake && (
@@ -1290,13 +1364,18 @@ export function Create({
                   // a retake runs over the whole source clip, whatever the span (docs/mock/VideoSource.dc.html)
                   <span className="mono text-[11px] font-medium">{wholeClip}</span>
                 ) : (
-                  took != null &&
+                  estimate &&
                   !busy && (
                     <span
                       className="mono text-[11px] font-medium"
-                      title={`The last run of this workflow took ${clock(took)}`}
+                      title={[
+                        took != null && `The last run of this workflow took ${clock(took)}`,
+                        peak != null && `Planned peak ${peak} GB`,
+                      ]
+                        .filter(Boolean)
+                        .join("; ")}
                     >
-                      ≈ {clock(took)}
+                      {estimate}
                     </span>
                   )
                 )}
@@ -1343,6 +1422,7 @@ export function Create({
             groups={groups}
             resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
             presets={workflow?.studio?.presets}
+            presetOrder={presetNames(workflow?.studio)}
             fields={fields}
             raws={raws}
             errors={errors}
@@ -1352,13 +1432,11 @@ export function Create({
             uploads={uploads}
             compact={video}
             grid={grid}
-            // ponytail: by kind (LTX's upscaler doubles the stage-1 latent); a schema hint would make it generic
+            // ponytail: by kind (LTX's upscaler doubles the stage-1 latent); a schema hint would make it generic.
+            // Bypassed (the Recipe's one-stage) the clip itself is stage 1's size
             stage1={
-              video &&
-              Object.values(workflow?.nodes ?? {}).some(
-                (n) => n.kind.endsWith("/upscale") && !n.bypass,
-              )
-                ? 2
+              video && upscale
+                ? { by: 2, clip: (raws[`${upscale}.bypass`] ?? false) === true }
                 : undefined
             }
             familyTitle={
@@ -1401,12 +1479,20 @@ function Stage({
   onStar,
   onFull,
   onDrop,
+  compare,
+  onCompare,
+  onExplain,
 }: {
   run?: Run;
   take?: Take;
   workflow?: S<"Workflow">;
   onStar?: () => void;
   onFull: () => void;
+  /** Compare's view, shown in place of the take while it is open */
+  compare?: React.ReactNode;
+  /** Compare and Explain run (docs/mock/Main.dc.html); absent: not offered for what is shown */
+  onCompare?: () => void;
+  onExplain?: () => void;
   /** takes a drop of images or dragged takes as references; absent: the workflow takes none */
   onDrop?: (dt: DataTransfer) => boolean;
 }) {
@@ -1500,6 +1586,25 @@ function Stage({
                 <Maximize size={16} strokeWidth={1.75} aria-hidden />
               </button>
             )}
+            {onCompare && (
+              <button
+                type="button"
+                aria-pressed={!!compare}
+                onClick={onCompare}
+                className="bevel h-9 rounded-lg border border-s5 bg-s2/90 px-3 text-[13px] aria-pressed:bg-s5"
+              >
+                Compare
+              </button>
+            )}
+            {onExplain && (
+              <button
+                type="button"
+                onClick={onExplain}
+                className="bevel h-9 rounded-lg border border-s5 bg-s2/90 px-3 text-[13px]"
+              >
+                Explain run
+              </button>
+            )}
             {size && (
               <span className="mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] text-t2">
                 {size.w} × {size.h}
@@ -1528,7 +1633,9 @@ function Stage({
         style={{ containerType: "size" }}
       >
         {/* with neither, Create shows its empty screen, not the Stage */}
-        {!run && !take ? null : out?.kind === "image" || out?.kind === "video" ? (
+        {!run && !take ? null : compare ? (
+          compare
+        ) : out?.kind === "image" || out?.kind === "video" ? (
           <Media
             key={outKey}
             take={out}

@@ -20,6 +20,7 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
 | `agent_loop.py` | (1.15) the Agent node as plain graph nodes: per turn `submit` (one model call) `wait` `tools` (checked turn, tools run as the owner), then `route`; the director's `wake` … `reply` on its own thread |
 | `remote.py` | (1.15) remote calls queued in pipelines' DB and sent by its worker: per-provider in-flight limit, per-batch caps, Pause holds, Stop cancels |
 | `providers.py` | (1.15) the only code that calls a model provider (`ChatOpenAI(base_url=…)`, built inside a call): the host rule, key files, failure classes and retries, `pipelines.providers.test` |
+| `judge_test.py` | (1.28) `pipelines.judge.test`: a judge test's filled `judge` template (with the judge's memory now) and its verdict from the run's answer (the Judge panel's Test on takes) |
 | `server.py` | (1.15) the `server` env runner for each host in `PIPELINES_SERVER_HOSTS`: registry, hosts key, `cmd.run.<host>.server` → one local-server call → `evt.run.status` |
 | `custom.py`, `packs/` | (1.15) custom nodes (pydantic in/out; example `text/prefix`), published to registry `pipelines.engine.custom` |
 | `tests/fake_openai.py` | the fake OpenAI-compatible server (stdlib; `python tests/fake_openai.py --port 8399` for the fake overlay) |

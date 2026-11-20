@@ -30,6 +30,38 @@ export function useHosts() {
   return hosts;
 }
 
+/** The planned peak in GB of the run `body` would make (POST /v1/studio/runs/plan, API 1.25), asked 400 ms after the
+ * form settles; the workflow's last answer stays until the next. Null before one, with no plan (the whole host budget) and when
+ * the form does not resolve yet (its 422s are Generate's to show). */
+export function usePlannedPeak(body: S<"RunRequest"> | null) {
+  const key = body && JSON.stringify(body);
+  // the answer and the workflow it was for: another workflow's never shows while this one's is asked
+  const [got, setGot] = useState<{ wf: string; gb: number | null } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    const req = JSON.parse(key) as S<"RunRequest">;
+    let stop = false;
+    const t = setTimeout(() => {
+      ok(api.POST("/v1/studio/runs/plan", { body: req }))
+        .then((p) => !stop && setGot({ wf: req.workflow_id, gb: p.peak_gb }))
+        .catch(() => !stop && setGot({ wf: req.workflow_id, gb: null }));
+    }, 400);
+    return () => {
+      stop = true;
+      clearTimeout(t);
+    };
+  }, [key]);
+  return body && got?.wf === body.workflow_id ? got.gb : null;
+}
+
+/** The Generate button's estimate (docs/mock/TextToVideo.dc.html "≈ 40 s · 21 GB"): the last run's time, then the
+ * planned peak; null with neither. `upTo`: a choice switched nodes off, and the plan is the whole workflow's (it has
+ * no figure per stage), so the peak is a ceiling: "up to 46 GB". */
+export function estimateText(took: string | null, gb: number | null, upTo = false) {
+  const mem = gb != null ? `${upTo ? "up to " : ""}${Math.round(gb)} GB` : "";
+  return took ? `≈ ${[took, mem].filter(Boolean).join(" · ")}` : mem || null;
+}
+
 /** The memory button: used / budget of the host that runs the workflow, across its envs; its popover lists what
  * each env holds. */
 export function Memory({ memory }: { memory: HostMemory }) {
