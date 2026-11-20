@@ -135,7 +135,11 @@ export function Modal({
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
-    if (open && !d?.open) d?.showModal();
+    if (open && d && !d.open) {
+      d.showModal();
+      // showModal focuses the first button, the ×, and Safari rings it: keep the focus on the dialog instead
+      if (document.activeElement === d.querySelector("[data-close]")) d.focus();
+    }
     if (!open && d?.open) d.close();
   }, [open]);
   return (
@@ -151,13 +155,15 @@ export function Modal({
         if (e.target === d && out) d.close();
       }}
       aria-label={title}
-      className={`pop m-auto ${width} p-5 text-t1 backdrop:bg-black/50`}
+      tabIndex={-1}
+      className={`pop m-auto ${width} p-5 text-t1 outline-none backdrop:bg-black/50`}
     >
       <div className="mb-4 flex h-7 items-center justify-between gap-2">
         <h2 className="m-0 font-display text-base font-bold">{title}</h2>
         <button
           type="button"
           aria-label="Close"
+          data-close
           onClick={() => ref.current?.close()}
           className="grid size-7 shrink-0 place-items-center rounded-lg hover:bg-s3"
         >
