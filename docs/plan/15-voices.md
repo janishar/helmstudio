@@ -346,9 +346,8 @@ before the screens are built:
 
 Each with the recommended answer first.
 
-1. **The unused 8 GB of ZONOS3 files.** The whole folder is now in `~/GenAI/models` (the disk is 94% full).
-   Recommended: keep it until the scout step, then delete what the pack does not use (`zac.gguf`,
-   `zac-encoder.gguf`, `ssl-teacher.gguf`, the edit files); the SSD keeps a copy.
+1. **The unused 8 GB of ZONOS3 files.** Answered (owner, 2026-11-21): leave them. The whole folder stays in
+   `~/GenAI/models`; nothing is deleted.
 2. **Voice cloning on Qwen too?** Recommended: not now. ZONOS3 clones; Qwen's Base 1.7B (about 4.5 GB) is declared
    in the pack as a downloadable variant and added when you choose to fetch it.
 3. **Where dialogue is written.** Recommended: a script in the dialogue composer (`@handle: text`), which Write
