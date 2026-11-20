@@ -8,7 +8,7 @@
 <body>
 <x-dc>
 <helmet>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Bricolage+Grotesque:wght@600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
 <style>
 /* themes */
 [data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
@@ -109,6 +109,7 @@ button:disabled{cursor:not-allowed}
 .trim::before{left:-4px}.trim::after{right:-4px}
 .rng{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--t2)}
 .rng input{width:100%;accent-color:var(--a2)}
+.vp b,.vp small,.vp em,.pk b,.pk small,.tile b,.tile small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </helmet>
 <div data-theme="{{theme}}" style="position: relative; display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
@@ -137,7 +138,7 @@ button:disabled{cursor:not-allowed}
 </details>
 </nav>
 
-<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
+<main style="flex: 999 1 560px; min-width: 0; min-height: 960px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
 
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
 <button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
@@ -199,7 +200,7 @@ button:disabled{cursor:not-allowed}
 <sc-if value="{{isList}}" hint-placeholder-val="{{ true }}">
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
 <h2 style="margin: 0; font-size: 15px; font-weight: 600">Voice<button class="i" aria-label="More information" title="Presets come with the models; play one to hear it. Yours are voices you cloned from a clip or designed from words. Saved voices count toward the 200 items you can keep.">i</button></h2>
-<span style="display: flex; gap: 8px"><button class="chip" onClick="{{toClone}}" style="display: flex; align-items: center; gap: 6px; font-weight: 600"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="7" r="3"></circle><circle cx="6" cy="17" r="3"></circle><path d="M8.5 8.5 20 18M8.5 15.5 20 6"></path></svg>Clone from a clip</button><button class="chip" onClick="{{toDesign}}" style="display: flex; align-items: center; gap: 6px; font-weight: 600"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m4 20 11-11M14 4v3M19 9h-3M18 5l-2 2M13 10l1 1"></path></svg>Design a voice</button></span>
+<span style="display: flex; align-items: center; gap: 8px"><button class="chip" onClick="{{toClone}}" style="display: flex; align-items: center; gap: 6px; font-weight: 600"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="7" r="3"></circle><circle cx="6" cy="17" r="3"></circle><path d="M8.5 8.5 20 18M8.5 15.5 20 6"></path></svg>Clone from a clip</button><button class="chip" onClick="{{toDesign}}" style="display: flex; align-items: center; gap: 6px; font-weight: 600"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m4 20 11-11M14 4v3M19 9h-3M18 5l-2 2M13 10l1 1"></path></svg>Design a voice</button><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span>
 </div>
 <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
 <input aria-label="Search voices" placeholder="Search names and styles" style="flex: 1 1 260px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--a1); background: var(--s1); color: var(--t1); font: inherit; font-size: 13px">
@@ -246,7 +247,7 @@ button:disabled{cursor:not-allowed}
 <p style="margin: 0; font-size: 12px; color: var(--t2)">Voices that do not fit {{wfName}} are greyed with the reason. Presets are read-only.</p>
 </sc-if>
 <sc-if value="{{isClone}}" hint-placeholder-val="{{ false }}">
-<div style="display: flex; align-items: center; gap: 8px"><button class="ic" aria-label="Back to voices" onClick="{{toList}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"></path></svg></button><h2 style="margin: 0; font-size: 15px; font-weight: 600">Clone from a clip</h2></div>
+<div style="display: flex; align-items: center; gap: 8px"><button class="ic" aria-label="Back to voices" onClick="{{toList}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"></path></svg></button><h2 style="margin: 0; font-size: 15px; font-weight: 600">Clone from a clip</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none; margin-left: auto"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 <div class="fl">An audio take, or a video's sound
 <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
 <sc-for list="{{takes}}" as="t" hint-placeholder-count="4">
@@ -260,8 +261,8 @@ button:disabled{cursor:not-allowed}
 <div class="mono" style="display: flex; justify-content: space-between; font-size: 11px"><span>0:00</span><span>{{durLabel}}</span></div>
 </div>
 <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end">
-<label class="rng">In · <span class="mono">{{inLabel}}</span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{inS}}" onChange="{{setIn}}"></label>
-<label class="rng">Out · <span class="mono">{{outLabel}}</span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{outS}}" onChange="{{setOut}}"></label>
+<label class="rng"><span>In · <span class="mono">{{inLabel}}</span></span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{inS}}" onChange="{{setIn}}"></label>
+<label class="rng"><span>Out · <span class="mono">{{outLabel}}</span></span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{outS}}" onChange="{{setOut}}"></label>
 <div style="padding: 8px 12px; border-radius: 12px; background: var(--s1)"><span style="display: block; font-size: 12px; color: var(--t2)">Length · 3 – 30 s</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">{{lenLabel}}</span></div>
 </div>
 <sc-if value="{{lenBad}}" hint-placeholder-val="{{ false }}"><p class="err">{{lenErr}}</p></sc-if>
@@ -276,7 +277,7 @@ button:disabled{cursor:not-allowed}
 </div>
 </sc-if>
 <sc-if value="{{isDesign}}" hint-placeholder-val="{{ false }}">
-<div style="display: flex; align-items: center; gap: 8px"><button class="ic" aria-label="Back to voices" onClick="{{toList}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"></path></svg></button><h2 style="margin: 0; font-size: 15px; font-weight: 600">Design a voice</h2></div>
+<div style="display: flex; align-items: center; gap: 8px"><button class="ic" aria-label="Back to voices" onClick="{{toList}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"></path></svg></button><h2 style="margin: 0; font-size: 15px; font-weight: 600">Design a voice</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none; margin-left: auto"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 <label class="fl"><span style="display: flex; justify-content: space-between">Describe the voice<span style="font-family: 'JetBrains Mono', monospace">49 / 2000</span></span><textarea rows="3" style="height: auto; padding: 8px 12px; resize: none">Male, about 60, low and warm, slow, a slight rasp</textarea></label>
 <label class="fl">A line to hear it say<input value="The tide waits for no one, lad. Not even you."></label>
 <div style="display: flex; align-items: center; gap: 8px">
@@ -306,7 +307,7 @@ button:disabled{cursor:not-allowed}
 <span style="position: absolute; left: 40px; top: 28px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Clone from a clip and Design a voice open in the same dialog; a character element's editor gets a Voice tile</span>
 
 <section aria-label="Clone from a clip" style="position: absolute; left: 40px; top: 72px; width: 540px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
-<h2 style="margin: 0; font-size: 15px; font-weight: 600">Clone from a clip</h2>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Clone from a clip</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 <div class="fl">An audio take, or a video's sound
 <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
 <sc-for list="{{takes}}" as="t" hint-placeholder-count="4">
@@ -320,8 +321,8 @@ button:disabled{cursor:not-allowed}
 <div class="mono" style="display: flex; justify-content: space-between; font-size: 11px"><span>0:00</span><span>{{durLabel}}</span></div>
 </div>
 <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end">
-<label class="rng">In · <span class="mono">{{inLabel}}</span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{inS}}" onChange="{{setIn}}"></label>
-<label class="rng">Out · <span class="mono">{{outLabel}}</span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{outS}}" onChange="{{setOut}}"></label>
+<label class="rng"><span>In · <span class="mono">{{inLabel}}</span></span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{inS}}" onChange="{{setIn}}"></label>
+<label class="rng"><span>Out · <span class="mono">{{outLabel}}</span></span><input type="range" min="0" max="{{take.dur}}" step="0.1" value="{{outS}}" onChange="{{setOut}}"></label>
 <div style="padding: 8px 12px; border-radius: 12px; background: var(--s1)"><span style="display: block; font-size: 12px; color: var(--t2)">Length · 3 – 30 s</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">{{lenLabel}}</span></div>
 </div>
 <sc-if value="{{lenBad}}" hint-placeholder-val="{{ false }}"><p class="err">{{lenErr}}</p></sc-if>
@@ -336,8 +337,8 @@ button:disabled{cursor:not-allowed}
 </div>
 </section>
 
-<section aria-label="Design a voice" style="position: absolute; left: 610px; top: 72px; width: 440px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
-<h2 style="margin: 0; font-size: 15px; font-weight: 600">Design a voice</h2>
+<section aria-label="Design a voice" style="position: absolute; left: 610px; top: 72px; width: 420px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Design a voice</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 <label class="fl"><span style="display: flex; justify-content: space-between">Describe the voice<span style="font-family: 'JetBrains Mono', monospace">49 / 2000</span></span><textarea rows="3" style="height: auto; padding: 8px 12px; resize: none">Male, about 60, low and warm, slow, a slight rasp</textarea></label>
 <label class="fl">A line to hear it say<input value="The tide waits for no one, lad. Not even you."></label>
 <div style="display: flex; align-items: center; gap: 8px">
@@ -362,8 +363,8 @@ button:disabled{cursor:not-allowed}
 </div>
 </section>
 
-<section aria-label="Edit element" style="position: absolute; left: 1080px; top: 72px; width: 330px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
-<h2 style="margin: 0; font-size: 15px; font-weight: 600">Edit element</h2>
+<section aria-label="Edit element" style="position: absolute; left: 1060px; top: 72px; width: 340px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Edit element</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
 <label class="fl">Name<input value="Mara"></label>
 <label class="fl">Handle<input value="@mara" style="font-family: 'JetBrains Mono', monospace"></label>
@@ -375,14 +376,14 @@ button:disabled{cursor:not-allowed}
 </div>
 <div class="fl"><span style="display: flex; justify-content: space-between">Images<span style="font-family: 'JetBrains Mono', monospace">2 / 4</span></span>
 <ol aria-label="Images, in order" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
-<li style="aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1)"></li>
-<li style="aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1)"></li>
-<li><button style="width: 100%; height: 100%; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); font-size: 11px">Add</button></li>
+<li style="aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></li>
+<li style="aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path></svg></li>
+<li><button style="width: 100%; height: 100%; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>Add</button></li>
 </ol>
 </div>
 <div class="fl"><span style="display: flex; align-items: center">Voice<button class="i" aria-label="More information" title="Characters only. In a dialogue script, each @handle line is spoken in its element's voice. A deleted voice leaves the element with none.">i</button></span>
 <sc-if value="{{elVoice}}" hint-placeholder-val="{{ true }}">
-<div class="tile" style="display: flex; align-items: center; gap: 8px; color: var(--t1)"><span class="thumb wave" aria-hidden="true" style="height: 28px; border-style: solid"></span><span style="flex: 1 1 auto; min-width: 0"><small>Voice</small><b>Mara · Savannah</b><small style="font-family: Inter, sans-serif; font-size: 11px">ZONOS3 preset · American female</small></span><button class="chip" aria-haspopup="dialog" style="height: 28px">Change</button><button class="ic" aria-label="Remove the voice" onClick="{{removeElVoice}}">×</button></div>
+<div class="tile" style="flex: 0 0 auto; display: flex; align-items: center; gap: 8px; color: var(--t1)"><span class="thumb wave" aria-hidden="true" style="height: 28px; border-style: solid"></span><span style="flex: 1 1 auto; min-width: 0"><small>Voice</small><b>Mara · Savannah</b><small style="font-family: Inter, sans-serif; font-size: 11px">ZONOS3 preset · American female</small></span><button class="chip" aria-haspopup="dialog" style="flex: 0 0 auto; height: 28px">Change</button><button class="ic" aria-label="Remove the voice" onClick="{{removeElVoice}}" style="flex: 0 0 auto; display: grid; place-items: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 </sc-if>
 <sc-if value="{{elNoVoice}}" hint-placeholder-val="{{ false }}">
 <button aria-haspopup="dialog" onClick="{{addElVoice}}" style="height: 48px; border-radius: 12px; border: 1px dashed var(--dash); background: transparent; color: var(--t1); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 8px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Pick a voice</button>
@@ -399,12 +400,12 @@ button:disabled{cursor:not-allowed}
 </section>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"workflow":{"editor":"enum","default":"zonos3","options":["zonos3","qwen3-tts"]},"$preview":{"width":1440,"height":1920}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"workflow":{"editor":"enum","default":"qwen3-tts","options":["zonos3","qwen3-tts"]},"$preview":{"width":1440,"height":1920}}'>
 class Component extends DCLogic {
-state = { theme: null, wf: null, tab: 'presets', view: 'list', picked: 'savannah', playing: null, lang: 'English', menu: null, renaming: null, confirming: null, draft: '', names: {}, gone: {}, take: 'letter', inS: 4, outS: 16, consent: false, heard: true, tries: 1, savedClone: false, savedDesign: false, elVoice: true };
+state = { theme: null, wf: null, tab: 'presets', view: 'list', picked: 'ryan', playing: null, lang: 'English', menu: null, renaming: null, confirming: null, draft: '', names: {}, gone: {}, take: 'letter', inS: 4, outS: 16, consent: false, heard: true, tries: 1, savedClone: false, savedDesign: false, elVoice: true };
 renderVals() {
 const s = this.state;
-const wf = s.wf ?? this.props.workflow ?? 'zonos3';
+const wf = s.wf ?? this.props.workflow ?? 'qwen3-tts';
 const isQwen = wf === 'qwen3-tts';
 const wfModel = isQwen ? 'Qwen3-TTS' : 'ZONOS3';
 const QWEN = [
@@ -455,7 +456,8 @@ if (s.savedDesign) MINE.unshift({ id: 'new-design', name: 'Old captain', kind: '
 const reasonOf = (v) => {
 if (v.fam === 'qwen') return isQwen ? '' : v.short + ' is for Qwen3-TTS';
 if (v.fam === 'zonos') return isQwen ? v.short + ' is for ZONOS3' : '';
-return isQwen && v.kind === 'Cloned' ? 'Qwen3-TTS cannot use a cloned voice' : '';
+if (!isQwen) return '';
+return v.kind === 'Designed' ? 'A designed voice needs Qwen3-TTS · Voice design' : 'Qwen3-TTS cannot clone a voice';
 };
 const playOf = (id) => ({
 playing: s.playing === id, idle: s.playing !== id, playStr: s.playing === id ? 'true' : 'false',
@@ -493,7 +495,7 @@ const designOff = !s.heard;
 return {
 theme: this.state.theme ?? this.props.theme ?? 'forest',
 setTheme: (e) => this.setState({ theme: e.target.value }),
-wfModel, wfName: wfModel + ' · Speak', rateLabel: isQwen ? '24 kHz' : '44.1 kHz',
+wfModel, wfName: wfModel + ' · Voice-over', rateLabel: isQwen ? '24 kHz' : '44.1 kHz',
 toggleWf: () => this.setState({ wf: isQwen ? 'zonos3' : 'qwen3-tts', picked: null, playing: null }),
 voiceTile: pickedName || 'Pick a voice',
 isList: s.view === 'list', isClone: s.view === 'clone', isDesign: s.view === 'design',

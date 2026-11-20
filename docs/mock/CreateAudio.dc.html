@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Studio view, audio: voice-over and dialogue</title>
+<title>Studio view, audio: Qwen3-TTS voice-over and dialogue</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -69,7 +69,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .note{font-size:12px;color:var(--t2);margin:0}
 .x{width:22px;height:22px;padding:0;border:0;border-radius:8px;background:var(--s3);color:var(--t2);font-size:12px}
 .kv{display:flex;justify-content:space-between;gap:10px;font-size:13px}
-.kv span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+.kv span:last-child{text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
 [role="tab"][aria-selected="true"]{background:var(--s5)!important;color:var(--t1)!important}
 .seg{display:flex;padding:3px;border-radius:10px;background:var(--s1);border:1px solid var(--s3)}
 .seg button{height:34px;padding:0 14px;border-radius:8px;border:0;background:transparent;color:var(--t2);font-weight:500;box-shadow:none!important}
@@ -183,7 +183,7 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 <span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Dialogue <span class="mono">3 lines</span></span>
 <span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Output</span>
 <div style="flex-grow: 1"></div>
-<span class="mono" style="font-size: 13px">Done · seed 7 · the script changed since: line 4 is new</span>
+<span class="mono" style="font-size: 13px">Done · seed 7 · 0:09</span>
 </div>
 </sc-if>
 
@@ -197,18 +197,17 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 <sc-if value="{{voice}}" hint-placeholder-val="{{ true }}">
 <span aria-label="Take, seed 14, speaking" style="flex: 0 0 auto; width: 112px; height: 72px; box-sizing: border-box; border-radius: 8px; border: 1px dashed var(--dash); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: flex; align-items: center; justify-content: center">seed 14 · 43%</span>
 </sc-if>
-<div style="flex-grow: 1"></div>
+<button class="chip" style="flex: 0 0 auto; height: 44px">Add to timeline</button>
+<button class="chip" style="flex: 0 0 auto; height: 44px">Save as voice</button>
 <details open="open" style="position: relative; flex: 0 0 auto">
-<summary style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px dashed var(--dash); background: transparent; color: var(--t1); display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Use in…</summary>
+<summary style="height: 44px; box-sizing: border-box; padding: 0 14px; border-radius: 10px; border: 1px dashed var(--dash); background: transparent; color: var(--t1); display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent), 0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Use in…</summary>
 <div role="group" aria-label="Use this take in" style="position: absolute; right: 0; bottom: 52px; z-index: 4; width: 300px; box-sizing: border-box; padding: 12px; border-radius: 18px 18px 8px 18px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
-<h2 class="h">Use {{selSeed}} in…</h2>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 class="h">Use {{selSeed}} in…</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
 <button class="mi">Audio to video<span class="mono" style="font-size: 11px">LTX-2.5</span></button>
 <button class="mi">References<span class="mono" style="font-size: 11px">MiniMax H3</span></button>
 <p class="note">LTX takes up to 13.4 s of sound; H3 takes 2 to 15 s beside an image or video reference.</p>
 </div>
 </details>
-<button class="chip" style="flex: 0 0 auto; height: 44px">Add to timeline</button>
-<button class="chip" style="flex: 0 0 auto; height: 44px">Save as voice</button>
 </div>
 
 <div style="display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px">
@@ -231,27 +230,25 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 
 <sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile" aria-haspopup="dialog"><small>Cast</small><b>Mara, Jon, Kai · 1 without a voice</b></button>
+<button class="tile" aria-haspopup="dialog"><small>Cast</small><b>Mara, Jon · 2 presets</b></button>
 <button class="tile"><small>Language</small><b>Auto</b></button>
 <button class="tile"><small>Seed</small><b>7</b></button>
 </div>
 <ol aria-label="Script" style="margin: 0; padding: 4px 6px; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 15px; line-height: 22px">
-<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 1" style="width: 16px; font-size: 11px; text-align: right">1</span><button class="vc" aria-label="@mara, voice Savannah"><i aria-hidden="true">M</i>@mara<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Mara · Savannah</span></button><span style="color: var(--t2); font-style: italic">(quiet):</span><span>You said you'd be back by noon.</span></li>
-<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 2" style="width: 16px; font-size: 11px; text-align: right">2</span><button class="vc" aria-label="@jon, voice Harbor"><i aria-hidden="true">J</i>@jon<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Jon · Harbor</span></button><span style="color: var(--t2)">:</span><span>I know. The road was closed.</span></li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 1" style="width: 16px; font-size: 11px; text-align: right">1</span><button class="vc" aria-label="@mara, voice Serena"><i aria-hidden="true">M</i>@mara<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Mara · Serena</span></button><span style="color: var(--t2); font-style: italic">(quiet):</span><span>You said you'd be back by noon.</span></li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 2" style="width: 16px; font-size: 11px; text-align: right">2</span><button class="vc" aria-label="@jon, voice Ryan"><i aria-hidden="true">J</i>@jon<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Jon · Ryan</span></button><span style="margin-left: -5px; color: var(--t2)">:</span><span>I know. The road was closed.</span></li>
 <li aria-label="Blank line" style="height: 10px"></li>
-<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 3" style="width: 16px; font-size: 11px; text-align: right">3</span><button class="vc" aria-label="@mara, voice Savannah"><i aria-hidden="true">M</i>@mara<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Mara · Savannah</span></button><span style="color: var(--t2)">:</span><span>Then you should have called.</span></li>
-<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 4" style="width: 16px; font-size: 11px; text-align: right; color: #ff8a80">4</span><button class="vc bad" aria-label="@kai, no voice" aria-describedby="kai-err"><i aria-hidden="true">K</i>@kai<span class="vb">no voice</span></button><span style="color: var(--t2)">:</span><span>Both of you, inside. Now.</span></li>
-<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 6px 8px 6px 30px; border-radius: 10px; background: color-mix(in srgb, #ff8a80 10%, transparent)"><p id="kai-err" class="err" style="flex: 1 1 260px">Line 4: @kai has no voice. Give Kai a voice, or change the line to someone in the cast.</p><button class="chip" style="height: 32px; background: var(--s5)">Give Kai a voice</button></li>
+<li style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="mono" aria-label="Line 3" style="width: 16px; font-size: 11px; text-align: right">3</span><button class="vc" aria-label="@mara, voice Serena"><i aria-hidden="true">M</i>@mara<span class="vb"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path></svg>Mara · Serena</span></button><span style="margin-left: -5px; color: var(--t2)">:</span><span>Then you should have called.</span></li>
 </ol>
 </sc-if>
 
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}"><button class="chip" aria-label="Insert element">@</button></sc-if>
+<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}"><button class="chip" aria-label="Insert element"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button></sc-if>
 <details style="position: relative">
 <summary class="chip" style="display: flex; align-items: center; gap: 6px; cursor: pointer; box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent), 0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)">{{model}}<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 15 6-6 6 6"></path></svg></summary>
-<div role="menu" aria-label="Model" style="position: absolute; left: 0; bottom: 44px; z-index: 4; width: 280px; box-sizing: border-box; padding: 12px; border-radius: 18px 18px 18px 8px; background: var(--s3); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<div role="menu" aria-label="Model" style="position: absolute; left: 0; bottom: 44px; z-index: 4; width: 360px; box-sizing: border-box; padding: 12px; border-radius: 18px 18px 18px 8px; background: var(--s3); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
 <sc-for list="{{models}}" as="o" hint-placeholder-count="3">
-<button class="mi" role="menuitemradio" aria-checked="{{o.cur}}" style="background: var(--s2)">{{o.label}}<span class="mono" style="font-size: 11px">{{o.note}}</span></button>
+<button class="mi" role="menuitemradio" aria-checked="{{o.cur}}" style="background: var(--s2)">{{o.label}}<span class="mono" style="font-size: 11px; white-space: nowrap">{{o.note}}</span></button>
 </sc-for>
 </div>
 </details>
@@ -260,12 +257,7 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 <button aria-label="Fewer seeds" onClick="{{lessSeeds}}" style="width: 36px; height: 36px; border: 0; background: transparent; color: var(--t2)">−</button><span style="font-family: 'JetBrains Mono', monospace">{{seeds}} / 4</span><button aria-label="More seeds" onClick="{{moreSeeds}}" style="width: 36px; height: 36px; border: 0; background: transparent">+</button>
 </div>
 <div style="flex-grow: 1"></div>
-<sc-if value="{{voice}}" hint-placeholder-val="{{ true }}">
-<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a2); color: var(--on2); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Generate</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">≈ 0:08 · 6 GB</span></button>
-</sc-if>
-<sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
-<button disabled="disabled" aria-describedby="kai-err" title="Fix line 4 first" style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a2); color: var(--on2); opacity: 0.55; cursor: not-allowed; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Generate</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">Fix line 4 first</span></button>
-</sc-if>
+<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a2); color: var(--on2); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Generate</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">{{genNote}}</span></button>
 </div>
 </div>
 </div>
@@ -300,36 +292,34 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 <div class="kv"><span>Length</span><span>≈ 0:08 from 18 words</span></div>
 </div>
 
-<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: var(--s2)">
-<span style="font-size: 13px; font-weight: 600">On ZONOS3</span>
-<p class="note">The model has no Style or Variation. This section is Delivery instead: Emotion, Energy, Whisper and Speaking rate, with presets Neutral, Warm, Tense and Whisper. Dialogue shows it.</p>
-</div>
 </sc-if>
 
 <sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
-<div style="display: flex; flex-direction: column; gap: 12px">
-<h2 class="h">Delivery<button class="i" aria-label="More information" title="ZONOS3 controls, for every line. A line's (style) adds to them.">i</button></h2>
-<sc-for list="{{delivery}}" as="d" hint-placeholder-count="4">
-<div style="display: flex; flex-direction: column; gap: 4px">
-<label for="{{d.id}}" style="display: flex; justify-content: space-between; gap: 8px"><span>{{d.label}}</span><span class="mono" style="font-size: 12px">{{d.shown}}</span></label>
-<input id="{{d.id}}" type="range" min="{{d.min}}" max="{{d.max}}" step="0.05" value="{{d.val}}" onChange="{{d.set}}" style="width: 100%; accent-color: var(--a2)">
-<span class="mono" style="display: flex; justify-content: space-between; font-size: 11px"><span>{{d.lo}}</span><span>{{d.hi}}</span></span>
-</div>
-</sc-for>
-</div>
-
 <div style="display: flex; flex-direction: column; gap: 8px">
-<h2 class="h">Cast<button class="i" aria-label="More information" title="One family per run: on ZONOS3, presets and any saved voice with a clip.">i</button></h2>
-<div class="kv"><span>@mara</span><span>Savannah · preset</span></div>
-<div class="kv"><span>@jon</span><span>Harbor · mine, from a clip</span></div>
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px"><span>@kai</span><button class="chip" style="height: 32px; color: #ff8a80; border: 1px dashed #ff8a80; background: transparent">No voice · give one</button></div>
+<h2 class="h">Cast<button class="i" aria-label="More information" title="One family per run: Qwen dialogue takes presets only. ZONOS3: see the next board.">i</button></h2>
+<div class="kv"><span>@mara</span><span>Serena · preset</span></div>
+<div class="kv"><span>@jon</span><span>Ryan · preset</span></div>
 <label for="gap" style="display: flex; justify-content: space-between; gap: 8px; margin-top: 4px"><span>Pause between lines</span><span class="mono" style="font-size: 12px">0.35 s</span></label>
 <input id="gap" type="range" min="0" max="5" step="0.05" value="0.35" style="width: 100%; accent-color: var(--a2)">
 </div>
 
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 class="h">Voice<button class="i" aria-label="More information" title="Custom voice: each line's preset speaker, with that line's style in words.">i</button></h2>
+<span>Style per line</span>
+<div style="display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 8px 10px">
+<label for="st1" class="mono" style="font-size: 12px">1 @mara</label><input id="st1" type="text" value="quiet" style="height: 36px; box-sizing: border-box; min-width: 0; padding: 0 12px; border-radius: 10px; border: 1px solid var(--s5); background: var(--s1); color: var(--t1); font: inherit; font-size: 14px">
+<label for="st2" class="mono" style="font-size: 12px">2 @jon</label><input id="st2" type="text" value="" placeholder="as written" style="height: 36px; box-sizing: border-box; min-width: 0; padding: 0 12px; border-radius: 10px; border: 1px solid var(--s5); background: var(--s1); color: var(--t1); font: inherit; font-size: 14px">
+<label for="st3" class="mono" style="font-size: 12px">3 @mara</label><input id="st3" type="text" value="" placeholder="as written" style="height: 36px; box-sizing: border-box; min-width: 0; padding: 0 12px; border-radius: 10px; border: 1px solid var(--s5); background: var(--s1); color: var(--t1); font: inherit; font-size: 14px">
+</div>
+<span style="font-size: 12px; color: var(--t2)">The (style) after a line's @name, in words: quiet, angry, whispering.</span>
+<label for="vary-d" style="display: flex; justify-content: space-between; gap: 8px; margin-top: 4px"><span>Variation</span><span class="mono" style="font-size: 12px">{{variation}}</span></label>
+<input id="vary-d" type="range" min="0.1" max="1.2" step="0.05" value="{{variation}}" onChange="{{setVariation}}" style="width: 100%; accent-color: var(--a2)">
+<span style="font-size: 12px; color: var(--t2)">Low keeps each voice steady; high is livelier and drifts.</span>
+</div>
+
 <div style="display: flex; flex-direction: column; gap: 8px">
 <h2 class="h">Output</h2>
-<div class="kv"><span>Sound</span><span>44.1 kHz · mono · wav</span></div>
+<div class="kv"><span>Sound</span><span>24 kHz · mono · wav</span></div>
 <div class="kv"><span>Cues</span><span>one per line, on the stage and the timeline</span></div>
 </div>
 </sc-if>
@@ -338,7 +328,7 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"mode":{"editor":"enum","default":"voice","options":["voice","dialogue"]},"$preview":{"width":1440,"height":960}}'>
 class Component extends DCLogic {
-state = { theme: null, mode: null, media: 'audio', playing: false, pos: 0, seeds: 1, takeV: 12, takeD: 7, presetV: 'Steady', variation: null, styleText: 'calm, a little tired', presetZ: 'Warm', dz: {} };
+state = { theme: null, mode: null, media: 'audio', playing: false, pos: 0, seeds: 1, takeV: 12, takeD: 7, presetV: 'Steady', variation: null, styleText: 'calm, a little tired' };
 renderVals() {
 const mode = this.state.mode ?? this.props.mode ?? 'voice';
 const dlg = mode === 'dialogue';
@@ -385,34 +375,13 @@ const modes = [{ id: 'voice', label: 'Voice-over' }, { id: 'dialogue', label: 'D
 }));
 const pv = { Steady: 0.3, Lively: 0.9 };
 const variation = this.state.variation ?? pv[this.state.presetV];
-const zp = {
-Neutral: { emotion: 0.5, energy: 0.5, whisper: 0, rate: 1 },
-Warm: { emotion: 0.7, energy: 0.45, whisper: 0, rate: 0.95 },
-Tense: { emotion: 0.3, energy: 0.75, whisper: 0, rate: 1.1 },
-Whisper: { emotion: 0.5, energy: 0.25, whisper: 0.9, rate: 0.9 }
-};
-const presets = dlg
-? Object.keys(zp).map((label) => ({ label, sel: label === this.state.presetZ, pick: () => this.setState({ presetZ: label, dz: {} }) }))
-: Object.keys(pv).map((label) => ({ label, sel: label === this.state.presetV, pick: () => this.setState({ presetV: label, variation: null }) }));
-const dv = { ...zp[this.state.presetZ], ...this.state.dz };
+const presets = Object.keys(pv).map((label) => ({ label, sel: label === this.state.presetV, pick: () => this.setState({ presetV: label, variation: null }) }));
 const num = (v) => String(Math.round(v * 100) / 100);
-const delivery = [
-{ key: 'emotion', label: 'Emotion', min: 0, max: 1, lo: 'sad', hi: 'happy' },
-{ key: 'energy', label: 'Energy', min: 0, max: 1, lo: 'soft, slow', hi: 'loud, quick' },
-{ key: 'whisper', label: 'Whisper', min: 0, max: 1, lo: 'off', hi: 'full' },
-{ key: 'rate', label: 'Speaking rate', min: 0.5, max: 1.5, lo: '0.5×', hi: '1.5×' }
-].map((d) => ({
-...d,
-id: 'z-' + d.key,
-val: dv[d.key],
-shown: d.key === 'rate' ? num(dv[d.key]) + '×' : num(dv[d.key]),
-set: (e) => this.setState({ dz: { ...this.state.dz, [d.key]: Number(e.target.value) } })
-}));
-const model = dlg ? 'ZONOS3 · Mini' : 'Qwen3-TTS · Custom voice';
+const model = 'Qwen3-TTS · Custom voice';
 const models = [
 { label: 'Qwen3-TTS · Custom voice', note: '9 presets' },
 { label: 'Qwen3-TTS · Voice design', note: 'a voice from words' },
-{ label: 'ZONOS3 · Mini', note: 'clones a clip' }
+{ label: 'ZONOS3 · Mini', note: 'see the next board' }
 ].map((o) => ({ ...o, cur: o.label === model }));
 return {
 theme: this.state.theme ?? this.props.theme ?? 'forest',
@@ -421,10 +390,10 @@ voice: !dlg,
 dialogue: dlg,
 modes,
 medias,
-template: dlg ? 'ZONOS3 · Dialogue · 3 speakers' : 'Qwen3-TTS · Voice-over',
-mem: dlg ? '15 / 64 GB' : '19 / 64 GB',
-memLabel: dlg ? 'Memory: 15 of 64 gigabytes used' : 'Memory: 19 of 64 gigabytes used',
-stageBadge: dlg ? 'seed 7 · 0:09 · 3 lines · 44.1 kHz mono' : 'seed ' + this.state.takeV + ' · 24 kHz mono',
+template: dlg ? 'Qwen3-TTS · Dialogue · 2 speakers' : 'Qwen3-TTS · Voice-over',
+mem: '19 / 64 GB',
+memLabel: 'Memory: 19 of 64 gigabytes used',
+stageBadge: dlg ? 'seed 7 · 0:09 · 3 lines · 24 kHz mono' : 'seed ' + this.state.takeV + ' · 24 kHz mono',
 bars,
 cues,
 head: (pos / posMax * 100).toFixed(2),
@@ -440,7 +409,8 @@ takes,
 selSeed: 'seed ' + selTake,
 model,
 models,
-rate: dlg ? '44.1 kHz' : '24 kHz',
+rate: '24 kHz',
+genNote: dlg ? '≈ 0:09 · 6 GB' : '≈ 0:08 · 6 GB',
 seeds: this.state.seeds,
 lessSeeds: () => this.setState({ seeds: Math.max(1, this.state.seeds - 1) }),
 moreSeeds: () => this.setState({ seeds: Math.min(4, this.state.seeds + 1) }),
@@ -449,8 +419,7 @@ variation: num(variation),
 setVariation: (e) => this.setState({ variation: Number(e.target.value) }),
 styleText: this.state.styleText,
 styleLen: this.state.styleText.length,
-setStyle: (e) => this.setState({ styleText: e.target.value }),
-delivery
+setStyle: (e) => this.setState({ styleText: e.target.value })
 };
 }
 }
